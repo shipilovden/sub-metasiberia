@@ -17,12 +17,12 @@ AboutDialog::AboutDialog(QWidget* parent, const std::string& appdata_path)
 {
 	setupUi(this);
 
-	std::string display_str = "<h2>Substrata v" + ::cyberspace_version + "</h2>";
+	std::string display_str = "<h2>Metasiberia v" + ::cyberspace_version + "</h2>";
 
 	display_str += "<p>";
-	display_str += QtUtils::toIndString(tr("Copyright Glare Technologies Limited."));
+	display_str += "Metasiberia is inspired and based on <a href=\"https://substrata.info\"><span style=\" text-decoration: underline; color:#222222;\">Substrata</span></a>.<br>";
+	display_str += "Forked by <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>";
 	display_str += "</p>";
-	display_str += "<a href=\"https://substrata.info\"><span style=\" text-decoration: underline; color:#222222;\">http://substrata.info</span></a>";
 
 	this->text->setText(QtUtils::toQString(display_str));
 	this->text->setOpenExternalLinks(true);
