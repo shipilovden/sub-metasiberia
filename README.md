@@ -1,6 +1,6 @@
 # Metasiberia - metaverse from Siberia
 
-**Metasiberia is inspired and based on Substrata**
+# Metasiberia is inspired and based on Substrata
 
 Metasiberia is a virtual world project created using the open-source Substrata software. 
 
