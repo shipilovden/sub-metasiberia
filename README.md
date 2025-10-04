@@ -1,99 +1,99 @@
+# Metasiberia
 
-Substrata is an open-source metaverse, developed by Glare Technologies Limited, see https://substrata.info/.
+Metasiberia is a virtual world project created using the open-source Substrata software. Learn, work, play and communicate with other users, ride motorcycles, build your own world or buy a land parcel and create your presence in the main world.
 
-The Substrata client and server are native apps written in C++, that support Windows, Mac and Linux.
-There is also an in-development web-client.
+![Metasiberia Screenshot](icons/installer/slide1.bmp)
 
-You can build the Substrata client or Substrata server from this repository.
+## About Metasiberia
 
-![main screenshot](https://github.com/glaretechnologies/substrata/assets/30285/38a6db93-e729-4f15-8561-5c848eb5391c)
+**METASIBERIA°** is a virtual world project that offers a unique digital experience. You can program, modify and use your digital plots as you see fit, as well as grant rights to other users for collaborative creativity. Metasiberia has a huge number of parcels, and they will soon appear in our **store**! Follow the **news** to secure your piece of the digital world and create something unique.
 
+### Key Features
 
-## Usage examples
+- **Virtual World Creation**: Build and customize your own digital space
+- **Parcel System**: Own and develop unique digital plots
+- **Multi-user Interaction**: Chat, collaborate and play with other users
+- **Vehicle Simulation**: Ride motorcycles and explore the world
+- **Programming Capabilities**: Script and customize your environment
+- **Open Source**: Based on the open-source Substrata platform
 
-You can always visit the main Substrata world at substrata.info - this is the server that we run, and the main gathering point for Substrata users.  However you are also welcome to run your own server!  You can do this using by building the server from this repository, or using one of the prebuilt binaries.
+![Metasiberia Features](icons/installer/slide2.bmp)
 
-### 3D model Visualisation
+## Getting Started
 
-Substrata is perfect for multi-user visualisation of 3d models.  Walk around a digital twin model with your team, hosted on an on-premises server!
+### Web Client
+For your convenience, the web client currently works only from computers.
 
-### Education
+Visit: **[https://metasiberia.com/](https://metasiberia.com/)**
 
-Because Substrata is open source, you can build and run your own world for students without paying any licensing fees.
+### Native Client
+Download and install the Metasiberia client for the best experience:
 
-## Get Involved
+- **Windows**: Metasiberia_v1.0.0_Setup.exe
+- **Build System**: See `../Metasiberia_Build_System/` for complete build instructions
 
-We welcome contributions from people!
+![Installation](icons/installer/slide3.bmp)
 
-Chat about Substrata on the Substrata discord here: https://discord.gg/3Ds9cxyEnZ
+## Building Your World
 
-Feel free to drop a message on the discord if you are having trouble building Substrata, or have any questions about it.
+### Sandbox Mode
+To create objects in the main world, you need to be either in a parcel you own or in the sandbox (Parcel #31). Alternatively, you can create objects in your personal world where there are no restrictions.
 
+### Parcel System
+- **Parcels**: Your unique digital plots in virtual space
+- **Programming**: Script and customize your parcels
+- **Collaboration**: Grant rights to other users for joint creativity
+- **Store**: Purchase parcels and create your digital presence
 
+![Building Tools](icons/installer/slide4.bmp)
 
-## Building
+## Technical Features
 
-See [docs/building.txt](docs/building.txt) for build instructions.
+### High Performance Rendering
+- Physically-based rendering engine
+- Realistic lighting and atmospheric simulation
+- Automatic level of detail generation
+- Streaming loading of objects
 
-## Features
-
-### High performance, physically-based rendering engine
-
-Substrata uses the Glare engine (https://github.com/glaretechnologies/glare-core), which produces realistic graphics while rendering the entire Substrata world - e.g. over 12000 objects with user-generated content at 200 fps.
-
-* The Glare engine is designed for metaverses, in particular large numbers of varied objects.
-* Automatic level of detail generation
-* Streaming loading and unloading of objects without hitches as the player moves around
-* Physically-based rendering
-* Highly realistic sun/sky/daylight system derived from a multiple scattering ray-tracing atmospheric simulation in https://www.indigorenderer.com/
-* Skeletal animation system with procedural animations and animation retargetting for sharing animation data amongst avatars with varied sizes
-* Runtime texture compression for making best use of GPU memory
-* GLTF, OBJ import, plus supports many image formats
-* Terrain and water rendering
-* Particle system for rendering dust, water splashes, smoke etc.
-
-![boat](https://github.com/glaretechnologies/substrata/assets/30285/0dde612a-ea95-49af-bc64-07f1a7114c7f)
-
-
-### Networked physics simulation
-
-We have integrated the Jolt physics engine (https://github.com/jrouwe/JoltPhysics), and have implemented a networked physics simulation on top of it. 
-What that means is that multiple players can interact with objects in a world, drive vehicles, push objects etc. in a realistic way.
-
-Physics-based vehicles: (Image links are to videos on YouTube)
-
-<a href="https://youtu.be/-E3J8kaqolQ"><img src="https://github.com/glaretechnologies/substrata/assets/30285/18703540-58ae-4e18-bf28-635784cd6c9a" width="600"></a>
-
-Networked physics:
-
-<a href="https://youtu.be/_rECxiwVteY"><img src="https://github.com/glaretechnologies/substrata/assets/30285/37eaacef-0f1b-48af-a820-1dcc9c17466e" width="600"></a>
-
-
-Handling lots of interactive objects:
-
-<a href="https://youtu.be/CzGz6voUE_8?t=8"><img src="https://github.com/glaretechnologies/substrata/assets/30285/6956d5a7-33f4-4c79-947c-951a2fe3cb18" width="600"></a>
-
+### Networked Physics
+- Multi-user physics simulation
+- Interactive objects and vehicles
+- Realistic physics-based interactions
+- Collaborative building and editing
 
 ### Spatial Audio and Voice Chat
+- Built-in spatial audio system
+- Voice chat without third-party services
+- Immersive audio experience
 
-Substrata has built-in spatial audio and voice chat, without using any third-party services or servers.
+![Technical Features](icons/installer/slide5.bmp)
 
+## Community and Support
 
-### In-world building
+- **Website**: [https://metasiberia.com/](https://metasiberia.com/)
+- **News**: Stay updated with latest developments
+- **Store**: Purchase parcels and digital assets
+- **Map**: Explore the virtual world
+- **Admin Panel**: Manage your digital presence
 
-The substrata client has controls for creating and editing objects, as well as for editing voxels
+## Development
 
-<img src="https://github.com/glaretechnologies/substrata/assets/30285/1680739d-b7ae-4e8f-9ba8-48769643e27b" width="600">
+### Build System
+Complete build instructions and automation scripts are available in the `Metasiberia_Build_System` directory.
 
+### Contributing
+We welcome contributions to the Metasiberia project. The codebase is based on the open-source Substrata platform.
 
-<img src="https://github.com/glaretechnologies/substrata/assets/30285/3e3fb2f5-de3a-4132-9b86-b275b89c5dbd" width="600">
+## Credits
 
-You can add objects to the world from your local machine, and they will be automatically uploaded to the server and be visible to other users.
+**Metasiberia** is based on and inspired by **Substrata**
 
-## Get help
+- **Original Substrata**: [https://substrata.info/](https://substrata.info/)
+- **Substrata Creator**: [https://x.com/NickChapmn](https://x.com/NickChapmn)
+- **Metasiberia Author**: [https://x.com/denshipilovart](https://x.com/denshipilovart)
 
-Chat about Substrata on the Substrata discord here: https://discord.gg/3Ds9cxyEnZ
+---
 
-Feel free to drop a message on the discord if you are having trouble building Substrata, or have any questions about it.
+**© 2025 Denis Shipilov | Gallery20.ru | DNG**
 
-Alternatively, feel free to create a github issue.
+Metasiberia is based and inspired by Substrata
