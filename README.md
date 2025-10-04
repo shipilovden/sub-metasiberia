@@ -2,6 +2,7 @@
 
 Metasiberia is a virtual world project created using the open-source Substrata software. 
 
+**METASIBERIA°** is a virtual world project that offers a unique digital experience.
 ## Quick Access
 
 - **🌐 Web Client**: [https://vr.metasiberia.com/webclient](https://vr.metasiberia.com/webclient)
@@ -9,13 +10,13 @@ Metasiberia is a virtual world project created using the open-source Substrata s
 
 ![Metasiberia Screenshot](icons/installer/slide1.bmp)
 
-## About Metasiberia
 
-**METASIBERIA°** is a virtual world project that offers a unique digital experience.
+
+
 
 ![Metasiberia Features](icons/installer/slide2.bmp)
 
-## Getting Started
+
 
 ![Installation](icons/installer/slide3.bmp)
 
