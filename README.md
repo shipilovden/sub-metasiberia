@@ -1,4 +1,4 @@
-# Metasiberia - metaverse from Siberia
+# ❄️ Metasiberia - metaverse from Siberia ❄️
 
 # Metasiberia is inspired and based on Substrata
 
