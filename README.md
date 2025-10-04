@@ -94,6 +94,4 @@ We welcome contributions to the Metasiberia project. The codebase is based on th
 
 ---
 
-**© 2025 Denis Shipilov | Gallery20.ru | DNG**
-
 Metasiberia is based and inspired by Substrata
