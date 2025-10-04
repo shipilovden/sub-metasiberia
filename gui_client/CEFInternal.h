@@ -39,7 +39,7 @@ public:
 		CefRefPtr<CefClient>& client,
 		CefBrowserSettings& settings,
 		CefRefPtr<CefDictionaryValue>& extra_info,
-		bool* no_javascript_access) override;
+		bool* no_javascript_access);
 
 	void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
 

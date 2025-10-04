@@ -1282,11 +1282,11 @@ elseif(WIN32)
 	# Chromium embedded framework
 	if(CEF_SUPPORT)
 		target_link_libraries(${CURRENT_TARGET}
-			debug 		${cef_binary_dist_dir}/Debug/libcef.lib
-			optimized 	${cef_binary_dist_dir}/Release/libcef.lib
-			
-			debug     	${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/Debug/libcef_dll_wrapper.lib
-			optimized 	${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/Release/libcef_dll_wrapper.lib
+		#debug 		${cef_binary_dist_dir}/Debug/libcef.lib
+		#optimized 	${cef_binary_dist_dir}/Release/libcef.lib
+		
+		#debug     	${cef_binary_dist_dir}/libcef_dll_build/Release/libcef_dll_wrapper.lib
+		#optimized 	${cef_binary_dist_dir}/libcef_dll_build/Release/libcef_dll_wrapper.lib
 		)
 	endif()
 	
@@ -1324,11 +1324,11 @@ elseif(APPLE)
 	if(CEF_SUPPORT)
 		target_link_libraries(${CURRENT_TARGET} PRIVATE
 			# Chromium embedded framework
-			#debug 		${cef_binary_dist_dir}/Debug/libcef.lib
-			#optimized 	${cef_binary_dist_dir}/Release/libcef.lib
+			debug 		${cef_binary_dist_dir}/Debug/libcef.lib
+			optimized 	${cef_binary_dist_dir}/Release/libcef.lib
 			
-			debug     	${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/libcef_dll_wrapper.a
-			optimized 	${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/libcef_dll_wrapper.a
+			#debug     	${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/libcef_dll_wrapper.a
+			#optimized 	${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/libcef_dll_wrapper.a
 		)
 	endif()
 	
@@ -1387,7 +1387,7 @@ else() # linux
 	
 	if(CEF_SUPPORT)
 		target_link_libraries(${CURRENT_TARGET} PRIVATE
-			${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/libcef_dll_wrapper.a
+			#${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/libcef_dll_wrapper.a
 
 			debug		${cef_binary_dist_dir}/Debug/libcef.so
 			optimized	${cef_binary_dist_dir}/Release/libcef.so
