@@ -616,7 +616,9 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	if(log_window) log_window->close();
 
 	in_CEF_message_loop = true;
+#if CEF_SUPPORT
 	CEF::shutdownCEF();
+#endif
 	in_CEF_message_loop = false;
 
 	this->closing = true;
@@ -1109,7 +1111,9 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	Timer timerEvent_timer;
 
 	in_CEF_message_loop = true;
+#if CEF_SUPPORT
 	CEF::doMessageLoopWork();
+#endif
 	in_CEF_message_loop = false;
 
 
@@ -2804,8 +2808,19 @@ void MainWindow::on_actionExport_view_to_Indigo_triggered()
 void MainWindow::on_actionTake_Screenshot_triggered()
 {
 	ui->glWidget->opengl_engine->getCurrentScene()->draw_overlay_objects = false; // Hide UI
+	
+	// Also hide PhotoModeUI specifically
+	bool photo_mode_was_visible = false;
+	if(gui_client.photo_mode_ui.isPhotoModeEnabled())
+	{
+		photo_mode_was_visible = true;
+		gui_client.photo_mode_ui.setVisible(false);
+	}
 
-	ui->glWidget->updateGL(); // Draw again now that the UI is hidden
+    // Force repaint without UI so the captured frame excludes overlays
+    ui->glWidget->updateGL();
+    QCoreApplication::processEvents();
+    ui->glWidget->updateGL();
 
 #if QT_VERSION_MAJOR >= 6
 	QImage framebuffer = ui->glWidget->grabFramebuffer();
@@ -2813,7 +2828,8 @@ void MainWindow::on_actionTake_Screenshot_triggered()
 	if(opengl_engine.nonNull())
 		opengl_engine->setReadFrameBufferToDefault();// Make sure we are reading from the default framebuffer.  Get an OpenGL error if we don't call this.
 
-	QImage framebuffer = ui->glWidget->grabFrameBuffer();
+    ui->glWidget->makeCurrent();
+    QImage framebuffer = ui->glWidget->grabFrameBuffer();
 #endif
 	
 	// NOTE: Qt-saved images were doing weird things with parcel border alpha.  Just copy to an ImageMapUInt8 and do the image saving ourselves.
@@ -2841,6 +2857,12 @@ void MainWindow::on_actionTake_Screenshot_triggered()
 	}
 
 	ui->glWidget->opengl_engine->getCurrentScene()->draw_overlay_objects = true; // Unhide UI.
+	
+	// Restore PhotoModeUI visibility if it was visible before
+	if(photo_mode_was_visible)
+	{
+		gui_client.photo_mode_ui.setVisible(true);
+	}
 }
 
 
