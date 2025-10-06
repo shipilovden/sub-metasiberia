@@ -36,8 +36,8 @@ if(WIN32)
 		debug 		${cef_binary_dist_dir}/Debug/libcef.lib
 		optimized 	${cef_binary_dist_dir}/Release/libcef.lib
 		
-		debug 		${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/Debug/libcef_dll_wrapper.lib
-		optimized 	${cef_binary_dist_dir}/libcef_dll_build/libcef_dll_wrapper/Release/libcef_dll_wrapper.lib
+		debug 		${cef_binary_dist_dir}/libcef_dll_build/Release/libcef_dll_wrapper.lib
+		optimized 	${cef_binary_dist_dir}/libcef_dll_build/Release/libcef_dll_wrapper.lib
 	)
 	
 elseif(APPLE)

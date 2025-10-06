@@ -60,6 +60,8 @@ public:
 
 	QSettings* settings;
 	std::string base_dir_path;
+	// Call to apply translations to all UI strings of this widget
+	void retranslate() { Ui::ObjectEditor::retranslateUi(this); }
 protected:
 
 signals:;

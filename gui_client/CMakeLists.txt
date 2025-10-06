@@ -879,6 +879,7 @@ include_directories(${cef_binary_dist_dir})
 
 
 #include_directories(../meshoptimizer/src)
+# (moved) Translations block is placed after add_executable so target exists
 
 
 #============== ImGui ==============
@@ -1396,4 +1397,53 @@ else() # linux
 
 	#get_target_property(OLD_TARGET_PROPERTIES ${CURRENT_TARGET} LINK_FLAGS)
 	#set_target_properties(${CURRENT_TARGET} PROPERTIES LINK_FLAGS "${OLD_TARGET_PROPERTIES} -Xlinker -rpath='$ORIGIN/lib'")
+endif()
+
+#---------------- Translations (.qm) ----------------
+set(TRANSLATIONS_DIR "${CMAKE_SOURCE_DIR}/resources/translations")
+
+# Try to build .qm from .ts using Qt LinguistTools if available; otherwise use lrelease from INDIGO_QT_DIR
+file(GLOB TS_FILES "${TRANSLATIONS_DIR}/*.ts")
+set(ALL_QM_FILES)
+if(TS_FILES)
+    set(QM_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/built_qm")
+    file(MAKE_DIRECTORY ${QM_OUTPUT_DIR})
+
+    # Preferred: use Qt5 LinguistTools (provides qt5_add_translation)
+    find_package(Qt5 COMPONENTS LinguistTools QUIET)
+    if(Qt5_LinguistTools_FOUND)
+        qt5_add_translation(QM_BUILT_FILES ${TS_FILES})
+        add_custom_target(build_translations DEPENDS ${QM_BUILT_FILES})
+        list(APPEND ALL_QM_FILES ${QM_BUILT_FILES})
+    else()
+        # Fallback: call lrelease directly from INDIGO_QT_DIR/bin if present
+        if(EXISTS "${INDIGO_QT_DIR}/bin/lrelease.exe")
+            set(GENERATED_QM_FILES)
+            foreach(TS ${TS_FILES})
+                get_filename_component(TS_NAME ${TS} NAME_WE)
+                set(OUT_QM "${QM_OUTPUT_DIR}/${TS_NAME}.qm")
+                add_custom_command(OUTPUT ${OUT_QM}
+                    COMMAND "${INDIGO_QT_DIR}/bin/lrelease.exe" -silent ${TS} -qm ${OUT_QM}
+                    DEPENDS ${TS}
+                )
+                list(APPEND GENERATED_QM_FILES ${OUT_QM})
+            endforeach()
+            add_custom_target(build_translations DEPENDS ${GENERATED_QM_FILES})
+            list(APPEND ALL_QM_FILES ${GENERATED_QM_FILES})
+        endif()
+    endif()
+endif()
+
+# Also include any prebuilt .qm that are already present in source tree
+if(EXISTS ${TRANSLATIONS_DIR})
+    file(GLOB PREBUILT_QM_FILES "${TRANSLATIONS_DIR}/*.qm")
+    list(APPEND ALL_QM_FILES ${PREBUILT_QM_FILES})
+endif()
+
+# After building the executable, copy all known .qm files next to it
+if(ALL_QM_FILES)
+    add_custom_command(TARGET ${CURRENT_TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${CURRENT_TARGET}>/translations"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ALL_QM_FILES} "$<TARGET_FILE_DIR:${CURRENT_TARGET}>/translations"
+    )
 endif()

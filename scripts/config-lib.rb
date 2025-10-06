@@ -48,3 +48,4 @@ def get_substrata_version
 	version = versionmatch[1]
 	version
 end
+

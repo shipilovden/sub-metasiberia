@@ -31,13 +31,21 @@ UserDetailsWidget::~UserDetailsWidget()
 
 void UserDetailsWidget::setTextAsNotLoggedIn()
 {
-	this->userDetailsLabel->setText("<a href=\"#login\">Log in</a> or <a href=\"#signup\">Sign up</a>");
+    // Use Qt translation for auth strings
+    this->userDetailsLabel->setText(
+        QString("<a href=\"#login\">%1</a> %2 <a href=\"#signup\">%3</a>")
+            .arg(tr("Log in"))
+            .arg(tr("or"))
+            .arg(tr("Sign up"))
+    );
 }
 
 
 void UserDetailsWidget::setTextAsLoggedIn(const std::string& username)
 {
-	this->userDetailsLabel->setText("Logged in as " + QtUtils::toQString(username).toHtmlEscaped() + ".   <a href=\"#logout\">logout</a>");
+    // "Logged in as <username>.  logout"
+    const QString logged_in_as = tr("Logged in as ") + QtUtils::toQString(username).toHtmlEscaped();
+    this->userDetailsLabel->setText(logged_in_as + ".   <a href=\"#logout\">" + tr("logout") + "</a>");
 }
 
 

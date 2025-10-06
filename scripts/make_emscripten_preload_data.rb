@@ -28,7 +28,7 @@ puts "glare_core: #{glare_core}"
 puts "substrata_dir: #{substrata_dir}"
 puts "-----------------------------------------"
 
-FileUtils.rm_r("data", :verbose=>true) if File.exists?("data")
+FileUtils.rm_r("data", :verbose=>true) if File.exist?("data")
 FileUtils.mkdir_p("data", :verbose => true)
 
 FileUtils.cp_r(substrata_dir + "/resources", "data", :verbose=>true)
@@ -77,8 +77,8 @@ end
 cyb_output_resources_dir             = cyberspace_output + "/data/resources"
 cyb_output_test_builds_resources_dir = cyberspace_output + "/test_builds/data/resources"
 
-FileUtils.mkdir_p(cyb_output_resources_dir, :verbose => true)             if !File.exists?(cyb_output_resources_dir)             # Make cyberspace_output + "/data" dir if it doesn't exist already.
-FileUtils.mkdir_p(cyb_output_test_builds_resources_dir, :verbose => true) if !File.exists?(cyb_output_test_builds_resources_dir) # Make cyberspace_output + "/test_builds/data" dir if it doesn't exist already.
+FileUtils.mkdir_p(cyb_output_resources_dir, :verbose => true)             if !File.exist?(cyb_output_resources_dir)             # Make cyberspace_output + "/data" dir if it doesn't exist already.
+FileUtils.mkdir_p(cyb_output_test_builds_resources_dir, :verbose => true) if !File.exist?(cyb_output_test_builds_resources_dir) # Make cyberspace_output + "/test_builds/data" dir if it doesn't exist already.
 
 FileUtils.cp_r(substrata_dir + "/webclient/webclient.html",            cyberspace_output,                                                   :verbose=>true)
 FileUtils.cp_r(substrata_dir + "/webclient/webclient.html",            cyberspace_output + "/test_builds",                                  :verbose=>true)
@@ -96,3 +96,4 @@ FileUtils.cp_r(glare_core + "/opengl/gl_data", cyberspace_output + "/test_builds
 FileUtils.touch(glare_core + '/graphics/TextureData.cpp')
 
 puts "Done."
+

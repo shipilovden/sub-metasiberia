@@ -35,6 +35,8 @@ public:
 
 	void setControlsEditable(bool editable);
 
+	// Call to apply translations to all UI strings of this widget
+	void retranslate() { Ui::MaterialEditor::retranslateUi(this); }
 protected:
 	void updateColourButton();
 	void updateEmissionColourButton();

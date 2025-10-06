@@ -42,6 +42,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "../shared/ImageDecoding.h"
 #include "../shared/MessageUtils.h"
 #include <QtCore/QMimeData>
+#include <QtCore/QFile>
+#include <QtCore/QDir>
 #include <QtCore/QSettings>
 #include <QtCore/QLoggingCategory>
 #include <QtGui/QMouseEvent>
@@ -110,6 +112,9 @@ Copyright Glare Technologies Limited 2024 -
 #endif
 
 
+// Forward declaration so computeWindowTitle() can be used earlier in this file
+static std::string computeWindowTitle();
+
 static const Colour4f PARCEL_OUTLINE_COLOUR    = Colour4f::fromHTMLHexString("f09a13"); // orange
 
 static std::vector<std::string> qt_debug_msgs;
@@ -159,6 +164,86 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	ui->menuWindow->addAction(ui->indigoViewDockWidget->toggleViewAction());
 #endif
 	ui->menuWindow->addAction(ui->diagnosticsDockWidget->toggleViewAction());
+
+    // ---------------- Language submenu ----------------
+    {
+        QMenu* language_menu = new QMenu(tr("Language"), this);
+        language_action_group = new QActionGroup(this);
+        language_action_group->setExclusive(true);
+
+        action_lang_en = language_menu->addAction(tr("English"));
+        action_lang_en->setCheckable(true);
+        action_lang_en->setData(QString("en"));
+        language_action_group->addAction(action_lang_en);
+
+        action_lang_ru = language_menu->addAction(tr("Русский"));
+        action_lang_ru->setCheckable(true);
+        action_lang_ru->setData(QString("ru"));
+        language_action_group->addAction(action_lang_ru);
+
+        ui->menuWindow->addSeparator();
+        ui->menuWindow->addMenu(language_menu);
+
+        // Ensure settings is initialised before we use it
+        if(!settings)
+            settings = new QSettings("Glare Technologies", "Cyberspace");
+
+        connect(language_action_group, &QActionGroup::triggered, this, [this](QAction* a){
+            const QString lang = a->data().toString();
+            // Uninstall previous
+            qApp->removeTranslator(&app_translator);
+            bool installed = false;
+            if(lang == "ru")
+            {
+                // Пытаемся загрузить перевод из нескольких стандартных мест
+                const QString path_src = QString::fromStdString(this->base_dir_path) + "/resources/translations/metasiberia_ru.qm";
+                const QString path_build = QCoreApplication::applicationDirPath() + "/translations/metasiberia_ru.qm";
+                const QString path_local = QDir::currentPath() + "/translations/metasiberia_ru.qm";
+
+                const QStringList candidates{ path_build, path_src, path_local };
+                for(const QString& p : candidates)
+                {
+                    if(QFile::exists(p) && app_translator.load(p))
+                    {
+                        qApp->installTranslator(&app_translator);
+                        installed = true;
+                        break;
+                    }
+                }
+            }
+            // Save choice
+            settings->setValue("mainwindow/language", lang);
+
+            // Retranslate UI
+            ui->retranslateUi(this);
+            // Перевести заголовки док-виджетов и динамические элементы, которые Qt Designer не обновляет сам
+            ui->editorDockWidget->setWindowTitle(tr("Editor"));
+            ui->materialBrowserDockWidget->setWindowTitle(tr("Material Browser"));
+            ui->environmentDockWidget->setWindowTitle(tr("Environment"));
+            ui->worldSettingsDockWidget->setWindowTitle(tr("World Settings"));
+            ui->helpInfoDockWidget->setWindowTitle(tr("Help Information"));
+            ui->diagnosticsDockWidget->setWindowTitle(tr("Diagnostics"));
+            ui->chatDockWidget->setWindowTitle(tr("Chat"));
+            // Re-apply dynamic titles if any
+            setWindowTitle(QtUtils::toQString(computeWindowTitle()));
+
+            // Keep action checked state accurate
+            action_lang_en->setChecked(lang == "en" || !installed);
+            action_lang_ru->setChecked(lang == "ru" && installed);
+        });
+
+        // Initial language from settings (default en)
+        const QString saved_lang = settings ? settings->value("mainwindow/language", "en").toString() : QString("en");
+        if(saved_lang == "ru")
+        {
+            // Активируем загрузку перевода (включая retranslateUi)
+            action_lang_ru->trigger();
+        }
+        else
+        {
+            action_lang_en->setChecked(true);
+        }
+    }
 
 	settings = new QSettings("Glare Technologies", "Cyberspace");
 

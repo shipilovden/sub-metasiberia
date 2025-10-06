@@ -965,6 +965,7 @@ public:
 };
 
 
+#if CEF_SUPPORT
 static Reference<EmbeddedBrowserCEFBrowser> createBrowser(const std::string& URL, Reference<OpenGLTexture> opengl_tex, GUIClient* gui_client, WorldObject* ob, OpenGLEngine* opengl_engine,
 	const std::string& root_page)
 {
@@ -989,6 +990,7 @@ static Reference<EmbeddedBrowserCEFBrowser> createBrowser(const std::string& URL
 	browser->cef_browser->GetHost()->SetAudioMuted(true);
 	return browser;
 }
+#endif
 
 
 #else // else if !CEF_SUPPORT: 

@@ -14,6 +14,8 @@ Copyright Glare Technologies Limited 2024 -
 #include <utils/ComObHandle.h>
 #include <utils/SocketBufferOutStream.h>
 #include <QtWidgets/QMainWindow>
+#include <QtCore/QTranslator>
+#include <QtWidgets/QActionGroup>
 #include <string>
 namespace Ui { class MainWindow; }
 namespace glare { class TaskManager; }
@@ -358,4 +360,10 @@ public:
 
 	//struct _SDL_GameController* game_controller;
 	QByteArray pre_fullscreen_window_state;
+    
+    // Language switching
+    QTranslator app_translator;
+    QActionGroup* language_action_group = nullptr;
+    QAction* action_lang_en = nullptr;
+    QAction* action_lang_ru = nullptr;
 };
