@@ -29,6 +29,7 @@ class QMimeData;
 struct ID3D11Device;
 struct IMFDXGIDeviceManager;
 struct _SDL_GameController;
+class RenderStatsWidget;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -284,6 +285,12 @@ public:
 	virtual float gamepadAxisLeftY();
 	virtual float gamepadAxisRightX();
 	virtual float gamepadAxisRightY();
+
+
+	// OpenGL
+	virtual bool supportsSharedGLContexts() const override;
+	virtual void* makeNewSharedGLContext()  override;
+	virtual void makeGLContextCurrent(void* context) override;
 	//------------------------------------------------- End UIInterface -----------------------------------------------------------
 
 public:
@@ -366,4 +373,7 @@ public:
     QActionGroup* language_action_group = nullptr;
     QAction* action_lang_en = nullptr;
     QAction* action_lang_ru = nullptr;
+
+	Reference<RenderStatsWidget> CPU_render_stats_widget;
+	Reference<RenderStatsWidget> GPU_render_stats_widget;
 };

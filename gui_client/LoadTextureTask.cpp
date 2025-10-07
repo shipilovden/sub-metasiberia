@@ -17,17 +17,20 @@ Copyright Glare Technologies Limited 2019 -
 #include <graphics/TextureProcessing.h>
 #include <opengl/OpenGLEngine.h>
 #include <opengl/TextureAllocator.h>
+#include <opengl/OpenGLUploadThread.h>
 #include <utils/LimitedAllocator.h>
 #include <utils/ConPrint.h>
 #include <utils/PlatformUtils.h>
 #include <utils/IncludeHalf.h>
 #include <utils/MemMappedFile.h>
+#include <utils/FastPoolAllocator.h>
 #include <tracy/Tracy.hpp>
 
 
-LoadTextureTask::LoadTextureTask(const Reference<OpenGLEngine>& opengl_engine_, const Reference<ResourceManager>& resource_manager_, ThreadSafeQueue<Reference<ThreadMessage> >* result_msg_queue_, const std::string& path_, const ResourceRef& resource_,
-	const TextureParams& tex_params_, bool is_terrain_map_, const Reference<glare::Allocator>& worker_allocator_)
-:	opengl_engine(opengl_engine_), resource_manager(resource_manager_), result_msg_queue(result_msg_queue_), path(path_), resource(resource_), tex_params(tex_params_), is_terrain_map(is_terrain_map_), worker_allocator(worker_allocator_)
+LoadTextureTask::LoadTextureTask(const Reference<OpenGLEngine>& opengl_engine_, const Reference<ResourceManager>& resource_manager_, ThreadSafeQueue<Reference<ThreadMessage> >* result_msg_queue_, const OpenGLTextureKey& path_, const ResourceRef& resource_,
+	const TextureParams& tex_params_, bool is_terrain_map_, const Reference<glare::Allocator>& worker_allocator_, Reference<glare::FastPoolAllocator>& texture_loaded_msg_allocator_, const Reference<OpenGLUploadThread>& upload_thread_)
+:	opengl_engine(opengl_engine_), resource_manager(resource_manager_), result_msg_queue(result_msg_queue_), path(path_), resource(resource_), tex_params(tex_params_), is_terrain_map(is_terrain_map_), 
+	worker_allocator(worker_allocator_), texture_loaded_msg_allocator(texture_loaded_msg_allocator_), upload_thread(upload_thread_)
 {}
 
 
@@ -42,7 +45,7 @@ void LoadTextureTask::run(size_t thread_index)
 		{
 			// conPrint("LoadTextureTask: processing texture '" + path + "'");
 
-			const std::string& key = this->path;
+			const OpenGLTextureKey& key = this->path;
 
 
 			runtimeCheck(resource.nonNull() && resource_manager.nonNull());
@@ -65,7 +68,7 @@ void LoadTextureTask::run(size_t thread_index)
 				ImageDecoding::ImageDecodingOptions options;
 				options.ETC_support = opengl_engine->texture_compression_ETC_support;
 
-				map = ImageDecoding::decodeImageFromBuffer(/*base dir path (not used)=*/".", key, texture_data_buffer, worker_allocator.ptr(), options);
+				map = ImageDecoding::decodeImageFromBuffer(/*base dir path (not used)=*/".", std::string(key), texture_data_buffer, worker_allocator.ptr(), options);
 			}
 
 #if USE_TEXTURE_VIEWS // NOTE: USE_TEXTURE_VIEWS is defined in opengl/TextureAllocator.h
@@ -111,76 +114,49 @@ void LoadTextureTask::run(size_t thread_index)
 			}
 
 
-			PBORef pbo;
-#if !EMSCRIPTEN
-			if(!texture_data->isMultiFrame())
-			{
-				ArrayRef<uint8> source_data;
-				if(!texture_data->mipmap_data.empty())
-					source_data = ArrayRef<uint8>(texture_data->mipmap_data.data(), texture_data->mipmap_data.size());
-				else
-				{
-					runtimeCheck(texture_data->converted_image.nonNull());
-					if(dynamic_cast<const ImageMapUInt8*>(texture_data->converted_image.ptr()))
-					{
-						const ImageMapUInt8* uint8_map = static_cast<const ImageMapUInt8*>(texture_data->converted_image.ptr());
-						source_data = ArrayRef<uint8>(uint8_map->getData(), uint8_map->getDataSizeB());
-					}
-					else if(dynamic_cast<const ImageMap<half, HalfComponentValueTraits>*>(texture_data->converted_image.ptr()))
-					{
-						const ImageMap<half, HalfComponentValueTraits>* half_map = static_cast<const ImageMap<half, HalfComponentValueTraits>*>(texture_data->converted_image.ptr());
-						source_data = ArrayRef<uint8>((const uint8*)half_map->getData(), half_map->getDataSizeB());
-					}
-				}
-
-				assert(source_data.data());
-				if(source_data.data())
-				{
-					const int max_num_attempts = (texture_data->mipmap_data.size() < 1024 * 1024) ? 1000 : 50;
-					for(int i=0; i<max_num_attempts; ++i)
-					{
-						pbo = opengl_engine->pbo_pool.getMappedPBO(source_data.size());
-						if(pbo)
-						{
-							//conPrint("LoadTextureTask: Memcpying to PBO mem: " + toString(source_data.size()) + " B");
-							std::memcpy(pbo->getMappedPtr(), source_data.data(), source_data.size()); // TODO: remove memcpy and build texture data directly into PBO
-
-							// Free image texture memory now it has been copied to the PBO.
-							texture_data->mipmap_data.clearAndFreeMem();
-							if(texture_data->converted_image)
-								texture_data->converted_image = nullptr;
-
-							break;
-						}
-						PlatformUtils::Sleep(1);
-					}
-				}
-			
-				if(!pbo)
-					conPrint("LoadTextureTask: Failed to get mapped PBO for " + uInt32ToStringCommaSeparated((uint32)source_data.size()) + " B");
-			}
-#endif
-
-
 			if(hasExtension(key, "gif") && texture_data->totalCPUMemUsage() > 100000000)
 			{
-				conPrint("Large gif texture data: " + toString(texture_data->totalCPUMemUsage()) + " B, " + key);
+				conPrint("Large gif texture data: " + toString(texture_data->totalCPUMemUsage()) + " B, " + std::string(key));
 			}
 
+			if(upload_thread)
+			{
+				UploadTextureMessage* upload_msg = upload_thread->allocUploadTextureMessage();
+				upload_msg->tex_path = path;
+				upload_msg->tex_params = tex_params;
+				upload_msg->texture_data = texture_data;
+				upload_msg->frame_i = 0;
 
-			// Send a message to MainWindow with the loaded texture data.
-			Reference<TextureLoadedThreadMessage> msg = new TextureLoadedThreadMessage();
-			msg->tex_path = path;
-			msg->tex_key = key;
-			msg->tex_params = tex_params;
-			msg->pbo = pbo;
-			if(is_terrain_map)
-				msg->terrain_map = map;
-			msg->texture_data = texture_data;
+				LoadTextureTaskUploadingUserInfo* user_info = new LoadTextureTaskUploadingUserInfo();
+				if(is_terrain_map)
+					user_info->terrain_map = map;
+				user_info->tex_URL = resource->URL;
+				upload_msg->user_info = user_info;
 
-			texture_data = NULL;
+				texture_data = NULL;
 
-			result_msg_queue->enqueue(msg);
+				upload_thread->getMessageQueue().enqueue(upload_msg);
+			}
+			else
+			{
+				// Send a message to MainWindow with the loaded texture data.
+				glare::FastPoolAllocator::AllocResult res = this->texture_loaded_msg_allocator->alloc();
+				Reference<TextureLoadedThreadMessage> msg = new (res.ptr) TextureLoadedThreadMessage();
+				msg->allocator = texture_loaded_msg_allocator.ptr();
+				msg->allocation_index = res.index;
+
+				msg->tex_path = path;
+				msg->tex_URL = resource->URL;
+				msg->tex_params = tex_params;
+				if(is_terrain_map)
+					msg->terrain_map = map;
+				msg->texture_data = texture_data;
+
+				texture_data = NULL;
+
+				result_msg_queue->enqueue(msg);
+			}
+			
 			return;
 		}
 		catch(glare::LimitedAllocatorAllocFailed& e)
@@ -192,12 +168,12 @@ void LoadTextureTask::run(size_t thread_index)
 		}
 		catch(ImFormatExcep& e)
 		{
-			result_msg_queue->enqueue(new LogMessage("Failed to load texture '" + path + "': " + e.what()));
+			result_msg_queue->enqueue(new LogMessage("Failed to load texture '" + std::string(path) + "': " + e.what()));
 			return;
 		}
 		catch(glare::Exception& e)
 		{
-			result_msg_queue->enqueue(new LogMessage("Failed to load texture '" + path + "': " + e.what()));
+			result_msg_queue->enqueue(new LogMessage("Failed to load texture '" + std::string(path) + "': " + e.what()));
 			return;
 		}
 		catch(std::bad_alloc&)
@@ -208,5 +184,5 @@ void LoadTextureTask::run(size_t thread_index)
 	}
 
 	// We tried N times but each time we got an LimitedAllocatorAllocFailed exception.
-	result_msg_queue->enqueue(new LogMessage("Failed to load texture '" + path + "': failed after multiple LimitedAllocatorAllocFailed"));
+	result_msg_queue->enqueue(new LogMessage("Failed to load texture '" + std::string(path) + "': failed after multiple LimitedAllocatorAllocFailed"));
 }
