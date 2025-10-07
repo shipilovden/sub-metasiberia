@@ -210,7 +210,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		const uint64 decompressed_size = socket->readUInt64();
 		const size_t compressed_size = msg_len - (msg_header_size_B + sizeof(uint64)); // Compressed data is the rest of the message after the header and decompressed size
 
-		if(decompressed_size > 100000000)
+		if(decompressed_size > 300'000'000)
 			throw glare::Exception("ObjectInitialSendCompressed: decompressed_size is too large: " + toString(decompressed_size)); 
 		if(compressed_size > 100000000)
 			throw glare::Exception("ObjectInitialSendCompressed: compressed_size is too large: " + toString(compressed_size)); 
@@ -1054,8 +1054,8 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::GetFile:
 		{
-			const std::string model_url = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
-			conPrint("Received GetFile message from server, model_url: '" + model_url + "'");
+			const URLString model_url = toURLString(msg_buffer.readStringLengthFirst(MAX_STRING_LEN));
+			conPrint("Received GetFile message from server, model_url: '" + toStdString(model_url) + "'");
 
 			out_msg_queue->enqueue(new GetFileMessage(model_url));
 			break;
@@ -1063,7 +1063,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 	case Protocol::NewResourceOnServer:
 		{
 			//conPrint("Received NewResourceOnServer message from server.");
-			const std::string url = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			const URLString url = toURLString(msg_buffer.readStringLengthFirst(MAX_STRING_LEN));
 			//conPrint("url: '" + url + "'");
 
 			out_msg_queue->enqueue(new NewResourceOnServerMessage(url));

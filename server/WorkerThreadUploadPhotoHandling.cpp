@@ -109,8 +109,7 @@ void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* serv
 		const std::string world_name = socket->readStringLengthFirst(Photo::MAX_WORLD_NAME_SIZE);
 
 		// Read parcel id
-		ParcelID parcel_id;
-		readParcelIDFromStream(*socket);
+		const ParcelID parcel_id = readParcelIDFromStream(*socket);
 
 		// Read cam_pos, cam_angles
 		Vec3d cam_pos, cam_angles;
@@ -162,6 +161,7 @@ void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* serv
 
 				socket->writeUInt32(Protocol::PhotoUploadFailed);
 				socket->writeStringLengthFirst("Server error: failed to make thumbnail for photo.");
+				socket->flush();
 				return;
 			}
 
@@ -176,6 +176,7 @@ void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* serv
 
 				socket->writeUInt32(Protocol::PhotoUploadFailed);
 				socket->writeStringLengthFirst("Server error: failed to save photo.");
+				socket->flush();
 				return;
 			}
 		}
@@ -203,6 +204,7 @@ void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* serv
 		}
 
 		socket->writeUInt32(Protocol::PhotoUploadSucceeded);
+		socket->flush();
 	}
 	catch(glare::Exception& e)
 	{

@@ -186,7 +186,7 @@ void TerrainScattering::init(const std::string& base_dir_path, TerrainSystem* te
 	//{
 	//	GLTFLoadedData gltf_data;
 	//	Reference<BatchedMesh> batched_mesh = FormatDecoderGLTF::loadGLBFile("D:\\models\\grass_clump1.glb", gltf_data);
-	//	grass_clump_meshdata = GLMeshBuilding::buildBatchedMesh(opengl_engine->vert_buf_allocator.ptr(), batched_mesh, /*skip_opengl_calls=*/true, /*instancing_matrix_data=*/NULL);
+	//	grass_clump_meshdata = GLMeshBuilding::buildBatchedMesh(opengl_engine->vert_buf_allocator.ptr(), batched_mesh, /*skip_opengl_calls=*/true);
 	//	//	
 	//}
 
@@ -547,7 +547,7 @@ void TerrainScattering::rebuildDetailMaskMapSection(int section_x, int section_y
 
 
 #else
-	if(section.detail_mask_map)
+	//if(section.detail_mask_map)
 	{
 		section.detail_mask_map.resizeNoCopy(detail_mask_map_width_px, detail_mask_map_width_px);
 		section.detail_mask_map.zero();
@@ -764,7 +764,7 @@ void TerrainScattering::updateCampos(const Vec3d& campos, glare::StackAllocator&
 					if(chunk_aabb_ws.contains(tree_info[z].pos))
 					{
 						//-------------- Create opengl tree object --------------
-						GLObjectRef gl_ob = new GLObject();
+						GLObjectRef gl_ob = opengl_engine->allocateObject();
 						gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(tree_info[z].pos) * Matrix4f::uniformScaleMatrix(tree_info[z].scale) * 
 							Matrix4f::rotationAroundZAxis(rng.unitRandom() * Maths::get2Pi<float>());// Matrix4f::scaleMatrix(tree_info[z].width, tree_info[z].width, tree_info[z].height);
 						gl_ob->mesh_data = biome_manager->elm_tree_mesh_render_data;
@@ -979,10 +979,10 @@ void TerrainScattering::updateCamposForGridScatter(const Vec3d& campos, glare::S
 				assert(x >= x0 && x < x0 + grid_scatter.grid_res);
 				assert(y >= y0 && y < y0 + grid_scatter.grid_res);
 
-				if(chunk.imposters_gl_ob.isNull())
+				if(!chunk.imposters_gl_ob)
 				{
 					makeGridScatterChunk(x, y, bump_allocator, grid_scatter, chunk); // Sets and chunk.imposters_gl_ob.
-					if(chunk.imposters_gl_ob.nonNull())
+					if(chunk.imposters_gl_ob)
 						opengl_engine->addObject(chunk.imposters_gl_ob);
 				}
 
@@ -1486,7 +1486,7 @@ GLObjectRef TerrainScattering::buildVegLocationsAndImposterGLOb(int chunk_x_inde
 	meshdata.aabb_os = aabb_os;
 
 
-	GLObjectRef gl_ob = new GLObject();
+	GLObjectRef gl_ob = opengl_engine->allocateObject();
 	gl_ob->ob_to_world_matrix = Matrix4f::identity();
 	gl_ob->mesh_data = mesh_data;
 
@@ -1517,6 +1517,10 @@ GLObjectRef TerrainScattering::makeUninitialisedImposterGLOb(glare::StackAllocat
 
 	OpenGLMeshRenderDataRef mesh_data = new OpenGLMeshRenderData();
 	OpenGLMeshRenderData& meshdata = *mesh_data;
+
+	// Set dummy AABB for now.
+	// object aabb_ws will be set later in updateGridScatterChunkWithComputeShader().
+	meshdata.aabb_os = js::AABBox(Vec4f(-100000.0f,0,0,1), Vec4f(-100000.0f,0,0,1));
 
 	meshdata.setIndexType(GL_UNSIGNED_SHORT);
 
@@ -1581,7 +1585,7 @@ GLObjectRef TerrainScattering::makeUninitialisedImposterGLOb(glare::StackAllocat
 
 	const size_t total_vert_data_size_B = N * 4 * vert_size_B;
 	
-	mesh_data->vbo_handle = opengl_engine->vert_buf_allocator->allocateVertexDataSpace(vert_size_B, NULL, total_vert_data_size_B);
+	mesh_data->vbo_handle = opengl_engine->vert_buf_allocator->allocateVertexDataSpace(vert_size_B, /*vert data=*/NULL, total_vert_data_size_B);
 
 	// Build index data
 	glare::StackAllocation temp_index_data(sizeof(uint16) * N * 6, /*alignment=*/8, bump_allocator);
@@ -1613,7 +1617,7 @@ GLObjectRef TerrainScattering::makeUninitialisedImposterGLOb(glare::StackAllocat
 
 	opengl_engine->vert_buf_allocator->getOrCreateAndAssignVAOForMesh(meshdata, meshdata.vertex_spec);
 
-	GLObjectRef gl_ob = new GLObject();
+	GLObjectRef gl_ob = opengl_engine->allocateObject();
 	gl_ob->ob_to_world_matrix = Matrix4f::identity();
 	gl_ob->mesh_data = mesh_data;
 
@@ -1869,6 +1873,10 @@ void TerrainScattering::updateGridScatterChunkWithComputeShader(int chunk_x_inde
 	
 		chunk.imposters_gl_ob->aabb_ws = aabb_ws;
 
+		chunk.imposters_gl_ob->mesh_data->aabb_os = aabb_ws; // Since we use identity transform
+
+		// TODO: call objectTransformDataChanged() or something if we want to apply local lights to imposters.
+
 
 		/*glQueryCounter(timer_query_ids[1], GL_TIMESTAMP);
 
@@ -1983,7 +1991,7 @@ void TerrainScattering::makeNearGrassChunk(int chunk_x_index, int chunk_y_index,
 		meshdata->aabb_os = aabb_os;
 
 
-		GLObjectRef gl_ob = new GLObject();
+		GLObjectRef gl_ob = opengl_engine->allocateObject();
 		gl_ob->ob_to_world_matrix = Matrix4f::identity();// /*Matrix4f::translationMatrix(temp_locations[0].pos) **/ Matrix4f::uniformScaleMatrix(temp_locations[0].scale * 0.5f) * Matrix4f::rotationAroundXAxis(Maths::pi_2<float>());
 		gl_ob->mesh_data = meshdata;
 
