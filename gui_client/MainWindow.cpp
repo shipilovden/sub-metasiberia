@@ -448,6 +448,8 @@ void MainWindow::initialise()
 
 	ui->objectEditor->setControlsEnabled(false);
 	ui->parcelEditor->hide();
+	// Always start with the editor dock hidden; it will be shown on demand
+	this->ui->editorDockWidget->hide();
 
 	startMainTimer();
 	
