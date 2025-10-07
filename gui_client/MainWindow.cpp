@@ -36,6 +36,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "CEF.h"
 #include "ThreadMessages.h"
 #include "MeshBuilding.h"
+#include "MiniMap.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
 #include "../shared/LODGeneration.h"
@@ -80,6 +81,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../indigo/TextureServer.h"
 #include "../graphics/PNGDecoder.h"
 #include "../graphics/jpegdecoder.h"
+#include "../opengl/RenderStatsWidget.h"
 #if defined(_WIN32)
 #include "../video/WMFVideoReader.h"
 #endif
@@ -164,8 +166,20 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 	credential_manager.loadFromSettings(*settings);
 
-	if(args.isArgPresent("--no_MDI"))
-		ui->glWidget->allow_multi_draw_indirect = false;
+	// Always disable MDI for now, seems to be slower in general in Substrata
+	// 
+	// 	-u sub://substrata.info/?x=-1.3&y=-5.1&z=1.67&heading=85.3
+	// -------------------------------------------------------------
+	// 1.67 ms CPU, 6.06 ms GPU
+	// 
+	// -u sub://substrata.info/?x=-1.3&y=-5.1&z=1.67&heading=85.3  --no_MDI
+	// -------------------------------------------------------------
+	// 2.18 ms CPU, 4.53 ms GPU
+	//
+	ui->glWidget->allow_multi_draw_indirect = false;
+
+	//if(args.isArgPresent("--no_MDI"))
+	//	ui->glWidget->allow_multi_draw_indirect = false;
 	if(args.isArgPresent("--no_bindless"))
 		ui->glWidget->allow_bindless_textures = false;
 
@@ -547,6 +561,15 @@ void MainWindow::afterGLInitInitialise()
 		logMessage("Setting MSAA to " + boolToString(MSAA));
 		//ui->glWidget->opengl_engine->setMSAAEnabled(MSAA);
 	}
+
+
+	if(ui->diagnosticsWidget->showFrameTimeGraphsCheckBox->isChecked())
+	{
+		opengl_engine->setProfilingEnabled(true);
+
+		CPU_render_stats_widget = new RenderStatsWidget(opengl_engine, gui_client.gl_ui, /*widget index=*/0);
+		GPU_render_stats_widget = new RenderStatsWidget(opengl_engine, gui_client.gl_ui, /*widget index=*/1);
+	}
 }
 
 
@@ -609,6 +632,9 @@ void MainWindow::closeEvent(QCloseEvent* event)
 
 	gui_client.shutdown();
 
+	CPU_render_stats_widget = nullptr;
+	GPU_render_stats_widget = nullptr;
+
 
 	this->opengl_engine = NULL;
 	ui->glWidget->shutdown(); // Shuts down OpenGL Engine.
@@ -649,7 +675,7 @@ void MainWindow::onIndigoViewDockWidgetVisibilityChanged(bool visible)
 {
 	// On Windows, use WMF's http reading to stream videos (until we get the custom byte stream working)
 #ifdef _WIN32
-	return ::hasExtensionStringView(url, "mp4");
+	return ::hasExtension(url, "mp4");
 #else
 	return false; // On Mac/linux, we'll use the ResourceIODeviceWrapper for QMediaPlayer, so we don't need to use http.
 #endif
@@ -999,7 +1025,7 @@ void MainWindow::setUpForScreenshot()
 
 	gui_client.gesture_ui.destroy();
 
-	gui_client.minimap.destroy();
+	gui_client.minimap = nullptr;
 
 	opengl_engine->getCurrentScene()->cloud_shadows = false;
 
@@ -1213,8 +1239,7 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	//Timer timer;
 	{
 		Timer timer2;
-		PERFORMANCEAPI_INSTRUMENT("updateGL()");
-		ZoneScopedN("updateGL"); // Tracy profiler
+		ZoneScopedNC("updateGL", 0x33FF33); // Tracy profiler
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 		ui->glWidget->update();
 #else
@@ -1224,6 +1249,15 @@ void MainWindow::timerEvent(QTimerEvent* event)
 		//	conPrint(doubleToStringNDecimalPlaces(Clock::getTimeSinceInit(), 3) + ": updateGL() took " + timer.elapsedStringNSigFigs(4));
 		this->last_updateGL_time = timer2.elapsed();
 	}
+
+	// Plot the total time spent on CPU work this frame.
+	// Note that we can't just measure the time of this timerEvent method with glWidget->updateGL(), because updateGL() will block for vsync, so it will include a lot of waiting time.
+	// Instead use the sum of work time in this method plus the work time in OpenGLEngine::draw().
+	if(CPU_render_stats_widget)
+		CPU_render_stats_widget->addFrameTime((float)(last_timerEvent_CPU_work_elapsed + opengl_engine->last_draw_CPU_time));
+
+	if(GPU_render_stats_widget)
+		GPU_render_stats_widget->addFrameTime((float)opengl_engine->last_total_draw_GPU_time);
 }
 
 
@@ -1947,12 +1981,12 @@ void MainWindow::on_actionAdd_Audio_Source_triggered()
 			// Compute hash over audio file
 			const uint64 audio_file_hash = FileChecksum::fileChecksum(path);
 
-			const std::string audio_file_URL = ResourceManager::URLForPathAndHash(path, audio_file_hash);
+			const URLString audio_file_URL = ResourceManager::URLForPathAndHash(path, audio_file_hash);
 
 			// Copy audio file to local resources dir.  UploadResourceThread will read from here.
 			gui_client.resource_manager->copyLocalFileToResourceDir(path, audio_file_URL);
 
-			const std::string model_URL = "Capsule_obj_7611321750126528672.bmesh"; // This file is in the client distribution.
+			const URLString model_URL = "Capsule_obj_7611321750126528672.bmesh"; // This file is in the client distribution.
 		
 			WorldObjectRef new_world_object = new WorldObject();
 			new_world_object->uid = UID(0); // Will be set by server
@@ -2039,7 +2073,7 @@ void MainWindow::on_actionAdd_Decal_triggered()
 	BitUtils::zeroBit(new_world_object->flags, WorldObject::COLLIDABLE_FLAG); // make non-collidable.
 
 
-	std::string unit_cube_mesh_URL = "unit_cube_bmesh_7263660735544605926.bmesh";
+	URLString unit_cube_mesh_URL = "unit_cube_bmesh_7263660735544605926.bmesh";
 	if(!gui_client.resource_manager->isFileForURLPresent(unit_cube_mesh_URL))
 	{
 		Reference<Indigo::Mesh> indigo_mesh = MeshBuilding::makeUnitCubeIndigoMesh();
@@ -2803,23 +2837,12 @@ void MainWindow::on_actionExport_view_to_Indigo_triggered()
 
 void MainWindow::on_actionTake_Screenshot_triggered()
 {
-	ui->glWidget->opengl_engine->getCurrentScene()->draw_overlay_objects = false; // Hide UI
+	opengl_engine->getCurrentScene()->draw_overlay_objects = false; // Hide UI
 
-	ui->glWidget->updateGL(); // Draw again now that the UI is hidden
-
-#if QT_VERSION_MAJOR >= 6
-	QImage framebuffer = ui->glWidget->grabFramebuffer();
-#else
-	if(opengl_engine.nonNull())
-		opengl_engine->setReadFrameBufferToDefault();// Make sure we are reading from the default framebuffer.  Get an OpenGL error if we don't call this.
-
-	QImage framebuffer = ui->glWidget->grabFrameBuffer();
-#endif
-	
-	// NOTE: Qt-saved images were doing weird things with parcel border alpha.  Just copy to an ImageMapUInt8 and do the image saving ourselves.
-
-	ImageMapUInt8Ref map = convertQImageToImageMapUInt8(framebuffer);
-
+	ui->glWidget->makeCurrent();
+	ImageMapUInt8Ref map = opengl_engine->drawToBufferAndReturnImageMap();
+	if(map->hasAlphaChannel())
+		map = map->extract3ChannelImage();
 
 	const std::string path = this->appdata_path + "/screenshots/screenshot_" + toString((uint64)Clock::getSecsSince1970()) + ".png";
 	try
@@ -2840,7 +2863,7 @@ void MainWindow::on_actionTake_Screenshot_triggered()
 		msgBox.exec();
 	}
 
-	ui->glWidget->opengl_engine->getCurrentScene()->draw_overlay_objects = true; // Unhide UI.
+	opengl_engine->getCurrentScene()->draw_overlay_objects = true; // Unhide UI.
 }
 
 
@@ -3239,6 +3262,21 @@ void MainWindow::on_actionEnter_Fullscreen_triggered()
 void MainWindow::diagnosticsWidgetChanged()
 {
 	opengl_engine->setDrawWireFrames(ui->diagnosticsWidget->showWireframesCheckBox->isChecked());
+
+	if(ui->diagnosticsWidget->showFrameTimeGraphsCheckBox->isChecked() && this->CPU_render_stats_widget.isNull())
+	{
+		opengl_engine->setProfilingEnabled(true);
+
+		CPU_render_stats_widget = new RenderStatsWidget(opengl_engine, gui_client.gl_ui, /*widget index=*/0);
+		GPU_render_stats_widget = new RenderStatsWidget(opengl_engine, gui_client.gl_ui, /*widget index=*/1);
+	}
+	else if(!ui->diagnosticsWidget->showFrameTimeGraphsCheckBox->isChecked() && CPU_render_stats_widget.nonNull())
+	{
+		opengl_engine->setProfilingEnabled(false);
+
+		CPU_render_stats_widget = nullptr;
+		GPU_render_stats_widget = nullptr;
+	}
 
 	gui_client.diagnosticsSettingsChanged();
 }
@@ -4142,6 +4180,28 @@ float MainWindow::gamepadAxisRightY()
 #endif
 
 
+bool MainWindow::supportsSharedGLContexts() const
+{
+	return true;
+}
+
+
+void* MainWindow::makeNewSharedGLContext()
+{
+	return (void*)ui->glWidget->makeNewSharedGLContext();
+}
+
+
+void MainWindow::makeGLContextCurrent(void* context_)
+{
+	HWND hwnd = reinterpret_cast<HWND>(ui->glWidget->winId());
+	HDC hdc = GetDC(hwnd);
+
+	HGLRC handle = (HGLRC)context_;
+	BOOL res = wglMakeCurrent(hdc, handle);
+	assert(res != 0);
+}
+
 
 // The mouse was double-clicked on a web-view object
 void MainWindow::webViewMouseDoubleClicked(QMouseEvent* e)
@@ -4321,7 +4381,7 @@ int main(int argc, char *argv[])
 	QApplication::setAttribute(Qt::AA_UseDesktopOpenGL); // See https://forum.qt.io/topic/73255/qglwidget-blank-screen-on-different-computer/7
 
 	//QtWebEngine::initialize();
-//	QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+	QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 //	QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 //	QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 //	QtWebEngineQuick::initialize();
