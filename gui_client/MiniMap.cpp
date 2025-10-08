@@ -16,60 +16,32 @@ Copyright Glare Technologies Limited 2023 -
 #include "../shared/ImageDecoding.h"
 #include <graphics/SRGBUtils.h>
 #include <utils/RuntimeCheck.h>
-
-
-MiniMap::MiniMap()
-:	gui_client(NULL),
-	last_requested_campos(Vec3d(-1000000)),
-	last_requested_tile_z(-1000),
-	map_width_ws(500.f),
-	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder)
-{}
-
-
-MiniMap::~MiniMap()
-{}
+#include <tracy/Tracy.hpp>
 
 
 static const float x_margin = 0.03f; // margin around map in UI coordinates
 
 static const float arrow_width_px = 22;
 
-static const int TILE_GRID_RES = 7; // There will be a TILE_GRID_RES x TILE_GRID_RES grid of tiles centered on the camera
+static const float clip_border_width_px = 6;
+
+static const int TILE_GRID_RES = 5; // There will be a TILE_GRID_RES x TILE_GRID_RES grid of tiles centered on the camera
 
 // -1 is near clip plane, +1 is the far clip plane.
-static const float MINIMAP_Z = -0.9f;
-static const float ARROW_IMAGE_Z = -0.95f;
-static const float AVATAR_MARKER_IMAGE_Z = -0.93f;
-static const float AVATAR_MARKER_ARROW_IMAGE_Z = -0.94f; // Slightly behind the marker dot
+static const float MINIMAP_Z = 0.3f;
+static const float MINIMAP_TILE_Z              = MINIMAP_Z;
+static const float BACKGROUND_IMAGE_Z          = MINIMAP_Z + 0.01f;
+static const float ARROW_IMAGE_Z               = MINIMAP_Z - 0.03f; // -0.95f;
+static const float AVATAR_MARKER_IMAGE_Z       = MINIMAP_Z - 0.01f; // -0.93f;
+static const float AVATAR_MARKER_ARROW_IMAGE_Z = MINIMAP_Z - 0.02f; //-0.94f; // Slightly behind the marker dot
 
 
-static int getTileZForMapWidthWS(float map_width_ws)
-{
-	/*
-	Lets say we want ~= 2 tiles to span the map (tiles are 256 pixels wide):
-	map_width_ws = 2 * tile_w
-	and
-	tile_w = 5120 / (2 ^ tile_z)
-	so 
-	map_width_ws = 2 * 5120 / (2 ^ tile_z)    [See updateMapTiles() in server.cpp]
-
-	2 ^ tile_z = 2 * 5120 / map_width_ws;
-	tile_z = log_2(2 * 5120 / map_width_ws)
-	*/
-
-	return myClamp((int)std::log2(2 * 5120 / map_width_ws), 0, 6);
-}
-
-
-// See updateMapTiles() in server.cpp
-static float getTileWidthWSForTileZ(int tile_z)
-{
-	return 5120.f / (1 << tile_z);
-}
-
-
-void MiniMap::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_, GLUIRef gl_ui_)
+MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_, GLUIRef gl_ui_)
+:	gui_client(NULL),
+	last_requested_campos(Vec3d(-1000000)),
+	last_requested_tile_z(-1000),
+	map_width_ws(500.f),
+	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder)
 {
 	opengl_engine = opengl_engine_;
 	gui_client = gui_client_;
@@ -82,18 +54,13 @@ void MiniMap::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_cli
 #endif
 	expanded = gui_client_->getSettingsStore()->getBoolValue("setting/show_minimap", /*default_value=*/default_minimap_expanded);
 	
-	// NOTE: Format_SRGB_Uint8 doesn't work for framebuffers (incomplete) in webgl.
-	minimap_texture = new OpenGLTexture(256, 256, opengl_engine.ptr(), ArrayRef<uint8>(NULL, 0), OpenGLTextureFormat::Format_RGB_Linear_Uint8, OpenGLTexture::Filtering_Bilinear);
-
-	// Create minimap image
+	// Create minimap (background) image.  Will be mostly covered by tiles, but keep for the sizing logic and mouse handler.
 	const float y_margin = computeMiniMapTopMargin();
 	const float minimap_width = computeMiniMapWidth();
-	minimap_image = new GLUIImage(*gl_ui, opengl_engine, "", Vec2f(1 - x_margin - minimap_width, gl_ui->getViewportMinMaxY() - y_margin - minimap_width), Vec2f(minimap_width), /*tooltip=*/"", MINIMAP_Z);
-	minimap_image->overlay_ob->material.albedo_texture = minimap_texture;
-	minimap_image->overlay_ob->material.tex_matrix = Matrix2f::identity(); // Since we are using a texture rendered in OpenGL we don't need to flip it.
-	minimap_image->overlay_ob->material.overlay_target_is_nonlinear = false;
-	minimap_image->setColour(Colour3f(1.f));
-	minimap_image->setMouseOverColour(Colour3f(1.f));
+	minimap_image = new GLUIImage(*gl_ui, opengl_engine, "", Vec2f(1 - x_margin - minimap_width, gl_ui->getViewportMinMaxY() - y_margin - minimap_width), Vec2f(minimap_width), /*tooltip=*/"", BACKGROUND_IMAGE_Z);
+	minimap_image->setColour(Colour3f(0.1f));
+	minimap_image->setAlpha(0.8f);
+	minimap_image->setMouseOverColour(Colour3f(0.1f));
 	minimap_image->handler = this;
 	gl_ui->addWidget(minimap_image);
 
@@ -134,26 +101,11 @@ void MiniMap::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_cli
 		tile_placeholder_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(OpenGLTextureKey("__tile_placeholder_tex__"), *default_detail_col_map);
 	}
 
-	//--------------------- Create minimap tile scene ------------------------
-	Reference<OpenGLScene> last_scene = opengl_engine->getCurrentScene();
-
-	scene = new OpenGLScene(*opengl_engine);
-	scene->shadow_mapping = false;
-	scene->draw_water = false;
-	scene->render_to_main_render_framebuffer = false;
-	scene->collect_stats = false;
-	scene->use_z_up = false;
-	scene->env_ob = NULL;
-
-	opengl_engine->addScene(scene);
-	opengl_engine->setCurrentScene(scene);
 
 	tiles.resize(TILE_GRID_RES, TILE_GRID_RES);
 	last_centre_x = -1000000;
 	last_centre_y = -1000000;
 
-	const int tile_z = getTileZForMapWidthWS(map_width_ws);
-	const float tile_w_ws = getTileWidthWSForTileZ(tile_z);
 
 	for(int y=0; y<TILE_GRID_RES; ++y)
 	for(int x=0; x<TILE_GRID_RES; ++x)
@@ -163,32 +115,20 @@ void MiniMap::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_cli
 		ob->material.albedo_texture = tile_placeholder_tex;
 		ob->material.tex_matrix = Matrix2f(1,0,0,-1);
 		ob->material.tex_translation = Vec2f(0, 1);
-		ob->ob_to_world_matrix = Matrix4f::translationMatrix(x * tile_w_ws, y * tile_w_ws, 0) *  Matrix4f::scaleMatrix(tile_w_ws, tile_w_ws, 1);
+		ob->ob_to_world_matrix = Matrix4f::identity();
 
 		opengl_engine->addOverlayObject(ob);
 
 		tiles.elem(x, y).ob = ob;
 	}
 
-	opengl_engine->setCurrentScene(last_scene); // Restore
-	//-------------------------------------------------------------------
-
-	frame_buffer = new FrameBuffer();
-	frame_buffer->attachTexture(*minimap_texture, GL_COLOR_ATTACHMENT0);
-
-	GLenum is_complete = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-	if(is_complete != GL_FRAMEBUFFER_COMPLETE)
-	{
-		conPrint("Error: MiniMap::create(): framebuffer is not complete.");
-		assert(0);
-	}
 
 	updateWidgetPositions();
 	setWidgetVisibilityForExpanded();
 }
 
 
-void MiniMap::destroy()
+MiniMap::~MiniMap()
 {
 	if(gl_ui.nonNull())
 	{
@@ -200,13 +140,7 @@ void MiniMap::destroy()
 				removeMarkerForAvatar(it->second.ptr());
 		}
 
-		frame_buffer = NULL;
-		minimap_texture = NULL;
 		tile_placeholder_tex = NULL;
-
-		//------------------- Destroy the minimap tile scene ------------------------
-		Reference<OpenGLScene> last_scene = opengl_engine->getCurrentScene();
-		opengl_engine->setCurrentScene(scene);
 
 		for(int y=0; y<TILE_GRID_RES; ++y)
 		for(int x=0; x<TILE_GRID_RES; ++x)
@@ -215,11 +149,6 @@ void MiniMap::destroy()
 			tiles.elem(x, y).ob = NULL;
 		}
 		tiles.resize(0, 0);
-
-		opengl_engine->removeScene(scene);
-		scene = NULL;
-		opengl_engine->setCurrentScene(last_scene);
-		//---------------------------------------------------------------------------
 
 		if(minimap_image.nonNull())
 		{
@@ -251,6 +180,31 @@ void MiniMap::destroy()
 }
 
 
+static int getTileZForMapWidthWS(float map_width_ws)
+{
+	/*
+	Lets say we want ~= 2 tiles to span the map (tiles are 256 pixels wide):
+	map_width_ws = 2 * tile_w
+	and
+	tile_w = 5120 / (2 ^ tile_z)
+	so 
+	map_width_ws = 2 * 5120 / (2 ^ tile_z)    [See updateMapTiles() in server.cpp]
+
+	2 ^ tile_z = 2 * 5120 / map_width_ws;
+	tile_z = log_2(2 * 5120 / map_width_ws)
+	*/
+
+	return myClamp((int)std::log2(2 * 5120 / map_width_ws), 0, 6);
+}
+
+
+// See updateMapTiles() in server.cpp
+static float getTileWidthWSForTileZ(int tile_z)
+{
+	return 5120.f / (1 << tile_z);
+}
+
+
 void MiniMap::setVisible(bool visible)
 {
 	this->expand_button->setVisible(visible && !expanded);
@@ -265,6 +219,14 @@ void MiniMap::setMapAndMarkersVisible(bool visible)
 	if(gl_ui.nonNull())
 	{
 		minimap_image->setVisible(visible);
+
+		for(int j=0; j<TILE_GRID_RES; ++j)
+		for(int i=0; i<TILE_GRID_RES; ++i)
+		{
+			MapTile& tile = tiles.elem(i, j);
+			tile.ob->draw = visible;
+		}
+
 		arrow_image->setVisible(visible);
 
 		// Set visibility of avatar markers
@@ -286,6 +248,8 @@ void MiniMap::setMapAndMarkersVisible(bool visible)
 
 void MiniMap::think()
 {
+	ZoneScoped; // Tracy profiler
+
 	if(gl_ui.isNull())
 		return;
 
@@ -350,20 +314,12 @@ void MiniMap::think()
 
 
 	checkUpdateTilesForCurCamPosition();
-	
-	Reference<OpenGLScene> last_scene = opengl_engine->getCurrentScene();
-	const Vec2i last_viewport = opengl_engine->getViewportDims();
-	Reference<FrameBuffer> last_target_framebuffer = opengl_engine->getTargetFrameBuffer();
-	
-	opengl_engine->setCurrentScene(this->scene);
-	
-	renderTilesToTexture();
-
-	opengl_engine->setCurrentScene(last_scene); // Restore scene to previous scene
-	opengl_engine->setViewportDims(last_viewport);
-	opengl_engine->setTargetFrameBuffer(last_target_framebuffer);
 
 
+	// Set transforms of tile overlay objects
+	setTileOverlayObjectTransforms();
+
+	
 	const float heading = (float)gui_client->cam_controller.getAngles().x;
 
 	const float arrow_width = gl_ui->getUIWidthForDevIndepPixelWidth(arrow_width_px);
@@ -373,6 +329,40 @@ void MiniMap::think()
 		/*dims=*/Vec2f(arrow_width), 
 		/*rotation=*/heading,
 		/*z=*/ARROW_IMAGE_Z);
+}
+
+
+// Set transforms of tile overlay objects
+void MiniMap::setTileOverlayObjectTransforms()
+{
+	// The logic of the transform is something like:
+	// Create tiles in world space (let the map == the territory), transform them into camera space for a camera looking down at the player position,
+	// then translate and scale them to the minimap UI rectangle.
+
+	const Vec3d campos = gui_client->cam_controller.getFirstPersonPosition();
+
+	const Rect2f minimap_gl_rect = gl_ui->OpenGLRectCoordsForUICoords(minimap_image->rect);
+	Matrix4f world_to_overlay_space_matrix = Matrix4f::translationMatrix(minimap_gl_rect.getMin().x, minimap_gl_rect.getMax().y, MINIMAP_TILE_Z) * 
+		Matrix4f::scaleMatrix(minimap_gl_rect.getWidths().x * 1.f/map_width_ws, minimap_gl_rect.getWidths().y * 1.f/map_width_ws, 1) * 
+		Matrix4f::translationMatrix((float)-campos.x + map_width_ws/2.f, (float)-campos.y - map_width_ws/2.f, 0);
+
+	const int x0     = last_centre_x  - TILE_GRID_RES/2; // unwrapped grid x coordinate of lower left grid cell in square grid around new camera position
+	const int y0     = last_centre_y  - TILE_GRID_RES/2;
+	const int wrapped_x0     = Maths::intMod(x0,     TILE_GRID_RES); // x0 mod TILE_GRID_RES                        [Using euclidean modulo]
+	const int wrapped_y0     = Maths::intMod(y0,     TILE_GRID_RES); // y0 mod TILE_GRID_RES                        [Using euclidean modulo]
+
+	const int tile_z = getTileZForMapWidthWS(map_width_ws);
+	const float tile_w_ws = getTileWidthWSForTileZ(tile_z);
+
+	for(int j=0; j<TILE_GRID_RES; ++j)
+	for(int i=0; i<TILE_GRID_RES; ++i)
+	{
+		// Get unwrapped coords
+		const int x = x0 + i - wrapped_x0 + ((i >= wrapped_x0) ? 0 : TILE_GRID_RES);
+		const int y = y0 + j - wrapped_y0 + ((j >= wrapped_y0) ? 0 : TILE_GRID_RES);
+
+		tiles.elem(i, j).ob->ob_to_world_matrix = world_to_overlay_space_matrix * ::translationMulScaleMatrix(Vec4f(x * tile_w_ws, y * tile_w_ws, 0, 0), tile_w_ws, tile_w_ws, 1);
+	}
 }
 
 
@@ -394,9 +384,6 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 {
 	if(!opengl_engine)
 		return;
-
-	Reference<OpenGLScene> last_scene = opengl_engine->getCurrentScene();
-	opengl_engine->setCurrentScene(this->scene);
 
 	const Vec3d campos = gui_client->cam_controller.getFirstPersonPosition();
 
@@ -470,10 +457,10 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 								tile.ob->material.tex_matrix = Matrix2f(scale, 0, 0, -scale);  // See diagrams below for explanation
 								tile.ob->material.tex_translation = Vec2f(lower_left_coords.x, 1 - lower_left_coords.y);
 
-								const std::string local_path = gui_client->resource_manager->getLocalAbsPathForResource(*resource);
+								const OpenGLTextureKey local_path = OpenGLTextureKey(gui_client->resource_manager->getLocalAbsPathForResource(*resource));
 
-								OpenGLTextureRef tile_tex = opengl_engine->getTextureIfLoaded(OpenGLTextureKey(local_path));
-								if(tile_tex.nonNull())
+								OpenGLTextureRef tile_tex = opengl_engine->getTextureIfLoaded(local_path);
+								if(tile_tex)
 								{
 									tile.ob->material.albedo_texture = tile_tex;
 								}
@@ -481,8 +468,6 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 								{
 									// If tile_tex is null, keep placeholder texture assigned to tile object for now.
 									// Start loading the texture (may never have been loaded, or may have been unloaded if wasn't used for a while)
-
-									tile.ob->material.tex_path = local_path; // Store path so texture will be assigned later when loaded.
 
 									const Vec3d tile_pos(0.0); // TEMP HACK could use tile position in world space? or cam position?
 
@@ -493,7 +478,9 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 									tex_params.use_mipmaps = false;
 
 									if(resource->getState() == Resource::State_Present)
-										gui_client->startLoadingTextureForLocalPath(/*ob uid=*/UID::invalidUID(), local_path, resource, tile_pos.toVec4fPoint(), tile_w_ws, /*max task dist=*/1.0e10f, /*importance factor=*/1.f, tex_params);
+										gui_client->startLoadingTextureForLocalPath(local_path, resource, tile_pos.toVec4fPoint(), tile_w_ws, /*max task dist=*/1.0e10f, /*importance factor=*/1.f, tex_params);
+
+									loading_texture_URL_to_tile_indices_map[info.image_URL] = Vec3i(tile_x, tile_y, z);
 								}
 							}
 
@@ -588,34 +575,18 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 
 #if VISUALISE_TILES
 				// Visualise individual tiles by colouring them differently
-				tile.ob->material.albedo_linear_rgb.r = 0.3 + 0.7f * uint32Hash(x)    * (1.f / 4294967296.f);
-				tile.ob->material.albedo_linear_rgb.g = 0.3 + 0.7f * uint32Hash(y)    * (1.f / 4294967296.f);
-				tile.ob->material.albedo_linear_rgb.b = 0.3 + 0.7f * uint32Hash(x+10) * (1.f / 4294967296.f);
+				tile.ob->material.albedo_linear_rgb.r = 0.3f + 0.7f * uint32Hash(x)    * (1.f / 4294967296.f);
+				tile.ob->material.albedo_linear_rgb.g = 0.3f + 0.7f * uint32Hash(y)    * (1.f / 4294967296.f);
+				tile.ob->material.albedo_linear_rgb.b = 0.3f + 0.7f * uint32Hash(x+10) * (1.f / 4294967296.f);
 #endif
 
-				tile.ob->ob_to_world_matrix = Matrix4f::translationMatrix(x * tile_w_ws, y * tile_w_ws, 0) *  Matrix4f::scaleMatrix(tile_w_ws, tile_w_ws, 1);
+				tile.ob->ob_to_world_matrix = Matrix4f::identity(); // Will be set later in setTileOverlayObjectTransforms().
 			}
 		}
 
 		last_centre_x = new_centre_x;
 		last_centre_y = new_centre_y;
 	}
-
-	opengl_engine->setCurrentScene(last_scene); // Restore scene
-}
-
-
-void MiniMap::renderTilesToTexture()
-{
-	const Vec3d campos = gui_client->cam_controller.getFirstPersonPosition();
-
-	opengl_engine->setIdentityCameraTransform(); // Since we are just rendering overlays, camera transformation doesn't really matter
-
-	this->scene->overlay_world_to_camera_space_matrix = Matrix4f::scaleMatrix(2.f/map_width_ws, 2.f/map_width_ws, 1) * Matrix4f::translationMatrix((float)-campos.x, (float)-campos.y, 0);
-
-	opengl_engine->setTargetFrameBufferAndViewport(frame_buffer);
-
-	opengl_engine->draw();
 }
 
 
@@ -638,7 +609,7 @@ void MiniMap::handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMe
 		auto res = tile_infos.find(indices);
 		if(res == tile_infos.end())
 		{
-			const std::string& URL = msg.tile_URLS[i];
+			const URLString& URL = msg.tile_URLS[i];
 			MapTileInfo info;
 			info.image_URL = URL;
 			tile_infos[indices] = info;
@@ -665,7 +636,9 @@ void MiniMap::handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMe
 
 
 				// Start loading the texture (if not already loaded)
-				gui_client->startLoadingTextureIfPresent(/*ob uid=*/UID::invalidUID(),URL, tile_pos.toVec4fPoint(), tile_w_ws, /*max task dist=*/1.0e10f, /*importance factor=*/1.f, tex_params);
+				gui_client->startLoadingTextureIfPresent(URL, tile_pos.toVec4fPoint(), tile_w_ws, /*max task dist=*/1.0e10f, /*importance factor=*/1.f, tex_params);
+
+				loading_texture_URL_to_tile_indices_map[URL] = indices;
 			}
 		}
 		else
@@ -678,15 +651,54 @@ void MiniMap::handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMe
 	last_centre_x = -10000;
 	last_centre_y = -10000;
 	checkUpdateTilesForCurCamPosition();
+
+	setTileOverlayObjectTransforms();
+}
+
+
+void MiniMap::handleUploadedTexture(const OpenGLTextureKey& path, const URLString& URL, const OpenGLTextureRef& opengl_tex)
+{
+	ZoneScoped; // Tracy profiler
+
+	// conPrint("MiniMap::handleUploadedTexture: " + path);
+
+	auto res = loading_texture_URL_to_tile_indices_map.find(URL);
+	if(res != loading_texture_URL_to_tile_indices_map.end())
+	{
+		const Vec3i indices = res->second;
+
+		const int x0     = last_centre_x  - TILE_GRID_RES/2; // unwrapped grid x coordinate of lower left grid cell in square grid around new camera position
+		const int y0     = last_centre_y  - TILE_GRID_RES/2;
+		const int wrapped_x0     = Maths::intMod(x0,     TILE_GRID_RES); // x0 mod TILE_GRID_RES                        [Using euclidean modulo]
+		const int wrapped_y0     = Maths::intMod(y0,     TILE_GRID_RES); // y0 mod TILE_GRID_RES                        [Using euclidean modulo]
+	
+		const int tile_z = getTileZForMapWidthWS(map_width_ws);
+
+		// Iterate over wrapped coordinates
+		MapTile* const tiles_data = tiles.getData();
+		for(int j=0; j<TILE_GRID_RES; ++j)
+		for(int i=0; i<TILE_GRID_RES; ++i)
+		{
+			MapTile& tile = tiles_data[i + j * TILE_GRID_RES];
+
+			// Get unwrapped coords
+			const int x = x0 + i - wrapped_x0 + ((i >= wrapped_x0) ? 0 : TILE_GRID_RES);
+			const int y = y0 + j - wrapped_y0 + ((j >= wrapped_y0) ? 0 : TILE_GRID_RES);
+			assert(x >= x0 && x < x0 + TILE_GRID_RES);
+			assert(y >= y0 && y < y0 + TILE_GRID_RES);
+
+			const Vec3i tile_indices(x, y, tile_z);
+			if((tile_indices == indices) && tile.ob)
+				tile.ob->material.albedo_texture = opengl_tex;
+		}
+	}
 }
 
 
 void MiniMap::viewportResized(int w, int h)
 {
-	if(gl_ui.nonNull())
-	{
+	if(gl_ui)
 		updateWidgetPositions();
-	}
 }
 
 
@@ -721,11 +733,11 @@ void MiniMap::updateWidgetPositions()
 {
 	if(gl_ui.nonNull())
 	{
-		if(minimap_image.nonNull())
+		if(minimap_image)
 		{
 			const float minimap_width = computeMiniMapWidth();
 			const float y_margin = computeMiniMapTopMargin();
-			minimap_image->setPosAndDims(Vec2f(1 - minimap_width - x_margin, gl_ui->getViewportMinMaxY() - minimap_width - y_margin), Vec2f(minimap_width), MINIMAP_Z);
+			minimap_image->setPosAndDims(Vec2f(1 - minimap_width - x_margin, gl_ui->getViewportMinMaxY() - minimap_width - y_margin), Vec2f(minimap_width), BACKGROUND_IMAGE_Z);
 
 			//last_minimap_bot_left_pos = minimap_image->rect.getMin();
 
@@ -741,6 +753,12 @@ void MiniMap::updateWidgetPositions()
 			const float margin_px = 18;
 			expand_button->setPosAndDims(Vec2f(1.f - gl_ui->getUIWidthForDevIndepPixelWidth(margin_px + expand_button_w_px), gl_ui->getViewportMinMaxY() - gl_ui->getUIWidthForDevIndepPixelWidth(margin_px + expand_button_w_px)), 
 				Vec2f(expand_button_w, expand_button_w));
+
+			//---------------------------- Update tile clip regions ----------------------------
+			const float clip_border_width = gl_ui->getUIWidthForDevIndepPixelWidth(clip_border_width_px);
+			for(int y=0; y<TILE_GRID_RES; ++y)
+			for(int x=0; x<TILE_GRID_RES; ++x)
+				tiles.elem(x, y).ob->clip_region = gl_ui->OpenGLRectCoordsForUICoords(Rect2f(minimap_image->rect.getMin() + Vec2f(clip_border_width), minimap_image->rect.getMax() - Vec2f(clip_border_width)));
 		}
 	}
 }
@@ -779,7 +797,7 @@ void MiniMap::updateMarkerForAvatar(Avatar* avatar, const Vec3d& avatar_pos)
 	if(gl_ui.isNull())
 		return;
 
-	if(minimap_image.nonNull() && !minimap_image->isVisible()) // If map is hidden, don't do any work.
+	if(minimap_image && !minimap_image->isVisible()) // If map is hidden, don't do any work.
 		return;
 
 
@@ -944,7 +962,7 @@ void MiniMap::mouseWheelEventOccurred(GLUICallbackMouseWheelEvent& event)
 	if(gl_ui.isNull())
 		return;
 
-	if(minimap_image.nonNull() && !minimap_image->isVisible()) // If map is hidden, don't do any work.
+	if(minimap_image && !minimap_image->isVisible()) // If map is hidden, don't do any work.
 		return;
 
 
@@ -962,5 +980,7 @@ void MiniMap::mouseWheelEventOccurred(GLUICallbackMouseWheelEvent& event)
 		last_centre_x = -10000;
 		last_centre_y = -10000;
 		checkUpdateTilesForCurCamPosition();
+
+		setTileOverlayObjectTransforms();
 	}
 }

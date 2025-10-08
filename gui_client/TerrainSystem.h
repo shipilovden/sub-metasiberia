@@ -39,17 +39,17 @@ struct TerrainPathSpecSection
 {
 	int x, y; // section coordinates.  (0,0) is section centered on world origin.
 
-	std::string heightmap_path;
-	std::string mask_map_path;
-	std::string tree_mask_map_path;
+	OpenGLTextureKey heightmap_path;
+	OpenGLTextureKey mask_map_path;
+	OpenGLTextureKey tree_mask_map_path;
 };
 
 struct TerrainPathSpec
 {
 	std::vector<TerrainPathSpecSection> section_specs;
 
-	std::string detail_col_map_paths[4];
-	std::string detail_height_map_paths[4];
+	OpenGLTextureKey detail_col_map_paths[4];
+	OpenGLTextureKey detail_height_map_paths[4];
 
 	float terrain_section_width_m;
 	float default_terrain_z;
@@ -61,9 +61,9 @@ struct TerrainPathSpec
 
 struct TerrainDataSection
 {
-	std::string heightmap_path;
-	std::string mask_map_path;
-	std::string tree_mask_map_path;
+	OpenGLTextureKey heightmap_path;
+	OpenGLTextureKey mask_map_path;
+	OpenGLTextureKey tree_mask_map_path;
 
 	Map2DRef heightmap;
 	OpenGLTextureRef heightmap_gl_tex;
@@ -87,7 +87,9 @@ struct TerrainChunkData
 class MakeTerrainChunkTask : public glare::Task
 {
 public:
-	virtual void run(size_t thread_index);
+	virtual void run(size_t thread_index) override;
+
+	virtual void removedFromQueue() override;
 
 	uint64 node_id;
 	float chunk_x, chunk_y; // world-space coords of lower left corner of chunk.
@@ -99,6 +101,8 @@ public:
 	TerrainChunkData chunk_data; // Result of building chunk
 
 	ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue;
+
+	glare::AtomicInt* num_uncompleted_tasks_ptr;
 };
 
 
@@ -158,9 +162,9 @@ public:
 	void shutdown();
 
 	// A texture that will be used by the terrain system has been loaded into OpenGL.
-	void handleTextureLoaded(const std::string& path, const Map2DRef& map);
+	void handleTextureLoaded(const OpenGLTextureKey& path, const Map2DRef& map);
 
-	bool isTextureUsedByTerrain(const std::string& path) const;
+	bool isTextureUsedByTerrain(const OpenGLTextureKey& path) const;
 
 	void handleCompletedMakeChunkTask(const TerrainChunkGeneratedMsg& msg);
 
@@ -228,4 +232,6 @@ private:
 	float terrain_scale_factor;
 
 	std::vector<GLObjectRef> water_gl_obs;
+
+	glare::AtomicInt num_uncompleted_tasks;
 };

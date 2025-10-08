@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2021 -
 
 
 #include "../shared/ResourceManager.h"
+#include "../shared/URLString.h"
 #include "DownloadingResourceQueue.h"
 #include "WorldState.h"
 #include <MySocket.h>
@@ -30,8 +31,8 @@ class DownloadingResourceQueue;
 class ResourceDownloadedMessage : public ThreadMessage
 {
 public:
-	ResourceDownloadedMessage(const std::string& URL_, const ResourceRef& resource_) : URL(URL_), resource(resource_) {}
-	std::string URL;
+	ResourceDownloadedMessage(const URLString& URL_, const ResourceRef& resource_) : URL(URL_), resource(resource_) {}
+	URLString URL;
 	ResourceRef resource;
 
 	Reference<LoadedBuffer> loaded_buffer; // For emscripten, where we will load directly into memory instead of to disk.
@@ -40,7 +41,7 @@ public:
 
 /*=====================================================================
 DownloadResourcesThread
--------------------
+-----------------------
 Downloads any resources from the server as needed.
 This thread gets sent DownloadResourceMessage from MainWindow, when a new file is needed to be downloaded.
 It sends ResourceDownloadedMessages back to MainWindow via the out_msg_queue when files are downloaded.

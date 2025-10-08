@@ -18,6 +18,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/FileUtils.h>
 #include <utils/ContainerUtils.h>
 #include <utils/RuntimeCheck.h>
+#include <utils/PlatformUtils.h>
 #include "graphics/Voronoi.h"
 #include "graphics/FormatDecoderGLTF.h"
 #include "graphics/PNGDecoder.h"
@@ -28,10 +29,12 @@ Copyright Glare Technologies Limited 2023 -
 #include "opengl/MeshPrimitiveBuilding.h"
 #include "meshoptimizer/src/meshoptimizer.h"
 #include "../dll/include/IndigoMesh.h"
+#include <tracy/Tracy.hpp>
 
 
 TerrainSystem::TerrainSystem()
 {
+	num_uncompleted_tasks = 0;
 }
 
 
@@ -347,7 +350,7 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 			if(!(offset_x == 0 && offset_y == 0))
 			{
 				// Tessellate ground mesh, to avoid texture shimmer due to large quads.
-				GLObjectRef gl_ob = new GLObject();
+				GLObjectRef gl_ob = opengl_engine->allocateObject();
 				gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, spec.water_z) * Matrix4f::uniformScaleMatrix(large_water_quad_w) * Matrix4f::translationMatrix(-0.5f + offset_x, -0.5f + offset_y, 0);
 				gl_ob->mesh_data = quad_meshdata;
 
@@ -361,7 +364,7 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 
 		{
 			// Tessellate ground mesh, to avoid texture shimmer due to large quads.
-			GLObjectRef gl_ob = new GLObject();
+			GLObjectRef gl_ob = opengl_engine->allocateObject();
 			gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, spec.water_z) * Matrix4f::uniformScaleMatrix(large_water_quad_w) * Matrix4f::translationMatrix(-0.5f, -0.5f, 0);
 			gl_ob->mesh_data = MeshPrimitiveBuilding::makeQuadMesh(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,1,0,0), /*res=*/64);
 
@@ -376,7 +379,7 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 
 		// Create cylinder for water boundary
 		{
-			GLObjectRef gl_ob = new GLObject();
+			GLObjectRef gl_ob = opengl_engine->allocateObject();
 			const float wall_h = 1000.0f;
 			gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, -wall_h) * Matrix4f::scaleMatrix(25000, 25000, wall_h);
 			gl_ob->mesh_data = MeshPrimitiveBuilding::makeCylinderMesh(*opengl_engine->vert_buf_allocator.ptr(), /*end_caps=*/false);
@@ -411,9 +414,10 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 }
 
 
-void TerrainSystem::handleTextureLoaded(const std::string& path, const Map2DRef& map)
+void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2DRef& map)
 {
 	// conPrint("TerrainSystem::handleTextureLoaded(): path: '" + path + "'");
+	ZoneScoped; // Tracy profiler
 
 	assert(opengl_engine->isOpenGLTextureInsertedForKey(OpenGLTextureKey(path)));
 
@@ -468,7 +472,7 @@ void TerrainSystem::handleTextureLoaded(const std::string& path, const Map2DRef&
 }
 
 
-bool TerrainSystem::isTextureUsedByTerrain(const std::string& path) const
+bool TerrainSystem::isTextureUsedByTerrain(const OpenGLTextureKey& path) const
 {
 	for(int i=0; i<4; ++i)
 	{
@@ -536,6 +540,22 @@ void TerrainSystem::removeAllNodeDataForSubtree(TerrainNode* node)
 
 void TerrainSystem::shutdown()
 {
+	// Wait for any MakeTerrainChunkTasks to finish, since they have pointers to this object
+	const int max_num_wait_iters = 10000;
+	int z = 0;
+	assert(num_uncompleted_tasks >= 0);
+	while(num_uncompleted_tasks != 0)
+	{
+		assert(num_uncompleted_tasks >= 0);
+		PlatformUtils::Sleep(1);
+		z++;
+		if(z > max_num_wait_iters)
+		{
+			conPrint("Internal error: failed to wait for all MakeTerrainChunkTasks: num_uncompleted_tasks=" + toString(num_uncompleted_tasks));
+			break;
+		}
+	}
+
 	terrain_scattering.shutdown();
 
 	if(root_node.nonNull())
@@ -1414,6 +1434,9 @@ void TerrainSystem::createSubtree(TerrainNode* node, const Vec3d& campos)
 		assert(desired_depth <= node->depth);
 		// This node should be a leaf node
 
+		assert(num_uncompleted_tasks >= 0);
+		num_uncompleted_tasks++;
+
 		// Create geometry for it
 		MakeTerrainChunkTask* task = new MakeTerrainChunkTask();
 		task->node_id = node->id;
@@ -1424,6 +1447,7 @@ void TerrainSystem::createSubtree(TerrainNode* node, const Vec3d& campos)
 		//task->build_physics_ob = (max_depth - node->depth) < 3;
 		task->terrain = this;
 		task->out_msg_queue = out_msg_queue;
+		task->num_uncompleted_tasks_ptr = &num_uncompleted_tasks;
 		task_manager->addTask(task);
 
 		node->building = true;
@@ -1486,6 +1510,9 @@ void TerrainSystem::updateSubtree(TerrainNode* cur, const Vec3d& campos)
 			if(!cur->building)
 			{
 				// No chunk at this location, make one
+				assert(num_uncompleted_tasks >= 0);
+				num_uncompleted_tasks++;
+
 				MakeTerrainChunkTask* task = new MakeTerrainChunkTask();
 				task->node_id = cur->id;
 				task->chunk_x = cur->aabb.min_[0];
@@ -1495,6 +1522,7 @@ void TerrainSystem::updateSubtree(TerrainNode* cur, const Vec3d& campos)
 				//task->build_physics_ob = (max_depth - cur->depth) < 3;
 				task->terrain = this;
 				task->out_msg_queue = out_msg_queue;
+				task->num_uncompleted_tasks_ptr = &num_uncompleted_tasks;
 				task_manager->addTask(task);
 
 				//conPrint("Making new node chunk");
@@ -1657,7 +1685,7 @@ void TerrainSystem::handleCompletedMakeChunkTask(const TerrainChunkGeneratedMsg&
 			mesh_data->vert_index_buffer_uint8.clearAndFreeMem();
 		}
 
-		GLObjectRef gl_ob = new GLObject();
+		GLObjectRef gl_ob = opengl_engine->allocateObject();
 		gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(msg.chunk_x, msg.chunk_y, 0);
 		gl_ob->mesh_data = mesh_data;
 
@@ -1774,6 +1802,8 @@ void MakeTerrainChunkTask::run(size_t thread_index)
 {
 	try
 	{
+		assert((*num_uncompleted_tasks_ptr) >= 0);
+
 		// Make terrain
 		terrain->makeTerrainChunkMesh(chunk_x, chunk_y, chunk_w, build_physics_ob, /*chunk data out=*/chunk_data);
 
@@ -1794,4 +1824,14 @@ void MakeTerrainChunkTask::run(size_t thread_index)
 	{
 		conPrint(e.what());
 	}
+
+	assert((*num_uncompleted_tasks_ptr) >= 0);
+	(*num_uncompleted_tasks_ptr)--;
+}
+
+
+void MakeTerrainChunkTask::removedFromQueue()
+{
+	assert((*num_uncompleted_tasks_ptr) >= 0);
+	(*num_uncompleted_tasks_ptr)--;
 }
