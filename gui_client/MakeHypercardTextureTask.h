@@ -6,12 +6,15 @@ Copyright Glare Technologies Limited 2022 -
 #pragma once
 
 
+#include <opengl/OpenGLTexture.h>
 #include <Task.h>
 #include <ThreadMessage.h>
 #include <ThreadSafeQueue.h>
 #include <string>
 class OpenGLEngine;
 class TextRendererFontFaceSizeSet;
+class OpenGLUploadThread;
+namespace glare { class FastPoolAllocator; }
 
 
 /*=====================================================================
@@ -27,10 +30,13 @@ public:
 
 	virtual void run(size_t thread_index);
 
-	std::string tex_key;
+	OpenGLTextureKey tex_key;
 	Reference<OpenGLEngine> opengl_engine;
+	Reference<glare::FastPoolAllocator> texture_loaded_msg_allocator;
 	Reference<TextRendererFontFaceSizeSet> fonts;
 	std::string hypercard_content;
 	ThreadSafeQueue<Reference<ThreadMessage> >* result_msg_queue;
 	Reference<glare::Allocator> worker_allocator;
+
+	Reference<OpenGLUploadThread> upload_thread;
 };

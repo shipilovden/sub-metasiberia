@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2023 -
 
 #include "GUIClient.h"
 #include "EmbeddedBrowser.h"
+#include "LoadTextureTask.h"
 #include "CEF.h"
 #include "../shared/ResourceManager.h"
 #include "../shared/WorldObject.h"
@@ -19,14 +20,15 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/ConPrint.h>
 #include <utils/PlatformUtils.h>
 #include <utils/FileInStream.h>
+#include <utils/IncludeHalf.h>
 #include <xxhash.h>
+#include <tracy/Tracy.hpp>
 
 
 AnimatedTexData::AnimatedTexData(bool is_mp4_)
-:	last_loaded_frame_i(-1),
-	cur_frame_i(0),
-	is_mp4(is_mp4_)
-{}
+:	is_mp4(is_mp4_)
+{
+}
 
 AnimatedTexData::~AnimatedTexData()
 {
@@ -43,123 +45,8 @@ AnimatedTexData::~AnimatedTexData()
 }
 
 
-void AnimatedTexObData::processGIFAnimatedTex(GUIClient* gui_client, OpenGLEngine* opengl_engine, WorldObject* ob, double anim_time, double dt,
-	OpenGLMaterial& mat, Reference<OpenGLTexture>& texture, AnimatedTexData& animtexdata, const std::string& tex_path, bool is_refl_tex)
-{
-	if(!texture)
-		return;
-	TextureData* texdata = texture->texture_data.ptr();
-	if(texdata)
-	{
-		const int num_frames = (int)texdata->num_frames;
-		const double total_anim_time = texdata->last_frame_end_time;
-		if((num_frames > 0) && (total_anim_time > 0)) // Check !frames.empty() for back() calls below.
-		{
-			const double in_anim_time = Maths::doubleMod(anim_time, total_anim_time);
-			assert(in_anim_time >= 0);
-
-			// Search for the current frame, setting animtexdata.cur_frame_i, for in_anim_time.
-			// Note that in_anim_time may have increased just a little bit since last time process() was called, or it may have jumped a lot if object left and re-entered the camera view.
-
-			if(animtexdata.cur_frame_i < 0 && animtexdata.cur_frame_i >= num_frames) // Make sure cur_frame_i is in bounds.
-			{
-				assert(false);
-				animtexdata.cur_frame_i = 0;
-			}
-
-			// If frame durations are equal, we can skip the frame search stuff, and just compute the frame index directly.
-			if(texdata->frame_durations_equal)
-			{
-				int index = (int)(in_anim_time * texdata->recip_frame_duration);
-				assert(index >= 0);
-
-				if(index >= num_frames)
-					index = 0;
-
-				animtexdata.cur_frame_i = index;
-			}
-			else
-			{
-				// Else frame end times are irregularly spaced.  
-				// Start with a special case search, where we assume in_anim_time just increased a little bit, so that we are still on the same frame, or maybe the next frame.
-				// If that doesn't find the correct frame, then fall back to a binary search over all frames to find the correct frame.
-
-				// Is in_anim_time still in the time range of the current frame?  Note that we need to check both frame start and end times as in_anim_time may have decreased.
-				// cur frame start time = prev frame end time, but be careful about wraparound.
-				const double cur_frame_start_time = (animtexdata.cur_frame_i == 0) ? 0.0 : texdata->frame_end_times[animtexdata.cur_frame_i - 1];
-				if(in_anim_time >= cur_frame_start_time && in_anim_time <= texdata->frame_end_times[animtexdata.cur_frame_i])
-				{
-					// animtexdata.cur_frame_i is unchanged.
-					//conPrint("current frame is unchanged");
-				}
-				else
-				{
-					// See if in_anim_time is in the time range of the next frame
-					double next_frame_start_time, next_frame_end_time;
-					int next_frame_index;
-					if(animtexdata.cur_frame_i == num_frames - 1)
-					{
-						next_frame_start_time = 0.0;
-						next_frame_end_time = texdata->frame_end_times[0];
-						next_frame_index = 0;
-					}
-					else
-					{
-						next_frame_start_time = texdata->frame_end_times[animtexdata.cur_frame_i];
-						next_frame_end_time   = texdata->frame_end_times[animtexdata.cur_frame_i + 1];
-						next_frame_index = animtexdata.cur_frame_i + 1;
-					}
-
-					if(in_anim_time >= next_frame_start_time && in_anim_time <= next_frame_end_time) // if in_anim_time is in the time range of the next frame:
-					{
-						animtexdata.cur_frame_i = next_frame_index;
-						//conPrint("advancing to next frame");
-					}
-					else
-					{
-						//conPrint("Finding frame with binary search");
-
-						// Else in_anim_time was not in current frame or next frame periods.
-						// Do binary search for current frame.
-						const auto res = std::lower_bound(texdata->frame_end_times.begin(), texdata->frame_end_times.end(), in_anim_time); // Get the position of the first frame_end_time >= in_anim_time.
-						int index = (int)(res - texdata->frame_end_times.begin());
-						assert(index >= 0);
-						if(index >= num_frames)
-							index = 0;
-
-						animtexdata.cur_frame_i = index;
-					}
-				}
-			}
-
-			assert(animtexdata.cur_frame_i >= 0 && animtexdata.cur_frame_i < num_frames); // Should be in bounds
-
-			if(animtexdata.cur_frame_i >= 0 && animtexdata.cur_frame_i < num_frames) // Make sure in bounds
-			{
-				if(animtexdata.cur_frame_i != animtexdata.last_loaded_frame_i) // If cur frame changed: (Avoid uploading the same frame multiple times in a row)
-				{
-					/*printVar(animtexdata.cur_frame_i);*/
-
-					// There may be some frames after a LOD level change where the new texture with the updated size is loading, and thus we have a size mismatch.
-					// Don't try and upload the wrong size or we will get an OpenGL error or crash.
-
-					OpenGLTextureRef tex = is_refl_tex ? mat.albedo_texture : mat.emission_texture;
-
-					if(tex.nonNull() && tex->xRes() == texdata->W && tex->yRes() == texdata->H)
-						TextureLoading::loadIntoExistingOpenGLTexture(tex, *texdata, animtexdata.cur_frame_i);
-					//else
-					//	conPrint("AnimatedTexObData::process(): tex data W or H wrong.");
-
-					animtexdata.last_loaded_frame_i = animtexdata.cur_frame_i;
-				}
-			}
-		}
-	}
-}
-
-
 void AnimatedTexObData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine* opengl_engine, WorldObject* ob, double anim_time, double dt,
-	OpenGLMaterial& mat, AnimatedTexData& animtexdata, const std::string& tex_path, bool is_refl_tex)
+	OpenGLMaterial& mat, AnimatedTexData& animtexdata, const OpenGLTextureKey& tex_path, bool is_refl_tex)
 {
 #if CEF_SUPPORT
 	if(!CEF::isInitialised())
@@ -240,9 +127,12 @@ void AnimatedTexObData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngin
 
 AnimatedTexObDataProcessStats AnimatedTexObData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, WorldObject* ob, double anim_time, double dt)
 {
+	ZoneScoped; // Tracy profiler
+
 	AnimatedTexObDataProcessStats stats;
 	stats.num_gif_textures_processed = 0;
 	stats.num_mp4_textures_processed = 0;
+	stats.num_gif_frames_advanced = 0;
 
 	if(ob->opengl_engine_ob.isNull())
 		return stats;
@@ -289,11 +179,11 @@ AnimatedTexObDataProcessStats AnimatedTexObData::process(GUIClient* gui_client, 
 						stats.num_mp4_textures_processed++;
 					}
 				}
-				else
-				{
-					processGIFAnimatedTex(gui_client, opengl_engine, ob, anim_time, dt, mat, mat.albedo_texture, *refl_data, mat.tex_path, /*is refl tex=*/true);
-					stats.num_gif_textures_processed++;
-				}
+				//else
+				//{
+				//	processGIFAnimatedTex(gui_client, opengl_engine, ob->opengl_engine_ob, ob, anim_time, dt, mat, mat.albedo_texture, *refl_data, mat.tex_path, /*is refl tex=*/true, stats.num_gif_frames_advanced);
+				//	stats.num_gif_textures_processed++;
+				//}
 			}
 
 			//---- Handle animated emission texture ----
@@ -308,11 +198,11 @@ AnimatedTexObDataProcessStats AnimatedTexObData::process(GUIClient* gui_client, 
 						stats.num_mp4_textures_processed++;
 					}
 				}
-				else
-				{
-					processGIFAnimatedTex(gui_client, opengl_engine, ob, anim_time, dt, mat, mat.emission_texture, *emission_data, mat.emission_tex_path, /*is refl tex=*/false);
-					stats.num_gif_textures_processed++;
-				}
+				//else
+				//{
+				//	processGIFAnimatedTex(gui_client, opengl_engine, ob->opengl_engine_ob, ob, anim_time, dt, mat, mat.emission_texture, *emission_data, mat.emission_tex_path, /*is refl tex=*/false, stats.num_gif_frames_advanced);
+				//	stats.num_gif_textures_processed++;
+				//}
 			}
 		}
 	}
@@ -369,7 +259,7 @@ AnimatedTexObDataProcessStats AnimatedTexObData::process(GUIClient* gui_client, 
 }
 
 
-void AnimatedTexObData::rescanObjectForAnimatedTextures(WorldObject* ob)
+void AnimatedTexObData::rescanObjectForAnimatedTextures(OpenGLEngine* opengl_engine, WorldObject* ob, PCG32& rng, AnimatedTextureManager& animated_tex_manager)
 {
 	if(ob->opengl_engine_ob.isNull())
 		return;
@@ -381,31 +271,304 @@ void AnimatedTexObData::rescanObjectForAnimatedTextures(WorldObject* ob)
 	{
 		const OpenGLMaterial& mat = ob->opengl_engine_ob->materials[m];
 
-		if(mat.albedo_texture && mat.albedo_texture->texture_data && mat.albedo_texture->texture_data->isMultiFrame())
-		{
-			if(animation_data.mat_animtexdata[m].refl_col_animated_tex_data.isNull())
-				animation_data.mat_animtexdata[m].refl_col_animated_tex_data = new AnimatedTexData(/*is mp4=*/false);
-		}
-		else if(hasExtensionStringView(mat.tex_path, "mp4"))
+		if(hasExtension(mat.tex_path, "mp4"))
 		{
 			if(animation_data.mat_animtexdata[m].refl_col_animated_tex_data.isNull())
 				animation_data.mat_animtexdata[m].refl_col_animated_tex_data = new AnimatedTexData(/*is mp4=*/true);
 		}
-		//else
-		//	animation_data.mat_animtexdata[m].refl_col_animated_tex_data = nullptr;
 
 		// Emission tex
-		if(mat.emission_texture && mat.emission_texture->texture_data && mat.emission_texture->texture_data->isMultiFrame())
-		{
-			if(animation_data.mat_animtexdata[m].emission_col_animated_tex_data.isNull())
-				animation_data.mat_animtexdata[m].emission_col_animated_tex_data = new AnimatedTexData(/*is mp4=*/false);
-		}
-		else if(hasExtensionStringView(mat.emission_tex_path, "mp4"))
+		if(hasExtension(mat.emission_tex_path, "mp4"))
 		{
 			if(animation_data.mat_animtexdata[m].emission_col_animated_tex_data.isNull())
 				animation_data.mat_animtexdata[m].emission_col_animated_tex_data = new AnimatedTexData(/*is mp4=*/true);
 		}
-		//else
-		//	animation_data.mat_animtexdata[m].emission_col_animated_tex_data = nullptr;
+	}
+}
+
+
+AnimatedTextureManager::AnimatedTextureManager()
+:	last_num_textures_visible_and_close(0)
+{
+}
+
+
+void AnimatedTextureManager::think(GUIClient* gui_client, OpenGLEngine* opengl_engine, double anim_time, double dt)
+{
+	last_num_textures_visible_and_close = 0;
+
+	for(auto info_it = tex_info.begin(); info_it != tex_info.end(); ++info_it)
+	{
+		AnimatedTexInfo& info = *info_it->second;
+
+		if(info.original_tex)
+		{
+			// Iterate over all objects using this texture, see if any are visible and close enough to camera
+			bool visible_and_close = false;
+
+			for(auto it = info.uses.begin(); (it != info.uses.end()) && !visible_and_close; ++it)
+			{
+				const GLObject* ob = it->ob.ptr();
+				if(opengl_engine->isObjectInCameraFrustum(*ob))
+				{
+					// Work out if the object is sufficiently large, as seen from the camera, and sufficiently close to the camera.
+					// Gifs will play further away than mp4s.
+					const float max_dist = 200.f; // textures <= max_dist are updated
+					const float min_recip_dist = 1 / max_dist; // textures >= min_recip_dist are updated
+
+					const float ob_w = ob->aabb_ws.longestLength();
+					const float recip_dist = (ob->aabb_ws.centroid() - gui_client->cam_controller.getPosition().toVec4fPoint()).fastApproxRecipLength();
+					const float proj_len = ob_w * recip_dist;
+
+					const bool large_enough     = (proj_len > 0.01f) && (recip_dist > min_recip_dist);
+					if(large_enough)
+						visible_and_close = true;
+				}
+			}
+
+			if(visible_and_close)
+			{
+				TextureData* texdata = info.original_tex->texture_data.ptr();
+				if(texdata)
+				{
+					const int num_frames = (int)texdata->num_frames;
+					const double total_anim_time = texdata->last_frame_end_time;
+					if((num_frames > 0) && (total_anim_time > 0)) // Check !frames.empty() for back() calls below.
+					{
+						const double in_anim_time = Maths::doubleMod(anim_time/* + info.time_offset*/, total_anim_time);
+						assert(in_anim_time >= 0);
+
+						// Search for the current frame, setting animtexdata.cur_frame_i, for in_anim_time.
+						// Note that in_anim_time may have increased just a little bit since last time process() was called, or it may have jumped a lot if object left and re-entered the camera view.
+
+						if(info.cur_frame_i < 0 && info.cur_frame_i >= num_frames) // Make sure cur_frame_i is in bounds.
+						{
+							assert(false);
+							info.cur_frame_i = 0;
+						}
+
+						// If frame durations are equal, we can skip the frame search stuff, and just compute the frame index directly.
+						if(texdata->frame_durations_equal)
+						{
+							int index = (int)(in_anim_time * texdata->recip_frame_duration);
+							assert(index >= 0);
+
+							if(index >= num_frames)
+								index = 0;
+
+							info.cur_frame_i = index;
+						}
+						else
+						{
+							// Else frame end times are irregularly spaced.  
+							// Start with a special case search, where we assume in_anim_time just increased a little bit, so that we are still on the same frame, or maybe the next frame.
+							// If that doesn't find the correct frame, then fall back to a binary search over all frames to find the correct frame.
+
+							// Is in_anim_time still in the time range of the current frame?  Note that we need to check both frame start and end times as in_anim_time may have decreased.
+							// cur frame start time = prev frame end time, but be careful about wraparound.
+							const double cur_frame_start_time = (info.cur_frame_i == 0) ? 0.0 : texdata->frame_end_times[info.cur_frame_i - 1];
+							if(in_anim_time >= cur_frame_start_time && in_anim_time <= texdata->frame_end_times[info.cur_frame_i])
+							{
+								// animtexdata.cur_frame_i is unchanged.
+								//conPrint("current frame is unchanged");
+							}
+							else
+							{
+								// See if in_anim_time is in the time range of the next frame
+								double next_frame_start_time, next_frame_end_time;
+								int next_frame_index;
+								if(info.cur_frame_i == num_frames - 1)
+								{
+									next_frame_start_time = 0.0;
+									next_frame_end_time = texdata->frame_end_times[0];
+									next_frame_index = 0;
+								}
+								else
+								{
+									next_frame_start_time = texdata->frame_end_times[info.cur_frame_i];
+									next_frame_end_time   = texdata->frame_end_times[info.cur_frame_i + 1];
+									next_frame_index = info.cur_frame_i + 1;
+								}
+
+								if(in_anim_time >= next_frame_start_time && in_anim_time <= next_frame_end_time) // if in_anim_time is in the time range of the next frame:
+								{
+									info.cur_frame_i = next_frame_index;
+									//conPrint("advancing to next frame");
+								}
+								else
+								{
+									//conPrint("Finding frame with binary search");
+
+									// Else in_anim_time was not in current frame or next frame periods.
+									// Do binary search for current frame.
+									const auto res = std::lower_bound(texdata->frame_end_times.begin(), texdata->frame_end_times.end(), in_anim_time); // Get the position of the first frame_end_time >= in_anim_time.
+									int index = (int)(res - texdata->frame_end_times.begin());
+									assert(index >= 0);
+									if(index >= num_frames)
+										index = 0;
+
+									info.cur_frame_i = index;
+								}
+							}
+						}
+
+						assert(info.cur_frame_i >= 0 && info.cur_frame_i < num_frames); // Should be in bounds
+
+						if(info.cur_frame_i >= 0 && info.cur_frame_i < num_frames) // Make sure in bounds
+						{
+							if(info.cur_frame_i != info.last_loaded_frame_i) // If cur frame changed: (Avoid uploading the same frame multiple times in a row)
+							{
+								if(gui_client->opengl_upload_thread)
+								{
+									Reference<OpenGLTexture> next_tex = (info.next_tex_i == 0) ? info.original_tex : info.other_tex;
+									Reference<OpenGLTexture> from_tex = (info.next_tex_i == 0) ? info.other_tex    : info.original_tex;
+
+									// NOTE: next_tex will be null if this is the first time we have updated a frame for this animated texture.
+									// In this case the texture will be created on the OpenGLUploadThread.
+
+									// Don't load new data into the texture that is currently applied to objects.
+									// This could happen if the opengl upload thread is slow uploading textures.
+									if(info.next_tex_i != info.cur_displayed_tex_i)
+									{
+										if(from_tex)
+										{
+											//conPrint("Sending UploadTextureMessage for tex " + info.original_tex->key);
+											UploadTextureMessage* msg = gui_client->opengl_upload_thread->allocUploadTextureMessage();
+											msg->is_animated_texture_update = true;
+											//msg->tex_params = from_tex->getTexParams(); TODO: set tex params from from_tex
+											msg->texture_data = texdata;
+											msg->old_tex = from_tex;
+											msg->new_tex = next_tex;
+											msg->frame_i = info.cur_frame_i;
+											if(!next_tex)
+												msg->tex_path = info.original_tex->key;
+
+											gui_client->opengl_upload_thread->getMessageQueue().enqueue(msg);
+
+											info.next_tex_i = (info.next_tex_i + 1) % 2;
+										}
+									}
+									//else
+									//	conPrint("Can't start loading into next tex i " + toString(info.next_tex_i) + ", is currently applied");
+								}
+								else
+								{
+									// Insert message into gui_client async_texture_loaded_messages_to_process, which will load the frame in an async manner on the main OpenGL context.
+									// Note that when loading this way (as opposed to using a separate upload thread), we seem to be able to get away with just updating
+									// the texture currently in use, without seeing any glitches from partially updated textures.  In other words we don't need to ping-pong between two textures.
+									Reference<TextureLoadedThreadMessage> msg = gui_client->allocTextureLoadedThreadMessage();
+									msg->texture_data = texdata;
+									msg->existing_opengl_tex = info.original_tex;
+									msg->load_into_frame_i = info.cur_frame_i;
+										
+									gui_client->async_texture_loaded_messages_to_process.push_back(msg);
+								}
+								
+								info.last_loaded_frame_i = info.cur_frame_i;
+							}
+						}
+					}
+				}
+
+				last_num_textures_visible_and_close++;
+			} // end if(visible_and_close)
+		}
+	}
+}
+
+
+std::string AnimatedTextureManager::diagnostics()
+{
+	std::string s = "----AnimatedTextureManager----\n";
+	s += "last_num_textures_visible_and_close: " + toString(last_num_textures_visible_and_close) + "\n\n";
+	for(auto info_it = tex_info.begin(); info_it != tex_info.end(); ++info_it)
+	{
+		AnimatedTexInfo& info = *info_it->second;
+
+		if(info.original_tex)
+			s += std::string(info.original_tex->key) + ": uses: " + toString(info.uses.size()) + "\n";
+	}
+	s += "----------------------------\n";
+	return s;
+}
+
+
+void AnimatedTextureManager::doTextureSwap(OpenGLEngine* opengl_engine, const OpenGLTextureRef& old_tex, const OpenGLTextureRef& new_tex)
+{
+	assert(old_tex->key == new_tex->key);
+
+	auto res = tex_info.find(old_tex->key);
+	if(res != tex_info.end())
+	{
+		AnimatedTexInfo* info = res->second.ptr();
+
+		for(auto it = info->uses.begin(); it != info->uses.end(); ++it)
+		{
+			const AnimatedTexUse& use = *it;
+
+			OpenGLMaterial& mat = use.ob->materials[use.mat_index];
+
+			if(mat.albedo_texture == old_tex)
+				mat.albedo_texture = new_tex;
+			if(mat.emission_texture == old_tex)
+				mat.emission_texture = new_tex;
+
+			opengl_engine->materialTextureChanged(*use.ob, mat);
+		}
+
+		// Handle case where the other texture was created in OpenGLUploadThread.
+		if(!info->other_tex)
+		{
+			//assert(old_tex == info->original_tex);
+			info->other_tex = new_tex;
+		}
+
+		info->cur_displayed_tex_i = (info->cur_displayed_tex_i + 1) % 2;
+	}
+}
+
+
+void AnimatedTextureManager::checkAddTextureUse(const Reference<OpenGLTexture>& texture, GLObjectRef ob, size_t mat_index)
+{
+	Reference<AnimatedTexInfo> info;
+	auto res = tex_info.find(texture->key);
+	if(res == tex_info.end())
+	{
+		info = new AnimatedTexInfo();
+
+		info->last_loaded_frame_i = -1;
+		info->cur_frame_i = 0;
+		info->original_tex = texture;
+
+		info->cur_displayed_tex_i = 0;
+		info->next_tex_i = 1;
+
+		tex_info[texture->key] = info;
+	}
+	else
+		info = res->second;
+
+
+	AnimatedTexUse use;
+	use.ob = ob;
+	use.mat_index = mat_index;
+	info->uses.insert(use);
+}
+
+
+void AnimatedTextureManager::removeTextureUse(const Reference<OpenGLTexture>& tex, GLObjectRef ob, size_t mat_index)
+{
+	auto res = tex_info.find(tex->key);
+	if(res != tex_info.end())
+	{
+		AnimatedTexInfo* info = res->second.ptr();
+
+		AnimatedTexUse use;
+		use.ob = ob;
+		use.mat_index = mat_index;
+
+		info->uses.erase(use);
+		if(info->uses.empty())
+			tex_info.erase(res);
 	}
 }

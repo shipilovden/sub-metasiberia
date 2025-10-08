@@ -18,7 +18,6 @@ Copyright Glare Technologies Limited 2024 -
 #include "HeadUpDisplayUI.h"
 #include "PhotoModeUI.h"
 #include "ChatUI.h"
-#include "MiniMap.h"
 #include "DownloadingResourceQueue.h"
 #include "LoadItemQueue.h"
 #include "MeshManager.h"
@@ -32,6 +31,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "../audio/AudioEngine.h"
 #include "../audio/MicReadThread.h" // For MicReadStatus
 #include "../opengl/TextureLoading.h"
+#include "../opengl/PBOAsyncTextureUploader.h"
+#include "../opengl/AsyncGeometryUploader.h"
 #include "../shared/WorldObject.h"
 #include "../shared/LuaScriptEvaluator.h"
 #include "../shared/TimerQueue.h"
@@ -45,6 +46,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <utils/SocketBufferOutStream.h>
 #include <utils/GenerationalArray.h>
 #include <utils/UniqueRef.h>
+#include <utils/ArenaAllocator.h>
 #include <maths/PCG32.h>
 #include <maths/LineSegment4f.h>
 #include <networking/IPAddress.h>
@@ -84,6 +86,13 @@ class SubstrataLuaVM;
 struct LoadedBuffer;
 struct AsyncUploadedGeometryInfo;
 struct PBOAsyncUploadedTextureInfo;
+class OpenGLUploadThread;
+class AnimatedTextureManager;
+class MiniMap;
+class VBOPool;
+class PBOPool;
+class VBO;
+class PBO;
 
 
 struct ResourceUserList
@@ -171,7 +180,7 @@ public:
 	void startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_level);
 	void startDownloadingResourcesForAvatar(Avatar* ob, int ob_lod_level, bool our_avatar);
 
-	void startDownloadingResource(const std::string& url, const Vec4f& centroid_ws, float aabb_ws_longest_len, const DownloadingResourceInfo& resouce_info); // For every resource that the object uses (model, textures etc..), if the resource is not present locally, start downloading it.
+	void startDownloadingResource(const URLString& url, const Vec4f& centroid_ws, float aabb_ws_longest_len, const DownloadingResourceInfo& resouce_info); // For every resource that the object uses (model, textures etc..), if the resource is not present locally, start downloading it.
 	
 	std::string getDiagnosticsString(bool do_graphics_diagnostics, bool do_physics_diagnostics, bool do_terrain_diagnostics, double last_timerEvent_CPU_work_elapsed, double last_updateGL_time);
 	void diagnosticsSettingsChanged();
@@ -223,7 +232,7 @@ public:
 	GLObjectRef makeSpeakerGLObject();
 public:
 	void loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock);
-	void loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, WorldStateLock& world_state_lock);
+	void loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, int voxel_subsample_factor, WorldStateLock& world_state_lock);
 	void loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
 	void loadModelForAvatar(Avatar* avatar);
 	void loadScriptForObject(WorldObject* ob, WorldStateLock& world_state_lock);
@@ -236,6 +245,7 @@ public:
 	void updateNotifications(double cur_time);
 	void setNotificationsVisible(bool visible);
 	void updateParcelGraphics();
+	void assignLODChunkSubMeshPlaceholderToOb(const LODChunk* chunk, WorldObject* const ob);
 	void updateLODChunkGraphics();
 	void updateAvatarGraphics(double cur_time, double dt, const Vec3d& cam_angles, bool our_move_impulse_zero);
 	void setThirdPersonCameraPosition(double dt);
@@ -253,9 +263,9 @@ public:
 	std::string serialiseAllObjectsInParcelToXML(size_t& num_obs_serialised_out);
 	void deleteAllParcelObjects(size_t& num_obs_deleted_out);
 	void setMaterialFlagsForObject(WorldObject* ob);
-	bool isResourceCurrentlyNeededForObject(const std::string& url, const WorldObject* ob) const;
-	bool isResourceCurrentlyNeededForObjectGivenIsDependency(const std::string& url, const WorldObject* ob) const;
-	bool isDownloadingResourceCurrentlyNeeded(const std::string& url) const;
+	bool isResourceCurrentlyNeededForObject(const URLString& url, const WorldObject* ob) const;
+	bool isResourceCurrentlyNeededForObjectGivenIsDependency(const URLString& url, const WorldObject* ob) const;
+	bool isDownloadingResourceCurrentlyNeeded(const URLString& url) const;
 public:
 	bool objectModificationAllowed(const WorldObject& ob);
 	bool connectedToUsersWorldOrGodUser();
@@ -273,7 +283,7 @@ public:
 	void pickUpSelectedObject();
 	void dropSelectedObject();
 
-	void checkForLODChanges();
+	void checkForLODChanges(Timer& timer_event_timer);
 	void checkForAudioRangeChanges();
 
 	int mouseOverAxisArrowOrRotArc(const Vec2f& pixel_coords, Vec4f& closest_seg_point_ws_out); // Returns closest axis arrow or -1 if no close.
@@ -284,23 +294,22 @@ public:
 	// new_ob_pos_out is set to new, clamped position.
 	bool clampObjectPositionToParcelForNewTransform(const WorldObject& ob, GLObjectRef& opengl_ob, const Vec3d& old_ob_pos,
 		const Matrix4f& tentative_to_world_matrix, js::Vector<EdgeMarker, 16>& edge_markers_out, Vec3d& new_ob_pos_out);
-	bool checkAddTextureToProcessingSet(const std::string& path); // returns true if was not in processed set (and hence this call added it), false if it was.
-	bool checkAddModelToProcessingSet(const std::string& url, bool dynamic_physics_shape); // returns true if was not in processed set (and hence this call added it), false if it was.
-	bool checkAddAudioToProcessingSet(const std::string& url); // returns true if was not in processed set (and hence this call added it), false if it was.
+	bool checkAddTextureToProcessingSet(const OpenGLTextureKey& path); // returns true if was not in processed set (and hence this call added it), false if it was.
+	bool checkAddModelToProcessingSet(const URLString& url, bool dynamic_physics_shape); // returns true if was not in processed set (and hence this call added it), false if it was.
+	bool checkAddAudioToProcessingSet(const URLString& url); // returns true if was not in processed set (and hence this call added it), false if it was.
 	bool checkAddScriptToProcessingSet(const std::string& script_content); // returns true if was not in processed set (and hence this call added it), false if it was.
 
-	void startLoadingTextureIfPresent(const UID& ob_uid, const std::string& tex_url, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_task_dist, float importance_factor, 
+	void startLoadingTextureIfPresent(const URLString& tex_url, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_task_dist, float importance_factor, 
 		const TextureParams& tex_params);
-	void startLoadingTextureForLocalPath(const UID& ob_uid, const std::string& local_abs_tex_path, const Reference<Resource>& resource, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_task_dist, float importance_factor, 
+	void startLoadingTextureForLocalPath(const OpenGLTextureKey& local_abs_tex_path, const Reference<Resource>& resource, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_task_dist, float importance_factor, 
 		const TextureParams& tex_params);
-	void startLoadingTextureForObject(const UID& ob_uid, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_dist_for_ob_lod_level, float max_dist_for_ob_lod_level_clamped_0, float importance_factor, const WorldMaterial& world_mat, 
-		int ob_lod_level, const std::string& texture_url, bool tex_has_alpha, bool use_sRGB, bool allow_compression);
+	void startLoadingTextureForObjectOrAvatar(const UID& ob_uid, const UID& avatar_uid, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_dist_for_ob_lod_level, float max_dist_for_ob_lod_level_clamped_0, float importance_factor, const WorldMaterial& world_mat, 
+		int ob_lod_level, const URLString& texture_url, bool tex_has_alpha, bool use_sRGB, bool allow_compression);
 	void startLoadingTexturesForObject(const WorldObject& ob, int ob_lod_level, float max_dist_for_ob_lod_level, float max_dist_for_ob_lod_level_clamped_0);
 	void startLoadingTexturesForAvatar(const Avatar& ob, int ob_lod_level, float max_dist_for_ob_lod_level, bool our_avatar);
 	void removeAndDeleteGLObjectsForOb(WorldObject& ob);
 	void removeAndDeleteGLAndPhysicsObjectsForOb(WorldObject& ob);
 	void removeAndDeleteGLObjectForAvatar(Avatar& ob);
-	void addPlaceholderObjectsForOb(WorldObject& ob);
 
 	//----------------------- ObLoadingCallbacks interface -----------------------
 	//virtual void loadObject(WorldObjectRef ob);
@@ -330,7 +339,9 @@ public:
 
 	void connectToServer(const URLParseResults& url_results);
 
-	void processLoading();
+	void processLoading(Timer& timer_event_timer);
+	void sendGeometryDataToGarbageDeleterThread(const Reference<OpenGLMeshRenderData>& gl_meshdata);
+	void sendWinterShaderEvaluatorToGarbageDeleterThread(const Reference<WinterShaderEvaluator>& script_evaluator);
 	ObjectPathController* getPathControllerForOb(const WorldObject& ob);
 	void createPathControlledPathVisObjects(const WorldObject& ob);
 	Reference<VehiclePhysics> createVehicleControllerForScript(WorldObject* ob);
@@ -356,13 +367,13 @@ public:
 	void updateSpotlightGraphicsEngineData(const Matrix4f& ob_to_world_matrix, WorldObject* ob);
 	void recreateTextGraphicsAndPhysicsObs(WorldObject* ob);
 
-	void handleLODChunkTextureLoaded(const std::string& tex_URL, OpenGLTextureRef opengl_tex);
-	void handleLODChunkMeshLoaded(const std::string& mesh_URL, Reference<MeshData> mesh_data);
+	void handleLODChunkMeshLoaded(const URLString& mesh_URL, Reference<MeshData> mesh_data, WorldStateLock& lock);
 
 	void assignLoadedOpenGLTexturesToMats(WorldObject* ob);
 
-	void handleUploadedMeshData(const std::string& lod_model_url, int loaded_model_lod_level, bool dynamic_physics_shape, OpenGLMeshRenderDataRef mesh_data, PhysicsShape& physics_shape, UID voxel_ob_uid, int voxel_subsample_factor);
-	void handleUploadedTexture(const std::string& path, const OpenGLTextureRef& opengl_tex, const TextureDataRef& tex_data, const Map2DRef& terrain_map);
+	void handleUploadedMeshData(const URLString& lod_model_url, int loaded_model_lod_level, bool dynamic_physics_shape, OpenGLMeshRenderDataRef mesh_data, PhysicsShape& physics_shape, 
+		int voxel_subsample_factor, uint64 voxel_hash);
+	void handleUploadedTexture(const OpenGLTextureKey& path, const URLString& URL, const OpenGLTextureRef& opengl_tex, const TextureDataRef& tex_data, const Map2DRef& terrain_map);
 
 	void updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::string& local_model_path, const Matrix4f& pre_ob_to_world_matrix, const std::vector<WorldMaterialRef>& materials);
 
@@ -382,6 +393,8 @@ public:
 	virtual void contactPersisted(const JPH::Body &inBody1, const JPH::Body &inBody2/*PhysicsObject* ob_a, PhysicsObject* ob_b*/, const JPH::ContactManifold& contact_manifold) override;
 	//----------------------- end PhysicsWorldEventListener interface -----------------------
 	
+
+	Reference<TextureLoadedThreadMessage> allocTextureLoadedThreadMessage();
 
 public:
 	Reference<OpenGLEngine> opengl_engine;
@@ -419,6 +432,7 @@ public:
 	ThreadManager resource_download_thread_manager;
 	ThreadManager net_resource_download_thread_manager;
 	ThreadManager save_resources_db_thread_manager;
+	ThreadManager garbage_deleter_thread_manager;
 
 	glare::AtomicInt num_non_net_resources_downloading;
 	glare::AtomicInt num_net_resources_downloading;
@@ -479,6 +493,9 @@ public:
 
 	PhysicsShape unit_cube_shape;
 
+	Reference<MeshData> single_voxel_meshdata;
+	Reference<PhysicsShapeData> single_voxel_shapedata;
+
 	Reference<GLObject> ob_denied_move_marker; // Prototype object
 	std::vector<Reference<GLObject> > ob_denied_move_markers;
 
@@ -530,23 +547,27 @@ public:
 	std::deque<Reference<ModelLoadedThreadMessage> > model_loaded_messages_to_process;
 	std::deque<Reference<TextureLoadedThreadMessage> > texture_loaded_messages_to_process;
 
-	std::deque<Reference<ModelLoadedThreadMessage> > async_model_loaded_messages_to_process;
-	std::deque<Reference<TextureLoadedThreadMessage> > async_texture_loaded_messages_to_process;
+	CircularBuffer<Reference<ModelLoadedThreadMessage> > async_model_loaded_messages_to_process;
+	CircularBuffer<Reference<TextureLoadedThreadMessage> > async_texture_loaded_messages_to_process;
 
-	// Reference<VBO> dummy_vbo;
+	Reference<VBO> dummy_vert_vbo;
+	Reference<VBO> dummy_index_vbo;
+	Reference<PBO> dummy_pbo;
+	Reference<PBO> temp_pbo;
+	Reference<OpenGLTexture> dummy_opengl_tex;
 	
 	bool process_model_loaded_next;
 
 	// Textures being loaded or already loaded.
 	// We have this set so that we don't process the same texture from multiple LoadTextureTasks running in parallel.
-	std::unordered_set<std::string> textures_processing;
+	std::unordered_set<OpenGLTextureKey> textures_processing;
 
 	// We build a different physics mesh for dynamic objects, so we need to keep track of which mesh we are building.
 	struct ModelProcessingKey
 	{
-		ModelProcessingKey(const std::string& URL_, const bool dynamic_physics_shape_) : URL(URL_), dynamic_physics_shape(dynamic_physics_shape_) {}
+		ModelProcessingKey(const URLString& URL_, const bool dynamic_physics_shape_) : URL(URL_), dynamic_physics_shape(dynamic_physics_shape_) {}
 
-		std::string URL;
+		URLString URL;
 		bool dynamic_physics_shape;
 
 		bool operator < (const ModelProcessingKey& other) const
@@ -564,7 +585,7 @@ public:
 	{
 		size_t operator() (const ModelProcessingKey& key) const
 		{
-			std::hash<std::string> h;
+			std::hash<string_view> h;
 			return h(key.URL);
 		}
 	};
@@ -574,7 +595,7 @@ public:
 
 	// Audio files being loaded or already loaded.
 	// We have this set so that we don't process the same audio from multiple LoadAudioTasks running in parallel.
-	std::unordered_set<std::string> audio_processing;
+	std::unordered_set<URLString> audio_processing;
 
 	std::unordered_set<std::string> script_content_processing;
 
@@ -617,7 +638,7 @@ public:
 	HeadUpDisplayUI hud_ui; // Draws stuff like markers for other avatars
 	ChatUI chat_ui; // Draws chat user-interface, showing chat from other users plus the line edit for chatting.
 	PhotoModeUI photo_mode_ui;
-	MiniMap minimap; // Draws minimap
+	Reference<MiniMap> minimap;
 
 	bool running_destructor;
 
@@ -633,14 +654,18 @@ public:
 
 	js::Vector<Vec4f, 16> temp_av_positions;
 
-	std::map<std::string, DownloadingResourceInfo> URL_to_downloading_info; // Map from URL to info about the resource, for currently downloading resources.
+	std::unordered_map<URLString, DownloadingResourceInfo> URL_to_downloading_info; // Map from URL to info about the resource, for currently downloading resources.
 
 	std::map<ModelProcessingKey, std::set<UID>> loading_model_URL_to_world_ob_UID_map;
-	std::map<std::string, std::set<UID>> loading_model_URL_to_avatar_UID_map;
+	std::unordered_map<URLString, std::set<UID>> loading_model_URL_to_avatar_UID_map;
 
-	std::map<std::string, std::set<UID>> loading_texture_abs_path_to_world_ob_UID_map;
+	std::unordered_map<URLString, std::set<UID>> loading_texture_URL_to_world_ob_UID_map;
+	std::unordered_map<URLString, std::set<UID>> loading_texture_URL_to_avatar_UID_map;
 
-	std::map<std::string, Vec3i> loading_mesh_URL_to_chunk_coords_map;
+	std::unordered_map<OpenGLTextureKey, std::set<UID>> loading_texture_key_to_hypercard_UID_map;
+
+	std::unordered_map<URLString, Vec3i> loading_mesh_URL_to_chunk_coords_map;
+	std::unordered_map<URLString, Vec3i> loading_texture_URL_to_chunk_coords_map;
 
 	std::vector<Reference<GLObject> > player_phys_debug_spheres;
 
@@ -651,10 +676,10 @@ public:
 
 	MeshDataLoadingProgress mesh_data_loading_progress;
 	Reference<OpenGLMeshRenderData> cur_loading_mesh_data;
-	std::string cur_loading_lod_model_url;
+	URLString cur_loading_lod_model_url;
 	int cur_loading_model_lod_level;
 	bool cur_loading_dynamic_physics_shape;
-	UID cur_loading_voxel_ob_uid;
+	uint64 cur_loading_voxel_hash;
 	int cur_loading_voxel_subsample_factor;
 	PhysicsShape cur_loading_physics_shape;
 
@@ -671,6 +696,7 @@ public:
 	uint32 server_capabilities;
 
 	uint64 frame_num;
+	size_t next_lod_changes_begin_i;
 
 	MicReadStatus mic_read_status;
 
@@ -685,6 +711,8 @@ public:
 
 	glare::StackAllocator stack_allocator;
 	Reference<glare::Allocator> worker_allocator;
+
+	glare::ArenaAllocator arena_allocator;
 
 
 	Mutex particles_creation_buf_mutex;
@@ -764,32 +792,48 @@ public:
 
 	bool sent_perform_gesture_without_stop_gesture;
 
-	struct PBOAsyncTextureUploading
+	// Info stored about an upload to the GPU using a PBO while it is taking place
+	struct PBOAsyncTextureUploading : public UploadingTextureUserInfo
 	{
-		std::string path;
+		OpenGLTextureKey path;
+		URLString URL;
 		Reference<TextureData> tex_data;
 		Reference<OpenGLTexture> opengl_tex;
 		Map2DRef terrain_map;
+		bool loading_into_existing_opengl_tex;
 	};
-	
-	std::map<Reference<OpenGLTexture>, PBOAsyncTextureUploading> pbo_async_uploading_textures;
 
 
-	struct AsyncGeometryUploading
+	struct AsyncGeometryUploading : public UploadingGeometryUserInfo
 	{
-		std::string lod_model_url;
+		URLString lod_model_url;
 		int ob_model_lod_level;
 		bool dynamic_physics_shape;
 		PhysicsShape physics_shape;
-		UID voxel_ob_uid;
 		int voxel_subsample_factor;
+		uint64 voxel_hash;
 	};
 	
-	std::map<OpenGLMeshRenderDataRef, AsyncGeometryUploading> async_uploading_geom;
 
 	js::Vector<AsyncUploadedGeometryInfo, 16> temp_uploaded_geom_infos;
 	js::Vector<PBOAsyncUploadedTextureInfo, 16> temp_loaded_texture_infos;
 
+	Reference<glare::FastPoolAllocator> texture_loaded_msg_allocator; // For TextureLoadedThreadMessage
+
 	bool use_lightmaps;
 	Timer retry_connection_timer;
+
+
+	ThreadManager opengl_worker_thread_manager;
+
+	Reference<OpenGLUploadThread> opengl_upload_thread;
+
+	Reference<PBOPool> pbo_pool;
+	PBOAsyncTextureUploader pbo_async_tex_loader;
+	Reference<VBOPool> vbo_pool;
+	Reference<VBOPool> index_vbo_pool;
+	AsyncGeometryUploader async_geom_loader;
+	AsyncGeometryUploader async_index_geom_loader;
+
+	Reference<AnimatedTextureManager> animated_texture_manager;
 };

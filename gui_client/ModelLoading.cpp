@@ -111,26 +111,28 @@ void ModelLoading::setGLMaterialFromWorldMaterialWithLocalPaths(const WorldMater
 }
 
 
-static const std::string toLocalPath(const std::string& URL, ResourceManager& resource_manager)
+static const std::string toLocalPath(const URLString& URL, ResourceManager& resource_manager)
 {
 	if(URL.empty())
 		return "";
 	else
 	{
-		const bool streamable = ::hasExtensionStringView(URL, "mp4");
+		const bool streamable = ::hasExtension(URL, "mp4");
 		if(streamable)
-			return URL; // Just leave streamable URLs as-is.
+			return toString(URL); // Just leave streamable URLs as-is.
 		else
 			return resource_manager.pathForURL(URL);
 	}
 }
 
 
-void ModelLoading::setGLMaterialFromWorldMaterial(const WorldMaterial& mat, int lod_level, const std::string& lightmap_url, bool use_basis, ResourceManager& resource_manager, OpenGLMaterial& opengl_mat)
+void ModelLoading::setGLMaterialFromWorldMaterial(const WorldMaterial& mat, int lod_level, const URLString& lightmap_url, bool use_basis, ResourceManager& resource_manager, OpenGLMaterial& opengl_mat)
 {
+	const WorldMaterial::GetURLOptions get_url_options(use_basis, /*area allocator=*/nullptr);
+
 	opengl_mat.albedo_linear_rgb = sanitiseAndConvertToLinearAlbedoColour(mat.colour_rgb);
 	if(!mat.colour_texture_url.empty())
-		opengl_mat.tex_path = toLocalPath(mat.getLODTextureURLForLevel(mat.colour_texture_url, lod_level, /*has alpha=*/mat.colourTexHasAlpha(), use_basis), resource_manager);
+		opengl_mat.tex_path = toLocalPath(mat.getLODTextureURLForLevel(get_url_options, mat.colour_texture_url, lod_level, /*has alpha=*/mat.colourTexHasAlpha()), resource_manager);
 	else
 		opengl_mat.tex_path.clear();
 
@@ -140,22 +142,22 @@ void ModelLoading::setGLMaterialFromWorldMaterial(const WorldMaterial& mat, int 
 
 
 	if(!mat.emission_texture_url.empty())
-		opengl_mat.emission_tex_path = toLocalPath(mat.getLODTextureURLForLevel(mat.emission_texture_url, lod_level, /*has alpha=*/false, use_basis), resource_manager);
+		opengl_mat.emission_tex_path = toLocalPath(mat.getLODTextureURLForLevel(get_url_options, mat.emission_texture_url, lod_level, /*has alpha=*/false), resource_manager);
 	else
 		opengl_mat.emission_tex_path.clear();
 
 	if(!mat.roughness.texture_url.empty())
-		opengl_mat.metallic_roughness_tex_path = toLocalPath(mat.getLODTextureURLForLevel(mat.roughness.texture_url, lod_level, /*has alpha=*/false, use_basis), resource_manager);
+		opengl_mat.metallic_roughness_tex_path = toLocalPath(mat.getLODTextureURLForLevel(get_url_options, mat.roughness.texture_url, lod_level, /*has alpha=*/false), resource_manager);
 	else
 		opengl_mat.metallic_roughness_tex_path.clear();
 
 	if(!mat.normal_map_url.empty())
-		opengl_mat.normal_map_path = toLocalPath(mat.getLODTextureURLForLevel(mat.normal_map_url, lod_level, /*has alpha=*/false, use_basis), resource_manager);
+		opengl_mat.normal_map_path = toLocalPath(mat.getLODTextureURLForLevel(get_url_options, mat.normal_map_url, lod_level, /*has alpha=*/false), resource_manager);
 	else
 		opengl_mat.normal_map_path.clear();
 
 	if(!lightmap_url.empty())
-		opengl_mat.lightmap_path = toLocalPath(WorldObject::getLODLightmapURL(lightmap_url, lod_level), resource_manager);
+		opengl_mat.lightmap_path = toLocalPath(WorldObject::getLODLightmapURLForLevel(lightmap_url, lod_level), resource_manager);
 	else
 		opengl_mat.lightmap_path.clear();
 
@@ -174,7 +176,7 @@ void ModelLoading::setGLMaterialFromWorldMaterial(const WorldMaterial& mat, int 
 	// glTexImage2D expects the start of the texture data to be the lower left of the image, whereas it is actually the upper left.  So flip y coord to compensate.
 	opengl_mat.tex_matrix = Matrix2f(1, 0, 0, -1) * mat.tex_matrix;
 
-	if(::hasExtensionStringView(opengl_mat.tex_path, "mp4"))
+	if(::hasExtension(opengl_mat.tex_path, "mp4"))
 		opengl_mat.fresnel_scale = 0; // Remove specular reflections, reduces washed-out look.
 }
 
@@ -673,7 +675,7 @@ void ModelLoading::makeGLObjectForModelFile(
 			gl_ob = gl_engine.allocateObject();
 			gl_ob->ob_to_world_matrix = results_out.ob_to_world;
 
-			gl_ob->mesh_data = GLMeshBuilding::buildBatchedMesh(&vert_buf_allocator, batched_mesh, /*skip_opengl_calls=*/false, /*instancing_matrix_data=*/NULL);
+			gl_ob->mesh_data = GLMeshBuilding::buildBatchedMesh(&vert_buf_allocator, batched_mesh, /*skip_opengl_calls=*/false);
 		}
 
 		const size_t bmesh_num_mats_referenced = batched_mesh->numMaterialsReferenced();
@@ -854,7 +856,7 @@ void ModelLoading::makeGLObjectForModelFile(
 		{
 			gl_ob = gl_engine.allocateObject();
 			gl_ob->ob_to_world_matrix = Matrix4f::identity(); // ob_to_world_matrix;
-			gl_ob->mesh_data = GLMeshBuilding::buildBatchedMesh(&vert_buf_allocator, bmesh, /*skip_opengl_calls=*/false, /*instancing_matrix_data=*/NULL);
+			gl_ob->mesh_data = GLMeshBuilding::buildBatchedMesh(&vert_buf_allocator, bmesh, /*skip_opengl_calls=*/false);
 		}
 		const size_t num_mats = bmesh->numMaterialsReferenced();
 		if(do_opengl_stuff)
@@ -948,7 +950,7 @@ GLObjectRef ModelLoading::makeImageCube(OpenGLEngine& gl_engine, VertexBufferAll
 
 
 GLObjectRef ModelLoading::makeGLObjectForMeshDataAndMaterials(OpenGLEngine& gl_engine, const Reference<OpenGLMeshRenderData> gl_meshdata, //size_t num_materials_referenced,
-	int ob_lod_level, const std::vector<WorldMaterialRef>& materials, const std::string& lightmap_url, bool use_basis,
+	int ob_lod_level, const std::vector<WorldMaterialRef>& materials, const URLString& lightmap_url, bool use_basis,
 	ResourceManager& resource_manager,
 	const Matrix4f& ob_to_world_matrix)
 {
@@ -1000,7 +1002,7 @@ GLObjectRef ModelLoading::makeGLObjectForMeshDataAndMaterials(OpenGLEngine& gl_e
 
 
 void ModelLoading::setMaterialTexPathsForLODLevel(GLObject& gl_ob, int ob_lod_level, const std::vector<WorldMaterialRef>& materials,
-	const std::string& lightmap_url, bool use_basis, ResourceManager& resource_manager)
+	const URLString& lightmap_url, bool use_basis, ResourceManager& resource_manager)
 {
 	for(size_t i=0; i<gl_ob.materials.size(); ++i)
 	{
@@ -1075,7 +1077,7 @@ Reference<OpenGLMeshRenderData> ModelLoading::makeGLMeshDataAndBatchedMeshForMod
 		if(batched_mesh->animation_data.vrm_data.nonNull())
 			rotateVRMMesh(*batched_mesh);
 
-	Reference<OpenGLMeshRenderData> gl_meshdata = GLMeshBuilding::buildBatchedMesh(vert_buf_allocator, batched_mesh, /*skip opengl calls=*/skip_opengl_calls, /*instancing_matrix_data=*/NULL);
+	Reference<OpenGLMeshRenderData> gl_meshdata = GLMeshBuilding::buildBatchedMesh(vert_buf_allocator, batched_mesh, /*skip opengl calls=*/skip_opengl_calls);
 
 	if(build_physics_ob)
 		physics_shape_out = PhysicsWorld::createJoltShapeForBatchedMesh(*batched_mesh, /*is dynamic=*/build_dynamic_physics_ob, mem_allocator, &create_physics_tris_for_mat);
@@ -1176,6 +1178,8 @@ static Reference<OpenGLMeshRenderData> buildVoxelOpenGLMeshData(const Indigo::Me
 
 	mesh_data->has_shading_normals = false;
 	mesh_data->has_uvs = mesh_has_uvs;
+
+	mesh_data->num_materials_referenced = mesh->num_materials_referenced;
 
 	size_t num_bytes_per_vert = 0;
 	size_t uv0_offset = 0;

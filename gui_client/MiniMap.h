@@ -6,6 +6,7 @@ Copyright Glare Technologies Limited 2023 -
 #pragma once
 
 
+#include "../shared/URLString.h"
 #include <opengl/ui/GLUI.h>
 #include <opengl/ui/GLUIButton.h>
 #include <opengl/ui/GLUICallbackHandler.h>
@@ -31,7 +32,7 @@ struct MapTile
 
 struct MapTileInfo
 {
-	std::string image_URL;
+	URLString image_URL;
 };
 
 
@@ -40,14 +41,11 @@ MiniMap
 -------
 
 =====================================================================*/
-class MiniMap : public GLUICallbackHandler
+class MiniMap : public GLUICallbackHandler, public ThreadSafeRefCounted
 {
 public:
-	MiniMap();
+	MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_, GLUIRef gl_ui_);
 	~MiniMap();
-
-	void create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_, GLUIRef gl_ui_);
-	void destroy();
 
 	void setVisible(bool visible); // Set expand, collapse button visibility, plus call setMapAndMarkersVisible().
 	void setMapAndMarkersVisible(bool visible);
@@ -68,11 +66,13 @@ public:
 	void mouseWheelEventOccurred(GLUICallbackMouseWheelEvent& event) override;
 
 	void handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMessage& msg);
+
+	void handleUploadedTexture(const OpenGLTextureKey& path, const URLString& URL, const OpenGLTextureRef& opengl_tex);
 private:
 	void setWidgetVisibilityForExpanded();
 	void checkUpdateTilesForCurCamPosition();
 	void updateWidgetPositions();
-	void renderTilesToTexture();
+	void setTileOverlayObjectTransforms();
 	Vec2f mapUICoordsForWorldSpacePos(const Vec3d& pos);
 	float computeMiniMapWidth();
 	float computeMiniMapTopMargin();
@@ -94,12 +94,6 @@ private:
 	std::set<Vec3i> queried_tile_coords;
 	std::map<Vec3i, MapTileInfo> tile_infos;
 
-	Reference<FrameBuffer> frame_buffer;
-
-	Reference<OpenGLTexture> minimap_texture;
-
-	Reference<OpenGLScene> scene;
-
 	Vec3d last_requested_campos;
 	int last_requested_tile_z;
 
@@ -108,4 +102,6 @@ private:
 	SocketBufferOutStream scratch_packet;
 
 	OpenGLTextureRef tile_placeholder_tex;
+
+	std::unordered_map<URLString, Vec3i> loading_texture_URL_to_tile_indices_map;
 };
