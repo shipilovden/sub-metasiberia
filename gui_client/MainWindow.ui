@@ -451,7 +451,7 @@
   </widget>
   <action name="actionAvatarSettings">
    <property name="text">
-    <string>Avatar Settings</string>
+    <string>Настройки аватара</string>
    </property>
   </action>
   <action name="actionAddObject">
