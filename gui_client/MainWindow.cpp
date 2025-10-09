@@ -176,12 +176,15 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	// -------------------------------------------------------------
 	// 2.18 ms CPU, 4.53 ms GPU
 	//
+	// Metasiberia: Enable compatibility mode by default
 	ui->glWidget->allow_multi_draw_indirect = false;
-
-	//if(args.isArgPresent("--no_MDI"))
-	//	ui->glWidget->allow_multi_draw_indirect = false;
-	if(args.isArgPresent("--no_bindless"))
-		ui->glWidget->allow_bindless_textures = false;
+	ui->glWidget->allow_bindless_textures = false;
+	
+	// Allow override via command line if needed
+	if(args.isArgPresent("--enable_MDI"))
+		ui->glWidget->allow_multi_draw_indirect = true;
+	if(args.isArgPresent("--enable_bindless"))
+		ui->glWidget->allow_bindless_textures = true;
 
 	ui->glWidget->setBaseDir(base_dir_path, /*print output=*/this, settings);
 	ui->objectEditor->base_dir_path = base_dir_path;
@@ -4428,8 +4431,10 @@ int main(int argc, char *argv[])
 		syntax["--extractanims"] = std::vector<ArgumentParser::ArgumentType>(2, ArgumentParser::ArgumentType_string); // Extract animation data
 		syntax["--screenshotslave"] = std::vector<ArgumentParser::ArgumentType>(); // Run GUI as a screenshot-taking slave.
 		syntax["--testscreenshot"] = std::vector<ArgumentParser::ArgumentType>(); // Test screenshot taking
-		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine
-		syntax["--no_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Disable bindless textures in graphics engine
+		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine (legacy)
+		syntax["--no_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Disable bindless textures in graphics engine (legacy)
+		syntax["--enable_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Enable MDI in graphics engine (override default)
+		syntax["--enable_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Enable bindless textures in graphics engine (override default)
 
 		if(args.size() == 3 && args[1] == "-NSDocumentRevisionsDebugMode")
 			args.resize(1); // This is some XCode debugging rubbish, remove it
