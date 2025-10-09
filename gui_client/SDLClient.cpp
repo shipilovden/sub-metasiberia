@@ -219,8 +219,10 @@ int main(int argc, char** argv)
 		syntax["--extractanims"] = std::vector<ArgumentParser::ArgumentType>(2, ArgumentParser::ArgumentType_string); // Extract animation data
 		syntax["--screenshotslave"] = std::vector<ArgumentParser::ArgumentType>(); // Run GUI as a screenshot-taking slave.
 		syntax["--testscreenshot"] = std::vector<ArgumentParser::ArgumentType>(); // Test screenshot taking
-		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine
-		syntax["--no_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Disable bindless textures in graphics engine
+		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine (legacy)
+		syntax["--no_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Disable bindless textures in graphics engine (legacy)
+		syntax["--enable_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Enable MDI in graphics engine (override default)
+		syntax["--enable_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Enable bindless textures in graphics engine (override default)
 
 		std::vector<std::string> args;
 		for(int i=0; i<argc; ++i)
@@ -480,10 +482,15 @@ int main(int argc, char** argv)
 		settings.ssao_support = false;
 		settings.ssao = false;
 
-		if(parsed_args.isArgPresent("--no_MDI"))
-			settings.allow_multi_draw_indirect = false;
-		if(parsed_args.isArgPresent("--no_bindless"))
-			settings.allow_bindless_textures = false;
+		// Metasiberia: Enable compatibility mode by default
+		settings.allow_multi_draw_indirect = false;
+		settings.allow_bindless_textures = false;
+		
+		// Allow override via command line if needed
+		if(parsed_args.isArgPresent("--enable_MDI"))
+			settings.allow_multi_draw_indirect = true;
+		if(parsed_args.isArgPresent("--enable_bindless"))
+			settings.allow_bindless_textures = true;
 
 		if(on_apple_device)
 			settings.use_multiple_phong_uniform_bufs = true; // Work around Mac OpenGL bug with changing the phong uniform buffer between rendering batches (see https://issues.chromium.org/issues/338348430)
