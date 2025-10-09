@@ -121,7 +121,7 @@ MESSAGE("\n----------Cache vars:----------")
 SET(CEF_SUPPORT ON CACHE BOOL "Enable use of Chromium Embedded Framework (CEF) - needed for webviews and video playback")
 MESSAGE("CEF_SUPPORT: ${CEF_SUPPORT}")
 
-SET(BUGSPLAT_SUPPORT ON CACHE BOOL "Enable building with BugSplat - the crash handling and bug reporting tool.")
+SET(BUGSPLAT_SUPPORT OFF CACHE BOOL "Enable building with BugSplat - the crash handling and bug reporting tool.")
 MESSAGE("BUGSPLAT_SUPPORT: ${BUGSPLAT_SUPPORT}")
 
 

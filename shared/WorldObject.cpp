@@ -150,7 +150,7 @@ WorldObject::~WorldObject()
 URLString WorldObject::makeOptimisedMeshURL(const URLString& base_model_url, int lod_level, bool get_optimised_mesh, int opt_mesh_version, glare::ArenaAllocator* arena_allocator)
 {
 	glare::STLArenaAllocator<char> stl_arena_allocator(arena_allocator);
-	URLString new_url(stl_arena_allocator);
+	URLString new_url;
 
 	new_url.reserve(base_model_url.size() + 16);
 
@@ -261,7 +261,7 @@ URLString WorldObject::getLODLightmapURLForLevel(const URLString& base_lightmap_
 		return base_lightmap_url;
 	else if(level == 1)
 	{
-		URLString res(base_lightmap_url.get_allocator());
+		URLString res;
 		res.reserve(base_lightmap_url.size() + 8);
 		res.append(removeDotAndExtension(base_lightmap_url));
 		res.append("_lod1.");
@@ -270,7 +270,7 @@ URLString WorldObject::getLODLightmapURLForLevel(const URLString& base_lightmap_
 	}
 	else
 	{
-		URLString res(base_lightmap_url.get_allocator());
+		URLString res;
 		res.reserve(base_lightmap_url.size() + 8);
 		res.append(removeDotAndExtension(base_lightmap_url));
 		res.append("_lod2.");
@@ -333,7 +333,7 @@ void WorldObject::appendDependencyURLs(int ob_lod_level, const GetDependencyOpti
 	if(!audio_source_url.empty())
 	{
 		glare::STLArenaAllocator<char> stl_allocator(options.allocator);
-		URLs_out.push_back(DependencyURL(URLString(audio_source_url, stl_allocator)));
+		URLs_out.push_back(DependencyURL(URLString(audio_source_url)));
 		
 		//URLs_out.push_back(DependencyURL(audio_source_url));
 	}
@@ -1868,7 +1868,7 @@ void WorldObject::test()
 		glare::ArenaAllocator arena_allocator(1024 * 1024);
 
 
-		const std::string xml_path = "C:\\code\\substrata\\testfiles\\world_objects\\sandbox_parcel_objects.xml";
+		const std::string xml_path = "C:\\programming\\substrata\\testfiles\\world_objects\\sandbox_parcel_objects.xml";
 		IndigoXMLDoc doc(xml_path);
 
 		std::vector<WorldObjectRef> obs;
@@ -1887,7 +1887,7 @@ void WorldObject::test()
 			for(int z=0; z<10000; ++z)
 			{
 				Timer timer;
-				glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+				glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 				glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&use_arena);
 				DependencyURLSet URLs(std::less<DependencyURL>(), stl_arena_allocator);
 
@@ -1931,7 +1931,7 @@ void WorldObject::test()
 				for(int q=0; q<num_inner_iters; ++q)
 				{
 					{
-						glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+						glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 						glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&use_arena);
 						DependencyURLVector URL_vector(stl_arena_allocator);
 						for(size_t i=0; i<obs.size(); ++i)

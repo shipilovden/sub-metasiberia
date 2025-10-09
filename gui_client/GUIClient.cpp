@@ -1458,7 +1458,7 @@ bool GUIClient::isResourceCurrentlyNeededForObject(const URLString& url, const W
 		return false;
 	}
 
-	glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+	glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 	glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&use_arena);
 
 	WorldObject::GetDependencyOptions options;
@@ -1528,7 +1528,7 @@ void GUIClient::startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_l
 
 	// conPrint("startDownloadingResourcesForObject: ob_lod_level: " + toString(ob_lod_level));
 
-	glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+	glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 	glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&use_arena);
 
 	WorldObject::GetDependencyOptions options;
@@ -1576,7 +1576,7 @@ void GUIClient::startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_l
 
 void GUIClient::startDownloadingResourcesForAvatar(Avatar* ob, int ob_lod_level, bool our_avatar)
 {
-	glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+	glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 	glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&use_arena);
 
 	Avatar::GetDependencyOptions options;
@@ -1780,7 +1780,7 @@ void GUIClient::assignLoadedOpenGLTexturesToMats(WorldObject* ob)
 {
 	ZoneScoped; // Tracy profiler
 
-	glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+	glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 
 	doAssignLoadedOpenGLTexturesToMats(ob, /*use_basis=*/this->server_has_basis_textures, this->use_lightmaps, *opengl_engine, *resource_manager, *animated_texture_manager, &use_arena);
 }
@@ -2672,7 +2672,7 @@ void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const R
 
 	avatar->graphics.build();
 
-	glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+	glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 	assignLoadedOpenGLTexturesToAvatarMats(avatar, /*use_basis=*/this->server_has_basis_textures, *opengl_engine, *resource_manager, *animated_texture_manager, &use_arena);
 
 	// Enable materialise effect if needed
@@ -4210,7 +4210,7 @@ void GUIClient::handleUploadedTexture(const OpenGLTextureKey& path, const URLStr
 					{
 						Avatar* av = res2->second.ptr();
 
-						glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+						glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 						assignLoadedOpenGLTexturesToAvatarMats(av, /*use basis=*/this->server_has_basis_textures, *opengl_engine, *resource_manager, *animated_texture_manager, &use_arena);
 					}
 				}
@@ -8707,7 +8707,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 							//if(ob->using_placeholder_model)
 							{
-								glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+								glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 								glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&use_arena);
 
 								WorldObject::GetDependencyOptions options;
@@ -8743,7 +8743,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 							//if(ob->using_placeholder_model)
 							{
-								glare::ArenaAllocator use_arena = arena_allocator.getFreeAreaArenaAllocator();
+								glare::ArenaAllocator use_arena(1024 * 1024); // 1MB arena
 								glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&use_arena);
 
 								Avatar::GetDependencyOptions options;
