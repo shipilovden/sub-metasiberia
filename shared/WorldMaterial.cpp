@@ -44,7 +44,7 @@ static inline URLString getLODTextureURLForLevel(const URLString& base_texture_u
 	// Don't do LOD on mp4 (video) textures (for now).
 	// Also don't do LOD with http URLs
 	if(::hasExtension(base_texture_url, "mp4") || hasPrefix(base_texture_url, "http:") || hasPrefix(base_texture_url, "https:"))
-		return URLString(base_texture_url, glare::STLArenaAllocator<char>(arena_allocator)); 
+		return URLString(base_texture_url); 
 
 	if(level <= material_min_lod_level)
 	{
@@ -59,14 +59,14 @@ static inline URLString getLODTextureURLForLevel(const URLString& base_texture_u
 			const string_view root = removeDotAndExtensionStringView(base_texture_url);
 
 			glare::STLArenaAllocator<char> allocator(arena_allocator);
-			URLString res(allocator);
+			URLString res;
 			res.reserve(root.size() + std::strlen(".basis"));
 			res.append(root);
 			res.append(".basis");
 			return res;
 		}
 		else
-			return URLString(base_texture_url, glare::STLArenaAllocator<char>(arena_allocator));
+			return URLString(base_texture_url);
 	}
 	else
 	{
@@ -75,7 +75,7 @@ static inline URLString getLODTextureURLForLevel(const URLString& base_texture_u
 			const string_view root = removeDotAndExtensionStringView(base_texture_url);
 
 			glare::STLArenaAllocator<char> allocator(arena_allocator);
-			URLString res(allocator);
+			URLString res;
 			res.reserve(root.size() + std::strlen("_lodX.basis"));
 			res.append(root);
 			res.append("_lod");

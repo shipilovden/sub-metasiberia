@@ -238,7 +238,7 @@ end
 
 def downloadFileHTTPSIfNotOnDisk(disk_path, uri_string)
 
-	if File.exists?(disk_path)
+	if File.exist?(disk_path)
 		puts "Already present on disk at '#{disk_path}', skipping download of '#{uri_string}'."
 		return
 	end

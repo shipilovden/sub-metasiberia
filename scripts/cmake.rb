@@ -158,7 +158,7 @@ class CMakeBuild
 		success_file_path = "#{install_dir}/#{successFilename()}"
 
 		# File doesn't exist: build was unsuccessful.
-		if !File.exists?(success_file_path)
+		if !File.exist?(success_file_path)
 			return false
 		end
 
