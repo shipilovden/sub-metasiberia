@@ -78,7 +78,34 @@ void ParcelEditor::toParcel(Parcel& parcel_out)
 }
 
 
+void ParcelEditor::setCurrentServerURL(const std::string& server_url)
+{
+	current_server_url = server_url;
+}
+
 void ParcelEditor::on_showOnWebLabel_linkActivated(const QString&)
 {
-	QDesktopServices::openUrl("https://vr.metasiberia.com/parcel/" + this->IDLabel->text());
+	// Extract hostname from server URL
+	std::string hostname = "vr.metasiberia.com"; // Default fallback
+	
+	if(!current_server_url.empty())
+	{
+		// Parse URL to extract hostname
+		// Format: sub://hostname:port/path
+		if(current_server_url.find("sub://") == 0)
+		{
+			std::string url_part = current_server_url.substr(6); // Remove "sub://"
+			size_t colon_pos = url_part.find(':');
+			size_t slash_pos = url_part.find('/');
+			
+			if(colon_pos != std::string::npos)
+				hostname = url_part.substr(0, colon_pos);
+			else if(slash_pos != std::string::npos)
+				hostname = url_part.substr(0, slash_pos);
+			else
+				hostname = url_part;
+		}
+	}
+	
+	QDesktopServices::openUrl(QString::fromStdString("https://" + hostname + "/parcel/" + this->IDLabel->text().toStdString()));
 }

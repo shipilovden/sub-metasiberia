@@ -3736,6 +3736,13 @@ void MainWindow::showParcelEditor()
 void MainWindow::setParcelEditorForParcel(const Parcel& parcel)
 {
 	ui->parcelEditor->setFromParcel(parcel);
+	
+	// Set current server URL for dynamic parcel links
+	if(ui->urlWidget)
+	{
+		std::string current_url = ui->urlWidget->getURL();
+		ui->parcelEditor->setCurrentServerURL(current_url);
+	}
 }
 
 
