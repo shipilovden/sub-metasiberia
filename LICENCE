@@ -1,21 +1,54 @@
-MIT License
+Metasiberia Non-Commercial License (MNCL) 1.0
+Copyright (c) 2015–2023 Glare Technologies Limited
+Copyright (c) 2025 Denis Shipilov (Metasiberia Project)
 
-Copyright (c) 2015-2023 Glare Technologies Limited
+Based on the open-source project "Substrata" by Glare Technologies Limited,
+licensed under the MIT License.
+Modified and extended by Denis Shipilov for the Metasiberia Project.
+
+---
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+of this software and associated documentation files (the "Software"), to use,
+copy and modify the Software for personal, educational, research, and other
+non-commercial purposes, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Non-Commercial Use Only  
+   The Software may **NOT** be used, distributed, sublicensed, or otherwise
+   exploited for commercial purposes, including but not limited to sale,
+   licensing, hosting, or inclusion in any product or service that is sold
+   or monetized, without the **prior written permission** of the copyright
+   holder (Denis Shipilov).
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Attribution  
+   All copies or substantial portions of the Software and all derivative
+   works must include this copyright notice and the following attribution:
+
+   > "Based on Substrata (© 2015–2023 Glare Technologies Limited)  
+   > Modified and extended as Metasiberia by Denis Shipilov (© 2025)."
+
+3. Derivative Works  
+   Derivative works are allowed only for non-commercial purposes unless a
+   separate commercial license is granted. All derivatives must clearly
+   acknowledge their origin from the Metasiberia Project and describe the
+   nature of modifications made.
+
+4. Redistribution  
+   Redistribution (in source or binary form) is permitted only for
+   non-commercial purposes and must retain all copyright and license notices.
+
+5. No Warranty  
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+6. Contact for Commercial Licensing  
+   For commercial use, integration, or partnership inquiries, contact:  
+   **denshipilov@gmail.com** | @https://x.com/denshipilovart
+
+By using, copying, modifying, or redistributing this Software, you accept and
+agree to be bound by the terms of this license.
