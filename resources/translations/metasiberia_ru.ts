@@ -101,7 +101,11 @@
     </message>
     <message>
       <source>About Metasiberia</source>
-      <translation>О Metasiberia</translation>
+      <translation>О Метасибири</translation>
+    </message>
+    <message>
+      <source>Metasiberia</source>
+      <translation>Метасибирь</translation>
     </message>
     <message>
       <source>Online Users:</source>

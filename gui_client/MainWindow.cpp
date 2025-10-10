@@ -148,6 +148,9 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	ui = new Ui::MainWindow();
 	ui->setupUi(this);
 
+	// Set translatable window title
+	setWindowTitle(tr("Metasiberia"));
+
 	setAcceptDrops(true);
 
 	update_ob_editor_transform_timer = new QTimer(this);
