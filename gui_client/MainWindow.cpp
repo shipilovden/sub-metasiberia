@@ -10,6 +10,11 @@ Copyright Glare Technologies Limited 2024 -
 #endif
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
+#include <QtCore/QTranslator>
+#include <QtWidgets/QActionGroup>
+#include <QtWidgets/QAction>
+#include <QtWidgets/QMenu>
+#include <QtCore/QFile>
 #include "AboutDialog.h"
 #include "CreateObjectsDialog.h"
 #include "ClientThread.h"
@@ -161,6 +166,74 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	ui->menuWindow->addAction(ui->indigoViewDockWidget->toggleViewAction());
 #endif
 	ui->menuWindow->addAction(ui->diagnosticsDockWidget->toggleViewAction());
+
+	// ---------------- Language submenu ----------------
+	{
+		QMenu* language_menu = new QMenu(tr("Language"), this);
+		language_action_group = new QActionGroup(this);
+		language_action_group->setExclusive(true);
+
+		action_lang_en = language_menu->addAction(tr("English"));
+		action_lang_en->setCheckable(true);
+		action_lang_en->setData(QString("en"));
+		language_action_group->addAction(action_lang_en);
+
+		action_lang_ru = language_menu->addAction(tr("Русский"));
+		action_lang_ru->setCheckable(true);
+		action_lang_ru->setData(QString("ru"));
+		language_action_group->addAction(action_lang_ru);
+
+		ui->menuWindow->addSeparator();
+		ui->menuWindow->addMenu(language_menu);
+
+		// Ensure settings is initialised before we use it
+		if(!settings)
+			settings = new QSettings("Glare Technologies", "Cyberspace");
+
+		connect(language_action_group, &QActionGroup::triggered, this, [this](QAction* a){
+			const QString lang = a->data().toString();
+			// Uninstall previous
+			qApp->removeTranslator(&app_translator);
+			bool installed = false;
+			if(lang == "ru")
+			{
+				// Try to load Russian translation
+				QString qm_path = QString::fromStdString(base_dir_path) + "/data/resources/translations/metasiberia_ru.qm";
+				if(QFile::exists(qm_path))
+				{
+					installed = app_translator.load(qm_path);
+					if(installed)
+						qApp->installTranslator(&app_translator);
+				}
+			}
+			// For English, we just don't install any translator
+			
+			// Save language preference
+			if(settings)
+				settings->setValue("mainwindow/language", lang);
+			
+			// Retranslate UI immediately
+			ui->retranslateUi(this);
+		});
+
+		// Initial language from settings (default en)
+		const QString saved_lang = settings ? settings->value("mainwindow/language", "en").toString() : QString("en");
+		if(saved_lang == "ru")
+		{
+			action_lang_ru->setChecked(true);
+			// Load Russian translation
+			QString qm_path = QString::fromStdString(base_dir_path) + "/data/resources/translations/metasiberia_ru.qm";
+			if(QFile::exists(qm_path))
+			{
+				if(app_translator.load(qm_path))
+					qApp->installTranslator(&app_translator);
+			}
+		}
+		else
+		{
+			action_lang_en->setChecked(true);
+		}
+	}
 
 	settings = new QSettings("Glare Technologies", "Cyberspace");
 
