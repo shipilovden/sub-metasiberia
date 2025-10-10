@@ -576,7 +576,7 @@ int main(int argc, char** argv)
 			URLParser::processQueryKeyValues(queries, url_parse_results);
 		}
 #else
-		std::string server_URL = "sub://substrata.info"; // Default URL
+		std::string server_URL = "sub://vr.metasiberia.com"; // Default URL
 
 		if(parsed_args.isArgPresent("-h"))
 		{
