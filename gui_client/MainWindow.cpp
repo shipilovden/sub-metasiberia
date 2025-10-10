@@ -336,6 +336,13 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 	ui->environmentOptionsWidget->init(settings);
 	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
+	
+	// Initialize northern lights setting
+	if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene())
+	{
+		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+	}
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->chatMessageLineEdit, SIGNAL(returnPressed()), this, SLOT(sendChatMessageSlot()));
@@ -3461,13 +3468,38 @@ void MainWindow::worldSettingsAppliedSlot()
 // An environment setting has been edited in the environment options dock widget
 void MainWindow::environmentSettingChangedSlot()
 {
+	printf("[MainWindow] environmentSettingChangedSlot called\n");
+	
 	if(ui->glWidget->opengl_engine.nonNull())
 	{
 		const float theta = myClamp(::degreeToRad((float)ui->environmentOptionsWidget->sunThetaRealControl->value()), 0.01f, Maths::pi<float>() - 0.01f);
 		const float phi   = ::degreeToRad((float)ui->environmentOptionsWidget->sunPhiRealControl->value());
 		const Vec4f sundir = GeometrySampling::dirForSphericalCoords(phi, theta);
 
-		opengl_engine->setSunDir(sundir);
+		ui->glWidget->opengl_engine->setSunDir(sundir);
+		
+		// Update northern lights setting
+		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		printf("[MainWindow] northern_lights_enabled from widget: %s\n", northern_lights_enabled ? "true" : "false");
+		
+		if(ui->glWidget->opengl_engine->getCurrentScene())
+		{
+			printf("[MainWindow] BEFORE: Scene draw_aurora = %s\n", 
+				ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
+			
+			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+			
+			printf("[MainWindow] AFTER: Scene draw_aurora = %s\n", 
+				ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
+		}
+		else
+		{
+			printf("[MainWindow] ERROR: getCurrentScene() is NULL!\n");
+		}
+	}
+	else
+	{
+		printf("[MainWindow] ERROR: opengl_engine is NULL!\n");
 	}
 }
 

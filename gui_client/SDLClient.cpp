@@ -639,7 +639,7 @@ int main(int argc, char** argv)
 		if(bloom)
 			opengl_engine->getCurrentScene()->bloom_strength = 0.3f;
 
-		opengl_engine->getCurrentScene()->draw_aurora = true;
+		// Aurora setting will be controlled by Environment panel
 
 		
 		
