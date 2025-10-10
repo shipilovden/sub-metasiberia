@@ -2971,28 +2971,6 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 }
 
 
-void MainWindow::on_actionAvatarSettings_triggered()
-{
-	showAvatarSettings();
-}
-
-
-void MainWindow::showAvatarSettings()
-{
-	AvatarSettingsDialog d(base_dir_path, settings, gui_client.resource_manager);
-	const int code = d.exec();
-	if(code == QDialog::Accepted)
-	{
-		const std::string path = d.result_path;
-		if(!path.empty())
-		{
-			// Load avatar
-			gui_client.setAvatarForCurrentClient(path, d.pre_ob_to_world_matrix);
-		}
-	}
-}
-
-
 void MainWindow::on_actionOptions_triggered()
 {
 	const std::string prev_audio_input_dev_name = QtUtils::toStdString(settings->value(MainOptionsDialog::inputDeviceNameKey(), "Default").toString());
