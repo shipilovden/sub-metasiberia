@@ -82,6 +82,9 @@ void ParcelEditor::setCurrentServerURL(const std::string& server_url)
 {
 	current_server_url = server_url;
 	
+	// Debug: print the received URL
+	printf("[ParcelEditor] setCurrentServerURL called with: %s\n", server_url.c_str());
+	
 	// Update the link text dynamically based on current server
 	std::string hostname = "vr.metasiberia.com"; // Default fallback
 	
@@ -104,9 +107,15 @@ void ParcelEditor::setCurrentServerURL(const std::string& server_url)
 		}
 	}
 	
+	// Debug: print the parsed hostname
+	printf("[ParcelEditor] Parsed hostname: %s\n", hostname.c_str());
+	
 	// Update the link text
 	QString link_text = QString::fromStdString("<a href=\"#boo\">Show parcel on " + hostname + "</a>");
 	this->showOnWebLabel->setText(link_text);
+	
+	// Debug: print the final link text
+	printf("[ParcelEditor] Final link text: Show parcel on %s\n", hostname.c_str());
 }
 
 void ParcelEditor::on_showOnWebLabel_linkActivated(const QString&)
