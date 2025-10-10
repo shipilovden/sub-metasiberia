@@ -8,6 +8,10 @@
       <translation>Metasiberia</translation>
     </message>
     <message>
+      <source>Metasiberia</source>
+      <translation>Метасибирь</translation>
+    </message>
+    <message>
       <source>Window</source>
       <translation>Окно</translation>
     </message>
