@@ -3468,6 +3468,8 @@ void MainWindow::worldSettingsAppliedSlot()
 // An environment setting has been edited in the environment options dock widget
 void MainWindow::environmentSettingChangedSlot()
 {
+	printf("[MainWindow] environmentSettingChangedSlot called\n");
+	
 	if(ui->glWidget->opengl_engine.nonNull())
 	{
 		const float theta = myClamp(::degreeToRad((float)ui->environmentOptionsWidget->sunThetaRealControl->value()), 0.01f, Maths::pi<float>() - 0.01f);
@@ -3478,13 +3480,26 @@ void MainWindow::environmentSettingChangedSlot()
 		
 		// Update northern lights setting
 		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		printf("[MainWindow] northern_lights_enabled from widget: %s\n", northern_lights_enabled ? "true" : "false");
+		
 		if(ui->glWidget->opengl_engine->getCurrentScene())
 		{
+			printf("[MainWindow] BEFORE: Scene draw_aurora = %s\n", 
+				ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
+			
 			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
-			// Debug: print the state
-			printf("Northern lights setting changed: %s\n", northern_lights_enabled ? "true" : "false");
-			printf("Scene draw_aurora: %s\n", ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
+			
+			printf("[MainWindow] AFTER: Scene draw_aurora = %s\n", 
+				ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
 		}
+		else
+		{
+			printf("[MainWindow] ERROR: getCurrentScene() is NULL!\n");
+		}
+	}
+	else
+	{
+		printf("[MainWindow] ERROR: opengl_engine is NULL!\n");
 	}
 }
 
