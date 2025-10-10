@@ -503,5 +503,24 @@
       <translation>Декаль</translation>
     </message>
   </context>
+  <context>
+    <name>AboutDialog</name>
+    <message>
+      <source>Metasiberia v%1</source>
+      <translation>Metasiberia v%1</translation>
+    </message>
+    <message>
+      <source>Metasiberia is inspired and based on <a href="https://substrata.info"><span style=" text-decoration: underline; color:#222222;">Substrata</span></a>.<br></source>
+      <translation>Metasiberia вдохновлен и основан на <a href="https://substrata.info"><span style=" text-decoration: underline; color:#222222;">Substrata</span></a>.<br></translation>
+    </message>
+    <message>
+      <source>Forked by <a href="https://x.com/denshipilovart"><span style=" text-decoration: underline; color:#222222;">Denis Shipilov</span></a></source>
+      <translation>Форк от <a href="https://x.com/denshipilovart"><span style=" text-decoration: underline; color:#222222;">Дениса Шипилова</span></a></translation>
+    </message>
+    <message>
+      <source>Generate Crash</source>
+      <translation>Создать краш</translation>
+    </message>
+  </context>
 </TS>
 
