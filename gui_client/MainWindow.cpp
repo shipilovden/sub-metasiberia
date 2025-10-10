@@ -3020,13 +3020,6 @@ void MainWindow::on_actionUndo_triggered()
 }
 
 
-void MainWindow::on_actionAbout_Substrata_triggered()
-{
-	AboutDialog d(this, appdata_path);
-	d.exec();
-}
-
-
 void MainWindow::on_actionRedo_triggered()
 {
 	try
