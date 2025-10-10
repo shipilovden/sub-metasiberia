@@ -4543,7 +4543,7 @@ int main(int argc, char *argv[])
 
 		//std::string server_hostname = "substrata.info";
 		//std::string server_userpath = "";
-		std::string server_URL = "sub://substrata.info";
+		std::string server_URL = "sub://vr.metasiberia.com";
 		bool server_URL_explicitly_specified = false;
 
 		if(parsed_args.isArgPresent("-h"))
