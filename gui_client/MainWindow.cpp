@@ -400,7 +400,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 static std::string computeWindowTitle()
 {
-	return "Substrata v" + ::cyberspace_version;
+	return "Metasiberia v" + ::cyberspace_version;
 }
 
 
