@@ -80,5 +80,5 @@ void ParcelEditor::toParcel(Parcel& parcel_out)
 
 void ParcelEditor::on_showOnWebLabel_linkActivated(const QString&)
 {
-	QDesktopServices::openUrl("https://substrata.info/parcel/" + this->IDLabel->text());
+	QDesktopServices::openUrl("https://vr.metasiberia.com/parcel/" + this->IDLabel->text());
 }
