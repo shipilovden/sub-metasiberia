@@ -3556,6 +3556,9 @@ void MainWindow::URLChangedSlot()
 {
 	const std::string URL = this->url_widget->getURL();
 	visitSubURL(URL);
+	
+	// Update parcel editor with current server URL for dynamic links
+	ui->parcelEditor->setCurrentServerURL(URL);
 }
 
 
@@ -4548,9 +4551,9 @@ int main(int argc, char *argv[])
 		}
 
 
-		//std::string server_hostname = "substrata.info";
-		//std::string server_userpath = "";
-		std::string server_URL = "sub://substrata.info";
+	//std::string server_hostname = "substrata.info";
+	//std::string server_userpath = "";
+	std::string server_URL = "sub://vr.metasiberia.com";
 		bool server_URL_explicitly_specified = false;
 
 		if(parsed_args.isArgPresent("-h"))
