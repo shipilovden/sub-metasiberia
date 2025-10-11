@@ -576,7 +576,7 @@ int main(int argc, char** argv)
 			URLParser::processQueryKeyValues(queries, url_parse_results);
 		}
 #else
-		std::string server_URL = "sub://substrata.info"; // Default URL
+		std::string server_URL = "sub://vr.metasiberia.com"; // Default URL
 
 		if(parsed_args.isArgPresent("-h"))
 		{
@@ -639,7 +639,7 @@ int main(int argc, char** argv)
 		if(bloom)
 			opengl_engine->getCurrentScene()->bloom_strength = 0.3f;
 
-		opengl_engine->getCurrentScene()->draw_aurora = true;
+		// Aurora setting will be controlled by Environment panel
 
 		
 		

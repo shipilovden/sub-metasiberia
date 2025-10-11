@@ -78,7 +78,69 @@ void ParcelEditor::toParcel(Parcel& parcel_out)
 }
 
 
+void ParcelEditor::setCurrentServerURL(const std::string& server_url)
+{
+	current_server_url = server_url;
+	
+	// Debug: print the received URL
+	printf("[ParcelEditor] setCurrentServerURL called with: %s\n", server_url.c_str());
+	
+	// Update the link text dynamically based on current server
+	std::string hostname = "vr.metasiberia.com"; // Default fallback
+	
+	if(!current_server_url.empty())
+	{
+		// Parse URL to extract hostname
+		// Format: sub://hostname:port/path
+		if(current_server_url.find("sub://") == 0)
+		{
+			std::string url_part = current_server_url.substr(6); // Remove "sub://"
+			size_t colon_pos = url_part.find(':');
+			size_t slash_pos = url_part.find('/');
+			
+			if(colon_pos != std::string::npos)
+				hostname = url_part.substr(0, colon_pos);
+			else if(slash_pos != std::string::npos)
+				hostname = url_part.substr(0, slash_pos);
+			else
+				hostname = url_part;
+		}
+	}
+	
+	// Debug: print the parsed hostname
+	printf("[ParcelEditor] Parsed hostname: %s\n", hostname.c_str());
+	
+	// Update the link text
+	QString link_text = QString::fromStdString("<a href=\"#boo\">Show parcel on " + hostname + "</a>");
+	this->showOnWebLabel->setText(link_text);
+	
+	// Debug: print the final link text
+	printf("[ParcelEditor] Final link text: Show parcel on %s\n", hostname.c_str());
+}
+
 void ParcelEditor::on_showOnWebLabel_linkActivated(const QString&)
 {
-	QDesktopServices::openUrl("https://substrata.info/parcel/" + this->IDLabel->text());
+	// Extract hostname from server URL
+	std::string hostname = "vr.metasiberia.com"; // Default fallback
+	
+	if(!current_server_url.empty())
+	{
+		// Parse URL to extract hostname
+		// Format: sub://hostname:port/path
+		if(current_server_url.find("sub://") == 0)
+		{
+			std::string url_part = current_server_url.substr(6); // Remove "sub://"
+			size_t colon_pos = url_part.find(':');
+			size_t slash_pos = url_part.find('/');
+			
+			if(colon_pos != std::string::npos)
+				hostname = url_part.substr(0, colon_pos);
+			else if(slash_pos != std::string::npos)
+				hostname = url_part.substr(0, slash_pos);
+			else
+				hostname = url_part;
+		}
+	}
+	
+	QDesktopServices::openUrl(QString::fromStdString("https://" + hostname + "/parcel/" + this->IDLabel->text().toStdString()));
 }

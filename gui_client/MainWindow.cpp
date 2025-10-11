@@ -336,6 +336,13 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 	ui->environmentOptionsWidget->init(settings);
 	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
+	
+	// Initialize northern lights setting
+	if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene())
+	{
+		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+	}
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->chatMessageLineEdit, SIGNAL(returnPressed()), this, SLOT(sendChatMessageSlot()));
@@ -3467,7 +3474,17 @@ void MainWindow::environmentSettingChangedSlot()
 		const float phi   = ::degreeToRad((float)ui->environmentOptionsWidget->sunPhiRealControl->value());
 		const Vec4f sundir = GeometrySampling::dirForSphericalCoords(phi, theta);
 
-		opengl_engine->setSunDir(sundir);
+		ui->glWidget->opengl_engine->setSunDir(sundir);
+		
+		// Update northern lights setting
+		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		if(ui->glWidget->opengl_engine->getCurrentScene())
+		{
+			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+			// Debug: print the state
+			printf("Northern lights setting changed: %s\n", northern_lights_enabled ? "true" : "false");
+			printf("Scene draw_aurora: %s\n", ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
+		}
 	}
 }
 
@@ -3556,6 +3573,9 @@ void MainWindow::URLChangedSlot()
 {
 	const std::string URL = this->url_widget->getURL();
 	visitSubURL(URL);
+	
+	// Update parcel editor with current server URL for dynamic links
+	ui->parcelEditor->setCurrentServerURL(URL);
 }
 
 
@@ -3736,6 +3756,13 @@ void MainWindow::showParcelEditor()
 void MainWindow::setParcelEditorForParcel(const Parcel& parcel)
 {
 	ui->parcelEditor->setFromParcel(parcel);
+	
+	// Set current server URL for dynamic parcel links
+	if(url_widget)
+	{
+		std::string current_url = url_widget->getURL();
+		ui->parcelEditor->setCurrentServerURL(current_url);
+	}
 }
 
 
@@ -4541,9 +4568,9 @@ int main(int argc, char *argv[])
 		}
 
 
-		//std::string server_hostname = "substrata.info";
-		//std::string server_userpath = "";
-		std::string server_URL = "sub://substrata.info";
+	//std::string server_hostname = "substrata.info";
+	//std::string server_userpath = "";
+	std::string server_URL = "sub://vr.metasiberia.com";
 		bool server_URL_explicitly_specified = false;
 
 		if(parsed_args.isArgPresent("-h"))
