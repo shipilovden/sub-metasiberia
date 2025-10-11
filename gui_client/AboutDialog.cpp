@@ -18,21 +18,23 @@ AboutDialog::AboutDialog(QWidget* parent, const std::string& appdata_path)
 	setupUi(this);
 
 	// Use tr() for translatable strings
-	QString display_str = "<h2>" + tr("Metasiberia v%1").arg(QString::fromStdString(::cyberspace_version)) + "</h2>";
+	QString display_str = "";
 
-	// Add social media links for Metasiberia
+	// Add Substrata info with bold link first
 	display_str += "<p>";
-	display_str += "<a href=\"https://github.com/shipilovden/substrata-metasiberia\"><span style=\" text-decoration: underline; color:#222222; font-weight: bold;\">Github</span></a> ";
-	display_str += "<a href=\"https://vk.com/metasiberia_official\"><span style=\" text-decoration: underline; color:#222222; font-weight: bold;\">Vk</span></a> ";
-	display_str += "<a href=\"https://t.me/metasiberia_channel\"><span style=\" text-decoration: underline; color:#222222; font-weight: bold;\">Telegram</span></a>";
+	display_str += tr("Metasiberia is inspired and based on <a href=\"https://substrata.info\"><span style=\" text-decoration: underline; color:#222222; font-weight: bold;\">Substrata</span></a>.");
 	display_str += "</p>";
 
 	// Add separator line
 	display_str += "<hr style=\"border: 1px solid #ccc; margin: 10px 0;\">";
 
-	// Add Substrata info with bold link
+	// Add Metasiberia title and social media links
+	display_str += "<h2>" + tr("Metasiberia v%1").arg(QString::fromStdString(::cyberspace_version)) + "</h2>";
+
 	display_str += "<p>";
-	display_str += tr("Metasiberia is inspired and based on <a href=\"https://substrata.info\"><span style=\" text-decoration: underline; color:#222222; font-weight: bold;\">Substrata</span></a>.");
+	display_str += "<a href=\"https://github.com/shipilovden/substrata-metasiberia\"><span style=\" text-decoration: underline; color:#222222; font-weight: bold;\">Github</span></a> ";
+	display_str += "<a href=\"https://vk.com/metasiberia_official\"><span style=\" text-decoration: underline; color:#222222; font-weight: bold;\">Vk</span></a> ";
+	display_str += "<a href=\"https://t.me/metasiberia_channel\"><span style=\" text-decoration: underline; color:#222222; font-weight: bold;\">Telegram</span></a>";
 	display_str += "</p>";
 
 	// Add separator line
