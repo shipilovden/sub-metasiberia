@@ -34,6 +34,8 @@ Copyright Glare Technologies Limited 2022 -
 #include "../server/SubEthTransaction.h"
 #include "../ethereum/Signing.h"
 #include "../ethereum/Infura.h"
+#include <fstream>
+#include <regex>
 
 
 namespace AccountHandlers
@@ -943,19 +945,118 @@ void handleDeleteSecretPost(ServerAllWorldsState& world_state, const web::Reques
 	return;
 }
 
+void renderUserAccountPageWin98(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	// Load Win98 template
+	std::string template_html;
+	{
+		const std::string template_path = "C:\\Users\\densh\\AppData\\Roaming\\Substrata\\server_data\\webserver_public_files\\account_template.html";
+		std::ifstream file(template_path);
+		if (file.is_open()) {
+			std::string line;
+			while (std::getline(file, line)) {
+				template_html += line + "\n";
+			}
+			file.close();
+		} else {
+			// Fallback to simple HTML if template not found
+			std::string page = WebServerResponseUtils::standardHTMLHeader(*world_state.web_data_store, request, "Account");
+			page += "<h1>Template not found</h1>";
+			web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+			return;
+		}
+	}
+
+	// Replace template placeholders
+	std::string page = template_html;
+	
+	{ // lock scope
+		Lock lock(world_state.mutex);
+
+		const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+		if(logged_in_user == NULL)
+		{
+			std::string error_page = WebServerResponseUtils::standardHTMLHeader(*world_state.web_data_store, request, "User Account");
+			error_page += "You must be logged in to view your user account page.";
+			error_page += WebServerResponseUtils::standardFooter(request, /*include_email_link=*/true);
+			web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, error_page);
+			return;
+		}
+
+		// Basic replacements
+		page = std::regex_replace(page, std::regex("%USERNAME%"), web::Escaping::HTMLEscape(logged_in_user->name), std::regex_constants::match_default);
+		page = std::regex_replace(page, std::regex("%ACCOUNT_TYPE%"), "User", std::regex_constants::match_default);
+		
+		// Generate parcels HTML
+		std::string parcels_html;
+		Reference<ServerWorldState> root_world = world_state.getRootWorldState();
+		for(auto it = root_world->parcels.begin(); it != root_world->parcels.end(); ++it)
+		{
+			const Parcel* parcel = it->second.ptr();
+			if(parcel->owner_id == logged_in_user->id)
+			{
+				parcels_html += "<div class=\"parcel-card\">";
+				parcels_html += "<div class=\"parcel-info\">";
+				parcels_html += "<strong>Parcel #" + parcel->id.toString() + "</strong><br>";
+				parcels_html += "Description: " + web::Escaping::HTMLEscape(parcel->description);
+				parcels_html += "</div>";
+				parcels_html += "<div class=\"parcel-actions\">";
+				parcels_html += "<a href=\"/parcel/" + parcel->id.toString() + "\" class=\"btn\">👁 View</a>";
+				if(parcel->nft_status == Parcel::NFTStatus_NotNFT)
+					parcels_html += "<a href=\"/make_parcel_into_nft?parcel_id=" + parcel->id.toString() + "\" class=\"btn\">🪙 Mint NFT</a>";
+				parcels_html += "</div>";
+				parcels_html += "</div>";
+			}
+		}
+		if(parcels_html.empty()) {
+			parcels_html = "<div class=\"muted\">No parcels owned.</div>";
+		}
+		page = std::regex_replace(page, std::regex("%PARCELS_HTML%"), parcels_html, std::regex_constants::match_default);
+		
+		// Generate worlds HTML
+		std::string worlds_html;
+		for(auto it = world_state.world_states.begin(); it != world_state.world_states.end(); ++it)
+		{
+			const ServerWorldState* world = it->second.ptr();
+			if(world->details.owner_id == logged_in_user->id)
+			{
+				worlds_html += "<div class=\"world-card\">";
+				worlds_html += "<div class=\"world-info\">";
+				worlds_html += "<strong>" + web::Escaping::HTMLEscape(world->details.name) + "</strong><br>";
+				worlds_html += "Description: " + web::Escaping::HTMLEscape(world->details.description);
+				worlds_html += "</div>";
+				worlds_html += "<div class=\"world-actions\">";
+				worlds_html += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world->details.name) + "\" class=\"btn\">🌍 Open</a>";
+				worlds_html += "</div>";
+				worlds_html += "</div>";
+			}
+		}
+		if(worlds_html.empty()) {
+			worlds_html = "<div class=\"muted\">No worlds owned.</div>";
+		}
+		page = std::regex_replace(page, std::regex("%WORLDS_HTML%"), worlds_html, std::regex_constants::match_default);
+		
+		// Generate Ethereum address
+		std::string eth_address = "No address linked.";
+		if(!logged_in_user->controlled_eth_address.empty()) {
+			eth_address = web::Escaping::HTMLEscape(logged_in_user->controlled_eth_address);
+		}
+		page = std::regex_replace(page, std::regex("%ETH_ADDRESS%"), eth_address, std::regex_constants::match_default);
+		
+	} // end lock scope
+
+	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+}
 
 } // end namespace AccountHandlers
 
 
 #if BUILD_TESTS
 
-
 #include "../utils/TestUtils.h"
-
 
 void AccountHandlers::test()
 {
 }
-
 
 #endif // BUILD_TESTS

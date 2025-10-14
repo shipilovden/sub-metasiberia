@@ -348,6 +348,14 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			WorldHandlers::handleWorldRevokeParcelWriterPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/world_grant_editor_post")
+		{
+			WorldHandlers::handleWorldGrantEditorPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/world_revoke_editor_post")
+		{
+			WorldHandlers::handleWorldRevokeEditorPost(*this->world_state, request, reply_info);
+		}
 		else
 		{
 			const std::string page = "Unknown post URL";

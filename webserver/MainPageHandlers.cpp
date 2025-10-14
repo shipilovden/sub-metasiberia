@@ -22,6 +22,8 @@ Copyright Glare Technologies Limited 2021 -
 #include <PlatformUtils.h>
 #include <WebDataStore.h>
 #include <webserver/ResponseUtils.h>
+#include <fstream>
+#include <regex>
 
 
 namespace MainPageHandlers
@@ -141,7 +143,8 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 
 		// Build latest news HTML
-		latest_news_html += "<div class=\"root-news-div-container\">\n";		const int max_num_to_display = 4;
+		latest_news_html += "<div class=\"root-news-div-container\">\n";
+		const int max_num_to_display = 4;
 		int num_displayed = 0;
 		for(auto it = world_state.news_posts.rbegin(); it != world_state.news_posts.rend() && num_displayed < max_num_to_display; ++it)
 		{
@@ -170,7 +173,8 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 
 		// Build events HTML
-		events_html += "<div class=\"root-events-div-container\">\n";		const int max_num_events_to_display = 4;
+		events_html += "<div class=\"root-events-div-container\">\n";
+		const int max_num_events_to_display = 4;
 		int num_events_displayed = 0;
 		for(auto it = world_state.events.rbegin(); (it != world_state.events.rend()) && (num_events_displayed < max_num_events_to_display); ++it)
 		{
@@ -204,7 +208,8 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 
 		//------------------------------- Build photos grid view HTML --------------------------
-		photos_html += "<div class=\"photo-container\">\n";		const int max_num_photos_to_display = 20;
+		photos_html += "<div class=\"photo-container\">\n";
+		const int max_num_photos_to_display = 20;
 		int num_photos_displayed = 0;
 		for(auto it = world_state.photos.rbegin(); (it != world_state.photos.rend()) && (num_photos_displayed < max_num_photos_to_display); ++it)
 		{
@@ -828,5 +833,83 @@ void renderMapPage(ServerAllWorldsState& world_state, const web::RequestInfo& re
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
 }
 
+
+void renderRootPageWin98(ServerAllWorldsState& world_state, WebDataStore& data_store, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
+{
+	// Load Win98 template
+	std::string template_html;
+	{
+		const std::string template_path = "C:\\Users\\densh\\AppData\\Roaming\\Substrata\\server_data\\webserver_public_files\\win98_template.html";
+		std::ifstream file(template_path);
+		if (file.is_open()) {
+			std::string line;
+			while (std::getline(file, line)) {
+				template_html += line + "\n";
+			}
+			file.close();
+		} else {
+			// Fallback to simple HTML if template not found
+			std::string page = WebServerResponseUtils::standardHTMLHeader(data_store, request_info, "Metasiberia");
+			page += "<h1>Template not found</h1>";
+			web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+			return;
+		}
+	}
+
+	// Replace template placeholders
+	std::string page = template_html;
+	
+	// Basic replacements
+	page = std::regex_replace(page, std::regex("%PAGE_TITLE%"), "Metasiberia", std::regex_constants::match_default);
+	page = std::regex_replace(page, std::regex("%WINDOW_TITLE%"), "🏠 Metasiberia", std::regex_constants::match_default);
+	
+	// Generate navigation
+	std::string navigation_html = "<a href=\"/\">🏠 Home</a>";
+	web::UnsafeString logged_in_username;
+	bool is_user_admin;
+	const bool logged_in = LoginHandlers::isLoggedIn(world_state, request_info, logged_in_username, is_user_admin);
+	
+	if(logged_in) {
+		navigation_html += " <a href=\"/account\">👤 Account</a>";
+		if(is_user_admin) {
+			navigation_html += " <a href=\"/admin\">⚙️ Admin</a>";
+		}
+		navigation_html += " <a href=\"/logout_post\">🚪 Logout</a>";
+	} else {
+		navigation_html += " <a href=\"/login\">🔑 Login</a>";
+	}
+	navigation_html += " <a href=\"/map\">🗺️ Map</a>";
+	
+	page = std::regex_replace(page, std::regex("%NAVIGATION_HTML%"), navigation_html, std::regex_constants::match_default);
+	
+	// Generate content
+	std::string content_html;
+	if(logged_in) {
+		content_html += "<div class=\"account-section\">";
+		content_html += "<h3>👤 Welcome</h3>";
+		content_html += "<p>You are logged in as <strong>" + logged_in_username.HTMLEscaped() + "</strong></p>";
+		content_html += "<p>Welcome to Metasiberia!</p>";
+		content_html += "</div>";
+	} else {
+		content_html += "<div class=\"account-section\">";
+		content_html += "<h3>🔑 Login</h3>";
+		content_html += "<form action=\"/login_post\" method=\"post\">";
+		content_html += "<p>Username: <input type=\"text\" name=\"username\" class=\"input\"></p>";
+		content_html += "<p>Password: <input type=\"password\" name=\"password\" class=\"input\"></p>";
+		content_html += "<button type=\"submit\" class=\"btn\">🔑 Login</button>";
+		content_html += "</form>";
+		content_html += "</div>";
+	}
+	
+	content_html += "<div class=\"account-section\">";
+	content_html += "<h3>ℹ️ About</h3>";
+	content_html += "<p>Metasiberia is based on Substrata</p>";
+	content_html += "<p><a href=\"/map\" class=\"btn\">🗺️ Map</a></p>";
+	content_html += "</div>";
+	
+	page = std::regex_replace(page, std::regex("%CONTENT_HTML%"), content_html, std::regex_constants::match_default);
+
+	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+}
 
 } // end namespace MainPageHandlers

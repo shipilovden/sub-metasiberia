@@ -11,7 +11,7 @@ Copyright Glare Technologies Limited 2025 -
 #include <utils/RuntimeCheck.h>
 
 
-static const uint32 WORLD_DETAILS_SERIALISATION_VERSION = 1;
+static const uint32 WORLD_DETAILS_SERIALISATION_VERSION = 2;
 
 
 void WorldDetails::writeToNetworkStream(RandomAccessOutStream& stream) const
@@ -28,6 +28,11 @@ void WorldDetails::writeToNetworkStream(RandomAccessOutStream& stream) const
 	created_time.writeToStream(stream);
 	stream.writeStringLengthFirst(name);
 	stream.writeStringLengthFirst(description);
+	
+	// Write editor_ids
+	stream.writeUInt32((uint32)editor_ids.size());
+	for(size_t i = 0; i < editor_ids.size(); ++i)
+		::writeToStream(editor_ids[i], stream);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)(stream.getWriteIndex() - initial_write_index);
@@ -50,6 +55,15 @@ void readWorldDetailsFromNetworkStream(RandomAccessInStream& stream, WorldDetail
 	details.created_time.readFromStream(stream);
 	details.name = stream.readStringLengthFirst(WorldDetails::MAX_NAME_SIZE);
 	details.description = stream.readStringLengthFirst(WorldDetails::MAX_DESCRIPTION_SIZE);
+	
+	// Read editor_ids (if available)
+	if(buffer_size > (stream.getReadIndex() - initial_read_index))
+	{
+		const uint32 editor_count = stream.readUInt32();
+		details.editor_ids.resize(editor_count);
+		for(uint32 i = 0; i < editor_count; ++i)
+			details.editor_ids[i] = readUserIDFromStream(stream);
+	}
 
 	// Discard any remaining unread data
 	const size_t read_B = stream.getReadIndex() - initial_read_index; // Number of bytes we have read so far

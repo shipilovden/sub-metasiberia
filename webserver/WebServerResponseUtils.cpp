@@ -49,7 +49,8 @@ const std::string standardHTMLHeader(WebDataStore& data_store, const web::Reques
 		"		<meta http-equiv=\"Content-Security-Policy\" content=\"frame-src youtube.com www.youtube.com player.vimeo.com vimeocdn.com; img-src 'self' i.ytimg.com i.vimeocdn.com; default-src 'self';\" />	\n" 
 		"		<title>" + web::Escaping::HTMLEscape(page_title) + "</title>												\n"
 		"		<link href=\"/files/main.css?hash=" + data_store.main_css_hash + "\" rel=\"stylesheet\" />														\n"
-		"		<link rel=\"icon\" type=\"image/png\" href=\"/files/favicon.png\">											\n"
+		"		<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css\">	\n"
+		"		<link rel=\"icon\" type=\"image/x-icon\" href=\"/files/substrata.ico\">											\n"
 		+ extra_header_tags + 
 		"		</head>																										\n";
 }
@@ -84,7 +85,7 @@ const std::string standardHeader(ServerAllWorldsState& world_state, const web::R
 	}
 	page_out += 
 	"	</div>																									\n" // End login div
-	"	<a href=\"/\"><img src=\"/files/logo_small.png\" alt=\"Metasiberia\" class=\"substrata-logo-top-small\"/></a>											\n"
+	"	<a href=\"/\"><img src=\"/files/icon_512x512.png\" alt=\"Metasiberia\" class=\"substrata-logo-top-small\"/></a>											\n"
 	
 	"	<header>																								\n"
 	"		<h1>" + web::Escaping::HTMLEscape(page_title) + "</h1>												\n"
