@@ -30,7 +30,7 @@ std::string sharedAdminHeader(ServerAllWorldsState& world_state, const web::Requ
 {
 	std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Admin");
 
-	page_out += "<p><a href=\"/admin\">Main admin page</a> | <a href=\"/admin_users\">Users</a> | <a href=\"/admin_parcels\">Parcels</a> | ";
+	page_out += "<p><a href=\"/admin\">Main admin page</a> | <a href=\"/admin_users\">Users</a> | <a href=\"/admin_parcels\">Parcels</a> | <a href=\"/admin_add_new_parcel\">Add Parcel</a> | ";
 	page_out += "<a href=\"/admin_parcel_auctions\">Parcel Auctions</a> | <a href=\"/admin_orders\">Orders</a> | <a href=\"/admin_sub_eth_transactions\">Eth Transactions</a> | <a href=\"/admin_map\">Map</a> | ";
 	page_out += "<a href=\"/admin_news_posts\">News Posts</a> | <a href=\"/admin_lod_chunks\">LOD Chunks</a> | <a href=\"/admin_worlds\">Worlds</a> </p>";
 
@@ -259,6 +259,7 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		Lock lock(world_state.mutex);
 
 		page_out += "<h2>Root world Parcels</h2>\n";
+		page_out += "<a href=\"/admin_add_new_parcel\">Add new parcel</a>\n";
 
 		//-----------------------
 		page_out += "<hr/>";
@@ -310,6 +311,7 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			page_out += "</div>    \n";
 
 			page_out += " <a href=\"/admin_create_parcel_auction/" + parcel->id.toString() + "\">Create auction</a>";
+			page_out += " <a href=\"/admin_edit_parcel/" + parcel->id.toString() + "\">Edit</a>";
 
 			page_out += "</p>\n";
 			page_out += "<br/>  \n";
@@ -2231,6 +2233,317 @@ void handleRebuildWorldLODChunks(ServerAllWorldsState& all_worlds_state, const w
 	{
 		if(!request.fuzzing)
 			conPrint("handleRebuildWorldLODChunks error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void renderAdminAddNewParcel(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info) {
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	std::string page = sharedAdminHeader(world_state, request);
+
+	page += "<div class=\"main\">   \n";
+
+	page += "Чтобы добавить новый парсель, введите координаты и его ширину и высоту.";
+
+	{ // Lock scope
+
+		Lock lock(world_state.mutex);
+
+		const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+		if(logged_in_user)
+		{
+			const std::string msg = world_state.getAndRemoveUserWebMessage(logged_in_user->id);
+			if(!msg.empty())
+				page += "<div class=\"msg\">" + web::Escaping::HTMLEscape(msg) + "</div>  \n";
+		}
+
+		page += "<form action=\"/admin_add_new_parcel_post\" method=\"post\" id=\"usrform\">";
+		page += "X: <input type=\"number\" step=\"0.01\" name=\"x\" value=\"\"><br>";
+		page += "Y: <input type=\"number\" step=\"0.01\" name=\"y\" value=\"\"><br>";
+		page += "Z: <input type=\"number\" step=\"0.01\" name=\"z\" value=\"\"><br>";
+		page += "Ширина: <input type=\"number\" step=\"0.01\" name=\"width\" value=\"\"><br>";
+		page += "Длина: <input type=\"number\" step=\"0.01\" name=\"height\" value=\"\"><br>";
+		page += "Высота: <input type=\"number\" step=\"0.01\" name=\"zheight\" value=\"\"><br>";
+		page += "<input type=\"submit\" value=\"Добавить парсель\">";
+		page += "</form>";
+	} // End lock scope
+
+	page += "</div>   \n"; // end main div
+	page += WebServerResponseUtils::standardFooter(request, true);
+
+	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+}
+
+void renderAdminEditParcel(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info) {
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	// Parse parcel auction id from request path
+	Parser parser(request.path);
+	if(!parser.parseString("/admin_edit_parcel/"))
+		throw glare::Exception("Failed to parse /admin_edit_parcel/");
+
+	uint32 parcel_id;
+	if(!parser.parseUnsignedInt(parcel_id))
+		throw glare::Exception("Failed to parse parcel id");
+
+	std::string page_out = sharedAdminHeader(world_state, request);
+
+	std::string page = sharedAdminHeader(world_state, request);
+
+	page += "<div class=\"main\">   \n";
+
+	auto parcelId = ParcelID(parcel_id);
+	auto res = world_state.getRootWorldState()->parcels.find(parcelId);
+
+	if (res != world_state.getRootWorldState()->parcels.end()) {
+		page += "Редактирование параметров парсела №" + uInt32ToString(parcelId.v);
+
+		{ // Lock scope
+
+			Lock lock(world_state.mutex);
+
+			auto parcel = res->second.ptr();
+			auto parcelOrigin = parcel->verts[0];
+			auto topRight = parcel->verts[2];
+
+			auto width_and_height_vec = topRight - parcelOrigin;
+			auto width = width_and_height_vec.x;
+			auto height = width_and_height_vec.y;
+			auto zheight = (parcel->zbounds.y) - (parcel->zbounds.x);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			if(logged_in_user)
+			{
+				const std::string msg = world_state.getAndRemoveUserWebMessage(logged_in_user->id);
+				if(!msg.empty())
+					page += "<div class=\"msg\">" + web::Escaping::HTMLEscape(msg) + "</div>  \n";
+			}
+
+			page += "<form action=\"/admin_edit_parcel_post\" method=\"post\" id=\"usrform\">";
+			page += "<input type=\"hidden\" step=\"0.01\" name=\"parcel_id\" value=\"" + uInt32ToString(parcelId.v) + "\">";
+			page += "X: <input type=\"number\" step=\"0.01\" name=\"x\" value=\"" + doubleToString(parcelOrigin.x) + "\"><br>";
+			page += "Y: <input type=\"number\" step=\"0.01\" name=\"y\" value=\"" + doubleToString(parcelOrigin.y) + "\"><br>";
+			page += "Z: <input type=\"number\" step=\"0.01\" name=\"z\" value=\"" + doubleToString(parcel->zbounds.x) + "\"><br>";
+			page += "Ширина: <input type=\"number\" step=\"0.01\" name=\"width\" value=\"" + doubleToString(width) + "\"><br>";
+			page += "Длина: <input type=\"number\" step=\"0.01\" name=\"height\" value=\"" + doubleToString(height) + "\"><br>";
+			page += "Высота: <input type=\"number\" step=\"0.01\" name=\"zheight\" value=\"" + doubleToString(zheight) + "\"><br>";
+			page += "<input type=\"submit\" value=\"Обновить параметры\">";
+			page += "</form>";
+
+			page += "<input type=\"checkbox\" id=\"remove-confirm\">";
+			page += "<label for=\"rules-checkbox\">Подтверждение удаления парселя<a><label/><br/>";
+			page += "<form action=\"/admin_remove_parcel_post\" method=\"post\">";
+			page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + uInt32ToString(parcelId.v) + "\">";
+			page += "<input type=\"submit\" id=\"remove-submit\" disabled=\"true\" value=\"Удалить парсель\">";
+			page += "</form>";
+			page += "<script>document.getElementById(\"remove-confirm\").addEventListener(\"change\",function(){document.getElementById(\"remove-submit\").disabled=!this.checked;});</script>";
+		} // End lock scope
+
+		page += "</div>   \n"; // end main div
+	}
+
+	page += WebServerResponseUtils::standardFooter(request, true);
+
+	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+}
+
+void handleAdminAddNewParcelPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info) {
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const double x = stringToDouble(request.getPostField("x").str());
+		const double y = stringToDouble(request.getPostField("y").str());
+		const double z = stringToDouble(request.getPostField("z").str());
+
+		const Vec2d parcelOrigin = Vec2d(x, y);
+
+		const double width = stringToDouble(request.getPostField("width").str());
+		const double height = stringToDouble(request.getPostField("height").str());
+		const double zheight = stringToDouble(request.getPostField("zheight").str());
+
+		const Vec2d botleft = parcelOrigin;
+		const Vec2d topright = parcelOrigin + Vec2d(width, height);
+
+		bool valid_parcel = true;
+
+		ParcelID parcel_id;
+
+		{ // Lock scope
+			Lock lock(world_state.mutex);
+
+			// determine parcel id
+			const auto allParcels = world_state.getRootWorldState()->parcels;
+			auto parcelIds = std::vector<int>();
+
+			for (auto const& res : allParcels) {
+				parcelIds.push_back(res.first.value());
+			}
+
+			auto maxParcelId = *std::max_element(parcelIds.begin(), parcelIds.end());
+			parcel_id = ParcelID(maxParcelId + 1);
+
+			// create parcel
+			if (valid_parcel) {
+
+				ParcelRef new_parcel = new Parcel();
+				new_parcel->state = Parcel::State_Alive;
+				new_parcel->id = parcel_id;
+				new_parcel->owner_id = UserID(0);
+				new_parcel->admin_ids.push_back(UserID(0));
+				new_parcel->writer_ids.push_back(UserID(0));
+				new_parcel->created_time = TimeStamp::currentTime();
+				new_parcel->zbounds = Vec2d(z, zheight + z);
+
+				new_parcel->verts[0] = botleft;
+				new_parcel->verts[1] = Vec2d(topright.x, botleft.y);
+				new_parcel->verts[2] = topright;
+				new_parcel->verts[3] = Vec2d(botleft.x, topright.y);
+
+				new_parcel->build();
+
+				world_state.getRootWorldState()->parcels[parcel_id] = new_parcel;
+				WorldStateLock lock(world_state.mutex);
+				world_state.getRootWorldState()->addParcelAsDBDirty(new_parcel, lock);
+
+				world_state.denormaliseData(); // Update parcel writer names
+				world_state.markAsChanged();
+			}
+		}
+
+		if (valid_parcel) {
+			web::ResponseUtils::writeRedirectTo(reply_info, "/parcel/" + parcel_id.toString());
+		} else {
+			world_state.setUserWebMessage(UserID(0), "Неправильные параметры парселя. Возможно, он пересекается с другим парселем.");
+			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_add_new_parcel");
+		}
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleAdminAddNewParcelPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+void handleAdminEditParcelPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info) {
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const int parcel_id = request.getPostIntField("parcel_id");
+		const double x = stringToDouble(request.getPostField("x").str());
+		const double y = stringToDouble(request.getPostField("y").str());
+		const double z = stringToDouble(request.getPostField("z").str());
+
+		const Vec2d parcelOrigin = Vec2d(x, y);
+
+		const double width = stringToDouble(request.getPostField("width").str());
+		const double height = stringToDouble(request.getPostField("height").str());
+		const double zheight = stringToDouble(request.getPostField("zheight").str());
+
+		const Vec2d botleft = parcelOrigin;
+		const Vec2d topright = parcelOrigin + Vec2d(width, height);
+
+		bool valid_parcel = true;
+
+		ParcelID parcelId(parcel_id);
+
+		auto res = world_state.getRootWorldState()->parcels.find(parcelId);
+
+		if (res != world_state.getRootWorldState()->parcels.end()) {
+			{ // Lock scope
+				Lock lock(world_state.mutex);
+
+				Parcel *parcel = res->second.ptr();
+
+				if (valid_parcel) {
+					parcel->zbounds = Vec2d(z, z + zheight);
+
+					parcel->verts[0] = botleft;
+					parcel->verts[1] = Vec2d(topright.x, botleft.y);
+					parcel->verts[2] = topright;
+					parcel->verts[3] = Vec2d(botleft.x, topright.y);
+
+					parcel->build();
+
+					world_state.getRootWorldState()->parcels[parcelId] = parcel;
+					WorldStateLock lock(world_state.mutex);
+					world_state.getRootWorldState()->addParcelAsDBDirty(parcel, lock);
+
+					world_state.denormaliseData(); // Update parcel writer names
+					world_state.markAsChanged();
+				}
+			}
+		}
+
+		if (valid_parcel) {
+			web::ResponseUtils::writeRedirectTo(reply_info, "/parcel/" + parcelId.toString());
+		} else {
+			world_state.setUserWebMessage(UserID(0), "Неправильные параметры парселя. Возможно, он пересекается с другим парселем.");
+			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_edit_parcel/" + uInt32ToString(parcelId.v));
+		}
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleAdminEditParcelPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+void handleAdminRemoveParcelPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info) {
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try {
+		{ // Lock scope
+			Lock lock(world_state.mutex);
+			// Lookup parcel
+			const ParcelID parcel_id = ParcelID(request.getPostIntField("parcel_id"));
+			conPrint("parcel_id: " + parcel_id.value());
+
+			const auto res = world_state.getRootWorldState()->parcels.find(ParcelID(parcel_id));
+			Parcel *parcel = res->second.ptr();
+			world_state.db_records_to_delete.insert(parcel->database_key);
+			world_state.getRootWorldState()->parcels.erase(parcel->id);
+			world_state.denormaliseData(); // Update parcel writer names
+			world_state.markAsChanged();
+
+			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_parcels");
+		}
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleAdminRemoveParcelPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }

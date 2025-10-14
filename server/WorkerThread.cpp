@@ -346,7 +346,7 @@ void WorkerThread::handleResourceUploadConnection()
 				{
 					ServerWorldState* world = world_it->second.ptr();
 
-					std::set<DependencyURL> URLs;
+					DependencyURLSet URLs;
 					const ServerWorldState::ObjectMapType& objects = world->getObjects(lock);
 					for(auto it = objects.begin(); it != objects.end(); ++it)
 					{
@@ -1466,7 +1466,7 @@ void WorkerThread::doRun()
 							}
 
 							// Process resources
-							std::set<DependencyURL> URLs;
+							DependencyURLSet URLs;
 							Avatar::GetDependencyOptions options;
 							options.get_optimised_mesh = false; // Get non-optimised mesh, optimise on server.
 							options.use_basis = false; // Get non-basis resources, convert to basis on server.
@@ -1518,7 +1518,7 @@ void WorkerThread::doRun()
 								sendGetFileMessageIfNeeded(temp_avatar.avatar_settings.model_url);
 
 							// Process resources
-							std::set<DependencyURL> URLs;
+							DependencyURLSet URLs;
 							Avatar::GetDependencyOptions options;
 							options.get_optimised_mesh = false; // Get non-optimised mesh, optimise on server.
 							options.use_basis = false; // Get non-basis resources, convert to basis on server.
@@ -1885,7 +1885,7 @@ void WorkerThread::doRun()
 											world_state->markAsChanged();
 
 											// Process resources
-											std::set<DependencyURL> URLs;
+											DependencyURLSet URLs;
 											WorldObject::GetDependencyOptions options;
 											options.use_basis = false; // Get plain textures, convert to basis on server.
 											options.get_optimised_mesh = false;
@@ -2108,7 +2108,7 @@ void WorkerThread::doRun()
 									new_ob->last_modified_time = new_ob->created_time;
 									new_ob->creator_name = client_user_name;
 
-									std::set<DependencyURL> URLs;
+									DependencyURLSet URLs;
 									WorldObject::GetDependencyOptions options;
 									options.use_basis = false; // Get plain textures, convert to basis on server.
 									options.get_optimised_mesh = false;

@@ -15005,16 +15005,27 @@ void GUIClient::keyPressed(KeyEvent& e)
 
 	if(e.key == Key::Key_F5)
 	{
-		URLParseResults url_parse_results;
-		url_parse_results.hostname = this->server_hostname;
-		url_parse_results.worldname = this->server_worldname;
-		url_parse_results.x = this->cam_controller.getPosition().x;
-		url_parse_results.y = this->cam_controller.getPosition().y;
-		url_parse_results.z = this->cam_controller.getPosition().z;
-		url_parse_results.parsed_x = url_parse_results.parsed_y = url_parse_results.parsed_z = true;
-		url_parse_results.heading =  Maths::doubleMod(::radToDegree(this->cam_controller.getAngles().x), 360.0);
+		// Ctrl+F5: принудительное переподключение. Обычный F5: мягкое обновление без разлогина.
+		if(BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Ctrl))
+		{
+			URLParseResults url_parse_results;
+			url_parse_results.hostname = this->server_hostname;
+			url_parse_results.worldname = this->server_worldname;
+			url_parse_results.x = this->cam_controller.getPosition().x;
+			url_parse_results.y = this->cam_controller.getPosition().y;
+			url_parse_results.z = this->cam_controller.getPosition().z;
+			url_parse_results.parsed_x = url_parse_results.parsed_y = url_parse_results.parsed_z = true;
+			url_parse_results.heading =  Maths::doubleMod(::radToDegree(this->cam_controller.getAngles().x), 360.0);
 
-		this->connectToServer(url_parse_results);
+			this->connectToServer(url_parse_results);
+		}
+		else
+		{
+			// Мягкое обновление: перегенерируем землю и принудительно перерисуем без смены сессии
+			updateGroundPlane();
+			if(opengl_engine)
+				opengl_engine->requestRedraw();
+		}
 	}
 }
 

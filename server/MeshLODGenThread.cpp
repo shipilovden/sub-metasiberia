@@ -494,7 +494,8 @@ static void checkForLODTexturesToGenerate(ServerAllWorldsState* world_state, Ser
 						if(texture_URL == mat->colour_texture_url)
 							has_alpha = BitUtils::isBitSet(mat->flags, WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG); // Assume mat->flags are correct.
 
-						const std::string lod_URL = mat->getLODTextureURLForLevel(texture_URL, lvl, has_alpha, /*use basis=*/false);
+						WorldMaterial::GetURLOptions options(false, nullptr);
+						const std::string lod_URL = mat->getLODTextureURLForLevel(options, texture_URL, lvl, has_alpha);
 
 						if(lod_URL != texture_URL) // We don't do LOD for some texture types.
 						{
@@ -552,7 +553,8 @@ static void checkForBasisTexturesToGenerateForMaterials(ServerAllWorldsState* wo
 
 					for(int lvl = mat->minLODLevel(); lvl <= 2; ++lvl)
 					{
-						const std::string basis_lod_URL = mat->getLODTextureURLForLevel(texture_URL, lvl, /*has_alpha=*/false, /*use basis=-*/true);  // Lod URL without ktx extension (jpg or PNG)
+						WorldMaterial::GetURLOptions options2(true, nullptr);
+						const std::string basis_lod_URL = mat->getLODTextureURLForLevel(options2, texture_URL, lvl, /*has_alpha=*/false);  // Lod URL without ktx extension (jpg or PNG)
 						if(hasExtension(basis_lod_URL, "basis"))
 						{
 							if(lod_URLs_considered.count(basis_lod_URL) == 0)

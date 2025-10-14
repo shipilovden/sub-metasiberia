@@ -90,12 +90,12 @@ void renderParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 
 			const Vec3d pos = parcel->getVisitPosition();
 			
-			const std::string weclient_URL = "/webclient?x=" + doubleToStringMaxNDecimalPlaces(pos.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(pos.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(pos.z, 1);
-			const std::string sub_URL = "sub://substrata.info/?x=" + doubleToStringMaxNDecimalPlaces(pos.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(pos.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(pos.z, 1);
+			const std::string weclient_URL = "https://vr.metasiberia.com/webclient?x=" + doubleToStringMaxNDecimalPlaces(pos.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(pos.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(pos.z, 1);
+			const std::string sub_URL = "sub://vr.metasiberia.com/?x=" + doubleToStringMaxNDecimalPlaces(pos.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(pos.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(pos.z, 1);
 			
 			page += "<p><a href=\"" + weclient_URL + "\">Visit in web browser</a><br/></p>   \n";
 			//page += "<p>For the best experience, enter this URL into the location bar in the Substrata client: " + sub_URL + "</p>";
-			page += "<p>Visit in Substrata: <a href=\"" + sub_URL + "\">" + sub_URL + "</a><br/>(Click or enter URL into location bar in Substrata client)</p>   \n";
+			page += "<p>Visit in Metasiberia: <a href=\"" + sub_URL + "\">" + sub_URL + "</a><br/>(Click or enter URL into location bar in Metasiberia client)</p>   \n";
 
 
 			// Look up owner

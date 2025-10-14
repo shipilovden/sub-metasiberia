@@ -118,6 +118,18 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			LoginHandlers::handleSetNewPasswordPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/admin_add_new_parcel_post")
+		{
+			AdminHandlers::handleAdminAddNewParcelPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_edit_parcel_post")
+		{
+			AdminHandlers::handleAdminEditParcelPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_remove_parcel_post")
+		{
+			AdminHandlers::handleAdminRemoveParcelPost(*this->world_state, request, reply_info);
+		}
 #if USE_GLARE_PARCEL_AUCTION_CODE
 		else if(request.path == "/ipn_listener")
 		{
@@ -308,6 +320,14 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			WorldHandlers::handleEditWorldPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/grant_world_edit_post")
+		{
+			WorldHandlers::handleGrantWorldEditPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/revoke_world_edit_post")
+		{
+			WorldHandlers::handleRevokeWorldEditPost(*this->world_state, request, reply_info);
+		}
 		else if(request.path == "/delete_photo_post")
 		{
 			PhotoHandlers::handleDeletePhotoPost(*this->world_state, request, reply_info);
@@ -324,6 +344,12 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		if(request.path == "/")
 		{
 			MainPageHandlers::renderRootPage(*this->world_state, *this->data_store, request, reply_info);
+		}
+		else if(request.path == "/admin_add_new_parcel") {
+			AdminHandlers::renderAdminAddNewParcel(*this->world_state, request, reply_info);
+		}
+		else if(::hasPrefix(request.path, "/admin_edit_parcel/")) {
+			AdminHandlers::renderAdminEditParcel(*this->world_state, request, reply_info);
 		}
 		else if(request.path == "/terms")
 		{

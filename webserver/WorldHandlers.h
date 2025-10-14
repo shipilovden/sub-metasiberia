@@ -34,6 +34,10 @@ namespace WorldHandlers
 
 	void handleEditWorldPost(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info);
 
+	// Grant/revoke edit permissions for a personal world to another user by username
+	void handleGrantWorldEditPost(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info);
+	void handleRevokeWorldEditPost(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info);
+
 	std::string URLEscapeWorldName(const std::string& world_name);
 
 	void test();
