@@ -92,8 +92,10 @@ SOURCE_GROUP(giflib FILES ${giflib})
 SOURCE_GROUP(zstandard FILES ${zstandard})
 
 include(../cmake/shared_cxx_settings.cmake)
+include(../cmake/shared_settings.cmake)
 
 add_definitions(-DPNG_ALLOW_BENIGN_ERRORS)
+add_definitions(-DGUI_CLIENT)
 
 # openexr_all_files is defined in openexr.cmake which is included from shared_cxx_settings.cmake.
 add_library(libs
