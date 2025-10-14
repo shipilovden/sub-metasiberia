@@ -7,6 +7,7 @@ if(NOT USE_SDL)
 endif()
 
 include(../cmake/shared_settings.cmake)
+
 include(../cmake/shared_cxx_settings.cmake)
 
 if(NOT EMSCRIPTEN)
@@ -513,6 +514,8 @@ SET(shared_files
 ../shared/LODChunk.h
 ../shared/WorldDetails.cpp
 ../shared/WorldDetails.h
+../shared/RateLimiter.cpp
+../shared/RateLimiter.h
 )
 
 SET(client_indigo_files
@@ -1084,7 +1087,6 @@ ${utils}
 ${hdr}
 ${WINTER_FILES}
 ${gui_client}
-${shared_files}
 ${scripts}
 ${double_conversion}
 ${opengl}
@@ -1101,6 +1103,7 @@ ${lang}
 ${video}
 ${webserver_files}
 ${rtaudio}
+${substrata_shared}
 ${audio}
 ${indigo_audio}
 ${resonance}
@@ -1232,6 +1235,9 @@ elseif(WIN32)
 		Jolt
 		
 		Opus
+		
+		# Substrata shared library
+		libs
 	)
 	
 	if(INDIGO_SUPPORT)

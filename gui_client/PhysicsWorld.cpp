@@ -199,7 +199,7 @@ class MyObjectLayerPairFilter : public JPH::ObjectLayerPairFilter
 static void* joltAllocate(size_t size)
 {
 	//num_jolt_allocs_done++;
-	void* ptr = MemAlloc::mallocWithDefaultAlignmentAndThrow(size);
+	void* ptr = MemAlloc::alignedMalloc(size, 16);
 
 	TracyAllocS(ptr, size, /*call stack capture depth=*/10);
 
@@ -210,7 +210,7 @@ static void joltFree(void* inBlock)
 {
 	TracyFreeS(inBlock, /*call stack capture depth=*/10);
 
-	MemAlloc::freeWithDefaultAlignmentAndThrow(inBlock);
+	MemAlloc::alignedFree(inBlock);
 }
 
 static void* joltReallocate(void *inBlock, [[maybe_unused]] size_t inOldSize, size_t inNewSize)
@@ -218,7 +218,7 @@ static void* joltReallocate(void *inBlock, [[maybe_unused]] size_t inOldSize, si
 	//num_jolt_allocs_done++;
 
 	// Alloc new mem
-	void* ptr = MemAlloc::mallocWithDefaultAlignmentAndThrow(inNewSize);
+	void* ptr = MemAlloc::alignedMalloc(inNewSize, 16);
 	if(!ptr)
 		throw std::bad_alloc();
 	TracyAllocS(ptr, inNewSize, /*call stack capture depth=*/10);
@@ -231,7 +231,7 @@ static void* joltReallocate(void *inBlock, [[maybe_unused]] size_t inOldSize, si
 	if(inBlock)
 	{
 		TracyFreeS(inBlock, /*call stack capture depth=*/10);
-		MemAlloc::freeWithDefaultAlignmentAndThrow(inBlock);
+		MemAlloc::alignedFree(inBlock);
 	}
 
 	return ptr;

@@ -685,6 +685,49 @@ set(natvis_files ${GLARE_CORE_TRUNK_DIR_ENV}/glare-core.natvis)
 endif()
 
 
+# Substrata shared files
+set(SUBSTRATA_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(substrata_shared
+${SUBSTRATA_ROOT_DIR}/shared/Resource.cpp
+${SUBSTRATA_ROOT_DIR}/shared/Resource.h
+${SUBSTRATA_ROOT_DIR}/shared/ResourceManager.cpp
+${SUBSTRATA_ROOT_DIR}/shared/ResourceManager.h
+${SUBSTRATA_ROOT_DIR}/shared/WorldObject.cpp
+${SUBSTRATA_ROOT_DIR}/shared/WorldObject.h
+${SUBSTRATA_ROOT_DIR}/shared/WorldMaterial.cpp
+${SUBSTRATA_ROOT_DIR}/shared/WorldMaterial.h
+${SUBSTRATA_ROOT_DIR}/shared/Avatar.cpp
+${SUBSTRATA_ROOT_DIR}/shared/Avatar.h
+${SUBSTRATA_ROOT_DIR}/shared/Parcel.cpp
+${SUBSTRATA_ROOT_DIR}/shared/Parcel.h
+${SUBSTRATA_ROOT_DIR}/shared/LODChunk.cpp
+${SUBSTRATA_ROOT_DIR}/shared/LODChunk.h
+${SUBSTRATA_ROOT_DIR}/shared/WorldSettings.cpp
+${SUBSTRATA_ROOT_DIR}/shared/WorldSettings.h
+${SUBSTRATA_ROOT_DIR}/shared/SubstrataLuaVM.cpp
+${SUBSTRATA_ROOT_DIR}/shared/SubstrataLuaVM.h
+${SUBSTRATA_ROOT_DIR}/shared/ObjectEventHandlers.cpp
+${SUBSTRATA_ROOT_DIR}/shared/ObjectEventHandlers.h
+${SUBSTRATA_ROOT_DIR}/shared/LODGeneration.cpp
+${SUBSTRATA_ROOT_DIR}/shared/LODGeneration.h
+${SUBSTRATA_ROOT_DIR}/shared/VoxelMeshBuilding.cpp
+${SUBSTRATA_ROOT_DIR}/shared/VoxelMeshBuilding.h
+${SUBSTRATA_ROOT_DIR}/shared/ImageDecoding.cpp
+${SUBSTRATA_ROOT_DIR}/shared/ImageDecoding.h
+${SUBSTRATA_ROOT_DIR}/shared/FileTypes.cpp
+${SUBSTRATA_ROOT_DIR}/shared/FileTypes.h
+${SUBSTRATA_ROOT_DIR}/shared/GroundPatch.cpp
+${SUBSTRATA_ROOT_DIR}/shared/GroundPatch.h
+${SUBSTRATA_ROOT_DIR}/shared/LuaScriptEvaluator.cpp
+${SUBSTRATA_ROOT_DIR}/shared/LuaScriptEvaluator.h
+${SUBSTRATA_ROOT_DIR}/shared/RateLimiter.cpp
+${SUBSTRATA_ROOT_DIR}/shared/RateLimiter.h
+${SUBSTRATA_ROOT_DIR}/shared/TimerQueue.cpp
+${SUBSTRATA_ROOT_DIR}/shared/TimerQueue.h
+${SUBSTRATA_ROOT_DIR}/shared/WorldDetails.cpp
+${SUBSTRATA_ROOT_DIR}/shared/WorldDetails.h
+)
+
 SOURCE_GROUP(graphics FILES ${graphics})
 SOURCE_GROUP(indigo FILES ${indigo_src})
 SOURCE_GROUP(maths FILES ${maths})
@@ -701,3 +744,4 @@ SOURCE_GROUP(meshoptimizer FILES ${meshoptimizer})
 SOURCE_GROUP(luau/luau_vm FILES ${luau_vm})
 SOURCE_GROUP(luau/luau_compiler FILES ${luau_compiler})
 SOURCE_GROUP(lua FILES ${lua})
+SOURCE_GROUP(substrata_shared FILES ${substrata_shared})

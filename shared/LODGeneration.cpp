@@ -32,9 +32,9 @@ Copyright Glare Technologies Limited 2021 -
 #include <dll/include/IndigoMesh.h>
 #include <dll/include/IndigoException.h>
 #include <dll/IndigoStringUtils.h>
-#include <encoder/basisu_comp.h>
+#include <basis_universal/encoder/basisu_comp.h>
 #if !GUI_CLIENT
-//#include <encoder/basisu_comp.h>
+//#include <basis_universal/encoder/basisu_comp.h>
 #endif
 
 namespace LODGeneration
