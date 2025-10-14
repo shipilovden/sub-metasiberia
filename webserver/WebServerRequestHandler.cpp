@@ -332,6 +332,22 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			PhotoHandlers::handleDeletePhotoPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/world_add_parcel_post")
+		{
+			WorldHandlers::handleWorldAddParcelPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/world_delete_parcel_post")
+		{
+			WorldHandlers::handleWorldDeleteParcelPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/world_grant_parcel_writer_post")
+		{
+			WorldHandlers::handleWorldGrantParcelWriterPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/world_revoke_parcel_writer_post")
+		{
+			WorldHandlers::handleWorldRevokeParcelWriterPost(*this->world_state, request, reply_info);
+		}
 		else
 		{
 			const std::string page = "Unknown post URL";
@@ -366,6 +382,14 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		else if(request.path == "/about_substrata")
 		{
 			MainPageHandlers::renderAboutSubstrataPage(*this->world_state, *this->data_store, request, reply_info);
+		}
+		else if(::hasPrefix(request.path, "/world_add_parcel/"))
+		{
+			WorldHandlers::renderWorldAddParcel(*this->world_state, request, reply_info);
+		}
+		else if(::hasPrefix(request.path, "/world_edit_parcel/"))
+		{
+			WorldHandlers::renderWorldEditParcel(*this->world_state, request, reply_info);
 		}
 		else if(request.path == "/running_your_own_server")
 		{
