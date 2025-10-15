@@ -227,12 +227,13 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		
 		// Generate URLs
 		const std::string hostname = request.getHostHeader();
-		const std::string webclient_URL = (request.tls_connection ? std::string("https") : std::string("http")) + "://" + hostname + "/webclient?world=" + URLEscapeWorldName(world_name);
-		const std::string native_URL = "sub://" + hostname + "/" + world_name;
+			const std::string webclient_URL = (request.tls_connection ? std::string("https") : std::string("http")) + "://" + hostname + "/webclient?world=" + URLEscapeWorldName(world_name);
+			const std::string native_URL = "sub://" + hostname + "/" + world_name;
 		
 		page += "<h2>🔗 Quick Links</h2>\n";
-		page += "<p><a href=\"" + webclient_URL + "\" style=\"padding: 6px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 3px; margin-right: 10px;\">🌐 Visit in Web Browser</a>";
-		page += "<a href=\"" + native_URL + "\" style=\"padding: 6px 12px; background: #28a745; color: white; text-decoration: none; border-radius: 3px;\">💻 Visit in Metasiberia</a></p>\n";
+		page += "<p><a href=\"" + webclient_URL + "\" target=\"_blank\" style=\"color: #0066cc; text-decoration: underline; font-weight: bold;\">🌐 Visit in Web</a>";
+		page += "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"; // Добавляем пробелы
+		page += "<a href=\"sub://" + hostname + "/" + world_name + "\" data-app-href=\"sub://" + hostname + "/" + world_name + "\" style=\"color: #0066cc; text-decoration: underline; font-weight: bold;\">💻 Visit in Metasiberia</a></p>\n";
 		page += "<p><small style=\"color: #666; font-size: 11px;\">";
 		page += "Web: " + webclient_URL + "<br>";
 		page += "App: " + native_URL;
@@ -242,7 +243,6 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		page += "<div style=\"border: 2px solid #ddd; margin: 15px 0; padding: 15px; background: #f8f9fa;\">\n";
 		page += "<h2>🌍 World Management</h2>\n";
 		page += "<p><strong>Quick Actions:</strong></p>\n";
-		page += "<p><a href=\"/world/" + URLEscapeWorldName(world_name) + "\" style=\"margin-right: 15px; padding: 5px 10px; background: #007bff; color: white; text-decoration: none; border-radius: 3px;\">📝 Edit All Parcels</a></p>\n";
 		
 		// Add delete world button for created worlds (not personal worlds)
 		if(world_name.find('/') != std::string::npos && logged_in_user && world->details.owner_id == logged_in_user->id)
@@ -302,8 +302,9 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
 			page += "<input type=\"submit\" value=\"🗑️ Delete\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + "?');\" style=\"background: #ff0000; color: white; border: none; padding: 4px 8px; cursor: pointer; border-radius: 3px;\">";
 			page += "</form>";
-			page += "<a href=\"" + parcel_webclient_URL + "\" style=\"margin-right: 10px; padding: 4px 8px; background: #007bff; color: white; text-decoration: none; border-radius: 3px;\">🌐 Open Web</a>";
-			page += "<a href=\"" + parcel_native_URL + "\" style=\"margin-right: 10px; padding: 4px 8px; background: #28a745; color: white; text-decoration: none; border-radius: 3px;\">💻 Open App</a>";
+			page += "<a href=\"" + parcel_webclient_URL + "\" target=\"_blank\" style=\"color: #0066cc; text-decoration: underline; font-weight: bold;\">🌐 Visit in Web</a>";
+			page += "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"; // Добавляем пробелы
+			page += "<a href=\"sub://" + hostname + "/" + world_name + "?x=" + doubleToString(parcel->aabb_min.x) + "&y=" + doubleToString(parcel->aabb_min.y) + "&z=" + doubleToString(parcel->aabb_min.z) + "\" data-app-href=\"sub://" + hostname + "/" + world_name + "?x=" + doubleToString(parcel->aabb_min.x) + "&y=" + doubleToString(parcel->aabb_min.y) + "&z=" + doubleToString(parcel->aabb_min.z) + "\" style=\"color: #0066cc; text-decoration: underline; font-weight: bold;\">💻 Visit in Metasiberia</a>";
 			page += "<br><small style=\"color: #666; font-size: 11px;\">";
 			page += "Web: " + parcel_webclient_URL + "<br>";
 			page += "App: " + parcel_native_URL;
@@ -348,26 +349,6 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			page += "<input type=\"submit\" value=\"Revoke Writer Rights\">\n";
 			page += "</form>\n";
 			
-			// Force revoke form for world owner
-			if(logged_in_user && world->details.owner_id == logged_in_user->id)
-			{
-				page += "<form action=\"/world_revoke_parcel_writer_post\" method=\"post\" style=\"margin-top: 10px; padding: 10px; border: 2px solid #ff0000; background: #ffeeee;\">\n";
-				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
-				page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">\n";
-				page += "<input type=\"hidden\" name=\"force_revoke\" value=\"true\">\n";
-				page += "<input type=\"text\" name=\"username\" placeholder=\"Username to FORCE revoke\" required>\n";
-				page += "<input type=\"submit\" value=\"FORCE Revoke (Owner Only)\" style=\"background: #ff0000; color: white; font-weight: bold;\">\n";
-				page += "</form>\n";
-				
-				// Special button to force revoke admin (ID: 1)
-				page += "<form action=\"/world_revoke_parcel_writer_post\" method=\"post\" style=\"margin-top: 10px; padding: 10px; border: 2px solid #ff0000; background: #ffeeee;\">\n";
-				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
-				page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">\n";
-				page += "<input type=\"hidden\" name=\"force_revoke\" value=\"true\">\n";
-				page += "<input type=\"hidden\" name=\"username\" value=\"admin\">\n";
-				page += "<input type=\"submit\" value=\"FORCE Revoke admin (ID: 1)\" style=\"background: #ff0000; color: white; font-weight: bold;\">\n";
-				page += "</form>\n";
-			}
 			
 			page += "</div>\n";
 		}
@@ -433,6 +414,36 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		} // end lock scope
 
 		page += "</div>\n";
+		
+		// Add JavaScript for app link fallback
+		page += "<script>\n";
+		page += "(function(){\n";
+		page += "  const appLinks = document.querySelectorAll('a[data-app-href]');\n";
+		page += "  appLinks.forEach(function(appLink) {\n";
+		page += "    appLink.addEventListener('click', function(e) {\n";
+		page += "      e.preventDefault();\n";
+		page += "      const url = appLink.getAttribute('data-app-href') || appLink.href;\n";
+		page += "      let done = false;\n";
+		page += "      const t = setTimeout(function() {\n";
+		page += "        if (done) return;\n";
+		page += "        alert('Метасиберия-приложение не обнаружено. Установите приложение или зарегистрируйте протокол metasiberia://');\n";
+		page += "      }, 800);\n";
+		page += "      try {\n";
+		page += "        window.location.href = url;\n";
+		page += "        done = true;\n";
+		page += "        clearTimeout(t);\n";
+		page += "      } catch(_) {\n";
+		page += "        const ifr = document.createElement('iframe');\n";
+		page += "        ifr.style.display = 'none';\n";
+		page += "        ifr.src = url;\n";
+		page += "        document.body.appendChild(ifr);\n";
+		page += "        setTimeout(() => { document.body.removeChild(ifr); }, 2000);\n";
+		page += "      }\n";
+		page += "    });\n";
+		page += "  });\n";
+		page += "})();\n";
+		page += "</script>\n";
+		
 		page += WebServerResponseUtils::standardFooter(request, true);
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
 	}
