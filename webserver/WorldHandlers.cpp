@@ -234,23 +234,26 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		page += "<p><a href=\"" + webclient_URL + "\">Visit in web browser</a></p>\n";
 		page += "<p><a href=\"" + native_URL + "\">Visit in Metasiberia</a></p>\n";
 		
-		// World settings
-		page += "<h2>World Settings</h2>\n";
-		page += "<p><a href=\"/world_add_parcel/" + URLEscapeWorldName(world_name) + "\">Add Parcel</a></p>\n";
-		page += "<p><a href=\"/world/" + URLEscapeWorldName(world_name) + "\">Edit Parcels</a></p>\n";
+		// World management section
+		page += "<div style=\"border: 2px solid #ddd; margin: 15px 0; padding: 15px; background: #f8f9fa;\">\n";
+		page += "<h2>🌍 World Management</h2>\n";
+		page += "<p><strong>Quick Actions:</strong></p>\n";
+		page += "<p><a href=\"/world/" + URLEscapeWorldName(world_name) + "\" style=\"margin-right: 15px; padding: 5px 10px; background: #007bff; color: white; text-decoration: none; border-radius: 3px;\">📝 Edit All Parcels</a></p>\n";
 		
 		// Add delete world button for created worlds (not personal worlds)
 		if(world_name.find('/') != std::string::npos && logged_in_user && world->details.owner_id == logged_in_user->id)
 		{
-			page += "<form action=\"/world_delete_post\" method=\"post\" style=\"margin-top: 20px; padding: 10px; border: 2px solid #ff0000; background: #ffeeee;\">\n";
+			page += "<form action=\"/world_delete_post\" method=\"post\" style=\"margin-top: 15px; padding: 10px; border: 2px solid #ff0000; background: #ffeeee; border-radius: 5px;\">\n";
 			page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
-			page += "<input type=\"submit\" value=\"DELETE WORLD\" onclick=\"return confirm('Are you sure you want to delete this world? This action cannot be undone!');\" style=\"background: #ff0000; color: white; font-weight: bold;\">\n";
+			page += "<input type=\"submit\" value=\"🗑️ DELETE WORLD\" onclick=\"return confirm('Are you sure you want to delete this world? This action cannot be undone!');\" style=\"background: #ff0000; color: white; font-weight: bold; padding: 8px 15px; border: none; border-radius: 3px; cursor: pointer;\">\n";
 			page += "</form>\n";
 		}
+		page += "</div>\n";
 		
 		
-		// Parcels list
-		page += "<h2>Parcels</h2>\n";
+		// Parcels section
+		page += "<div style=\"border: 2px solid #28a745; margin: 15px 0; padding: 15px; background: #f8fff8;\">\n";
+		page += "<h2>🏗️ Parcels Management</h2>\n";
 		int parcel_count = 0;
 		for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
 			const Parcel* parcel = it->second.ptr();
@@ -291,7 +294,11 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			const std::string parcel_native_URL = "sub://" + hostname + "/" + world_name + "?x=" + doubleToStringMaxNDecimalPlaces(parcel_center.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(parcel_center.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(parcel_center.z, 1);
 			
 			page += "<a href=\"/world_edit_parcel/" + URLEscapeWorldName(world_name) + "/" + parcel->id.toString() + "\" style=\"margin-right: 10px;\">Edit</a>";
-			page += "<a href=\"/world_delete_parcel_post\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + "?');\" style=\"margin-right: 10px; color: #ff0000;\">Delete</a>";
+			page += "<form action=\"/world_delete_parcel_post\" method=\"post\" style=\"display: inline; margin-right: 10px;\">";
+			page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+			page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+			page += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + "?');\" style=\"background: #ff0000; color: white; border: none; padding: 2px 6px; cursor: pointer;\">";
+			page += "</form>";
 			page += "<a href=\"" + parcel_webclient_URL + "\" style=\"margin-right: 10px;\">Open Web</a>";
 			page += "<a href=\"" + parcel_native_URL + "\">Open App</a>";
 			page += "</td>\n";
@@ -362,32 +369,35 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			page += "<p>No parcels found.</p>\n";
 		}
 		
-		// Add parcel management forms for world owner
+		// Parcel management forms for world owner
 		if(logged_in_user && world->details.owner_id == logged_in_user->id)
 		{
 			// Add new parcel form
-			page += "<h3>Add New Parcel</h3>\n";
-			page += "<form action=\"/world_add_parcel_post\" method=\"post\" style=\"border: 1px solid #ccc; padding: 15px; margin: 10px 0; background: #f0f8ff;\">\n";
+			page += "<div style=\"border: 1px solid #17a2b8; margin: 15px 0; padding: 15px; background: #e7f3ff; border-radius: 5px;\">\n";
+			page += "<h3>➕ Add New Parcel</h3>\n";
+			page += "<form action=\"/world_add_parcel_post\" method=\"post\">\n";
 			page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
 			page += "<table style=\"width: 100%;\">\n";
-			page += "<tr><td style=\"width: 120px;\">X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" value=\"0\" required></td></tr>\n";
-			page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" value=\"0\" required></td></tr>\n";
-			page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" value=\"0\" required></td></tr>\n";
-			page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" value=\"10\" required></td></tr>\n";
-			page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" value=\"10\" required></td></tr>\n";
-			page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" value=\"5\" required></td></tr>\n";
-			page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"Add Parcel\" style=\"margin-top: 10px;\"></td></tr>\n";
+			page += "<tr><td style=\"width: 120px;\">X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" value=\"0\" required style=\"width: 100px;\"></td></tr>\n";
+			page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" value=\"0\" required style=\"width: 100px;\"></td></tr>\n";
+			page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" value=\"0\" required style=\"width: 100px;\"></td></tr>\n";
+			page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" value=\"10\" required style=\"width: 100px;\"></td></tr>\n";
+			page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" value=\"10\" required style=\"width: 100px;\"></td></tr>\n";
+			page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" value=\"5\" required style=\"width: 100px;\"></td></tr>\n";
+			page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"➕ Add Parcel\" style=\"margin-top: 10px; padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer;\"></td></tr>\n";
 			page += "</table>\n";
 			page += "</form>\n";
+			page += "</div>\n";
 			
 			// Edit parcel size form (only if parcels exist)
 			if(parcel_count > 0)
 			{
-				page += "<h3>Edit Parcel Size</h3>\n";
-				page += "<form action=\"/world_update_parcel_size_post\" method=\"post\" style=\"border: 1px solid #ccc; padding: 15px; margin: 10px 0; background: #f9f9f9;\">\n";
+				page += "<div style=\"border: 1px solid #ffc107; margin: 15px 0; padding: 15px; background: #fff8e1; border-radius: 5px;\">\n";
+				page += "<h3>✏️ Edit Parcel Size</h3>\n";
+				page += "<form action=\"/world_update_parcel_size_post\" method=\"post\">\n";
 				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
 				page += "<table style=\"width: 100%;\">\n";
-				page += "<tr><td style=\"width: 120px;\">Parcel ID:</td><td><select name=\"parcel_id\" required>\n";
+				page += "<tr><td style=\"width: 120px;\">Parcel ID:</td><td><select name=\"parcel_id\" required style=\"width: 100px;\">\n";
 				
 				// Add parcel options
 				for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
@@ -399,17 +409,19 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 				}
 				
 				page += "</select></td></tr>\n";
-				page += "<tr><td>X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" required></td></tr>\n";
-				page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" required></td></tr>\n";
-				page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" required></td></tr>\n";
-				page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
-				page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
-				page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
-				page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"Update Parcel Size\" style=\"margin-top: 10px;\"></td></tr>\n";
+				page += "<tr><td>X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"✏️ Update Parcel Size\" style=\"margin-top: 10px; padding: 8px 15px; background: #ffc107; color: #000; border: none; border-radius: 3px; cursor: pointer;\"></td></tr>\n";
 				page += "</table>\n";
 				page += "</form>\n";
+				page += "</div>\n";
 			}
 		}
+		page += "</div>\n"; // Close parcels section
 			
 		} // end lock scope
 
