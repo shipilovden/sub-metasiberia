@@ -61,6 +61,7 @@ const std::string standardHeader(ServerAllWorldsState& world_state, const web::R
 	std::string page_out = standardHTMLHeader(*world_state.web_data_store, request_info, page_title, extra_header_tags);
 	page_out +=
 		"	<body class=\"standard-body\">\n"
+		"	<div class=\"site-banner\">❄️ Metasiberia ❄️</div>\n"
 		"	<div id=\"login\">\n"; // Start login div
 	
 	web::UnsafeString logged_in_username;
@@ -84,12 +85,13 @@ const std::string standardHeader(ServerAllWorldsState& world_state, const web::R
 		page_out += "<a href=\"/login\">log in</a> <br/>\n";
 	}
 	page_out += 
-	"	</div>																									\n" // End login div
-	"	<a href=\"/\"><img src=\"/files/icon_512x512.png\" alt=\"Metasiberia\" class=\"substrata-logo-top-small\"/></a>											\n"
+	"	</div>\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n" // End login div
+	"	<a href=\"/\"><img src=\"/files/icon_512x512.png\" alt=\"Metasiberia\" class=\"substrata-logo-top-small\"/></a>\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n"
+	"	<div class=\"site-banner site-banner-bottom\">❄️ Metasiberia ❄️</div>\n"
 	
-	"	<header>																								\n"
-	"		<h1>" + web::Escaping::HTMLEscape(page_title) + "</h1>												\n"
-	"	</header>																								\n";
+	"	<header>\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n"
+	"		<h1>" + web::Escaping::HTMLEscape(page_title) + "</h1>\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n"
+	"	</header>\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n";
 		
 	return page_out;
 }

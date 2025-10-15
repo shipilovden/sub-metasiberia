@@ -35,6 +35,8 @@ body {
 {
 	margin-top: 60px;
 	width: 75vw;
+	margin-left: auto;
+	margin-right: auto;
 }
 h1,h2,h3
 {
@@ -54,6 +56,9 @@ td
 .main
 {
 	min-height: 400px;
+	margin-left: auto;
+	margin-right: auto;
+	max-width: 980px;
 }
 .caption
 {
@@ -518,4 +523,16 @@ td
 }
 .feature-disabled {
 	color: darkred;
+}
+
+.site-banner {
+	text-align: center;
+	font-weight: bold;
+	font-size: 22px;
+	padding: 6px 0;
+	color: #0d47a1;
+}
+.site-banner-bottom {
+	margin-top: -10px;
+	margin-bottom: 10px;
 }

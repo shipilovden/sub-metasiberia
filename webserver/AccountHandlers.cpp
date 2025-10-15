@@ -96,6 +96,7 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 		//-------------------------------- List worlds owned by user --------------------------------
 
 		page += "<h2>Worlds</h2>\n";
+		page += "<div style=\"text-align:center;\">\n";
 
 		for(auto it = world_state.world_states.begin(); it != world_state.world_states.end(); ++it)
 		{
@@ -103,11 +104,13 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 
 			if(world->details.owner_id == logged_in_user->id)
 			{
-				page += "<div>\n";
-				page += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world->details.name) + "\">" + web::Escaping::HTMLEscape(world->details.name) + "</a>";
+				page += "<div style=\"margin: 4px 0;\">";
+				page += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world->details.name) + "\" style=\"display:inline-block; padding:2px 6px;\">" + web::Escaping::HTMLEscape(world->details.name) + "</a>";
 				page += "</div>\n";
 			}
 		}
+
+		page += "</div>\n";
 
 		page += "<p><a href=\"/create_world\">Create a new world</a></p>\n";
 

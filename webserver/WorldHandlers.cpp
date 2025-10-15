@@ -317,24 +317,29 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			page += "<h4>Parcel Writer Rights</h4>\n";
 			page += "<p>Grant/revoke rights to edit this specific parcel:</p>\n";
 			
-			// Show current writers
+			// Show current writers (clean list, no debug info)
 			page += "<h5>Current Writers:</h5>\n";
-			page += "<p><em>DEBUG: Parcel " + parcel->id.toString() + " has " + toString(parcel->writer_ids.size()) + " writers</em></p>\n";
-			page += "<ul>\n";
-			for(size_t i = 0; i < parcel->writer_ids.size(); ++i)
+			if(parcel->writer_ids.empty())
 			{
-				page += "<li><em>DEBUG: Writer ID " + toString(i) + ": " + toString(parcel->writer_ids[i].value()) + "</em></li>\n";
-				auto user_it = world_state.user_id_to_users.find(parcel->writer_ids[i]);
-				if(user_it != world_state.user_id_to_users.end())
-				{
-					page += "<li>" + web::Escaping::HTMLEscape(user_it->second->name) + "</li>\n";
-				}
-				else
-				{
-					page += "<li>Unknown user (ID: " + toString(parcel->writer_ids[i].value()) + ")</li>\n";
-				}
+				page += "<ul><li>None</li></ul>\n";
 			}
-			page += "</ul>\n";
+			else
+			{
+				page += "<ul>\n";
+				for(size_t i = 0; i < parcel->writer_ids.size(); ++i)
+				{
+					auto user_it = world_state.user_id_to_users.find(parcel->writer_ids[i]);
+					if(user_it != world_state.user_id_to_users.end())
+					{
+						page += "<li>" + web::Escaping::HTMLEscape(user_it->second->name) + "</li>\n";
+					}
+					else
+					{
+						page += "<li>Unknown user (ID: " + toString(parcel->writer_ids[i].value()) + ")</li>\n";
+					}
+				}
+				page += "</ul>\n";
+			}
 			
 			page += "<form action=\"/world_grant_parcel_writer_post\" method=\"post\">\n";
 			page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
@@ -369,8 +374,8 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			page += "<tr><td style=\"width: 120px;\">X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" value=\"0\" required style=\"width: 100px;\"></td></tr>\n";
 			page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" value=\"0\" required style=\"width: 100px;\"></td></tr>\n";
 			page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" value=\"0\" required style=\"width: 100px;\"></td></tr>\n";
-			page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" value=\"10\" required style=\"width: 100px;\"></td></tr>\n";
-			page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" value=\"10\" required style=\"width: 100px;\"></td></tr>\n";
+			page += "<tr><td>X Size:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" value=\"10\" required style=\"width: 100px;\"></td></tr>\n";
+			page += "<tr><td>Y Size:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" value=\"10\" required style=\"width: 100px;\"></td></tr>\n";
 			page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" value=\"5\" required style=\"width: 100px;\"></td></tr>\n";
 			page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"➕ Add Parcel\" style=\"margin-top: 10px; padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer;\"></td></tr>\n";
 			page += "</table>\n";
@@ -385,27 +390,53 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 				page += "<form action=\"/world_update_parcel_size_post\" method=\"post\">\n";
 				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
 				page += "<table style=\"width: 100%;\">\n";
-				page += "<tr><td style=\"width: 120px;\">Parcel ID:</td><td><select name=\"parcel_id\" required style=\"width: 100px;\">\n";
+				page += "<tr><td style=\"width: 120px;\">Parcel ID:</td><td><select name=\"parcel_id\" id=\"edit-parcel-select\" required style=\"width: 100px;\">\n";
 				
 				// Add parcel options
 				for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
 					const Parcel* parcel = it->second.ptr();
 					// Only show parcels that are not the base parcel in personal worlds
 					if(!(parcel->id.value() == 1 && world_name.find('/') == std::string::npos)) {
-						page += "<option value=\"" + parcel->id.toString() + "\">" + parcel->id.toString() + "</option>\n";
+						const Vec2d origin = parcel->verts[0];
+						const Vec2d topRight = parcel->verts[2];
+						const Vec2d size = topRight - origin;
+						const double zheight = parcel->zbounds.y - parcel->zbounds.x;
+						page += "<option value=\"" + parcel->id.toString() + "\" ";
+						page += "data-x=\"" + doubleToStringMaxNDecimalPlaces(origin.x, 3) + "\" ";
+						page += "data-y=\"" + doubleToStringMaxNDecimalPlaces(origin.y, 3) + "\" ";
+						page += "data-z=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 3) + "\" ";
+						page += "data-width=\"" + doubleToStringMaxNDecimalPlaces(size.x, 3) + "\" ";
+						page += "data-height=\"" + doubleToStringMaxNDecimalPlaces(size.y, 3) + "\" ";
+						page += "data-zheight=\"" + doubleToStringMaxNDecimalPlaces(zheight, 3) + "\">";
+						page += parcel->id.toString() + "</option>\n";
 					}
 				}
 				
 				page += "</select></td></tr>\n";
-				page += "<tr><td>X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
-				page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
-				page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
-				page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
-				page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
-				page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>X Position:</td><td><input type=\"number\" name=\"x\" id=\"edit-x\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" id=\"edit-y\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" id=\"edit-z\" step=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>X Size:</td><td><input type=\"number\" name=\"width\" id=\"edit-width\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Y Size:</td><td><input type=\"number\" name=\"height\" id=\"edit-height\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
+				page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" id=\"edit-zheight\" step=\"0.1\" min=\"0.1\" required style=\"width: 100px;\"></td></tr>\n";
 				page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"✏️ Update Parcel Size\" style=\"margin-top: 10px; padding: 8px 15px; background: #ffc107; color: #000; border: none; border-radius: 3px; cursor: pointer;\"></td></tr>\n";
 				page += "</table>\n";
 				page += "</form>\n";
+				// JS to auto-fill fields from selected option data
+				page += "<script>\n";
+				page += "(function(){\n";
+				page += "  var sel=document.getElementById('edit-parcel-select');\n";
+				page += "  var x=document.getElementById('edit-x');\n";
+				page += "  var y=document.getElementById('edit-y');\n";
+				page += "  var z=document.getElementById('edit-z');\n";
+				page += "  var w=document.getElementById('edit-width');\n";
+				page += "  var h=document.getElementById('edit-height');\n";
+				page += "  var zh=document.getElementById('edit-zheight');\n";
+				page += "  function fill(){ var o=sel.options[sel.selectedIndex]; if(!o) return; x.value=o.getAttribute('data-x'); y.value=o.getAttribute('data-y'); z.value=o.getAttribute('data-z'); w.value=o.getAttribute('data-width'); h.value=o.getAttribute('data-height'); zh.value=o.getAttribute('data-zheight'); }\n";
+				page += "  sel.addEventListener('change', fill);\n";
+				page += "  fill();\n"; // initial fill with current selection
+				page += "})();\n";
+				page += "</script>\n";
 				page += "</div>\n";
 			}
 		}
@@ -423,10 +454,12 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		page += "    appLink.addEventListener('click', function(e) {\n";
 		page += "      e.preventDefault();\n";
 		page += "      const url = appLink.getAttribute('data-app-href') || appLink.href;\n";
+		page += "      console.log('Trying to open app with URL:', url);\n";
+		page += "      alert('Попытка открыть приложение: ' + url);\n";
 		page += "      let done = false;\n";
 		page += "      const t = setTimeout(function() {\n";
 		page += "        if (done) return;\n";
-		page += "        alert('Метасиберия-приложение не обнаружено. Установите приложение или зарегистрируйте протокол metasiberia://');\n";
+		page += "        alert('Метасиберия-приложение не обнаружено. Установите приложение или зарегистрируйте протокол sub://');\n";
 		page += "      }, 800);\n";
 		page += "      try {\n";
 		page += "        window.location.href = url;\n";
@@ -444,6 +477,8 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		page += "})();\n";
 		page += "</script>\n";
 		
+		// Close main container
+		page += "</div>\n";
 		page += WebServerResponseUtils::standardFooter(request, true);
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
 	}
@@ -878,7 +913,13 @@ void handleWorldDeletePost(ServerAllWorldsState& world_state, const web::Request
             if(world_name.find('/') == std::string::npos)
                 throw glare::Exception("Cannot delete personal worlds");
             
-            // Delete the world
+            // Queue persistent DB records for deletion so the world does not reappear after restart
+            if(world->database_key.valid())
+                world_state.db_records_to_delete.insert(world->database_key);
+            if(world->world_settings.database_key.valid())
+                world_state.db_records_to_delete.insert(world->world_settings.database_key);
+
+            // Delete the world (in-memory)
             world_state.world_states.erase(world_res);
             world_state.markAsChanged();
             
