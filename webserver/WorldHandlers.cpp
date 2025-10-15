@@ -362,34 +362,53 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			page += "<p>No parcels found.</p>\n";
 		}
 		
-		// Add parcel size editing form for world owner
-		if(logged_in_user && world->details.owner_id == logged_in_user->id && parcel_count > 0)
+		// Add parcel management forms for world owner
+		if(logged_in_user && world->details.owner_id == logged_in_user->id)
 		{
-			page += "<h3>Edit Parcel Size</h3>\n";
-			page += "<form action=\"/world_update_parcel_size_post\" method=\"post\" style=\"border: 1px solid #ccc; padding: 15px; margin: 10px 0; background: #f9f9f9;\">\n";
+			// Add new parcel form
+			page += "<h3>Add New Parcel</h3>\n";
+			page += "<form action=\"/world_add_parcel_post\" method=\"post\" style=\"border: 1px solid #ccc; padding: 15px; margin: 10px 0; background: #f0f8ff;\">\n";
 			page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
 			page += "<table style=\"width: 100%;\">\n";
-			page += "<tr><td style=\"width: 120px;\">Parcel ID:</td><td><select name=\"parcel_id\" required>\n";
-			
-			// Add parcel options
-			for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
-				const Parcel* parcel = it->second.ptr();
-				// Only show parcels that are not the base parcel in personal worlds
-				if(!(parcel->id.value() == 1 && world_name.find('/') == std::string::npos)) {
-					page += "<option value=\"" + parcel->id.toString() + "\">" + parcel->id.toString() + "</option>\n";
-				}
-			}
-			
-			page += "</select></td></tr>\n";
-			page += "<tr><td>X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" required></td></tr>\n";
-			page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" required></td></tr>\n";
-			page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" required></td></tr>\n";
-			page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
-			page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
-			page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
-			page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"Update Parcel Size\" style=\"margin-top: 10px;\"></td></tr>\n";
+			page += "<tr><td style=\"width: 120px;\">X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" value=\"0\" required></td></tr>\n";
+			page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" value=\"0\" required></td></tr>\n";
+			page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" value=\"0\" required></td></tr>\n";
+			page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" value=\"10\" required></td></tr>\n";
+			page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" value=\"10\" required></td></tr>\n";
+			page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" value=\"5\" required></td></tr>\n";
+			page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"Add Parcel\" style=\"margin-top: 10px;\"></td></tr>\n";
 			page += "</table>\n";
 			page += "</form>\n";
+			
+			// Edit parcel size form (only if parcels exist)
+			if(parcel_count > 0)
+			{
+				page += "<h3>Edit Parcel Size</h3>\n";
+				page += "<form action=\"/world_update_parcel_size_post\" method=\"post\" style=\"border: 1px solid #ccc; padding: 15px; margin: 10px 0; background: #f9f9f9;\">\n";
+				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
+				page += "<table style=\"width: 100%;\">\n";
+				page += "<tr><td style=\"width: 120px;\">Parcel ID:</td><td><select name=\"parcel_id\" required>\n";
+				
+				// Add parcel options
+				for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
+					const Parcel* parcel = it->second.ptr();
+					// Only show parcels that are not the base parcel in personal worlds
+					if(!(parcel->id.value() == 1 && world_name.find('/') == std::string::npos)) {
+						page += "<option value=\"" + parcel->id.toString() + "\">" + parcel->id.toString() + "</option>\n";
+					}
+				}
+				
+				page += "</select></td></tr>\n";
+				page += "<tr><td>X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" required></td></tr>\n";
+				page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" required></td></tr>\n";
+				page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" required></td></tr>\n";
+				page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
+				page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
+				page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
+				page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"Update Parcel Size\" style=\"margin-top: 10px;\"></td></tr>\n";
+				page += "</table>\n";
+				page += "</form>\n";
+			}
 		}
 			
 		} // end lock scope
