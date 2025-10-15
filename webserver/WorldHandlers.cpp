@@ -230,9 +230,13 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		const std::string webclient_URL = (request.tls_connection ? std::string("https") : std::string("http")) + "://" + hostname + "/webclient?world=" + URLEscapeWorldName(world_name);
 		const std::string native_URL = "sub://" + hostname + "/" + world_name;
 		
-		page += "<h2>Quick Links</h2>\n";
-		page += "<p><a href=\"" + webclient_URL + "\">Visit in web browser</a></p>\n";
-		page += "<p><a href=\"" + native_URL + "\">Visit in Metasiberia</a></p>\n";
+		page += "<h2>🔗 Quick Links</h2>\n";
+		page += "<p><a href=\"" + webclient_URL + "\" style=\"padding: 6px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 3px; margin-right: 10px;\">🌐 Visit in Web Browser</a>";
+		page += "<a href=\"" + native_URL + "\" style=\"padding: 6px 12px; background: #28a745; color: white; text-decoration: none; border-radius: 3px;\">💻 Visit in Metasiberia</a></p>\n";
+		page += "<p><small style=\"color: #666; font-size: 11px;\">";
+		page += "Web: " + webclient_URL + "<br>";
+		page += "App: " + native_URL;
+		page += "</small></p>\n";
 		
 		// World management section
 		page += "<div style=\"border: 2px solid #ddd; margin: 15px 0; padding: 15px; background: #f8f9fa;\">\n";
@@ -293,14 +297,17 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			const std::string parcel_webclient_URL = webclient_URL + "&x=" + doubleToStringMaxNDecimalPlaces(parcel_center.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(parcel_center.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(parcel_center.z, 1);
 			const std::string parcel_native_URL = "sub://" + hostname + "/" + world_name + "?x=" + doubleToStringMaxNDecimalPlaces(parcel_center.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(parcel_center.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(parcel_center.z, 1);
 			
-			page += "<a href=\"/world_edit_parcel/" + URLEscapeWorldName(world_name) + "/" + parcel->id.toString() + "\" style=\"margin-right: 10px;\">Edit</a>";
 			page += "<form action=\"/world_delete_parcel_post\" method=\"post\" style=\"display: inline; margin-right: 10px;\">";
 			page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
 			page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
-			page += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + "?');\" style=\"background: #ff0000; color: white; border: none; padding: 2px 6px; cursor: pointer;\">";
+			page += "<input type=\"submit\" value=\"🗑️ Delete\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + "?');\" style=\"background: #ff0000; color: white; border: none; padding: 4px 8px; cursor: pointer; border-radius: 3px;\">";
 			page += "</form>";
-			page += "<a href=\"" + parcel_webclient_URL + "\" style=\"margin-right: 10px;\">Open Web</a>";
-			page += "<a href=\"" + parcel_native_URL + "\">Open App</a>";
+			page += "<a href=\"" + parcel_webclient_URL + "\" style=\"margin-right: 10px; padding: 4px 8px; background: #007bff; color: white; text-decoration: none; border-radius: 3px;\">🌐 Open Web</a>";
+			page += "<a href=\"" + parcel_native_URL + "\" style=\"margin-right: 10px; padding: 4px 8px; background: #28a745; color: white; text-decoration: none; border-radius: 3px;\">💻 Open App</a>";
+			page += "<br><small style=\"color: #666; font-size: 11px;\">";
+			page += "Web: " + parcel_webclient_URL + "<br>";
+			page += "App: " + parcel_native_URL;
+			page += "</small>";
 			page += "</td>\n";
 			page += "</tr>\n";
 			page += "</table>\n";
