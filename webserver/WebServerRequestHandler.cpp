@@ -348,13 +348,13 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			WorldHandlers::handleWorldRevokeParcelWriterPost(*this->world_state, request, reply_info);
 		}
-		else if(request.path == "/world_grant_editor_post")
+		else if(request.path == "/world_delete_post")
 		{
-			WorldHandlers::handleWorldGrantEditorPost(*this->world_state, request, reply_info);
+			WorldHandlers::handleWorldDeletePost(*this->world_state, request, reply_info);
 		}
-		else if(request.path == "/world_revoke_editor_post")
+		else if(request.path == "/world_update_parcel_size_post")
 		{
-			WorldHandlers::handleWorldRevokeEditorPost(*this->world_state, request, reply_info);
+			WorldHandlers::handleWorldUpdateParcelSizePost(*this->world_state, request, reply_info);
 		}
 		else
 		{

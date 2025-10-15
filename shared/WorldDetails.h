@@ -28,7 +28,6 @@ public:
 	TimeStamp created_time;
 	std::string name;
 	std::string description;
-	std::vector<UserID> editor_ids; // Users who can edit the entire world (create/delete parcels, manage world settings)
 
 	static const size_t MAX_NAME_SIZE               = 1000;
 	static const size_t MAX_DESCRIPTION_SIZE        = 10000;

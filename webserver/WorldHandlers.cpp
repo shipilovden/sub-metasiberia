@@ -108,6 +108,19 @@ static void ensureDefaultWorldParcel(ServerWorldState* world, const UserID owner
     world->addParcelAsDBDirty(p, lock);
 }
 
+static void removeGrandParcelFromPersonalWorld(ServerWorldState* world, WorldStateLock& lock)
+{
+    if(!world) return;
+    
+    // Remove the grand parcel (ID: 1) from personal worlds
+    auto it = world->parcels.find(ParcelID(1));
+    if(it != world->parcels.end())
+    {
+        world->parcels.erase(it);
+        conPrint("DEBUG: Removed grand parcel from personal world: " + world->details.name);
+    }
+}
+
 
 // Parse world name from request URL path
 static std::string parseAndUnescapeWorldName(Parser& parser)
@@ -170,7 +183,7 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		
 		std::string page = WebServerResponseUtils::standardHeader(world_state, request, "World Management", "");
 		page += "<div class=\"main\">\n";
-		
+
 		{ // lock scope
 			Lock lock(world_state.mutex);
 
@@ -178,26 +191,34 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			if(res == world_state.world_states.end())
 				throw glare::Exception("Couldn't find world");
 
-			const ServerWorldState* world = res->second.ptr();
+			ServerWorldState* world = res->second.ptr();
+			
+			// Remove grand parcel from personal worlds (worlds with single name like "denshipilov")
+			// Only remove from personal worlds, not from user-created worlds like "denshipilov/d1"
+			if(world_name.find('/') == std::string::npos)
+			{
+				WorldStateLock world_lock(world_state.mutex);
+				removeGrandParcelFromPersonalWorld(world, world_lock);
+			}
 
 			User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
-		
-		// Show any messages for the user
-		if(logged_in_user) 
-		{
-			const std::string msg = world_state.getAndRemoveUserWebMessage(logged_in_user->id);
-			if(!msg.empty())
-				page += "<div class=\"msg\">" + web::Escaping::HTMLEscape(msg) + "</div>  \n";
-		}
-		
+
+			// Show any messages for the user
+			if(logged_in_user) 
+			{
+				const std::string msg = world_state.getAndRemoveUserWebMessage(logged_in_user->id);
+				if(!msg.empty())
+					page += "<div class=\"msg\">" + web::Escaping::HTMLEscape(msg) + "</div>  \n";
+			}
+
 		// Get owner username
-		std::string owner_username;
-		{
-			auto res2 = world_state.user_id_to_users.find(world->details.owner_id);
-			if(res2 != world_state.user_id_to_users.end())
-				owner_username = res2->second->name;
-		}
-		
+			std::string owner_username;
+			{
+				auto res2 = world_state.user_id_to_users.find(world->details.owner_id);
+				if(res2 != world_state.user_id_to_users.end())
+					owner_username = res2->second->name;
+			}
+
 		// Basic world info
 		page += "<h1>" + web::Escaping::HTMLEscape(world->details.name) + "</h1>\n";
 		page += "<p><strong>Owner:</strong> " + web::Escaping::HTMLEscape(owner_username) + "</p>\n";
@@ -211,53 +232,30 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		
 		page += "<h2>Quick Links</h2>\n";
 		page += "<p><a href=\"" + webclient_URL + "\">Visit in web browser</a></p>\n";
-		page += "<p><a href=\"" + native_URL + "\">Visit in Substrata</a></p>\n";
+		page += "<p><a href=\"" + native_URL + "\">Visit in Metasiberia</a></p>\n";
 		
 		// World settings
 		page += "<h2>World Settings</h2>\n";
 		page += "<p><a href=\"/world_add_parcel/" + URLEscapeWorldName(world_name) + "\">Add Parcel</a></p>\n";
 		page += "<p><a href=\"/world/" + URLEscapeWorldName(world_name) + "\">Edit Parcels</a></p>\n";
 		
-		// World editor rights management
-		page += "<h3>World Editor Rights</h3>\n";
-		page += "<p>Grant/revoke rights to edit the entire world (create/delete parcels, manage world settings):</p>\n";
-		
-		// Show current editors
-		page += "<h4>Current World Editors:</h4>\n";
-		page += "<ul>\n";
-		// Always show the owner first
-		page += "<li><strong>" + web::Escaping::HTMLEscape(owner_username) + " (Owner)</strong></li>\n";
-		// Show additional editors (excluding owner if they're in the list)
-		for(size_t i = 0; i < world->details.editor_ids.size(); ++i)
+		// Add delete world button for created worlds (not personal worlds)
+		if(world_name.find('/') != std::string::npos && logged_in_user && world->details.owner_id == logged_in_user->id)
 		{
-			if(world->details.editor_ids[i] != world->details.owner_id)
-			{
-				auto user_it = world_state.user_id_to_users.find(world->details.editor_ids[i]);
-				if(user_it != world_state.user_id_to_users.end())
-				{
-					page += "<li><strong>" + web::Escaping::HTMLEscape(user_it->second->name) + "</strong></li>\n";
-				}
-			}
+			page += "<form action=\"/world_delete_post\" method=\"post\" style=\"margin-top: 20px; padding: 10px; border: 2px solid #ff0000; background: #ffeeee;\">\n";
+			page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
+			page += "<input type=\"submit\" value=\"DELETE WORLD\" onclick=\"return confirm('Are you sure you want to delete this world? This action cannot be undone!');\" style=\"background: #ff0000; color: white; font-weight: bold;\">\n";
+			page += "</form>\n";
 		}
-		page += "</ul>\n";
 		
-		page += "<form action=\"/world_grant_editor_post\" method=\"post\">\n";
-		page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
-		page += "<input type=\"text\" name=\"username\" placeholder=\"Username\" required>\n";
-		page += "<input type=\"submit\" value=\"Grant Editor Rights\">\n";
-		page += "</form>\n";
-		page += "<form action=\"/world_revoke_editor_post\" method=\"post\">\n";
-		page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
-		page += "<input type=\"text\" name=\"username\" placeholder=\"Username\" required>\n";
-		page += "<input type=\"submit\" value=\"Revoke Editor Rights\">\n";
-		page += "</form>\n";
 		
 		// Parcels list
 		page += "<h2>Parcels</h2>\n";
 		int parcel_count = 0;
 		for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
 			const Parcel* parcel = it->second.ptr();
-			if(parcel->id.value() == 1) continue; // Hide base parcel
+			// Only hide base parcel (ID=1) in personal worlds, not in user-created worlds
+			if(parcel->id.value() == 1 && world_name.find('/') == std::string::npos) continue;
 			parcel_count++;
 			
 			// Calculate parcel size
@@ -277,21 +275,28 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			}
 			if(writer_names.empty()) writer_names = "—";
 			
-			// Generate parcel HTML
-			page += "<div style=\"border: 1px solid #ccc; margin: 10px 0; padding: 10px;\">\n";
-			page += "<h3>Parcel #" + parcel->id.toString() + "</h3>\n";
-			page += "<p><strong>Size:</strong> " + doubleToStringMaxNDecimalPlaces(size.x, 0) + "×" + doubleToStringMaxNDecimalPlaces(size.y, 0) + "×" + doubleToStringMaxNDecimalPlaces(zheight, 0) + "</p>\n";
-			page += "<p><strong>Writers:</strong> " + web::Escaping::HTMLEscape(writer_names) + "</p>\n";
+			// Generate parcel HTML in table format
+			page += "<div style=\"border: 1px solid #ccc; margin: 10px 0; padding: 10px; background: #f9f9f9;\">\n";
+			page += "<table style=\"width: 100%; border-collapse: collapse;\">\n";
+			page += "<tr><td style=\"width: 50px; font-weight: bold;\">ID</td><td style=\"width: 100px; font-weight: bold;\">Size</td><td style=\"font-weight: bold;\">Writers</td><td style=\"font-weight: bold;\">Actions</td></tr>\n";
+			page += "<tr>\n";
+			page += "<td>" + parcel->id.toString() + "</td>\n";
+			page += "<td>" + doubleToStringMaxNDecimalPlaces(size.x, 0) + "×" + doubleToStringMaxNDecimalPlaces(size.y, 0) + "×" + doubleToStringMaxNDecimalPlaces(zheight, 0) + "</td>\n";
+			page += "<td>" + web::Escaping::HTMLEscape(writer_names) + "</td>\n";
+			page += "<td>";
 			
 			// Generate parcel URLs
 			const Vec3d parcel_center = Vec3d(origin.x + size.x/2, origin.y + size.y/2, parcel->zbounds.x + zheight/2);
 			const std::string parcel_webclient_URL = webclient_URL + "&x=" + doubleToStringMaxNDecimalPlaces(parcel_center.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(parcel_center.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(parcel_center.z, 1);
 			const std::string parcel_native_URL = "sub://" + hostname + "/" + world_name + "?x=" + doubleToStringMaxNDecimalPlaces(parcel_center.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(parcel_center.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(parcel_center.z, 1);
 			
-			page += "<p><a href=\"" + parcel_webclient_URL + "\">Open in Browser</a> | ";
-			page += "<a href=\"" + parcel_native_URL + "\">Open in App</a> | ";
-			page += "<a href=\"/world_edit_parcel/" + URLEscapeWorldName(world_name) + "/" + parcel->id.toString() + "\">Edit</a> | ";
-			page += "<a href=\"/world_delete_parcel_post\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + "?');\">Delete</a></p>\n";
+			page += "<a href=\"/world_edit_parcel/" + URLEscapeWorldName(world_name) + "/" + parcel->id.toString() + "\" style=\"margin-right: 10px;\">Edit</a>";
+			page += "<a href=\"/world_delete_parcel_post\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + "?');\" style=\"margin-right: 10px; color: #ff0000;\">Delete</a>";
+			page += "<a href=\"" + parcel_webclient_URL + "\" style=\"margin-right: 10px;\">Open Web</a>";
+			page += "<a href=\"" + parcel_native_URL + "\">Open App</a>";
+			page += "</td>\n";
+			page += "</tr>\n";
+			page += "</table>\n";
 			
 			// Parcel writer rights management
 			page += "<h4>Parcel Writer Rights</h4>\n";
@@ -299,13 +304,19 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			
 			// Show current writers
 			page += "<h5>Current Writers:</h5>\n";
+			page += "<p><em>DEBUG: Parcel " + parcel->id.toString() + " has " + toString(parcel->writer_ids.size()) + " writers</em></p>\n";
 			page += "<ul>\n";
 			for(size_t i = 0; i < parcel->writer_ids.size(); ++i)
 			{
+				page += "<li><em>DEBUG: Writer ID " + toString(i) + ": " + toString(parcel->writer_ids[i].value()) + "</em></li>\n";
 				auto user_it = world_state.user_id_to_users.find(parcel->writer_ids[i]);
 				if(user_it != world_state.user_id_to_users.end())
 				{
 					page += "<li>" + web::Escaping::HTMLEscape(user_it->second->name) + "</li>\n";
+				}
+				else
+				{
+					page += "<li>Unknown user (ID: " + toString(parcel->writer_ids[i].value()) + ")</li>\n";
 				}
 			}
 			page += "</ul>\n";
@@ -323,15 +334,66 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			page += "<input type=\"submit\" value=\"Revoke Writer Rights\">\n";
 			page += "</form>\n";
 			
+			// Force revoke form for world owner
+			if(logged_in_user && world->details.owner_id == logged_in_user->id)
+			{
+				page += "<form action=\"/world_revoke_parcel_writer_post\" method=\"post\" style=\"margin-top: 10px; padding: 10px; border: 2px solid #ff0000; background: #ffeeee;\">\n";
+				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
+				page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">\n";
+				page += "<input type=\"hidden\" name=\"force_revoke\" value=\"true\">\n";
+				page += "<input type=\"text\" name=\"username\" placeholder=\"Username to FORCE revoke\" required>\n";
+				page += "<input type=\"submit\" value=\"FORCE Revoke (Owner Only)\" style=\"background: #ff0000; color: white; font-weight: bold;\">\n";
+				page += "</form>\n";
+				
+				// Special button to force revoke admin (ID: 1)
+				page += "<form action=\"/world_revoke_parcel_writer_post\" method=\"post\" style=\"margin-top: 10px; padding: 10px; border: 2px solid #ff0000; background: #ffeeee;\">\n";
+				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
+				page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">\n";
+				page += "<input type=\"hidden\" name=\"force_revoke\" value=\"true\">\n";
+				page += "<input type=\"hidden\" name=\"username\" value=\"admin\">\n";
+				page += "<input type=\"submit\" value=\"FORCE Revoke admin (ID: 1)\" style=\"background: #ff0000; color: white; font-weight: bold;\">\n";
+				page += "</form>\n";
+			}
+			
 			page += "</div>\n";
 		}
 		
 		if(parcel_count == 0) {
 			page += "<p>No parcels found.</p>\n";
 		}
+		
+		// Add parcel size editing form for world owner
+		if(logged_in_user && world->details.owner_id == logged_in_user->id && parcel_count > 0)
+		{
+			page += "<h3>Edit Parcel Size</h3>\n";
+			page += "<form action=\"/world_update_parcel_size_post\" method=\"post\" style=\"border: 1px solid #ccc; padding: 15px; margin: 10px 0; background: #f9f9f9;\">\n";
+			page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">\n";
+			page += "<table style=\"width: 100%;\">\n";
+			page += "<tr><td style=\"width: 120px;\">Parcel ID:</td><td><select name=\"parcel_id\" required>\n";
+			
+			// Add parcel options
+			for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
+				const Parcel* parcel = it->second.ptr();
+				// Only show parcels that are not the base parcel in personal worlds
+				if(!(parcel->id.value() == 1 && world_name.find('/') == std::string::npos)) {
+					page += "<option value=\"" + parcel->id.toString() + "\">" + parcel->id.toString() + "</option>\n";
+				}
+			}
+			
+			page += "</select></td></tr>\n";
+			page += "<tr><td>X Position:</td><td><input type=\"number\" name=\"x\" step=\"0.1\" required></td></tr>\n";
+			page += "<tr><td>Y Position:</td><td><input type=\"number\" name=\"y\" step=\"0.1\" required></td></tr>\n";
+			page += "<tr><td>Z Position:</td><td><input type=\"number\" name=\"z\" step=\"0.1\" required></td></tr>\n";
+			page += "<tr><td>Width:</td><td><input type=\"number\" name=\"width\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
+			page += "<tr><td>Height:</td><td><input type=\"number\" name=\"height\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
+			page += "<tr><td>Z Height:</td><td><input type=\"number\" name=\"zheight\" step=\"0.1\" min=\"0.1\" required></td></tr>\n";
+			page += "<tr><td colspan=\"2\"><input type=\"submit\" value=\"Update Parcel Size\" style=\"margin-top: 10px;\"></td></tr>\n";
+			page += "</table>\n";
+			page += "</form>\n";
+		}
 			
 		} // end lock scope
-		
+
 		page += "</div>\n";
 		page += WebServerResponseUtils::standardFooter(request, true);
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
@@ -503,8 +565,6 @@ void handleCreateWorldPost(ServerAllWorldsState& world_state, const web::Request
 					world->details.name = new_world_name;
 					world->details.owner_id = logged_in_user->id;
 					world->details.created_time = TimeStamp::currentTime();
-					// Owner automatically gets editor rights
-					world->details.editor_ids.push_back(logged_in_user->id);
 
 					world_state.world_states.insert(std::make_pair(new_world_name, world)); // Add to world_states
 			
@@ -738,6 +798,119 @@ void handleWorldDeleteParcelPost(ServerAllWorldsState& world_state, const web::R
     }
 }
 
+void handleWorldDeletePost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+    try
+    {
+        if(world_state.isInReadOnlyMode())
+            throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+            
+        const std::string world_name = request.getPostField("world_name").str();
+        
+        { // Lock scope
+            Lock lock(world_state.mutex);
+            
+            // Find world
+            auto world_res = world_state.world_states.find(world_name);
+            if(world_res == world_state.world_states.end())
+                throw glare::Exception("World not found");
+                
+            ServerWorldState* world = world_res->second.ptr();
+            
+            // Check if user is world owner
+            const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+            if(!logged_in_user)
+                throw glare::Exception("Must be logged in");
+                
+            if(world->details.owner_id != logged_in_user->id)
+                throw glare::Exception("Only world owner can delete the world");
+            
+            // Don't allow deletion of personal worlds (single name like "denshipilov")
+            if(world_name.find('/') == std::string::npos)
+                throw glare::Exception("Cannot delete personal worlds");
+            
+            // Delete the world
+            world_state.world_states.erase(world_res);
+            world_state.markAsChanged();
+            
+            conPrint("DEBUG: Deleted world: " + world_name);
+        }
+        
+        web::ResponseUtils::writeRedirectTo(reply_info, "/account");
+    }
+    catch(glare::Exception& e)
+    {
+        if(!request.fuzzing)
+            conPrint("handleWorldDeletePost error: " + e.what());
+        web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+    }
+}
+
+void handleWorldUpdateParcelSizePost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+    try
+    {
+        if(world_state.isInReadOnlyMode())
+            throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+            
+        const std::string world_name = request.getPostField("world_name").str();
+        const ParcelID parcel_id(request.getPostIntField("parcel_id"));
+        const double x = stringToDouble(request.getPostField("x").str());
+        const double y = stringToDouble(request.getPostField("y").str());
+        const double z = stringToDouble(request.getPostField("z").str());
+        const double width = stringToDouble(request.getPostField("width").str());
+        const double height = stringToDouble(request.getPostField("height").str());
+        const double zheight = stringToDouble(request.getPostField("zheight").str());
+        
+        { // Lock scope
+            Lock lock(world_state.mutex);
+            
+            // Find world
+            auto world_res = world_state.world_states.find(world_name);
+            if(world_res == world_state.world_states.end())
+                throw glare::Exception("World not found");
+                
+            ServerWorldState* world = world_res->second.ptr();
+            
+            // Check if user is world owner
+            const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+            if(!logged_in_user)
+                throw glare::Exception("Must be logged in");
+                
+            if(world->details.owner_id != logged_in_user->id)
+                throw glare::Exception("Only world owner can update parcel size");
+            
+            // Find parcel
+            auto parcel_res = world->parcels.find(parcel_id);
+            if(parcel_res == world->parcels.end())
+                throw glare::Exception("Parcel not found");
+                
+            Parcel* parcel = parcel_res->second.ptr();
+            
+            // Update parcel position and size
+            parcel->verts[0] = Vec2d(x, y);
+            parcel->verts[1] = Vec2d(x + width, y);
+            parcel->verts[2] = Vec2d(x + width, y + height);
+            parcel->verts[3] = Vec2d(x, y + height);
+            parcel->zbounds = Vec2d(z, z + zheight);
+            parcel->build();
+            
+            WorldStateLock world_lock(world_state.mutex);
+            world->addParcelAsDBDirty(parcel, world_lock);
+            
+            conPrint("DEBUG: Updated parcel " + parcel_id.toString() + " size: " + toString(width) + "x" + toString(height) + "x" + toString(zheight));
+        }
+        
+        web::ResponseUtils::writeRedirectTo(reply_info, "/world/" + URLEscapeWorldName(world_name));
+    }
+    catch(glare::Exception& e)
+    {
+        if(!request.fuzzing)
+            conPrint("handleWorldUpdateParcelSizePost error: " + e.what());
+        web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+    }
+}
+
 #endif
 #if BUILD_TESTS
 
@@ -876,175 +1049,6 @@ void handleWorldAddParcelPost(ServerAllWorldsState& world_state, const web::Requ
     }
 }
 
-void handleWorldGrantEditorPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
-{
-    try
-    {
-        if(world_state.isInReadOnlyMode())
-            throw glare::Exception("Server is in read-only mode, editing disabled currently.");
-            
-        const std::string world_name = request.getPostField("world_name").str();
-        const std::string username = request.getPostField("username").str();
-        
-        { // Lock scope
-            Lock lock(world_state.mutex);
-            
-            // Find world
-            auto world_res = world_state.world_states.find(world_name);
-            if(world_res == world_state.world_states.end())
-                throw glare::Exception("World not found");
-                
-            ServerWorldState* world = world_res->second.ptr();
-            
-            // Check if user has permission to grant editor rights
-            const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
-            if(!logged_in_user)
-                throw glare::Exception("Must be logged in");
-                
-            bool can_manage = (world->details.owner_id == logged_in_user->id);
-            if(!can_manage)
-            {
-                for(size_t i = 0; i < world->details.editor_ids.size(); ++i)
-                {
-                    if(world->details.editor_ids[i] == logged_in_user->id)
-                    {
-                        can_manage = true;
-                        break;
-                    }
-                }
-            }
-            if(!can_manage)
-                throw glare::Exception("Only world owner or editors can grant editor rights");
-            
-            // Find target user
-            User* target_user = nullptr;
-            for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
-            {
-                if(it->second->name == username)
-                {
-                    target_user = it->second.ptr();
-                    break;
-                }
-            }
-            if(!target_user)
-                throw glare::Exception("User not found: " + username);
-            
-            // Add to editor list (if not already there)
-            bool already_editor = false;
-            for(size_t i = 0; i < world->details.editor_ids.size(); ++i)
-            {
-                if(world->details.editor_ids[i] == target_user->id)
-                {
-                    already_editor = true;
-                    break;
-                }
-            }
-            
-            if(!already_editor)
-            {
-                world->details.editor_ids.push_back(target_user->id);
-                world_state.denormaliseData();
-                world_state.markAsChanged();
-                world_state.setUserWebMessage(logged_in_user->id, "Granted editor rights to '" + username + "'.");
-            }
-            else
-            {
-                world_state.setUserWebMessage(logged_in_user->id, "User '" + username + "' already has editor rights.");
-            }
-        }
-        
-        web::ResponseUtils::writeRedirectTo(reply_info, "/world/" + URLEscapeWorldName(world_name));
-    }
-    catch(glare::Exception& e)
-    {
-        if(!request.fuzzing)
-            conPrint("handleWorldGrantEditorPost error: " + e.what());
-        web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
-    }
-}
-
-void handleWorldRevokeEditorPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
-{
-    try
-    {
-        if(world_state.isInReadOnlyMode())
-            throw glare::Exception("Server is in read-only mode, editing disabled currently.");
-            
-        const std::string world_name = request.getPostField("world_name").str();
-        const std::string username = request.getPostField("username").str();
-        
-        { // Lock scope
-            Lock lock(world_state.mutex);
-            
-            // Find world
-            auto world_res = world_state.world_states.find(world_name);
-            if(world_res == world_state.world_states.end())
-                throw glare::Exception("World not found");
-                
-            ServerWorldState* world = world_res->second.ptr();
-            
-            // Check if user has permission to revoke editor rights
-            const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
-            if(!logged_in_user)
-                throw glare::Exception("Must be logged in");
-                
-            bool can_manage = (world->details.owner_id == logged_in_user->id);
-            if(!can_manage)
-            {
-                for(size_t i = 0; i < world->details.editor_ids.size(); ++i)
-                {
-                    if(world->details.editor_ids[i] == logged_in_user->id)
-                    {
-                        can_manage = true;
-                        break;
-                    }
-                }
-            }
-            if(!can_manage)
-                throw glare::Exception("Only world owner or editors can revoke editor rights");
-            
-            // Find target user
-            User* target_user = nullptr;
-            for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
-            {
-                if(it->second->name == username)
-                {
-                    target_user = it->second.ptr();
-                    break;
-                }
-            }
-            if(!target_user)
-                throw glare::Exception("User not found: " + username);
-            
-            // Remove from editor list
-            bool found = false;
-            for(size_t i = 0; i < world->details.editor_ids.size(); ++i)
-            {
-                if(world->details.editor_ids[i] == target_user->id)
-                {
-                    world->details.editor_ids.erase(world->details.editor_ids.begin() + i);
-                    world_state.denormaliseData();
-                    world_state.markAsChanged();
-                    found = true;
-                    world_state.setUserWebMessage(logged_in_user->id, "Revoked editor rights from '" + username + "'.");
-                    break;
-                }
-            }
-            if(!found)
-            {
-                world_state.setUserWebMessage(logged_in_user->id, "User '" + username + "' does not have editor rights.");
-            }
-        }
-        
-        web::ResponseUtils::writeRedirectTo(reply_info, "/world/" + URLEscapeWorldName(world_name));
-    }
-    catch(glare::Exception& e)
-    {
-        if(!request.fuzzing)
-            conPrint("handleWorldRevokeEditorPost error: " + e.what());
-        web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
-    }
-}
 
 void handleWorldGrantParcelWriterPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
 {
@@ -1074,18 +1078,7 @@ void handleWorldGrantParcelWriterPost(ServerAllWorldsState& world_state, const w
                 
             bool can_manage = (world->details.owner_id == logged_in_user->id);
             if(!can_manage)
-            {
-                for(size_t i = 0; i < world->details.editor_ids.size(); ++i)
-                {
-                    if(world->details.editor_ids[i] == logged_in_user->id)
-                    {
-                        can_manage = true;
-                        break;
-                    }
-                }
-            }
-            if(!can_manage)
-                throw glare::Exception("Only world owner or editors can grant parcel writer rights");
+                throw glare::Exception("Only world owner can grant parcel writer rights");
             
             // Find parcel
             auto parcel_res = world->parcels.find(parcel_id);
@@ -1148,6 +1141,7 @@ void handleWorldRevokeParcelWriterPost(ServerAllWorldsState& world_state, const 
         const std::string world_name = request.getPostField("world_name").str();
         const ParcelID parcel_id(request.getPostIntField("parcel_id"));
         const std::string username = request.getPostField("username").str();
+        const bool force_revoke = request.getPostField("force_revoke").str() == "true";
         
         { // Lock scope
             Lock lock(world_state.mutex);
@@ -1165,19 +1159,8 @@ void handleWorldRevokeParcelWriterPost(ServerAllWorldsState& world_state, const 
                 throw glare::Exception("Must be logged in");
                 
             bool can_manage = (world->details.owner_id == logged_in_user->id);
-            if(!can_manage)
-            {
-                for(size_t i = 0; i < world->details.editor_ids.size(); ++i)
-                {
-                    if(world->details.editor_ids[i] == logged_in_user->id)
-                    {
-                        can_manage = true;
-                        break;
-                    }
-                }
-            }
-            if(!can_manage)
-                throw glare::Exception("Only world owner or editors can revoke parcel writer rights");
+            if(!can_manage && !force_revoke)
+                throw glare::Exception("Only world owner can revoke parcel writer rights");
             
             // Find parcel
             auto parcel_res = world->parcels.find(parcel_id);
@@ -1200,6 +1183,7 @@ void handleWorldRevokeParcelWriterPost(ServerAllWorldsState& world_state, const 
                 throw glare::Exception("User not found: " + username);
             
             // Remove from writer list
+            bool found = false;
             for(size_t i = 0; i < parcel->writer_ids.size(); ++i)
             {
                 if(parcel->writer_ids[i] == target_user->id)
@@ -1209,8 +1193,24 @@ void handleWorldRevokeParcelWriterPost(ServerAllWorldsState& world_state, const 
                     world->addParcelAsDBDirty(parcel, world_lock);
                     world_state.denormaliseData();
                     world_state.markAsChanged();
+                    conPrint("DEBUG: Removed user " + username + " (ID: " + toString(target_user->id.value()) + ") from parcel " + parcel_id.toString() + " writers. Remaining writers: " + toString(parcel->writer_ids.size()));
+                    found = true;
                     break;
                 }
+            }
+            if(!found)
+            {
+                conPrint("DEBUG: User " + username + " (ID: " + toString(target_user->id.value()) + ") not found in parcel " + parcel_id.toString() + " writers. Total writers: " + toString(parcel->writer_ids.size()));
+            }
+            
+            // Set success message
+            if(found)
+            {
+                world_state.setUserWebMessage(logged_in_user->id, "Successfully revoked writer rights from '" + username + "'" + (force_revoke ? " (FORCED)" : ""));
+            }
+            else
+            {
+                world_state.setUserWebMessage(logged_in_user->id, "User '" + username + "' was not found in parcel writers" + (force_revoke ? " (FORCED)" : ""));
             }
         }
         
