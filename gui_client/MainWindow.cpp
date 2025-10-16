@@ -374,6 +374,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	connect(user_details, SIGNAL(logOutClicked()), this, SLOT(on_actionLogOut_triggered()));
 	connect(user_details, SIGNAL(signUpClicked()), this, SLOT(on_actionSignUp_triggered()));
 	connect(url_widget, SIGNAL(URLChanged()), this, SLOT(URLChangedSlot()));
+	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
 
 
 #if !defined(_WIN32)

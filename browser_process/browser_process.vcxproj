@@ -1,0 +1,287 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{F32B7333-0B79-3A09-955C-9A77C00BC32D}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>browser_process</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">browser_process.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">browser_process</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">browser_process.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">browser_process</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">browser_process.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">browser_process</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;BUILD_TESTS=1;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;BUILD_TESTS=1;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>C:\CEF\Debug\libcef.lib;C:\CEF\libcef_dll_build\libcef_dll_wrapper\Debug\libcef_dll_wrapper.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>C:/programming/substrata_output/vs2022/cyberspace_x64/Debug/browser_process.lib</ImportLibrary>
+      <ProgramDataBaseFile>C:/programming/substrata_output/vs2022/cyberspace_x64/Debug/browser_process.pdb</ProgramDataBaseFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <Manifest>
+      <AdditionalManifestFiles>C:\programming\substrata\browser_process\manifest.manifest;</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>C:\CEF\Release\libcef.lib;C:\CEF\libcef_dll_build\libcef_dll_wrapper\Release\libcef_dll_wrapper.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>C:/programming/substrata_output/vs2022/cyberspace_x64/Release/browser_process.lib</ImportLibrary>
+      <ProgramDataBaseFile>C:/programming/substrata_output/vs2022/cyberspace_x64/Release/browser_process.pdb</ProgramDataBaseFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <Manifest>
+      <AdditionalManifestFiles>C:\programming\substrata\browser_process\manifest.manifest;</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;BUILD_TESTS=1;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;BUILD_TESTS=1;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\CEF\include;C:\CEF;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>C:\CEF\Release\libcef.lib;C:\CEF\libcef_dll_build\libcef_dll_wrapper\Release\libcef_dll_wrapper.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>C:/programming/substrata_output/vs2022/cyberspace_x64/RelWithDebInfo/browser_process.lib</ImportLibrary>
+      <ProgramDataBaseFile>C:/programming/substrata_output/vs2022/cyberspace_x64/RelWithDebInfo/browser_process.pdb</ProgramDataBaseFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <Manifest>
+      <AdditionalManifestFiles>C:\programming\substrata\browser_process\manifest.manifest;</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\programming\substrata\browser_process\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/programming/substrata/browser_process/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/browser_process/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\substrata\browser_process\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/programming/substrata/browser_process/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/browser_process/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\substrata\browser_process\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/programming/substrata/browser_process/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/browser_process/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\substrata\browser_process\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\programming\substrata\browser_process\BrowserProcess.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="C:\programming\substrata\ZERO_CHECK.vcxproj">
+      <Project>{6AF2D106-A890-3BEC-80CD-372BD15FBB9B}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

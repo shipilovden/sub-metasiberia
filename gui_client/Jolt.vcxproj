@@ -1,0 +1,1193 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{F3DA04A7-9F7B-3AB1-86BB-418B8F80A033}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>Jolt</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Jolt.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Jolt</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Jolt.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Jolt</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Jolt.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Jolt</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;C:\programming\llvm\llvm_15_0_7_install_vs2022_64_debug\include;C:\programming\LibreSSL\libressl-3.5.2-x64-vs2022-install-debug\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>C:/programming/substrata/gui_client/Jolt.dir/Debug/cmake_pch.pch</PrecompiledHeaderOutputFile>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;BUILD_TESTS=1;_HAS_EXCEPTIONS=0;_DEBUG;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;BUILD_TESTS=1;_HAS_EXCEPTIONS=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;C:\programming\llvm\llvm_15_0_7_install_vs2022_64\include;C:\programming\LibreSSL\libressl-3.5.2-x64-vs2022-install\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>C:/programming/substrata/gui_client/Jolt.dir/Release/cmake_pch.pch</PrecompiledHeaderOutputFile>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;_HAS_EXCEPTIONS=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;_HAS_EXCEPTIONS=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;C:\programming\llvm\llvm_15_0_7_install_vs2022_64\include;C:\programming\LibreSSL\libressl-3.5.2-x64-vs2022-install\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>C:/programming/substrata/gui_client/Jolt.dir/RelWithDebInfo/cmake_pch.pch</PrecompiledHeaderOutputFile>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;BUILD_TESTS=1;_HAS_EXCEPTIONS=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;BUILD_TESTS=1;_HAS_EXCEPTIONS=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1\include;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\programming\substrata\gui_client\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/programming/substrata/gui_client/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/gui_client/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\glare-core\opengl\opengl.cmake;C:\programming\jolt\5.3.0\Jolt\Jolt.cmake;C:\programming\substrata\cmake\libressl.cmake;C:\programming\substrata\cmake\llvm.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;C:\programming\substrata\cmake\shared_target_settings.cmake;C:\programming\substrata\cmake\ssl.cmake;C:\programming\substrata\cmake\winter.cmake;C:\programming\substrata\opus\opus.cmake;C:\programming\winter\embed_winter.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\substrata\gui_client\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/programming/substrata/gui_client/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/gui_client/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\glare-core\opengl\opengl.cmake;C:\programming\jolt\5.3.0\Jolt\Jolt.cmake;C:\programming\substrata\cmake\libressl.cmake;C:\programming\substrata\cmake\llvm.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;C:\programming\substrata\cmake\shared_target_settings.cmake;C:\programming\substrata\cmake\ssl.cmake;C:\programming\substrata\cmake\winter.cmake;C:\programming\substrata\opus\opus.cmake;C:\programming\winter\embed_winter.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\substrata\gui_client\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/programming/substrata/gui_client/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/gui_client/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\glare-core\opengl\opengl.cmake;C:\programming\jolt\5.3.0\Jolt\Jolt.cmake;C:\programming\substrata\cmake\libressl.cmake;C:\programming\substrata\cmake\llvm.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;C:\programming\substrata\cmake\shared_target_settings.cmake;C:\programming\substrata\cmake\ssl.cmake;C:\programming\substrata\cmake\winter.cmake;C:\programming\substrata\opus\opus.cmake;C:\programming\winter\embed_winter.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\substrata\gui_client\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\programming\substrata\gui_client\CMakeFiles\Jolt.dir\cmake_pch.cxx">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/Jolt.dir/Debug/cmake_pch.pch</PrecompiledHeaderOutputFile>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/Jolt.dir/Release/cmake_pch.pch</PrecompiledHeaderOutputFile>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/Jolt.dir/RelWithDebInfo/cmake_pch.pch</PrecompiledHeaderOutputFile>
+    </ClCompile>
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\AABBTreeBuilder.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\AABBTreeBuilder.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\AABBTreeToBuffer.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\NodeCodec\NodeCodecQuadTreeHalfFloat.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\TriangleCodec\TriangleCodecIndexed8BitPackSOA4Flags.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ConfigurationString.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\ARMNeon.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Array.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Atomics.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\BinaryHeap.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\ByteBuffer.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Color.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Color.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Core.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Factory.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Factory.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FixedSizeFreeList.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FixedSizeFreeList.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FPControlWord.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FPException.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FPFlushDenormals.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\HashCombine.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\HashTable.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\InsertionSort.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\IssueReporting.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\IssueReporting.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystem.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystem.inl" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemSingleThreaded.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemSingleThreaded.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemThreadPool.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemThreadPool.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemWithBarrier.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemWithBarrier.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\LinearCurve.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\LinearCurve.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\LockFreeHashMap.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\LockFreeHashMap.inl" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Memory.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Memory.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Mutex.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\MutexArray.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\NonCopyable.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Profiler.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Profiler.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Profiler.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\QuickSort.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Reference.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Result.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\RTTI.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\RTTI.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\ScopeExit.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Semaphore.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Semaphore.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StaticArray.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\STLAlignedAllocator.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\STLAllocator.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\STLLocalAllocator.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\STLTempAllocator.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StreamIn.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StreamOut.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StreamUtils.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StreamWrapper.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StridedPtr.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\StringTools.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StringTools.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\TempAllocator.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\TickCounter.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\TickCounter.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\UnorderedMap.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\UnorderedSet.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\AABox.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\AABox4.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ClipPoly.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ClosestPoint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder2D.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder2D.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexSupport.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Ellipse.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\EPAConvexHullBuilder.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\EPAPenetrationDepth.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\GJKClosestPoint.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\IndexedTriangle.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Indexify.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Indexify.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\MortonCode.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Geometry\OrientedBox.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\OrientedBox.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Plane.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RayAABox.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RayCapsule.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RayCylinder.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RaySphere.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RayTriangle.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Sphere.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Triangle.h" />
+    <None Include="C:\programming\jolt\5.3.0\Jolt\Jolt.cmake">
+    </None>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Jolt.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\BVec16.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\BVec16.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DMat44.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DMat44.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Double3.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DVec3.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DVec3.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DynMatrix.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\EigenValueSymmetric.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\FindRoot.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Float2.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Float3.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Float4.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\GaussianElimination.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\HalfFloat.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Mat44.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Mat44.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Math.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\MathTypes.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Matrix.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Quat.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Quat.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Real.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Swizzle.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Trigonometry.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\UVec4.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\UVec4.inl" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec3.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec3.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec3.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec4.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec4.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vector.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\ObjectStream.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableAttribute.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableAttributeEnum.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableAttributeTyped.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableObject.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableObject.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\TypeDeclarations.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\AllowedDOFs.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\Body.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\Body.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\Body.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyAccess.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyActivationListener.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyCreationSettings.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyCreationSettings.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyFilter.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyID.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyInterface.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyInterface.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyLock.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyLockInterface.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyLockMulti.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyManager.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyManager.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyPair.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyType.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MassProperties.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MassProperties.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.inl" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionQuality.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionType.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\Character.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\Character.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterBase.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterBase.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterID.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterVirtual.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterVirtual.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\AABoxCast.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ActiveEdgeMode.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ActiveEdges.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BackFaceMode.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhase.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhase.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseBruteForce.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseBruteForce.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayer.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayerInterfaceMask.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayerInterfaceTable.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuadTree.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuadTree.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuery.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\ObjectVsBroadPhaseLayerFilterMask.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\ObjectVsBroadPhaseLayerFilterTable.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\QuadTree.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\QuadTree.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastConvexVsTriangles.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastConvexVsTriangles.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastResult.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastSphereVsTriangles.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastSphereVsTriangles.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollectFacesMode.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideConvexVsTriangles.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideConvexVsTriangles.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollidePointResult.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideShape.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideShapeVsShapePerLeaf.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideSoftBodyVertexIterator.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideSoftBodyVerticesVsTriangles.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideSphereVsTriangles.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideSphereVsTriangles.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionCollector.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionCollectorImpl.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionDispatch.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionDispatch.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionGroup.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionGroup.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ContactListener.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\EstimateCollisionResponse.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\EstimateCollisionResponse.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\GroupFilter.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\GroupFilter.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\GroupFilterTable.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\GroupFilterTable.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\InternalEdgeRemovingCollector.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ManifoldBetweenTwoFaces.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ManifoldBetweenTwoFaces.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseQuery.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseQuery.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseStats.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseStats.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayer.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayerPairFilterMask.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayerPairFilterTable.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterial.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterial.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterialSimple.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterialSimple.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\RayCast.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\BoxShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\BoxShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CapsuleShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CapsuleShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShape.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShapeVisitors.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexHullShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexHullShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CylinderShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CylinderShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\DecoratedShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\DecoratedShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\EmptyShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\EmptyShape.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\GetTrianglesContext.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\HeightFieldShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\HeightFieldShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\MeshShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\MeshShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\MutableCompoundShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\MutableCompoundShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\OffsetCenterOfMassShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\OffsetCenterOfMassShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\PlaneShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\PlaneShape.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\PolyhedronSubmergedVolumeCalculator.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\RotatedTranslatedShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\RotatedTranslatedShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaledShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaledShape.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaleHelpers.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\Shape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\Shape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\SphereShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\SphereShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\StaticCompoundShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\StaticCompoundShape.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\SubShapeID.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\SubShapeIDPair.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <None Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.gliffy">
+    </None>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCylinderShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCylinderShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TriangleShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TriangleShape.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ShapeCast.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ShapeFilter.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\SimShapeFilter.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\SimShapeFilterWrapper.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\SortReverseAndStore.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\TransformedShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\TransformedShape.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\CalculateSolverSteps.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConeConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConeConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\Constraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\Constraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintManager.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintManager.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\AngleConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\AxisConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\DualAxisConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\GearConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\HingeRotationConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\IndependentAxisConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\PointConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RackAndPinionConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RotationEulerConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RotationQuatConstraintPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\SpringPart.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\SwingTwistConstraintPart.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ContactConstraintManager.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ContactConstraintManager.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\DistanceConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\DistanceConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\FixedConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\FixedConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\GearConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\GearConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\HingeConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\HingeConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\MotorSettings.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\MotorSettings.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPath.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPath.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPathHermite.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPathHermite.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PointConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PointConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PulleyConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PulleyConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\RackAndPinionConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\RackAndPinionConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SixDOFConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SixDOFConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SliderConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SliderConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SpringSettings.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SpringSettings.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SwingTwistConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SwingTwistConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\TwoBodyConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\TwoBodyConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\DeterminismLog.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\DeterminismLog.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\EActivation.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\EPhysicsUpdateError.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\IslandBuilder.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\IslandBuilder.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\LargeIslandSplitter.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\LargeIslandSplitter.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsLock.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsScene.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsScene.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsSettings.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsStepListener.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsSystem.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsSystem.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsUpdateContext.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsUpdateContext.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Ragdoll\Ragdoll.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Ragdoll\Ragdoll.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyContactListener.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyCreationSettings.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyCreationSettings.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyManifold.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyMotionProperties.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyMotionProperties.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyShape.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyShape.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodySharedSettings.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodySharedSettings.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyUpdateContext.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyVertex.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\StateRecorder.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\StateRecorderImpl.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\StateRecorderImpl.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\MotorcycleController.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\MotorcycleController.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\TrackedVehicleController.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\TrackedVehicleController.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleAntiRollBar.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleAntiRollBar.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleCollisionTester.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleCollisionTester.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleConstraint.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleConstraint.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleController.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleController.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleDifferential.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleDifferential.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleEngine.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleEngine.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTrack.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTrack.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTransmission.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTransmission.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\Wheel.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\Wheel.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\WheeledVehicleController.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\WheeledVehicleController.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\RegisterTypes.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\RegisterTypes.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRenderer.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRenderer.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererPlayback.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererPlayback.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererRecorder.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererRecorder.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererSimple.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererSimple.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletalAnimation.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletalAnimation.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\Skeleton.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\Skeleton.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletonMapper.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletonMapper.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletonPose.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletonPose.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitter.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitter.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterBinning.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterBinning.h" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterMean.cpp">
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Debug/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/Release/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:/programming/substrata/gui_client/CMakeFiles/Jolt.dir/RelWithDebInfo/cmake_pch.hxx;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterMean.h" />
+    <Natvis Include="C:\programming\jolt\5.3.0\Jolt\Jolt.natvis">
+    </Natvis>
+    <ClInclude Include="C:\programming\substrata\gui_client\CMakeFiles\Jolt.dir\Debug\cmake_pch.hxx" />
+    <ClInclude Include="C:\programming\substrata\gui_client\CMakeFiles\Jolt.dir\Release\cmake_pch.hxx" />
+    <ClInclude Include="C:\programming\substrata\gui_client\CMakeFiles\Jolt.dir\RelWithDebInfo\cmake_pch.hxx" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="C:\programming\substrata\ZERO_CHECK.vcxproj">
+      <Project>{6AF2D106-A890-3BEC-80CD-372BD15FBB9B}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

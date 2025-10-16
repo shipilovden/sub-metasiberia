@@ -1,0 +1,461 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{9569F455-49EF-3E97-9C46-77FFC7B10CE4}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>Opus</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Opus.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Opus</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Opus.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Opus</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Opus.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Opus</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;BUILD_TESTS=1;OPUS_BUILD;ENABLE_HARDENING;USE_ALLOCA;CPU_INFO_BY_C;OPUS_HAVE_RTCD;OPUS_X86_MAY_HAVE_SSE;OPUS_X86_PRESUME_SSE;OPUS_X86_MAY_HAVE_SSE2;OPUS_X86_PRESUME_SSE2;OPUS_X86_MAY_HAVE_SSE4_1;OPUS_X86_PRESUME_SSE4_1;OPUS_X86_MAY_HAVE_AVX;PACKAGE_VERSION="1.3.1";PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;BUILD_TESTS=1;OPUS_BUILD;ENABLE_HARDENING;USE_ALLOCA;CPU_INFO_BY_C;OPUS_HAVE_RTCD;OPUS_X86_MAY_HAVE_SSE;OPUS_X86_PRESUME_SSE;OPUS_X86_MAY_HAVE_SSE2;OPUS_X86_PRESUME_SSE2;OPUS_X86_MAY_HAVE_SSE4_1;OPUS_X86_PRESUME_SSE4_1;OPUS_X86_MAY_HAVE_AVX;PACKAGE_VERSION=\"1.3.1\";PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;OPUS_BUILD;ENABLE_HARDENING;USE_ALLOCA;CPU_INFO_BY_C;OPUS_HAVE_RTCD;OPUS_X86_MAY_HAVE_SSE;OPUS_X86_PRESUME_SSE;OPUS_X86_MAY_HAVE_SSE2;OPUS_X86_PRESUME_SSE2;OPUS_X86_MAY_HAVE_SSE4_1;OPUS_X86_PRESUME_SSE4_1;OPUS_X86_MAY_HAVE_AVX;PACKAGE_VERSION="1.3.1";PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;OPUS_BUILD;ENABLE_HARDENING;USE_ALLOCA;CPU_INFO_BY_C;OPUS_HAVE_RTCD;OPUS_X86_MAY_HAVE_SSE;OPUS_X86_PRESUME_SSE;OPUS_X86_MAY_HAVE_SSE2;OPUS_X86_PRESUME_SSE2;OPUS_X86_MAY_HAVE_SSE4_1;OPUS_X86_PRESUME_SSE4_1;OPUS_X86_MAY_HAVE_AVX;PACKAGE_VERSION=\"1.3.1\";PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;BUILD_TESTS=1;OPUS_BUILD;ENABLE_HARDENING;USE_ALLOCA;CPU_INFO_BY_C;OPUS_HAVE_RTCD;OPUS_X86_MAY_HAVE_SSE;OPUS_X86_PRESUME_SSE;OPUS_X86_MAY_HAVE_SSE2;OPUS_X86_PRESUME_SSE2;OPUS_X86_MAY_HAVE_SSE4_1;OPUS_X86_PRESUME_SSE4_1;OPUS_X86_MAY_HAVE_AVX;PACKAGE_VERSION="1.3.1";PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;BUILD_TESTS=1;OPUS_BUILD;ENABLE_HARDENING;USE_ALLOCA;CPU_INFO_BY_C;OPUS_HAVE_RTCD;OPUS_X86_MAY_HAVE_SSE;OPUS_X86_PRESUME_SSE;OPUS_X86_MAY_HAVE_SSE2;OPUS_X86_PRESUME_SSE2;OPUS_X86_MAY_HAVE_SSE4_1;OPUS_X86_PRESUME_SSE4_1;OPUS_X86_MAY_HAVE_AVX;PACKAGE_VERSION=\"1.3.1\";PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;TARGET_LLVM_VERSION=150;USE_WASM_SIMD=1;USE_JOLT=1;_USE_MATH_DEFINES;EIGEN_MPL2_ONLY;FT2_BUILD_LIBRARY;BASISU_SUPPORT_SSE=1;BASISD_SUPPORT_UASTC=0;BASISD_SUPPORT_BC7=0;BASISD_SUPPORT_BC7_MODE5=0;BASISD_SUPPORT_PVRTC1=0;BASISD_SUPPORT_PVRTC2=0;BASISD_SUPPORT_ASTC=0;BASISD_SUPPORT_ATC=0;BASISD_SUPPORT_ETC2_EAC_RG11=0;BASISD_SUPPORT_FXT1=0;BASIS_NO_IMAGE_READERS=1;GUI_CLIENT=1;USE_QT=1;__WINDOWS_DS__;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\winter;C:\programming\jolt\5.3.0;C:\programming\glare-core\webserver;C:\programming\substrata\gui_client\..\resonance-audio;C:\programming\substrata\gui_client\..\resonance-audio\resonance_audio;C:\programming\substrata\gui_client\..\resonance-audio\third_party\eigen;C:\programming\substrata\gui_client\..\resonance-audio\third_party\pffft;C:\programming\substrata\opus\opus-1.3.1;C:\programming\substrata\opus\opus-1.3.1\include;C:\programming\substrata\opus\opus-1.3.1\src;C:\programming\substrata\opus\opus-1.3.1\celt;C:\programming\substrata\opus\opus-1.3.1\silk;C:\programming\substrata\opus\opus-1.3.1\silk\float;C:\CEF\include;C:\CEF;C:\programming\glare-core\freetype\include;C:\programming\glare-core\freetype\include\freetype\internal;C:\programming\glare-core\basis_universal;C:\programming\Qt\5.15.16-vs2022-64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\programming\substrata\gui_client\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/programming/substrata/gui_client/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/gui_client/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\glare-core\opengl\opengl.cmake;C:\programming\jolt\5.3.0\Jolt\Jolt.cmake;C:\programming\substrata\cmake\libressl.cmake;C:\programming\substrata\cmake\llvm.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;C:\programming\substrata\cmake\shared_target_settings.cmake;C:\programming\substrata\cmake\ssl.cmake;C:\programming\substrata\cmake\winter.cmake;C:\programming\substrata\opus\opus.cmake;C:\programming\winter\embed_winter.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\substrata\gui_client\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/programming/substrata/gui_client/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/gui_client/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\glare-core\opengl\opengl.cmake;C:\programming\jolt\5.3.0\Jolt\Jolt.cmake;C:\programming\substrata\cmake\libressl.cmake;C:\programming\substrata\cmake\llvm.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;C:\programming\substrata\cmake\shared_target_settings.cmake;C:\programming\substrata\cmake\ssl.cmake;C:\programming\substrata\cmake\winter.cmake;C:\programming\substrata\opus\opus.cmake;C:\programming\winter\embed_winter.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\substrata\gui_client\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/programming/substrata/gui_client/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/gui_client/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\glare-core\opengl\opengl.cmake;C:\programming\jolt\5.3.0\Jolt\Jolt.cmake;C:\programming\substrata\cmake\libressl.cmake;C:\programming\substrata\cmake\llvm.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;C:\programming\substrata\cmake\shared_target_settings.cmake;C:\programming\substrata\cmake\ssl.cmake;C:\programming\substrata\cmake\winter.cmake;C:\programming\substrata\opus\opus.cmake;C:\programming\winter\embed_winter.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\substrata\gui_client\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\analysis.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\src\analysis.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\mapping_matrix.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\src\mapping_matrix.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\mlp.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\src\mlp.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\mlp_data.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\opus.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\opus_decoder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\opus_encoder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\opus_multistream.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\opus_multistream_decoder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\opus_multistream_encoder.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\src\opus_private.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\opus_projection_decoder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\opus_projection_encoder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\src\repacketizer.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\src\tansig_table.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\include\opus.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\include\opus_custom.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\include\opus_defines.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\include\opus_multistream.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\include\opus_projection.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\include\opus_types.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\arch.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\bands.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\bands.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\celt.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\celt.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\celt_decoder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\celt_encoder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\celt_lpc.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\celt_lpc.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\cpu_support.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\cwrs.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\cwrs.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\ecintrin.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\entcode.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\entcode.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\entdec.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\entdec.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\entenc.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\entenc.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\fixed_debug.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\fixed_generic.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\float_cast.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\kiss_fft.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\kiss_fft.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\laplace.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\laplace.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\mathops.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\mathops.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\mdct.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\mdct.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\mfrngcod.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\modes.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\modes.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\os_support.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\pitch.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\pitch.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\quant_bands.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\quant_bands.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\rate.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\rate.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\stack_alloc.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\static_modes_fixed.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\static_modes_fixed_arm_ne10.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\static_modes_float.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\static_modes_float_arm_ne10.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\vq.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\vq.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\_kiss_fft_guts.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\celt_lpc_sse.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\celt_lpc_sse4_1.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\pitch_sse.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\pitch_sse.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\pitch_sse2.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\pitch_sse4_1.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\vq_sse.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\vq_sse2.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\x86cpu.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\x86cpu.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\celt\x86\x86_celt_map.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\A2NLSF.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\ana_filt_bank_1.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\API.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\biquad_alt.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\bwexpander.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\bwexpander_32.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\check_control_input.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\CNG.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\code_signs.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\control.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\control_audio_bandwidth.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\control_codec.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\control_SNR.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\debug.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\debug.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\decoder_set_fs.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\decode_core.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\decode_frame.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\decode_indices.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\decode_parameters.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\decode_pitch.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\decode_pulses.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\dec_API.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\define.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\encode_indices.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\encode_pulses.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\enc_API.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\errors.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\gain_quant.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\HP_variable_cutoff.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\init_decoder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\init_encoder.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\Inlines.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\inner_prod_aligned.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\interpolate.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\lin2log.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\log2lin.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\LPC_analysis_filter.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\LPC_fit.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\LPC_inv_pred_gain.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\LP_variable_cutoff.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\MacroCount.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\MacroDebug.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\macros.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\main.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NLSF2A.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NLSF_decode.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NLSF_del_dec_quant.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NLSF_encode.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NLSF_stabilize.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NLSF_unpack.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NLSF_VQ.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NLSF_VQ_weights_laroia.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NSQ.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\NSQ.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\NSQ_del_dec.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\pitch_est_defines.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\pitch_est_tables.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\PLC.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\PLC.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\process_NLSFs.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\quant_LTP_gains.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_down2.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_down2_3.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_private.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_private_AR2.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_private_down_FIR.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_private_IIR_FIR.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_private_up2_HQ.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_rom.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_rom.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\resampler_structs.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\shell_coder.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\sigm_Q15.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\SigProc_FIX.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\sort.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\stereo_decode_pred.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\stereo_encode_pred.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\stereo_find_predictor.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\stereo_LR_to_MS.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\stereo_MS_to_LR.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\stereo_quant_pred.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\structs.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\sum_sqr_shift.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\tables.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\tables_gain.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\tables_LTP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\tables_NLSF_CB_NB_MB.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\tables_NLSF_CB_WB.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\tables_other.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\tables_pitch_lag.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\tables_pulses_per_block.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\table_LSF_cos.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\tuning_parameters.h" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\typedef.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\VAD.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\VQ_WMat_EC.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\apply_sine_window_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\autocorrelation_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\burg_modified_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\bwexpander_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\corrMatrix_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\encode_frame_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\energy_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\find_LPC_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\find_LTP_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\find_pitch_lags_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\find_pred_coefs_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\inner_product_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\k2a_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\LPC_analysis_filter_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\LPC_inv_pred_gain_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\LTP_analysis_filter_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\LTP_scale_ctrl_FLP.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\main_FLP.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\noise_shape_analysis_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\pitch_analysis_core_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\process_gains_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\regularize_correlations_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\residual_energy_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\scale_copy_vector_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\scale_vector_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\schur_FLP.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\SigProc_FLP.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\sort_FLP.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\structs_FLP.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\warped_autocorrelation_FLP.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\float\wrappers_FLP.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\x86\main_sse.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\x86\NSQ_del_dec_sse4_1.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\x86\NSQ_sse4_1.c" />
+    <ClInclude Include="C:\programming\substrata\opus\opus-1.3.1\silk\x86\SigProc_FIX_sse.h" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\x86\VAD_sse4_1.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\x86\VQ_WMat_EC_sse4_1.c" />
+    <ClCompile Include="C:\programming\substrata\opus\opus-1.3.1\silk\x86\x86_silk_map.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="C:\programming\substrata\ZERO_CHECK.vcxproj">
+      <Project>{6AF2D106-A890-3BEC-80CD-372BD15FBB9B}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

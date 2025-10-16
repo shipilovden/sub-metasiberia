@@ -29,7 +29,7 @@ if exist CMakeFiles rmdir /s /q CMakeFiles
 
 REM Конфигурация проекта
 echo Конфигурация проекта...
-cmake C:\programming\substrata -G "Visual Studio 17 2022" -A x64 -DBUGSPLAT_SUPPORT=OFF -DSUBSTRATA_VERSION=1.0.0
+cmake C:\programming\substrata -G "Visual Studio 17 2022" -A x64 -DBUGSPLAT_SUPPORT=OFF -DCEF_SUPPORT=OFF -DSUBSTRATA_VERSION=1.0.0
 
 if %ERRORLEVEL% neq 0 (
     echo ОШИБКА: Конфигурация проекта не удалась!

@@ -1,0 +1,2414 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\programming\glare-core\graphics\AnimationData.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\BatchedMesh.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\BatchedMeshTests.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\bitmap.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\BoxFilterFunction.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\Colour3.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\Colour3f.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\Colour4f.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\CompressedImage.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\Drawing.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\DXTCompression.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\EXRDecoder.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\FilterFunction.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\FFTPlan.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\FormatDecoderGLTF.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\formatdecoderobj.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\FormatDecoderSTL.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\FormatDecoderVox.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\GaussianFilterFunction.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\GaussianImageFilter.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\GifDecoder.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\GridNoise.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\image.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\Image4f.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\ImageFilter.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\ImageMap.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\ImageMapUInt1.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\ImageMapTests.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\imformatdecoder.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\jpegdecoder.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\KTXDecoder.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\BasisDecoder.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\Map2D.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\MeshSimplification.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\SRGBUtils.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\NonZeroMipMap.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\PerlinNoise.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\PNGDecoder.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\Voronoi.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\TextureProcessing.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\TextureProcessingTests.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\TextureData.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\graphics\ShelfPack.cpp">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\indigo\UVUnwrapper.cpp">
+      <Filter>indigo</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\CheckedMaths.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\mathstypes.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\Matrix2.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\matrix3.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\Matrix4f.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\plane.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\Quat.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\SSE.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\vec2.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\vec3.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\Vec4f.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\maths\Vec4i.cpp">
+      <Filter>maths</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\IPAddress.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\MySocket.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\Networking.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\NetworkingTests.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\Packet.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\RecordingSocket.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\SocketInterface.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\SocketTests.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\TestSocket.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\UDPSocket.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\URL.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\WebSocket.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\WebSocketTests.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\HTTPClient.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\SMTPClient.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\TLSSocket.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\networking\TLSSocketTests.cpp">
+      <Filter>networking</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\physics\BVH.cpp">
+      <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\physics\BVHBuilder.cpp">
+      <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\physics\BVHBuilderTestUtils.cpp">
+      <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\physics\jscol_aabbox.cpp">
+      <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\physics\jscol_Tree.cpp">
+      <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\physics\jscol_triangle.cpp">
+      <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\physics\MollerTrumboreTri.cpp">
+      <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\physics\BinningBVHBuilder.cpp">
+      <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\simpleraytracer\raymesh.cpp">
+      <Filter>simpleraytracer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\AllocatorVectorUnitTests.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ArenaAllocator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ArgumentParser.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Array.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ArrayRef.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Base64.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\BestFitAllocator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\BitField.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\BitUtils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\BufferInStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\BufferOutStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\StackAllocator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\CircularBuffer.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Checksum.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Clock.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Condition.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ConPrint.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\CryptoRNG.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\CycleTimer.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\EventFD.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Exception.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\FastIterMap.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\FileChecksum.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\FileHandle.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\FileInStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\FileOutStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\FileUtils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\GlareString.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\AtomicInt.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\IndigoXMLDoc.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\InStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\JSONParser.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\KillThreadMessage.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Keccak256.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\LinearIterSet.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Lock.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\MemAlloc.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\MemMappedFile.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\MessageableThread.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Mutex.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\MyThread.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\NameMap.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Numeric.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\OutStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Parser.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\PlatformUtils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Plotter.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\PoolAllocator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\FastPoolAllocator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\PoolMap.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\GlareProcess.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\RandomAccessInStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ReferenceTest.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\SmallArray.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\SmallVector.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\SocketBufferOutStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Sort.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\StandardPrintOutput.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\StringUtils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\string_view.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Task.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\TaskManager.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\TaskRunnerThread.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\TaskTests.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ThreadManager.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ThreadMessage.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ThreadMessageSink.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ThreadTests.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\TimeStamp.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Timer.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\UTF8Utils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Vector.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\VectorUnitTests.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\XMLParseUtils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\TestUtils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\ManagerWithCache.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\Database.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\DatabaseTests.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\BufferViewInStream.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\HashSet.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\HashMap.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\RuntimeCheck.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\GeneralMemAllocator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\TopologicalSort.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\GenerationalArray.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\XMLWriteUtils.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\LRUCache.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\LimitedAllocator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\SharedImmutableString.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\SharedStringTable.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\STLArenaAllocator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\OpenSSL.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\AESEncryption.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\utils\SHA256.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\AuctionLock.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\ChunkGenThread.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\DynamicTextureUpdaterThread.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\ListenerThread.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\LuaHTTPRequestManager.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\LuaHTTPWorkerThread.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\MeshLODGenThread.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\NewsPost.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\Order.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\ParcelAuction.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\PasswordReset.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\Photo.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\Screenshot.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\Server.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\ServerLuaScriptTests.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\ServerSideScripting.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\ServerTestSuite.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\ServerWorldState.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\SubEthTransaction.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\SubEvent.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\UDPHandlerThread.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\User.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\UserWebSession.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\WorkerThread.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\WorkerThreadTests.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\WorkerThreadUploadPhotoHandling.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\WorldCreation.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\server\WorldMaintenance.cpp">
+      <Filter>server</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\AccountHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\AdminHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\LoginHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\MainPageHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\NewsPostHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\ParcelHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\PhotoHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\ResourceHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\ScreenshotHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\SubEventHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\WebDataFileWatcherThread.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\WebDataStore.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\WebServerRequestHandler.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\WebServerRequestHandlerTests.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\WebServerResponseUtils.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\webserver\WorldHandlers.cpp">
+      <Filter>webserver</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\Escaping.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\WebListenerThread.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\RequestInfo.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\ResponseUtils.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\StressTest.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\WebWorkerThread.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\RequestHandler.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\UnsafeString.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\webserver\WebWorkerThreadTests.cpp">
+      <Filter>webserver_core_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\Avatar.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\ImageDecoding.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\FileTypes.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\LODGeneration.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\Parcel.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\Resource.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\ResourceManager.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\VoxelMeshBuilding.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\WorldObject.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\WorldSettings.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\WorldMaterial.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\SubstrataLuaVM.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\LuaScriptEvaluator.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\TimerQueue.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\ObjectEventHandlers.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\RateLimiter.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\LODChunk.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\shared\WorldDetails.cpp">
+      <Filter>shared_files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\double-conversion\bignum-dtoa.cc">
+      <Filter>double_conversion</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\double-conversion\bignum.cc">
+      <Filter>double_conversion</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\double-conversion\cached-powers.cc">
+      <Filter>double_conversion</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\double-conversion\double-to-string.cc">
+      <Filter>double_conversion</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\double-conversion\fast-dtoa.cc">
+      <Filter>double_conversion</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\double-conversion\fixed-dtoa.cc">
+      <Filter>double_conversion</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\double-conversion\string-to-double.cc">
+      <Filter>double_conversion</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\double-conversion\strtod.cc">
+      <Filter>double_conversion</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\dll\IndigoMesh.cpp">
+      <Filter>dll</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\dll\IndigoAllocation.cpp">
+      <Filter>dll</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\libs\fft2d\fft4f2d.c">
+      <Filter>fft2d</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\secp256k1-master\src\secp256k1.c">
+      <Filter>secp256k1</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\ethereum\Infura.cpp">
+      <Filter>ethereum</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\ethereum\RLP.cpp">
+      <Filter>ethereum</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\ethereum\Signing.cpp">
+      <Filter>ethereum</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\substrata\ethereum\UInt256.cpp">
+      <Filter>ethereum</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\allocator.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\clusterizer.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\indexcodec.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\indexgenerator.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\overdrawoptimizer.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\simplifier.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\spatialorder.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\stripifier.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\vcacheoptimizer.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\vertexcodec.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\vertexfilter.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\meshoptimizer\src\vfetchoptimizer.cpp">
+      <Filter>meshoptimizer</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_backend.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_basis_file.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_bc7enc.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_comp.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_enc.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_etc.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_frontend.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_gpu_texture.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_kernels_sse.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_opencl.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_pvrtc1_4.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_resampler.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_resample_filters.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_ssim.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_uastc_enc.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_uastc_hdr_4x4_enc.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_astc_hdr_6x6_enc.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\basisu_astc_hdr_common.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\encoder\3rdparty\android_astc_decomp.cpp">
+      <Filter>basis_universal\encoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\basis_universal\transcoder\basisu_transcoder.cpp">
+      <Filter>basis_universal\transcoder</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lapi.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\laux.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbaselib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbitlib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuffer.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuflib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuiltins.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lcorolib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldblib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldebug.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldo.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lfunc.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lgc.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lgcdebug.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\linit.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lmathlib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lmem.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lnumprint.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lobject.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\loslib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lperf.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstate.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstring.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstrlib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltable.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltablib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltm.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ludata.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lutf8lib.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmexecute.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmload.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmutils.cpp">
+      <Filter>luau\luau_vm</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\BuiltinFolding.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Builtins.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\BytecodeBuilder.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Compiler.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\ConstantFolding.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\CostModel.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\lcode.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\TableShape.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Types.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\ValueTracking.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Ast.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Confusables.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Lexer.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Location.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Parser.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\StringUtils.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\TimeTrace.cpp">
+      <Filter>luau\luau_compiler</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\lua\LuaTests.cpp">
+      <Filter>lua</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\lua\LuaVM.cpp">
+      <Filter>lua</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\lua\LuaScript.cpp">
+      <Filter>lua</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\lua\LuaUtils.cpp">
+      <Filter>lua</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\lua\LuaSerialisation.cpp">
+      <Filter>lua</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\tracy\public\TracyClient.cpp">
+      <Filter>tracy</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\programming\glare-core\graphics\AnimationData.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\BatchedMesh.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\BatchedMeshTests.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\bitmap.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\BoxFilterFunction.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\colour3.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\Colour4f.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\CompressedImage.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\Drawing.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\DXTCompression.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\EXRDecoder.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\FilterFunction.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\FFTPlan.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\FormatDecoderGLTF.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\formatdecoderobj.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\FormatDecoderSTL.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\FormatDecoderVox.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\GaussianFilterFunction.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\GaussianImageFilter.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\GifDecoder.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\GridNoise.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\image.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\Image4f.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\ImageFilter.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\ImageMap.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\ImageMapUInt1.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\ImageMapSequence.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\ImageMapTests.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\imformatdecoder.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\jpegdecoder.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\KTXDecoder.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\BasisDecoder.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\Map2D.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\MeshSimplification.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\SRGBUtils.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\NonZeroMipMap.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\PerlinNoise.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\PNGDecoder.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\Voronoi.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\TextureProcessing.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\TextureProcessingTests.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\TextureData.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\graphics\ShelfPack.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\indigo\UVUnwrapper.h">
+      <Filter>indigo</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\LineSegment4f.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\CheckedMaths.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\mathstypes.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\Matrix2.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\matrix3.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\Matrix4f.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\PCG32.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\plane.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\Quat.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\SSE.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\vec2.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\vec3.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\Vec4f.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\maths\Vec4i.h">
+      <Filter>maths</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\FractionListener.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\IPAddress.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\MySocket.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\Networking.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\NetworkingTests.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\Packet.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\RecordingSocket.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\SocketInterface.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\SocketTests.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\TestSocket.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\UDPSocket.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\URL.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\WebSocket.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\WebSocketTests.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\HTTPClient.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\SMTPClient.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\TLSSocket.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\networking\TLSSocketTests.h">
+      <Filter>networking</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\physics\BVH.h">
+      <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\physics\BVHBuilder.h">
+      <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\physics\BVHBuilderTestUtils.h">
+      <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\physics\jscol_aabbox.h">
+      <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\physics\jscol_Tree.h">
+      <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\physics\jscol_triangle.h">
+      <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\physics\MollerTrumboreTri.h">
+      <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\physics\BinningBVHBuilder.h">
+      <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\simpleraytracer\geometry.h">
+      <Filter>simpleraytracer</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\simpleraytracer\raymesh.h">
+      <Filter>simpleraytracer</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\simpleraytracer\hitinfo.h">
+      <Filter>simpleraytracer</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\AllocatorVectorUnitTests.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\AllocatorVector.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ArenaAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ArgumentParser.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Array.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Array2D.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Array3D.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ArrayRef.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Base64.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\BestFitAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\BitField.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\BitUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\BufferInStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\BufferOutStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\StackAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\CircularBuffer.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Checksum.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Clock.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Condition.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ConPrint.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ContainerUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\CryptoRNG.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\CycleTimer.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\EventFD.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Exception.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\FastIterMap.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\FileChecksum.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\FileHandle.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\FileInStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\FileOutStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\FileUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\GlareString.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\GlareAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\IncludeWindows.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\AtomicInt.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\IndigoXMLDoc.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\InStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\JSONParser.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\KillThreadMessage.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Keccak256.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\LinearIterSet.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Lock.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Maybe.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\MemAlloc.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\MemMappedFile.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\MessageableThread.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Mutex.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\MyThread.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\NameMap.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Numeric.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\OutStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Parser.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Platform.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\PlatformUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Plotter.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\PoolAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\FastPoolAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\PoolMap.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\GlareProcess.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\RandomAccessInStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\RandomAccessOutStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\RefCounted.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Reference.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ReferenceTest.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\SmallArray.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\SmallVector.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\SocketBufferOutStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Sort.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\StandardPrintOutput.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\StringUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\string_view.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Task.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\TaskManager.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\TaskRunnerThread.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\TaskTests.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ThreadManager.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ThreadMessage.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ThreadMessageSink.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ThreadSafeQueue.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ThreadSafeRefCounted.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ThreadTests.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\TimeStamp.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Timer.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\UTF8Utils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Vector.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\VectorUnitTests.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\VRef.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\XMLParseUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\TestUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\ManagerWithCache.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Database.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\DatabaseKey.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\DatabaseTests.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\BufferViewInStream.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\HashSet.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\HashSetIterators.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\HashMap.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\HashMapIterators.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\RuntimeCheck.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\GeneralMemAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\TopologicalSort.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\GenerationalArray.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\WeakRefCounted.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\WeakReference.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\TestExceptionUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\Hasher.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\XMLWriteUtils.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\LRUCache.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\LimitedAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\SharedImmutableString.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\SharedStringTable.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\STLArenaAllocator.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\OpenSSL.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\AESEncryption.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\utils\SHA256.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\AuctionLock.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\ChunkGenThread.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\DynamicTextureUpdaterThread.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\ListenerThread.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\LuaHTTPRequestManager.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\LuaHTTPWorkerThread.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\MeshLODGenThread.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\NewsPost.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\Order.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\ParcelAuction.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\PasswordReset.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\Photo.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\Screenshot.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\Server.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\ServerLuaScriptTests.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\ServerSideScripting.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\ServerTestSuite.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\ServerWorldState.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\SubEthTransaction.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\SubEvent.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\UDPHandlerThread.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\User.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\UserWebSession.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\WorkerThread.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\WorkerThreadTests.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\WorkerThreadUploadPhotoHandling.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\WorldCreation.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\server\WorldMaintenance.h">
+      <Filter>server</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\AccountHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\AdminHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\LoginHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\MainPageHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\NewsPostHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\ParcelHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\PhotoHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\ResourceHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\ScreenshotHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\SubEventHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\WebDataFileWatcherThread.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\WebDataStore.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\WebServerRequestHandler.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\WebServerRequestHandlerTests.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\WebServerResponseUtils.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\webserver\WorldHandlers.h">
+      <Filter>webserver</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\Escaping.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\WebListenerThread.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\RequestInfo.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\ResponseUtils.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\StressTest.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\WebsiteExcep.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\WebWorkerThread.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\RequestHandler.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\UnsafeString.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\webserver\WebWorkerThreadTests.h">
+      <Filter>webserver_core_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\Avatar.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\ImageDecoding.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\FileTypes.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\LODGeneration.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\MessageUtils.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\Parcel.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\ParcelID.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\Protocol.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\Resource.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\ResourceManager.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\UID.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\UserID.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\VoxelMeshBuilding.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\WorldObject.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\WorldSettings.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\WorldMaterial.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\SubstrataLuaVM.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\LuaScriptEvaluator.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\TimerQueue.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\ObjectEventHandlers.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\RateLimiter.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\LODChunk.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\shared\WorldDetails.h">
+      <Filter>shared_files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\bignum-dtoa.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\bignum.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\cached-powers.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\diy-fp.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\double-conversion.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\double-to-string.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\fast-dtoa.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\fixed-dtoa.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\ieee.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\string-to-double.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\strtod.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\double-conversion\utils.h">
+      <Filter>double_conversion</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\dll\include\IndigoMesh.h">
+      <Filter>dll</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\dll\include\IndigoAllocation.h">
+      <Filter>dll</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\assumptions.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\basic-config.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\ecdsa.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\ecdsa_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\eckey.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\eckey_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\ecmult.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\ecmult_const.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\ecmult_const_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\ecmult_gen.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\ecmult_gen_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\ecmult_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\field.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\field_10x26.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\field_10x26_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\field_5x52.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\field_5x52_asm_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\field_5x52_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\field_5x52_int128_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\field_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\group.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\group_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\hash.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\hash_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\modinv32.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\modinv32_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\modinv64.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\modinv64_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scalar.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scalar_4x64.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scalar_4x64_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scalar_8x32.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scalar_8x32_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scalar_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scalar_low.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scalar_low_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scratch.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\scratch_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\selftest.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\util.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\secp256k1-master\src\modules\recovery\main_impl.h">
+      <Filter>secp256k1</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\ethereum\Infura.h">
+      <Filter>ethereum</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\ethereum\RLP.h">
+      <Filter>ethereum</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\ethereum\Signing.h">
+      <Filter>ethereum</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\ethereum\EthAddress.h">
+      <Filter>ethereum</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\ethereum\EthTransaction.h">
+      <Filter>ethereum</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\substrata\ethereum\UInt256.h">
+      <Filter>ethereum</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\meshoptimizer\src\meshoptimizer.h">
+      <Filter>meshoptimizer</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_backend.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_basis_file.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_bc7enc.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_comp.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_enc.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_etc.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_frontend.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_gpu_texture.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_kernels_imp.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_miniz.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_opencl.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_pvrtc1_4.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_resampler.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_resampler_filters.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_ssim.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_uastc_enc.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\encoder\basisu_uastc_hdr_4x4_enc.h">
+      <Filter>basis_universal\encoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\transcoder\basisu_transcoder.h">
+      <Filter>basis_universal\transcoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\basis_universal\transcoder\basisu.h">
+      <Filter>basis_universal\transcoder</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lapi.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbuffer.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbuiltins.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbytecode.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lcommon.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ldebug.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ldo.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lfunc.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lgc.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lmem.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lnumutils.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lobject.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lstate.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lstring.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ltable.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ltm.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ludata.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lvm.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\include\lua.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\include\luaconf.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\VM\include\lualib.h">
+      <Filter>luau\luau_vm</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\BuiltinFolding.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\Builtins.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\ConstantFolding.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\CostModel.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\TableShape.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\Types.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\ValueTracking.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\luacode.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\Luau\BytecodeBuilder.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\Luau\Compiler.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Ast.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Confusables.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Lexer.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Location.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\ParseOptions.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Parser.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\ParseResult.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\StringUtils.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\TimeTrace.h">
+      <Filter>luau\luau_compiler</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\lua\LuaTests.h">
+      <Filter>lua</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\lua\LuaVM.h">
+      <Filter>lua</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\lua\LuaScript.h">
+      <Filter>lua</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\lua\LuaUtils.h">
+      <Filter>lua</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\lua\LuaSerialisation.h">
+      <Filter>lua</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\programming\substrata\server\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="C:\programming\glare-core\glare-core.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\programming\substrata\scripts\build_qt.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\cmake.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\config-lib.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\config.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\copy_files_to_output.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\dist_utils.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\get_libs.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\make_emscripten_preload_data.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\script_utils.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\scripts\update_webclient_cache_busting_hashes.rb">
+      <Filter>scripts</Filter>
+    </None>
+    <None Include="C:\programming\substrata\docs\building.txt">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="C:\programming\substrata\docs\changelog.txt">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="C:\programming\substrata\docs\fuzzing.txt">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="C:\programming\substrata\docs\lets_encrypt.txt">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="C:\programming\substrata\docs\licence.txt">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="C:\programming\substrata\docs\networked physics.txt">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="C:\programming\substrata\docs\running server.txt">
+      <Filter>docs</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="basis_universal">
+      <UniqueIdentifier>{ED1EDAA3-EE56-3179-9298-343734E0FB62}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="basis_universal\encoder">
+      <UniqueIdentifier>{645AC3C1-43A5-31EE-A456-C47797A91F19}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="basis_universal\transcoder">
+      <UniqueIdentifier>{3BB07753-848C-34A3-850C-0A1030C78FAB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dll">
+      <UniqueIdentifier>{E994BAAD-6482-370D-9EB8-23D7FEF752DF}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs">
+      <UniqueIdentifier>{58C67DF5-A76B-3BB9-B84A-AF001E9DDC47}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="double_conversion">
+      <UniqueIdentifier>{F3CB8641-2A74-3176-AEF2-0EDB3B2964D1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ethereum">
+      <UniqueIdentifier>{37B5B21F-8A1D-3644-9638-64D1918A5C54}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="fft2d">
+      <UniqueIdentifier>{24637934-546A-34E9-8E09-B0C837BFED4F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="graphics">
+      <UniqueIdentifier>{3E97D25E-3AF7-3F89-8574-AE385128F451}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="indigo">
+      <UniqueIdentifier>{61CB61CB-6868-333F-9895-A9EBEB274CB4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lua">
+      <UniqueIdentifier>{FF1CCE0A-A6EE-363D-BAFF-D2D08E3B4EF4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="luau">
+      <UniqueIdentifier>{F3AB020D-D6EA-3A9A-A498-5B050D14D289}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="luau\luau_compiler">
+      <UniqueIdentifier>{CA6EAC51-BF91-38FF-A063-16CCAE812E5F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="luau\luau_vm">
+      <UniqueIdentifier>{E775BF67-E9A5-3492-848E-2B6D8BEAEFD2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="maths">
+      <UniqueIdentifier>{5AEF008A-EC30-3278-9D03-735FB9FFF5D5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="meshoptimizer">
+      <UniqueIdentifier>{E6DBC5B7-F858-32AD-92B7-05EF95D7B72E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="networking">
+      <UniqueIdentifier>{AC2C84D2-6661-39B9-A5B9-F490E9A36132}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="physics">
+      <UniqueIdentifier>{84AC848A-7B58-34B8-A0E4-0D8389DFCB1A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="scripts">
+      <UniqueIdentifier>{953A62CF-02FE-3695-B0C7-3EA3D84B9D14}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="secp256k1">
+      <UniqueIdentifier>{4695C89E-8F98-310A-B562-A1C1F8F6599B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="server">
+      <UniqueIdentifier>{1EEE58DD-7357-3C6F-AFE2-55C173FFFC4E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shared_files">
+      <UniqueIdentifier>{04969105-AA5A-3D8C-A1DE-68F752D9CC85}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="simpleraytracer">
+      <UniqueIdentifier>{0F271B3C-7CE3-3DA7-A6F2-B9ABAAA136F0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tracy">
+      <UniqueIdentifier>{B24604F5-657E-3921-9B9A-AC51EA80F1B2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="utils">
+      <UniqueIdentifier>{EDFB20D2-4DB6-363B-B37E-7579F3F2AA46}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="webserver">
+      <UniqueIdentifier>{CA65D282-2111-3C19-8F6C-9F500A2C3963}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="webserver_core_files">
+      <UniqueIdentifier>{DE32A31D-DA7B-35E2-A23F-C69A99F36BA3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

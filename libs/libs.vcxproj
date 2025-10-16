@@ -1,0 +1,610 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{FEB75A8C-88DD-3850-B075-943959EAFDBA}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>libs</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">libs.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">libs</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">libs.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">libs</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\substrata_output\vs2022\cyberspace_x64\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">libs.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">libs</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;BUILD_TESTS=1;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;GUI_CLIENT;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;BUILD_TESTS=1;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;GUI_CLIENT;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;GUI_CLIENT;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;GUI_CLIENT;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;C:\programming\libjpeg-turbo\libjpeg-turbo-3.0.0-vs2022-install\include;C:\programming\glare-core\libpng;C:\programming\glare-core\pugixml\src;C:\programming\glare-core\zlib;C:\programming\glare-core;C:\programming\glare-core\utils;C:\programming\glare-core\networking;C:\programming\glare-core\maths;C:\programming\glare-core\opengl;C:\programming\glare-core\giflib\lib;C:\programming\glare-core\little_cms\include;C:\programming\glare-core\zstd\lib;C:\programming\glare-core\zstd\lib\common;C:\programming\glare-core\opencl\khronos;C:\programming\BugSplat\BugSplat\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4996;4355;4127;4100;4512;4201;5240</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;BUILD_TESTS=1;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;GUI_CLIENT;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;BUILD_TESTS=1;PLATFORM_WINDOWS;NO_EMBREE;MAP2D_FILTERING_SUPPORT=1;USING_LIBRESSL;RAYMESH_TRACING_SUPPORT=1;CMS_NO_REGISTER_KEYWORD;NO_LCMS_SUPPORT=1;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;__SSE4_1__;PERFORMANCEAPI_ENABLED=0;OPENEXR_SUPPORT;PNG_ALLOW_BENIGN_ERRORS;PNG_INTEL_SSE;PNG_NO_SETJMP;WUFFS_SUPPORT=1;GUI_CLIENT;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\programming\glare-core\Imath\src\Imath;C:\programming\glare-core\OpenEXR\src\lib\Iex;C:\programming\glare-core\OpenEXR\src\lib\IlmThread;C:\programming\glare-core\OpenEXR\src\lib\OpenEXR;C:\programming\glare-core\OpenEXR\src\lib\OpenEXRUtil;C:\programming\glare-core\Imath\config_windows;C:\programming\glare-core\OpenEXR\config_windows;C:\programming\glare-core\tracy\public;C:\programming\glare-core\dll;C:\programming\glare-core\dll\include;C:\programming\luau\0.627\VM\include;C:\programming\luau\0.627\Common\include;C:\programming\luau\0.627\Ast\include;C:\programming\luau\0.627\Compiler\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\programming\substrata\libs\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/programming/substrata/libs/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/libs/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Strawberry\c\share\cmake-3.29\Modules\CMakeASMInformation.cmake;C:\Strawberry\c\share\cmake-3.29\Modules\Compiler\MSVC-ASM.cmake;C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\programming\substrata\libs\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/programming/substrata/libs/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/libs/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Strawberry\c\share\cmake-3.29\Modules\CMakeASMInformation.cmake;C:\Strawberry\c\share\cmake-3.29\Modules\Compiler\MSVC-ASM.cmake;C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\programming\substrata\libs\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/programming/substrata/libs/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+C:\Strawberry\c\bin\cmake.exe -SC:/programming/substrata -BC:/programming/substrata --check-stamp-file C:/programming/substrata/libs/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Strawberry\c\share\cmake-3.29\Modules\CMakeASMInformation.cmake;C:\Strawberry\c\share\cmake-3.29\Modules\Compiler\MSVC-ASM.cmake;C:\programming\glare-core\OpenEXR\openexr.cmake;C:\programming\substrata\cmake\shared_cxx_settings.cmake;C:\programming\substrata\cmake\shared_settings.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\programming\substrata\libs\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\programming\glare-core\Imath\src\Imath\half.cpp" />
+    <ClCompile Include="C:\programming\glare-core\Imath\src\Imath\ImathColorAlgo.cpp" />
+    <ClCompile Include="C:\programming\glare-core\Imath\src\Imath\ImathFun.cpp" />
+    <ClCompile Include="C:\programming\glare-core\Imath\src\Imath\ImathMatrixAlgo.cpp" />
+    <ClCompile Include="C:\programming\glare-core\Imath\src\Imath\ImathRandom.cpp" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\toFloat.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\half.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\halfFunction.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\halfLimits.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathBox.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathBoxAlgo.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathColor.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathColorAlgo.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathEuler.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathExport.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathForward.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathFrame.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathFrustum.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathFrustumTest.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathFun.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathGL.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathGLU.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathInt64.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathInterval.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathLine.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathLineAlgo.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathMath.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathMatrix.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathMatrixAlgo.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathNamespace.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathPlane.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathPlatform.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathQuat.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathRandom.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathRoots.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathShear.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathSphere.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathTypeTraits.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathVec.h" />
+    <ClInclude Include="C:\programming\glare-core\Imath\src\Imath\ImathVecAlgo.h" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexBaseExc.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexMathFloatExc.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexMathFpu.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexThrowErrnoExc.cpp" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\Iex.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexBaseExc.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexErrnoExc.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexExport.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexForward.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexMacros.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexMathExc.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexMathFloatExc.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexMathIeeeExc.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexNamespace.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\Iex\IexThrowErrnoExc.h" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThread.cpp" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThread.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThreadExport.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThreadForward.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThreadMutex.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThreadNamespace.h" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThreadPool.cpp" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThreadPool.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThreadSemaphore.h" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\IlmThread\IlmThreadSemaphoreWin32.cpp" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\b44ExpLogTable.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\dwaLookups.h" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfAcesFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfB44Compressor.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfBoxAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfChannelList.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfChannelListAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfChromaticities.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfChromaticitiesAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfCompositeDeepScanLine.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfCompressionAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfCompressor.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfConvert.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfCRgbaFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepCompositing.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepFrameBuffer.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepImageStateAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepScanLineInputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepScanLineInputPart.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepScanLineOutputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepScanLineOutputPart.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepTiledInputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepTiledInputPart.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepTiledOutputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepTiledOutputPart.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDoubleAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDwaCompressor.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfEnvmap.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfEnvmapAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFastHuf.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFloatAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFloatVectorAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFrameBuffer.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFramesPerSecond.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfGenericInputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfGenericOutputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfHeader.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfHuf.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfIDManifest.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfIDManifestAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfInputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfInputPart.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfInputPartData.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfIntAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfIO.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfKeyCode.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfKeyCodeAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfLineOrderAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfLut.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMatrixAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMisc.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMultiPartInputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMultiPartOutputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMultiView.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfOpaqueAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfOutputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfOutputPart.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfOutputPartData.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPartType.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPizCompressor.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPreviewImage.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPreviewImageAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPxr24Compressor.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRational.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRationalAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRgbaFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRgbaYca.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRle.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRleCompressor.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfScanLineInputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfStandardAttributes.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfStdIO.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfStringAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfStringVectorAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfSystemSpecific.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTestFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfThreading.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTileDescriptionAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledInputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledInputPart.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledMisc.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledOutputFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledOutputPart.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledRgbaFile.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTileOffsets.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTimeCode.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTimeCodeAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfVecAttribute.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfVersion.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfWav.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfZip.cpp" />
+    <ClCompile Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfZipCompressor.cpp" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfAcesFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfArray.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfBoxAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfChannelList.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfChannelListAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfChromaticities.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfChromaticitiesAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfCompositeDeepScanLine.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfCompression.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfCompressionAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfConvert.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfCRgbaFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepCompositing.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepFrameBuffer.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepImageState.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepImageStateAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepScanLineInputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepScanLineInputPart.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepScanLineOutputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepScanLineOutputPart.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepTiledInputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepTiledInputPart.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepTiledOutputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDeepTiledOutputPart.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfDoubleAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfEnvmap.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfEnvmapAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfExport.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFloatAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFloatVectorAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfForward.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFrameBuffer.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfFramesPerSecond.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfGenericInputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfGenericOutputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfHeader.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfHuf.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfIDManifest.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfIDManifestAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfInputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfInputPart.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfInt64.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfIntAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfIO.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfKeyCode.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfKeyCodeAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfLineOrder.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfLineOrderAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfLut.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMatrixAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMultiPartInputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMultiPartOutputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfMultiView.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfName.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfNamespace.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfOpaqueAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfOutputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfOutputPart.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPartHelper.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPartType.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPixelType.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPreviewImage.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfPreviewImageAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRational.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRationalAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRgba.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRgbaFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfRgbaYca.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfStandardAttributes.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfStdIO.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfStringAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfStringVectorAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTestFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfThreading.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTileDescription.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTileDescriptionAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledInputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledInputPart.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledOutputFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledOutputPart.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTiledRgbaFile.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTimeCode.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfTimeCodeAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfVecAttribute.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfVersion.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfWav.h" />
+    <ClInclude Include="C:\programming\glare-core\OpenEXR\src\lib\OpenEXR\ImfXdr.h" />
+    <ClCompile Include="C:\programming\glare-core\libpng\png.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngerror.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngget.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngmem.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngpread.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngread.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngrio.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngrtran.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngrutil.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngset.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngtrans.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngwio.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngwrite.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngwtran.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\pngwutil.c" />
+    <ClInclude Include="C:\programming\glare-core\libpng\png.h" />
+    <ClInclude Include="C:\programming\glare-core\libpng\pngconf.h" />
+    <ClInclude Include="C:\programming\glare-core\libpng\pngdebug.h" />
+    <ClInclude Include="C:\programming\glare-core\libpng\pnginfo.h" />
+    <ClInclude Include="C:\programming\glare-core\libpng\pnglibconf.h" />
+    <ClInclude Include="C:\programming\glare-core\libpng\pngpriv.h" />
+    <ClInclude Include="C:\programming\glare-core\libpng\pngstruct.h" />
+    <ClCompile Include="C:\programming\glare-core\libpng\intel\intel_init.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\intel\filter_sse2_intrinsics.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\arm\arm_init.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\arm\filter_neon_intrinsics.c" />
+    <ClCompile Include="C:\programming\glare-core\libpng\arm\palette_neon_intrinsics.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\adler32.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\compress.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\crc32.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\deflate.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\inffast.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\inflate.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\inftrees.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\trees.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\uncompr.c" />
+    <ClCompile Include="C:\programming\glare-core\zlib\zutil.c" />
+    <ClInclude Include="C:\programming\glare-core\zlib\crc32.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\deflate.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\inffast.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\inffixed.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\inflate.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\inftrees.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\trees.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\zconf.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\zlib.h" />
+    <ClInclude Include="C:\programming\glare-core\zlib\zutil.h" />
+    <ClCompile Include="C:\programming\glare-core\pugixml\src\pugixml.cpp" />
+    <ClInclude Include="C:\programming\glare-core\pugixml\src\pugixml.hpp" />
+    <ClInclude Include="C:\programming\glare-core\pugixml\src\pugiconfig.hpp" />
+    <ClCompile Include="C:\programming\glare-core\giflib\lib\dgif_lib.c" />
+    <ClCompile Include="C:\programming\glare-core\giflib\lib\egif_lib.c" />
+    <ClCompile Include="C:\programming\glare-core\giflib\lib\gif_err.c" />
+    <ClCompile Include="C:\programming\glare-core\giflib\lib\gif_hash.c" />
+    <ClInclude Include="C:\programming\glare-core\giflib\lib\gif_hash.h" />
+    <ClInclude Include="C:\programming\glare-core\giflib\lib\gif_lib.h" />
+    <ClInclude Include="C:\programming\glare-core\giflib\lib\gif_lib_private.h" />
+    <ClCompile Include="C:\programming\glare-core\giflib\lib\gifalloc.c" />
+    <ClCompile Include="C:\programming\glare-core\giflib\lib\openbsd-reallocarray.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\allocations.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\bits.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\bitstream.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\compiler.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\cpu.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\common\debug.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\debug.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\common\entropy_common.c" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\common\error_private.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\error_private.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\fse.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\common\fse_decompress.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\huf.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\mem.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\common\pool.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\pool.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\portability_macros.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\common\threading.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\threading.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\common\xxhash.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\xxhash.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\common\zstd_common.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\zstd_deps.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\zstd_internal.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\common\zstd_trace.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\clevels.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\fse_compress.c" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\hist.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\hist.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\huf_compress.c" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_compress.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_compress_internal.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_compress_literals.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_compress_literals.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_compress_sequences.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_compress_sequences.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_compress_superblock.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_compress_superblock.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_cwksp.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_double_fast.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_double_fast.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_fast.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_fast.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_lazy.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_lazy.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_ldm.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_ldm.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_ldm_geartab.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstd_opt.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstd_opt.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\compress\zstdmt_compress.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\compress\zstdmt_compress.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\decompress\huf_decompress.c" />
+    <None Include="C:\programming\glare-core\zstd\lib\decompress\huf_decompress_amd64.S" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\decompress\zstd_ddict.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\decompress\zstd_ddict.h" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\decompress\zstd_decompress.c" />
+    <ClCompile Include="C:\programming\glare-core\zstd\lib\decompress\zstd_decompress_block.c" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\decompress\zstd_decompress_block.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\decompress\zstd_decompress_internal.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\zdict.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\zstd.h" />
+    <ClInclude Include="C:\programming\glare-core\zstd\lib\zstd_errors.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="C:\programming\substrata\ZERO_CHECK.vcxproj">
+      <Project>{6AF2D106-A890-3BEC-80CD-372BD15FBB9B}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
