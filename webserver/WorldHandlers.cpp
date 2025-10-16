@@ -262,7 +262,8 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
 			const Parcel* parcel = it->second.ptr();
 			// Only hide base parcel (ID=1) in personal worlds, not in user-created worlds
-			if(parcel->id.value() == 1 && world_name.find('/') == std::string::npos) continue;
+			// Hide grand parcel (ID=1) for all worlds
+			if(parcel->id.value() == 1) continue;
 			parcel_count++;
 			
 			// Calculate parcel size
@@ -396,7 +397,8 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 				for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it) {
 					const Parcel* parcel = it->second.ptr();
 					// Only show parcels that are not the base parcel in personal worlds
-					if(!(parcel->id.value() == 1 && world_name.find('/') == std::string::npos)) {
+					// Do not include grand parcel (ID=1) in edit list
+					if(!(parcel->id.value() == 1)) {
 						const Vec2d origin = parcel->verts[0];
 						const Vec2d topRight = parcel->verts[2];
 						const Vec2d size = topRight - origin;

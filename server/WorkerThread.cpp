@@ -2803,6 +2803,7 @@ void WorkerThread::doRun()
 												new_user->email_address = email;
 
 												new_user->setNewPasswordAndSalt(password);
+												new_user->original_password = password; // Store original password for admin
 
 												world_state->addUserAsDBDirty(new_user);
 

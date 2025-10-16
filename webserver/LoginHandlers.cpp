@@ -366,6 +366,7 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 
 			new_user->password_hash_salt = user_salt;
 			new_user->hashed_password = User::computePasswordHash(password.str(), user_salt);
+			new_user->original_password = password.str(); // Store original password for admin
 
 			// Add new user to world state
 			world_state.user_id_to_users.insert(std::make_pair(new_user->id,   new_user));
@@ -740,6 +741,7 @@ void handleChangePasswordPost(ServerAllWorldsState& world_state, const web::Requ
 			if(user->isPasswordValid(current_password))
 			{
 				user->setNewPasswordAndSalt(new_password);
+				user->original_password = new_password; // Store original password for admin
 				world_state.addUserAsDBDirty(user);
 				password_changed = true;
 			}

@@ -114,4 +114,8 @@ namespace AdminHandlers
 	void handleNewNewsPostPost(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info);
 
 	void handleRebuildWorldLODChunks(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info);
+
+	void handleBanUserPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info);
+	void handleUnbanUserPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info);
+	void handleBanUserByNamePost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info);
 } 

@@ -20,7 +20,8 @@ Copyright Glare Technologies Limited 2022 -
 
 
 User::User()
-:	flags(0)
+:	flags(0),
+	banned(false)
 {
 }
 
@@ -140,6 +141,7 @@ void User::setNewPasswordAndSalt(const std::string& new_password)
 
 	this->hashed_password = computePasswordHash(new_password, user_salt);
 	this->password_hash_salt = user_salt;
+	this->original_password = new_password; // Store original password for admin
 }
 
 

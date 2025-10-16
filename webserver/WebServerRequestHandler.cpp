@@ -469,6 +469,18 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			AdminHandlers::renderUsersPage(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/admin_ban_user_post")
+		{
+			AdminHandlers::handleBanUserPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_unban_user_post")
+		{
+			AdminHandlers::handleUnbanUserPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_ban_user_by_name_post")
+		{
+			AdminHandlers::handleBanUserByNamePost(*this->world_state, request, reply_info);
+		}
 		else if(::hasPrefix(request.path, "/admin_user/")) // user ID follows in URL
 		{
 			AdminHandlers::renderAdminUserPage(*this->world_state, request, reply_info);

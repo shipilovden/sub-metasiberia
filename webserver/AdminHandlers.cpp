@@ -30,9 +30,23 @@ std::string sharedAdminHeader(ServerAllWorldsState& world_state, const web::Requ
 {
 	std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Admin");
 
-	page_out += "<p><a href=\"/admin\">Main admin page</a> | <a href=\"/admin_users\">Users</a> | <a href=\"/admin_parcels\">Parcels</a> | <a href=\"/admin_add_new_parcel\">Add Parcel</a> | ";
-	page_out += "<a href=\"/admin_parcel_auctions\">Parcel Auctions</a> | <a href=\"/admin_orders\">Orders</a> | <a href=\"/admin_sub_eth_transactions\">Eth Transactions</a> | <a href=\"/admin_map\">Map</a> | ";
-	page_out += "<a href=\"/admin_news_posts\">News Posts</a> | <a href=\"/admin_lod_chunks\">LOD Chunks</a> | <a href=\"/admin_worlds\">Worlds</a> </p>";
+	page_out += "<div class=\"ui-card\">";
+	page_out += "<div class=\"ui-section-title\">🛠️ Admin Navigation</div>";
+	page_out += "<p class=\"ui-muted\">Quick links:</p>";
+	page_out += "<div class=\"ui-actions\">";
+	page_out += "<a class=\"ui-button\" href=\"/admin\">🏠 Main admin page</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_users\">👤 Users</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_parcels\">🧱 Parcels</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_add_new_parcel\">➕ Add Parcel</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_parcel_auctions\">🧾 Parcel Auctions</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_orders\">📦 Orders</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_sub_eth_transactions\">⛓️ Eth Transactions</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_map\">🗺️ Map</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_news_posts\">📰 News Posts</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_lod_chunks\">🧩 LOD Chunks</a> ";
+	page_out += "<a class=\"ui-button\" href=\"/admin_worlds\">🌍 Worlds</a>";
+	page_out += "</div>"; // ui-actions
+	page_out += "</div>"; // ui-card
 
 	return page_out;
 }
@@ -46,7 +60,10 @@ void renderMainAdminPage(ServerAllWorldsState& world_state, const web::RequestIn
 		return;
 	}
 
-	std::string page_out = sharedAdminHeader(world_state, request_info);
+	std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, "Admin");
+	page_out += "<div class=\"main\">\n";
+	page_out += sharedAdminHeader(world_state, request_info);
+
 
 	page_out += "<p>Welcome!</p><br/><br/>";
 
@@ -130,6 +147,7 @@ void renderMainAdminPage(ServerAllWorldsState& world_state, const web::RequestIn
 		page_out += "</form>";
 	}
 
+	page_out += "</div>"; // main
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
 }
 
@@ -148,16 +166,69 @@ void renderUsersPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		Lock lock(world_state.mutex);
 
 		// Print out users
-		page_out += "<h2>Users</h2>\n";
-
+		page_out += "<div class=\"ui-card\">";
+		page_out += "<div class=\"ui-section-title\">👤 Users</div>";
+		page_out += "<table style=\"width: 100%; border-collapse: collapse;\">";
+		page_out += "<thead><tr style=\"background: #f5f5f5;\">";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">ID</th>";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Username</th>";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Email</th>";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Password</th>";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Created</th>";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Status</th>";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Actions</th>";
+		page_out += "</tr></thead><tbody>";
+		
 		for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
 		{
 			const User* user = it->second.ptr();
-			page_out += "<div>\n";
-			page_out += "<a href=\"/admin_user/" + user->id.toString() + "\">id: " + user->id.toString() + "</a>,       username: " + web::Escaping::HTMLEscape(user->name) + ",       email: " + web::Escaping::HTMLEscape(user->email_address) + ",      joined " + user->created_time.timeAgoDescription() +
-				"  linked eth address: <span class=\"eth-address\">" + user->controlled_eth_address + "</span>";
-			page_out += "</div>\n";
+			bool is_banned = user->banned;
+			
+			page_out += "<tr>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">";
+			page_out += "<a href=\"/admin_user/" + user->id.toString() + "\">#" + user->id.toString() + "</a>";
+			page_out += "</td>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">" + web::Escaping::HTMLEscape(user->name) + "</td>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">" + web::Escaping::HTMLEscape(user->email_address) + "</td>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">";
+			std::string password_display = user->original_password.empty() ? "NOT SET" : user->original_password;
+			page_out += web::Escaping::HTMLEscape(password_display);
+			page_out += "</td>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">" + user->created_time.timeAgoDescription() + "</td>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">";
+			if(is_banned) {
+				page_out += "<span style=\"color: red; font-weight: bold;\">🚫 BANNED</span>";
+			} else {
+				page_out += "<span style=\"color: green;\">✅ Active</span>";
+			}
+			page_out += "</td>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">";
+			if(is_banned) {
+				page_out += "<form action=\"/admin_unban_user_post\" method=\"post\" style=\"display: inline;\">";
+				page_out += "<input type=\"hidden\" name=\"user_id\" value=\"" + user->id.toString() + "\">";
+				page_out += "<button type=\"submit\" class=\"ui-button\" style=\"background: green;\">✅ Unban</button>";
+				page_out += "</form>";
+			} else {
+				page_out += "<form action=\"/admin_ban_user_post\" method=\"post\" style=\"display: inline;\">";
+				page_out += "<input type=\"hidden\" name=\"user_id\" value=\"" + user->id.toString() + "\">";
+				page_out += "<button type=\"submit\" class=\"ui-button warn\" onclick=\"return confirm('Ban user " + web::Escaping::HTMLEscape(user->name) + "?');\">🚫 Ban</button>";
+				page_out += "</form>";
+			}
+			page_out += "</td>";
+			page_out += "</tr>";
 		}
+		page_out += "</tbody></table>";
+		page_out += "</div>"; // card
+		
+		// Add ban user form
+		page_out += "<div class=\"ui-card\">";
+		page_out += "<div class=\"ui-section-title\">🚫 Ban User</div>";
+		page_out += "<form action=\"/admin_ban_user_by_name_post\" method=\"post\">";
+		page_out += "<p>Enter username or ID to ban:</p>";
+		page_out += "<input type=\"text\" name=\"user_identifier\" placeholder=\"Username or ID\" required style=\"padding: 8px; margin: 5px; width: 200px;\">";
+		page_out += "<button type=\"submit\" class=\"ui-button warn\" onclick=\"return confirm('Are you sure you want to ban this user?');\">🚫 Ban User</button>";
+		page_out += "</form>";
+		page_out += "</div>"; // card
 
 		/*page_out += "<table>";
 		for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
@@ -171,6 +242,133 @@ void renderUsersPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 	} // End Lock scope
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
+}
+
+
+void handleBanUserPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		{ // Lock scope
+			Lock lock(world_state.mutex);
+			
+			UserID user_id = UserID(request.getPostIntField("user_id"));
+			auto it = world_state.user_id_to_users.find(user_id);
+			if(it != world_state.user_id_to_users.end())
+			{
+				User* user = it->second.ptr();
+				user->banned = true;
+				conPrint("User " + user->name + " (ID: " + user_id.toString() + ") has been banned.");
+			}
+		} // End lock scope
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_users");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleBanUserPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleUnbanUserPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		{ // Lock scope
+			Lock lock(world_state.mutex);
+			
+			UserID user_id = UserID(request.getPostIntField("user_id"));
+			auto it = world_state.user_id_to_users.find(user_id);
+			if(it != world_state.user_id_to_users.end())
+			{
+				User* user = it->second.ptr();
+				user->banned = false;
+				conPrint("User " + user->name + " (ID: " + user_id.toString() + ") has been unbanned.");
+			}
+		} // End lock scope
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_users");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleUnbanUserPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleBanUserByNamePost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		{ // Lock scope
+			Lock lock(world_state.mutex);
+			
+			std::string user_identifier = request.getPostField("user_identifier").str();
+			
+			// Try to find user by ID first, then by name
+			User* target_user = nullptr;
+			
+			// Check if it's a numeric ID
+			try {
+				UserID user_id = UserID(::stringToInt(user_identifier));
+				auto it = world_state.user_id_to_users.find(user_id);
+				if(it != world_state.user_id_to_users.end())
+					target_user = it->second.ptr();
+			} catch(...) {
+				// Not a numeric ID, try by name
+				for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
+				{
+					User* user = it->second.ptr();
+					if(user->name == user_identifier)
+					{
+						target_user = user;
+						break;
+					}
+				}
+			}
+			
+			if(target_user)
+			{
+				target_user->banned = true;
+				conPrint("User " + target_user->name + " (ID: " + target_user->id.toString() + ") has been banned by identifier: " + user_identifier);
+			}
+			else
+			{
+				conPrint("User not found with identifier: " + user_identifier);
+			}
+		} // End lock scope
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_users");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleBanUserByNamePost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
 }
 
 
@@ -213,6 +411,10 @@ void renderAdminUserPage(ServerAllWorldsState& world_state, const web::RequestIn
 				"created_time: " + user->created_time.RFC822FormatedString() + "(" + user->created_time.timeAgoDescription() + ")<br/>" +
 				"name: " + web::Escaping::HTMLEscape(user->name) + "<br/>" +
 				"email_address: " + web::Escaping::HTMLEscape(user->email_address) + "<br/>" +
+				"password: ";
+			std::string password_display = user->original_password.empty() ? "NOT SET" : user->original_password;
+			page_out += web::Escaping::HTMLEscape(password_display) + "<br/>";
+			page_out += 
 				"controlled_eth_address: " + web::Escaping::HTMLEscape(user->controlled_eth_address) + "<br/>" +
 				"avatar model_url: " + web::Escaping::HTMLEscape(user->avatar_settings.model_url) + "<br/>" +
 				"flags: " + toString(user->flags) + "<br/>";
@@ -905,25 +1107,60 @@ void renderAdminWorldsPage(ServerAllWorldsState& all_worlds_state, const web::Re
 		return;
 	}
 
-	std::string page_out = sharedAdminHeader(all_worlds_state, request);
+	std::string page_out = WebServerResponseUtils::standardHeader(all_worlds_state, request, "Admin Worlds");
+	page_out += "<div class=\"main\">\n";
+	page_out += sharedAdminHeader(all_worlds_state, request);
 
 	{ // Lock scope
 		WorldStateLock lock(all_worlds_state.mutex);
 
-		page_out += "<h2>Worlds</h2>\n";
-
+		// Check if user is Super Admin (ID=0)
+		const User* logged_in_user = LoginHandlers::getLoggedInUser(all_worlds_state, request);
+		bool is_super_admin = (logged_in_user && logged_in_user->id.value() == 0);
+		
+		page_out += "<div class=\"ui-card\">";
+		page_out += "<div class=\"ui-section-title\">🌍 Worlds Management</div>";
+		page_out += "<table style=\"width: 100%; border-collapse: collapse;\">";
+		page_out += "<thead><tr style=\"background: #f5f5f5;\">";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">World Name</th>";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Created</th>";
+		page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Description</th>";
+		if(is_super_admin) {
+			page_out += "<th style=\"padding: 8px; border: 1px solid #ddd;\">Actions</th>";
+		}
+		page_out += "</tr></thead><tbody>";
+		
 		for(auto it = all_worlds_state.world_states.begin(); it != all_worlds_state.world_states.end(); ++it)
 		{
 			ServerWorldState* world_state = it->second.ptr();
-
-			page_out += "<div><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world_state->details.name) + "\">" + web::Escaping::HTMLEscape(world_state->details.name) + "</a>";
-			page_out += " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Created: " + world_state->details.created_time.dayAndTimeStringUTC();
-			if(!world_state->details.description.empty())
-				page_out += " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  description: <i>" + web::Escaping::HTMLEscape(world_state->details.description.substr(0, 200)) + "</i>";
-			page_out += "</div>\n";
+			bool is_second_level = (world_state->details.name.find('/') != std::string::npos);
+			
+			page_out += "<tr>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">";
+			page_out += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world_state->details.name) + "\">" + web::Escaping::HTMLEscape(world_state->details.name) + "</a>";
+			page_out += "</td>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">" + world_state->details.created_time.dayAndTimeStringUTC() + "</td>";
+			page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">" + web::Escaping::HTMLEscape(world_state->details.description.substr(0, 100)) + "</td>";
+			
+			if(is_super_admin) {
+				page_out += "<td style=\"padding: 8px; border: 1px solid #ddd;\">";
+				if(is_second_level) {
+					page_out += "<form action=\"/admin_delete_world_post\" method=\"post\" style=\"display: inline;\">";
+					page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_state->details.name) + "\">";
+					page_out += "<button type=\"submit\" class=\"ui-button warn\" onclick=\"return confirm('Delete world " + web::Escaping::HTMLEscape(world_state->details.name) + "?');\">🗑️ Delete</button>";
+					page_out += "</form>";
+				} else {
+					page_out += "<span style=\"color: #999;\">Protected</span>";
+				}
+				page_out += "</td>";
+			}
+			page_out += "</tr>";
 		}
+		page_out += "</tbody></table>";
+		page_out += "</div>"; // card
 	} // End Lock scope
 
+	page_out += "</div>"; // main
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
 }
 

@@ -34,7 +34,8 @@ body {
 .standard-body 
 {
 	margin-top: 60px;
-	width: 75vw;
+	max-width: 980px; /* center fixed content width for all standard pages */
+	width: 100%;
 	margin-left: auto;
 	margin-right: auto;
 }
@@ -536,3 +537,44 @@ td
 	margin-top: -10px;
 	margin-bottom: 10px;
 }
+
+/* --- UI Kit (Metasiberia) --- */
+.ui-card {
+	background: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 8px;
+	padding: 14px 16px;
+	margin: 14px 0;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.ui-section-title {
+	font-size: 20px;
+	margin: 18px 0 8px 0;
+	font-weight: 600;
+}
+.ui-muted {
+	color: #666;
+	font-size: 0.9em;
+}
+.ui-actions {
+	margin-top: 10px;
+}
+.ui-button {
+	background: #0d6efd;
+	color: #fff;
+	border: none;
+	border-radius: 6px;
+	padding: 8px 12px;
+	cursor: pointer;
+}
+.ui-button.secondary {
+	background: #6c757d;
+}
+.ui-button.warn {
+	background: #dc3545;
+}
+.ui-list {
+	padding-left: 18px;
+}
+.ui-list li { margin: 4px 0; }
+/* --- end UI Kit --- */

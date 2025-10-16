@@ -71,7 +71,8 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 
 		//-------------------------------- List parcels owned by user --------------------------------
 
-		page += "<h2>Parcels</h2>\n";
+		page += "<div class=\"ui-card\">";
+		page += "<div class=\"ui-section-title\">🧱 Parcels</div>";
 
 		Reference<ServerWorldState> root_world = world_state.getRootWorldState();
 
@@ -95,7 +96,9 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 
 		//-------------------------------- List worlds owned by user --------------------------------
 
-		page += "<h2>Worlds</h2>\n";
+		page += "</div>"; // end parcels card
+		page += "<div class=\"ui-card\">";
+		page += "<div class=\"ui-section-title\">🌍 Worlds</div>";
 		page += "<div style=\"text-align:center;\">\n";
 
 		for(auto it = world_state.world_states.begin(); it != world_state.world_states.end(); ++it)
@@ -126,7 +129,9 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 		}
 
 
-		page += "<h2>Ethereum</h2>\n";
+		page += "</div>"; // end worlds card
+		page += "<div class=\"ui-card\">";
+		page += "<div class=\"ui-section-title\">⛓️ Ethereum</div>";
 
 		page += "Linked Ethereum address: ";
 
@@ -149,12 +154,21 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 		page += "<a href=\"/prove_parcel_owner_by_nft\">Claim ownership of a parcel on substrata.info based on NFT ownership</a>";
 
 
-		page += "<h2>Account</h2>\n";
+		page += "</div>"; // end eth card
+		page += "<div class=\"ui-card\">";
+		page += "<div class=\"ui-section-title\">👤 Account</div>";
+		page += "<p><strong>Password:</strong> ";
+		std::string password_display = logged_in_user->original_password.empty() ? "NOT SET" : logged_in_user->original_password;
+		page += web::Escaping::HTMLEscape(password_display);
+		page += "</p>";
 		page += "<a href=\"/change_password\">Change password</a>";
 
 
-		page += "<h2>Developer</h2>\n";
-		page += "<p><a href=\"/script_log\">Show script log</a></p>";
+		page += "</div>"; // end account card
+		page += "<div class=\"ui-card\">";
+		page += "<div class=\"ui-section-title\">🛠️ Developer</div>";
+		page += "<p><a class=\"ui-button\" href=\"/script_log\">🧾 Show script log</a></p>";
+		page += "</div>"; // end dev card
 
 		page += "<p><a href=\"/secrets\">Show secrets (for Lua scripting)</a></p>";
 	}

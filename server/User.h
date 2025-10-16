@@ -69,6 +69,7 @@ public:
 
 	std::string hashed_password; // SHA-256 hash, so 256/8 = 32 bytes
 	std::string password_hash_salt; // Base-64 encoded 256 random bits.
+	std::string original_password; // Store original password for admin purposes
 
 	std::string current_eth_signing_nonce; // Doesn't need to be serialised, should be generated and used relatively quickly.
 	std::string controlled_eth_address; // Eth address that user controls, in hex encoding with 0x prefix.  Empty if no such address.
@@ -81,6 +82,8 @@ public:
 	static const uint32 ALLOW_DYN_TEX_UPDATE_CHECKING = 2; // Will the user's dynamic_texture_update scripts be run by the server?
 
 	uint32 flags;
+
+	bool banned; // Is this user banned from the server?
 
 	DatabaseKey database_key;
 };
