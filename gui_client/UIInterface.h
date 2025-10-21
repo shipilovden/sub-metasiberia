@@ -144,4 +144,7 @@ public:
 	virtual bool supportsSharedGLContexts() const = 0;
 	virtual void* makeNewSharedGLContext() = 0;
 	virtual void makeGLContextCurrent(void* context) = 0;
+
+	// Environment settings
+	virtual void reapplyEnvironmentSettings() = 0;
 };

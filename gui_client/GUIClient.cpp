@@ -8206,6 +8206,12 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->server_has_basisu_terrain_detail_maps = BitUtils::isBitSet(this->server_capabilities, Protocol::TERRAIN_DETAIL_MAPS_BASISU_SUPPORT);
 			this->server_has_optimised_meshes           = BitUtils::isBitSet(this->server_capabilities, Protocol::OPTIMISED_MESH_SUPPORT);
 
+			// Reapply environment settings (including northern lights) to the new scene
+			if(ui_interface)
+			{
+				ui_interface->reapplyEnvironmentSettings();
+			}
+
 			// Try and log in automatically if we have saved credentials for this domain, and auto_login is true.
 			if(settings->getBoolValue("LoginDialog/auto_login", /*default=*/true))
 			{

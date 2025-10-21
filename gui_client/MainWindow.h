@@ -292,6 +292,9 @@ public:
 	virtual bool supportsSharedGLContexts() const override;
 	virtual void* makeNewSharedGLContext()  override;
 	virtual void makeGLContextCurrent(void* context) override;
+
+	// Environment settings
+	virtual void reapplyEnvironmentSettings() override;
 	//------------------------------------------------- End UIInterface -----------------------------------------------------------
 
 public:

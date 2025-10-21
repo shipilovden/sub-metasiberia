@@ -561,3 +561,8 @@ void SDLUIInterface::makeGLContextCurrent(void* context)
 {
 	assert(0);
 }
+
+void SDLUIInterface::reapplyEnvironmentSettings()
+{
+	// TODO: implement - SDL version doesn't have environment settings
+}

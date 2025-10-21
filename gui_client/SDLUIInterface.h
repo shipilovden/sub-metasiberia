@@ -128,6 +128,9 @@ public:
 	virtual void* makeNewSharedGLContext() override;
 	virtual void makeGLContextCurrent(void* context) override;
 
+	// Environment settings
+	virtual void reapplyEnvironmentSettings() override;
+
 
 	SDL_Window* window;
 	SDL_GLContext gl_context;

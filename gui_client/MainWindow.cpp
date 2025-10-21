@@ -4749,4 +4749,11 @@ int main(int argc, char *argv[])
 }
 
 
+void MainWindow::reapplyEnvironmentSettings()
+{
+	// Reapply environment settings (including northern lights) to the new scene
+	environmentSettingChangedSlot();
+}
+
+
 #endif // End #ifndef FUZZING
