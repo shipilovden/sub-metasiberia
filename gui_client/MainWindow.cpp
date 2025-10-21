@@ -337,24 +337,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	ui->environmentOptionsWidget->init(settings);
 	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
 	
-	// Initialize northern lights setting with safety checks
-	if(ui->glWidget->opengl_engine.nonNull())
-	{
-		if(ui->glWidget->opengl_engine->getCurrentScene())
-		{
-			const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
-			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
-			printf("Northern lights initialized at startup: %s\n", northern_lights_enabled ? "true" : "false");
-		}
-		else
-		{
-			printf("WARNING: getCurrentScene() returned null during startup - northern lights not initialized!\n");
-		}
-	}
-	else
-	{
-		printf("WARNING: opengl_engine is null during startup - northern lights not initialized!\n");
-	}
+	// Northern lights initialization moved to afterGLInitInitialise() to ensure OpenGL engine is ready
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->chatMessageLineEdit, SIGNAL(returnPressed()), this, SLOT(sendChatMessageSlot()));
@@ -669,6 +652,9 @@ void MainWindow::afterGLInitInitialise()
 		CPU_render_stats_widget = new RenderStatsWidget(opengl_engine, gui_client.gl_ui, /*widget index=*/0);
 		GPU_render_stats_widget = new RenderStatsWidget(opengl_engine, gui_client.gl_ui, /*widget index=*/1);
 	}
+	
+	// Initialize environment settings (northern lights, etc.) after OpenGL engine is ready
+	environmentSettingChangedSlot();
 }
 
 
