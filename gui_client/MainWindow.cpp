@@ -337,11 +337,23 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	ui->environmentOptionsWidget->init(settings);
 	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
 	
-	// Initialize northern lights setting
-	if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene())
+	// Initialize northern lights setting with safety checks
+	if(ui->glWidget->opengl_engine.nonNull())
 	{
-		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
-		ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+		if(ui->glWidget->opengl_engine->getCurrentScene())
+		{
+			const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+			printf("Northern lights initialized at startup: %s\n", northern_lights_enabled ? "true" : "false");
+		}
+		else
+		{
+			printf("WARNING: getCurrentScene() returned null during startup - northern lights not initialized!\n");
+		}
+	}
+	else
+	{
+		printf("WARNING: opengl_engine is null during startup - northern lights not initialized!\n");
 	}
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
@@ -374,7 +386,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	connect(user_details, SIGNAL(logOutClicked()), this, SLOT(on_actionLogOut_triggered()));
 	connect(user_details, SIGNAL(signUpClicked()), this, SLOT(on_actionSignUp_triggered()));
 	connect(url_widget, SIGNAL(URLChanged()), this, SLOT(URLChangedSlot()));
-	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
+	// Removed duplicate signal connection - already connected at line 338
 
 
 #if !defined(_WIN32)
@@ -3479,15 +3491,25 @@ void MainWindow::environmentSettingChangedSlot()
 
 		ui->glWidget->opengl_engine->setSunDir(sundir);
 		
-		// Update northern lights setting
+		// Update northern lights setting with additional safety checks
 		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		printf("Northern lights checkbox state: %s\n", northern_lights_enabled ? "true" : "false");
+		
 		if(ui->glWidget->opengl_engine->getCurrentScene())
 		{
 			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
 			// Debug: print the state
-			printf("Northern lights setting changed: %s\n", northern_lights_enabled ? "true" : "false");
-			printf("Scene draw_aurora: %s\n", ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
+			printf("Northern lights setting applied: %s\n", northern_lights_enabled ? "true" : "false");
+			printf("Scene draw_aurora after setting: %s\n", ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
 		}
+		else
+		{
+			printf("WARNING: getCurrentScene() returned null - northern lights setting not applied!\n");
+		}
+	}
+	else
+	{
+		printf("WARNING: opengl_engine is null - northern lights setting not applied!\n");
 	}
 }
 
