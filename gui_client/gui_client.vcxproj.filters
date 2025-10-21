@@ -1684,151 +1684,151 @@
     <ClCompile Include="C:\programming\glare-core\freetype\builds\windows\ftdebug.c">
       <Filter>freetype</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lapi.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lapi.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\laux.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\laux.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbaselib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbaselib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbitlib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbitlib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuffer.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbuffer.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuflib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbuflib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuiltins.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbuiltins.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lcorolib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lcorolib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldblib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ldblib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldebug.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ldebug.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldo.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ldo.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lfunc.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lfunc.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lgc.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lgc.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lgcdebug.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lgcdebug.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\linit.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\linit.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lmathlib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lmathlib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lmem.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lmem.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lnumprint.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lnumprint.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lobject.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lobject.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\loslib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\loslib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lperf.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lperf.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstate.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lstate.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstring.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lstring.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstrlib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lstrlib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltable.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ltable.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltablib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ltablib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltm.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ltm.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\ludata.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ludata.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lutf8lib.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lutf8lib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmexecute.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lvmexecute.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmload.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lvmload.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmutils.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lvmutils.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\BuiltinFolding.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\BuiltinFolding.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Builtins.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\Builtins.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\BytecodeBuilder.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\BytecodeBuilder.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Compiler.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\Compiler.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\ConstantFolding.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\ConstantFolding.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\CostModel.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\CostModel.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\lcode.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\lcode.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\TableShape.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\TableShape.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Types.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\Types.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\ValueTracking.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\ValueTracking.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Ast.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Ast.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Confusables.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Confusables.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Lexer.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Lexer.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Location.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Location.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Parser.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Parser.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Ast\src\StringUtils.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\StringUtils.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\luau\0.627\Ast\src\TimeTrace.cpp">
+    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\TimeTrace.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
     <ClCompile Include="C:\programming\glare-core\lua\LuaTests.cpp">
@@ -3828,124 +3828,124 @@
     <ClInclude Include="C:\programming\glare-core\ui\UIEvents.h">
       <Filter>ui</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lapi.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lapi.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbuffer.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lbuffer.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbuiltins.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lbuiltins.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbytecode.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lbytecode.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lcommon.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lcommon.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\ldebug.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ldebug.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\ldo.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ldo.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lfunc.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lfunc.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lgc.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lgc.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lmem.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lmem.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lnumutils.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lnumutils.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lobject.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lobject.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lstate.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lstate.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lstring.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lstring.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\ltable.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ltable.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\ltm.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ltm.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\ludata.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ludata.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\src\lvm.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lvm.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\include\lua.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\include\lua.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\include\luaconf.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\include\luaconf.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\VM\include\lualib.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\include\lualib.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\BuiltinFolding.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\BuiltinFolding.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\Builtins.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\Builtins.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\ConstantFolding.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\ConstantFolding.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\CostModel.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\CostModel.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\TableShape.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\TableShape.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\Types.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\Types.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\ValueTracking.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\ValueTracking.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\luacode.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\include\luacode.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\Luau\BytecodeBuilder.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\include\Luau\BytecodeBuilder.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\Luau\Compiler.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\include\Luau\Compiler.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Ast.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Ast.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Confusables.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Confusables.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Lexer.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Lexer.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Location.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Location.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\ParseOptions.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\ParseOptions.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Parser.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Parser.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\ParseResult.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\ParseResult.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\StringUtils.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\StringUtils.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\TimeTrace.h">
+    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\TimeTrace.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
     <ClInclude Include="C:\programming\glare-core\lua\LuaTests.h">

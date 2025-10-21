@@ -738,7 +738,8 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 				{
 					WorldObject* ob = res.getValue().ptr();
 #if GUI_CLIENT
-					if(!ob->is_selected) // Don't update the selected object - we will consider the local client control authoritative while the object is selected.
+					// Don't update the selected object if it has local changes - we will consider the local client control authoritative while the object is selected and has local changes.
+					if(!ob->is_selected || !ob->from_local_other_dirty)
 #endif
 					{
 						readWorldObjectFromNetworkStreamGivenUID(msg_buffer, *ob);

@@ -1984,6 +1984,10 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 	// conPrint("loadModelForObject(): UID: " + ob->uid.toString());
 	const Vec4f campos = cam_controller.getPosition().toVec4fPoint();
 
+	// Don't reload model for objects with local changes to prevent overwriting user modifications
+	if(ob->from_local_other_dirty && ob->opengl_engine_ob.nonNull())
+		return;
+
 	// Check object is in proximity.  Otherwise we might load objects outside of proximity, for example large objects transitioning from LOD level 1 to LOD level 2 or vice-versa.
 	if(!ob->in_proximity)
 		return;
@@ -2517,6 +2521,10 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 void GUIClient::loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, 
 	int voxel_subsample_factor, WorldStateLock& world_state_lock)
 {
+	// Don't reload model for objects with local changes to prevent overwriting user modifications
+	if(ob->from_local_other_dirty && ob->opengl_engine_ob.nonNull())
+		return;
+		
 	removeAndDeleteGLObjectsForOb(*ob); // Remove any existing OpenGL model
 
 	// Remove previous physics object. If this is a dynamic or kinematic object, don't delete old object though, unless it's a placeholder.
@@ -6359,7 +6367,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 						if(!ob_just_created_or_initially_sent) // Don't reload materials when we just created the object locally.
 						{
 							// Update transform for object and object materials in OpenGL engine
-							if(ob->opengl_engine_ob.nonNull() && (ob != selected_ob.getPointer())) // Don't update the selected object based on network messages, we will consider the local transform for it authoritative.
+							if(ob->opengl_engine_ob.nonNull() && (ob != selected_ob.getPointer()) && !ob->from_local_other_dirty) // Don't update the selected object or objects with local changes based on network messages, we will consider the local transform for it authoritative.
 							{
 								GLObjectRef opengl_ob = ob->opengl_engine_ob;
 
@@ -12720,7 +12728,15 @@ void GUIClient::mousePressed(MouseEvent& e)
 
 						if(voxels_changed)
 						{
+							// Mark object as locally modified to prevent server updates from overwriting local changes
+							this->selected_ob->from_local_other_dirty = true;
+							this->world_state->dirty_from_local_objects.insert(this->selected_ob);
+							
 							updateObjectModelForChangedDecompressedVoxels(this->selected_ob);
+							
+							// Ensure object remains marked as locally modified after model update
+							this->selected_ob->from_local_other_dirty = true;
+							this->world_state->dirty_from_local_objects.insert(this->selected_ob);
 						}
 					}
 				}
@@ -12872,7 +12888,7 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 		physics_ob->scale = useScaleForWorldOb(ob->scale);
 
 		ob->opengl_engine_ob = gl_ob;
-		//opengl_engine->addObjectAndLoadTexturesImmediately(gl_ob);
+		opengl_engine->addObject(gl_ob);
 		assignLoadedOpenGLTexturesToMats(ob.ptr()); // TEMP TEST
 
 		// Update in Indigo view

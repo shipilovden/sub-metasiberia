@@ -222,19 +222,16 @@ INDIGO_SUPPORT:BOOL=OFF
 PERFORMANCEAPI_ENABLED:BOOL=OFF
 
 //Path to a program.
-"PROGRAM_FOUND_C:/programming/Qt/5.15.16-vs2022-64/bin/moc":FILEPATH=C:/programming/Qt/5.15.16-vs2022-64/bin/moc.exe
+"PROGRAM_FOUND_C:/programming/glare-core/Qt/5.15.16-vs2022-64/bin/moc":FILEPATH=C:/programming/glare-core/qt/5.15.16-vs2022-64/bin/moc.exe
 
 //Path to a program.
 PROGRAM_FOUND_ruby:FILEPATH=C:/Ruby34-x64/bin/ruby.exe
 
 //SDL build directory
-SDL_BUILD_DIR:FILEPATH=C:/programming/SDL/sdl_build
+SDL_BUILD_DIR:FILEPATH=C:/programming/glare-core/SDL/sdl_build
 
 //Path to substrata-private repo.
 SUBSTRATA_PRIVATE_REPO_PATH:PATH=
-
-//No help, variable specified on the command line.
-SUBSTRATA_VERSION:UNINITIALIZED=1.0.0
 
 //Target ARM64 architecture.  Only used on Mac currently.
 TARGET_ARM64:BOOL=OFF
