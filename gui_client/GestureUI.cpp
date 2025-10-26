@@ -123,7 +123,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Вызвать велосипед";
-			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon bike", Vec2f(0), args);
+			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, "Вызвать велосипед", Vec2f(0), args);
 			summon_bike_button->setVisible(vehicle_buttons_visible);
 			summon_bike_button->handler = this;
 			gl_ui->addWidget(summon_bike_button);
@@ -131,7 +131,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Вызвать машину";
-			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon car", Vec2f(0), args);
+			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, "Вызвать машину", Vec2f(0), args);
 			summon_car_button->setVisible(vehicle_buttons_visible);
 			summon_car_button->handler = this;
 			gl_ui->addWidget(summon_car_button);
@@ -139,7 +139,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Вызвать лодку";
-			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon boat", Vec2f(0), args);
+			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, "Вызвать лодку", Vec2f(0), args);
 			summon_boat_button->setVisible(vehicle_buttons_visible);
 			summon_boat_button->handler = this;
 			gl_ui->addWidget(summon_boat_button);
@@ -147,7 +147,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Вызвать ховеркар";
-			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon hovercar", Vec2f(0), args);
+			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, "Вызвать ховеркар", Vec2f(0), args);
 			summon_hovercar_button->setVisible(vehicle_buttons_visible);
 			summon_hovercar_button->handler = this;
 			gl_ui->addWidget(summon_hovercar_button);

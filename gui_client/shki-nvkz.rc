@@ -1,4 +1,4 @@
 #include <windows.h>
 
 // Icon resource for shki-nvkz custom build
-IDI_ICON1 ICON "C:\\programming\\substrata\\icons\\shki-nvkz.ico"
+IDI_ICON1 ICON "../../icons/shki-nvkz.ico"
