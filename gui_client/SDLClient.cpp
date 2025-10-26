@@ -40,6 +40,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <GL/gl3w.h>
 #include <SDL_opengl.h>
 #include <SDL.h>
+#include <SDL_syswm.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
 #include <string>
@@ -372,6 +373,31 @@ int main(int argc, char** argv)
 		win = SDL_CreateWindow(window_name, 600, 100, primary_W, primary_H, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 		if(win == nullptr)
 			throw glare::Exception("SDL_CreateWindow Error: " + std::string(SDL_GetError()));
+
+#ifdef CUSTOM_BUILD
+		// Set custom icon for shki-nvkz build using Windows API
+		SDL_SysWMinfo wmInfo;
+		SDL_VERSION(&wmInfo.version);
+		if(SDL_GetWindowWMInfo(win, &wmInfo)) {
+			HWND hwnd = wmInfo.info.win.window;
+			if(hwnd != NULL) {
+				// Try to load the icon from the executable's resources first
+				HICON hIcon = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(1), IMAGE_ICON, 0, 0, LR_DEFAULTCOLOR);
+				if(hIcon == NULL) {
+					// If that fails, try to load from file
+					hIcon = (HICON)LoadImage(NULL, L"C:\\programming\\substrata\\icons\\shki-nvkz.ico", IMAGE_ICON, 0, 0, LR_LOADFROMFILE);
+				}
+				if(hIcon != NULL) {
+					SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+					SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+					// Don't destroy the icon if it came from resources
+					if(GetModuleHandle(NULL) == NULL) {
+						DestroyIcon(hIcon);
+					}
+				}
+			}
+		}
+#endif
 
 		cur_canvas_css_W = primary_W;
 		cur_canvas_css_H = primary_H;
