@@ -1121,6 +1121,11 @@ ${settings}
 
 add_definitions(-DGUI_CLIENT=1)
 
+# Add CUSTOM_BUILD definition if CUSTOM_BUILD is ON
+if(CUSTOM_BUILD)
+	add_definitions(-DCUSTOM_BUILD=1)
+endif()
+
 include(../cmake/shared_target_settings.cmake)
 
 if(USE_SDL)

@@ -33,6 +33,11 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 	opengl_engine = opengl_engine_;
 	gui_client = gui_client_;
 	gl_ui = gl_ui_;
+
+#ifdef CUSTOM_BUILD
+	conPrint("ChatUI::create() - CUSTOM_BUILD detected");
+#endif
+
 #if EMSCRIPTEN
 	const bool default_chat_expanded = false; // On mobile screens, chat can cover most of the viewport, so make collapsed by default.
 #else
@@ -102,10 +107,19 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 
 		setWidgetVisibilityForExpanded();
 		updateWidgetTransforms();
+
+#ifdef CUSTOM_BUILD
+		conPrint("ChatUI::create() completed successfully");
+		conPrint("isInitialisedFully(): " + toString(isInitialisedFully()));
+		conPrint("expanded: " + toString(expanded));
+#endif
 	}
 	catch(glare::Exception& e)
 	{
 		conPrint("Warning: Excep while creating ChatUI: " + e.what());
+#ifdef CUSTOM_BUILD
+		conPrint("ChatUI::create() failed with exception");
+#endif
 	}
 }
 
