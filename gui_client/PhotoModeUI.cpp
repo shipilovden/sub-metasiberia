@@ -88,7 +88,7 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "The standard camera mode when not in photo mode.";
+		args.tooltip = "Стандартный режим камеры вне режима фото.";
 		standard_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "standard camera", Vec2f(0), args);
 		standard_cam_button->handler = this;
 		gl_ui->addWidget(standard_cam_button);
@@ -97,7 +97,7 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera that looks back at the avatar's face.  The avatar will look towards the camera.";
+		args.tooltip = "Камера, смотрящая на лицо аватара. Аватар будет смотреть на камеру.";
 		selfie_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "selfie camera", Vec2f(0), args);
 		selfie_cam_button->handler = this;
 		gl_ui->addWidget(selfie_cam_button);
@@ -106,28 +106,28 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera with a fixed angle relative to the player avatar or vehicle.";
+		args.tooltip = "Камера с фиксированным углом относительно аватара игрока или транспорта.";
 		fixed_angle_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "fixed angle camera", Vec2f(0), args);
 		fixed_angle_cam_button->handler = this;
 		gl_ui->addWidget(fixed_angle_cam_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "The free camera can move anywhere and look in any direction";
+		args.tooltip = "Свободная камера может двигаться везде и смотреть в любом направлении";
 		free_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "free camera", Vec2f(0), args);
 		free_cam_button->handler = this;
 		gl_ui->addWidget(free_cam_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera with a fixed positon that looks at the avatar";
+		args.tooltip = "Камера с фиксированной позицией, смотрящая на аватара";
 		tracking_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "tracking camera", Vec2f(0), args);
 		tracking_cam_button->handler = this;
 		gl_ui->addWidget(tracking_cam_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Reset photo mode camera settings";
+		args.tooltip = "Сбросить настройки камеры режима фото";
 		reset_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Reset", Vec2f(0), args);
 		reset_button->handler = this;
 		gl_ui->addWidget(reset_button);
@@ -137,7 +137,7 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 		GLUITextView::CreateArgs text_view_args;
 		text_view_args.background_alpha = 0;
 		text_view_args.text_colour = Colour3f(0.9f);
-		text_view_args.tooltip = "Autofocus";
+		text_view_args.tooltip = "Автофокус";
 
 		autofocus_label = new GLUITextView(*gl_ui, opengl_engine, "Autofocus", Vec2f(0), text_view_args);
 		gl_ui->addWidget(autofocus_label);
@@ -146,21 +146,21 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Disable autofocus.  Focus Distance slider is used instead.";
+		args.tooltip = "Отключить автофокус. Используется слайдер расстояния фокуса.";
 		autofocus_off_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Off", Vec2f(0), args);
 		autofocus_off_button->handler = this;
 		gl_ui->addWidget(autofocus_off_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Automatically focus on the nearest avatar eye.";
+		args.tooltip = "Автоматически фокусироваться на ближайшем глазе аватара.";
 		autofocus_eye_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Eye", Vec2f(0), args);
 		autofocus_eye_button->handler = this;
 		gl_ui->addWidget(autofocus_eye_button);
 	}
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Take photo";
+		args.tooltip = "Сделать фото";
 		take_screenshot_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Selfie.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
 		//take_screenshot_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/minimap_icon.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
 		take_screenshot_button->handler = this;
@@ -168,14 +168,14 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Show photos folder";
+		args.tooltip = "Показать папку с фото";
 		show_screenshots_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Show photos", Vec2f(0), args);
 		show_screenshots_button->handler = this;
 		gl_ui->addWidget(show_screenshots_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Upload photo to the website";
+		args.tooltip = "Загрузить фото на сайт";
 		upload_photo_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Upload photo", Vec2f(0), args);
 		upload_photo_button->handler = this;
 		gl_ui->addWidget(upload_photo_button);

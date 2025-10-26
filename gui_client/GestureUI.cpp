@@ -97,7 +97,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	// Create left and right tab buttons
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = "View gestures";
+		args.tooltip = "Показать жесты";
 		expand_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Waving 1.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
 		expand_button->handler = this;
 		gl_ui->addWidget(expand_button);
@@ -105,7 +105,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Hide gestures";
+		args.tooltip = "Скрыть жесты";
 		collapse_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/right_tab.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
 		collapse_button->handler = this;
 		gl_ui->addWidget(collapse_button);
@@ -114,7 +114,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{
 		{
 			GLUIButton::CreateArgs args;
-			args.tooltip = "Summon vehicle";
+			args.tooltip = "Вызвать транспорт";
 			vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/bike.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
 			vehicle_button->handler = this;
 			gl_ui->addWidget(vehicle_button);
@@ -122,7 +122,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon bike";
+			args.tooltip = "Вызвать велосипед";
 			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon bike", Vec2f(0), args);
 			summon_bike_button->setVisible(vehicle_buttons_visible);
 			summon_bike_button->handler = this;
@@ -130,7 +130,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon car";
+			args.tooltip = "Вызвать машину";
 			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon car", Vec2f(0), args);
 			summon_car_button->setVisible(vehicle_buttons_visible);
 			summon_car_button->handler = this;
@@ -138,7 +138,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon boat";
+			args.tooltip = "Вызвать лодку";
 			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon boat", Vec2f(0), args);
 			summon_boat_button->setVisible(vehicle_buttons_visible);
 			summon_boat_button->handler = this;
@@ -146,7 +146,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon hovercar";
+			args.tooltip = "Вызвать ховеркар";
 			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon hovercar", Vec2f(0), args);
 			summon_hovercar_button->setVisible(vehicle_buttons_visible);
 			summon_hovercar_button->handler = this;
@@ -155,7 +155,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 
 		{
 			GLUIButton::CreateArgs args;
-			args.tooltip = "Hide vehicles";
+			args.tooltip = "Скрыть транспорт";
 			collapse_vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/down_tab.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
 			collapse_vehicle_button->handler = this;
 			collapse_vehicle_button->setVisible(vehicle_buttons_visible);
@@ -166,7 +166,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Photo mode";
+		args.tooltip = "Режим фото";
 		photo_mode_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Selfie.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
 		photo_mode_button->toggleable = true;
 		photo_mode_button->handler = this;
@@ -175,7 +175,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	
 	{	
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Enable microphone for voice chat";
+		args.tooltip = "Включить микрофон для голосового чата";
 		microphone_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/microphone.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
 		microphone_button->toggleable = true;
 		microphone_button->handler = this;
@@ -430,9 +430,9 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				gui_client->setMicForVoiceChatEnabled(microphone_button->toggled);
 
 				if(microphone_button->toggled)
-					microphone_button->tooltip = "Disable microphone for voice chat";
+					microphone_button->tooltip = "Отключить микрофон для голосового чата";
 				else
-					microphone_button->tooltip = "Enable microphone for voice chat";
+					microphone_button->tooltip = "Включить микрофон для голосового чата";
 			}
 		}
 

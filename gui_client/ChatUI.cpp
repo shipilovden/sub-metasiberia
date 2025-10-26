@@ -84,7 +84,7 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 
 		{
 			GLUIButton::CreateArgs args;
-			args.tooltip = "Hide chat";
+			args.tooltip = "Скрыть чат";
 			//args.button_colour = Colour3f(0.2f);
 			//args.mouseover_button_colour = Colour3f(0.4f);
 			collapse_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/left_tab.png", /*botleft=*/Vec2f(0), /*dims=*/Vec2f(0.1f), args);
@@ -94,7 +94,7 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 
 		{
 			GLUIButton::CreateArgs args;
-			args.tooltip = "Show chat";
+			args.tooltip = "Показать чат";
 			expand_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/expand_chat_icon.png", /*botleft=*/Vec2f(0), /*dims=*/Vec2f(0.1f), args);
 			expand_button->handler = this;
 			expand_button->setVisible(false);

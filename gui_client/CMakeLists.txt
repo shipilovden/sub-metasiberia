@@ -1124,6 +1124,12 @@ add_definitions(-DGUI_CLIENT=1)
 # Add CUSTOM_BUILD definition if CUSTOM_BUILD is ON
 if(CUSTOM_BUILD)
 	add_definitions(-DCUSTOM_BUILD=1)
+	# Set custom output name and icon for shki-nvkz build
+	set_target_properties(${CURRENT_TARGET} PROPERTIES OUTPUT_NAME "shki-nvkz")
+	# Add custom icon resource file
+	SET(gui_client ${gui_client}
+		${CMAKE_CURRENT_SOURCE_DIR}/shki-nvkz.rc
+	)
 endif()
 
 include(../cmake/shared_target_settings.cmake)
