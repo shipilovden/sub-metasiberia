@@ -1129,8 +1129,8 @@ if(CUSTOM_BUILD)
 	# Set icon for the executable using CMake properties
 	set_target_properties(${CURRENT_TARGET} PROPERTIES VS_DPI_AWARE "PerMonitor")
 	set_target_properties(${CURRENT_TARGET} PROPERTIES WIN32_EXECUTABLE TRUE)
-	# Set the icon using VS_ICON property
-	set_target_properties(${CURRENT_TARGET} PROPERTIES VS_ICON "${CMAKE_CURRENT_SOURCE_DIR}/shki-nvkz.ico")
+	# Set the icon using VS_ICON property with absolute path
+	set_target_properties(${CURRENT_TARGET} PROPERTIES VS_ICON "C:/programming/substrata/icons/shki-nvkz.ico")
 endif()
 
 include(../cmake/shared_target_settings.cmake)
