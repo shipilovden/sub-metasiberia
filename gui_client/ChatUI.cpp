@@ -15,7 +15,7 @@ Copyright Glare Technologies Limited 2024 -
 
 ChatUI::ChatUI()
 :	gui_client(NULL),
-	expanded(true)
+	expanded(false)
 {}
 
 
@@ -33,10 +33,15 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 	opengl_engine = opengl_engine_;
 	gui_client = gui_client_;
 	gl_ui = gl_ui_;
+
+#ifdef CUSTOM_BUILD
+	conPrint("ChatUI::create() - CUSTOM_BUILD detected");
+#endif
+
 #if EMSCRIPTEN
 	const bool default_chat_expanded = false; // On mobile screens, chat can cover most of the viewport, so make collapsed by default.
 #else
-	const bool default_chat_expanded = true;
+	const bool default_chat_expanded = false;
 #endif
 	expanded = gui_client_->getSettingsStore()->getBoolValue("setting/show_chat", /*default_value=*/default_chat_expanded);
 	last_background_top_right_pos = Vec2f(0.f);
@@ -79,7 +84,7 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 
 		{
 			GLUIButton::CreateArgs args;
-			args.tooltip = "Hide chat";
+			args.tooltip = "Скрыть чат";
 			//args.button_colour = Colour3f(0.2f);
 			//args.mouseover_button_colour = Colour3f(0.4f);
 			collapse_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/left_tab.png", /*botleft=*/Vec2f(0), /*dims=*/Vec2f(0.1f), args);
@@ -89,7 +94,7 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 
 		{
 			GLUIButton::CreateArgs args;
-			args.tooltip = "Show chat";
+			args.tooltip = "Показать чат";
 			expand_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/expand_chat_icon.png", /*botleft=*/Vec2f(0), /*dims=*/Vec2f(0.1f), args);
 			expand_button->handler = this;
 			expand_button->setVisible(false);
@@ -102,10 +107,19 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 
 		setWidgetVisibilityForExpanded();
 		updateWidgetTransforms();
+
+#ifdef CUSTOM_BUILD
+		conPrint("ChatUI::create() completed successfully");
+		conPrint("isInitialisedFully(): " + toString(isInitialisedFully()));
+		conPrint("expanded: " + toString(expanded));
+#endif
 	}
 	catch(glare::Exception& e)
 	{
 		conPrint("Warning: Excep while creating ChatUI: " + e.what());
+#ifdef CUSTOM_BUILD
+		conPrint("ChatUI::create() failed with exception");
+#endif
 	}
 }
 
@@ -159,8 +173,8 @@ bool ChatUI::isInitialisedFully()
 
 float ChatUI::computeWidgetWidth()
 {
-	// Upper bound so that there is always enough room to show the minimise button to the right of the chat window.
-	return myClamp(gl_ui->getUIWidthForDevIndepPixelWidth(300.f), /*lower bound=*/0.4f, /*upper bound=*/1.6f);
+	// Fixed width for compact chat
+	return gl_ui->getUIWidthForDevIndepPixelWidth(300.f);
 }
 
 
@@ -314,8 +328,7 @@ void ChatUI::updateWidgetTransforms()
 	const float z = 0.1f;
 	const float msgs_background_ob_y = chat_line_edit_y + gl_ui->getUIWidthForDevIndepPixelWidth(50);
 	Vec2f background_pos(-1.f + gl_ui->getUIWidthForDevIndepPixelWidth(20), msgs_background_ob_y);
-	//background_overlay_ob->ob_to_world_matrix = Matrix4f::translationMatrix(background_pos.x, background_pos.y * y_scale, z) * Matrix4f::scaleMatrix(background_w, background_h * y_scale, 1);
-	background_overlay_ob->ob_to_world_matrix = Matrix4f::translationMatrix(background_pos.x, background_pos.y * y_scale, z) * Matrix4f::scaleMatrix(1, y_scale, 1);
+	background_overlay_ob->ob_to_world_matrix = Matrix4f::translationMatrix(background_pos.x, background_pos.y * y_scale, z) * Matrix4f::scaleMatrix(background_w, background_h * y_scale, 1);
 
 	this->last_background_top_right_pos = background_pos + Vec2f(background_w, background_h);
 	

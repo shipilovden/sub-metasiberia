@@ -458,6 +458,7 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	hud_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
 
 	chat_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
+	chat_ui.setVisible(true);
 
 	photo_mode_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui, this->settings);
 	photo_mode_ui.setVisible(false);

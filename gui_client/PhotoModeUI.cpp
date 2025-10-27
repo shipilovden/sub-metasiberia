@@ -88,8 +88,8 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "The standard camera mode when not in photo mode.";
-		standard_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "standard camera", Vec2f(0), args);
+		args.tooltip = "Стандартный режим камеры вне режима фото.";
+		standard_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "стандартная камера", Vec2f(0), args);
 		standard_cam_button->handler = this;
 		gl_ui->addWidget(standard_cam_button);
 
@@ -97,8 +97,8 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera that looks back at the avatar's face.  The avatar will look towards the camera.";
-		selfie_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "selfie camera", Vec2f(0), args);
+		args.tooltip = "Камера, смотрящая на лицо аватара. Аватар будет смотреть на камеру.";
+		selfie_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "селфи камера", Vec2f(0), args);
 		selfie_cam_button->handler = this;
 		gl_ui->addWidget(selfie_cam_button);
 
@@ -106,29 +106,29 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera with a fixed angle relative to the player avatar or vehicle.";
-		fixed_angle_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "fixed angle camera", Vec2f(0), args);
+		args.tooltip = "Камера с фиксированным углом относительно аватара игрока или транспорта.";
+		fixed_angle_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "камера с фиксированным углом", Vec2f(0), args);
 		fixed_angle_cam_button->handler = this;
 		gl_ui->addWidget(fixed_angle_cam_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "The free camera can move anywhere and look in any direction";
-		free_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "free camera", Vec2f(0), args);
+		args.tooltip = "Свободная камера может двигаться везде и смотреть в любом направлении";
+		free_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "свободная камера", Vec2f(0), args);
 		free_cam_button->handler = this;
 		gl_ui->addWidget(free_cam_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera with a fixed positon that looks at the avatar";
-		tracking_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "tracking camera", Vec2f(0), args);
+		args.tooltip = "Камера с фиксированной позицией, смотрящая на аватара";
+		tracking_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "отслеживающая камера", Vec2f(0), args);
 		tracking_cam_button->handler = this;
 		gl_ui->addWidget(tracking_cam_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Reset photo mode camera settings";
-		reset_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Reset", Vec2f(0), args);
+		args.tooltip = "Сбросить настройки камеры режима фото";
+		reset_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Сброс", Vec2f(0), args);
 		reset_button->handler = this;
 		gl_ui->addWidget(reset_button);
 	}
@@ -137,30 +137,30 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 		GLUITextView::CreateArgs text_view_args;
 		text_view_args.background_alpha = 0;
 		text_view_args.text_colour = Colour3f(0.9f);
-		text_view_args.tooltip = "Autofocus";
+		text_view_args.tooltip = "Автофокус";
 
-		autofocus_label = new GLUITextView(*gl_ui, opengl_engine, "Autofocus", Vec2f(0), text_view_args);
+		autofocus_label = new GLUITextView(*gl_ui, opengl_engine, "Автофокус", Vec2f(0), text_view_args);
 		gl_ui->addWidget(autofocus_label);
 
 	}
 
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Disable autofocus.  Focus Distance slider is used instead.";
-		autofocus_off_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Off", Vec2f(0), args);
+		args.tooltip = "Отключить автофокус. Используется слайдер расстояния фокуса.";
+		autofocus_off_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Выкл", Vec2f(0), args);
 		autofocus_off_button->handler = this;
 		gl_ui->addWidget(autofocus_off_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Automatically focus on the nearest avatar eye.";
-		autofocus_eye_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Eye", Vec2f(0), args);
+		args.tooltip = "Автоматически фокусироваться на ближайшем глазе аватара.";
+		autofocus_eye_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Глаз", Vec2f(0), args);
 		autofocus_eye_button->handler = this;
 		gl_ui->addWidget(autofocus_eye_button);
 	}
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Take photo";
+		args.tooltip = "Сделать фото";
 		take_screenshot_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Selfie.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
 		//take_screenshot_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/minimap_icon.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
 		take_screenshot_button->handler = this;
@@ -168,15 +168,15 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Show photos folder";
-		show_screenshots_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Show photos", Vec2f(0), args);
+		args.tooltip = "Показать папку с фото";
+		show_screenshots_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Показать фото", Vec2f(0), args);
 		show_screenshots_button->handler = this;
 		gl_ui->addWidget(show_screenshots_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Upload photo to the website";
-		upload_photo_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Upload photo", Vec2f(0), args);
+		args.tooltip = "Загрузить фото на сайт";
+		upload_photo_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Загрузить фото", Vec2f(0), args);
 		upload_photo_button->handler = this;
 		gl_ui->addWidget(upload_photo_button);
 	}
@@ -190,22 +190,22 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 		gl_ui->addWidget(background_ob);
 	}
 
-	makePhotoModeSlider(dof_blur_slider, /*label=*/"Depth of field blur", /*tooltip=*/"Depth of field blur strength", 
+	makePhotoModeSlider(dof_blur_slider, /*label=*/"Размытие фона", /*tooltip=*/"Сила размытия фона", 
 		/*min val=*/0.0, /*max val=*/1.0, /*initial val=*/opengl_engine->getCurrentScene()->dof_blur_strength, /*scroll speed=*/1.0);
 
-	makePhotoModeSlider(dof_focus_distance_slider, /*label=*/"Focus Distance", /*tooltip=*/"Focus Distance", 
+	makePhotoModeSlider(dof_focus_distance_slider, /*label=*/"Расстояние фокуса", /*tooltip=*/"Расстояние фокуса", 
 		/*min val=*/0.001, /*max val=*/1.0, /*initial val=*/sliderValForFocusDist(opengl_engine->getCurrentScene()->dof_blur_focus_distance), /*scroll speed=*/1.0);
 
-	makePhotoModeSlider(ev_adjust_slider, /*label=*/"EV adjust", /*tooltip=*/"EV adjust", 
+	makePhotoModeSlider(ev_adjust_slider, /*label=*/"Коррекция экспозиции", /*tooltip=*/"Коррекция экспозиции", 
 		/*min val=*/-8, /*max val=*/8, /*initial val=*/0, /*scroll speed=*/1.0);
 
-	makePhotoModeSlider(saturation_slider, /*label=*/"Saturation", /*tooltip=*/"Colour saturation", 
+	makePhotoModeSlider(saturation_slider, /*label=*/"Насыщенность", /*tooltip=*/"Насыщенность цвета", 
 		/*min val=*/0, /*max val=*/2, /*initial val=*/1, /*scroll speed=*/1.0);
 
-	makePhotoModeSlider(focal_length_slider, /*label=*/"Focal length", /*tooltip=*/"Camera focal length", 
+	makePhotoModeSlider(focal_length_slider, /*label=*/"Фокусное расстояние", /*tooltip=*/"Фокусное расстояние камеры", 
 		/*min val=*/0.010, /*max val=*/1.0, /*initial val=*/0.025, /*scroll speed=*/0.05);
 
-	makePhotoModeSlider(roll_slider, /*label=*/"Roll", /*tooltip=*/"Camera roll angle", 
+	makePhotoModeSlider(roll_slider, /*label=*/"Поворот", /*tooltip=*/"Угол поворота камеры", 
 		/*min val=*/-90, /*max val=*/90, /*initial val=*/0, /*scroll speed=*/1.0);
 
 	updateFocusDistValueString();

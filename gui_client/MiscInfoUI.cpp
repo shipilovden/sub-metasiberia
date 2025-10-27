@@ -24,31 +24,47 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 	gui_client = gui_client_;
 	gl_ui = gl_ui_;
 
-#if EMSCRIPTEN // Only show login, signup and movement buttons on web.
+#if EMSCRIPTEN || USE_SDL // Show login, signup and avatar buttons on web and SDL
 	GLUITextButton::CreateArgs login_args;
+#if USE_SDL
+	login_args.tooltip = "Войти в существующий аккаунт";
+#else
 	login_args.tooltip = "Log in to an existing user account";
+#endif
 	login_args.font_size_px = 12;
 	login_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Log in", Vec2f(0.f), login_args);
 	login_button->handler = this;
 	gl_ui->addWidget(login_button);
 
 	GLUITextButton::CreateArgs signup_args;
+#if USE_SDL
+	signup_args.tooltip = "Создать новый аккаунт";
+#else
 	signup_args.tooltip = "Create a new user account";
+#endif
 	signup_args.font_size_px = 12;
 	signup_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Sign up", Vec2f(0.f), signup_args);
 	signup_button->handler = this;
 	gl_ui->addWidget(signup_button);
 
-
+#if EMSCRIPTEN
 	movement_button = new GLUIButton(*gl_ui_, opengl_engine_, /*tex path=*/gui_client->resources_dir_path + "/buttons/dir_pad.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), GLUIButton::CreateArgs());
 	movement_button->handler = this;
 	gl_ui->addWidget(movement_button);
-
+#endif
 
 	{
 		GLUIButton::CreateArgs args;
+#if USE_SDL
+		args.tooltip = "Настройки аватара";
+#else
 		args.tooltip = "Avatar settings";
+#endif
+#ifdef CUSTOM_BUILD
+		avatar_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/shki-nvkz_avatar.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+#else
 		avatar_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/avatar.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+#endif
 		avatar_button->handler = this;
 		gl_ui->addWidget(avatar_button);
 	}

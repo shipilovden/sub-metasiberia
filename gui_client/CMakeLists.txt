@@ -1124,6 +1124,18 @@ ${settings}
 
 add_definitions(-DGUI_CLIENT=1)
 
+# Add CUSTOM_BUILD definition if CUSTOM_BUILD is ON
+if(CUSTOM_BUILD)
+	add_definitions(-DCUSTOM_BUILD=1)
+	# Set custom output name and icon for shki-nvkz build
+	set_target_properties(${CURRENT_TARGET} PROPERTIES OUTPUT_NAME "shki-nvkz")
+	# Set icon for the executable using CMake properties
+	set_target_properties(${CURRENT_TARGET} PROPERTIES VS_DPI_AWARE "PerMonitor")
+	set_target_properties(${CURRENT_TARGET} PROPERTIES WIN32_EXECUTABLE TRUE)
+	# Set the icon using VS_ICON property with absolute path
+	set_target_properties(${CURRENT_TARGET} PROPERTIES VS_ICON "C:/programming/substrata/icons/shki-nvkz.ico")
+endif()
+
 include(../cmake/shared_target_settings.cmake)
 
 if(USE_SDL)

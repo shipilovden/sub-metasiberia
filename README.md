@@ -38,6 +38,11 @@ See [docs/building.txt](docs/building.txt) for build instructions.
 ### Build System
 Complete build instructions and automation scripts are available in the `Metasiberia_Build_System` directory.
 
+### 🌿 Branch System
+- **[BRANCH_OVERVIEW.md](BRANCH_OVERVIEW.md)** - Обзор всех веток проекта
+- **[BRANCH_DESCRIPTIONS.md](../BRANCH_DESCRIPTIONS.md)** - Подробный справочник веток
+- **[BRANCH_SYSTEM_GUIDE.md](../BRANCH_SYSTEM_GUIDE.md)** - Инструкция по работе с ветками
+
 ### Contributing
 We welcome contributions to the Metasiberia project. The codebase is based on the open-source Substrata platform.
 
