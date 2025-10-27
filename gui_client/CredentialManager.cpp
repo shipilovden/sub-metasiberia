@@ -10,9 +10,13 @@ Copyright Glare Technologies Limited 2021 -
 #include <qt/QtUtils.h>
 #include <QtCore/QSettings>
 #endif
-#include <AESEncryption.h>
-#include <Base64.h>
-#include <Exception.h>
+#include "../settings/SettingsStore.h"
+#include <utils/AESEncryption.h>
+#include <utils/Base64.h>
+#include <utils/Exception.h>
+#include <utils/ConPrint.h>
+#include <utils/StringUtils.h>
+#include <vector>
 
 
 
@@ -76,11 +80,25 @@ void CredentialManager::saveToSettings(QSettings& settings)
 
 std::string CredentialManager::getUsernameForDomain(const std::string& domain)
 {
+	conPrint("CredentialManager::getUsernameForDomain: looking for domain: " + domain);
+	conPrint("CredentialManager::getUsernameForDomain: credentials map size: " + toString(credentials.size()));
+	
+	for(auto it = credentials.begin(); it != credentials.end(); ++it)
+	{
+		conPrint("CredentialManager::getUsernameForDomain: stored domain: " + it->first);
+	}
+	
 	auto res = credentials.find(domain);
 	if(res != credentials.end())
+	{
+		conPrint("CredentialManager::getUsernameForDomain: found username: " + res->second.username);
 		return res->second.username;
+	}
 	else
+	{
+		conPrint("CredentialManager::getUsernameForDomain: no credentials found for domain: " + domain);
 		return std::string();
+	}
 }
 
 
@@ -156,5 +174,58 @@ const std::string CredentialManager::encryptPassword(const std::string& password
 	catch(glare::Exception&)
 	{
 		return "";
+	}
+}
+
+
+// SettingsStore implementation (for SDL client)
+void CredentialManager::loadFromSettingsStore(SettingsStore& settings)
+{
+	conPrint("CredentialManager::loadFromSettingsStore: starting to load credentials");
+	credentials.clear();
+
+	// Load number of credentials
+	const int size = settings.getIntValue("credentials/size", 0);
+	conPrint("CredentialManager::loadFromSettingsStore: found " + toString(size) + " credentials in settings store");
+
+	for(int i = 0; i < size; ++i)
+	{
+		DomainCredentials cred;
+		cred.domain = settings.getStringValue("credentials/" + toString(i) + "/domain", "");
+		cred.username = settings.getStringValue("credentials/" + toString(i) + "/username", "");
+		cred.encrypted_password = settings.getStringValue("credentials/" + toString(i) + "/encrypted_password", "");
+
+		conPrint("CredentialManager::loadFromSettingsStore: loaded credential " + toString(i) + " - domain: " + cred.domain + ", username: " + cred.username);
+
+		if(!cred.domain.empty() && !cred.username.empty())
+		{
+			credentials[cred.domain] = cred;
+			conPrint("CredentialManager::loadFromSettingsStore: added credential for domain: " + cred.domain);
+		}
+		else
+		{
+			conPrint("CredentialManager::loadFromSettingsStore: skipping invalid credential " + toString(i));
+		}
+	}
+	
+	conPrint("CredentialManager::loadFromSettingsStore: finished loading " + toString(credentials.size()) + " valid credentials");
+}
+
+
+void CredentialManager::saveToSettingsStore(SettingsStore& settings)
+{
+	// Save number of credentials
+	settings.setIntValue("credentials/size", (int)credentials.size());
+
+	int i = 0;
+	for(auto it = credentials.begin(); it != credentials.end(); ++it)
+	{
+		DomainCredentials& cred = it->second;
+
+		settings.setStringValue("credentials/" + toString(i) + "/domain", cred.domain);
+		settings.setStringValue("credentials/" + toString(i) + "/username", cred.username);
+		settings.setStringValue("credentials/" + toString(i) + "/encrypted_password", cred.encrypted_password);
+
+		i++;
 	}
 }

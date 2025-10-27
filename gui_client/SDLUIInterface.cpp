@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2022 -
 
 
 #include "GUIClient.h"
+#include "CredentialManager.h"
 #include <utils/ConPrint.h>
 #include <utils/Base64.h>
 #include <utils/BufferOutStream.h>
@@ -358,15 +359,6 @@ Vec2i SDLUIInterface::getMouseCursorWidgetPos() // Get mouse cursor position, re
 	return p;
 }
 
-std::string SDLUIInterface::getUsernameForDomain(const std::string& domain)
-{
-	return std::string();
-}
-
-std::string SDLUIInterface::getDecryptedPasswordForDomain(const std::string& domain)
-{
-	return std::string();
-}
 
 bool SDLUIInterface::inScreenshotTakingMode()
 {
@@ -565,4 +557,44 @@ void SDLUIInterface::makeGLContextCurrent(void* context)
 void SDLUIInterface::reapplyEnvironmentSettings()
 {
 	// TODO: implement - SDL version doesn't have environment settings
+}
+
+
+std::string SDLUIInterface::getUsernameForDomain(const std::string& domain)
+{
+	if(settings_store.isNull())
+	{
+		conPrint("SDLUIInterface::getUsernameForDomain: settings_store is null");
+		return "";
+	}
+
+	conPrint("SDLUIInterface::getUsernameForDomain: looking for domain: " + domain);
+	
+	CredentialManager manager;
+	manager.loadFromSettingsStore(*settings_store);
+	std::string username = manager.getUsernameForDomain(domain);
+	
+	conPrint("SDLUIInterface::getUsernameForDomain: found username: " + username);
+	
+	return username;
+}
+
+
+std::string SDLUIInterface::getDecryptedPasswordForDomain(const std::string& domain)
+{
+	if(settings_store.isNull())
+	{
+		conPrint("SDLUIInterface::getDecryptedPasswordForDomain: settings_store is null");
+		return "";
+	}
+
+	conPrint("SDLUIInterface::getDecryptedPasswordForDomain: looking for domain: " + domain);
+	
+	CredentialManager manager;
+	manager.loadFromSettingsStore(*settings_store);
+	std::string password = manager.getDecryptedPasswordForDomain(domain);
+	
+	conPrint("SDLUIInterface::getDecryptedPasswordForDomain: found password: " + std::string(password.empty() ? "EMPTY" : "NOT_EMPTY"));
+	
+	return password;
 }

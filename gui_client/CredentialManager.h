@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2021 -
 #include <map>
 #include <string>
 class QSettings;
+class SettingsStore;
 
 
 struct DomainCredentials
@@ -27,8 +28,13 @@ Stores usernames and passwords for different server domains
 class CredentialManager
 {
 public:
+#if USE_QT
 	void loadFromSettings(QSettings& settings);
 	void saveToSettings(QSettings& settings);
+#endif
+
+	void loadFromSettingsStore(SettingsStore& settings);
+	void saveToSettingsStore(SettingsStore& settings);
 
 	std::string getUsernameForDomain(const std::string& domain); // Returns empty string if no stored username for domain
 	std::string getDecryptedPasswordForDomain(const std::string& domain); // Returns empty string if no stored password for domain
