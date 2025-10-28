@@ -129,8 +129,10 @@ void MiscInfoUI::showLogInAndSignUpButtons()
 	if(signup_button)
 		signup_button->setVisible(true);
 	
+#if EMSCRIPTEN // Only hide logged_in_button on web, not on SDL
 	if(logged_in_button)
 		logged_in_button->setVisible(false);
+#endif
 
 	updateWidgetPositions();
 }
@@ -151,7 +153,7 @@ void MiscInfoUI::showLoggedInButton(const std::string& username)
 		gl_ui->removeWidget(logged_in_button);
 	logged_in_button = NULL;
 
-#if EMSCRIPTEN // Only show on web
+#if EMSCRIPTEN || USE_SDL // Show on web and SDL
 	GLUITextButton::CreateArgs logged_in_button_args;
 	logged_in_button_args.tooltip = "View user account";
 	logged_in_button_args.font_size_px = 12;

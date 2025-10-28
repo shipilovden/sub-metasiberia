@@ -2,5 +2,5 @@
 
 #pragma system_header
 #ifdef __cplusplus
-#include "C:/programming/glare-core/jolt/5.3.0/Jolt/Jolt.h"
+#include "C:/programming/jolt/5.3.0/Jolt/Jolt.h"
 #endif // __cplusplus

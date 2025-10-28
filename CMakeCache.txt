@@ -209,6 +209,9 @@ CMAKE_STATIC_LINKER_FLAGS_RELWITHDEBINFO:STRING=
 // Studio IDE projects all commands are done without /nologo.
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 
+//Build custom SDL client variant
+CUSTOM_BUILD:BOOL=ON
+
 //Enable use of private parcel auction code.
 ENABLE_GLARE_PARCEL_AUCTION_CODE:BOOL=OFF
 
@@ -243,7 +246,7 @@ TRACY_ENABLED:BOOL=OFF
 USE_SANITIZER:STRING=
 
 //Use SDL for client UI instead of Qt
-USE_SDL:BOOL=OFF
+USE_SDL:BOOL=ON
 
 //Value Computed by CMake
 dummy_BINARY_DIR:STATIC=C:/programming/substrata

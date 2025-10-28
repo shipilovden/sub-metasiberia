@@ -188,7 +188,7 @@ void CredentialManager::loadFromSettingsStore(SettingsStore& settings)
 	const int size = settings.getIntValue("credentials/size", 0);
 	conPrint("CredentialManager::loadFromSettingsStore: found " + toString(size) + " credentials in settings store");
 
-	for(int i = 0; i < size; ++i)
+	for(int i = 1; i <= size; ++i)
 	{
 		DomainCredentials cred;
 		cred.domain = settings.getStringValue("credentials/" + toString(i) + "/domain", "");
@@ -217,7 +217,7 @@ void CredentialManager::saveToSettingsStore(SettingsStore& settings)
 	// Save number of credentials
 	settings.setIntValue("credentials/size", (int)credentials.size());
 
-	int i = 0;
+	int i = 1;
 	for(auto it = credentials.begin(); it != credentials.end(); ++it)
 	{
 		DomainCredentials& cred = it->second;

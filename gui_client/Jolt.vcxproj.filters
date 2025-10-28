@@ -4,1267 +4,1267 @@
     <ClCompile Include="C:\programming\substrata\gui_client\CMakeFiles\Jolt.dir\cmake_pch.cxx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\AABBTree\AABBTreeBuilder.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\AABBTreeBuilder.cpp">
       <Filter>AABBTree</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Color.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Color.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Factory.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Factory.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\IssueReporting.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\IssueReporting.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\JobSystemSingleThreaded.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemSingleThreaded.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\JobSystemThreadPool.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemThreadPool.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\JobSystemWithBarrier.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemWithBarrier.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\LinearCurve.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\LinearCurve.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Memory.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Memory.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Profiler.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Profiler.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\RTTI.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\RTTI.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Semaphore.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\Semaphore.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\StringTools.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\StringTools.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\TickCounter.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Core\TickCounter.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder.cpp">
       <Filter>Geometry</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder2D.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder2D.cpp">
       <Filter>Geometry</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\Indexify.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Indexify.cpp">
       <Filter>Geometry</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\OrientedBox.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Geometry\OrientedBox.cpp">
       <Filter>Geometry</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Vec3.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec3.cpp">
       <Filter>Math</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\ObjectStream\SerializableObject.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableObject.cpp">
       <Filter>ObjectStream</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\Body.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\Body.cpp">
       <Filter>Physics\Body</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyCreationSettings.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyCreationSettings.cpp">
       <Filter>Physics\Body</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyInterface.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyInterface.cpp">
       <Filter>Physics\Body</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyManager.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyManager.cpp">
       <Filter>Physics\Body</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\MassProperties.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MassProperties.cpp">
       <Filter>Physics\Body</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.cpp">
       <Filter>Physics\Body</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Character\Character.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\Character.cpp">
       <Filter>Physics\Character</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Character\CharacterBase.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterBase.cpp">
       <Filter>Physics\Character</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Character\CharacterVirtual.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterVirtual.cpp">
       <Filter>Physics\Character</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhase.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhase.cpp">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseBruteForce.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseBruteForce.cpp">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuadTree.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuadTree.cpp">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\QuadTree.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\QuadTree.cpp">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CastConvexVsTriangles.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastConvexVsTriangles.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CastSphereVsTriangles.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastSphereVsTriangles.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollideConvexVsTriangles.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideConvexVsTriangles.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollideSphereVsTriangles.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideSphereVsTriangles.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollisionDispatch.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionDispatch.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollisionGroup.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionGroup.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\EstimateCollisionResponse.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\EstimateCollisionResponse.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\GroupFilter.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\GroupFilter.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\GroupFilterTable.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\GroupFilterTable.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ManifoldBetweenTwoFaces.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ManifoldBetweenTwoFaces.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseQuery.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseQuery.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseStats.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseStats.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterial.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterial.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterialSimple.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterialSimple.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\BoxShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\BoxShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\CapsuleShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CapsuleShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexHullShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexHullShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\CylinderShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CylinderShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\DecoratedShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\DecoratedShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\EmptyShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\EmptyShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\HeightFieldShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\HeightFieldShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\MeshShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\MeshShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\MutableCompoundShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\MutableCompoundShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\OffsetCenterOfMassShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\OffsetCenterOfMassShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\PlaneShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\PlaneShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\RotatedTranslatedShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\RotatedTranslatedShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaledShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaledShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\Shape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\Shape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\SphereShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\SphereShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\StaticCompoundShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\StaticCompoundShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCylinderShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCylinderShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\TriangleShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TriangleShape.cpp">
       <Filter>Physics\Collision\Shape</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\TransformedShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\TransformedShape.cpp">
       <Filter>Physics\Collision</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConeConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConeConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\Constraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\Constraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintManager.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintManager.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ContactConstraintManager.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ContactConstraintManager.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\DistanceConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\DistanceConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\FixedConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\FixedConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\GearConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\GearConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\HingeConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\HingeConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\MotorSettings.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\MotorSettings.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPath.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPath.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPathHermite.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPathHermite.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PointConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PointConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PulleyConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PulleyConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\RackAndPinionConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\RackAndPinionConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\SixDOFConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SixDOFConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\SliderConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SliderConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\SpringSettings.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SpringSettings.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\SwingTwistConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SwingTwistConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\TwoBodyConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\TwoBodyConstraint.cpp">
       <Filter>Physics\Constraints</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\DeterminismLog.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\DeterminismLog.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\IslandBuilder.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\IslandBuilder.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\LargeIslandSplitter.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\LargeIslandSplitter.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsScene.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsScene.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsSystem.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsSystem.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsUpdateContext.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsUpdateContext.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Ragdoll\Ragdoll.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Ragdoll\Ragdoll.cpp">
       <Filter>Physics\Ragdoll</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyCreationSettings.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyCreationSettings.cpp">
       <Filter>Physics\SoftBody</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyMotionProperties.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyMotionProperties.cpp">
       <Filter>Physics\SoftBody</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyShape.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyShape.cpp">
       <Filter>Physics\SoftBody</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodySharedSettings.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodySharedSettings.cpp">
       <Filter>Physics\SoftBody</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\StateRecorderImpl.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\StateRecorderImpl.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\MotorcycleController.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\MotorcycleController.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\TrackedVehicleController.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\TrackedVehicleController.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleAntiRollBar.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleAntiRollBar.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleCollisionTester.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleCollisionTester.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleConstraint.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleConstraint.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleController.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleController.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleDifferential.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleDifferential.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleEngine.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleEngine.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTrack.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTrack.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTransmission.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTransmission.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\Wheel.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\Wheel.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\WheeledVehicleController.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\WheeledVehicleController.cpp">
       <Filter>Physics\Vehicle</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\RegisterTypes.cpp" />
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Renderer\DebugRenderer.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\RegisterTypes.cpp" />
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRenderer.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Renderer\DebugRendererPlayback.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererPlayback.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Renderer\DebugRendererRecorder.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererRecorder.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Renderer\DebugRendererSimple.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererSimple.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Skeleton\SkeletalAnimation.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletalAnimation.cpp">
       <Filter>Skeleton</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Skeleton\Skeleton.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\Skeleton.cpp">
       <Filter>Skeleton</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Skeleton\SkeletonMapper.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletonMapper.cpp">
       <Filter>Skeleton</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Skeleton\SkeletonPose.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletonPose.cpp">
       <Filter>Skeleton</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitter.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitter.cpp">
       <Filter>TriangleSplitter</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterBinning.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterBinning.cpp">
       <Filter>TriangleSplitter</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterMean.cpp">
+    <ClCompile Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterMean.cpp">
       <Filter>TriangleSplitter</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\AABBTree\AABBTreeBuilder.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\AABBTreeBuilder.h">
       <Filter>AABBTree</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\AABBTree\AABBTreeToBuffer.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\AABBTreeToBuffer.h">
       <Filter>AABBTree</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\AABBTree\NodeCodec\NodeCodecQuadTreeHalfFloat.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\NodeCodec\NodeCodecQuadTreeHalfFloat.h">
       <Filter>AABBTree\NodeCodec</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\AABBTree\TriangleCodec\TriangleCodecIndexed8BitPackSOA4Flags.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\AABBTree\TriangleCodec\TriangleCodecIndexed8BitPackSOA4Flags.h">
       <Filter>AABBTree\TriangleCodec</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\ConfigurationString.h" />
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\ARMNeon.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ConfigurationString.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\ARMNeon.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Array.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Array.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Atomics.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Atomics.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\BinaryHeap.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\BinaryHeap.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\ByteBuffer.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\ByteBuffer.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Color.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Color.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Core.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Core.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Factory.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Factory.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\FixedSizeFreeList.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FixedSizeFreeList.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\FixedSizeFreeList.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FixedSizeFreeList.inl">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\FPControlWord.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FPControlWord.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\FPException.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FPException.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\FPFlushDenormals.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\FPFlushDenormals.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\HashCombine.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\HashCombine.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\HashTable.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\HashTable.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\InsertionSort.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\InsertionSort.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\IssueReporting.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\IssueReporting.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\JobSystem.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystem.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\JobSystem.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystem.inl">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\JobSystemSingleThreaded.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemSingleThreaded.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\JobSystemThreadPool.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemThreadPool.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\JobSystemWithBarrier.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\JobSystemWithBarrier.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\LinearCurve.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\LinearCurve.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\LockFreeHashMap.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\LockFreeHashMap.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\LockFreeHashMap.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\LockFreeHashMap.inl">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Memory.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Memory.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Mutex.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Mutex.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\MutexArray.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\MutexArray.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\NonCopyable.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\NonCopyable.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Profiler.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Profiler.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Profiler.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Profiler.inl">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\QuickSort.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\QuickSort.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Reference.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Reference.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Result.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Result.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\RTTI.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\RTTI.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\ScopeExit.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\ScopeExit.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\Semaphore.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\Semaphore.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\StaticArray.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StaticArray.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\STLAlignedAllocator.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\STLAlignedAllocator.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\STLAllocator.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\STLAllocator.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\STLLocalAllocator.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\STLLocalAllocator.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\STLTempAllocator.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\STLTempAllocator.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\StreamIn.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StreamIn.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\StreamOut.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StreamOut.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\StreamUtils.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StreamUtils.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\StreamWrapper.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StreamWrapper.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\StridedPtr.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StridedPtr.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\StringTools.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\StringTools.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\TempAllocator.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\TempAllocator.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\TickCounter.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\TickCounter.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\UnorderedMap.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\UnorderedMap.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Core\UnorderedSet.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Core\UnorderedSet.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\AABox.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\AABox.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\AABox4.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\AABox4.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\ClipPoly.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ClipPoly.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\ClosestPoint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ClosestPoint.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder2D.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexHullBuilder2D.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\ConvexSupport.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\ConvexSupport.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\Ellipse.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Ellipse.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\EPAConvexHullBuilder.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\EPAConvexHullBuilder.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\EPAPenetrationDepth.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\EPAPenetrationDepth.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\GJKClosestPoint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\GJKClosestPoint.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\IndexedTriangle.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\IndexedTriangle.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\Indexify.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Indexify.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\MortonCode.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\MortonCode.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\OrientedBox.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\OrientedBox.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\Plane.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Plane.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\RayAABox.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RayAABox.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\RayCapsule.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RayCapsule.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\RayCylinder.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RayCylinder.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\RaySphere.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RaySphere.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\RayTriangle.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\RayTriangle.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\Sphere.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Sphere.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Geometry\Triangle.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Geometry\Triangle.h">
       <Filter>Geometry</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Jolt.h" />
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\BVec16.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Jolt.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\BVec16.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\BVec16.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\BVec16.inl">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\DMat44.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DMat44.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\DMat44.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DMat44.inl">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Double3.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Double3.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\DVec3.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DVec3.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\DVec3.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DVec3.inl">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\DynMatrix.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\DynMatrix.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\EigenValueSymmetric.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\EigenValueSymmetric.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\FindRoot.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\FindRoot.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Float2.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Float2.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Float3.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Float3.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Float4.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Float4.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\GaussianElimination.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\GaussianElimination.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\HalfFloat.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\HalfFloat.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Mat44.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Mat44.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Mat44.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Mat44.inl">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Math.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Math.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\MathTypes.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\MathTypes.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Matrix.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Matrix.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Quat.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Quat.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Quat.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Quat.inl">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Real.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Real.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Swizzle.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Swizzle.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Trigonometry.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Trigonometry.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\UVec4.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\UVec4.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\UVec4.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\UVec4.inl">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Vec3.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec3.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Vec3.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec3.inl">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Vec4.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec4.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Vec4.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vec4.inl">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Math\Vector.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Math\Vector.h">
       <Filter>Math</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\ObjectStream\ObjectStream.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\ObjectStream.h">
       <Filter>ObjectStream</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\ObjectStream\SerializableAttribute.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableAttribute.h">
       <Filter>ObjectStream</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\ObjectStream\SerializableAttributeEnum.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableAttributeEnum.h">
       <Filter>ObjectStream</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\ObjectStream\SerializableAttributeTyped.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableAttributeTyped.h">
       <Filter>ObjectStream</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\ObjectStream\SerializableObject.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\SerializableObject.h">
       <Filter>ObjectStream</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\ObjectStream\TypeDeclarations.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\ObjectStream\TypeDeclarations.h">
       <Filter>ObjectStream</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\AllowedDOFs.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\AllowedDOFs.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\Body.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\Body.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\Body.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\Body.inl">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyAccess.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyAccess.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyActivationListener.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyActivationListener.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyCreationSettings.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyCreationSettings.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyFilter.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyFilter.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyID.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyID.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyInterface.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyInterface.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyLock.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyLock.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyLockInterface.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyLockInterface.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyLockMulti.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyLockMulti.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyManager.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyManager.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyPair.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyPair.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\BodyType.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\BodyType.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\MassProperties.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MassProperties.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.inl">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionProperties.inl">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\MotionQuality.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionQuality.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Body\MotionType.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Body\MotionType.h">
       <Filter>Physics\Body</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Character\Character.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\Character.h">
       <Filter>Physics\Character</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Character\CharacterBase.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterBase.h">
       <Filter>Physics\Character</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Character\CharacterID.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterID.h">
       <Filter>Physics\Character</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Character\CharacterVirtual.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Character\CharacterVirtual.h">
       <Filter>Physics\Character</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\AABoxCast.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\AABoxCast.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ActiveEdgeMode.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ActiveEdgeMode.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ActiveEdges.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ActiveEdges.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BackFaceMode.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BackFaceMode.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhase.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhase.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseBruteForce.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseBruteForce.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayer.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayer.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayerInterfaceMask.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayerInterfaceMask.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayerInterfaceTable.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseLayerInterfaceTable.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuadTree.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuadTree.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuery.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\BroadPhaseQuery.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\ObjectVsBroadPhaseLayerFilterMask.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\ObjectVsBroadPhaseLayerFilterMask.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\ObjectVsBroadPhaseLayerFilterTable.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\ObjectVsBroadPhaseLayerFilterTable.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\QuadTree.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\BroadPhase\QuadTree.h">
       <Filter>Physics\Collision\BroadPhase</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CastConvexVsTriangles.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastConvexVsTriangles.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CastResult.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastResult.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CastSphereVsTriangles.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CastSphereVsTriangles.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollectFacesMode.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollectFacesMode.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollideConvexVsTriangles.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideConvexVsTriangles.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollidePointResult.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollidePointResult.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollideShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideShape.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollideShapeVsShapePerLeaf.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideShapeVsShapePerLeaf.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollideSoftBodyVertexIterator.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideSoftBodyVertexIterator.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollideSoftBodyVerticesVsTriangles.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideSoftBodyVerticesVsTriangles.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollideSphereVsTriangles.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollideSphereVsTriangles.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollisionCollector.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionCollector.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollisionCollectorImpl.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionCollectorImpl.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollisionDispatch.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionDispatch.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\CollisionGroup.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\CollisionGroup.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ContactListener.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ContactListener.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\EstimateCollisionResponse.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\EstimateCollisionResponse.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\GroupFilter.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\GroupFilter.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\GroupFilterTable.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\GroupFilterTable.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\InternalEdgeRemovingCollector.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\InternalEdgeRemovingCollector.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ManifoldBetweenTwoFaces.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ManifoldBetweenTwoFaces.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseQuery.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseQuery.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseStats.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\NarrowPhaseStats.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayer.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayer.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayerPairFilterMask.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayerPairFilterMask.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayerPairFilterTable.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ObjectLayerPairFilterTable.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterial.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterial.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterialSimple.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\PhysicsMaterialSimple.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\RayCast.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\RayCast.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\BoxShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\BoxShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\CapsuleShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CapsuleShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShapeVisitors.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CompoundShapeVisitors.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexHullShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexHullShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ConvexShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\CylinderShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\CylinderShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\DecoratedShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\DecoratedShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\EmptyShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\EmptyShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\GetTrianglesContext.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\GetTrianglesContext.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\HeightFieldShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\HeightFieldShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\MeshShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\MeshShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\MutableCompoundShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\MutableCompoundShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\OffsetCenterOfMassShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\OffsetCenterOfMassShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\PlaneShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\PlaneShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\PolyhedronSubmergedVolumeCalculator.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\PolyhedronSubmergedVolumeCalculator.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\RotatedTranslatedShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\RotatedTranslatedShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaledShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaledShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaleHelpers.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\ScaleHelpers.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\Shape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\Shape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\SphereShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\SphereShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\StaticCompoundShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\StaticCompoundShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\SubShapeID.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\SubShapeID.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\SubShapeIDPair.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\SubShapeIDPair.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCylinderShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCylinderShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\TriangleShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TriangleShape.h">
       <Filter>Physics\Collision\Shape</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ShapeCast.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ShapeCast.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\ShapeFilter.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\ShapeFilter.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\SimShapeFilter.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\SimShapeFilter.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\SimShapeFilterWrapper.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\SimShapeFilterWrapper.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\SortReverseAndStore.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\SortReverseAndStore.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\TransformedShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\TransformedShape.h">
       <Filter>Physics\Collision</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\CalculateSolverSteps.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\CalculateSolverSteps.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConeConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConeConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\Constraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\Constraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintManager.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintManager.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\AngleConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\AngleConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\AxisConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\AxisConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\DualAxisConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\DualAxisConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\GearConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\GearConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\HingeRotationConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\HingeRotationConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\IndependentAxisConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\IndependentAxisConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\PointConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\PointConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RackAndPinionConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RackAndPinionConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RotationEulerConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RotationEulerConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RotationQuatConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\RotationQuatConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\SpringPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\SpringPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\SwingTwistConstraintPart.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ConstraintPart\SwingTwistConstraintPart.h">
       <Filter>Physics\Constraints\ConstraintPart</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\ContactConstraintManager.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\ContactConstraintManager.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\DistanceConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\DistanceConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\FixedConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\FixedConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\GearConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\GearConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\HingeConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\HingeConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\MotorSettings.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\MotorSettings.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPath.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPath.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPathHermite.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PathConstraintPathHermite.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PointConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PointConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\PulleyConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\PulleyConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\RackAndPinionConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\RackAndPinionConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\SixDOFConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SixDOFConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\SliderConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SliderConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\SpringSettings.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SpringSettings.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\SwingTwistConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\SwingTwistConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Constraints\TwoBodyConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Constraints\TwoBodyConstraint.h">
       <Filter>Physics\Constraints</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\DeterminismLog.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\DeterminismLog.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\EActivation.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\EActivation.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\EPhysicsUpdateError.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\EPhysicsUpdateError.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\IslandBuilder.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\IslandBuilder.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\LargeIslandSplitter.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\LargeIslandSplitter.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsLock.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsLock.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsScene.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsScene.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsSettings.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsSettings.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsStepListener.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsStepListener.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsSystem.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsSystem.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\PhysicsUpdateContext.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\PhysicsUpdateContext.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Ragdoll\Ragdoll.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Ragdoll\Ragdoll.h">
       <Filter>Physics\Ragdoll</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyContactListener.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyContactListener.h">
       <Filter>Physics\SoftBody</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyCreationSettings.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyCreationSettings.h">
       <Filter>Physics\SoftBody</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyManifold.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyManifold.h">
       <Filter>Physics\SoftBody</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyMotionProperties.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyMotionProperties.h">
       <Filter>Physics\SoftBody</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyShape.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyShape.h">
       <Filter>Physics\SoftBody</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodySharedSettings.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodySharedSettings.h">
       <Filter>Physics\SoftBody</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyUpdateContext.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyUpdateContext.h">
       <Filter>Physics\SoftBody</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyVertex.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\SoftBody\SoftBodyVertex.h">
       <Filter>Physics\SoftBody</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\StateRecorder.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\StateRecorder.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\StateRecorderImpl.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\StateRecorderImpl.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\MotorcycleController.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\MotorcycleController.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\TrackedVehicleController.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\TrackedVehicleController.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleAntiRollBar.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleAntiRollBar.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleCollisionTester.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleCollisionTester.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleConstraint.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleConstraint.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleController.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleController.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleDifferential.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleDifferential.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleEngine.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleEngine.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTrack.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTrack.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTransmission.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\VehicleTransmission.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\Wheel.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\Wheel.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Vehicle\WheeledVehicleController.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Physics\Vehicle\WheeledVehicleController.h">
       <Filter>Physics\Vehicle</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\RegisterTypes.h" />
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Renderer\DebugRenderer.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\RegisterTypes.h" />
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRenderer.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Renderer\DebugRendererPlayback.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererPlayback.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Renderer\DebugRendererRecorder.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererRecorder.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Renderer\DebugRendererSimple.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Renderer\DebugRendererSimple.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Skeleton\SkeletalAnimation.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletalAnimation.h">
       <Filter>Skeleton</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Skeleton\Skeleton.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\Skeleton.h">
       <Filter>Skeleton</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Skeleton\SkeletonMapper.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletonMapper.h">
       <Filter>Skeleton</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Skeleton\SkeletonPose.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\Skeleton\SkeletonPose.h">
       <Filter>Skeleton</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitter.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitter.h">
       <Filter>TriangleSplitter</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterBinning.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterBinning.h">
       <Filter>TriangleSplitter</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterMean.h">
+    <ClInclude Include="C:\programming\jolt\5.3.0\Jolt\TriangleSplitter\TriangleSplitterMean.h">
       <Filter>TriangleSplitter</Filter>
     </ClInclude>
     <ClInclude Include="C:\programming\substrata\gui_client\CMakeFiles\Jolt.dir\Debug\cmake_pch.hxx">
@@ -1283,11 +1283,11 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Jolt.natvis" />
+    <Natvis Include="C:\programming\jolt\5.3.0\Jolt\Jolt.natvis" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Jolt.cmake" />
-    <None Include="C:\programming\glare-core\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.gliffy">
+    <None Include="C:\programming\jolt\5.3.0\Jolt\Jolt.cmake" />
+    <None Include="C:\programming\jolt\5.3.0\Jolt\Physics\Collision\Shape\TaperedCapsuleShape.gliffy">
       <Filter>Physics\Collision\Shape</Filter>
     </None>
   </ItemGroup>

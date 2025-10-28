@@ -817,202 +817,10 @@
     <ClCompile Include="C:\programming\substrata\gui_client\GarbageDeleterThread.cpp">
       <Filter>gui_client</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\IndigoView.cpp">
+    <ClCompile Include="C:\programming\substrata\gui_client\SDLClient.cpp">
       <Filter>gui_client</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\AboutDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\AddObjectDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\AddObjectPreviewWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\AddVideoDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\AvatarPreviewWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\AvatarSettingsDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\ChangePasswordDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\DiagnosticsWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\EnvironmentOptionsWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\FindObjectDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\GlWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\GoToParcelDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\GoToPositionDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\GuiClientApplication.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\ISLSyntaxHighlighter.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\ListObjectsNearbyDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\LoginDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\LogWindow.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\MainOptionsDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\MainWindow.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\MaterialBrowser.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\MaterialEditor.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\ObjectEditor.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\ParcelEditor.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\TerrainSpecSectionWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\ShaderEditorDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\ResetPasswordDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\SignUpDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\UserDetailsWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\WorldSettingsWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\URLWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\ShaderEditorOutputTextEdit.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\CreateObjectsDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_MainWindow.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_GuiClientApplication.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_GlWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_AvatarSettingsDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_AvatarPreviewWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_AddObjectDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_AddVideoDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_AddObjectPreviewWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_ObjectEditor.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_EnvironmentOptionsWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_MaterialEditor.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_ParcelEditor.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_LoginDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_SignUpDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_UserDetailsWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_URLWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_ResetPasswordDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_ChangePasswordDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_MaterialBrowser.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_IndigoView.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_ShaderEditorDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_AboutDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_MainOptionsDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_GoToParcelDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_GoToPositionDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_FindObjectDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_ListObjectsNearbyDialog.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_LogWindow.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_DiagnosticsWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_TerrainSpecSectionWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_WorldSettingsWidget.cpp">
-      <Filter>gui_client</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\gui_client\moc_CreateObjectsDialog.cpp">
+    <ClCompile Include="C:\programming\substrata\gui_client\SDLUIInterface.cpp">
       <Filter>gui_client</Filter>
     </ClCompile>
     <ClCompile Include="C:\programming\glare-core\double-conversion\bignum-dtoa.cc">
@@ -1194,33 +1002,6 @@
     </ClCompile>
     <ClCompile Include="C:\programming\substrata\libs\fft2d\fft4f2d.c">
       <Filter>fft2d</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\qt\QtUtils.cpp">
-      <Filter>qt</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\qt\SignalBlocker.cpp">
-      <Filter>qt</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\qt\FlowLayout.cpp">
-      <Filter>qt</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\qt\FileSelectWidget.cpp">
-      <Filter>qt</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\qt\moc_FileSelectWidget.cpp">
-      <Filter>qt</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\qt\RealControl.cpp">
-      <Filter>qt</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\qt\moc_RealControl.cpp">
-      <Filter>qt</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\qt\IndigoDoubleSpinBox.cpp">
-      <Filter>qt</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\programming\substrata\qt\moc_IndigoDoubleSpinBox.cpp">
-      <Filter>qt</Filter>
     </ClCompile>
     <ClCompile Include="C:\programming\glare-core\video\VideoReader.cpp">
       <Filter>video</Filter>
@@ -1579,6 +1360,27 @@
     <ClCompile Include="C:\programming\glare-core\tracy\public\TracyClient.cpp">
       <Filter>tracy</Filter>
     </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\ImGui\imgui.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\ImGui\imgui_demo.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\ImGui\imgui_draw.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\ImGui\imgui_widgets.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\ImGui\imgui_tables.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\ImGui\backends\imgui_impl_sdl2.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\programming\glare-core\ImGui\backends\imgui_impl_opengl3.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
     <ClCompile Include="C:\programming\glare-core\freetype\src\autofit\autofit.c">
       <Filter>freetype</Filter>
     </ClCompile>
@@ -1684,151 +1486,151 @@
     <ClCompile Include="C:\programming\glare-core\freetype\builds\windows\ftdebug.c">
       <Filter>freetype</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lapi.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lapi.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\laux.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\laux.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbaselib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbaselib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbitlib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbitlib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbuffer.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuffer.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbuflib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuflib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lbuiltins.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lbuiltins.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lcorolib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lcorolib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ldblib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldblib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ldebug.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldebug.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ldo.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ldo.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lfunc.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lfunc.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lgc.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lgc.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lgcdebug.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lgcdebug.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\linit.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\linit.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lmathlib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lmathlib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lmem.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lmem.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lnumprint.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lnumprint.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lobject.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lobject.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\loslib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\loslib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lperf.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lperf.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lstate.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstate.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lstring.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstring.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lstrlib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lstrlib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ltable.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltable.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ltablib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltablib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ltm.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ltm.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\ludata.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\ludata.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lutf8lib.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lutf8lib.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lvmexecute.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmexecute.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lvmload.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmload.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\VM\src\lvmutils.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\VM\src\lvmutils.cpp">
       <Filter>luau\luau_vm</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\BuiltinFolding.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\BuiltinFolding.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\Builtins.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Builtins.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\BytecodeBuilder.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\BytecodeBuilder.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\Compiler.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Compiler.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\ConstantFolding.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\ConstantFolding.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\CostModel.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\CostModel.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\lcode.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\lcode.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\TableShape.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\TableShape.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\Types.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\Types.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Compiler\src\ValueTracking.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Compiler\src\ValueTracking.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Ast.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Ast.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Confusables.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Confusables.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Lexer.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Lexer.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Location.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Location.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\Parser.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\Parser.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\StringUtils.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\StringUtils.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\luau\0.627\Ast\src\TimeTrace.cpp">
+    <ClCompile Include="C:\programming\luau\0.627\Ast\src\TimeTrace.cpp">
       <Filter>luau\luau_compiler</Filter>
     </ClCompile>
     <ClCompile Include="C:\programming\glare-core\lua\LuaTests.cpp">
@@ -1855,7 +1657,7 @@
     <ClCompile Include="C:\programming\glare-core\settings\XMLSettingsStore.cpp">
       <Filter>settings</Filter>
     </ClCompile>
-    <ClCompile Include="C:\programming\glare-core\settings\QSettingsStore.cpp">
+    <ClCompile Include="C:\programming\glare-core\settings\RegistrySettingsStore.cpp">
       <Filter>settings</Filter>
     </ClCompile>
   </ItemGroup>
@@ -2787,190 +2589,7 @@
     <ClInclude Include="C:\programming\substrata\gui_client\GarbageDeleterThread.h">
       <Filter>gui_client</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\IndigoView.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\AboutDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\AddObjectDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\AddObjectPreviewWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\AddVideoDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\AvatarPreviewWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\AvatarSettingsDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ChangePasswordDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\DiagnosticsWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\EnvironmentOptionsWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\FindObjectDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\GlWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\GoToParcelDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\GoToPositionDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\GuiClientApplication.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ISLSyntaxHighlighter.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ListObjectsNearbyDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\LoginDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\LogWindow.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\MainOptionsDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\MainWindow.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\MaterialBrowser.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\MaterialEditor.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ObjectEditor.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ParcelEditor.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\TerrainSpecSectionWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ShaderEditorDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ResetPasswordDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\SignUpDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\SubstrataVideoSurface.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\UserDetailsWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\WorldSettingsWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\URLWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ShaderEditorOutputTextEdit.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\CreateObjectsDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_AddObjectDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_AddVideoDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_AvatarSettingsDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_ObjectEditor.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_EnvironmentOptionsWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_ParcelEditor.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_MaterialEditor.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_LoginDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_SignUpDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_MainWindow.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_UserDetailsWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_URLWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_ResetPasswordDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_ChangePasswordDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_MaterialBrowser.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_ShaderEditorDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_AboutDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_MainOptionsDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_GoToParcelDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_GoToPositionDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_FindObjectDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_ListObjectsNearbyDialog.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_LogWindow.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_DiagnosticsWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_TerrainSpecSectionWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_WorldSettingsWidget.h">
-      <Filter>gui_client</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\gui_client\ui_CreateObjectsDialog.h">
+    <ClInclude Include="C:\programming\substrata\gui_client\SDLUIInterface.h">
       <Filter>gui_client</Filter>
     </ClInclude>
     <ClInclude Include="C:\programming\glare-core\double-conversion\bignum-dtoa.h">
@@ -3164,30 +2783,6 @@
     </ClInclude>
     <ClInclude Include="C:\programming\glare-core\dll\include\IndigoAllocation.h">
       <Filter>dll</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\qt\QtUtils.h">
-      <Filter>qt</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\qt\SignalBlocker.h">
-      <Filter>qt</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\qt\FlowLayout.h">
-      <Filter>qt</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\qt\FileSelectWidget.h">
-      <Filter>qt</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\qt\ui_FileSelectWidget.h">
-      <Filter>qt</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\qt\RealControl.h">
-      <Filter>qt</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\qt\ui_RealControl.h">
-      <Filter>qt</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\programming\substrata\qt\IndigoDoubleSpinBox.h">
-      <Filter>qt</Filter>
     </ClInclude>
     <ClInclude Include="C:\programming\glare-core\video\VideoReader.h">
       <Filter>video</Filter>
@@ -3585,6 +3180,27 @@
     <ClInclude Include="C:\programming\glare-core\meshoptimizer\src\meshoptimizer.h">
       <Filter>meshoptimizer</Filter>
     </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\ImGui\imgui.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\ImGui\imgui_internal.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\ImGui\imstb_rectpack.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\ImGui\imstb_textedit.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\ImGui\imstb_truetype.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\ImGui\backends\imgui_impl_sdl2.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\programming\glare-core\ImGui\backends\imgui_impl_opengl3.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
     <ClInclude Include="C:\programming\glare-core\freetype\include\freetype\freetype.h">
       <Filter>freetype</Filter>
     </ClInclude>
@@ -3828,124 +3444,124 @@
     <ClInclude Include="C:\programming\glare-core\ui\UIEvents.h">
       <Filter>ui</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lapi.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lapi.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lbuffer.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbuffer.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lbuiltins.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbuiltins.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lbytecode.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lbytecode.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lcommon.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lcommon.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ldebug.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ldebug.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ldo.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ldo.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lfunc.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lfunc.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lgc.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lgc.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lmem.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lmem.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lnumutils.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lnumutils.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lobject.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lobject.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lstate.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lstate.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lstring.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lstring.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ltable.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ltable.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ltm.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ltm.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\ludata.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\ludata.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\src\lvm.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\src\lvm.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\include\lua.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\include\lua.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\include\luaconf.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\include\luaconf.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\VM\include\lualib.h">
+    <ClInclude Include="C:\programming\luau\0.627\VM\include\lualib.h">
       <Filter>luau\luau_vm</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\BuiltinFolding.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\BuiltinFolding.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\Builtins.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\Builtins.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\ConstantFolding.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\ConstantFolding.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\CostModel.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\CostModel.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\TableShape.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\TableShape.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\Types.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\Types.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\src\ValueTracking.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\src\ValueTracking.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\include\luacode.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\luacode.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\include\Luau\BytecodeBuilder.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\Luau\BytecodeBuilder.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Compiler\include\Luau\Compiler.h">
+    <ClInclude Include="C:\programming\luau\0.627\Compiler\include\Luau\Compiler.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Ast.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Ast.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Confusables.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Confusables.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Lexer.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Lexer.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Location.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Location.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\ParseOptions.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\ParseOptions.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\Parser.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\Parser.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\ParseResult.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\ParseResult.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\StringUtils.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\StringUtils.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\luau\0.627\Ast\include\Luau\TimeTrace.h">
+    <ClInclude Include="C:\programming\luau\0.627\Ast\include\Luau\TimeTrace.h">
       <Filter>luau\luau_compiler</Filter>
     </ClInclude>
     <ClInclude Include="C:\programming\glare-core\lua\LuaTests.h">
@@ -3975,203 +3591,11 @@
     <ClInclude Include="C:\programming\glare-core\settings\XMLSettingsStore.h">
       <Filter>settings</Filter>
     </ClInclude>
-    <ClInclude Include="C:\programming\glare-core\settings\QSettingsStore.h">
+    <ClInclude Include="C:\programming\glare-core\settings\RegistrySettingsStore.h">
       <Filter>settings</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_MainWindow.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_GuiClientApplication.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_GlWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_AvatarSettingsDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_AvatarPreviewWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_AddObjectDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_AddVideoDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_AddObjectPreviewWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_ObjectEditor.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_EnvironmentOptionsWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_MaterialEditor.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_ParcelEditor.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_LoginDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_SignUpDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_UserDetailsWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_URLWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_ResetPasswordDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_ChangePasswordDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_MaterialBrowser.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_IndigoView.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_ShaderEditorDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_AboutDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_MainOptionsDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_GoToParcelDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_GoToPositionDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_FindObjectDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_ListObjectsNearbyDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_LogWindow.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_DiagnosticsWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_TerrainSpecSectionWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_WorldSettingsWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\moc_CreateObjectsDialog.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_AddObjectDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_AddVideoDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_AvatarSettingsDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_ObjectEditor.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_EnvironmentOptionsWidget.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_ParcelEditor.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_MaterialEditor.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_LoginDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_SignUpDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_MainWindow.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_UserDetailsWidget.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_URLWidget.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_ResetPasswordDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_ChangePasswordDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_MaterialBrowser.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_ShaderEditorDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_AboutDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_MainOptionsDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_GoToParcelDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_GoToPositionDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_FindObjectDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_ListObjectsNearbyDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_LogWindow.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_DiagnosticsWidget.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_TerrainSpecSectionWidget.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_WorldSettingsWidget.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\3f142c001404da6415c8147c2b726881\ui_CreateObjectsDialog.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\0cd4cdbb36d0b91f38939ec980601d95\moc_FileSelectWidget.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\0cd4cdbb36d0b91f38939ec980601d95\ui_FileSelectWidget.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\0cd4cdbb36d0b91f38939ec980601d95\moc_RealControl.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\0cd4cdbb36d0b91f38939ec980601d95\ui_RealControl.h.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
-    <CustomBuild Include="C:\programming\substrata\CMakeFiles\0cd4cdbb36d0b91f38939ec980601d95\moc_IndigoDoubleSpinBox.cpp.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
     <CustomBuild Include="C:\programming\substrata\gui_client\CMakeLists.txt">
       <Filter>gui_client</Filter>
     </CustomBuild>
@@ -4180,90 +3604,6 @@
     <Natvis Include="C:\programming\glare-core\glare-core.natvis" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="C:\programming\substrata\gui_client\AboutDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\AddObjectDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\AddVideoDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\AvatarSettingsDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\ChangePasswordDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\DiagnosticsWidget.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\EnvironmentOptionsWidget.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\FindObjectDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\GoToParcelDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\GoToPositionDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\ListObjectsNearbyDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\LoginDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\LogWindow.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\MainOptionsDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\MainWindow.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\MainWindowTestCode.txt">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\MaterialBrowser.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\MaterialEditor.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\ObjectEditor.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\ParcelEditor.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\TerrainSpecSectionWidget.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\ShaderEditorDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\ResetPasswordDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\SignUpDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\UserDetailsWidget.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\WorldSettingsWidget.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\URLWidget.ui">
-      <Filter>gui_client</Filter>
-    </None>
-    <None Include="C:\programming\substrata\gui_client\CreateObjectsDialog.ui">
-      <Filter>gui_client</Filter>
-    </None>
     <None Include="C:\programming\substrata\scripts\build_qt.rb">
       <Filter>scripts</Filter>
     </None>
@@ -4442,9 +3782,6 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Filter Include="CMake Rules">
-      <UniqueIdentifier>{4377D28E-62F2-34EF-A82C-7CBDF5E0B6B1}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files">
       <UniqueIdentifier>{9B8C733A-F719-3F34-BAD1-1F3A392063E4}</UniqueIdentifier>
     </Filter>
@@ -4487,6 +3824,9 @@
     <Filter Include="gui_client_graphics">
       <UniqueIdentifier>{6CF4FC4A-8857-3BDE-95E3-FAAD9DF3ACC9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="imgui">
+      <UniqueIdentifier>{85FAF398-DBB9-3F49-A464-C6A063930077}</UniqueIdentifier>
+    </Filter>
     <Filter Include="indigo">
       <UniqueIdentifier>{61CB61CB-6868-333F-9895-A9EBEB274CB4}</UniqueIdentifier>
     </Filter>
@@ -4525,9 +3865,6 @@
     </Filter>
     <Filter Include="physics">
       <UniqueIdentifier>{84AC848A-7B58-34B8-A0E4-0D8389DFCB1A}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="qt">
-      <UniqueIdentifier>{983F6356-D9FD-38DA-ABAB-BFCCA270FDEE}</UniqueIdentifier>
     </Filter>
     <Filter Include="resonance-audio">
       <UniqueIdentifier>{CDC0D127-335B-3FD5-AB8D-E9C6B4DE913D}</UniqueIdentifier>

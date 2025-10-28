@@ -141,7 +141,8 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 
 		// Build latest news HTML
-		latest_news_html += "<div class=\"root-news-div-container\">\n";		const int max_num_to_display = 4;
+		latest_news_html += "<div class=\"root-news-div-container\">\n";
+		const int max_num_to_display = 4;
 		int num_displayed = 0;
 		for(auto it = world_state.news_posts.rbegin(); it != world_state.news_posts.rend() && num_displayed < max_num_to_display; ++it)
 		{
@@ -170,7 +171,8 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 
 		// Build events HTML
-		events_html += "<div class=\"root-events-div-container\">\n";		const int max_num_events_to_display = 4;
+		events_html += "<div class=\"root-events-div-container\">\n";
+		const int max_num_events_to_display = 4;
 		int num_events_displayed = 0;
 		for(auto it = world_state.events.rbegin(); (it != world_state.events.rend()) && (num_events_displayed < max_num_events_to_display); ++it)
 		{
@@ -204,7 +206,8 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 
 		//------------------------------- Build photos grid view HTML --------------------------
-		photos_html += "<div class=\"photo-container\">\n";		const int max_num_photos_to_display = 20;
+		photos_html += "<div class=\"photo-container\">\n";
+		const int max_num_photos_to_display = 20;
 		int num_photos_displayed = 0;
 		for(auto it = world_state.photos.rbegin(); (it != world_state.photos.rend()) && (num_photos_displayed < max_num_photos_to_display); ++it)
 		{
