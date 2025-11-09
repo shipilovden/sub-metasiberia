@@ -4426,7 +4426,7 @@ void GUIClient::processLoading(Timer& timer_event_timer)
 					Timer load_item_timer;
 					//size_t loaded_size_B = 0;
 
-					// conPrint("Handling model loaded message, lod_model_url: " + message->lod_model_url);
+					conPrint("Handling model loaded message, lod_model_url: " + message->lod_model_url + ", total_geom_size_B: " + toString(message->total_geom_size_B));
 					//num_models_loaded++;
 
 					try
@@ -4676,8 +4676,8 @@ void GUIClient::processLoading(Timer& timer_event_timer)
 
 				uploading = true;
 			}
-			//else
-			//	conPrint("Failed to get free vert and index VBOs for " + toString(message->total_geom_size_B) + " B");
+			else
+				conPrint("Failed to get free vert and index VBOs for " + toString(message->total_geom_size_B) + " B");
 
 			if(!uploading)
 				async_model_loaded_messages_to_process.push_back(message); // If we failed to upload this geometry, add to back of queue to try again later
@@ -7930,10 +7930,14 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		{
 			ModelLoadedThreadMessage* loaded_msg = static_cast<ModelLoadedThreadMessage*>(msg);
 
+			conPrint("Model loaded: URL=" + loaded_msg->lod_model_url + ", size=" + toString(loaded_msg->total_geom_size_B) + " B, largest VBO=" + toString(vbo_pool->getLargestVBOSize()) + " B");
 			if(loaded_msg->total_geom_size_B <= vbo_pool->getLargestVBOSize())
 				async_model_loaded_messages_to_process.push_back(loaded_msg);
 			else
+			{
+				conPrint("Model too large for async VBO pool, using sync queue. Size: " + toString(loaded_msg->total_geom_size_B) + " B > " + toString(vbo_pool->getLargestVBOSize()) + " B");
 				model_loaded_messages_to_process.push_back(loaded_msg);
+			}
 		}
 		else if(dynamic_cast<TextureLoadedThreadMessage*>(msg))
 		{

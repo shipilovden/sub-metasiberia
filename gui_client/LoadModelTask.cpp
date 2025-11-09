@@ -74,7 +74,7 @@ void LoadModelTask::run(size_t thread_index)
 				assert(!lod_model_url.empty());
 				runtimeCheck(resource.nonNull() && resource_manager.nonNull());
 
-				// conPrint("LoadModelTask: loading mesh with URL '" + lod_model_url + "'.");
+				conPrint("LoadModelTask: loading mesh with URL '" + lod_model_url + "'.");
 
 				const std::string lod_model_path = resource_manager->getLocalAbsPathForResource(*this->resource);
 
