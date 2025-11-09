@@ -2754,6 +2754,12 @@ void MainWindow::on_actionGo_to_Substrata_World_triggered()
 }
 
 
+void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
+{
+	visitSubURL("sub://vr.metasiberia.com");
+}
+
+
 void MainWindow::on_actionGo_to_Parcel_triggered()
 {
 	GoToParcelDialog d(this->settings);
