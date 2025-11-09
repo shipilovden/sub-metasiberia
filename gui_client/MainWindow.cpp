@@ -149,7 +149,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	ui->setupUi(this);
 
 	// Set translatable window title
-	setWindowTitle(tr("Metasiberia"));
+	setWindowTitle(tr("Metasiberia Edit Beta"));
 
 	setAcceptDrops(true);
 
@@ -403,7 +403,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 static std::string computeWindowTitle()
 {
-	return "Metasiberia v" + ::cyberspace_version;
+	return "Metasiberia Edit Beta";
 }
 
 
@@ -2745,6 +2745,12 @@ void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 	parse_results.worldname = "cryptovoxels";
 
 	gui_client.connectToServer(parse_results);
+}
+
+
+void MainWindow::on_actionGo_to_Substrata_World_triggered()
+{
+	visitSubURL("sub://substrata.info");
 }
 
 

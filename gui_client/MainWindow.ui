@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Metasiberia</string>
+   <string>Metasiberia Edit Beta</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -100,6 +100,7 @@
     <addaction name="actionGoToMainWorld"/>
     <addaction name="actionGoToPersonalWorld"/>
     <addaction name="actionGo_to_CryptoVoxels_World"/>
+    <addaction name="actionGo_to_Substrata_World"/>
     <addaction name="separator"/>
     <addaction name="actionSet_Start_Location"/>
    </widget>
@@ -537,6 +538,11 @@
   <action name="actionGo_to_CryptoVoxels_World">
    <property name="text">
     <string>Go to Cryptovoxels World</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Substrata_World">
+   <property name="text">
+    <string>Go to Substrata Server</string>
    </property>
   </action>
   <action name="actionExport_view_to_Indigo">
