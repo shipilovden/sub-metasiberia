@@ -2760,6 +2760,12 @@ void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
 }
 
 
+void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
+{
+	visitSubURL("sub://176.197.223.42");
+}
+
+
 void MainWindow::on_actionGo_to_Parcel_triggered()
 {
 	GoToParcelDialog d(this->settings);

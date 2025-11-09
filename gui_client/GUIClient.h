@@ -284,6 +284,13 @@ public:
 	void dropSelectedObject();
 
 	void checkForLODChanges(Timer& timer_event_timer);
+	bool shouldDisableLODForCurrentServer() const; // Returns true if LOD should be disabled for current server (e.g. 176.197.223.42)
+	int getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled)
+	int getEffectiveLODLevel(WorldObject* ob, const Vec3d& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled) - non-const overload
+	int getEffectiveLODLevel(const WorldObjectRef& ob, const Vec3d& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled) - WorldObjectRef overload
+	int getEffectiveLODLevel(const WorldObject* ob, const Vec4f& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled)
+	int getEffectiveLODLevel(const WorldObject* ob, float cam_to_ob_d2) const; // Returns LOD level considering server settings (always -1 if LOD disabled)
+	int getEffectiveLODLevel(const Avatar* av, const Vec3d& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled)
 	void checkForAudioRangeChanges();
 
 	int mouseOverAxisArrowOrRotArc(const Vec2f& pixel_coords, Vec4f& closest_seg_point_ws_out); // Returns closest axis arrow or -1 if no close.
