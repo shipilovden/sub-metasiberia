@@ -93,6 +93,7 @@ class VBOPool;
 class PBOPool;
 class VBO;
 class PBO;
+namespace Scripting { class ObjectScriptsEvaluator; }
 
 
 struct ResourceUserList
@@ -144,11 +145,13 @@ public:
 	static void staticInit();
 	static void staticShutdown();
 
-	void initialise(const std::string& cache_dir, const Reference<SettingsStore>& settings_store, UIInterface* ui_interface, glare::TaskManager* high_priority_task_manager_, Reference<glare::Allocator> worker_allocator
-#ifdef _WIN32
-		, IMFDXGIDeviceManager* device_manager_ = NULL // For WMFVideoReader fallback when CEF is not available
-#endif
-	);
+	// Initialise everything needed for the initial ClientThread launch.
+	void preConnectInitialise(const std::string& cache_dir, const Reference<SettingsStore>& settings_store, UIInterface* ui_interface, glare::TaskManager* high_priority_task_manager_, Reference<glare::Allocator> worker_allocator);
+
+	// Initialises various things not needed for the initial ClientThread launch.
+	// Called after the initial connectToServer() has completed.
+	void postConnectInitialise();
+
 	void afterGLInitInitialise(double device_pixel_ratio, Reference<OpenGLEngine> opengl_engine, 
 		const TextRendererFontFaceSizeSetRef& fonts, const TextRendererFontFaceSizeSetRef& emoji_fonts);
 
@@ -235,7 +238,7 @@ public:
 	GLObjectRef makeNameTagGLObject(const std::string& nametag);
 	GLObjectRef makeSpeakerGLObject();
 public:
-	void loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock);
+	void loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
 	void loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, int voxel_subsample_factor, WorldStateLock& world_state_lock);
 	void loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
 	void loadModelForAvatar(Avatar* avatar);
@@ -260,7 +263,7 @@ public:
 	void removeParcelObjects();
 	void recolourParcelsForLoggedInState();
 	void updateSelectedObjectPlacementBeamAndGizmos();
-	void updateInstancedCopiesOfObject(WorldObject* ob);
+	//void updateInstancedCopiesOfObject(WorldObject* ob);
 	void removeInstancesOfObject(WorldObject* ob);
 	void removeObScriptingInfo(WorldObject* ob);
 	void bakeLightmapsForAllObjectsInParcel(uint32 lightmap_flag);
@@ -288,13 +291,6 @@ public:
 	void dropSelectedObject();
 
 	void checkForLODChanges(Timer& timer_event_timer);
-	bool shouldDisableLODForCurrentServer() const; // Returns true if LOD should be disabled for current server (e.g. 176.197.223.42)
-	int getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled)
-	int getEffectiveLODLevel(WorldObject* ob, const Vec3d& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled) - non-const overload
-	int getEffectiveLODLevel(const WorldObjectRef& ob, const Vec3d& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled) - WorldObjectRef overload
-	int getEffectiveLODLevel(const WorldObject* ob, const Vec4f& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled)
-	int getEffectiveLODLevel(const WorldObject* ob, float cam_to_ob_d2) const; // Returns LOD level considering server settings (always -1 if LOD disabled)
-	int getEffectiveLODLevel(const Avatar* av, const Vec3d& campos) const; // Returns LOD level considering server settings (always -1 if LOD disabled)
 	void checkForAudioRangeChanges();
 
 	int mouseOverAxisArrowOrRotArc(const Vec2f& pixel_coords, Vec4f& closest_seg_point_ws_out); // Returns closest axis arrow or -1 if no close.
@@ -346,9 +342,12 @@ public:
 	void handleTextInputEvent(TextInputEvent& text_input_event);
 	void focusOut();
 
-	void disconnectFromServerAndClearAllObjects(bool fast_disconnect = false); // Remove any WorldObjectRefs held by MainWindow. fast_disconnect=true for faster world switching on same server.
+	void disconnectFromServerAndClearAllObjects(); // Remove any WorldObjectRefs held by MainWindow.
 
-	void connectToServer(const URLParseResults& url_results, bool fast_disconnect = false); // fast_disconnect=true for faster world switching on same server
+	void connectToServer(const URLParseResults& url_results);
+
+	void checkCreateResourceDownloadThreads(); // Create DownloadResourcesThread etc. if not created already and resource_manager is non-null.
+	void checkCreateManagersAndMinimap();
 
 	void processLoading(Timer& timer_event_timer);
 	void sendGeometryDataToGarbageDeleterThread(const Reference<OpenGLMeshRenderData>& gl_meshdata);
@@ -378,7 +377,7 @@ public:
 	void updateSpotlightGraphicsEngineData(const Matrix4f& ob_to_world_matrix, WorldObject* ob);
 	void recreateTextGraphicsAndPhysicsObs(WorldObject* ob);
 
-	void handleLODChunkMeshLoaded(const URLString& mesh_URL, Reference<MeshData> mesh_data, WorldStateLock& lock);
+	void handleLODChunkMeshLoaded(const URLString& mesh_URL, Reference<MeshData> mesh_data, WorldStateLock& lock) REQUIRES(world_state->mutex);
 
 	void assignLoadedOpenGLTexturesToMats(WorldObject* ob);
 
@@ -416,6 +415,7 @@ public:
 	std::string base_dir_path;
 	std::string resources_dir_path; // = base_dir_path + "/data/resources"
 	std::string appdata_path;
+	std::string cache_dir;
 	ArgumentParser parsed_args;
 
 	CameraController cam_controller;
@@ -478,9 +478,10 @@ public:
 	std::set<WorldObjectRef> web_view_obs;
 	std::set<WorldObjectRef> browser_vid_player_obs;
 	std::set<WorldObjectRef> audio_obs; // Objects with an audio_source or a non-empty audio_source_url, or objects that may play audio such as web-views or videos.
-	std::set<WorldObjectRef> obs_with_scripts; // Objects with non-null script_evaluator
+	glare::LinearIterSet<WorldObjectRef, WorldObjectRefHash> obs_with_scripts; // Objects with non-null script_evaluator
 	std::set<WorldObjectRef> obs_with_diagnostic_vis;
 
+	Reference<Scripting::ObjectScriptsEvaluator> object_scripts_evaluator;
 
 	WorldDetails connected_world_details;
 	WorldSettings connected_world_settings; // Settings for the world we are connected to, if any.
@@ -543,6 +544,7 @@ public:
 	
 	glare::TaskManager model_and_texture_loader_task_manager;
 
+	// For short, processor-intensive tasks that the main thread depends on, such as computing animation data for the current frame, or executing Jolt physics tasks.
 	glare::TaskManager* high_priority_task_manager;
 
 	MeshManager mesh_manager;
@@ -566,15 +568,12 @@ public:
 
 	Reference<VBO> dummy_vert_vbo;
 	Reference<VBO> dummy_index_vbo;
-	Reference<PBO> dummy_pbo;
-	Reference<PBO> temp_pbo;
-	Reference<OpenGLTexture> dummy_opengl_tex;
 	
 	bool process_model_loaded_next;
 
 	// Textures being loaded or already loaded.
 	// We have this set so that we don't process the same texture from multiple LoadTextureTasks running in parallel.
-	std::unordered_set<OpenGLTextureKey> textures_processing;
+	std::unordered_set<OpenGLTextureKey, OpenGLTextureKeyHasher> textures_processing;
 
 	// We build a different physics mesh for dynamic objects, so we need to keep track of which mesh we are building.
 	struct ModelProcessingKey
@@ -609,7 +608,7 @@ public:
 
 	// Audio files being loaded or already loaded.
 	// We have this set so that we don't process the same audio from multiple LoadAudioTasks running in parallel.
-	std::unordered_set<URLString> audio_processing;
+	std::unordered_set<URLString, URLStringHasher> audio_processing;
 
 	std::unordered_set<std::string> script_content_processing;
 
@@ -668,18 +667,18 @@ public:
 
 	js::Vector<Vec4f, 16> temp_av_positions;
 
-	std::unordered_map<URLString, DownloadingResourceInfo> URL_to_downloading_info; // Map from URL to info about the resource, for currently downloading resources.
+	std::unordered_map<URLString, DownloadingResourceInfo, URLStringHasher> URL_to_downloading_info; // Map from URL to info about the resource, for currently downloading resources.
 
 	std::map<ModelProcessingKey, std::set<UID>> loading_model_URL_to_world_ob_UID_map;
-	std::unordered_map<URLString, std::set<UID>> loading_model_URL_to_avatar_UID_map;
+	std::unordered_map<URLString, std::set<UID>, URLStringHasher> loading_model_URL_to_avatar_UID_map;
 
-	std::unordered_map<URLString, std::set<UID>> loading_texture_URL_to_world_ob_UID_map;
-	std::unordered_map<URLString, std::set<UID>> loading_texture_URL_to_avatar_UID_map;
+	std::unordered_map<URLString, std::set<UID>, URLStringHasher> loading_texture_URL_to_world_ob_UID_map;
+	std::unordered_map<URLString, std::set<UID>, URLStringHasher> loading_texture_URL_to_avatar_UID_map;
 
-	std::unordered_map<OpenGLTextureKey, std::set<UID>> loading_texture_key_to_hypercard_UID_map;
+	std::unordered_map<OpenGLTextureKey, std::set<UID>, URLStringHasher> loading_texture_key_to_hypercard_UID_map;
 
-	std::unordered_map<URLString, Vec3i> loading_mesh_URL_to_chunk_coords_map;
-	std::unordered_map<URLString, Vec3i> loading_texture_URL_to_chunk_coords_map;
+	std::unordered_map<URLString, Vec3i, URLStringHasher> loading_mesh_URL_to_chunk_coords_map;
+	std::unordered_map<URLString, Vec3i, URLStringHasher> loading_texture_URL_to_chunk_coords_map;
 
 	std::vector<Reference<GLObject> > player_phys_debug_spheres;
 
@@ -726,7 +725,7 @@ public:
 	glare::StackAllocator stack_allocator;
 	Reference<glare::Allocator> worker_allocator;
 
-	glare::ArenaAllocator arena_allocator;
+	mutable glare::ArenaAllocator arena_allocator;
 
 
 	Mutex particles_creation_buf_mutex;
@@ -850,8 +849,4 @@ public:
 	AsyncGeometryUploader async_index_geom_loader;
 
 	Reference<AnimatedTextureManager> animated_texture_manager;
-
-#ifdef _WIN32
-	IMFDXGIDeviceManager* device_manager; // For WMFVideoReader fallback when CEF is not available
-#endif
 };

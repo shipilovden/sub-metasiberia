@@ -14,9 +14,6 @@ Copyright Glare Technologies Limited 2024 -
 #include <utils/ComObHandle.h>
 #include <utils/SocketBufferOutStream.h>
 #include <QtWidgets/QMainWindow>
-#include <QtCore/QTranslator>
-#include <QtWidgets/QActionGroup>
-#include <QtWidgets/QAction>
 #include <string>
 namespace Ui { class MainWindow; }
 namespace glare { class TaskManager; }
@@ -40,8 +37,8 @@ public:
 	MainWindow(const std::string& base_dir_path, const std::string& appdata_path, const ArgumentParser& args, QWidget* parent = 0);
 	~MainWindow();
 
-	void initialise();
-	void afterGLInitInitialise();
+	void initialiseUI();
+	void afterGLInitInitialise(); // Called after glWigget and OpenGLEngine has been initialised.
 
 	void logAndConPrintMessage(const std::string& msg); // Print to console, and appends to LogWindow log display.
 
@@ -60,11 +57,11 @@ private slots:;
 	void on_actionAdd_Text_triggered();
 	void on_actionAdd_Voxels_triggered();
 	void on_actionAdd_Spotlight_triggered();
+	void on_actionAdd_Portal_triggered();
 	void on_actionAdd_Web_View_triggered();
 	void on_actionAdd_Video_triggered();
 	void on_actionAdd_Audio_Source_triggered();
 	void on_actionAdd_Decal_triggered();
-	void on_actionAdd_Portal_triggered();
 	void on_actionCopy_Object_triggered();
 	void on_actionPaste_Object_triggered();
 	void on_actionCloneObject_triggered();
@@ -79,9 +76,6 @@ private slots:;
 	void on_actionGoToMainWorld_triggered();
 	void on_actionGoToPersonalWorld_triggered();
 	void on_actionGo_to_CryptoVoxels_World_triggered();
-	void on_actionGo_to_Substrata_World_triggered();
-	void on_actionGo_to_Metasiberia_Server_triggered();
-	void on_actionGo_to_Shki_nvkz_Server_triggered();
 	void on_actionGo_to_Parcel_triggered();
 	void on_actionGo_to_Position_triggered();
 	void on_actionSet_Start_Location_triggered();
@@ -96,7 +90,6 @@ private slots:;
 	void on_actionUndo_triggered();
 	void on_actionRedo_triggered();
 	void on_actionShow_Log_triggered();
-	void on_actionUpdate_triggered();
 	void on_actionBake_Lightmaps_fast_for_all_objects_in_parcel_triggered();
 	void on_actionBake_lightmaps_high_quality_for_all_objects_in_parcel_triggered();
 	void on_actionSummon_Bike_triggered();
@@ -109,7 +102,6 @@ private slots:;
 	void on_actionLoad_Objects_From_Disk_triggered();
 	void on_actionDelete_All_Parcel_Objects_triggered();
 	void on_actionEnter_Fullscreen_triggered();
-	void on_actionAdd_to_Favorites_triggered();
 
 	void diagnosticsWidgetChanged();
 	void diagnosticsReloadTerrain();
@@ -165,11 +157,6 @@ private:
 	void startMainTimer();
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
-	void renameFavoriteLocation(const QString& url);
-	void removeFavoriteLocation(const QString& url);
-	void updateFavoritesMenu();
-	void onFavoriteLocationTriggered();
-	void onFavoritesMenuContextMenuRequested(const QPoint& pos);
 private:
 	void updateStatusBar();
 	void updateDiagnostics();
@@ -290,13 +277,13 @@ public:
 	virtual void webViewDataLinkHovered(const std::string& text) override;
 
 	// Gamepad
-	virtual bool gamepadAttached();
-	virtual float gamepadButtonL2();
-	virtual float gamepadButtonR2();
-	virtual float gamepadAxisLeftX();
-	virtual float gamepadAxisLeftY();
-	virtual float gamepadAxisRightX();
-	virtual float gamepadAxisRightY();
+	virtual bool gamepadAttached() override;
+	virtual float gamepadButtonL2() override;
+	virtual float gamepadButtonR2() override;
+	virtual float gamepadAxisLeftX() override;
+	virtual float gamepadAxisLeftY() override;
+	virtual float gamepadAxisRightX() override;
+	virtual float gamepadAxisRightY() override;
 
 
 	// OpenGL
@@ -304,8 +291,7 @@ public:
 	virtual void* makeNewSharedGLContext()  override;
 	virtual void makeGLContextCurrent(void* context) override;
 
-	// Environment settings
-	virtual void reapplyEnvironmentSettings() override;
+	virtual void* getID3D11Device() const override;
 	//------------------------------------------------- End UIInterface -----------------------------------------------------------
 
 public:
@@ -353,14 +339,11 @@ private:
 	QTimer* update_ob_editor_transform_timer;
 	QTimer* lightmap_flag_timer;
 	int main_timer_id; // ID of Main QT timer.
-	QList<QAction*> favorite_location_actions;
 
 public:
 #if defined(_WIN32)
 	ComObHandle<ID3D11Device> d3d_device;
 	ComObHandle<IMFDXGIDeviceManager> device_manager;
-	//HANDLE interop_device_handle;
-	//WGL wgl_funcs;
 #endif
 
 	LogWindow* log_window;
@@ -386,10 +369,4 @@ public:
 
 	Reference<RenderStatsWidget> CPU_render_stats_widget;
 	Reference<RenderStatsWidget> GPU_render_stats_widget;
-
-	// Language switching
-	QTranslator app_translator;
-	QActionGroup* language_action_group = nullptr;
-	QAction* action_lang_en = nullptr;
-	QAction* action_lang_ru = nullptr;
 };

@@ -10,11 +10,6 @@ Copyright Glare Technologies Limited 2024 -
 #endif
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
-#include <QtCore/QTranslator>
-#include <QtWidgets/QActionGroup>
-#include <QtWidgets/QAction>
-#include <QtWidgets/QMenu>
-#include <QtCore/QFile>
 #include "AboutDialog.h"
 #include "CreateObjectsDialog.h"
 #include "ClientThread.h"
@@ -42,6 +37,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "ThreadMessages.h"
 #include "MeshBuilding.h"
 #include "MiniMap.h"
+#include "PlayerPhysics.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
 #include "../shared/LODGeneration.h"
@@ -56,7 +52,6 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
-#include <QtWidgets/QInputDialog>
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
 #include "../qt/QtUtils.h"
@@ -101,7 +96,6 @@ Copyright Glare Technologies Limited 2024 -
 #ifdef _WIN32
 #include <d3d11.h>
 #include <d3d11_4.h>
-#include <windows.h> // For EXCEPTION_* constants and SetUnhandledExceptionFilter
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -142,16 +136,98 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	done_screenshot_setup(false),
 	running_destructor(false),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder),
-	settings(NULL)
+	settings(NULL),
+	user_details(NULL),
+	ui(NULL)
 	//game_controller(NULL)
 {
+	ZoneScoped; // Tracy profiler
+
+	settings = new QSettings("Glare Technologies", "Cyberspace");
+
+	credential_manager.loadFromSettings(*settings);
+
+	// Create main task manager.
+	// This is for doing work like texture compression and EXR loading, that will be created by LoadTextureTasks etc.
+	// Alloc these on the heap as Emscripten may have issues with stack-allocated objects before the emscripten_set_main_loop() call.
+	const size_t main_task_manager_num_threads = myClamp<size_t>(PlatformUtils::getNumLogicalProcessors(), 1, 512);
+	main_task_manager = new glare::TaskManager("main task manager", main_task_manager_num_threads);
+	main_task_manager->setThreadPriorities(MyThread::Priority_Lowest);
+
+
+	// Create high-priority task manager.
+	// For short, processor intensive tasks that the main thread depends on, such as computing animation data for the current frame, or executing Jolt physics tasks.
+	const size_t high_priority_task_manager_num_threads = myClamp<size_t>(PlatformUtils::getNumLogicalProcessors(), 1, 512);
+	high_priority_task_manager = new glare::TaskManager("high_priority_task_manager", high_priority_task_manager_num_threads);
+
+
+	main_mem_allocator = new glare::MallocAllocator(); // TEMP TODO: use something better
+	//main_mem_allocator = new glare::LimitedAllocator(10'000'000'000ull); // TEMP TODO: use something better
+
+
+
+	std::string cache_dir = appdata_path;
+	if(settings->value(MainOptionsDialog::useCustomCacheDirKey(), /*default value=*/false).toBool())
+	{
+		const std::string custom_cache_dir = QtUtils::toStdString(settings->value(MainOptionsDialog::customCacheDirKey()).toString());
+		if(!custom_cache_dir.empty()) // Don't use custom cache dir if it's the empty string (e.g. not set to something valid)
+			cache_dir = custom_cache_dir;
+	}
+
+	settings_store = new QSettingsStore(settings);
+
+	Reference<glare::Allocator> worker_allocator = new glare::LimitedAllocator(/*max_size_B=*/2048 * 1024 * 1024ull);
+
+	gui_client.preConnectInitialise(cache_dir, settings_store, this, high_priority_task_manager, /*worker allocator=*/worker_allocator);
+}
+
+
+static std::string computeWindowTitle()
+{
+	return "Substrata v" + ::cyberspace_version;
+}
+
+
+static const char* default_help_info_message = "Use the W/A/S/D keys and arrow keys to move and look around.\n"
+	"Click and drag the mouse on the 3D view to look around.\n"
+	"Space key: jump\n"
+	"Double-click an object to select it.";
+
+
+void MainWindow::startMainTimer()
+{
+	// Stop previous timer, if it exists.
+	if(main_timer_id != 0)
+		killTimer(main_timer_id);
+
+	int use_interval = 1; // in milliseconds
+	const bool limit_FPS = settings->value(MainOptionsDialog::limitFPSKey(), /*default val=*/false).toBool();
+	if(limit_FPS)
+	{
+		const int max_FPS = myClamp(settings->value(MainOptionsDialog::FPSLimitKey(), /*default val=*/60).toInt(), 15, 1000);
+		use_interval = (int)(1000.0 / max_FPS);
+	}
+
+#ifdef OSX
+	// Set to at least 17ms due to this issue on Mac OS: https://bugreports.qt.io/browse/QTBUG-60346
+	use_interval = myMax(use_interval, 17); 
+#endif
+
+	main_timer_id = startTimer(use_interval);
+}
+
+
+void MainWindow::initialiseUI()
+{
+	ZoneScoped; // Tracy profiler
+
 	QGamepadManager::instance(); // Creating the instance here before any windows are created is required for querying gamepads to work.
 
-	ui = new Ui::MainWindow();
-	ui->setupUi(this);
-
-	// Set translatable window title
-	setWindowTitle(tr("Metasiberia Editor Beta"));
+	{
+		ZoneScopedN("setupUi"); // Tracy profiler
+		ui = new Ui::MainWindow();
+		ui->setupUi(this);
+	}
 
 	setAcceptDrops(true);
 
@@ -172,77 +248,6 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 #endif
 	ui->menuWindow->addAction(ui->diagnosticsDockWidget->toggleViewAction());
 
-	// ---------------- Language submenu ----------------
-	{
-		QMenu* language_menu = new QMenu(tr("Language"), this);
-		language_action_group = new QActionGroup(this);
-		language_action_group->setExclusive(true);
-
-		action_lang_en = language_menu->addAction(tr("English"));
-		action_lang_en->setCheckable(true);
-		action_lang_en->setData(QString("en"));
-		language_action_group->addAction(action_lang_en);
-
-		action_lang_ru = language_menu->addAction(tr("Русский"));
-		action_lang_ru->setCheckable(true);
-		action_lang_ru->setData(QString("ru"));
-		language_action_group->addAction(action_lang_ru);
-
-		ui->menuWindow->addSeparator();
-		ui->menuWindow->addMenu(language_menu);
-
-		// Ensure settings is initialised before we use it
-		if(!settings)
-			settings = new QSettings("Glare Technologies", "Cyberspace");
-
-		connect(language_action_group, &QActionGroup::triggered, this, [this](QAction* a){
-			const QString lang = a->data().toString();
-			// Uninstall previous
-			qApp->removeTranslator(&app_translator);
-			bool installed = false;
-			if(lang == "ru")
-			{
-				// Try to load Russian translation
-				QString qm_path = QString::fromStdString(base_dir_path) + "/data/resources/translations/metasiberia_ru.qm";
-				if(QFile::exists(qm_path))
-				{
-					installed = app_translator.load(qm_path);
-					if(installed)
-						qApp->installTranslator(&app_translator);
-				}
-			}
-			// For English, we just don't install any translator
-			
-			// Save language preference
-			if(settings)
-				settings->setValue("mainwindow/language", lang);
-			
-			// Retranslate UI immediately
-			ui->retranslateUi(this);
-		});
-
-		// Initial language from settings (default en)
-		const QString saved_lang = settings ? settings->value("mainwindow/language", "en").toString() : QString("en");
-		if(saved_lang == "ru")
-		{
-			action_lang_ru->setChecked(true);
-			// Load Russian translation
-			QString qm_path = QString::fromStdString(base_dir_path) + "/data/resources/translations/metasiberia_ru.qm";
-			if(QFile::exists(qm_path))
-			{
-				if(app_translator.load(qm_path))
-					qApp->installTranslator(&app_translator);
-			}
-		}
-		else
-		{
-			action_lang_en->setChecked(true);
-		}
-	}
-
-	settings = new QSettings("Glare Technologies", "Cyberspace");
-
-	credential_manager.loadFromSettings(*settings);
 
 	// Always disable MDI for now, seems to be slower in general in Substrata
 	// 
@@ -254,15 +259,12 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	// -------------------------------------------------------------
 	// 2.18 ms CPU, 4.53 ms GPU
 	//
-	// Metasiberia: Enable compatibility mode by default
 	ui->glWidget->allow_multi_draw_indirect = false;
-	ui->glWidget->allow_bindless_textures = false;
-	
-	// Allow override via command line if needed
-	if(args.isArgPresent("--enable_MDI"))
-		ui->glWidget->allow_multi_draw_indirect = true;
-	if(args.isArgPresent("--enable_bindless"))
-		ui->glWidget->allow_bindless_textures = true;
+
+	//if(args.isArgPresent("--no_MDI"))
+	//	ui->glWidget->allow_multi_draw_indirect = false;
+	if(parsed_args.isArgPresent("--no_bindless"))
+		ui->glWidget->allow_bindless_textures = false;
 
 	ui->glWidget->setBaseDir(base_dir_path, /*print output=*/this, settings);
 	ui->objectEditor->base_dir_path = base_dir_path;
@@ -282,16 +284,9 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	user_details = new UserDetailsWidget(this);
 	ui->toolBar->addWidget(user_details);
 
-	
-	// Open Log File
-	//const std::string logfile_path = FileUtils::join(this->appdata_path, "log.txt");
-	//this->logfile.open(StringUtils::UTF8ToPlatformUnicodeEncoding(logfile_path).c_str(), std::ios_base::out);
-	//if(!logfile.good())
-	//	conPrint("WARNING: Failed to open log file at '" + logfile_path + "' for writing.");
-	//logfile << "============================= Cyberspace Started =============================" << std::endl;
-	//logfile << Clock::getAsciiTime() << std::endl;
 
-	
+
+
 
 	// Create the LogWindow early so we can log stuff to it.
 	log_window = new LogWindow(this, settings);
@@ -300,9 +295,15 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 
 	logMessage("Qt version: " + std::string(qVersion()));
+	logMessage("CEF version: " + CEF::CEFVersionString());
 
 	// Since we use a perspective projection matrix with infinite far distance, use a large max drawing distance.
 	ui->glWidget->max_draw_dist = 100000;
+
+	ui->glWidget->main_task_manager = main_task_manager;
+	ui->glWidget->high_priority_task_manager = high_priority_task_manager;
+	ui->glWidget->main_mem_allocator = main_mem_allocator;
+
 
 	// Restore main window geometry and state
 	this->restoreGeometry(settings->value("mainwindow/geometry").toByteArray());
@@ -338,8 +339,6 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 	ui->environmentOptionsWidget->init(settings);
 	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
-	
-	// Northern lights initialization moved to afterGLInitInitialise() to ensure OpenGL engine is ready
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->chatMessageLineEdit, SIGNAL(returnPressed()), this, SLOT(sendChatMessageSlot()));
@@ -371,7 +370,6 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	connect(user_details, SIGNAL(logOutClicked()), this, SLOT(on_actionLogOut_triggered()));
 	connect(user_details, SIGNAL(signUpClicked()), this, SLOT(on_actionSignUp_triggered()));
 	connect(url_widget, SIGNAL(URLChanged()), this, SLOT(URLChangedSlot()));
-	// Removed duplicate signal connection - already connected at line 338
 
 
 #if !defined(_WIN32)
@@ -380,66 +378,6 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 #endif
 
 
-	// Create main task manager.
-	// This is for doing work like texture compression and EXR loading, that will be created by LoadTextureTasks etc.
-	// Alloc these on the heap as Emscripten may have issues with stack-allocated objects before the emscripten_set_main_loop() call.
-	const size_t main_task_manager_num_threads = myClamp<size_t>(PlatformUtils::getNumLogicalProcessors(), 1, 512);
-	main_task_manager = new glare::TaskManager("main task manager", main_task_manager_num_threads);
-	main_task_manager->setThreadPriorities(MyThread::Priority_Lowest);
-
-
-	// Create high-priority task manager.
-	// For short, processor intensive tasks that the main thread depends on, such as computing animation data for the current frame, or executing Jolt physics tasks.
-	const size_t high_priority_task_manager_num_threads = myClamp<size_t>(PlatformUtils::getNumLogicalProcessors(), 1, 512);
-	high_priority_task_manager = new glare::TaskManager("high_priority_task_manager", high_priority_task_manager_num_threads);
-
-
-	main_mem_allocator = new glare::MallocAllocator(); // TEMP TODO: use something better
-	//main_mem_allocator = new glare::LimitedAllocator(10'000'000'000ull); // TEMP TODO: use something better
-
-	ui->glWidget->main_task_manager = main_task_manager;
-	ui->glWidget->high_priority_task_manager = high_priority_task_manager;
-	ui->glWidget->main_mem_allocator = main_mem_allocator;
-}
-
-
-static std::string computeWindowTitle()
-{
-	return "Metasiberia Editor Beta";
-}
-
-
-static const char* default_help_info_message = "Use the W/A/S/D keys and arrow keys to move and look around.\n"
-	"Click and drag the mouse on the 3D view to look around.\n"
-	"Space key: jump\n"
-	"Double-click an object to select it.";
-
-
-void MainWindow::startMainTimer()
-{
-	// Stop previous timer, if it exists.
-	if(main_timer_id != 0)
-		killTimer(main_timer_id);
-
-	int use_interval = 1; // in milliseconds
-	const bool limit_FPS = settings->value(MainOptionsDialog::limitFPSKey(), /*default val=*/false).toBool();
-	if(limit_FPS)
-	{
-		const int max_FPS = myClamp(settings->value(MainOptionsDialog::FPSLimitKey(), /*default val=*/60).toInt(), 15, 1000);
-		use_interval = (int)(1000.0 / max_FPS);
-	}
-
-#ifdef OSX
-	// Set to at least 17ms due to this issue on Mac OS: https://bugreports.qt.io/browse/QTBUG-60346
-	use_interval = myMax(use_interval, 17); 
-#endif
-
-	main_timer_id = startTimer(use_interval);
-}
-
-
-void MainWindow::initialise()
-{
 	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
 
 	ui->materialBrowserDockWidgetContents->init(this, this->base_dir_path, this->appdata_path, /*print output=*/this);
@@ -473,31 +411,13 @@ void MainWindow::initialise()
 	connect(lightmap_flag_timer, SIGNAL(timeout()), this, SLOT(sendLightmapNeededFlagsSlot()));
 
 
-	std::string cache_dir = appdata_path;
-	if(settings->value(MainOptionsDialog::useCustomCacheDirKey(), /*default value=*/false).toBool())
-	{
-		const std::string custom_cache_dir = QtUtils::toStdString(settings->value(MainOptionsDialog::customCacheDirKey()).toString());
-		if(!custom_cache_dir.empty()) // Don't use custom cache dir if it's the empty string (e.g. not set to something valid)
-			cache_dir = custom_cache_dir;
-	}
-
-	settings_store = new QSettingsStore(settings);
-
-	Reference<glare::Allocator> worker_allocator = new glare::LimitedAllocator(/*max_size_B=*/2048 * 1024 * 1024ull);
 
 #ifdef _WIN32
-	// Create a GPU device.  Needed to get hardware accelerated video decoding.
-	// Must be created BEFORE gui_client.initialise() so device_manager is available for WMFVideoReader fallback
+	// Create a GPU device.  Needed to get hardware accelerated video decoding and for hardware texture sharing for CEF.
 	Direct3DUtils::createGPUDeviceAndMFDeviceManager(d3d_device, device_manager);
 #endif //_WIN32
 
-	gui_client.initialise(cache_dir, settings_store, this, high_priority_task_manager, /*worker allocator=*/worker_allocator
-#ifdef _WIN32
-		, device_manager.ptr
-#endif
-	);
 
-	
 	if(run_as_screenshot_slave)
 	{
 		conPrint("Waiting for screenshot command connection...");
@@ -568,8 +488,11 @@ public:
 };
 
 
+ // Called after glWigget and OpenGLEngine has been initialised.
 void MainWindow::afterGLInitInitialise()
 {
+	ZoneScoped; // Tracy profiler
+
 	if(settings->value("mainwindow/showParcels", QVariant(false)).toBool())
 	{
 		ui->actionShow_Parcels->setChecked(true);
@@ -586,15 +509,6 @@ void MainWindow::afterGLInitInitialise()
 	ui->actionThird_Person_Camera->setChecked(settings->value("mainwindow/thirdPersonCamera", /*default val=*/false).toBool());
 
 	// OpenGLEngineTests::doTextureLoadingTests(*ui->glWidget->opengl_engine);
-
-#ifdef _WIN32
-	// Prepare for D3D interoperability with opengl
-	//wgl_funcs.init();
-	//
-	//interop_device_handle = wgl_funcs.wglDXOpenDeviceNV(d3d_device.ptr); // prepare for interoperability with opengl
-	//if(interop_device_handle == 0)
-	//	throw glare::Exception("wglDXOpenDeviceNV failed.");
-#endif
 
 	// NOTE: this code is also in SDLClient.cpp
 #if defined(_WIN32)
@@ -622,13 +536,6 @@ void MainWindow::afterGLInitInitialise()
 	MainWindowGLUICallbacks* glui_callbacks = new MainWindowGLUICallbacks();
 	glui_callbacks->main_window = this;
 	gui_client.gl_ui->callbacks = glui_callbacks;
-	
-	// Initialize favorites menu
-	updateFavoritesMenu();
-	
-	// Set up context menu for favorites menu (for right-click to delete)
-	ui->menuFavorites->setContextMenuPolicy(Qt::CustomContextMenu);
-	connect(ui->menuFavorites, &QMenu::customContextMenuRequested, this, &MainWindow::onFavoritesMenuContextMenuRequested);
 
 
 	// Do auto-setting of graphics options, if they have not been set.  Otherwise apply MSAA setting.
@@ -666,9 +573,6 @@ void MainWindow::afterGLInitInitialise()
 		CPU_render_stats_widget = new RenderStatsWidget(opengl_engine, gui_client.gl_ui, /*widget index=*/0);
 		GPU_render_stats_widget = new RenderStatsWidget(opengl_engine, gui_client.gl_ui, /*widget index=*/1);
 	}
-	
-	// Initialize environment settings (northern lights, etc.) after OpenGL engine is ready
-	environmentSettingChangedSlot();
 }
 
 
@@ -685,14 +589,6 @@ MainWindow::~MainWindow()
 
 	//ui->glWidget->makeCurrent(); // This crashes on Mac
 
-#ifdef _WIN32
-	//if(this->interop_device_handle)
-	//{
-	//	const BOOL res = wgl_funcs.wglDXCloseDeviceNV(this->interop_device_handle); // close interoperability with opengl
-	//	assertOrDeclareUsed(res);
-	//}
-#endif
-
 	// Free direct3d device and device manager
 #ifdef _WIN32
 	device_manager.release();
@@ -700,6 +596,7 @@ MainWindow::~MainWindow()
 #endif
 
 	delete ui;
+	ui = nullptr;
 	
 	settings_store = nullptr;
 	// NOTE: can't delete settings here as some widget destructors access it after here.
@@ -843,13 +740,15 @@ void MainWindow::showInfoNotification(const std::string& message)
 
 void MainWindow::setTextAsNotLoggedIn()
 {
-	user_details->setTextAsNotLoggedIn();
+	if(user_details)
+		user_details->setTextAsNotLoggedIn();
 }
 
 
 void MainWindow::setTextAsLoggedIn(const std::string& username)
 {
-	user_details->setTextAsLoggedIn(username);
+	if(user_details)
+		user_details->setTextAsLoggedIn(username);
 }
 
 
@@ -873,13 +772,15 @@ void MainWindow::loggedInButtonClicked()
 
 void MainWindow::updateWorldSettingsControlsEditable()
 {
-	ui->worldSettingsWidget->updateControlsEditable();
+	if(ui)
+		ui->worldSettingsWidget->updateControlsEditable();
 }
 
 
 void MainWindow::updateWorldSettingsUIFromWorldSettings()
 {
-	this->ui->worldSettingsWidget->setFromWorldSettings(gui_client.connected_world_settings); // Update UI
+	if(ui)
+		this->ui->worldSettingsWidget->setFromWorldSettings(gui_client.connected_world_settings); // Update UI
 }
 
 
@@ -1032,7 +933,8 @@ void MainWindow::appendChatMessage(const std::string& msg)
 
 void MainWindow::clearChatMessages()
 {
-	ui->chatMessagesTextEdit->clear();
+	if(ui)
+		ui->chatMessagesTextEdit->clear();
 }
 
 
@@ -1044,6 +946,9 @@ bool MainWindow::isShowParcelsEnabled() const
 
 void MainWindow::updateOnlineUsersList() // Works off world state avatars.
 {
+	if(!ui)
+		return;
+
 	if(gui_client.world_state.isNull())
 		return;
 
@@ -1869,6 +1774,9 @@ void MainWindow::on_actionAdd_Spotlight_triggered()
 	new_world_object->angle = 0;
 	new_world_object->scale = Vec3f(1.f);
 
+	new_world_object->type_data.spotlight_data.cone_start_angle = 0.317560429291521f; // = std::acos(0.95f); (old fixed value)
+	new_world_object->type_data.spotlight_data.cone_end_angle   = 0.451026811796262f; // = std::acos(0.9f);  (old fixed value)
+
 	// Emitting material
 	new_world_object->materials.push_back(new WorldMaterial());
 	new_world_object->materials.back()->emission_lum_flux_or_lum = 100000.f;
@@ -1911,13 +1819,6 @@ void MainWindow::on_actionAdd_Portal_triggered()
 		return;
 	}
 
-	// Check if portal meshes are loaded
-	if(gui_client.portal_opengl_mesh.isNull())
-	{
-		showErrorNotification("Cannot create portal: portal meshes not loaded. The portal.bmesh file may be missing or corrupted.");
-		return;
-	}
-
 	WorldObjectRef new_world_object = new WorldObject();
 	new_world_object->uid = UID(0); // Will be set by server
 	new_world_object->object_type = WorldObject::ObjectType_Portal;
@@ -1926,7 +1827,7 @@ void MainWindow::on_actionAdd_Portal_triggered()
 	new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>()); // Round to nearest 45 degree angle, facing player.
 	new_world_object->scale = Vec3f(1.f);
 
-	new_world_object->setAABBOS(gui_client.portal_opengl_mesh->aabb_os);
+	new_world_object->setAABBOS(gui_client.spotlight_opengl_mesh->aabb_os);
 
 
 	// Send CreateObject message to server
@@ -1938,59 +1839,6 @@ void MainWindow::on_actionAdd_Portal_triggered()
 	}
 
 	showInfoNotification("Added portal.");
-}
-
-
-void MainWindow::on_actionAdd_to_Favorites_triggered()
-{
-	// Get current location URL with coordinates
-	const std::string current_url = url_widget->getURL();
-	
-	if(current_url.empty())
-	{
-		showErrorNotification("Cannot add to favorites: no current location URL.");
-		return;
-	}
-	
-	QString url_qstr = QtUtils::toQString(current_url);
-	
-	// Load existing favorites with names
-	QVariantMap favorites_map = settings->value("favorite_locations_map", QVariantMap()).toMap();
-	
-	// Also check old format for backward compatibility
-	QStringList favorites_list = settings->value("favorite_locations", QStringList()).toStringList();
-	
-	// Check if this URL is already in favorites
-	if(favorites_map.contains(url_qstr) || favorites_list.contains(url_qstr))
-	{
-		showInfoNotification("This location is already in favorites.");
-		return;
-	}
-	
-	// Generate default name from URL
-	QString display_name = url_qstr;
-	if(display_name.contains("sub://"))
-	{
-		display_name = display_name.mid(display_name.indexOf("sub://") + 6);
-		if(display_name.length() > 50)
-			display_name = display_name.left(47) + "...";
-	}
-	
-	// Add to favorites map with default name
-	favorites_map[url_qstr] = display_name;
-	
-	// Also add to old format for backward compatibility
-	favorites_list.append(url_qstr);
-	
-	// Save to settings
-	settings->setValue("favorite_locations_map", favorites_map);
-	settings->setValue("favorite_locations", favorites_list);
-	settings->sync();
-	
-	// Update the favorites menu
-	updateFavoritesMenu();
-	
-	showInfoNotification("Location added to favorites.");
 }
 
 
@@ -2863,213 +2711,6 @@ void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 }
 
 
-void MainWindow::on_actionGo_to_Substrata_World_triggered()
-{
-	visitSubURL("sub://substrata.info");
-}
-
-
-void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
-{
-	visitSubURL("sub://vr.metasiberia.com");
-}
-
-
-void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
-{
-	visitSubURL("sub://176.197.223.42");
-}
-
-
-void MainWindow::updateFavoritesMenu()
-{
-	// Clear existing actions
-	for(QAction* action : favorite_location_actions)
-	{
-		ui->menuFavorites->removeAction(action);
-		delete action;
-	}
-	favorite_location_actions.clear();
-	
-	// Load favorites with names from settings
-	QVariantMap favorites_map = settings->value("favorite_locations_map", QVariantMap()).toMap();
-	
-	// Also load old format for backward compatibility
-	QStringList favorites_list = settings->value("favorite_locations", QStringList()).toStringList();
-	
-	// Merge old format into new format if needed
-	for(const QString& url : favorites_list)
-	{
-		if(!favorites_map.contains(url))
-		{
-			// Generate default name from URL
-			QString display_name = url;
-			if(display_name.contains("sub://"))
-			{
-				display_name = display_name.mid(display_name.indexOf("sub://") + 6);
-				if(display_name.length() > 50)
-					display_name = display_name.left(47) + "...";
-			}
-			favorites_map[url] = display_name;
-		}
-	}
-	
-	// Get list of URLs from map keys
-	QStringList favorites = favorites_map.keys();
-	
-	if(favorites.isEmpty())
-	{
-		// Add a placeholder action if no favorites
-		QAction* no_favorites_action = new QAction("(No favorites yet)", this);
-		no_favorites_action->setEnabled(false);
-		ui->menuFavorites->addAction(no_favorites_action);
-		favorite_location_actions.append(no_favorites_action);
-		return;
-	}
-	
-	// Create actions for each favorite location
-	for(const QString& url_str : favorites)
-	{
-		// Get saved name or generate default name from URL
-		QString display_name = favorites_map.value(url_str, "").toString();
-		if(display_name.isEmpty())
-		{
-			// Generate default name from URL
-			display_name = url_str;
-			if(display_name.contains("sub://"))
-			{
-				display_name = display_name.mid(display_name.indexOf("sub://") + 6);
-				if(display_name.length() > 50)
-					display_name = display_name.left(47) + "...";
-			}
-		}
-		
-		QAction* action = new QAction(display_name, this);
-		action->setData(url_str); // Store the full URL in action data
-		
-		// Connect left-click to navigate to location
-		QString url_for_lambda = url_str;
-		connect(action, &QAction::triggered, this, [this, url_for_lambda]() {
-			visitSubURL(QtUtils::toStdString(url_for_lambda));
-		});
-		
-		ui->menuFavorites->addAction(action);
-		favorite_location_actions.append(action);
-	}
-	
-	// Save updated map back (in case we migrated from old format)
-	if(!favorites_list.isEmpty())
-	{
-		settings->setValue("favorite_locations_map", favorites_map);
-		settings->sync();
-	}
-}
-
-
-void MainWindow::onFavoriteLocationTriggered()
-{
-	// This is handled by lambda in updateFavoritesMenu()
-	// But we keep this method for potential future use
-}
-
-
-void MainWindow::onFavoritesMenuContextMenuRequested(const QPoint& pos)
-{
-	// Get the action at the clicked position
-	QAction* action = ui->menuFavorites->actionAt(pos);
-	if(!action || !action->data().isValid())
-		return; // No action or no data (placeholder action)
-	
-	// Get the URL from action data
-	QString url = action->data().toString();
-	if(url.isEmpty())
-		return;
-	
-	// Create context menu with rename and delete options
-	QMenu context_menu(this);
-	QAction* rename_action = context_menu.addAction(this->tr("Rename"));
-	QAction* delete_action = context_menu.addAction(this->tr("Remove"));
-	
-	// Show context menu and wait for user selection
-	QAction* selected = context_menu.exec(ui->menuFavorites->mapToGlobal(pos));
-	
-	if(selected == rename_action)
-	{
-		renameFavoriteLocation(url);
-	}
-	else if(selected == delete_action)
-	{
-		removeFavoriteLocation(url);
-	}
-}
-
-
-void MainWindow::renameFavoriteLocation(const QString& url)
-{
-	// Load existing favorites with names
-	QVariantMap favorites_map = settings->value("favorite_locations_map", QVariantMap()).toMap();
-	
-	// Get current name (or generate default name from URL)
-	QString current_name = favorites_map.value(url, "").toString();
-	if(current_name.isEmpty())
-	{
-		// Generate default name from URL
-		QString display_name = url;
-		if(display_name.contains("sub://"))
-		{
-			display_name = display_name.mid(display_name.indexOf("sub://") + 6);
-			if(display_name.length() > 50)
-				display_name = display_name.left(47) + "...";
-		}
-		current_name = display_name;
-	}
-	
-	// Show input dialog for new name
-	bool ok;
-	QString new_name = QInputDialog::getText(this, this->tr("Rename Favorite"), this->tr("Enter new name:"), QLineEdit::Normal, current_name, &ok);
-	
-	if(ok && !new_name.isEmpty() && new_name != current_name)
-	{
-		// Update the name in the map
-		favorites_map[url] = new_name;
-		
-		// Save back to settings
-		settings->setValue("favorite_locations_map", favorites_map);
-		settings->sync();
-		
-		// Update the menu
-		updateFavoritesMenu();
-		
-		showInfoNotification(QtUtils::toStdString(this->tr("Favorite location renamed.")));
-	}
-}
-
-void MainWindow::removeFavoriteLocation(const QString& url)
-{
-	// Load existing favorites with names
-	QVariantMap favorites_map = settings->value("favorite_locations_map", QVariantMap()).toMap();
-	
-	// Also check old format for backward compatibility
-	QStringList favorites_list = settings->value("favorite_locations", QStringList()).toStringList();
-	
-	// Remove from map
-	favorites_map.remove(url);
-	
-	// Remove from list (for backward compatibility)
-	favorites_list.removeAll(url);
-	
-	// Save back to settings
-	settings->setValue("favorite_locations_map", favorites_map);
-	settings->setValue("favorite_locations", favorites_list);
-	settings->sync();
-	
-	// Update the menu
-	updateFavoritesMenu();
-	
-	showInfoNotification(QtUtils::toStdString(this->tr("Location removed from favorites.")));
-}
-
-
 void MainWindow::on_actionGo_to_Parcel_triggered()
 {
 	GoToParcelDialog d(this->settings);
@@ -3296,12 +2937,6 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 {
 	AboutDialog d(this, appdata_path);
 	d.exec();
-}
-
-
-void MainWindow::on_actionUpdate_triggered()
-{
-	// TODO: Implement update functionality
 }
 
 
@@ -3795,35 +3430,13 @@ void MainWindow::worldSettingsAppliedSlot()
 // An environment setting has been edited in the environment options dock widget
 void MainWindow::environmentSettingChangedSlot()
 {
-	printf("[MainWindow] environmentSettingChangedSlot called\n");
-	
 	if(ui->glWidget->opengl_engine.nonNull())
 	{
 		const float theta = myClamp(::degreeToRad((float)ui->environmentOptionsWidget->sunThetaRealControl->value()), 0.01f, Maths::pi<float>() - 0.01f);
 		const float phi   = ::degreeToRad((float)ui->environmentOptionsWidget->sunPhiRealControl->value());
 		const Vec4f sundir = GeometrySampling::dirForSphericalCoords(phi, theta);
 
-		ui->glWidget->opengl_engine->setSunDir(sundir);
-		
-		// Update northern lights setting with additional safety checks
-		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
-		printf("Northern lights checkbox state: %s\n", northern_lights_enabled ? "true" : "false");
-		
-		if(ui->glWidget->opengl_engine->getCurrentScene())
-		{
-			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
-			// Debug: print the state
-			printf("Northern lights setting applied: %s\n", northern_lights_enabled ? "true" : "false");
-			printf("Scene draw_aurora after setting: %s\n", ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora ? "true" : "false");
-		}
-		else
-		{
-			printf("WARNING: getCurrentScene() returned null - northern lights setting not applied!\n");
-		}
-	}
-	else
-	{
-		printf("WARNING: opengl_engine is null - northern lights setting not applied!\n");
+		opengl_engine->setSunDir(sundir);
 	}
 }
 
@@ -3912,9 +3525,6 @@ void MainWindow::URLChangedSlot()
 {
 	const std::string URL = this->url_widget->getURL();
 	visitSubURL(URL);
-	
-	// Update parcel editor with current server URL for dynamic links
-	ui->parcelEditor->setCurrentServerURL(URL);
 }
 
 
@@ -3976,6 +3586,9 @@ static uint32 fromQtModifiers(Qt::KeyboardModifiers modifiers)
 
 void MainWindow::glWidgetMousePressed(QMouseEvent* e)
 {
+	if(!opengl_engine)
+		return;
+
 	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
 
 	MouseEvent mouse_event;
@@ -3993,6 +3606,9 @@ void MainWindow::glWidgetMousePressed(QMouseEvent* e)
 
 void MainWindow::glWidgetMouseReleased(QMouseEvent* e)
 {
+	if(!opengl_engine)
+		return;
+
 	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
 	const Vec2f gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
 
@@ -4095,13 +3711,6 @@ void MainWindow::showParcelEditor()
 void MainWindow::setParcelEditorForParcel(const Parcel& parcel)
 {
 	ui->parcelEditor->setFromParcel(parcel);
-	
-	// Set current server URL for dynamic parcel links
-	if(url_widget)
-	{
-		std::string current_url = url_widget->getURL();
-		ui->parcelEditor->setCurrentServerURL(current_url);
-	}
 }
 
 
@@ -4627,24 +4236,44 @@ float MainWindow::gamepadAxisRightY()
 
 bool MainWindow::supportsSharedGLContexts() const
 {
+#if defined(_WIN32)
 	return true;
+#else
+	return false; // Not implemented yet for Mac and Linux
+#endif
 }
 
 
 void* MainWindow::makeNewSharedGLContext()
 {
+#if defined(_WIN32)
 	return (void*)ui->glWidget->makeNewSharedGLContext();
+#else
+	return nullptr;
+#endif
 }
 
 
 void MainWindow::makeGLContextCurrent(void* context_)
 {
+#if defined(_WIN32)
 	HWND hwnd = reinterpret_cast<HWND>(ui->glWidget->winId());
 	HDC hdc = GetDC(hwnd);
 
 	HGLRC handle = (HGLRC)context_;
 	BOOL res = wglMakeCurrent(hdc, handle);
 	assert(res != 0);
+#endif
+}
+
+
+void* MainWindow::getID3D11Device() const
+{
+#if defined(_WIN32)
+	return (void*)d3d_device.ptr;
+#else
+	return nullptr;
+#endif
 }
 
 
@@ -4797,63 +4426,29 @@ static void qtMessageHandler(QtMsgType type, const QMessageLogContext& context, 
 }
 
 
-// Unhandled exception filter - catches Windows structured exceptions (SEH)
-#ifdef _WIN32
-LONG WINAPI unhandledExceptionFilter(_EXCEPTION_POINTERS* ExceptionInfo)
-{
-	const DWORD code = ExceptionInfo->ExceptionRecord->ExceptionCode;
-	std::string error_msg;
-	
-	switch(code)
-	{
-	case EXCEPTION_ACCESS_VIOLATION:
-		error_msg = "Access violation (SEH) - possible corrupted file or invalid memory access";
-		break;
-	case EXCEPTION_INT_DIVIDE_BY_ZERO:
-		error_msg = "Integer divide by zero (SEH)";
-		break;
-	case EXCEPTION_STACK_OVERFLOW:
-		error_msg = "Stack overflow (SEH)";
-		break;
-	default:
-		error_msg = "Structured exception (SEH) code: " + toString((uint32)code);
-		break;
-	}
-	
-	conPrint("FATAL: Unhandled exception: " + error_msg);
-	
-	// Log to file if possible
-	// Note: We can't throw C++ exceptions from here, so we just log and let the system handle it
-	// Return EXCEPTION_CONTINUE_SEARCH to let default handler run (which will show crash dialog)
-	// or EXCEPTION_EXECUTE_HANDLER if we want to try to continue (risky)
-	return EXCEPTION_CONTINUE_SEARCH;
-}
-#endif
-
 int main(int argc, char *argv[])
 {
-#ifdef _WIN32
-	// Install unhandled exception filter to catch Windows structured exceptions (SEH)
-	SetUnhandledExceptionFilter(unhandledExceptionFilter);
-#endif
+	ZoneScoped; // Tracy profiler
 
 #ifdef BUGSPLAT_SUPPORT
 	if(shouldEnableBugSplat())
 	{
-		// BugSplat initialization - disabled for development build
-		// new MiniDmpSender(
-		//	L"Substrata", // database
-		//	L"Substrata", // app
-		//	StringUtils::UTF8ToPlatformUnicodeEncoding(cyberspace_version).c_str(), // version
-		//	NULL, // app identifier
-		//	MDSF_USEGUARDMEMORY | MDSF_LOGFILE | MDSF_PREVENTHIJACKING // flags
-		// );
+		ZoneScopedN("Bugsplat initialization"); // Tracy profiler
+
+		// BugSplat initialization.
+		new MiniDmpSender(
+			L"Substrata", // database
+			L"Substrata", // app
+			StringUtils::UTF8ToPlatformUnicodeEncoding(cyberspace_version).c_str(), // version
+			NULL, // app identifier
+			MDSF_USEGUARDMEMORY | MDSF_LOGFILE | MDSF_PREVENTHIJACKING // flags
+		);
 
 		// The following calls add support for collecting crashes for abort(), vectored exceptions, out of memory,
 		// pure virtual function calls, and for invalid parameters for OS functions.
 		// These calls should be used for each module that links with a separate copy of the CRT.
-		// SetGlobalCRTExceptionBehavior();
-		// SetPerThreadCRTExceptionBehavior(); // This call needed in each thread of your app
+		SetGlobalCRTExceptionBehavior();
+		SetPerThreadCRTExceptionBehavior(); // This call needed in each thread of your app
 	}
 #endif
 
@@ -4911,10 +4506,8 @@ int main(int argc, char *argv[])
 		syntax["--extractanims"] = std::vector<ArgumentParser::ArgumentType>(2, ArgumentParser::ArgumentType_string); // Extract animation data
 		syntax["--screenshotslave"] = std::vector<ArgumentParser::ArgumentType>(); // Run GUI as a screenshot-taking slave.
 		syntax["--testscreenshot"] = std::vector<ArgumentParser::ArgumentType>(); // Test screenshot taking
-		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine (legacy)
-		syntax["--no_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Disable bindless textures in graphics engine (legacy)
-		syntax["--enable_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Enable MDI in graphics engine (override default)
-		syntax["--enable_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Enable bindless textures in graphics engine (override default)
+		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine
+		syntax["--no_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Disable bindless textures in graphics engine
 
 		if(args.size() == 3 && args[1] == "-NSDocumentRevisionsDebugMode")
 			args.resize(1); // This is some XCode debugging rubbish, remove it
@@ -4945,9 +4538,9 @@ int main(int argc, char *argv[])
 		}
 
 
-	//std::string server_hostname = "substrata.info";
-	//std::string server_userpath = "";
-	std::string server_URL = "sub://vr.metasiberia.com";
+		//std::string server_hostname = "substrata.info";
+		//std::string server_userpath = "";
+		std::string server_URL = "sub://substrata.info";
 		bool server_URL_explicitly_specified = false;
 
 		if(parsed_args.isArgPresent("-h"))
@@ -5020,11 +4613,36 @@ int main(int argc, char *argv[])
 		}
 
 
-		int app_exec_res = 0; // Initialize to success
-		try
-		{ // Scope of MainWindow mw and textureserver.
+		int app_exec_res;
+		{ // Scope of MainWindow mw.
 
-			MainWindow mw(cyberspace_base_dir_path, appdata_path, parsed_args); // Creates GLWidget
+			// We want to call connectToServer as quickly as possible to hide the latency of setting up the TLS connection to the server.
+			// So do the bare minimum of initialisation, call connectToServer, then do the reset (setting up UI etc.)
+
+			MainWindow mw(cyberspace_base_dir_path, appdata_path, parsed_args);
+
+			// If the user didn't explicitly specify a URL (e.g. on the command line), and there is a valid start location URL setting, use it.
+			if(!server_URL_explicitly_specified)
+			{
+				const std::string start_loc_URL_setting = QtUtils::toStdString(mw.settings->value(MainOptionsDialog::startLocationURLKey()).toString());
+				if(!start_loc_URL_setting.empty())
+					server_URL = start_loc_URL_setting;
+			}
+
+			try
+			{
+				URLParseResults parse_results = URLParser::parseURL(server_URL);
+
+				mw.gui_client.connectToServer(parse_results);
+			}
+			catch(glare::Exception& e)
+			{
+				QtUtils::showErrorMessageDialog(e.what(), &mw);
+			}
+
+			// Do rest of initialisation now we have called connectToServer().
+			mw.gui_client.postConnectInitialise();
+			CEF::initialiseCEF(cyberspace_base_dir_path, appdata_path);
 
 			open_even_filter->main_window = &mw;
 
@@ -5034,15 +4652,15 @@ int main(int argc, char *argv[])
 			if(parsed_args.isArgPresent("--testscreenshot"))
 				mw.test_screenshot_taking = true;
 
-			mw.initialise();
+			mw.initialiseUI();
 
-			mw.show();
-			conPrint("MainWindow::show() called - window should be visible");
+			if(CEF::initialisationFailed())
+				mw.logMessage("CEF initialisation failed."); // Log CEF initialisation failure now that mw.log_window has been created.
+
+			mw.show(); // Calls glWidget->initializeGL() which initialises OpenGLEngine.
 
 			mw.raise();
-			conPrint("MainWindow::raise() called");
 
-			conPrint("Checking OpenGL engine initialization...");
 			if(!mw.ui->glWidget->opengl_engine->initSucceeded())
 			{
 				const std::string msg = "OpenGL engine initialisation failed: " + mw.ui->glWidget->opengl_engine->getInitialisationErrorMsg();
@@ -5060,128 +4678,14 @@ int main(int argc, char *argv[])
 			mw.gui_client.cam_controller.setMoveScale(0.3f);
 
 
-			// If the user didn't explictly specify a URL (e.g. on the command line), and there is a valid start location URL setting, use it.
-			if(!server_URL_explicitly_specified)
-			{
-				const std::string start_loc_URL_setting = QtUtils::toStdString(mw.settings->value(MainOptionsDialog::startLocationURLKey()).toString());
-				if(!start_loc_URL_setting.empty())
-					server_URL = start_loc_URL_setting;
-			}
 
-			conPrint("About to call afterGLInitInitialise()...");
-			try
-			{
-				mw.afterGLInitInitialise();
-				conPrint("afterGLInitInitialise() completed");
-			}
-			catch(glare::Exception& e)
-			{
-				// Handle exceptions during afterGLInitInitialise
-				const std::string error_msg = e.what();
-				if(error_msg.find("Invalid magic number") != std::string::npos)
-				{
-					conPrint("WARNING: " + error_msg + " during afterGLInitInitialise - continuing execution.");
-				}
-				else
-				{
-					conPrint("Exception in afterGLInitInitialise: " + error_msg);
-					QtUtils::showErrorMessageDialog("Error during initialization: " + error_msg, &mw);
-				}
-			}
-			catch(Indigo::IndigoException& e)
-			{
-				// Handle Indigo exceptions during afterGLInitInitialise
-				const std::string error_msg = toStdString(e.what());
-				if(error_msg.find("Invalid magic number") != std::string::npos)
-				{
-					conPrint("WARNING: " + error_msg + " during afterGLInitInitialise - continuing execution.");
-				}
-				else
-				{
-					conPrint("IndigoException in afterGLInitInitialise: " + error_msg);
-					QtUtils::showErrorMessageDialog("Error during initialization: " + error_msg, &mw);
-				}
-			}
+			mw.afterGLInitInitialise();
 
-			conPrint("About to connect to server: " + server_URL);
-			try
-			{
-				URLParseResults parse_results = URLParser::parseURL(server_URL);
 
-				mw.gui_client.connectToServer(parse_results);
-				conPrint("connectToServer() completed successfully");
-			}
-			catch(glare::Exception& e)
-			{
-				// For "Invalid magic number" errors, don't show dialog - just log
-				if(e.what().find("Invalid magic number") != std::string::npos)
-				{
-					conPrint("WARNING: " + e.what() + " - continuing without connecting to server.");
-				}
-				else
-				{
-					conPrint("Exception connecting to server: " + e.what());
-					QtUtils::showErrorMessageDialog(e.what(), &mw);
-				}
-			}
-
-			// Run the event loop - this is where the program actually runs
-			// Wrap in try-catch to handle any exceptions during execution
-			conPrint("About to start event loop (app.exec())...");
-			try
-			{
-				app_exec_res = app.exec();
-				conPrint("Event loop finished, exit code: " + toString(app_exec_res));
-			}
-			catch(glare::Exception& e)
-			{
-				// If exception occurs during event loop, log it but don't crash
-				conPrint("Exception during event loop: " + e.what());
-				app_exec_res = 1;
-			}
-			catch(Indigo::IndigoException& e)
-			{
-				// If exception occurs during event loop, log it but don't crash
-				conPrint("IndigoException during event loop: " + toStdString(e.what()));
-				app_exec_res = 1;
-			}
+			app_exec_res = app.exec();
 
 			open_even_filter->main_window = NULL;
-		} // End scope of MainWindow mw - destructor called here
-		catch(glare::Exception& e)
-		{
-			// Exception during MainWindow lifecycle - check if it's a non-critical error
-			const std::string error_msg = e.what();
-			if(error_msg.find("Invalid magic number") != std::string::npos)
-			{
-				// Non-critical file format error during destruction - just log, don't change exit code
-				conPrint("WARNING: " + error_msg + " during MainWindow destruction - ignoring.");
-				// Keep app_exec_res as is (should be 0 if program ran successfully)
-			}
-			else
-			{
-				// Other exceptions - log but don't crash
-				conPrint("Exception during MainWindow lifecycle: " + error_msg);
-				app_exec_res = 1;
-			}
-		}
-		catch(Indigo::IndigoException& e)
-		{
-			// Exception during MainWindow lifecycle - check if it's a non-critical error
-			const std::string error_msg = toStdString(e.what());
-			if(error_msg.find("Invalid magic number") != std::string::npos)
-			{
-				// Non-critical file format error during destruction - just log, don't change exit code
-				conPrint("WARNING: " + error_msg + " during MainWindow destruction - ignoring.");
-				// Keep app_exec_res as is (should be 0 if program ran successfully)
-			}
-			else
-			{
-				// Other exceptions - log but don't crash
-				conPrint("IndigoException during MainWindow lifecycle: " + error_msg);
-				app_exec_res = 1;
-			}
-		}
+		} // End scope of MainWindow mw
 
 #if defined(_WIN32)
 		WMFVideoReader::shutdownWMF();
@@ -5199,84 +4703,20 @@ int main(int argc, char *argv[])
 	{
 		// Show error
 		conPrint(toStdString(e.what()));
-		
-		// For "Invalid magic number" errors, don't show dialog - just log and exit
-		// These are usually non-critical file format errors that don't need user interaction
-		const std::string error_msg = toStdString(e.what());
-		if(error_msg.find("Invalid magic number") != std::string::npos)
-		{
-			conPrint("Non-critical error detected, exiting without dialog.");
-			try
-			{
-				GUIClient::staticShutdown();
-			}
-			catch(...)
-			{
-				// Ignore exceptions during shutdown
-			}
-			return 1;
-		}
-		
-		// For other errors, show dialog
-		// Ensure static shutdown is called BEFORE showing dialog to avoid crashes
-		try
-		{
-			GUIClient::staticShutdown();
-		}
-		catch(...)
-		{
-			// Ignore exceptions during shutdown to prevent double errors
-		}
-		
-		// Use QMessageBox instead of QErrorMessage for safer error display
-		QMessageBox::critical(nullptr, "Error", QtUtils::toQString(e.what()));
-		
+		QErrorMessage m;
+		m.showMessage(QtUtils::toQString(e.what()));
+		m.exec();
 		return 1;
 	}
 	catch(glare::Exception& e)
 	{
 		// Show error
 		conPrint(e.what());
-		
-		// For "Invalid magic number" errors, don't show dialog - just log and exit
-		// These are usually non-critical file format errors that don't need user interaction
-		if(e.what().find("Invalid magic number") != std::string::npos)
-		{
-			conPrint("Non-critical error detected, exiting without dialog.");
-			try
-			{
-				GUIClient::staticShutdown();
-			}
-			catch(...)
-			{
-				// Ignore exceptions during shutdown
-			}
-			return 1;
-		}
-		
-		// For other errors, show dialog
-		// Ensure static shutdown is called BEFORE showing dialog to avoid crashes
-		try
-		{
-			GUIClient::staticShutdown();
-		}
-		catch(...)
-		{
-			// Ignore exceptions during shutdown to prevent double errors
-		}
-		
-		// Use QMessageBox instead of QErrorMessage for safer error display
-		QMessageBox::critical(nullptr, "Error", QtUtils::toQString(e.what()));
-		
+		QErrorMessage m;
+		m.showMessage(QtUtils::toQString(e.what()));
+		m.exec();
 		return 1;
 	}
-}
-
-
-void MainWindow::reapplyEnvironmentSettings()
-{
-	// Reapply environment settings (including northern lights) to the new scene
-	environmentSettingChangedSlot();
 }
 
 

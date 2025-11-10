@@ -199,7 +199,7 @@ class MyObjectLayerPairFilter : public JPH::ObjectLayerPairFilter
 static void* joltAllocate(size_t size)
 {
 	//num_jolt_allocs_done++;
-	void* ptr = MemAlloc::alignedMalloc(size, 16);
+	void* ptr = MemAlloc::mallocWithDefaultAlignmentAndThrow(size);
 
 	TracyAllocS(ptr, size, /*call stack capture depth=*/10);
 
@@ -210,7 +210,7 @@ static void joltFree(void* inBlock)
 {
 	TracyFreeS(inBlock, /*call stack capture depth=*/10);
 
-	MemAlloc::alignedFree(inBlock);
+	MemAlloc::freeWithDefaultAlignmentAndThrow(inBlock);
 }
 
 static void* joltReallocate(void *inBlock, [[maybe_unused]] size_t inOldSize, size_t inNewSize)
@@ -218,7 +218,7 @@ static void* joltReallocate(void *inBlock, [[maybe_unused]] size_t inOldSize, si
 	//num_jolt_allocs_done++;
 
 	// Alloc new mem
-	void* ptr = MemAlloc::alignedMalloc(inNewSize, 16);
+	void* ptr = MemAlloc::mallocWithDefaultAlignmentAndThrow(inNewSize);
 	if(!ptr)
 		throw std::bad_alloc();
 	TracyAllocS(ptr, inNewSize, /*call stack capture depth=*/10);
@@ -231,7 +231,7 @@ static void* joltReallocate(void *inBlock, [[maybe_unused]] size_t inOldSize, si
 	if(inBlock)
 	{
 		TracyFreeS(inBlock, /*call stack capture depth=*/10);
-		MemAlloc::alignedFree(inBlock);
+		MemAlloc::freeWithDefaultAlignmentAndThrow(inBlock);
 	}
 
 	return ptr;
@@ -255,6 +255,8 @@ static void joltAlignedFree(void *inBlock)
 
 void PhysicsWorld::init()
 {
+	ZoneScoped; // Tracy profiler
+
 #if USE_JOLT
 	// Register allocation hook
 
@@ -476,6 +478,8 @@ PhysicsWorld::PhysicsWorld(glare::TaskManager* task_manager_/*PhysicsWorldBodyAc
 	large_objects(/*empty key=*/NULL, /*expected num items=*/32),
 #endif
 {
+	ZoneScoped; // Tracy profiler
+
 #if USE_JOLT
 	// Highest high water mark I have seen so far is 20.5 MB.  
 	// Note that increasing mMaxNumHits in CharacterVirtualSettings results in a lot more mem usage.

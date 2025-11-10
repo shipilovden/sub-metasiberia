@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Metasiberia Editor Beta</string>
+   <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -71,7 +71,6 @@
     <addaction name="actionAdd_Video"/>
     <addaction name="actionAdd_Decal"/>
     <addaction name="actionAdd_Portal"/>
-    <addaction name="actionAdd_to_Favorites"/>
     <addaction name="separator"/>
     <addaction name="actionCopy_Object"/>
     <addaction name="actionPaste_Object"/>
@@ -102,17 +101,8 @@
     <addaction name="actionGoToMainWorld"/>
     <addaction name="actionGoToPersonalWorld"/>
     <addaction name="actionGo_to_CryptoVoxels_World"/>
-    <addaction name="actionGo_to_Substrata_World"/>
-    <addaction name="actionGo_to_Metasiberia_Server"/>
-    <addaction name="actionGo_to_Shki_nvkz_Server"/>
-    <addaction name="menuFavorites"/>
     <addaction name="separator"/>
     <addaction name="actionSet_Start_Location"/>
-   </widget>
-   <widget class="QMenu" name="menuFavorites">
-    <property name="title">
-     <string>Go to Favorites</string>
-    </property>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -130,7 +120,6 @@
      <string>Help</string>
     </property>
     <addaction name="actionAbout_Substrata"/>
-    <addaction name="actionUpdate"/>
    </widget>
    <widget class="QMenu" name="menuAvatar">
     <property name="title">
@@ -551,21 +540,6 @@
     <string>Go to Cryptovoxels World</string>
    </property>
   </action>
-  <action name="actionGo_to_Substrata_World">
-   <property name="text">
-    <string>Go to Substrata Server</string>
-   </property>
-  </action>
-  <action name="actionGo_to_Metasiberia_Server">
-   <property name="text">
-    <string>Go to Metasiberia Server</string>
-   </property>
-  </action>
-  <action name="actionGo_to_Shki_nvkz_Server">
-   <property name="text">
-    <string>Go to Shki-nvkz Server</string>
-   </property>
-  </action>
   <action name="actionExport_view_to_Indigo">
    <property name="text">
     <string>Export view to Indigo</string>
@@ -573,12 +547,7 @@
   </action>
   <action name="actionAbout_Substrata">
    <property name="text">
-    <string>About Metasiberia</string>
-   </property>
-  </action>
-  <action name="actionUpdate">
-   <property name="text">
-    <string>Update</string>
+    <string>About Substrata</string>
    </property>
   </action>
   <action name="actionOptions">
@@ -763,16 +732,6 @@
     <string>Add Decal</string>
    </property>
   </action>
-  <action name="actionAdd_Portal">
-   <property name="text">
-    <string>Add Portal</string>
-   </property>
-  </action>
-  <action name="actionAdd_to_Favorites">
-   <property name="text">
-    <string>Add to Favorites</string>
-   </property>
-  </action>
   <action name="actionEnter_Fullscreen">
    <property name="text">
     <string>Enter Fullscreen Mode</string>
@@ -784,6 +743,11 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+Shift+C</string>
+   </property>
+  </action>
+  <action name="actionAdd_Portal">
+   <property name="text">
+    <string>Add Portal</string>
    </property>
   </action>
  </widget>

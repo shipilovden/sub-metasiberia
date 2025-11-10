@@ -17,19 +17,20 @@ Copyright Glare Technologies Limited 2022 -
 #include <simpleraytracer/raymesh.h>
 #include <graphics/formatdecoderobj.h>
 #include <graphics/FormatDecoderGLTF.h>
-#include <graphics/BatchedMesh.h>
 #include <utils/ShouldCancelCallback.h>
 #include <utils/StringUtils.h>
 #include <utils/ConPrint.h>
 #include <utils/StandardPrintOutput.h>
-#include <utils/FileUtils.h>
-#include <algorithm>
 #include <tracy/Tracy.hpp>
+
+#if USE_JOLT
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 #include <Jolt/Physics/Collision/Shape/CompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#endif
+
 
 
 MeshBuilding::MeshBuildingResults MeshBuilding::makeImageCube(VertexBufferAllocator& allocator)
@@ -151,6 +152,8 @@ MeshBuilding::MeshBuildingResults MeshBuilding::makeImageCube(VertexBufferAlloca
 
 MeshBuilding::MeshBuildingResults MeshBuilding::makeSpotlightMeshes(const std::string& base_dir_path, VertexBufferAllocator& allocator)
 {
+	ZoneScoped; // Tracy profiler
+
 	const std::string model_path = base_dir_path + "/data/resources/spotlight5.glb";
 
 	GLTFLoadedData gltf_data;
@@ -171,34 +174,9 @@ MeshBuilding::MeshBuildingResults MeshBuilding::makePortalMeshes(const std::stri
 {
 	ZoneScoped; // Tracy profiler
 
-	// Try multiple path formats for Windows compatibility
-	std::string model_path = base_dir_path + "/data/resources/portal.bmesh";
-	std::string model_path_alt = base_dir_path + "\\data\\resources\\portal.bmesh";
-	
-	// Check which path exists
-	std::string final_path;
-	if(FileUtils::fileExists(model_path))
-		final_path = model_path;
-	else if(FileUtils::fileExists(model_path_alt))
-		final_path = model_path_alt;
-	else
-	{
-		// Try with normalised path separators
-		std::string normalised_path = model_path;
-		std::replace(normalised_path.begin(), normalised_path.end(), '/', '\\');
-		if(FileUtils::fileExists(normalised_path))
-			final_path = normalised_path;
-		else
-			throw glare::Exception("Portal mesh file not found. Tried: " + model_path + ", " + model_path_alt + ", " + normalised_path);
-	}
-	
-	conPrint("Loading portal mesh from: " + final_path);
-	
-	// Log file size for debugging
-	const uint64 file_size = FileUtils::getFileSize(final_path);
-	conPrint("Portal mesh file size: " + toString(file_size) + " bytes");
+	const std::string model_path = base_dir_path + "/data/resources/portal.bmesh";
 
-	BatchedMeshRef batched_mesh = BatchedMesh::readFromFile(final_path, /*mem allocator=*/nullptr);
+	BatchedMeshRef batched_mesh = BatchedMesh::readFromFile(model_path, /*mem allocator=*/nullptr);
 
 	batched_mesh->checkValidAndSanitiseMesh();
 
