@@ -11964,8 +11964,18 @@ void GUIClient::visitSubURL(const std::string& URL) // Visit a substrata 'sub://
 
 		if(hostname != this->server_hostname || worldname != this->server_worldname)
 		{
-			// Connect to a different server!
-			connectToServer(parse_res);
+			// Connect to a different server or world!
+			// If same server but different world, use fast disconnect for quicker transition
+			const bool same_server_different_world = (hostname == this->server_hostname && worldname != this->server_worldname);
+			if(same_server_different_world)
+			{
+				showInfoNotification("Switching to world " + worldname + "...");
+			}
+			else
+			{
+				showInfoNotification("Connecting to " + hostname + "...");
+			}
+			connectToServer(parse_res, same_server_different_world);
 		}
 
 		// If we had a URL with a parcel UID, like sub://substrata.info/parcel/10, then look up the parcel to get its position, then go there.
@@ -12007,14 +12017,20 @@ void GUIClient::visitSubURL(const std::string& URL) // Visit a substrata 'sub://
 }
 
 
-void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObjectRefs held by GUIClient.
+void GUIClient::disconnectFromServerAndClearAllObjects(bool fast_disconnect) // Remove any WorldObjectRefs held by GUIClient. fast_disconnect=true for faster world switching on same server.
 {
-	udp_socket = NULL;
+	// For fast disconnect, we'll close UDP socket later (after clearing queues but before killing threads)
+	// For normal disconnect, close immediately
+	if(!fast_disconnect)
+	{
+		udp_socket = NULL;
+	}
 
 	load_item_queue.clear();
 	
 	// Cancel and wait for tasks to complete - wrap in try-catch to handle exceptions from damaged files
 	// Use a timeout to prevent hanging if tasks are stuck loading corrupted files
+	// Reduced timeout for faster portal transitions
 	try
 	{
 		// First, try to cancel tasks quickly
@@ -12024,12 +12040,21 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 		// Note: We can't directly access threads to cancel, so we'll just wait with timeout
 		
 		// Wait for tasks with a timeout to prevent hanging on corrupted files
-		Timer timeout_timer;
-		const double MAX_WAIT_TIME = 2.0; // Maximum 2 seconds to wait
-		
-		while(!model_and_texture_loader_task_manager.areAllTasksComplete() && timeout_timer.elapsed() < MAX_WAIT_TIME)
+		// For fast disconnect (same server, different world), use even shorter timeout or skip entirely
+		if(fast_disconnect)
 		{
-			PlatformUtils::Sleep(10); // Sleep 10ms
+			// For fast disconnect, just cancel tasks and don't wait - they'll finish in background
+			// This prevents blocking on slow/corrupted file loads
+		}
+		else
+		{
+			Timer timeout_timer;
+			const double MAX_WAIT_TIME = 0.3; // Maximum wait time for normal disconnect
+			
+			while(!model_and_texture_loader_task_manager.areAllTasksComplete() && timeout_timer.elapsed() < MAX_WAIT_TIME)
+			{
+				PlatformUtils::Sleep(5); // Sleep 5ms for normal
+			}
 		}
 		
 		if(!model_and_texture_loader_task_manager.areAllTasksComplete())
@@ -12059,9 +12084,28 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	upload_queue.clear();
 
 	// Kill any existing threads connected to the server
-	net_resource_download_thread_manager.killThreadsBlocking();
-	client_udp_handler_thread_manager.killThreadsBlocking();
-	mic_read_thread_manager.killThreadsBlocking();
+	// For fast disconnect, kill connections/sockets FIRST to unblock threads, then kill threads non-blocking
+	if(fast_disconnect)
+	{
+		// For fast disconnect, kill UDP socket first to unblock UDP handler thread
+		// This must happen BEFORE killing threads, otherwise threads may be blocked on socket operations
+		if(udp_socket.nonNull())
+		{
+			udp_socket = NULL; // Close UDP socket to unblock ClientUDPHandlerThread
+		}
+		
+		// Kill threads non-blocking - they should exit quickly since sockets are closed
+		// UDP handler thread will exit when it detects socket is closed
+		client_udp_handler_thread_manager.killThreadsNonBlocking();
+		net_resource_download_thread_manager.killThreadsNonBlocking();
+		mic_read_thread_manager.killThreadsNonBlocking();
+	}
+	else
+	{
+		net_resource_download_thread_manager.killThreadsBlocking();
+		client_udp_handler_thread_manager.killThreadsBlocking();
+		mic_read_thread_manager.killThreadsBlocking();
+	}
 
 #if defined(EMSCRIPTEN)
 	emscripten_resource_downloader.shutdown();
@@ -12072,57 +12116,114 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	resource_upload_thread_manager.killThreadsNonBlocking(); // Suggests to UploadResourcesThreads to quit, by calling UploadResourcesThread::kill(), which sets should_die = 1.
 
 	// Wait for some period of time to see if client_thread and resource download threads quit.  If not, hard-kill them by calling killConnection().
+	// Reduced timeout for faster portal transitions
+	// For fast disconnect (same server, different world), use even shorter timeout and skip waiting
 	Timer timer;
-	while((this->client_thread_manager.getNumThreads() > 0) || (resource_download_thread_manager.getNumThreads() > 0) || (resource_upload_thread_manager.getNumThreads() > 0)) // While client_thread or a resource download thread is still running:
+	const double MAX_THREAD_WAIT_TIME = fast_disconnect ? 0.05 : 0.2; // 0.05s for fast (same server), 0.2s for normal
+	if(fast_disconnect)
 	{
-		if(timer.elapsed() > 1.0)
+		// For fast disconnect, immediately kill connections and use non-blocking thread termination
+		// This prevents hanging on blocked socket operations
+		if(this->client_thread_manager.getNumThreads() > 0)
 		{
-			logAndConPrintMessage("Reached time limit waiting for client_thread or resource download threads to close.  Hard-killing connection(s)");
-			logAndConPrintMessage("this->client_thread_manager.getNumThreads(): " + toString(this->client_thread_manager.getNumThreads()));
-			logAndConPrintMessage("this->resource_download_thread_manager.getNumThreads(): " + toString(this->resource_download_thread_manager.getNumThreads()));
-			logAndConPrintMessage("this->resource_upload_thread_manager.getNumThreads(): " + toString(this->resource_upload_thread_manager.getNumThreads()));
-
-			if(this->client_thread_manager.getNumThreads() > 0)
-			{
-				if(client_thread.nonNull())
-					this->client_thread->killConnection(); // Calls ungracefulShutdown on socket, which should interrupt any blocking socket calls.
-
-				this->client_thread = NULL;
-				this->client_thread_manager.killThreadsBlocking();
-			}
-
-			if(resource_download_thread_manager.getNumThreads() > 0)
-			{
-				Lock lock(resource_download_thread_manager.getMutex());
-				for(auto it = resource_download_thread_manager.getThreads().begin(); it != resource_download_thread_manager.getThreads().end(); ++it)
-				{
-					Reference<MessageableThread> thread = *it;
-					assert(thread.isType<DownloadResourcesThread>());
-					if(thread.isType<DownloadResourcesThread>())
-						thread.downcastToPtr<DownloadResourcesThread>()->killConnection();
-				}
-			}
-
-			if(resource_upload_thread_manager.getNumThreads() > 0)
-			{
-				Lock lock(resource_upload_thread_manager.getMutex());
-				for(auto it = resource_upload_thread_manager.getThreads().begin(); it != resource_upload_thread_manager.getThreads().end(); ++it)
-				{
-					Reference<MessageableThread> thread = *it;
-					assert(thread.isType<UploadResourceThread>());
-					if(thread.isType<UploadResourceThread>())
-						thread.downcastToPtr<UploadResourceThread>()->killConnection();
-				}
-			}
-
-			break;
+			if(client_thread.nonNull())
+				this->client_thread->killConnection(); // Kill socket connection first to unblock thread
+			this->client_thread = NULL;
+			// Use non-blocking kill - threads will terminate in background
+			this->client_thread_manager.killThreadsNonBlocking();
 		}
+		
+		if(resource_download_thread_manager.getNumThreads() > 0)
+		{
+			Lock lock(resource_download_thread_manager.getMutex());
+			for(auto it = resource_download_thread_manager.getThreads().begin(); it != resource_download_thread_manager.getThreads().end(); ++it)
+			{
+				Reference<MessageableThread> thread = *it;
+				if(thread.isType<DownloadResourcesThread>())
+					thread.downcastToPtr<DownloadResourcesThread>()->killConnection(); // Kill socket first
+			}
+			// Use non-blocking kill - threads will terminate in background
+			resource_download_thread_manager.killThreadsNonBlocking();
+		}
+		
+		if(resource_upload_thread_manager.getNumThreads() > 0)
+		{
+			Lock lock(resource_upload_thread_manager.getMutex());
+			for(auto it = resource_upload_thread_manager.getThreads().begin(); it != resource_upload_thread_manager.getThreads().end(); ++it)
+			{
+				Reference<MessageableThread> thread = *it;
+				if(thread.isType<UploadResourceThread>())
+					thread.downcastToPtr<UploadResourceThread>()->killConnection(); // Kill socket first
+			}
+			// Use non-blocking kill - threads will terminate in background
+			resource_upload_thread_manager.killThreadsNonBlocking();
+		}
+	}
+	else
+	{
+		// Normal disconnect - wait a bit for graceful shutdown
+		while((this->client_thread_manager.getNumThreads() > 0) || (resource_download_thread_manager.getNumThreads() > 0) || (resource_upload_thread_manager.getNumThreads() > 0)) // While client_thread or a resource download thread is still running:
+		{
+			if(timer.elapsed() > MAX_THREAD_WAIT_TIME)
+			{
+				logAndConPrintMessage("Reached time limit waiting for client_thread or resource download threads to close.  Hard-killing connection(s)");
+				logAndConPrintMessage("this->client_thread_manager.getNumThreads(): " + toString(this->client_thread_manager.getNumThreads()));
+				logAndConPrintMessage("this->resource_download_thread_manager.getNumThreads(): " + toString(this->resource_download_thread_manager.getNumThreads()));
+				logAndConPrintMessage("this->resource_upload_thread_manager.getNumThreads(): " + toString(this->resource_upload_thread_manager.getNumThreads()));
 
-		PlatformUtils::Sleep(10);
+				if(this->client_thread_manager.getNumThreads() > 0)
+				{
+					if(client_thread.nonNull())
+						this->client_thread->killConnection(); // Calls ungracefulShutdown on socket, which should interrupt any blocking socket calls.
+
+					this->client_thread = NULL;
+					this->client_thread_manager.killThreadsBlocking();
+				}
+
+				if(resource_download_thread_manager.getNumThreads() > 0)
+				{
+					Lock lock(resource_download_thread_manager.getMutex());
+					for(auto it = resource_download_thread_manager.getThreads().begin(); it != resource_download_thread_manager.getThreads().end(); ++it)
+					{
+						Reference<MessageableThread> thread = *it;
+						assert(thread.isType<DownloadResourcesThread>());
+						if(thread.isType<DownloadResourcesThread>())
+							thread.downcastToPtr<DownloadResourcesThread>()->killConnection();
+					}
+				}
+
+				if(resource_upload_thread_manager.getNumThreads() > 0)
+				{
+					Lock lock(resource_upload_thread_manager.getMutex());
+					for(auto it = resource_upload_thread_manager.getThreads().begin(); it != resource_upload_thread_manager.getThreads().end(); ++it)
+					{
+						Reference<MessageableThread> thread = *it;
+						assert(thread.isType<UploadResourceThread>());
+						if(thread.isType<UploadResourceThread>())
+							thread.downcastToPtr<UploadResourceThread>()->killConnection();
+					}
+				}
+
+				break;
+			}
+
+			PlatformUtils::Sleep(5); // Reduced from 10ms to 5ms for faster response
+		}
 	}
 	this->client_thread = NULL; // Need to make sure client_thread is destroyed, since it hangs on to a bunch of references.
-	resource_download_thread_manager.killThreadsBlocking();
-	resource_upload_thread_manager.killThreadsBlocking();
+	if(!fast_disconnect)
+	{
+		// For normal disconnect, wait for threads to finish gracefully
+		resource_download_thread_manager.killThreadsBlocking();
+		resource_upload_thread_manager.killThreadsBlocking();
+	}
+	// For fast disconnect, threads are already killed non-blocking above, they will terminate in background
+
+	// Ensure UDP socket is closed (for fast disconnect, it was closed earlier, but make sure it's NULL)
+	if(fast_disconnect && udp_socket.nonNull())
+	{
+		udp_socket = NULL;
+	}
 
 	this->client_avatar_uid = UID::invalidUID();
 	this->server_protocol_version = 0;
@@ -12303,7 +12404,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 }
 
 
-void GUIClient::connectToServer(const URLParseResults& parse_res)
+void GUIClient::connectToServer(const URLParseResults& parse_res, bool fast_disconnect)
 {
 	this->last_url_parse_results = parse_res;
 
@@ -12314,7 +12415,7 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 	this->server_hostname = parse_res.hostname;
 	this->server_worldname = parse_res.worldname;
 
-	conPrint("connectToServer: server_hostname='" + this->server_hostname + "', shouldDisableLOD=" + toString(shouldDisableLODForCurrentServer()));
+	conPrint("connectToServer: server_hostname='" + this->server_hostname + "', worldname='" + this->server_worldname + "', fast_disconnect=" + toString(fast_disconnect) + ", shouldDisableLOD=" + toString(shouldDisableLODForCurrentServer()));
 
 	// Increase load distance for Shki-nvkz server to prevent objects from disappearing
 	if(shouldDisableLODForCurrentServer())
@@ -12343,7 +12444,7 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 	//-------------------------------- Do disconnect process --------------------------------
 	try
 	{
-		disconnectFromServerAndClearAllObjects();
+		disconnectFromServerAndClearAllObjects(fast_disconnect);
 	}
 	catch(glare::Exception& e)
 	{

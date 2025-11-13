@@ -144,7 +144,11 @@ public:
 	static void staticInit();
 	static void staticShutdown();
 
-	void initialise(const std::string& cache_dir, const Reference<SettingsStore>& settings_store, UIInterface* ui_interface, glare::TaskManager* high_priority_task_manager_, Reference<glare::Allocator> worker_allocator);
+	void initialise(const std::string& cache_dir, const Reference<SettingsStore>& settings_store, UIInterface* ui_interface, glare::TaskManager* high_priority_task_manager_, Reference<glare::Allocator> worker_allocator
+#ifdef _WIN32
+		, IMFDXGIDeviceManager* device_manager_ = NULL // For WMFVideoReader fallback when CEF is not available
+#endif
+	);
 	void afterGLInitInitialise(double device_pixel_ratio, Reference<OpenGLEngine> opengl_engine, 
 		const TextRendererFontFaceSizeSetRef& fonts, const TextRendererFontFaceSizeSetRef& emoji_fonts);
 
@@ -342,9 +346,9 @@ public:
 	void handleTextInputEvent(TextInputEvent& text_input_event);
 	void focusOut();
 
-	void disconnectFromServerAndClearAllObjects(); // Remove any WorldObjectRefs held by MainWindow.
+	void disconnectFromServerAndClearAllObjects(bool fast_disconnect = false); // Remove any WorldObjectRefs held by MainWindow. fast_disconnect=true for faster world switching on same server.
 
-	void connectToServer(const URLParseResults& url_results);
+	void connectToServer(const URLParseResults& url_results, bool fast_disconnect = false); // fast_disconnect=true for faster world switching on same server
 
 	void processLoading(Timer& timer_event_timer);
 	void sendGeometryDataToGarbageDeleterThread(const Reference<OpenGLMeshRenderData>& gl_meshdata);
@@ -497,6 +501,9 @@ public:
 
 	Reference<OpenGLMeshRenderData> spotlight_opengl_mesh;
 	PhysicsShape spotlight_shape;
+
+	Reference<OpenGLMeshRenderData> portal_opengl_mesh;
+	PhysicsShape portal_shape;
 
 	PhysicsShape unit_cube_shape;
 
@@ -843,4 +850,8 @@ public:
 	AsyncGeometryUploader async_index_geom_loader;
 
 	Reference<AnimatedTextureManager> animated_texture_manager;
+
+#ifdef _WIN32
+	IMFDXGIDeviceManager* device_manager; // For WMFVideoReader fallback when CEF is not available
+#endif
 };
