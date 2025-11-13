@@ -10,6 +10,8 @@ Copyright Glare Technologies Limited 2025 -
 #include "ThreadMessages.h"
 #include "ModelLoading.h"
 #include "../shared/ResourceManager.h"
+#include "../dll/include/IndigoException.h"
+#include "../dll/IndigoStringUtils.h"
 #include <opengl/OpenGLEngine.h>
 #include <opengl/OpenGLMeshRenderData.h>
 #include <utils/LimitedAllocator.h>
@@ -19,6 +21,7 @@ Copyright Glare Technologies Limited 2025 -
 #include <utils/UniqueRef.h>
 #include <utils/MemMappedFile.h>
 #include <tracy/Tracy.hpp>
+
 
 
 LoadModelTask::LoadModelTask()
@@ -103,6 +106,17 @@ void LoadModelTask::run(size_t thread_index)
 #endif
 
 				js::Vector<bool> create_tris_for_mat;
+
+				// Additional safety check before loading
+				if(model_buffer.dataSizeBytes() < 4)
+				{
+					throw glare::Exception("Model file '" + toStdString(lod_model_url) + "' is too small (size: " + toString(model_buffer.dataSizeBytes()) + " bytes). File may be corrupted.");
+				}
+				
+				if(model_buffer.data() == nullptr)
+				{
+					throw glare::Exception("Model file '" + toStdString(lod_model_url) + "' has null data pointer.");
+				}
 
 				gl_meshdata = ModelLoading::makeGLMeshDataAndBatchedMeshForModelPath(lod_model_path,
 					model_buffer,

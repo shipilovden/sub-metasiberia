@@ -1021,7 +1021,32 @@ Reference<OpenGLMeshRenderData> ModelLoading::makeGLMeshDataAndBatchedMeshForMod
 
 	if(hasExtension(model_path, "bmesh"))
 	{
-		batched_mesh = BatchedMesh::readFromData(model_data_buf.data(), model_data_buf.dataSizeBytes(), mem_allocator);
+		// Additional safety check before reading bmesh file
+		if(model_data_buf.dataSizeBytes() < 4)
+		{
+			throw glare::Exception("bmesh file '" + model_path + "' is too small (size: " + toString(model_data_buf.dataSizeBytes()) + " bytes). File may be corrupted.");
+		}
+		
+		// Check if data pointer is valid
+		if(model_data_buf.data() == nullptr)
+		{
+			throw glare::Exception("bmesh file '" + model_path + "' has null data pointer.");
+		}
+		
+		try
+		{
+			batched_mesh = BatchedMesh::readFromData(model_data_buf.data(), model_data_buf.dataSizeBytes(), mem_allocator);
+		}
+		catch(glare::Exception& e)
+		{
+			// Re-throw with context
+			throw glare::Exception("Error reading bmesh file '" + model_path + "': " + e.what());
+		}
+		catch(...)
+		{
+			// Catch any other exceptions (including system exceptions that might be converted)
+			throw glare::Exception("Unknown error reading bmesh file '" + model_path + "'. File may be corrupted.");
+		}
 	}
 	else if(hasExtension(model_path, "obj"))
 	{

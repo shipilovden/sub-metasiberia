@@ -216,9 +216,10 @@ elseif(WIN32)
 	endif()
 	
 	# Append optimisation flags.
-	SET(CMAKE_CXX_FLAGS_DEBUG			"${CMAKE_CXX_FLAGS_DEBUG}			")
-	SET(CMAKE_CXX_FLAGS_RELEASE			"${CMAKE_CXX_FLAGS_RELEASE}			-D_SECURE_SCL=0 /O2 -DNDEBUG ${GL_OPT} /Zi") # /Zi = use program database for debug info (.pdb)
-	SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO	"${CMAKE_CXX_FLAGS_RELWITHDEBINFO}	-D_SECURE_SCL=0 /O2 -DNDEBUG")
+	# /EHa = Enable C++ exception handling with SEH exceptions (allows catching Windows structured exceptions like access violations)
+	SET(CMAKE_CXX_FLAGS_DEBUG			"${CMAKE_CXX_FLAGS_DEBUG}			/EHa")
+	SET(CMAKE_CXX_FLAGS_RELEASE			"${CMAKE_CXX_FLAGS_RELEASE}			-D_SECURE_SCL=0 /O2 -DNDEBUG ${GL_OPT} /Zi /EHa") # /Zi = use program database for debug info (.pdb)
+	SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO	"${CMAKE_CXX_FLAGS_RELWITHDEBINFO}	-D_SECURE_SCL=0 /O2 -DNDEBUG /EHa")
 	
 elseif(APPLE)
 	add_definitions(-DOSX -DINDIGO_NO_OPENMP)

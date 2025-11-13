@@ -86,6 +86,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "../graphics/SRGBUtils.h"
 #include "../graphics/BasisDecoder.h"
 #include "../dll/include/IndigoMesh.h"
+#include "../dll/include/IndigoException.h"
+#include "../dll/IndigoStringUtils.h"
 #include "../indigo/TextureServer.h"
 #include <opengl/OpenGLShader.h>
 #include <opengl/MeshPrimitiveBuilding.h>
@@ -305,7 +307,11 @@ static void onAnimDataProgress(unsigned int, void* userdata_arg, int percent_com
 #endif // EMSCRIPTEN
 
 
-void GUIClient::initialise(const std::string& cache_dir, const Reference<SettingsStore>& settings_store_, UIInterface* ui_interface_, glare::TaskManager* high_priority_task_manager_, Reference<glare::Allocator> worker_allocator_)
+void GUIClient::initialise(const std::string& cache_dir, const Reference<SettingsStore>& settings_store_, UIInterface* ui_interface_, glare::TaskManager* high_priority_task_manager_, Reference<glare::Allocator> worker_allocator_
+#ifdef _WIN32
+	, IMFDXGIDeviceManager* device_manager_
+#endif
+)
 {
 	ZoneScoped; // Tracy profiler
 
@@ -313,6 +319,9 @@ void GUIClient::initialise(const std::string& cache_dir, const Reference<Setting
 	ui_interface = ui_interface_;
 	high_priority_task_manager = high_priority_task_manager_;
 	worker_allocator = worker_allocator_;
+#ifdef _WIN32
+	device_manager = device_manager_;
+#endif
 
 	PhysicsWorld::init(); // init Jolt stuff
 
@@ -586,6 +595,29 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 		MeshBuilding::MeshBuildingResults results = MeshBuilding::makeSpotlightMeshes(base_dir_path, *opengl_engine->vert_buf_allocator);
 		spotlight_opengl_mesh = results.opengl_mesh_data;
 		spotlight_shape = results.physics_shape;
+	}
+
+	// Make portal meshes
+	{
+		try
+		{
+			MeshBuilding::MeshBuildingResults results = MeshBuilding::makePortalMeshes(base_dir_path, *opengl_engine->vert_buf_allocator);
+			portal_opengl_mesh = results.opengl_mesh_data;
+			portal_shape = results.physics_shape;
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("WARNING: Failed to load portal meshes: " + e.what() + ". Portals will not be available.");
+			// Continue without portal meshes - portals just won't work
+			portal_opengl_mesh = NULL;
+			portal_shape.jolt_shape = NULL;
+		}
+		catch(...)
+		{
+			conPrint("WARNING: Unknown error loading portal meshes. Portals will not be available.");
+			portal_opengl_mesh = NULL;
+			portal_shape.jolt_shape = NULL;
+		}
 	}
 
 	// Make image cube meshes
@@ -2208,6 +2240,52 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				physics_world->addObject(ob->physics_object);
 
 				loadScriptForObject(ob, world_state_lock); // Load any script for the object.
+			}
+		}
+		else if(ob->object_type == WorldObject::ObjectType_Portal)
+		{
+			if(ob->opengl_engine_ob.isNull())
+			{
+				assert(ob->physics_object.isNull());
+
+				// Check if portal meshes were loaded successfully
+				if(portal_opengl_mesh.isNull() || portal_shape.jolt_shape == NULL)
+				{
+					conPrint("WARNING: Cannot create portal object - portal meshes not loaded. Object UID: " + ob->uid.toString());
+					// Skip this portal object - don't create OpenGL or physics objects for it
+				}
+				else
+				{
+					PhysicsObjectRef physics_ob = new PhysicsObject(/*collidable=*/true);
+					physics_ob->shape = this->portal_shape;
+					physics_ob->is_sensor = ob->isSensor();
+					physics_ob->userdata = ob;
+					physics_ob->userdata_type = 0;
+					physics_ob->ob_uid = ob->uid;
+					physics_ob->pos = ob->pos.toVec4fPoint();
+					physics_ob->rot = Quatf::fromAxisAndAngle(normalise(ob->axis), ob->angle);
+					physics_ob->scale = useScaleForWorldOb(ob->scale);
+
+					GLObjectRef opengl_ob = opengl_engine->allocateObject();
+					opengl_ob->mesh_data = this->portal_opengl_mesh;
+					
+					// Ensure there is a translucent inner plane material
+					if(opengl_ob->materials.size() < 4)
+						opengl_ob->materials.resize(4);
+					opengl_ob->materials[3].transparent = true;
+					opengl_ob->materials[3].hologram = true;
+					opengl_ob->materials[3].alpha = 0.8f;
+
+					opengl_ob->ob_to_world_matrix = ob_to_world_matrix;
+
+					ob->opengl_engine_ob = opengl_ob;
+					ob->physics_object = physics_ob;
+
+					opengl_engine->addObject(ob->opengl_engine_ob);
+					physics_world->addObject(ob->physics_object);
+
+					loadScriptForObject(ob, world_state_lock); // Load any script for the object.
+				}
 			}
 		}
 		else if(ob->object_type == WorldObject::ObjectType_WebView)
@@ -5712,6 +5790,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 				// Take physics ownership of any such object if needed.
 				{
 					Lock world_state_lock(this->world_state->mutex);
+					std::string touched_portal_target_URL;
 					for(size_t z=0; z<player_physics.contacted_events.size(); ++z)
 					{
 						PhysicsObject* physics_ob = player_physics.contacted_events[z].ob;
@@ -5726,8 +5805,17 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 								// conPrint("==Taking ownership of physics object from avatar physics contact...==");
 								takePhysicsOwnershipOfObject(*ob, global_time);
 							}
+
+							// Handle portals: touching a portal triggers visit to its target URL
+							if(ob->object_type == WorldObject::ObjectType_Portal && !ob->target_url.empty())
+							{
+								if(hasPrefix(ob->target_url, "sub://"))
+									touched_portal_target_URL = ob->target_url;
+							}
 						}
 					}
+					if(!touched_portal_target_URL.empty() && hasPrefix(touched_portal_target_URL, "sub://"))
+						visitSubURL(touched_portal_target_URL);
 				}
 
 				// Execute script events on any player contacted events.
@@ -11862,42 +11950,59 @@ void GUIClient::sendLightmapNeededFlagsSlot()
 
 void GUIClient::visitSubURL(const std::string& URL) // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 {
-	URLParseResults parse_res = URLParser::parseURL(::stripHeadAndTailWhitespace(URL));
-
-	const std::string hostname = parse_res.hostname;
-	const std::string worldname = parse_res.worldname;
-
-	if(parse_res.parsed_parcel_uid)
-		this->url_parcel_uid = parse_res.parcel_uid;
-	else
-		this->url_parcel_uid = -1;
-
-	if(hostname != this->server_hostname || worldname != this->server_worldname)
+	try
 	{
-		// Connect to a different server!
-		connectToServer(parse_res);
-	}
+		URLParseResults parse_res = URLParser::parseURL(::stripHeadAndTailWhitespace(URL));
 
-	// If we had a URL with a parcel UID, like sub://substrata.info/parcel/10, then look up the parcel to get its position, then go there.
-	// Note that this could fail if the parcels are not loaded yet.
-	if(parse_res.parsed_parcel_uid)
-	{
-		Lock lock(this->world_state->mutex);
-		const auto res = this->world_state->parcels.find(ParcelID(parse_res.parcel_uid));
-		if(res != this->world_state->parcels.end())
+		const std::string hostname = parse_res.hostname;
+		const std::string worldname = parse_res.worldname;
+
+		if(parse_res.parsed_parcel_uid)
+			this->url_parcel_uid = parse_res.parcel_uid;
+		else
+			this->url_parcel_uid = -1;
+
+		if(hostname != this->server_hostname || worldname != this->server_worldname)
 		{
-			this->cam_controller.setFirstAndThirdPersonPositions(res->second->getVisitPosition());
-			this->player_physics.setEyePosition(res->second->getVisitPosition());
-			showInfoNotification("Jumped to parcel " + toString(parse_res.parcel_uid));
+			// Connect to a different server!
+			connectToServer(parse_res);
+		}
+
+		// If we had a URL with a parcel UID, like sub://substrata.info/parcel/10, then look up the parcel to get its position, then go there.
+		// Note that this could fail if the parcels are not loaded yet.
+		if(parse_res.parsed_parcel_uid)
+		{
+			Lock lock(this->world_state->mutex);
+			const auto res = this->world_state->parcels.find(ParcelID(parse_res.parcel_uid));
+			if(res != this->world_state->parcels.end())
+			{
+				this->cam_controller.setFirstAndThirdPersonPositions(res->second->getVisitPosition());
+				this->player_physics.setEyePosition(res->second->getVisitPosition());
+				showInfoNotification("Jumped to parcel " + toString(parse_res.parcel_uid));
+			}
+			else
+				throw glare::Exception("Could not find parcel with id " + toString(parse_res.parcel_uid));
 		}
 		else
-			throw glare::Exception("Could not find parcel with id " + toString(parse_res.parcel_uid));
+		{
+			this->cam_controller.setAngles(Vec3d(/*heading=*/::degreeToRad(parse_res.heading), /*pitch=*/Maths::pi_2<double>(), /*roll=*/0));
+			this->cam_controller.setFirstAndThirdPersonPositions(Vec3d(parse_res.x, parse_res.y, parse_res.z));
+			this->player_physics.setEyePosition(Vec3d(parse_res.x, parse_res.y, parse_res.z));
+		}
 	}
-	else
+	catch(glare::Exception& e)
 	{
-		this->cam_controller.setAngles(Vec3d(/*heading=*/::degreeToRad(parse_res.heading), /*pitch=*/Maths::pi_2<double>(), /*roll=*/0));
-		this->cam_controller.setFirstAndThirdPersonPositions(Vec3d(parse_res.x, parse_res.y, parse_res.z));
-		this->player_physics.setEyePosition(Vec3d(parse_res.x, parse_res.y, parse_res.z));
+		// Handle exceptions during server switch - show error but don't crash
+		conPrint("ERROR: Exception while switching server: " + e.what());
+		showErrorNotification("Error switching server: " + e.what());
+		throw; // Re-throw to let caller handle it
+	}
+	catch(...)
+	{
+		// Handle any other exceptions (including system exceptions)
+		conPrint("ERROR: Unknown exception while switching server");
+		showErrorNotification("Unknown error while switching server");
+		throw glare::Exception("Unknown error while switching server");
 	}
 }
 
@@ -11907,7 +12012,47 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	udp_socket = NULL;
 
 	load_item_queue.clear();
-	model_and_texture_loader_task_manager.cancelAndWaitForTasksToComplete(); 
+	
+	// Cancel and wait for tasks to complete - wrap in try-catch to handle exceptions from damaged files
+	// Use a timeout to prevent hanging if tasks are stuck loading corrupted files
+	try
+	{
+		// First, try to cancel tasks quickly
+		model_and_texture_loader_task_manager.removeQueuedTasks();
+		
+		// Cancel running tasks in worker threads
+		// Note: We can't directly access threads to cancel, so we'll just wait with timeout
+		
+		// Wait for tasks with a timeout to prevent hanging on corrupted files
+		Timer timeout_timer;
+		const double MAX_WAIT_TIME = 2.0; // Maximum 2 seconds to wait
+		
+		while(!model_and_texture_loader_task_manager.areAllTasksComplete() && timeout_timer.elapsed() < MAX_WAIT_TIME)
+		{
+			PlatformUtils::Sleep(10); // Sleep 10ms
+		}
+		
+		if(!model_and_texture_loader_task_manager.areAllTasksComplete())
+		{
+			conPrint("WARNING: Timeout waiting for model/texture loader tasks to complete - some tasks may be loading corrupted files. Continuing disconnect.");
+		}
+	}
+	catch(glare::Exception& e)
+	{
+		// Handle exceptions during task cancellation (e.g. from damaged model files)
+		conPrint("WARNING: Exception while canceling model/texture loader tasks: " + e.what() + " - continuing disconnect.");
+	}
+	catch(Indigo::IndigoException& e)
+	{
+		// Handle Indigo exceptions during task cancellation
+		conPrint("WARNING: IndigoException while canceling model/texture loader tasks: " + toStdString(e.what()) + " - continuing disconnect.");
+	}
+	catch(...)
+	{
+		// Handle any other exceptions (including system exceptions)
+		conPrint("WARNING: Unknown exception while canceling model/texture loader tasks - continuing disconnect.");
+	}
+	
 	model_loaded_messages_to_process.clear();
 	texture_loaded_messages_to_process.clear();
 
@@ -12196,7 +12341,25 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 		spawn_pos.z = parse_res.z;
 
 	//-------------------------------- Do disconnect process --------------------------------
-	disconnectFromServerAndClearAllObjects();
+	try
+	{
+		disconnectFromServerAndClearAllObjects();
+	}
+	catch(glare::Exception& e)
+	{
+		// Handle exceptions during disconnect - log but continue with connection
+		conPrint("WARNING: Exception during disconnectFromServerAndClearAllObjects: " + e.what() + " - continuing with new connection.");
+	}
+	catch(Indigo::IndigoException& e)
+	{
+		// Handle Indigo exceptions during disconnect
+		conPrint("WARNING: IndigoException during disconnectFromServerAndClearAllObjects: " + toStdString(e.what()) + " - continuing with new connection.");
+	}
+	catch(...)
+	{
+		// Handle any other exceptions (including system exceptions)
+		conPrint("WARNING: Unknown exception during disconnectFromServerAndClearAllObjects - continuing with new connection.");
+	}
 	//-------------------------------- End disconnect process --------------------------------
 
 
@@ -12228,14 +12391,45 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 		opengl_engine->setSunDir(sundir);
 	}
 
-	world_state = new WorldState();
-	world_state->url_whitelist->loadDefaultWhitelist();
+	try
+	{
+		world_state = new WorldState();
+		world_state->url_whitelist->loadDefaultWhitelist();
 
-	TracyMessageL("Creating ClientThread");
+		TracyMessageL("Creating ClientThread");
 
-	client_thread = new ClientThread(&msg_queue, server_hostname, server_port, server_worldname, this->client_tls_config, this->world_ob_pool_allocator);
-	client_thread->world_state = world_state;
-	client_thread_manager.addThread(client_thread);
+		client_thread = new ClientThread(&msg_queue, server_hostname, server_port, server_worldname, this->client_tls_config, this->world_ob_pool_allocator);
+		client_thread->world_state = world_state;
+		client_thread_manager.addThread(client_thread);
+	}
+	catch(glare::Exception& e)
+	{
+		// Handle exceptions during connection setup
+		conPrint("ERROR: Exception while setting up connection to server: " + e.what());
+		// Clean up partial state
+		if(world_state.nonNull())
+			world_state = NULL;
+		if(client_thread.nonNull())
+		{
+			client_thread = NULL;
+			client_thread_manager.killThreadsBlocking();
+		}
+		throw; // Re-throw to let caller handle it
+	}
+	catch(...)
+	{
+		// Handle any other exceptions (including system exceptions)
+		conPrint("ERROR: Unknown exception while setting up connection to server");
+		// Clean up partial state
+		if(world_state.nonNull())
+			world_state = NULL;
+		if(client_thread.nonNull())
+		{
+			client_thread = NULL;
+			client_thread_manager.killThreadsBlocking();
+		}
+		throw glare::Exception("Unknown error while setting up connection to server");
+	}
 
 #if defined(EMSCRIPTEN)
 	emscripten_resource_downloader.init(&msg_queue, resource_manager, server_hostname, server_port, &this->num_non_net_resources_downloading, &this->download_queue, this);
@@ -13282,7 +13476,19 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 				}
 				else 
 				{
-					if(!ob->target_url.empty() && (ob->web_view_data.isNull() && ob->browser_vid_player.isNull())) // If the object has a target URL (and is not a web-view and not a video object):
+					if(ob->isPortal())
+					{
+						if(!ob->target_url.empty())
+						{
+							std::string trimmed_URL = ob->target_url;
+							const size_t MAX_LEN = 64;
+							if(trimmed_URL.size() > MAX_LEN)
+								trimmed_URL = trimmed_URL.substr(0, MAX_LEN) + "...";
+							ob_info_ui.showMessage("Walk through to visit " + trimmed_URL, cursor_gl_coords);
+							show_mouseover_info_ui = true;
+						}
+					}
+					else if(!ob->target_url.empty() && (ob->web_view_data.isNull() && ob->browser_vid_player.isNull())) // If the object has a target URL (and is not a web-view and not a video object):
 					{
 						// If the mouse-overed ob is currently selected, and is editable, don't show the hyperlink, because 'E' is the key to pick up the object.
 						const bool selected_editable_ob = (selected_ob.ptr() == ob) && objectModificationAllowed(*ob);

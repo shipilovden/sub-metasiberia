@@ -100,6 +100,7 @@ Copyright Glare Technologies Limited 2024 -
 #ifdef _WIN32
 #include <d3d11.h>
 #include <d3d11_4.h>
+#include <windows.h> // For EXCEPTION_* constants and SetUnhandledExceptionFilter
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -149,7 +150,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	ui->setupUi(this);
 
 	// Set translatable window title
-	setWindowTitle(tr("Metasiberia Edit Beta"));
+	setWindowTitle(tr("Metasiberia Editor Beta"));
 
 	setAcceptDrops(true);
 
@@ -403,7 +404,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 static std::string computeWindowTitle()
 {
-	return "Metasiberia Edit Beta";
+	return "Metasiberia Editor Beta";
 }
 
 
@@ -483,12 +484,17 @@ void MainWindow::initialise()
 
 	Reference<glare::Allocator> worker_allocator = new glare::LimitedAllocator(/*max_size_B=*/2048 * 1024 * 1024ull);
 
-	gui_client.initialise(cache_dir, settings_store, this, high_priority_task_manager, /*worker allocator=*/worker_allocator);
-
 #ifdef _WIN32
 	// Create a GPU device.  Needed to get hardware accelerated video decoding.
+	// Must be created BEFORE gui_client.initialise() so device_manager is available for WMFVideoReader fallback
 	Direct3DUtils::createGPUDeviceAndMFDeviceManager(d3d_device, device_manager);
 #endif //_WIN32
+
+	gui_client.initialise(cache_dir, settings_store, this, high_priority_task_manager, /*worker allocator=*/worker_allocator
+#ifdef _WIN32
+		, device_manager.ptr
+#endif
+	);
 
 	
 	if(run_as_screenshot_slave)
@@ -1876,6 +1882,54 @@ void MainWindow::on_actionAdd_Spotlight_triggered()
 	}
 
 	showInfoNotification("Added spotlight.");
+}
+
+
+void MainWindow::on_actionAdd_Portal_triggered()
+{
+	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + 
+		removeComponentInDir(gui_client.cam_controller.getForwardsVec(), Vec3d(0,0,1)) * 3.0f - // Forwards from the camera position, parallel to ground plane
+		Vec3d(0,0,PlayerPhysics::getEyeHeight()); // Then drop down to ground level that the player is standing on.
+
+	// Check permissions
+	bool ob_pos_in_parcel;
+	const bool have_creation_perms = gui_client.haveParcelObjectCreatePermissions(ob_pos, ob_pos_in_parcel);
+	if(!have_creation_perms)
+	{
+		if(ob_pos_in_parcel)
+			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
+		else
+			showErrorNotification("You can only create portals in a parcel that you have write permissions for.");
+		return;
+	}
+
+	// Check if portal meshes are loaded
+	if(gui_client.portal_opengl_mesh.isNull())
+	{
+		showErrorNotification("Cannot create portal: portal meshes not loaded. The portal.bmesh file may be missing or corrupted.");
+		return;
+	}
+
+	WorldObjectRef new_world_object = new WorldObject();
+	new_world_object->uid = UID(0); // Will be set by server
+	new_world_object->object_type = WorldObject::ObjectType_Portal;
+	new_world_object->pos = ob_pos;
+	new_world_object->axis = Vec3f(0, 0, 1);
+	new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>()); // Round to nearest 45 degree angle, facing player.
+	new_world_object->scale = Vec3f(1.f);
+
+	new_world_object->setAABBOS(gui_client.portal_opengl_mesh->aabb_os);
+
+
+	// Send CreateObject message to server
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+		new_world_object->writeToNetworkStream(scratch_packet);
+
+		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	}
+
+	showInfoNotification("Added portal.");
 }
 
 
@@ -4487,8 +4541,46 @@ static void qtMessageHandler(QtMsgType type, const QMessageLogContext& context, 
 }
 
 
+// Unhandled exception filter - catches Windows structured exceptions (SEH)
+#ifdef _WIN32
+LONG WINAPI unhandledExceptionFilter(_EXCEPTION_POINTERS* ExceptionInfo)
+{
+	const DWORD code = ExceptionInfo->ExceptionRecord->ExceptionCode;
+	std::string error_msg;
+	
+	switch(code)
+	{
+	case EXCEPTION_ACCESS_VIOLATION:
+		error_msg = "Access violation (SEH) - possible corrupted file or invalid memory access";
+		break;
+	case EXCEPTION_INT_DIVIDE_BY_ZERO:
+		error_msg = "Integer divide by zero (SEH)";
+		break;
+	case EXCEPTION_STACK_OVERFLOW:
+		error_msg = "Stack overflow (SEH)";
+		break;
+	default:
+		error_msg = "Structured exception (SEH) code: " + toString((uint32)code);
+		break;
+	}
+	
+	conPrint("FATAL: Unhandled exception: " + error_msg);
+	
+	// Log to file if possible
+	// Note: We can't throw C++ exceptions from here, so we just log and let the system handle it
+	// Return EXCEPTION_CONTINUE_SEARCH to let default handler run (which will show crash dialog)
+	// or EXCEPTION_EXECUTE_HANDLER if we want to try to continue (risky)
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+	// Install unhandled exception filter to catch Windows structured exceptions (SEH)
+	SetUnhandledExceptionFilter(unhandledExceptionFilter);
+#endif
+
 #ifdef BUGSPLAT_SUPPORT
 	if(shouldEnableBugSplat())
 	{
@@ -4672,7 +4764,8 @@ int main(int argc, char *argv[])
 		}
 
 
-		int app_exec_res;
+		int app_exec_res = 0; // Initialize to success
+		try
 		{ // Scope of MainWindow mw and textureserver.
 
 			MainWindow mw(cyberspace_base_dir_path, appdata_path, parsed_args); // Creates GLWidget
@@ -4688,9 +4781,12 @@ int main(int argc, char *argv[])
 			mw.initialise();
 
 			mw.show();
+			conPrint("MainWindow::show() called - window should be visible");
 
 			mw.raise();
+			conPrint("MainWindow::raise() called");
 
+			conPrint("Checking OpenGL engine initialization...");
 			if(!mw.ui->glWidget->opengl_engine->initSucceeded())
 			{
 				const std::string msg = "OpenGL engine initialisation failed: " + mw.ui->glWidget->opengl_engine->getInitialisationErrorMsg();
@@ -4716,23 +4812,120 @@ int main(int argc, char *argv[])
 					server_URL = start_loc_URL_setting;
 			}
 
-			mw.afterGLInitInitialise();
+			conPrint("About to call afterGLInitInitialise()...");
+			try
+			{
+				mw.afterGLInitInitialise();
+				conPrint("afterGLInitInitialise() completed");
+			}
+			catch(glare::Exception& e)
+			{
+				// Handle exceptions during afterGLInitInitialise
+				const std::string error_msg = e.what();
+				if(error_msg.find("Invalid magic number") != std::string::npos)
+				{
+					conPrint("WARNING: " + error_msg + " during afterGLInitInitialise - continuing execution.");
+				}
+				else
+				{
+					conPrint("Exception in afterGLInitInitialise: " + error_msg);
+					QtUtils::showErrorMessageDialog("Error during initialization: " + error_msg, &mw);
+				}
+			}
+			catch(Indigo::IndigoException& e)
+			{
+				// Handle Indigo exceptions during afterGLInitInitialise
+				const std::string error_msg = toStdString(e.what());
+				if(error_msg.find("Invalid magic number") != std::string::npos)
+				{
+					conPrint("WARNING: " + error_msg + " during afterGLInitInitialise - continuing execution.");
+				}
+				else
+				{
+					conPrint("IndigoException in afterGLInitInitialise: " + error_msg);
+					QtUtils::showErrorMessageDialog("Error during initialization: " + error_msg, &mw);
+				}
+			}
 
+			conPrint("About to connect to server: " + server_URL);
 			try
 			{
 				URLParseResults parse_results = URLParser::parseURL(server_URL);
 
 				mw.gui_client.connectToServer(parse_results);
+				conPrint("connectToServer() completed successfully");
 			}
 			catch(glare::Exception& e)
 			{
-				QtUtils::showErrorMessageDialog(e.what(), &mw);
+				// For "Invalid magic number" errors, don't show dialog - just log
+				if(e.what().find("Invalid magic number") != std::string::npos)
+				{
+					conPrint("WARNING: " + e.what() + " - continuing without connecting to server.");
+				}
+				else
+				{
+					conPrint("Exception connecting to server: " + e.what());
+					QtUtils::showErrorMessageDialog(e.what(), &mw);
+				}
 			}
 
-			app_exec_res = app.exec();
+			// Run the event loop - this is where the program actually runs
+			// Wrap in try-catch to handle any exceptions during execution
+			conPrint("About to start event loop (app.exec())...");
+			try
+			{
+				app_exec_res = app.exec();
+				conPrint("Event loop finished, exit code: " + toString(app_exec_res));
+			}
+			catch(glare::Exception& e)
+			{
+				// If exception occurs during event loop, log it but don't crash
+				conPrint("Exception during event loop: " + e.what());
+				app_exec_res = 1;
+			}
+			catch(Indigo::IndigoException& e)
+			{
+				// If exception occurs during event loop, log it but don't crash
+				conPrint("IndigoException during event loop: " + toStdString(e.what()));
+				app_exec_res = 1;
+			}
 
 			open_even_filter->main_window = NULL;
-		} // End scope of MainWindow mw
+		} // End scope of MainWindow mw - destructor called here
+		catch(glare::Exception& e)
+		{
+			// Exception during MainWindow lifecycle - check if it's a non-critical error
+			const std::string error_msg = e.what();
+			if(error_msg.find("Invalid magic number") != std::string::npos)
+			{
+				// Non-critical file format error during destruction - just log, don't change exit code
+				conPrint("WARNING: " + error_msg + " during MainWindow destruction - ignoring.");
+				// Keep app_exec_res as is (should be 0 if program ran successfully)
+			}
+			else
+			{
+				// Other exceptions - log but don't crash
+				conPrint("Exception during MainWindow lifecycle: " + error_msg);
+				app_exec_res = 1;
+			}
+		}
+		catch(Indigo::IndigoException& e)
+		{
+			// Exception during MainWindow lifecycle - check if it's a non-critical error
+			const std::string error_msg = toStdString(e.what());
+			if(error_msg.find("Invalid magic number") != std::string::npos)
+			{
+				// Non-critical file format error during destruction - just log, don't change exit code
+				conPrint("WARNING: " + error_msg + " during MainWindow destruction - ignoring.");
+				// Keep app_exec_res as is (should be 0 if program ran successfully)
+			}
+			else
+			{
+				// Other exceptions - log but don't crash
+				conPrint("IndigoException during MainWindow lifecycle: " + error_msg);
+				app_exec_res = 1;
+			}
+		}
 
 #if defined(_WIN32)
 		WMFVideoReader::shutdownWMF();
@@ -4750,18 +4943,75 @@ int main(int argc, char *argv[])
 	{
 		// Show error
 		conPrint(toStdString(e.what()));
-		QErrorMessage m;
-		m.showMessage(QtUtils::toQString(e.what()));
-		m.exec();
+		
+		// For "Invalid magic number" errors, don't show dialog - just log and exit
+		// These are usually non-critical file format errors that don't need user interaction
+		const std::string error_msg = toStdString(e.what());
+		if(error_msg.find("Invalid magic number") != std::string::npos)
+		{
+			conPrint("Non-critical error detected, exiting without dialog.");
+			try
+			{
+				GUIClient::staticShutdown();
+			}
+			catch(...)
+			{
+				// Ignore exceptions during shutdown
+			}
+			return 1;
+		}
+		
+		// For other errors, show dialog
+		// Ensure static shutdown is called BEFORE showing dialog to avoid crashes
+		try
+		{
+			GUIClient::staticShutdown();
+		}
+		catch(...)
+		{
+			// Ignore exceptions during shutdown to prevent double errors
+		}
+		
+		// Use QMessageBox instead of QErrorMessage for safer error display
+		QMessageBox::critical(nullptr, "Error", QtUtils::toQString(e.what()));
+		
 		return 1;
 	}
 	catch(glare::Exception& e)
 	{
 		// Show error
 		conPrint(e.what());
-		QErrorMessage m;
-		m.showMessage(QtUtils::toQString(e.what()));
-		m.exec();
+		
+		// For "Invalid magic number" errors, don't show dialog - just log and exit
+		// These are usually non-critical file format errors that don't need user interaction
+		if(e.what().find("Invalid magic number") != std::string::npos)
+		{
+			conPrint("Non-critical error detected, exiting without dialog.");
+			try
+			{
+				GUIClient::staticShutdown();
+			}
+			catch(...)
+			{
+				// Ignore exceptions during shutdown
+			}
+			return 1;
+		}
+		
+		// For other errors, show dialog
+		// Ensure static shutdown is called BEFORE showing dialog to avoid crashes
+		try
+		{
+			GUIClient::staticShutdown();
+		}
+		catch(...)
+		{
+			// Ignore exceptions during shutdown to prevent double errors
+		}
+		
+		// Use QMessageBox instead of QErrorMessage for safer error display
+		QMessageBox::critical(nullptr, "Error", QtUtils::toQString(e.what()));
+		
 		return 1;
 	}
 }

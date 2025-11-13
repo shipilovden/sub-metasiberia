@@ -357,12 +357,17 @@ void ResourceManager::loadFromDisk(const std::string& path, bool force_check_if_
 
 	Timer timer;
 
-	FileInStream stream(path);
+	try
+	{
+		FileInStream stream(path);
 
-	// Read magic number
-	const uint32 m = stream.readUInt32();
-	if(m != RESOURCE_MANAGER_MAGIC_NUMBER)
-		throw glare::Exception("Invalid magic number " + toString(m) + ", expected " + toString(RESOURCE_MANAGER_MAGIC_NUMBER) + ".");
+		// Read magic number
+		const uint32 m = stream.readUInt32();
+		if(m != RESOURCE_MANAGER_MAGIC_NUMBER)
+		{
+			conPrint("WARNING: Invalid magic number " + toString(m) + " in resources_db file. File may be corrupted. Skipping load.");
+			return; // Don't throw, just skip loading corrupted file
+		}
 
 	// Read version
 	const uint32 version = stream.readUInt32();
@@ -431,8 +436,19 @@ void ResourceManager::loadFromDisk(const std::string& path, bool force_check_if_
 		}
 	}
 
-	conPrint("Loaded info on " + toString(resource_for_url.size()) + " resource(s). (check_resources_present_on_disk: " + boolToString(check_resources_present_on_disk) + ", " + 
-		toString(num_resources_present) + " present on disk, changed: " + boolToString(changed) + ")  Elapsed: " + timer.elapsedStringNSigFigs(3) + "");
+		conPrint("Loaded info on " + toString(resource_for_url.size()) + " resource(s). (check_resources_present_on_disk: " + boolToString(check_resources_present_on_disk) + ", " + 
+			toString(num_resources_present) + " present on disk, changed: " + boolToString(changed) + ")  Elapsed: " + timer.elapsedStringNSigFigs(3) + "");
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("WARNING: Failed to load resources database from '" + path + "': " + e.what() + ". Continuing with empty resource database.");
+		// Don't throw - allow program to continue with empty resource database
+	}
+	catch(...)
+	{
+		conPrint("WARNING: Unknown error loading resources database from '" + path + "'. Continuing with empty resource database.");
+		// Don't throw - allow program to continue
+	}
 }
 
 
