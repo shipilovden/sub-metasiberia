@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Metasiberia Edit Beta</string>
+   <string>Metasiberia Editor Beta</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -70,6 +70,7 @@
     <addaction name="actionAdd_Web_View"/>
     <addaction name="actionAdd_Video"/>
     <addaction name="actionAdd_Decal"/>
+    <addaction name="actionAdd_Portal"/>
     <addaction name="separator"/>
     <addaction name="actionCopy_Object"/>
     <addaction name="actionPaste_Object"/>
@@ -747,6 +748,11 @@
   <action name="actionAdd_Decal">
    <property name="text">
     <string>Add Decal</string>
+   </property>
+  </action>
+  <action name="actionAdd_Portal">
+   <property name="text">
+    <string>Add Portal</string>
    </property>
   </action>
   <action name="actionEnter_Fullscreen">

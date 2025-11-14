@@ -296,6 +296,17 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 		this->physicsSettingsGroupBox->show();
 		this->videoGroupBox->hide();
 	}
+	else if(ob.object_type == WorldObject::ObjectType_Portal)
+	{
+		this->materialsGroupBox->show();
+		this->lightmapGroupBox->hide();
+		this->modelLabel->hide();
+		this->modelFileSelectWidget->hide();
+		this->spotlightGroupBox->hide();
+		this->audioGroupBox->hide();
+		this->physicsSettingsGroupBox->show();
+		this->videoGroupBox->hide();
+	}
 	else if(ob.object_type == WorldObject::ObjectType_WebView)
 	{
 		this->materialsGroupBox->show();
@@ -789,9 +800,10 @@ void ObjectEditor::materialSelectedInBrowser(const std::string& path)
 		if(selected_mat_index >= 0 && selected_mat_index < (int)this->cloned_materials.size())
 		{
 			this->cloned_materials[this->selected_mat_index] = mat;
+			// setFromMaterial will emit materialChanged(), which is connected to objectChanged()
+			// So we don't need to explicitly emit objectChanged() here
 			this->matEditor->setFromMaterial(*mat);
-
-			emit objectChanged();
+			// Note: objectChanged() will be emitted automatically via materialChanged() signal
 		}
 	}
 	catch(glare::Exception& e)

@@ -133,6 +133,8 @@ public:
 
 	static PhysicsShape createScaledAndTranslatedShapeForShape(const PhysicsShape& shape, const Vec3f& translation, const Vec3f& scale);
 
+	static size_t computeSizeBForShape(JPH::Ref<JPH::Shape> jolt_shape);
+
 	void think(double dt);
 
 #if USE_JOLT

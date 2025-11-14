@@ -10,6 +10,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "EmbeddedBrowser.h"
 #include "../shared/WorldObject.h"
 #include "../shared/ResourceManager.h"
+#include "../shared/FileTypes.h"
 #include "CEF.h"
 #include <opengl/OpenGLEngine.h>
 #include <opengl/IncludeOpenGL.h>
@@ -20,9 +21,16 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/FileInStream.h>
 #include <utils/PlatformUtils.h>
 #include <utils/Base64.h>
+#include <utils/Clock.h>
+#include <utils/FileUtils.h>
+#include <utils/StringUtils.h>
 #include "superluminal/PerformanceAPI.h"
 #if EMSCRIPTEN
 #include <emscripten.h>
+#endif
+#ifdef _WIN32
+#include "../video/WMFVideoReader.h"
+#include "../video/VideoReader.h"
 #endif
 
 
@@ -47,6 +55,14 @@ BrowserVidPlayer::BrowserVidPlayer()
 	m_gui_client(NULL),
 	html_view_handle(-1),
 	using_iframe(false)
+#ifdef _WIN32
+	, wmf_video_reader(NULL),
+	last_video_frame_time(0),
+	video_playback_time(0),
+	is_paused(false),
+	show_controls(false),
+	controls_hide_time(0)
+#endif
 {}
 
 
@@ -242,6 +258,8 @@ static void getVidTextureDimensions(const std::string& video_URL, WorldObject* o
 
 void BrowserVidPlayer::createNewBrowserPlayer(GUIClient* gui_client, OpenGLEngine* opengl_engine, WorldObject* ob)
 {
+	this->m_gui_client = gui_client; // Store reference for pause/play control
+	
 	if(ob->materials.empty())
 		throw glare::Exception("materials were empty");
 
@@ -250,21 +268,129 @@ void BrowserVidPlayer::createNewBrowserPlayer(GUIClient* gui_client, OpenGLEngin
 	int width, height;
 	getVidTextureDimensions(video_URL, ob, width, height);
 	
-
-	if(!CEF::isInitialised())
-		CEF::initialiseCEF(gui_client->base_dir_path);
-	if(!CEF::isInitialised())
-		throw glare::Exception("CEF could not be initialised");
-
-	
-	assert(browser.isNull());
-	browser = NULL;
-
 	if(video_URL.empty())
 		throw glare::Exception("video_URL was empty");
 
 	if(ob->opengl_engine_ob.isNull())
 		throw glare::Exception("ob->opengl_engine_ob.isNull");
+
+	// Check if CEF is available
+	bool cef_available = false;
+#if CEF_SUPPORT
+	if(!CEF::isInitialised())
+		CEF::initialiseCEF(gui_client->base_dir_path);
+	cef_available = CEF::isInitialised();
+#endif
+
+	// Check if this is an MP4 file and we should use WMFVideoReader fallback (Windows only, no CEF)
+	const bool is_http_URL = hasPrefix(video_URL, "http://") || hasPrefix(video_URL, "https://");
+	const bool is_mp4_file = !is_http_URL && hasExtension(video_URL, "mp4");
+
+#ifdef _WIN32
+	// Debug logging
+	gui_client->logMessage("Video player creation: video_URL='" + video_URL + "', is_http_URL=" + toString(is_http_URL) + ", is_mp4_file=" + toString(is_mp4_file) + ", cef_available=" + toString(cef_available) + ", device_manager=" + toString(gui_client->device_manager != NULL));
+
+	// Use WMFVideoReader fallback for MP4 files when CEF is not available
+	if(is_mp4_file && !cef_available && gui_client->device_manager != NULL)
+	{
+		gui_client->logMessage("Creating WMFVideoReader for MP4 (CEF not available), video_URL: " + video_URL);
+
+		// Get resource and local path
+		ResourceRef resource = gui_client->resource_manager->getExistingResourceForURL(toURLString(video_URL));
+		if(resource.isNull() || resource->getState() != Resource::State_Present)
+		{
+			std::string error_msg = "MP4 resource not found or not downloaded: " + video_URL;
+			if(resource.isNull())
+				error_msg += " (resource is null)";
+			else
+				error_msg += " (resource state: " + toString((int)resource->getState()) + ")";
+			gui_client->logMessage("WMFVideoReader error: " + error_msg);
+			throw glare::Exception(error_msg);
+		}
+
+		const std::string local_path = gui_client->resource_manager->getLocalAbsPathForResource(*resource);
+		gui_client->logMessage("WMFVideoReader: local_path='" + local_path + "'");
+
+		// Check if file exists
+		if(!FileUtils::fileExists(local_path))
+		{
+			std::string error_msg = "MP4 file does not exist at path: " + local_path;
+			gui_client->logMessage("WMFVideoReader error: " + error_msg);
+			throw glare::Exception(error_msg);
+		}
+
+		// Get file size for diagnostics
+		const uint64 file_size = FileUtils::getFileSize(local_path);
+		gui_client->logMessage("WMFVideoReader: file_size=" + toString(file_size) + " B (" + getNiceByteSize(file_size) + ")");
+
+		try
+		{
+			// Create WMFVideoReader
+			gui_client->logMessage("WMFVideoReader: Creating WMFVideoReader instance...");
+			wmf_video_reader = new WMFVideoReader(false, /*just_read_audio=*/false, local_path, /*reader callback=*/NULL, gui_client->device_manager, /*decode_to_d3d_tex=*/false);
+			gui_client->logMessage("WMFVideoReader: WMFVideoReader created successfully");
+
+			// Get first frame to determine dimensions
+			gui_client->logMessage("WMFVideoReader: Reading first frame...");
+			const SampleInfoRef frameinfo = wmf_video_reader->getAndLockNextSample(/*just_get_vid_sample=*/true);
+			if(frameinfo.isNull())
+			{
+				std::string error_msg = "Could not read first frame from MP4 file: " + local_path;
+				gui_client->logMessage("WMFVideoReader error: " + error_msg);
+				throw glare::Exception(error_msg);
+			}
+			gui_client->logMessage("WMFVideoReader: First frame read successfully, dimensions: " + toString((int)frameinfo->width) + "x" + toString((int)frameinfo->height));
+
+			// Use actual video dimensions
+			width = (int)frameinfo->width;
+			height = (int)frameinfo->height;
+
+			gui_client->setGLWidgetContextAsCurrent();
+
+			// Create texture
+			std::vector<uint8> data(width * height * 4); // Use a zeroed buffer to clear the texture.
+			ob->opengl_engine_ob->materials[0].emission_texture = new OpenGLTexture(width, height, opengl_engine, data, OpenGLTextureFormat::Format_SRGBA_Uint8,
+				GL_SRGB8_ALPHA8, // GL internal format
+				GL_BGRA, // GL format.
+				OpenGLTexture::Filtering_Bilinear);
+
+			opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
+
+			// Initialize playback time from first frame
+			last_video_frame_time = frameinfo->frame_time;
+			video_playback_time = frameinfo->frame_time;
+			is_paused = false; // Start playing by default
+
+			this->loaded_video_url = video_URL;
+			this->state = State_WMFVideoReaderCreated;
+			gui_client->logMessage("WMFVideoReader: Video player initialized successfully");
+			return;
+		}
+		catch(glare::Exception& e)
+		{
+			// Log detailed error information
+			std::string error_msg = "WMFVideoReader creation failed: " + e.what();
+			gui_client->logMessage("WMFVideoReader error: " + error_msg);
+			// Clean up if partially created
+			if(wmf_video_reader.nonNull())
+			{
+				wmf_video_reader = NULL;
+			}
+			throw glare::Exception(error_msg);
+		}
+	}
+#endif
+
+	// Use CEF browser (original code)
+	if(!cef_available)
+	{
+		std::string error_msg = "CEF could not be initialised and WMFVideoReader fallback is not available. ";
+		error_msg += "is_mp4_file=" + toString(is_mp4_file) + ", device_manager=" + toString(gui_client->device_manager != NULL) + ", video_URL='" + video_URL + "'";
+		throw glare::Exception(error_msg);
+	}
+
+	assert(browser.isNull());
+	browser = NULL;
 
 	gui_client->logMessage("Creating vid player browser, video_URL: " + video_URL);
 
@@ -290,6 +416,7 @@ void BrowserVidPlayer::createNewBrowserPlayer(GUIClient* gui_client, OpenGLEngin
 	browser->create(use_url, ob->opengl_engine_ob->materials[0].emission_texture, gui_client, ob, opengl_engine, root_page);
 
 	this->loaded_video_url = video_URL;
+	this->state = State_BrowserCreated;
 }
 
 
@@ -723,25 +850,69 @@ void BrowserVidPlayer::process(GUIClient* gui_client, OpenGLEngine* opengl_engin
 	}
 #endif // end if EMSCRIPTEN
 
-
-#if CEF_SUPPORT
+	// Handle WMFVideoReader and CEF browser (both need in_process_dist check)
 	if(in_process_dist)
 	{
+		// Check if URL has changed and we need to recreate the browser/player
+		if(!ob->materials.empty())
+		{
+			const std::string current_video_URL = toStdString(ob->materials[0]->emission_texture_url);
+			if(!current_video_URL.empty() && current_video_URL != this->loaded_video_url)
+			{
+				// URL has changed, need to recreate
+#if CEF_SUPPORT
+				if(browser.nonNull())
+				{
+					browser = NULL;
+				}
+#endif
+#ifdef _WIN32
+				if(wmf_video_reader.nonNull())
+				{
+					wmf_video_reader = NULL;
+				}
+#endif
+				this->state = State_Unloaded;
+				this->loaded_video_url = ""; // Reset to force recreation
+			}
+		}
+
 		if(state == State_Unloaded)
 		{
-			try
+			// Only try to create browser/player if URL is not empty
+			if(!ob->materials.empty())
 			{
-				createNewBrowserPlayer(gui_client, opengl_engine, ob);
-				this->state = State_BrowserCreated;
+				const std::string video_URL = toStdString(ob->materials[0]->emission_texture_url);
+				if(!video_URL.empty())
+				{
+					try
+					{
+						createNewBrowserPlayer(gui_client, opengl_engine, ob);
+						// State is set in createNewBrowserPlayer (State_BrowserCreated or State_WMFVideoReaderCreated)
+					}
+					catch(glare::Exception& e)
+					{
+						conPrint("Error occured while created browser video player: " + e.what());
+						gui_client->print("Error occured while created browser video player: " + e.what());
+						this->state = State_ErrorOccurred;
+					}
+				}
 			}
-			catch(glare::Exception& e)
+		}
+		else if(state == State_ErrorOccurred)
+		{
+			// If we're in error state, but URL is now valid, try again
+			if(!ob->materials.empty())
 			{
-				conPrint("Error occured while created browser video player: " + e.what());
-				gui_client->print("Error occured while created browser video player: " + e.what());
-				this->state = State_ErrorOccurred;
+				const std::string video_URL = toStdString(ob->materials[0]->emission_texture_url);
+				if(!video_URL.empty() && video_URL != this->loaded_video_url)
+				{
+					this->state = State_Unloaded; // Reset state to try again
+				}
 			}
 		}
 		
+#if CEF_SUPPORT
 		// While the webview is not visible by the camera, we discard any dirty-rect updates.  
 		// When the webview becomes visible again, if there were any discarded dirty rects, then we know our buffer is out of date.
 		// So invalidate the whole buffer.
@@ -759,9 +930,89 @@ void BrowserVidPlayer::process(GUIClient* gui_client, OpenGLEngine* opengl_engin
 
 			previous_is_visible = ob_visible;
 		}
-	}
+#endif
+
+#ifdef _WIN32
+		// Handle WMFVideoReader playback (fallback for MP4 when CEF is not available)
+		if(state == State_WMFVideoReaderCreated && wmf_video_reader.nonNull())
+		{
+			// Update playback time only if not paused
+			if(!is_paused)
+				video_playback_time += dt;
+
+			// Get next frame if available (using synchronous mode) - only if not paused
+			if(!is_paused && wmf_video_reader.nonNull() && ob->opengl_engine_ob.nonNull() && ob->opengl_engine_ob->materials[0].emission_texture.nonNull())
+			{
+				try
+				{
+					const SampleInfoRef frameinfo = wmf_video_reader->getAndLockNextSample(/*just_get_vid_sample=*/true);
+					if(frameinfo.nonNull() && frameinfo->frame_buffer != NULL)
+					{
+						// Check if we should display this frame (based on frame time)
+						// Always display frame if it's the first one or if playback time has advanced
+						if(last_video_frame_time == 0 || frameinfo->frame_time <= video_playback_time)
+						{
+							// Update texture with frame data
+							gui_client->setGLWidgetContextAsCurrent();
+
+							const uint8* frame_data = frameinfo->frame_buffer;
+							const int frame_width = (int)frameinfo->width;
+							const int frame_height = (int)frameinfo->height;
+							const int stride = (int)frameinfo->stride_B;
+
+							// WMFVideoReader provides frames in BGRA format (MFVideoFormat_RGB32)
+							if(stride > 0 && frame_data != NULL && frame_width > 0 && frame_height > 0)
+							{
+								// Copy frame data to texture
+								const size_t data_size = frame_height * stride;
+								ArrayRef<uint8> frame_array(const_cast<uint8*>(frame_data), data_size);
+
+								ob->opengl_engine_ob->materials[0].emission_texture->loadIntoExistingTexture(
+									/*mip level=*/0,
+									frame_width,
+									frame_height,
+									stride,
+									frame_array,
+									/*bind_needed=*/true
+								);
+
+								last_video_frame_time = frameinfo->frame_time;
+							}
+						}
+					}
+					else if(frameinfo.nonNull() && frameinfo->frame_buffer == NULL)
+					{
+						// End of stream - loop if needed
+						const bool loop = BitUtils::isBitSet(ob->flags, WorldObject::VIDEO_LOOP);
+						if(loop)
+						{
+							video_playback_time = 0;
+							last_video_frame_time = 0;
+							wmf_video_reader->seek(0);
+						}
+						else
+						{
+							// Video finished, keep showing last frame
+						}
+					}
+				}
+				catch(glare::Exception& e)
+				{
+					// Log error but don't crash - video might be corrupted or still loading
+					static Timer error_timer;
+					if(error_timer.elapsed() > 1.0) // Log at most once per second
+					{
+						gui_client->logMessage("WMFVideoReader error: " + e.what());
+						error_timer.reset();
+					}
+				}
+			}
+		}
+#endif // _WIN32
+	} // end if(in_process_dist)
 	else // else if !in_process_dist:
 	{
+#if CEF_SUPPORT
 		// If there is a browser, and it is past the unload distance, destroy it.
 		if((state == State_BrowserCreated) && (ob_dist_from_cam >= unload_dist))
 		{
@@ -783,8 +1034,24 @@ void BrowserVidPlayer::process(GUIClient* gui_client, OpenGLEngine* opengl_engin
 			}
 			this->state = State_Unloaded;
 		}
+#endif
+#ifdef _WIN32
+		// If using WMFVideoReader, and it is past the unload distance, destroy it.
+		if((state == State_WMFVideoReaderCreated) && (ob_dist_from_cam >= unload_dist))
+		{
+			if(wmf_video_reader.nonNull())
+			{
+				if(!ob->materials.empty())
+				{
+					const auto& video_URL = ob->materials[0]->emission_texture_url;
+					gui_client->logMessage("Closing WMFVideoReader (out of view distance), video_URL: " + std::string(video_URL));
+				}
+				wmf_video_reader = NULL;
+			}
+			this->state = State_Unloaded;
+		}
+#endif
 	}
-#endif // CEF_SUPPORT
 }
 
 
@@ -851,6 +1118,20 @@ void BrowserVidPlayer::mousePressed(MouseEvent* e, const Vec2f& uv_coords)
 {
 	//conPrint("BrowserVidPlayer mousePressed(), uv_coords: " + uv_coords.toString());
 
+#ifdef _WIN32
+	// Handle pause/play toggle for WMFVideoReader
+	if(state == State_WMFVideoReaderCreated && wmf_video_reader.nonNull())
+	{
+		// Toggle pause state
+		is_paused = !is_paused;
+		if(m_gui_client)
+		{
+			m_gui_client->logMessage("Video " + std::string(is_paused ? "paused" : "resumed"));
+		}
+		return; // Don't pass to browser
+	}
+#endif
+
 	if(browser.nonNull())
 		browser->mousePressed(e, uv_coords);
 
@@ -888,6 +1169,16 @@ void BrowserVidPlayer::mouseMoved(MouseEvent* e, const Vec2f& uv_coords)
 {
 	//conPrint("BrowserVidPlayer mouseMoved(), uv_coords: " + uv_coords.toString());
 
+#ifdef _WIN32
+	// Show controls when mouse is over video (for WMFVideoReader)
+	if(state == State_WMFVideoReaderCreated && wmf_video_reader.nonNull())
+	{
+		show_controls = true;
+		controls_hide_time = Clock::getCurTimeRealSec() + 3.0; // Hide controls after 3 seconds of no mouse movement
+		return; // Don't pass to browser
+	}
+#endif
+
 	if(browser.nonNull())
 		browser->mouseMoved(e, uv_coords);
 }
@@ -912,3 +1203,4 @@ void BrowserVidPlayer::keyReleased(KeyEvent* e)
 	if(browser.nonNull())
 		browser->keyReleased(e);
 }
+

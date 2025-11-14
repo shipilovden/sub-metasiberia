@@ -2269,20 +2269,90 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 					GLObjectRef opengl_ob = opengl_engine->allocateObject();
 					opengl_ob->mesh_data = this->portal_opengl_mesh;
 					
-					// Ensure there is a translucent inner plane material
-					if(opengl_ob->materials.size() < 4)
-						opengl_ob->materials.resize(4);
-					opengl_ob->materials[3].transparent = true;
-					opengl_ob->materials[3].hologram = true;
-					opengl_ob->materials[3].alpha = 0.8f;
+					// Ensure materials array is properly sized (portal.bmesh has 4 materials)
+					const size_t num_materials = this->portal_opengl_mesh->num_materials_referenced;
+					if(opengl_ob->materials.size() < num_materials)
+						opengl_ob->materials.resize(num_materials);
+					
+					// Set up all portal materials
+					// Materials 0-2: Marble frame (white/light gray)
+					// Material 3: Blue transparent inner plane (without glow)
+					for(size_t i = 0; i < num_materials; ++i)
+					{
+						OpenGLMaterial& mat = opengl_ob->materials[i];
+						
+						if(i < 3)
+						{
+							// Marble frame materials - white/light gray, non-transparent
+							mat.albedo_linear_rgb = toLinearSRGB(Colour3f(0.95f, 0.95f, 0.95f)); // White marble
+							mat.roughness = 0.3f; // Slightly glossy marble
+							mat.metallic_frac = 0.0f;
+							mat.transparent = false;
+							mat.alpha = 1.0f;
+							mat.emission_scale = 0.0f; // No glow
+							mat.emission_linear_rgb = Colour3f(0.0f, 0.0f, 0.0f);
+						}
+						else if(i == 3)
+						{
+							// Material index 3 is the blue portal shader material (inner plane)
+							// For hologram materials, the shader uses emission_col, not albedo!
+							mat.transparent = true;
+							mat.hologram = true;
+							mat.alpha = 0.6f; // More visible transparency
+							
+							// For hologram shader, color comes from emission_linear_rgb, not albedo
+							// Set blue color in emission - use moderate scale for visible color without strong glow
+							mat.emission_linear_rgb = toLinearSRGB(Colour3f(0.3f, 0.5f, 1.0f)); // Bright blue color
+							// Use moderate emission scale - visible color but minimal glow
+							// L_v = 5.0e3 gives visible color with minimal glow (much less than 2.0e5 which creates strong glow)
+							const float L_v = 5.0e3f; // Moderate luminance - visible color with minimal glow
+							mat.emission_scale = L_v * (1.0e-9f / (683.002f * 106.856e-9f));
+							
+							// Also set albedo for consistency
+							mat.albedo_linear_rgb = toLinearSRGB(Colour3f(0.3f, 0.5f, 1.0f)); // Blue color
+							
+							// Ensure material is properly configured for rendering
+							mat.roughness = 0.1f; // Smooth surface
+							mat.metallic_frac = 0.0f; // Non-metallic
+						}
+					}
 
 					opengl_ob->ob_to_world_matrix = ob_to_world_matrix;
 
 					ob->opengl_engine_ob = opengl_ob;
 					ob->physics_object = physics_ob;
 
+					// Add object to engine first
 					opengl_engine->addObject(ob->opengl_engine_ob);
 					physics_world->addObject(ob->physics_object);
+					
+					// Ensure materials are applied after object is added (materials may need to be set after addObject)
+					// Re-apply materials to make sure they stick
+					if(opengl_ob->materials.size() >= 4)
+					{
+						// Material 3: Blue transparent inner plane (without glow)
+						// For hologram materials, the shader uses emission_col, not albedo!
+						OpenGLMaterial& portal_mat = opengl_ob->materials[3];
+						portal_mat.transparent = true;
+						portal_mat.hologram = true;
+						portal_mat.alpha = 0.6f; // More visible transparency
+						
+						// For hologram shader, color comes from emission_linear_rgb, not albedo
+						portal_mat.emission_linear_rgb = toLinearSRGB(Colour3f(0.3f, 0.5f, 1.0f)); // Bright blue color
+						// Use moderate emission scale - visible color but minimal glow
+						const float L_v = 5.0e3f; // Moderate luminance - visible color with minimal glow
+						portal_mat.emission_scale = L_v * (1.0e-9f / (683.002f * 106.856e-9f));
+						
+						// Also set albedo for consistency
+						portal_mat.albedo_linear_rgb = toLinearSRGB(Colour3f(0.3f, 0.5f, 1.0f)); // Blue color
+						portal_mat.roughness = 0.1f; // Smooth surface
+						portal_mat.metallic_frac = 0.0f; // Non-metallic
+						
+						// Force material update in OpenGL engine
+						opengl_engine->objectMaterialsUpdated(*opengl_ob);
+						
+						conPrint("Portal material 3 set: emission_blue=" + toString(portal_mat.emission_linear_rgb.b) + ", emission_scale=" + toString(portal_mat.emission_scale) + ", transparent=" + toString(portal_mat.transparent) + ", hologram=" + toString(portal_mat.hologram));
+					}
 
 					loadScriptForObject(ob, world_state_lock); // Load any script for the object.
 				}
@@ -6586,12 +6656,16 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 								opengl_engine->updateObjectTransformData(*opengl_ob);
 
 								// Update materials in opengl engine.
-								const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
-								for(size_t i=0; i<ob->materials.size(); ++i)
-									if(i < opengl_ob->materials.size())
-										ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, opengl_ob->materials[i]);
+								// Skip material updates for portals - they use hardcoded materials that should not be overwritten
+								if(ob->object_type != WorldObject::ObjectType_Portal)
+								{
+									const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
+									for(size_t i=0; i<ob->materials.size(); ++i)
+										if(i < opengl_ob->materials.size())
+											ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, opengl_ob->materials[i]);
 
-								opengl_engine->objectMaterialsUpdated(*opengl_ob);
+									opengl_engine->objectMaterialsUpdated(*opengl_ob);
+								}
 
 								if(ob->object_type == WorldObject::ObjectType_Spotlight)
 									updateSpotlightGraphicsEngineData(opengl_ob->ob_to_world_matrix, ob);
@@ -12084,7 +12158,8 @@ void GUIClient::disconnectFromServerAndClearAllObjects(bool fast_disconnect) // 
 	upload_queue.clear();
 
 	// Kill any existing threads connected to the server
-	// For fast disconnect, kill connections/sockets FIRST to unblock threads, then kill threads non-blocking
+	// IMPORTANT: Always kill connections/sockets FIRST to unblock threads, then kill threads
+	// This prevents hanging on blocked socket operations for both fast and normal disconnect
 	if(fast_disconnect)
 	{
 		// For fast disconnect, kill UDP socket first to unblock UDP handler thread
@@ -12102,9 +12177,46 @@ void GUIClient::disconnectFromServerAndClearAllObjects(bool fast_disconnect) // 
 	}
 	else
 	{
-		net_resource_download_thread_manager.killThreadsBlocking();
-		client_udp_handler_thread_manager.killThreadsBlocking();
-		mic_read_thread_manager.killThreadsBlocking();
+		// For normal disconnect (different server), also kill connections first to prevent hanging
+		// Close UDP socket first to unblock UDP handler thread
+		if(udp_socket.nonNull())
+		{
+			udp_socket = NULL; // Close UDP socket to unblock ClientUDPHandlerThread
+		}
+		
+		// Kill client thread connection first to unblock it
+		if(this->client_thread_manager.getNumThreads() > 0 && client_thread.nonNull())
+		{
+			client_thread->killConnection(); // Kill socket connection first to unblock thread
+		}
+		
+		// Kill resource download/upload thread connections first
+		if(resource_download_thread_manager.getNumThreads() > 0)
+		{
+			Lock lock(resource_download_thread_manager.getMutex());
+			for(auto it = resource_download_thread_manager.getThreads().begin(); it != resource_download_thread_manager.getThreads().end(); ++it)
+			{
+				Reference<MessageableThread> thread = *it;
+				if(thread.isType<DownloadResourcesThread>())
+					thread.downcastToPtr<DownloadResourcesThread>()->killConnection();
+			}
+		}
+		
+		if(resource_upload_thread_manager.getNumThreads() > 0)
+		{
+			Lock lock(resource_upload_thread_manager.getMutex());
+			for(auto it = resource_upload_thread_manager.getThreads().begin(); it != resource_upload_thread_manager.getThreads().end(); ++it)
+			{
+				Reference<MessageableThread> thread = *it;
+				if(thread.isType<UploadResourceThread>())
+					thread.downcastToPtr<UploadResourceThread>()->killConnection();
+			}
+		}
+		
+		// Now kill threads - they should exit quickly since connections are closed
+		net_resource_download_thread_manager.killThreadsNonBlocking();
+		client_udp_handler_thread_manager.killThreadsNonBlocking();
+		mic_read_thread_manager.killThreadsNonBlocking();
 	}
 
 #if defined(EMSCRIPTEN)
@@ -12161,63 +12273,46 @@ void GUIClient::disconnectFromServerAndClearAllObjects(bool fast_disconnect) // 
 	}
 	else
 	{
-		// Normal disconnect - wait a bit for graceful shutdown
+		// Normal disconnect - connections already killed above, now wait briefly for threads to finish
+		// Use shorter timeout since connections are already closed
+		const double MAX_THREAD_WAIT_TIME_SHORT = 0.1; // Reduced from 0.2s since connections are already closed
 		while((this->client_thread_manager.getNumThreads() > 0) || (resource_download_thread_manager.getNumThreads() > 0) || (resource_upload_thread_manager.getNumThreads() > 0)) // While client_thread or a resource download thread is still running:
 		{
-			if(timer.elapsed() > MAX_THREAD_WAIT_TIME)
+			if(timer.elapsed() > MAX_THREAD_WAIT_TIME_SHORT)
 			{
-				logAndConPrintMessage("Reached time limit waiting for client_thread or resource download threads to close.  Hard-killing connection(s)");
+				// Timeout reached - threads should have exited by now since connections are closed
+				// Force kill remaining threads
+				logAndConPrintMessage("Reached time limit waiting for threads to close after killing connections. Force-killing remaining threads.");
 				logAndConPrintMessage("this->client_thread_manager.getNumThreads(): " + toString(this->client_thread_manager.getNumThreads()));
 				logAndConPrintMessage("this->resource_download_thread_manager.getNumThreads(): " + toString(this->resource_download_thread_manager.getNumThreads()));
 				logAndConPrintMessage("this->resource_upload_thread_manager.getNumThreads(): " + toString(this->resource_upload_thread_manager.getNumThreads()));
 
+				// Force kill remaining threads (connections already closed above)
 				if(this->client_thread_manager.getNumThreads() > 0)
 				{
-					if(client_thread.nonNull())
-						this->client_thread->killConnection(); // Calls ungracefulShutdown on socket, which should interrupt any blocking socket calls.
-
 					this->client_thread = NULL;
 					this->client_thread_manager.killThreadsBlocking();
 				}
 
 				if(resource_download_thread_manager.getNumThreads() > 0)
 				{
-					Lock lock(resource_download_thread_manager.getMutex());
-					for(auto it = resource_download_thread_manager.getThreads().begin(); it != resource_download_thread_manager.getThreads().end(); ++it)
-					{
-						Reference<MessageableThread> thread = *it;
-						assert(thread.isType<DownloadResourcesThread>());
-						if(thread.isType<DownloadResourcesThread>())
-							thread.downcastToPtr<DownloadResourcesThread>()->killConnection();
-					}
+					resource_download_thread_manager.killThreadsBlocking();
 				}
 
 				if(resource_upload_thread_manager.getNumThreads() > 0)
 				{
-					Lock lock(resource_upload_thread_manager.getMutex());
-					for(auto it = resource_upload_thread_manager.getThreads().begin(); it != resource_upload_thread_manager.getThreads().end(); ++it)
-					{
-						Reference<MessageableThread> thread = *it;
-						assert(thread.isType<UploadResourceThread>());
-						if(thread.isType<UploadResourceThread>())
-							thread.downcastToPtr<UploadResourceThread>()->killConnection();
-					}
+					resource_upload_thread_manager.killThreadsBlocking();
 				}
 
 				break;
 			}
 
-			PlatformUtils::Sleep(5); // Reduced from 10ms to 5ms for faster response
+			PlatformUtils::Sleep(2); // Reduced to 2ms for faster response
 		}
 	}
 	this->client_thread = NULL; // Need to make sure client_thread is destroyed, since it hangs on to a bunch of references.
-	if(!fast_disconnect)
-	{
-		// For normal disconnect, wait for threads to finish gracefully
-		resource_download_thread_manager.killThreadsBlocking();
-		resource_upload_thread_manager.killThreadsBlocking();
-	}
-	// For fast disconnect, threads are already killed non-blocking above, they will terminate in background
+	// For both fast and normal disconnect, threads are already killed above (non-blocking for fast, with timeout for normal)
+	// They will terminate in background since connections are closed
 
 	// Ensure UDP socket is closed (for fast disconnect, it was closed earlier, but make sure it's NULL)
 	if(fast_disconnect && udp_socket.nonNull())

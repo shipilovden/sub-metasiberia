@@ -29,7 +29,7 @@ AboutDialog::AboutDialog(QWidget* parent, const std::string& appdata_path)
 	display_str += "<hr style=\"border: 1px solid #ccc; margin: 10px 0;\">";
 
 	// Add Metasiberia title and social media links
-	display_str += "<h2>" + tr("Metasiberia Edit Beta") + "</h2>";
+	display_str += "<h2>" + tr("Metasiberia Editor Beta") + "</h2>";
 
 	// Add social media links for Metasiberia
 	display_str += "<p>";

@@ -170,6 +170,17 @@ void MaterialBrowser::init(QWidget* parent, const std::string& basedir_path_, co
 	basedir_path = basedir_path_;
 	appdata_path = appdata_path_;
 	print_output = print_output_;
+	
+	// Log through both conPrint and print_output to ensure visibility
+	conPrint("MaterialBrowser::init() called");
+	conPrint("MaterialBrowser::init() - basedir_path_ = " + basedir_path_);
+	conPrint("MaterialBrowser::init() - appdata_path_ = " + appdata_path_);
+	if(print_output)
+	{
+		print_output->print("MaterialBrowser::init() called");
+		print_output->print("MaterialBrowser::init() - basedir_path_ = " + basedir_path_);
+		print_output->print("MaterialBrowser::init() - appdata_path_ = " + appdata_path_);
+	}
 
 	setupUi(this);
 
@@ -182,7 +193,32 @@ void MaterialBrowser::init(QWidget* parent, const std::string& basedir_path_, co
 
 	try
 	{
-		const std::vector<std::string> filepaths = FileUtils::getFilesInDirWithExtensionFullPaths(basedir_path + "/data/resources/materials", "submat");
+		const std::string materials_dir = basedir_path + "/data/resources/materials";
+		conPrint("MaterialBrowser: basedir_path = " + basedir_path);
+		conPrint("MaterialBrowser: Scanning for materials in: " + materials_dir);
+		const bool dir_exists = FileUtils::fileExists(materials_dir);
+		conPrint("MaterialBrowser: Directory exists = " + toString(dir_exists));
+		
+		if(print_output)
+		{
+			print_output->print("MaterialBrowser: basedir_path = " + basedir_path);
+			print_output->print("MaterialBrowser: Scanning for materials in: " + materials_dir);
+			print_output->print("MaterialBrowser: Directory exists = " + toString(dir_exists));
+		}
+		
+		if(!FileUtils::fileExists(materials_dir))
+		{
+			conPrint("MaterialBrowser: ERROR - Materials directory does not exist: " + materials_dir);
+			if(print_output)
+				print_output->print("MaterialBrowser: ERROR - Materials directory does not exist: " + materials_dir);
+			return;
+		}
+		
+		const std::vector<std::string> filepaths = FileUtils::getFilesInDirWithExtensionFullPaths(materials_dir, "submat");
+		
+		conPrint("MaterialBrowser: Found " + toString(filepaths.size()) + " material files");
+		if(print_output)
+			print_output->print("MaterialBrowser: Found " + toString(filepaths.size()) + " material files");
 
 		for(size_t i=0; i<filepaths.size(); ++i)
 		{
@@ -191,8 +227,25 @@ void MaterialBrowser::init(QWidget* parent, const std::string& basedir_path_, co
 			const std::string mat_dir = ::removeDotAndExtension(filepaths[i]);
 			const std::string preview_path = mat_dir + "/preview.jpg";
 			
+			conPrint("MaterialBrowser: Loading material: " + mat_name + ", preview path: " + preview_path);
+			
 			QImage image;
-			image.load(QtUtils::toQString(preview_path));
+			const bool image_loaded = image.load(QtUtils::toQString(preview_path));
+			if(!image_loaded)
+			{
+				conPrint("MaterialBrowser: WARNING - Failed to load preview image: " + preview_path);
+				if(print_output)
+					print_output->print("MaterialBrowser: WARNING - Failed to load preview image: " + preview_path);
+				// Create a placeholder image if preview failed to load
+				image = QImage(PREVIEW_SIZE, PREVIEW_SIZE, QImage::Format_RGB32);
+				image.fill(QColor(128, 128, 128)); // Grey placeholder
+			}
+			else
+			{
+				conPrint("MaterialBrowser: Successfully loaded preview image: " + preview_path);
+				if(print_output)
+					print_output->print("MaterialBrowser: Successfully loaded preview image: " + preview_path);
+			}
 
 
 #if 0
@@ -270,7 +323,17 @@ void MaterialBrowser::init(QWidget* parent, const std::string& basedir_path_, co
 			button->setFixedHeight(PREVIEW_SIZE);
 			button->setIconSize(QSize(PREVIEW_SIZE, PREVIEW_SIZE));
 
-			button->setIcon(QPixmap::fromImage(image));
+			if(!image.isNull())
+			{
+				button->setIcon(QPixmap::fromImage(image));
+			}
+			else
+			{
+				// Set a placeholder icon if image is null
+				QImage placeholder(PREVIEW_SIZE, PREVIEW_SIZE, QImage::Format_RGB32);
+				placeholder.fill(QColor(128, 128, 128));
+				button->setIcon(QPixmap::fromImage(placeholder));
+			}
 
 			button->setToolTip(QtUtils::toQString(mat_name));
 
@@ -280,14 +343,30 @@ void MaterialBrowser::init(QWidget* parent, const std::string& basedir_path_, co
 
 			browser_buttons.push_back(button);
 			mat_paths.push_back(filepaths[i]);
+			
+			conPrint("MaterialBrowser: Created button for material: " + mat_name);
+			if(print_output)
+				print_output->print("MaterialBrowser: Created button for material: " + mat_name);
 
 		}
 	}
 	catch(glare::Exception& e)
 	{
+		conPrint("MaterialBrowser: EXCEPTION caught: " + e.what());
 		if(print_output)
 			print_output->print("MaterialBrowser: " + e.what());
-		conPrint("Error: " + e.what());
+	}
+	catch(std::exception& e)
+	{
+		conPrint("MaterialBrowser: std::exception caught: " + std::string(e.what()));
+		if(print_output)
+			print_output->print("MaterialBrowser: std::exception: " + std::string(e.what()));
+	}
+	catch(...)
+	{
+		conPrint("MaterialBrowser: Unknown exception caught");
+		if(print_output)
+			print_output->print("MaterialBrowser: Unknown exception");
 	}
 
 #if 0

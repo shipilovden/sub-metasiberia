@@ -18,6 +18,10 @@ class EmbeddedBrowser;
 class OpenGLEngine;
 class QString;
 template <class T> class Vec2;
+#ifdef _WIN32
+class WMFVideoReader;
+class SampleInfo;
+#endif
 
 
 class BrowserVidPlayer : public RefCounted
@@ -51,7 +55,8 @@ private:
 	{
 		State_Unloaded,
 		State_ErrorOccurred,
-		State_BrowserCreated
+		State_BrowserCreated,
+		State_WMFVideoReaderCreated // Using WMFVideoReader fallback (Windows, no CEF)
 	};
 	State state;
 
@@ -63,6 +68,15 @@ private:
 	bool using_iframe;
 
 	bool previous_is_visible;
+
+#ifdef _WIN32
+	Reference<WMFVideoReader> wmf_video_reader; // Fallback for MP4 files when CEF is not available
+	double last_video_frame_time; // Time of last video frame we displayed
+	double video_playback_time; // Current playback time for video
+	bool is_paused; // Whether video playback is paused (for WMFVideoReader)
+	bool show_controls; // Whether to show video controls overlay (when mouse is over video)
+	double controls_hide_time; // Time when controls should be hidden (after mouse leaves)
+#endif
 };
 
 

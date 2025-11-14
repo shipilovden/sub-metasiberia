@@ -18,8 +18,18 @@ Copyright Glare Technologies Limited 2022 -
 #include <webserver/Escaping.h>
 #include <SDL.h>
 #include <iostream>
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+#endif
 #if EMSCRIPTEN
 #include <emscripten.h>
+#endif
+#if !EMSCRIPTEN
+#include "ModelLoading.h"
+#include "GUIClient.h"
+#include "../shared/Avatar.h"
+#include <utils/FileInStream.h>
 #endif
 
 
@@ -273,10 +283,101 @@ void SDLUIInterface::startLightmapFlagTimer()
 void SDLUIInterface::showAvatarSettings() // Show avatar settings dialog.
 {
 #if EMSCRIPTEN
-	EM_ASM({
-		showAvatarSettingsWidget();
-	});
-#endif
+    EM_ASM({
+        showAvatarSettingsWidget();
+    });
+#else
+#if defined(CUSTOM_BUILD) && defined(_WIN32)
+    // Two-button dialog: Create avatar (open URL) or Load from disk
+    const SDL_MessageBoxButtonData buttons[] = {
+        { /*.flags=*/0, /*.buttonid=*/1, /*.text=*/"Создать аватар" },
+        { /*.flags=*/SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, /*.buttonid=*/2, /*.text=*/"Загрузить" }
+    };
+
+    const SDL_MessageBoxData messageboxdata = {
+        SDL_MESSAGEBOX_INFORMATION,
+        window,
+        "Настройки аватара",
+        "Выберите действие",
+        SDL_arraysize(buttons),
+        buttons,
+        NULL
+    };
+
+    int buttonid = 0;
+    if(SDL_ShowMessageBox(&messageboxdata, &buttonid) == 0)
+    {
+        if(buttonid == 1)
+        {
+            openURL("https://substrata.readyplayer.me/avatar");
+            return;
+        }
+        else if(buttonid == 2)
+        {
+            // Windows file open dialog
+            wchar_t file_buffer[MAX_PATH] = {0};
+            OPENFILENAMEW ofn; memset(&ofn, 0, sizeof(ofn));
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = NULL;
+            ofn.lpstrFile = file_buffer;
+            ofn.nMaxFile = MAX_PATH;
+            ofn.lpstrFilter = L"Avatar files (*.vrm;*.glb;*.gltf;*.bmesh)\0*.vrm;*.glb;*.gltf;*.bmesh\0All files (*.*)\0*.*\0\0";
+            ofn.nFilterIndex = 1;
+            ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+
+            if(GetOpenFileNameW(&ofn))
+            {
+                // Convert wide to UTF-8/std::string
+                char path_utf8[MAX_PATH * 3] = {0};
+                WideCharToMultiByte(CP_UTF8, 0, file_buffer, -1, path_utf8, (int)sizeof(path_utf8), NULL, NULL);
+                const std::string model_path(path_utf8);
+
+                try
+                {
+                    // Load model (similar to processAvatarModelFile)
+                    ModelLoading::MakeGLObjectResults results;
+                    if(!model_path.empty())
+                    {
+                        ModelLoading::makeGLObjectForModelFile(*gui_client->opengl_engine, *gui_client->opengl_engine->vert_buf_allocator, /*allocator=*/nullptr, model_path, /*do_opengl_stuff=*/false, results);
+                    }
+
+                    // Compute transform and materials
+                    Vec4f original_toe_pos = results.batched_mesh ? results.batched_mesh->animation_data.getNodePositionModelSpace("LeftToe_End", /*use_retarget_adjustment=*/false) : Vec4f(0,0.0362269469f,0,1);
+                    float foot_bottom_height = original_toe_pos[1] - 0.0362269469f;
+
+                    if(results.batched_mesh)
+                    {
+                        FileInStream file(gui_client->resources_dir_path + "/extracted_avatar_anim.bin");
+                        AnimationData animation_data_copy = results.batched_mesh->animation_data;
+                        animation_data_copy.loadAndRetargetAnim(file);
+                        Vec4f new_toe_pos = animation_data_copy.getNodePositionModelSpace("LeftToe_End", /*use_retarget_adjustment=*/true);
+                        foot_bottom_height = new_toe_pos[1] - 0.03f;
+                    }
+
+                    const Matrix4f pre_ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, -1.67f - foot_bottom_height) * results.ob_to_world;
+
+                    // If loader didn’t fill materials for default case, ensure at least two exist
+                    if(results.materials.empty())
+                    {
+                        results.materials.resize(2);
+                        results.materials[0] = new WorldMaterial();
+                        results.materials[0]->colour_rgb = Avatar::defaultMat0Col();
+                        results.materials[1] = new WorldMaterial();
+                        results.materials[1]->colour_rgb = Avatar::defaultMat1Col();
+                    }
+
+                    gui_client->updateOurAvatarModel(results.batched_mesh, model_path, pre_ob_to_world_matrix, results.materials);
+                    gui_client->showInfoNotification("Аватар обновлён");
+                }
+                catch(glare::Exception& e)
+                {
+                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Ошибка загрузки аватара", e.what().c_str(), window);
+                }
+            }
+        }
+    }
+#endif // CUSTOM_BUILD && _WIN32
+#endif // EMSCRIPTEN
 }
 
 void SDLUIInterface::setCamRotationOnMouseDragEnabled(bool enabled)
