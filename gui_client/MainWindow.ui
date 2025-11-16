@@ -71,6 +71,7 @@
     <addaction name="actionAdd_Video"/>
     <addaction name="actionAdd_Decal"/>
     <addaction name="actionAdd_Portal"/>
+    <addaction name="actionAdd_to_Favorites"/>
     <addaction name="separator"/>
     <addaction name="actionCopy_Object"/>
     <addaction name="actionPaste_Object"/>
@@ -104,8 +105,14 @@
     <addaction name="actionGo_to_Substrata_World"/>
     <addaction name="actionGo_to_Metasiberia_Server"/>
     <addaction name="actionGo_to_Shki_nvkz_Server"/>
+    <addaction name="menuFavorites"/>
     <addaction name="separator"/>
     <addaction name="actionSet_Start_Location"/>
+   </widget>
+   <widget class="QMenu" name="menuFavorites">
+    <property name="title">
+     <string>Go to Favorites</string>
+    </property>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -753,6 +760,11 @@
   <action name="actionAdd_Portal">
    <property name="text">
     <string>Add Portal</string>
+   </property>
+  </action>
+  <action name="actionAdd_to_Favorites">
+   <property name="text">
+    <string>Add to Favorites</string>
    </property>
   </action>
   <action name="actionEnter_Fullscreen">

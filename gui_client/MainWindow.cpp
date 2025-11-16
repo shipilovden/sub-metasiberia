@@ -621,6 +621,13 @@ void MainWindow::afterGLInitInitialise()
 	MainWindowGLUICallbacks* glui_callbacks = new MainWindowGLUICallbacks();
 	glui_callbacks->main_window = this;
 	gui_client.gl_ui->callbacks = glui_callbacks;
+	
+	// Initialize favorites menu
+	updateFavoritesMenu();
+	
+	// Set up context menu for favorites menu (for right-click to delete)
+	ui->menuFavorites->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(ui->menuFavorites, &QMenu::customContextMenuRequested, this, &MainWindow::onFavoritesMenuContextMenuRequested);
 
 
 	// Do auto-setting of graphics options, if they have not been set.  Otherwise apply MSAA setting.
@@ -1933,6 +1940,39 @@ void MainWindow::on_actionAdd_Portal_triggered()
 }
 
 
+void MainWindow::on_actionAdd_to_Favorites_triggered()
+{
+	// Get current location URL with coordinates
+	const std::string current_url = url_widget->getURL();
+	
+	if(current_url.empty())
+	{
+		showErrorNotification("Cannot add to favorites: no current location URL.");
+		return;
+	}
+	
+	// Load existing favorites
+	QStringList favorites = settings->value("favorite_locations", QStringList()).toStringList();
+	
+	// Check if this URL is already in favorites
+	if(favorites.contains(QtUtils::toQString(current_url)))
+	{
+		showInfoNotification("This location is already in favorites.");
+		return;
+	}
+	
+	// Add to favorites
+	favorites.append(QtUtils::toQString(current_url));
+	settings->setValue("favorite_locations", favorites);
+	settings->sync();
+	
+	// Update the favorites menu
+	updateFavoritesMenu();
+	
+	showInfoNotification("Location added to favorites.");
+}
+
+
 void MainWindow::on_actionAdd_Web_View_triggered()
 {
 	const float quad_w = 0.4f;
@@ -2817,6 +2857,109 @@ void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
 void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
 {
 	visitSubURL("sub://176.197.223.42");
+}
+
+
+void MainWindow::updateFavoritesMenu()
+{
+	// Clear existing actions
+	for(QAction* action : favorite_location_actions)
+	{
+		ui->menuFavorites->removeAction(action);
+		delete action;
+	}
+	favorite_location_actions.clear();
+	
+	// Load favorites from settings
+	QStringList favorites = settings->value("favorite_locations", QStringList()).toStringList();
+	
+	if(favorites.isEmpty())
+	{
+		// Add a placeholder action if no favorites
+		QAction* no_favorites_action = new QAction("(No favorites yet)", this);
+		no_favorites_action->setEnabled(false);
+		ui->menuFavorites->addAction(no_favorites_action);
+		favorite_location_actions.append(no_favorites_action);
+		return;
+	}
+	
+	// Create actions for each favorite location
+	for(const QString& url_str : favorites)
+	{
+		// Create a short display name from the URL
+		QString display_name = url_str;
+		// Try to extract a meaningful name
+		if(display_name.contains("sub://"))
+		{
+			display_name = display_name.mid(display_name.indexOf("sub://") + 6); // Remove "sub://"
+			if(display_name.length() > 50)
+				display_name = display_name.left(47) + "...";
+		}
+		
+		QAction* action = new QAction(display_name, this);
+		action->setData(url_str); // Store the full URL in action data
+		
+		// Connect left-click to navigate to location
+		QString url_for_lambda = url_str;
+		connect(action, &QAction::triggered, this, [this, url_for_lambda]() {
+			visitSubURL(QtUtils::toStdString(url_for_lambda));
+		});
+		
+		ui->menuFavorites->addAction(action);
+		favorite_location_actions.append(action);
+	}
+}
+
+
+void MainWindow::onFavoriteLocationTriggered()
+{
+	// This is handled by lambda in updateFavoritesMenu()
+	// But we keep this method for potential future use
+}
+
+
+void MainWindow::onFavoritesMenuContextMenuRequested(const QPoint& pos)
+{
+	// Get the action at the clicked position
+	QAction* action = ui->menuFavorites->actionAt(pos);
+	if(!action || !action->data().isValid())
+		return; // No action or no data (placeholder action)
+	
+	// Get the URL from action data
+	QString url = action->data().toString();
+	if(url.isEmpty())
+		return;
+	
+	// Create context menu with delete option
+	QMenu context_menu(this);
+	QAction* delete_action = context_menu.addAction("Remove from Favorites");
+	
+	// Show context menu and wait for user selection
+	QAction* selected = context_menu.exec(ui->menuFavorites->mapToGlobal(pos));
+	
+	if(selected == delete_action)
+	{
+		removeFavoriteLocation(url);
+	}
+}
+
+
+void MainWindow::removeFavoriteLocation(const QString& url)
+{
+	// Load existing favorites
+	QStringList favorites = settings->value("favorite_locations", QStringList()).toStringList();
+	
+	// Remove the URL from favorites
+	favorites.removeAll(url);
+	
+	// Save back to settings
+	settings->setValue("favorite_locations", favorites);
+	settings->sync();
+	
+	// Update the menu
+	updateFavoritesMenu();
+	
+	showInfoNotification("Location removed from favorites.");
 }
 
 
