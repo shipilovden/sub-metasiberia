@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "WorldState.h"
 #include "../shared/WorldStateLock.h"
 #include "../shared/WorldObject.h"
+#include "../shared/UID.h"
 #include "../utils/Clock.h"
 #include "../utils/StringUtils.h"
 #include "../utils/BitUtils.h"
@@ -18,6 +19,32 @@ Copyright Glare Technologies Limited 2024 -
 #include <ctime>
 #include <algorithm>
 #include <vector>
+
+UID UserListDisplay::findUserListTextObjectByMarker(WorldState* world_state)
+{
+	if(!world_state)
+		return UID::invalidUID();
+	
+	const std::string marker = "🌍 USERS IN THE METASIBERIA 🌍";
+	
+	WorldStateLock lock(world_state->mutex);
+	
+	// Search through all objects to find text object with the marker
+	for(auto it = world_state->objects.valuesBegin(); it != world_state->objects.valuesEnd(); ++it)
+	{
+		WorldObject* ob = it.getValue().ptr();
+		if(ob && ob->object_type == WorldObject::ObjectType_Text)
+		{
+			// Check if content starts with our marker
+			if(ob->content.find(marker) == 0)
+			{
+				return ob->uid;
+			}
+		}
+	}
+	
+	return UID::invalidUID();
+}
 
 bool UserListDisplay::updateUserListTextObject(GUIClient* gui_client, WorldState* world_state, const UID& text_object_uid)
 {
@@ -32,24 +59,34 @@ bool UserListDisplay::updateUserListTextObject(GUIClient* gui_client, WorldState
 	{
 		WorldStateLock lock(world_state->mutex);
 
-		// Find the text object
+		UID actual_uid = text_object_uid;
+		
+		// First try to find object by UID (for backward compatibility)
 		auto res = world_state->objects.find(text_object_uid);
 		if(res == world_state->objects.end())
 		{
-			conPrint("UserListDisplay: Text object with UID " + text_object_uid.toString() + " not found in world_state->objects (total objects: " + toString(world_state->objects.size()) + ")");
-			return false; // Object not found
+			// If not found by UID, try to find by content marker (works on any server/world)
+			actual_uid = findUserListTextObjectByMarker(world_state);
+			if(actual_uid.valid())
+			{
+				res = world_state->objects.find(actual_uid);
+			}
+		}
+		
+		if(res == world_state->objects.end())
+		{
+			// Object not found by UID or by marker
+			return false;
 		}
 
 		WorldObject* ob = res.getValue().ptr();
 		if(!ob)
 		{
-			conPrint("UserListDisplay: Text object pointer is null for UID " + text_object_uid.toString());
 			return false; // Object pointer is null
 		}
 			
 		if(ob->object_type != WorldObject::ObjectType_Text)
 		{
-			conPrint("UserListDisplay: Object with UID " + text_object_uid.toString() + " is not a text object (type=" + toString((int)ob->object_type) + ")");
 			return false; // Not a text object
 		}
 
@@ -57,7 +94,6 @@ bool UserListDisplay::updateUserListTextObject(GUIClient* gui_client, WorldState
 		// Also check if object is being deleted or recreated (has CONTENT_CHANGED flag already set)
 		if(ob->opengl_engine_ob.isNull())
 		{
-			conPrint("UserListDisplay: Text object with UID " + text_object_uid.toString() + " is not yet loaded (opengl_engine_ob is null)");
 			return false; // Object is not yet loaded, skip update
 		}
 			

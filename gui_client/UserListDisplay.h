@@ -22,9 +22,14 @@ Utility class for updating text objects with user list information.
 class UserListDisplay
 {
 public:
-	// Update the text object with UID 5609 to display current users in the world
+	// Update the text object to display current users in the world
+	// First tries to find object by UID (for backward compatibility), then searches by content marker
 	// Returns true if the object was found and updated, false otherwise
 	static bool updateUserListTextObject(GUIClient* gui_client, WorldState* world_state, const UID& text_object_uid);
+	
+	// Find text object by content marker (works on any server/world)
+	// Returns UID of found object, or invalid UID if not found
+	static UID findUserListTextObjectByMarker(WorldState* world_state);
 
 private:
 	// Format date/time as "YYYY-MM-DD HH:MM:SS"
