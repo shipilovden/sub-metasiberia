@@ -5,30 +5,30 @@
     <name>AboutDialog</name>
     <message>
         <source>Metasiberia v%1</source>
-        <translation>Metasiberia v%1</translation>
+        <translation type="vanished">Metasiberia v%1</translation>
     </message>
     <message>
         <source>Metasiberia is inspired and based on &lt;a href=&quot;https://substrata.info&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#222222;&quot;&gt;Substrata&lt;/span&gt;&lt;/a&gt;.&lt;br&gt;</source>
-        <translation>Metasiberia вдохновлен и основан на &lt;a href=&quot;https://substrata.info&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#222222;&quot;&gt;Substrata&lt;/span&gt;&lt;/a&gt;.&lt;br&gt;</translation>
+        <translation type="vanished">Metasiberia вдохновлен и основан на &lt;a href=&quot;https://substrata.info&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#222222;&quot;&gt;Substrata&lt;/span&gt;&lt;/a&gt;.&lt;br&gt;</translation>
     </message>
     <message>
         <source>Forked by &lt;a href=&quot;https://x.com/denshipilovart&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#222222;&quot;&gt;Denis Shipilov&lt;/span&gt;&lt;/a&gt;</source>
-        <translation>Форк от &lt;a href=&quot;https://x.com/denshipilovart&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#222222;&quot;&gt;Дениса Шипилова&lt;/span&gt;&lt;/a&gt;</translation>
+        <translation type="vanished">Форк от &lt;a href=&quot;https://x.com/denshipilovart&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#222222;&quot;&gt;Дениса Шипилова&lt;/span&gt;&lt;/a&gt;</translation>
     </message>
     <message>
         <source>Generate Crash</source>
-        <translation>Создать краш</translation>
+        <translation type="vanished">Создать краш</translation>
     </message>
 </context>
 <context>
     <name>MainWindow</name>
     <message>
         <source>MainWindow</source>
-        <translation>Metasiberia</translation>
+        <translation type="vanished">Metasiberia</translation>
     </message>
     <message>
         <source>Metasiberia</source>
-        <translation>Метасибирь</translation>
+        <translation type="vanished">Метасибирь</translation>
     </message>
     <message>
         <source>Window</source>
@@ -104,11 +104,11 @@
     </message>
     <message>
         <source>Language</source>
-        <translation>Язык</translation>
+        <translation type="vanished">Язык</translation>
     </message>
     <message>
         <source>English</source>
-        <translation>Английский</translation>
+        <translation type="vanished">Английский</translation>
     </message>
     <message>
         <source>Take Screenshot</source>
@@ -125,6 +125,10 @@
     <message>
         <source>About Metasiberia</source>
         <translation>О Метасибири</translation>
+    </message>
+    <message>
+        <source>Update</source>
+        <translation>Обновление</translation>
     </message>
     <message>
         <source>Online Users:</source>
@@ -200,7 +204,7 @@
     </message>
     <message>
         <source>Find Object</source>
-        <translation>Найти объект</translation>
+        <translation type="vanished">Найти объект</translation>
     </message>
     <message>
         <source>Find Object by ID</source>
@@ -208,7 +212,7 @@
     </message>
     <message>
         <source>List Objects Nearby</source>
-        <translation>Список ближайших объектов</translation>
+        <translation type="vanished">Список ближайших объектов</translation>
     </message>
     <message>
         <source>Bake Lightmaps (fast) for all objects in parcel</source>
@@ -260,11 +264,11 @@
     </message>
     <message>
         <source>Go to CryptoVoxels World</source>
-        <translation>Перейти в мир CryptoVoxels</translation>
+        <translation type="vanished">Перейти в мир CryptoVoxels</translation>
     </message>
     <message>
         <source>Set Start Location</source>
-        <translation>Установить точку старта</translation>
+        <translation type="vanished">Установить точку старта</translation>
     </message>
     <message>
         <source>Export view to Indigo</source>
@@ -324,27 +328,27 @@
     </message>
     <message>
         <source>Rename</source>
-        <translation>Переименовать</translation>
+        <translation type="vanished">Переименовать</translation>
     </message>
     <message>
         <source>Remove</source>
-        <translation>Удалить</translation>
+        <translation type="vanished">Удалить</translation>
     </message>
     <message>
         <source>Rename Favorite</source>
-        <translation>Переименовать избранное</translation>
+        <translation type="vanished">Переименовать избранное</translation>
     </message>
     <message>
         <source>Enter new name:</source>
-        <translation>Введите новое имя:</translation>
+        <translation type="vanished">Введите новое имя:</translation>
     </message>
     <message>
         <source>Favorite location renamed.</source>
-        <translation>Избранное переименовано.</translation>
+        <translation type="vanished">Избранное переименовано.</translation>
     </message>
     <message>
         <source>Location removed from favorites.</source>
-        <translation>Локация удалена из избранного.</translation>
+        <translation type="vanished">Локация удалена из избранного.</translation>
     </message>
     <message>
         <source>Set current location as start location</source>
@@ -356,46 +360,98 @@
     </message>
     <message>
         <source>Sign up</source>
-        <translation>Регистрация</translation>
+        <translation type="vanished">Регистрация</translation>
     </message>
     <message>
         <source>or</source>
-        <translation>или</translation>
+        <translation type="vanished">или</translation>
     </message>
     <message>
         <source>Logged in as </source>
-        <translation>Вход выполнен как </translation>
+        <translation type="vanished">Вход выполнен как </translation>
     </message>
     <message>
         <source>logout</source>
-        <translation>выйти</translation>
+        <translation type="vanished">выйти</translation>
     </message>
     <message>
         <source>View user account</source>
-        <translation>Открыть аккаунт</translation>
+        <translation type="vanished">Открыть аккаунт</translation>
     </message>
     <message>
         <source>Metasiberia Editor Beta</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Русский</source>
+        <source>toolBar</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Select audio file...</source>
+        <source>Indigo View</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Audio file (*.mp3 *.wav)</source>
+        <source>Avatar Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Select file...</source>
+        <source>Add Model/Image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>XML file (*.xml)</source>
+        <source>Ctrl+D</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LogIn</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SignUp</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LogOut</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+Z</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+Y</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Find Objects Nearby</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+F</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+B</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+H</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+M</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+B</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete All Parcel Objects</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+C</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -403,198 +459,198 @@
     <name>MaterialEditor</name>
     <message>
         <source>Colour</source>
-        <translation>Цвет</translation>
+        <translation type="vanished">Цвет</translation>
     </message>
     <message>
         <source>Texture</source>
-        <translation>Текстура</translation>
+        <translation type="vanished">Текстура</translation>
     </message>
     <message>
         <source>Texture x scale</source>
-        <translation>Масштаб текстуры X</translation>
+        <translation type="vanished">Масштаб текстуры X</translation>
     </message>
     <message>
         <source>Texture y scale</source>
-        <translation>Масштаб текстуры Y</translation>
+        <translation type="vanished">Масштаб текстуры Y</translation>
     </message>
     <message>
         <source>Roughness</source>
-        <translation>Шероховатость</translation>
+        <translation type="vanished">Шероховатость</translation>
     </message>
     <message>
         <source>Metallic Fraction</source>
-        <translation>Металличность</translation>
+        <translation type="vanished">Металличность</translation>
     </message>
     <message>
         <source>Opacity</source>
-        <translation>Прозрачность</translation>
+        <translation type="vanished">Прозрачность</translation>
     </message>
     <message>
         <source>Metallic roughness texture</source>
-        <translation>Карта металличности/шероховатости</translation>
+        <translation type="vanished">Карта металличности/шероховатости</translation>
     </message>
     <message>
         <source>Emission Colour</source>
-        <translation>Цвет свечения</translation>
+        <translation type="vanished">Цвет свечения</translation>
     </message>
     <message>
         <source>Emission Texture</source>
-        <translation>Текстура свечения</translation>
+        <translation type="vanished">Текстура свечения</translation>
     </message>
     <message>
         <source>Luminance</source>
-        <translation>Яркость</translation>
+        <translation type="vanished">Яркость</translation>
     </message>
     <message>
         <source>Hologram</source>
-        <translation>Голограмма</translation>
+        <translation type="vanished">Голограмма</translation>
     </message>
     <message>
         <source>Use vert colours for wind</source>
-        <translation>Вершинные цвета для ветра</translation>
+        <translation type="vanished">Вершинные цвета для ветра</translation>
     </message>
     <message>
         <source>Double sided</source>
-        <translation>Двусторонний</translation>
+        <translation type="vanished">Двусторонний</translation>
     </message>
     <message>
         <source>Normal map</source>
-        <translation>Нормал‑карта</translation>
+        <translation type="vanished">Нормал‑карта</translation>
     </message>
     <message>
         <source>Decal</source>
-        <translation>Декаль</translation>
+        <translation type="vanished">Декаль</translation>
     </message>
 </context>
 <context>
     <name>ObjectEditor</name>
     <message>
         <source>Info label</source>
-        <translation>Информация</translation>
+        <translation type="vanished">Информация</translation>
     </message>
     <message>
         <source>Model</source>
-        <translation>Модель</translation>
+        <translation type="vanished">Модель</translation>
     </message>
     <message>
         <source>Position x/y/z</source>
-        <translation>Позиция x/y/z</translation>
+        <translation type="vanished">Позиция x/y/z</translation>
     </message>
     <message>
         <source>Scale x/y/z </source>
-        <translation>Масштаб x/y/z</translation>
+        <translation type="vanished">Масштаб x/y/z</translation>
     </message>
     <message>
         <source>Link x/y/z scale</source>
-        <translation>Связывать масштаб по осям</translation>
+        <translation type="vanished">Связывать масштаб по осям</translation>
     </message>
     <message>
         <source>Rot z/y/x</source>
-        <translation>Вращение z/y/x</translation>
+        <translation type="vanished">Вращение z/y/x</translation>
     </message>
     <message>
         <source>Show 3D pos/rot controls</source>
-        <translation>Показать 3D‑контроллеры поз./вращ.</translation>
+        <translation type="vanished">Показать 3D‑контроллеры поз./вращ.</translation>
     </message>
     <message>
         <source>Snap to grid</source>
-        <translation>Привязка к сетке</translation>
+        <translation type="vanished">Привязка к сетке</translation>
     </message>
     <message>
         <source>Grid spacing:</source>
-        <translation>Шаг сетки:</translation>
+        <translation type="vanished">Шаг сетки:</translation>
     </message>
     <message>
         <source>Script</source>
-        <translation>Скрипт</translation>
+        <translation type="vanished">Скрипт</translation>
     </message>
     <message>
         <source>Edit</source>
-        <translation>Редактировать</translation>
+        <translation type="vanished">Редактировать</translation>
     </message>
     <message>
         <source>Content</source>
-        <translation>Контент</translation>
+        <translation type="vanished">Контент</translation>
     </message>
     <message>
         <source>Target URL</source>
-        <translation>Целевая ссылка</translation>
+        <translation type="vanished">Целевая ссылка</translation>
     </message>
     <message>
         <source>Materials</source>
-        <translation>Материалы</translation>
+        <translation type="vanished">Материалы</translation>
     </message>
     <message>
         <source>Current mat:</source>
-        <translation>Текущий мат.:</translation>
+        <translation type="vanished">Текущий мат.:</translation>
     </message>
     <message>
         <source>New Material</source>
-        <translation>Новый материал</translation>
+        <translation type="vanished">Новый материал</translation>
     </message>
     <message>
         <source>Lightmap URL</source>
-        <translation>Путь к карте освещения</translation>
+        <translation type="vanished">Путь к карте освещения</translation>
     </message>
     <message>
         <source>Bake lightmap</source>
-        <translation>Запечь карту освещения</translation>
+        <translation type="vanished">Запечь карту освещения</translation>
     </message>
     <message>
         <source>Bake lightmap (high quality)</source>
-        <translation>Запечь карту освещения (высокое качество)</translation>
+        <translation type="vanished">Запечь карту освещения (высокое качество)</translation>
     </message>
     <message>
         <source>Physics</source>
-        <translation>Физика</translation>
+        <translation type="vanished">Физика</translation>
     </message>
     <message>
         <source>Collidable</source>
-        <translation>Столкновения</translation>
+        <translation type="vanished">Столкновения</translation>
     </message>
     <message>
         <source>Dynamic</source>
-        <translation>Динамический</translation>
+        <translation type="vanished">Динамический</translation>
     </message>
     <message>
         <source>Sensor</source>
-        <translation>Сенсор</translation>
+        <translation type="vanished">Сенсор</translation>
     </message>
     <message>
         <source>Mass</source>
-        <translation>Масса</translation>
+        <translation type="vanished">Масса</translation>
     </message>
     <message>
         <source>Friction</source>
-        <translation>Трение</translation>
+        <translation type="vanished">Трение</translation>
     </message>
     <message>
         <source>Restitution</source>
-        <translation>Упругость</translation>
+        <translation type="vanished">Упругость</translation>
     </message>
     <message>
         <source>Centre of mass offset</source>
-        <translation>Смещение центра массы</translation>
+        <translation type="vanished">Смещение центра массы</translation>
     </message>
     <message>
         <source>Audio</source>
-        <translation>Аудио</translation>
+        <translation type="vanished">Аудио</translation>
     </message>
     <message>
         <source>Audio File</source>
-        <translation>Аудиофайл</translation>
+        <translation type="vanished">Аудиофайл</translation>
     </message>
     <message>
         <source>Volume</source>
-        <translation>Громкость</translation>
+        <translation type="vanished">Громкость</translation>
     </message>
     <message>
         <source>Autoplay</source>
-        <translation>Автовоспроизведение</translation>
+        <translation type="vanished">Автовоспроизведение</translation>
     </message>
     <message>
         <source>Loop</source>
-        <translation>Зацикливание</translation>
+        <translation type="vanished">Зацикливание</translation>
     </message>
 </context>
 </TS>

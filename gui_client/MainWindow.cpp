@@ -3299,6 +3299,12 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 }
 
 
+void MainWindow::on_actionUpdate_triggered()
+{
+	// TODO: Implement update functionality
+}
+
+
 void MainWindow::on_actionOptions_triggered()
 {
 	const std::string prev_audio_input_dev_name = QtUtils::toStdString(settings->value(MainOptionsDialog::inputDeviceNameKey(), "Default").toString());
