@@ -43,6 +43,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "BoatPhysics.h"
 #include "JoltUtils.h"
 #include "MiniMap.h"
+#include "UserListDisplay.h"
 #if !defined(EMSCRIPTEN)
 #include "../networking/TLSSocket.h"
 #endif
@@ -5409,6 +5410,8 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 		scripted_ob_proximity_checker.think(cam_controller.getPosition().toVec4fPoint(), lock);
 	}
 
+	// Note: updateUserListTextObject is called AFTER dead avatars are removed (see below)
+
 	// Do Lua timer callbacks
 	if(false) // TEMP 
 	{
@@ -7007,6 +7010,17 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 			for(auto it = this->world_state->dirty_from_local_objects.begin(); it != this->world_state->dirty_from_local_objects.end(); ++it)
 			{
 				WorldObject* world_ob = it->getPointer();
+				
+				// Check for CONTENT_CHANGED flag for text objects - recreate graphics before sending updates
+				if(world_ob->object_type == WorldObject::ObjectType_Text)
+				{
+					if(BitUtils::isBitSet(world_ob->changed_flags, WorldObject::CONTENT_CHANGED))
+					{
+						recreateTextGraphicsAndPhysicsObs(world_ob);
+						BitUtils::zeroBit(world_ob->changed_flags, WorldObject::CONTENT_CHANGED);
+					}
+				}
+				
 				if(world_ob->from_local_other_dirty)
 				{
 					// Enqueue ObjectFullUpdate
@@ -7630,6 +7644,9 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 					this->world_state->avatars.erase(old_avatar_iterator);
 
 					ui_interface->updateOnlineUsersList();
+					
+					// Update user list text object (UID 5609) - call together with updateOnlineUsersList
+					UserListDisplay::updateUserListTextObject(this, world_state.ptr(), UID(5609));
 
 					world_state->avatars_changed = 1;
 				}
@@ -7657,6 +7674,9 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 						reload_opengl_model = true;
 
 						ui_interface->updateOnlineUsersList();
+						
+						// Update user list text object (UID 5609) - call together with updateOnlineUsersList
+						UserListDisplay::updateUserListTextObject(this, world_state.ptr(), UID(5609));
 					}
 
 					if((cam_controller.thirdPersonEnabled() || !our_avatar) && reload_opengl_model) // Don't load graphics for our avatar unless we are in third-person cam view mode
@@ -8694,6 +8714,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						toString(avatar->name_colour.r * 255) + ", " + toString(avatar->name_colour.g * 255) + ", " + toString(avatar->name_colour.b * 255) +
 						")\">" + web::Escaping::HTMLEscape(avatar->name) + "</span> is here.</i>");
 					ui_interface->updateOnlineUsersList();
+					
+					// Update user list text object (UID 5609) - call together with updateOnlineUsersList
+					UserListDisplay::updateUserListTextObject(this, world_state.ptr(), UID(5609));
 
 					chat_ui.appendMessage(avatar->name, avatar->name_colour, " is here.");
 				}
@@ -8715,6 +8738,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						toString(avatar->name_colour.r * 255) + ", " + toString(avatar->name_colour.g * 255) + ", " + toString(avatar->name_colour.b * 255) +
 						")\">" + web::Escaping::HTMLEscape(avatar->name) + "</span> joined.</i>");
 					ui_interface->updateOnlineUsersList();
+					
+					// Update user list text object (UID 5609) - call together with updateOnlineUsersList
+					UserListDisplay::updateUserListTextObject(this, world_state.ptr(), UID(5609));
 
 					chat_ui.appendMessage(avatar->name, avatar->name_colour, " joined.");
 				}
@@ -12335,6 +12361,13 @@ void GUIClient::disconnectFromServerAndClearAllObjects(bool fast_disconnect) // 
 	ui_interface->updateWorldSettingsControlsEditable();
 
 	ui_interface->updateOnlineUsersList();
+	
+	// Update user list text object (UID 5609) - call together with updateOnlineUsersList
+	if(world_state.nonNull())
+	{
+		UserListDisplay::updateUserListTextObject(this, world_state.ptr(), UID(5609));
+	}
+	
 	//ui->onlineUsersTextEdit->clear();
 	ui_interface->clearChatMessages();
 	//ui->chatMessagesTextEdit->clear();
