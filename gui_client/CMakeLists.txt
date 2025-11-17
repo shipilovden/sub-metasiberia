@@ -247,6 +247,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/UndoBuffer.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/UndoBuffer.h
 ${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.h
+${CMAKE_SOURCE_DIR}/gui_client/UserListDisplay.cpp
+${CMAKE_SOURCE_DIR}/gui_client/UserListDisplay.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLParser.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/URLParser.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.cpp

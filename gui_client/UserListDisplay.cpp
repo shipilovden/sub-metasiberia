@@ -88,19 +88,12 @@ bool UserListDisplay::updateUserListTextObject(GUIClient* gui_client, WorldState
 		// Only update if content has actually changed to avoid unnecessary recreations
 		if(ob->content != new_content)
 		{
-			conPrint("UserListDisplay: Content changed! Old length=" + toString(ob->content.length()) + ", new length=" + toString(new_content.length()));
 			ob->content = new_content;
 			BitUtils::setBit(ob->changed_flags, WorldObject::CONTENT_CHANGED);
 			
 			// Add object to dirty_from_local_objects so it gets recreated in timerEvent
 			// This ensures the text is actually updated on screen
 			world_state->dirty_from_local_objects.insert(ob);
-			
-			conPrint("UserListDisplay: Updated text object content, length=" + toString(new_content.length()) + ", added to dirty_from_local_objects");
-		}
-		else
-		{
-			conPrint("UserListDisplay: Content unchanged, skipping update (length=" + toString(new_content.length()) + ")");
 		}
 
 		return true;
@@ -157,26 +150,16 @@ std::string UserListDisplay::buildUserListTable(const std::map<UID, Reference<Av
 	// Dead avatars are removed in timerEvent before updateOnlineUsersList() is called
 	std::vector<std::string> active_user_names;
 	
-	conPrint("UserListDisplay: buildUserListTable called with " + toString(avatars.size()) + " avatars");
-	
 	for(auto entry : avatars)
 	{
 		const Avatar* av = entry.second.ptr();
-		if(av)
+		if(av && !av->name.empty())
 		{
-			conPrint("UserListDisplay: Found avatar - name='" + av->name + "', state=" + toString((int)av->state) + ", our_avatar=" + toString(av->our_avatar));
-			
-			if(!av->name.empty())
-			{
-				// Include all avatars from the map - same as updateOnlineUsersList()
-				// Dead avatars are already removed from the map by the time this is called
-				active_user_names.push_back(av->name);
-				conPrint("UserListDisplay: Added '" + av->name + "' to list");
-			}
+			// Include all avatars from the map - same as updateOnlineUsersList()
+			// Dead avatars are already removed from the map by the time this is called
+			active_user_names.push_back(av->name);
 		}
 	}
-	
-	conPrint("UserListDisplay: Total users in list: " + toString(active_user_names.size()));
 
 	// Sort by name for consistent display
 	std::sort(active_user_names.begin(), active_user_names.end());
