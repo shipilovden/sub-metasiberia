@@ -87,6 +87,7 @@ private slots:;
 	void onFavoriteLocationTriggered(); // Slot for when a favorite location is clicked
 	void onFavoritesMenuContextMenuRequested(const QPoint& pos); // Handle right-click context menu for favorites
 	void removeFavoriteLocation(const QString& url); // Remove a location from favorites
+	void renameFavoriteLocation(const QString& url); // Rename a favorite location
 	void on_actionGo_to_Parcel_triggered();
 	void on_actionGo_to_Position_triggered();
 	void on_actionSet_Start_Location_triggered();
