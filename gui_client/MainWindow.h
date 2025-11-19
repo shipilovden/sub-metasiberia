@@ -65,7 +65,6 @@ private slots:;
 	void on_actionAdd_Audio_Source_triggered();
 	void on_actionAdd_Decal_triggered();
 	void on_actionAdd_Portal_triggered();
-	void on_actionAdd_to_Favorites_triggered();
 	void on_actionCopy_Object_triggered();
 	void on_actionPaste_Object_triggered();
 	void on_actionCloneObject_triggered();
@@ -83,11 +82,6 @@ private slots:;
 	void on_actionGo_to_Substrata_World_triggered();
 	void on_actionGo_to_Metasiberia_Server_triggered();
 	void on_actionGo_to_Shki_nvkz_Server_triggered();
-	void updateFavoritesMenu(); // Update the favorites submenu with saved locations
-	void onFavoriteLocationTriggered(); // Slot for when a favorite location is clicked
-	void onFavoritesMenuContextMenuRequested(const QPoint& pos); // Handle right-click context menu for favorites
-	void removeFavoriteLocation(const QString& url); // Remove a location from favorites
-	void renameFavoriteLocation(const QString& url); // Rename a favorite location
 	void on_actionGo_to_Parcel_triggered();
 	void on_actionGo_to_Position_triggered();
 	void on_actionSet_Start_Location_triggered();
@@ -98,7 +92,6 @@ private slots:;
 	void on_actionTake_Screenshot_triggered();
 	void on_actionShow_Screenshot_Folder_triggered();
 	void on_actionAbout_Substrata_triggered();
-	void on_actionUpdate_triggered();
 	void on_actionOptions_triggered();
 	void on_actionUndo_triggered();
 	void on_actionRedo_triggered();
@@ -343,8 +336,6 @@ public:
 
 	UserDetailsWidget* user_details;
 	URLWidget* url_widget;
-	
-	QList<QAction*> favorite_location_actions; // Actions for favorite locations in the menu
 
 	double last_timerEvent_CPU_work_elapsed;
 	double last_updateGL_time;
