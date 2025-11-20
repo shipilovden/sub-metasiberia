@@ -800,10 +800,9 @@ void ObjectEditor::materialSelectedInBrowser(const std::string& path)
 		if(selected_mat_index >= 0 && selected_mat_index < (int)this->cloned_materials.size())
 		{
 			this->cloned_materials[this->selected_mat_index] = mat;
-			// setFromMaterial will emit materialChanged(), which is connected to objectChanged()
-			// So we don't need to explicitly emit objectChanged() here
 			this->matEditor->setFromMaterial(*mat);
-			// Note: objectChanged() will be emitted automatically via materialChanged() signal
+
+			emit objectChanged();
 		}
 	}
 	catch(glare::Exception& e)
