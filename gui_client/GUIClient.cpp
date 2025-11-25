@@ -148,7 +148,7 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	appdata_path(appdata_path_),
 	parsed_args(args),
 	connection_state(ServerConnectionState_NotConnected),
-	received_world_settings_since_connect_or_world_change(false),
+	received_world_settings_since_connect(false),
 	logged_in_user_id(UserID::invalidUserID()),
 	logged_in_user_flags(0),
 	shown_object_modification_error_msg(false),
@@ -5715,7 +5715,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 	std::string touched_portal_target_URL;
 
-	if((connection_state == ServerConnectionState_Connected) && received_world_settings_since_connect_or_world_change)
+	if((connection_state == ServerConnectionState_Connected) && received_world_settings_since_connect)
 	{
 		ZoneScopedN("processPlayerPhysicsInput"); // Tracy profiler
 		processPlayerPhysicsInput((float)dt, world_render_has_keyboard_focus, /*input_out=*/physics_input); // sets player physics move impulse.
@@ -8775,7 +8775,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			const WorldSettingsReceivedMessage* m = checkedDowncastPtr<const WorldSettingsReceivedMessage>(msg);
 
 			this->connected_world_settings.copyNetworkStateFrom(m->world_settings); // Store world settings to be used later
-			this->received_world_settings_since_connect_or_world_change = true;
+			this->received_world_settings_since_connect = true;
 
 			this->ui_interface->updateWorldSettingsUIFromWorldSettings(); // Update UI
 
@@ -12443,131 +12443,7 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 
 
 	this->connection_state = ServerConnectionState_Connecting;
-	this->received_world_settings_since_connect_or_world_change = false;
-}
-
-
-void GUIClient::changeToDifferentWorld(const URLParseResults& parse_res)
-{
-	ZoneScoped; // Tracy profiler
-
-	this->last_url_parse_results = parse_res;
-
-	// By default, randomly vary the spawn position a bit so players don't spawn inside other players.
-	const double spawn_r = 4.0;
-	Vec3d spawn_pos = Vec3d(-spawn_r + 2 * spawn_r * rng.unitRandom(), -spawn_r + 2 * spawn_r * rng.unitRandom(), PlayerPhysics::getEyeHeight());
-
-	//this->server_hostname = parse_res.hostname;
-	this->server_worldname = parse_res.worldname;
-
-	if(parse_res.parsed_parcel_uid)
-		this->url_parcel_uid = parse_res.parcel_uid;
-	else
-		this->url_parcel_uid = -1;
-
-	if(parse_res.parsed_x)
-		spawn_pos.x = parse_res.x;
-	if(parse_res.parsed_y)
-		spawn_pos.y = parse_res.y;
-	if(parse_res.parsed_z)
-		spawn_pos.z = parse_res.z;
-
-
-	clearAllObjects();
-
-
-	// Send AvatarDestroyed message to remove avatar in the current world
-	if(this->client_avatar_uid.valid())
-	{
-		MessageUtils::initPacket(scratch_packet, Protocol::AvatarDestroyed);
-		writeToStream(this->client_avatar_uid, scratch_packet);
-		enqueueMessageToSend(*this->client_thread, scratch_packet);
-	}
-
-
-	// Send ChangeToDifferentWorld message to server
-	{
-		MessageUtils::initPacket(scratch_packet, Protocol::ChangeToDifferentWorld);
-		scratch_packet.writeStringLengthFirst(this->server_worldname);
-		enqueueMessageToSend(*this->client_thread, scratch_packet);
-	}
-
-
-	// Move player position back to near origin or the position in the URL.
-	this->cam_controller.setAngles(Vec3d(/*heading=*/::degreeToRad(parse_res.heading), /*pitch=*/Maths::pi_2<double>(), /*roll=*/0));
-	this->cam_controller.setFirstAndThirdPersonPositions(spawn_pos);
-
-	if(parse_res.parsed_sun_vert_angle || parse_res.parsed_sun_azimuth_angle)
-	{
-		const float theta = myClamp(::degreeToRad((float)parse_res.sun_vert_angle), 0.01f, Maths::pi<float>() - 0.01f);
-		const float phi   = ::degreeToRad((float)parse_res.sun_azimuth_angle);
-		const Vec4f sundir = GeometrySampling::dirForSphericalCoords(phi, theta);
-		opengl_engine->setSunDir(sundir);
-	}
-
-
-	if(physics_world.isNull())
-	{
-		physics_world = new PhysicsWorld(high_priority_task_manager, &this->stack_allocator);
-		physics_world->event_listener = this;
-		player_physics.init(*physics_world, spawn_pos);
-	}
-	else
-	{
-		this->player_physics.setEyePosition(spawn_pos);
-	}
-
-	// When the player spawns, gravity will be turned off, so they don't e.g. fall through buildings before they have been loaded.
-	// Turn it on as soon as the player tries to move.
-	this->player_physics.setGravityEnabled(false);
-
-	this->sent_perform_gesture_without_stop_gesture = false;
-
-
-	minimap = nullptr;
-	checkCreateManagersAndMinimap();
-
-
-	// Send CreateAvatar packet for this client's avatar
-	{
-		const Vec3d cam_angles = this->cam_controller.getAvatarAngles();
-
-		Avatar avatar;
-		avatar.uid = this->client_avatar_uid;
-		avatar.pos = Vec3d(this->cam_controller.getFirstPersonPosition());
-		avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
-		avatar.avatar_settings = this->logged_in_avatar_settings;
-		avatar.name = this->logged_in_user_name;
-
-		MessageUtils::initPacket(scratch_packet, Protocol::CreateAvatar);
-		writeAvatarToNetworkStream(avatar, scratch_packet);
-		enqueueMessageToSend(*this->client_thread, scratch_packet);
-	}
-
-
-	// Note that getFirstPersonPosition() is used for consistency with proximity_loader.updateCamPos() calls, where getFirstPersonPosition() is used also.
-	const js::AABBox initial_aabb = proximity_loader.setCameraPosForNewConnection(this->cam_controller.getFirstPersonPosition().toVec4fPoint());
-
-	// Send QueryObjectsInAABB for initial volume around camera to server
-	{
-		// Make QueryObjectsInAABB packet and enqueue to send
-		MessageUtils::initPacket(scratch_packet, Protocol::QueryObjectsInAABB);
-		writeToStream<double>(this->cam_controller.getPosition(), scratch_packet); // Send camera position
-		scratch_packet.writeFloat((float)initial_aabb.min_[0]);
-		scratch_packet.writeFloat((float)initial_aabb.min_[1]);
-		scratch_packet.writeFloat((float)initial_aabb.min_[2]);
-		scratch_packet.writeFloat((float)initial_aabb.max_[0]);
-		scratch_packet.writeFloat((float)initial_aabb.max_[1]);
-		scratch_packet.writeFloat((float)initial_aabb.max_[2]);
-
-		enqueueMessageToSend(*this->client_thread, scratch_packet);
-	}
-
-	this->received_world_settings_since_connect_or_world_change = false;
-
-
-	audio_engine.playOneShotSound(resources_dir_path + "/sounds/462089__newagesoup__ethereal-woosh_normalised_mono.wav", 
-		(this->cam_controller.getFirstPersonPosition() + Vec3d(0, 0, -1)).toVec4fPoint());
+	this->received_world_settings_since_connect = false;
 }
 
 
@@ -14422,7 +14298,7 @@ void GUIClient::updateGroundPlane()
 
 	// If we are not connected to a server, or we have not received the world settings (which include the terrain settings),
 	// Then don't create the terrain, as it will likely just have to be destroyed immediately when we connect and receive the actual settings.
-	if((connection_state != ServerConnectionState_Connected) || !received_world_settings_since_connect_or_world_change)
+	if((connection_state != ServerConnectionState_Connected) || !received_world_settings_since_connect)
 		return;
 
 	if(terrain_system.isNull())
