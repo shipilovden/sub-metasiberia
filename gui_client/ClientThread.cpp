@@ -37,16 +37,17 @@ static const size_t MAX_STRING_LEN = 10000;
 
 
 ClientThread::ClientThread(ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue_, const std::string& hostname_, int port_,
-						   const std::string& world_name_, struct tls_config* config_, const Reference<glare::FastPoolAllocator>& world_ob_pool_allocator_)
+						   const std::string& initial_world_name_, struct tls_config* config_, const Reference<glare::FastPoolAllocator>& world_ob_pool_allocator_, Reference<WorldState> world_state_)
 :	out_msg_queue(out_msg_queue_),
 	hostname(hostname_),
 	port(port_),
-	world_name(world_name_),
+	initial_world_name(initial_world_name_),
 	all_objects_received(false),
 	config(config_),
 	world_ob_pool_allocator(world_ob_pool_allocator_),
 	send_data_to_socket(false),
-	dstream(nullptr)
+	dstream(nullptr),
+	world_state(world_state_)
 {
 #if !defined(EMSCRIPTEN)
 	MySocketRef mysocket = new MySocket();
@@ -317,7 +318,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 	{
 	case Protocol::AllObjectsSent:
 		{
-			conPrint("All objects finished sending.");
+			// conPrint("All objects finished sending.");
 			// This message has no payload.
 			this->all_objects_received = true;
 			break;
@@ -337,7 +338,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::AudioStreamToServerEnded:
 		{
-			conPrint("ClientThread: received Protocol::AudioStreamToServerEnded");
+			// conPrint("ClientThread: received Protocol::AudioStreamToServerEnded");
 
 			const UID avatar_uid = readUIDFromStream(msg_buffer);
 
@@ -379,7 +380,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::AvatarFullUpdate:
 		{
-			conPrint("received Protocol::AvatarFullUpdate");
+			// conPrint("received Protocol::AvatarFullUpdate");
 
 			const UID avatar_uid = readUIDFromStream(msg_buffer);
 
@@ -402,7 +403,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::AvatarIsHere:
 		{
-			conPrint("received Protocol::AvatarIsHere");
+			// conPrint("received Protocol::AvatarIsHere");
 
 			const UID avatar_uid = readUIDFromStream(msg_buffer);
 			Avatar temp_avatar;
@@ -433,7 +434,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::AvatarCreated:
 		{
-			conPrint("received Protocol::AvatarCreated");
+			// conPrint("received Protocol::AvatarCreated");
 
 			const UID avatar_uid = readUIDFromStream(msg_buffer);
 			Avatar temp_avatar;
@@ -464,7 +465,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::AvatarDestroyed:
 		{
-			conPrint("AvatarDestroyed");
+			// conPrint("AvatarDestroyed");
 			const UID avatar_uid = readUIDFromStream(msg_buffer);
 
 			// Mark avatar as dead
@@ -535,7 +536,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::AvatarExitedVehicle:
 		{
-			conPrint("AvatarExitedVehicle");
+			// conPrint("AvatarExitedVehicle");
 
 			const UID avatar_uid = readUIDFromStream(msg_buffer);
 
@@ -738,8 +739,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 				{
 					WorldObject* ob = res.getValue().ptr();
 #if GUI_CLIENT
-					// Don't update the selected object if it has local changes - we will consider the local client control authoritative while the object is selected and has local changes.
-					if(!ob->is_selected || !ob->from_local_other_dirty)
+					if(!ob->is_selected) // Don't update the selected object - we will consider the local client control authoritative while the object is selected.
 #endif
 					{
 						readWorldObjectFromNetworkStreamGivenUID(msg_buffer, *ob);
@@ -928,7 +928,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::ObjectDestroyed:
 		{
-			conPrint("ObjectDestroyed");
+			// conPrint("ObjectDestroyed");
 			const UID object_uid = readUIDFromStream(msg_buffer);
 
 			// Mark object as dead
@@ -1008,7 +1008,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::ParcelDestroyed:
 		{
-			conPrint("ParcelDestroyed");
+			// conPrint("ParcelDestroyed");
 			const ParcelID parcel_id = readParcelIDFromStream(msg_buffer);
 
 			// Mark parcel as dead
@@ -1027,7 +1027,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::ParcelFullUpdate:
 		{
-			conPrint("ParcelFullUpdate");
+			// conPrint("ParcelFullUpdate");
 			const ParcelID parcel_id = readParcelIDFromStream(msg_buffer);
 
 			// Look up existing parcel in world state
@@ -1056,7 +1056,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 	case Protocol::GetFile:
 		{
 			const URLString model_url = toURLString(msg_buffer.readStringLengthFirst(MAX_STRING_LEN));
-			conPrint("Received GetFile message from server, model_url: '" + toStdString(model_url) + "'");
+			// conPrint("Received GetFile message from server, model_url: '" + toStdString(model_url) + "'");
 
 			out_msg_queue->enqueue(new GetFileMessage(model_url));
 			break;
@@ -1110,7 +1110,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		}
 	case Protocol::LoggedInMessageID:
 		{
-			conPrint("Received LoggedInMessageID msg.");
+			// conPrint("Received LoggedInMessageID msg.");
 			const UserID logged_in_user_id = readUserIDFromStream(msg_buffer); 
 			const std::string logged_in_username = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 			Reference<LoggedInMessage> msg = new LoggedInMessage(logged_in_user_id, logged_in_username);
@@ -1269,7 +1269,7 @@ void ClientThread::doRun()
 		scratch_packet.writeUInt32(Protocol::CyberspaceHello); // Write hello
 		scratch_packet.writeUInt32(Protocol::CyberspaceProtocolVersion); // Write protocol version
 		scratch_packet.writeUInt32(Protocol::ConnectionTypeUpdates); // Write connection type
-		scratch_packet.writeStringLengthFirst(world_name); // Write world name
+		scratch_packet.writeStringLengthFirst(initial_world_name); // Write world name
 		socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
 
 
