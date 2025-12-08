@@ -2217,10 +2217,10 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				light->gpu_data.pos = ob->pos.toVec4fPoint();
 				light->gpu_data.dir = normalise(ob_to_world_matrix * Vec4f(0, 0, -1, 0));
 				light->gpu_data.light_type = 1; // spotlight
-				light->gpu_data.cone_cos_angle_start = 0.9f;
-				light->gpu_data.cone_cos_angle_end = 0.95f;
+				light->gpu_data.cone_min_cos_angle = 0.9f;
+				light->gpu_data.cone_max_cos_angle = 0.95f;
 				float scale;
-				light->gpu_data.col = computeSpotlightColour(*ob, light->gpu_data.cone_cos_angle_start, light->gpu_data.cone_cos_angle_end, scale);
+				light->gpu_data.col = computeSpotlightColour(*ob, light->gpu_data.cone_min_cos_angle, light->gpu_data.cone_max_cos_angle, scale);
 				light->max_light_dist = myMin(15.f, 4.f * myMax(light->gpu_data.col[0], light->gpu_data.col[1], light->gpu_data.col[2]));
 				
 				// Apply a light emitting material to the light surface material in the spotlight model.
@@ -5040,7 +5040,7 @@ void GUIClient::processLoading(Timer& timer_event_timer)
 
 						//timer2.reset();
 						// Start asynchronous load from PBO
-						pbo_async_tex_loader.startUploadingTexture(pbo, message->texture_data, opengl_tex, dummy_opengl_tex, dummy_pbo, opengl_engine->getCurrentScene()->frame_num, uploading_info);
+						pbo_async_tex_loader.startUploadingTexture(pbo, message->texture_data, opengl_tex, opengl_engine->getCurrentScene()->frame_num, uploading_info);
 						//conPrint("    startUploadingTexture() took  " + timer2.elapsedStringMSWIthNSigFigs());
 
 						uploading = true;
@@ -11857,7 +11857,7 @@ void GUIClient::updateSpotlightGraphicsEngineData(const Matrix4f& ob_to_world_ma
 		light->gpu_data.dir = normalise(ob_to_world_matrix * Vec4f(0, 0, -1, 0));
 
 		float scale;
-		light->gpu_data.col = computeSpotlightColour(*ob, light->gpu_data.cone_cos_angle_start, light->gpu_data.cone_cos_angle_end, scale);
+		light->gpu_data.col = computeSpotlightColour(*ob, light->gpu_data.cone_min_cos_angle, light->gpu_data.cone_max_cos_angle, scale);
 
 		opengl_engine->setLightPos(light, ob->pos.toVec4fPoint());
 

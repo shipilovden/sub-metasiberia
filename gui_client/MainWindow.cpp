@@ -2987,8 +2987,8 @@ void MainWindow::onFavoritesMenuContextMenuRequested(const QPoint& pos)
 	
 	// Create context menu with rename and delete options
 	QMenu context_menu(this);
-	QAction* rename_action = context_menu.addAction(tr("Rename"));
-	QAction* delete_action = context_menu.addAction(tr("Remove"));
+	QAction* rename_action = context_menu.addAction(this->tr("Rename"));
+	QAction* delete_action = context_menu.addAction(this->tr("Remove"));
 	
 	// Show context menu and wait for user selection
 	QAction* selected = context_menu.exec(ui->menuFavorites->mapToGlobal(pos));
@@ -3026,7 +3026,7 @@ void MainWindow::renameFavoriteLocation(const QString& url)
 	
 	// Show input dialog for new name
 	bool ok;
-	QString new_name = QInputDialog::getText(this, tr("Rename Favorite"), tr("Enter new name:"), QLineEdit::Normal, current_name, &ok);
+	QString new_name = QInputDialog::getText(this, this->tr("Rename Favorite"), this->tr("Enter new name:"), QLineEdit::Normal, current_name, &ok);
 	
 	if(ok && !new_name.isEmpty() && new_name != current_name)
 	{
@@ -3040,7 +3040,7 @@ void MainWindow::renameFavoriteLocation(const QString& url)
 		// Update the menu
 		updateFavoritesMenu();
 		
-		showInfoNotification(QtUtils::toStdString(tr("Favorite location renamed.")));
+		showInfoNotification(QtUtils::toStdString(this->tr("Favorite location renamed.")));
 	}
 }
 
@@ -3066,7 +3066,7 @@ void MainWindow::removeFavoriteLocation(const QString& url)
 	// Update the menu
 	updateFavoritesMenu();
 	
-	showInfoNotification(QtUtils::toStdString(tr("Location removed from favorites.")));
+	showInfoNotification(QtUtils::toStdString(this->tr("Location removed from favorites.")));
 }
 
 

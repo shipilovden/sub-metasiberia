@@ -96,6 +96,7 @@ private slots:;
 	void on_actionUndo_triggered();
 	void on_actionRedo_triggered();
 	void on_actionShow_Log_triggered();
+	void on_actionUpdate_triggered();
 	void on_actionBake_Lightmaps_fast_for_all_objects_in_parcel_triggered();
 	void on_actionBake_lightmaps_high_quality_for_all_objects_in_parcel_triggered();
 	void on_actionSummon_Bike_triggered();
@@ -108,6 +109,7 @@ private slots:;
 	void on_actionLoad_Objects_From_Disk_triggered();
 	void on_actionDelete_All_Parcel_Objects_triggered();
 	void on_actionEnter_Fullscreen_triggered();
+	void on_actionAdd_to_Favorites_triggered();
 
 	void diagnosticsWidgetChanged();
 	void diagnosticsReloadTerrain();
@@ -163,6 +165,11 @@ private:
 	void startMainTimer();
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
+	void renameFavoriteLocation(const QString& url);
+	void removeFavoriteLocation(const QString& url);
+	void updateFavoritesMenu();
+	void onFavoriteLocationTriggered();
+	void onFavoritesMenuContextMenuRequested(const QPoint& pos);
 private:
 	void updateStatusBar();
 	void updateDiagnostics();
@@ -346,6 +353,7 @@ private:
 	QTimer* update_ob_editor_transform_timer;
 	QTimer* lightmap_flag_timer;
 	int main_timer_id; // ID of Main QT timer.
+	QList<QAction*> favorite_location_actions;
 
 public:
 #if defined(_WIN32)
