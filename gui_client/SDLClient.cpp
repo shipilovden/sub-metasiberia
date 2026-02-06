@@ -633,17 +633,52 @@ int main(int argc, char** argv)
 		gui_client->postConnectInitialise();
 
 #ifdef _WIN32
+		// Initialize COM for Direct3D and Media Foundation
+		HRESULT com_hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+		if(FAILED(com_hr) && com_hr != RPC_E_CHANGED_MODE) // RPC_E_CHANGED_MODE means COM was already initialized
+		{
+			conPrint("WARNING: CoInitializeEx failed: " + PlatformUtils::COMErrorString(com_hr));
+		}
+		
 		// Create a GPU device.  Needed to get hardware accelerated video decoding and for hardware texture sharing for CEF.
-		Direct3DUtils::createGPUDeviceAndMFDeviceManager(d3d_device, device_manager);
-
-		sdl_ui_interface->d3d11_device = (void*)d3d_device.ptr;
+		// Temporarily disabled to test if this is causing the crash
+		// TODO: Re-enable after fixing the crash issue
+		/*
+		try
+		{
+			Direct3DUtils::createGPUDeviceAndMFDeviceManager(d3d_device, device_manager);
+			sdl_ui_interface->d3d11_device = (void*)d3d_device.ptr;
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("WARNING: Failed to create Direct3D device: " + e.what());
+			conPrint("Continuing without Direct3D support (video decoding and CEF texture sharing may be limited)");
+			// Continue without Direct3D - the app should still work
+		}
+		*/
+		conPrint("NOTE: Direct3D initialization temporarily disabled for testing");
 #endif //_WIN32
 
+		// Check if CEF should be enabled via environment variable
+		bool enable_CEF = true;
+		try
+		{
+			const std::string val = PlatformUtils::getEnvironmentVariable("SUBSTRATA_ENABLE_CEF");
+			if(toLowerCase(val) == "false")
+				enable_CEF = false;
+		}
+		catch(glare::Exception& )
+		{}
 
-		CEF::initialiseCEF(base_dir, appdata_path);
+		if(enable_CEF)
+			CEF::initialiseCEF(base_dir, appdata_path);
+		else
+			conPrint("CEF disabled via SUBSTRATA_ENABLE_CEF environment variable");
 
+		conPrint("About to call afterGLInitInitialise...");
 		// NOTE: use 1 for device_pixel_ratio as we are not doing high DPI rendering.
 		gui_client->afterGLInitInitialise(/*device_pixel_ratio*/1.f, opengl_engine, fonts, emoji_fonts);
+		conPrint("afterGLInitInitialise completed successfully");
 
 		gui_client->gl_ui->callbacks = new SDLClientGLUICallbacks();
 
