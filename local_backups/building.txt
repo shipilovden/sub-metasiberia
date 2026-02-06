@@ -1,0 +1,326 @@
+Prerequisites
+=============
+git (used to check out source)
+ruby (used by substrata build scripts)
+cmake (used for substrata build)
+Python (used by LLVM build)
+Visual Studio 2022 (v17) with "Desktop Development with C++" Workload (Used by LLVM Build)
+7-Zip (If on Windows - for extracting LLVM source code)
+
+
+Check out source
+================
+Pick a directory to check out the source to (e.g. c:/programming or ~/programming on Mac/Linux).
+Change into that directory, then
+
+	git clone https://github.com/glaretechnologies/glare-core.git
+	git clone https://github.com/glaretechnologies/winter.git
+	git clone https://github.com/glaretechnologies/substrata.git
+
+Build libraries that Substrata uses
+===================================
+
+Set needed env vars:
+GLARE_CORE_LIBS is where library build scripts will build libraries: Qt, LLVM, Libjpegturbo etc.
+WINTER_DIR just has the path to the checked out Winter repo.
+GLARE_CORE_TRUNK_DIR just has the path to the checked out Glare-core repo.
+CYBERSPACE_OUTPUT is where the built executables will be placed.
+For example on Mac:
+	export GLARE_CORE_LIBS=/Users/XX/programming
+	export WINTER_DIR=/Users/XX/programming/winter
+	export GLARE_CORE_TRUNK_DIR=/Users/XX/programming/glare-core
+	export CYBERSPACE_OUTPUT=/Users/XX/programming/substrata_output
+Or on windows:
+Set GLARE_CORE_LIBS to c:/programming
+Set WINTER_DIR to c:/programming/winter
+Set GLARE_CORE_TRUNK_DIR to c:/programming/glare-core
+Set CYBERSPACE_OUTPUT to c:/programming/substrata_output
+
+In your programming dir (e.g. c:/programming or ~/programming on Mac/Linux):
+
+	cd glare-core/scripts
+	ruby build_libressl.rb
+	ruby build_llvm.rb
+	ruby build_jpegturbo.rb
+
+In your programming dir
+
+	cd substrata/scripts
+	ruby get_libs.rb
+
+If you want to build with Qt for the user interface (you can make a SDL build instead, which is easier but doesn't have the full UI):
+
+	ruby build_qt.rb
+
+
+Optionally build Chromium Embedded Framework (CEF) as described below.  The following build instructions will assume we are building without CEF support.
+CEF is used for web-views. (embedded browser widgets)
+
+Build Substrata
+================
+In your programming dir (e.g. c:/programming or ~/programming on Mac/Linux):
+
+	mkdir substrata_build
+	cd substrata_build
+
+On Windows:
+	cmake ../substrata -DCEF_SUPPORT=OFF
+
+On Mac/linux, x64 architecture:
+	cmake ../substrata -DCEF_SUPPORT=OFF -DCMAKE_BUILD_TYPE=Debug
+
+On Mac, ARM64 architecture:
+	cmake ../substrata -DCEF_SUPPORT=OFF -DCMAKE_BUILD_TYPE=Debug -DTARGET_ARM64=ON
+
+
+To build with SDL instead of with Qt, add the -DUSE_SDL=ON option to the above cmake command line.
+
+
+Start build:	
+	make
+
+Or to just build the GUI client:
+	make gui_client
+	
+Or to just build the server:
+	make server
+
+To build with e.g. 8 threads:
+	make gui_client -j 8
+
+
+Running Substrata
+=================
+
+In your programming dir (e.g. c:/programming or ~/programming on Mac/Linux):
+
+	cd substrata/scripts
+	ruby copy_files_to_output.rb --no_cef
+
+
+Then run the gui_client executable that should have been built.
+
+
+
+
+
+
+Building Chromium Embedded Framework (CEF)
+==========================================
+
+We want to build CEF ourselves so we can compile in proprietary_codecs (in particular h264 support) 
+
+
+CEF on Windows
+===========
+
+pre-build:
+---------
+Install Windows 11 SDK with 10.0.22621.0 version 
+(Otherwise get the following error: "Exception: Path "C:\Program Files (x86)\Windows Kits\10\\include\10.0.22621.0\\um" from environment variable "include" does not exist. Make sure the necessary SDK is installed.")
+
+Building CEF from source
+------------------------
+Following https://bitbucket.org/chromiumembedded/cef/wiki/AutomatedBuildSetup and https://bitbucket.org/chromiumembedded/cef/wiki/BranchesAndBuilding.md roughly:
+
+Download https://bitbucket.org/chromiumembedded/cef/raw/master/tools/automate/automate-git.py, save it somewhere, e.g. in c:/programming
+
+In cmd.exe shell:
+(may also require a VS shell like "x64 Native Tools Command Prompt for VS 2022")
+
+
+set GN_DEFINES=is_official_build=true proprietary_codecs=true ffmpeg_branding=Chrome use_thin_lto=false
+set GYP_MSVS_VERSION=2022
+set CEF_ARCHIVE_FORMAT=tar.bz2
+C:\programming>python automate-git.py --download-dir=c:/cef --branch=7258 --minimal-distrib --client-distrib --force-clean --x64-build --with-pgo-profiles
+
+Branch 7258 is July 2025
+
+Notes:
+You will need a *lot* of disk space - at least 200 GB.
+If the downloading of source with the above command fails with HTTP error 429 ("too many requests"), try running the command again without the --force-clean argument.
+If you get compilation errors, it's probably best to start again by removing all the downloads in c:/cef and running the command again.
+
+To build binary distribution
+----------------------------
+Add C:\cef\depot_tools to PATH env var (needed because make_distrib.bat calls 'python.bat') which is in C:\cef\depot_tools.
+
+cd C:\cef\chromium\src\cef\tools
+make_distrib.bat --ninja-build --x64-build
+
+Builds to something like:
+C:\cef\chromium\src\cef\binary_distrib\cef_binary_139.0.40+g465474a+chromium-139.0.7258.139_windows64
+
+
+
+
+Rebuild libcef C++ dll wrapper
+------------------------------
+Change into the binary distribution directory we just built:
+
+cd C:\cef\chromium\src\cef\binary_distrib\cef_binary_139.0.40+g465474a+chromium-139.0.7258.139_windows64
+mkdir libcef_dll_build
+cd libcef_dll_build
+cmake ../
+# Open in Visual Studio:
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\devenv.exe" cef.sln
+
+For libcef_dll_wrapper project:
+
+Change 'Debug' configuration C/C++ / Code generation  / Runtime Library to "Multi-threaded Debug DLL (/MDd)"
+Change 'Release' configuration C/C++ / Code generation  / Runtime Library to "Multi-threaded DLL (/MD)"
+
+Then build libcef_dll_wrapper project in both 'Debug' and 'Release' configurations.
+
+
+CEF on Mac
+===========
+To allow the pre-built spotify binaries to be loaded:
+cd /Users/nick/programming/cyberspace_output/test_builds
+xattr -d com.apple.quarantine Chromium\ Embedded\ Framework.framework/Chromium\ Embedded\ Framework
+
+
+
+https://developer.apple.com/documentation/security/disabling_and_enabling_system_integrity_protection
+
+
+
+cd /Users/nick/programming/cef_binary_100.0.24+g0783cf8+chromium-100.0.4896.127_macosx64/libcef_dll_build/tests/cefclient/Release
+codesign --options runtime --deep --force --verify --verbose --sign "Developer ID Application: Glare Technologies UK Limited" "cefclient Helper.app"
+
+
+codesign --options runtime --deep --force --verify --verbose --sign "Developer ID Application: Glare Technologies UK Limited" "/Users/nick/programming/cyberspace_output/test_builds/gui_client.app/Contents/Frameworks/Chromium Embedded Framework.framework"
+
+
+CEF on Linux
+============
+sudo apt-get install gperf
+
+cd /home/nick/cef
+export GN_DEFINES="is_official_build=true use_sysroot=true use_allocator=none symbol_level=1 is_cfi=false use_thin_lto=false proprietary_codecs=true ffmpeg_branding=Chrome"
+export CEF_ARCHIVE_FORMAT=tar.bz2
+python3 automate-git.py --download-dir=/home/nick/cef --branch=4951 --minimal-distrib --client-distrib --force-clean --build-target=cefsimple --x64-build
+
+
+# Change dir into the just-build binary distribution dir (path may differ), and build libcef_dll wrapper:
+cd ~/cef/chromium/src/cef/binary_distrib/cef_binary_101.0.18+g367b4a0+chromium-101.0.4951.67_linux64
+mkdir libcef_dll_build && cd libcef_dll_build
+cmake ../
+make libcef_dll_wrapper -j 12
+
+
+
+
+
+Building SDL
+============
+Building SDL is optional for the native build (can be used instead of Qt), but is required for the web build.
+Download SDL source, e.g https://github.com/libsdl-org/SDL/archive/refs/tags/release-2.30.9.zip
+Unzip in ~programming/SDL, e.g.
+C:\programming\SDL\SDL-release-2.30.9
+cd C:\programming\SDL\
+mkdir sdl_2.30.9_build
+cd sdl_2.30.9_build
+cmake ../SDL-release-2.30.9
+
+On Windows:
+cmake --build . --config Debug
+cmake --build . --config RelWithDebInfo
+cmake --build . --config Release
+
+Copy SDL2.dll files to substrata output dir.
+
+
+
+
+
+Building the web client with Emscripten
+=======================================
+The Substrata web client uses Emscripten to compile C++ code to WASM, which the web browser executes to run the web client.
+
+Install Emscripten SDK
+----------------------
+Install Emscripten SDK, see instructions at https://emscripten.org/docs/getting_started/downloads.html
+You can just follow the 'Installation instructions using the emsdk (recommended)' instructions.
+
+
+Install Ninja
+-------------
+Ninja is a build tool that we need for Emscripten builds.
+Download from https://github.com/ninja-build/ninja/releases
+Unzip, add the directory to your PATH environment variable.
+Make sure you can execute the ninja executable from the command line.
+
+
+Making Emscripten SDL build
+---------------------------
+Assuming you have followed the instructions in 'Building SDL' section above already:
+(Note that the node version may have changed, you may need to change '16.20.0_64bit' to something else)
+
+	cd C:\programming\SDL
+	mkdir sdl_2.30.9_build_emscripten
+	cd sdl_2.30.9_build_emscripten
+	cmake -DCMAKE_TOOLCHAIN_FILE=C:\programming\emsdk\upstream\emscripten\cmake\Modules\Platform\Emscripten.cmake -DCMAKE_CROSSCOMPILING_EMULATOR=C:/programming/emsdk/node/16.20.0_64bit/bin/node.exe -DSDL_PTHREADS=ON -G "Ninja" ..\SDL-release-2.30.9
+	cmake --build .
+
+
+Building libjpeg-turbo with Emscripten
+--------------------------------------
+Assuming you have followed the 'ruby build_jpegturbo.rb' step above already:
+
+(See https://github.com/libjpeg-turbo/libjpeg-turbo/issues/250#issuecomment-944487299 regarding libjpeg-turbo Emscripten support)
+
+	mkdir C:\programming\libjpeg-turbo\libjpeg-turbo-emscripten-build
+	cd C:\programming\libjpeg-turbo\libjpeg-turbo-emscripten-build
+	cmake -DCMAKE_TOOLCHAIN_FILE=C:\programming\emsdk\upstream\emscripten\cmake\Modules\Platform\Emscripten.cmake -DCMAKE_CROSSCOMPILING_EMULATOR=C:/programming/emsdk/node/16.20.0_64bit/bin/node.exe -G "Ninja" -DWITH_SIMD=0 -DENABLE_SHARED=0 ..\libjpeg-turbo-3.0.0\
+	cmake --build .
+
+
+
+Building Substrata itself with Emscripten
+-----------------------------------------
+
+Make a build directory and change into it, e.g.
+	mkdir C:\programming\substrata\emscripten_build
+	cd C:\programming\substrata\emscripten_build
+
+Use Cmake to make a cmake project, making it use the Emscripten toolchain.
+Use the path to where you installed the Emscripten SDK. (In my case have installed it to C:\programming\emsdk)
+Also specifiy path to where you checked out substrata source code dir, e.g.  c:\code\substrata
+You will also need to choose a build type, such as -DCMAKE_BUILD_TYPE=Debug or -DCMAKE_BUILD_TYPE=RelWithDebInfo or -DCMAKE_BUILD_TYPE=Release.
+Start with 'Debug' or 'RelWithDebInfo' build type.
+Also specify the path to your Emscripten build of SDL that you built in the 'Making Emscripten SDL build' section above, e.g. -DSDL_BUILD_DIR=C:/programming/SDL/sdl_2.30.9_build_emscripten
+
+	cmake -DCMAKE_TOOLCHAIN_FILE=C:\programming\emsdk\upstream\emscripten\cmake\Modules\Platform\Emscripten.cmake -DCMAKE_CROSSCOMPILING_EMULATOR=C:/programming/emsdk/node/16.20.0_64bit/bin/node.exe c:\code\substrata -G "Ninja" -DCMAKE_BUILD_TYPE=Debug -DUSE_SDL=ON -DCEF_SUPPORT=OFF -DSDL_BUILD_DIR=C:/programming/SDL/sdl_2.30.9_build_emscripten
+
+
+Make data directory to be bundled
+---------------------------------
+The data directory contains resources (textures, models etc.) that substrata needs to run.
+The 'data' folder gets packaged up into gui_client.data, which is preloaded by Emscripten at runtime.
+In your emscripten build dir (e.g. C:\programming\substrata\emscripten_build), run the make_emscripten_preload_data.rb script, passing in your substrata source directory as the first argument:
+
+	ruby C:\programming\substrata\scripts\make_emscripten_preload_data.rb C:\programming\substrata
+
+
+Now do the build:
+
+	cmake --build . --target gui_client
+
+
+Now run update_webclient_cache_busting_hashes.rb, to update webclient.html with 'cache-busting' hashes - e.g. file hashes that indicate to the web browser to download updated files.
+
+	ruby C:\programming\substrata\scripts\update_webclient_cache_busting_hashes.rb C:\programming\substrata
+
+
+Running the web client
+----------------------
+In Substrata server config (e.g. "C:\Users\xx\AppData\Roaming\Substrata\server_data\substrata_server_config.xml"), set webclient dir to emscripten build dir, e.g.
+<webclient_dir>C:\programming\cyberspace\output\test_builds</webclient_dir>
+
+Run the Substrata server (./server.exe), then visit http://localhost/webclient in your web browser.
+
+
+Command line for using Clang in MVSC++
+======================================
+-Wno-unused-parameter -Wno-reorder-ctor -msse4.1 -Wthread-safety -Werror=thread-safety -Wno-deprecated-declarations

@@ -641,9 +641,6 @@ int main(int argc, char** argv)
 		}
 		
 		// Create a GPU device.  Needed to get hardware accelerated video decoding and for hardware texture sharing for CEF.
-		// Temporarily disabled to test if this is causing the crash
-		// TODO: Re-enable after fixing the crash issue
-		/*
 		try
 		{
 			Direct3DUtils::createGPUDeviceAndMFDeviceManager(d3d_device, device_manager);
@@ -653,10 +650,7 @@ int main(int argc, char** argv)
 		{
 			conPrint("WARNING: Failed to create Direct3D device: " + e.what());
 			conPrint("Continuing without Direct3D support (video decoding and CEF texture sharing may be limited)");
-			// Continue without Direct3D - the app should still work
 		}
-		*/
-		conPrint("NOTE: Direct3D initialization temporarily disabled for testing");
 #endif //_WIN32
 
 		// Check if CEF should be enabled via environment variable
@@ -675,10 +669,8 @@ int main(int argc, char** argv)
 		else
 			conPrint("CEF disabled via SUBSTRATA_ENABLE_CEF environment variable");
 
-		conPrint("About to call afterGLInitInitialise...");
 		// NOTE: use 1 for device_pixel_ratio as we are not doing high DPI rendering.
 		gui_client->afterGLInitInitialise(/*device_pixel_ratio*/1.f, opengl_engine, fonts, emoji_fonts);
-		conPrint("afterGLInitInitialise completed successfully");
 
 		gui_client->gl_ui->callbacks = new SDLClientGLUICallbacks();
 
