@@ -83,7 +83,6 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	vehicle_buttons_visible = false;
 
 	const float min_max_y = gl_ui->getViewportMinMaxY();
-	conPrint("GestureUI::create begin");
 
 	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
 	{
@@ -120,8 +119,6 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 			// Continue with other buttons
 		}
 	}
-
-	conPrint("GestureUI::create: gesture buttons done");
 
 	// Create left and right tab buttons
 	{
@@ -178,8 +175,6 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		}
 	}
 
-	conPrint("GestureUI::create: expand/collapse done");
-	
 	{
 		{
 			const std::string vehicle_tex_path = gui_client->resources_dir_path + "/buttons/bike.png";
@@ -211,55 +206,43 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon bike";
-			conPrint("GestureUI::create: creating summon_bike_button...");
 			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon bike", Vec2f(0), args);
 			summon_bike_button->setVisible(vehicle_buttons_visible);
 			summon_bike_button->handler = this;
 			gl_ui->addWidget(summon_bike_button);
-			conPrint("GestureUI::create: summon_bike_button created");
 		}
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon car";
-			conPrint("GestureUI::create: creating summon_car_button...");
 			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon car", Vec2f(0), args);
 			summon_car_button->setVisible(vehicle_buttons_visible);
 			summon_car_button->handler = this;
 			gl_ui->addWidget(summon_car_button);
-			conPrint("GestureUI::create: summon_car_button created");
 		}
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon boat";
-			conPrint("GestureUI::create: creating summon_boat_button...");
 			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon boat", Vec2f(0), args);
 			summon_boat_button->setVisible(vehicle_buttons_visible);
 			summon_boat_button->handler = this;
 			gl_ui->addWidget(summon_boat_button);
-			conPrint("GestureUI::create: summon_boat_button created");
 		}
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon jet ski";
-			conPrint("GestureUI::create: creating summon_jetski_button...");
 			summon_jetski_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon jet ski", Vec2f(0), args);
 			summon_jetski_button->setVisible(vehicle_buttons_visible);
 			summon_jetski_button->handler = this;
 			gl_ui->addWidget(summon_jetski_button);
-			conPrint("GestureUI::create: summon_jetski_button created");
 		}
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon hovercar";
-			conPrint("GestureUI::create: creating summon_hovercar_button...");
 			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon hovercar", Vec2f(0), args);
 			summon_hovercar_button->setVisible(vehicle_buttons_visible);
 			summon_hovercar_button->handler = this;
 			gl_ui->addWidget(summon_hovercar_button);
-			conPrint("GestureUI::create: summon_hovercar_button created");
 		}
-
-		conPrint("GestureUI::create: vehicle-related widgets done");
 
 		{
 			const std::string collapse_vehicle_tex_path = gui_client->resources_dir_path + "/buttons/down_tab.png";
@@ -290,7 +273,6 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		}
 
 	}
-	conPrint("GestureUI::create completed successfully (before photo/mic widgets)");
 	
 	{
 		GLUIButton::CreateArgs args;
