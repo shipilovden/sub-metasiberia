@@ -10,6 +10,8 @@ Copyright Glare Technologies Limited 2021 -
 #include <settings/SettingsStore.h>
 #include <graphics/SRGBUtils.h>
 #include <tracy/Tracy.hpp>
+#include <utils/FileUtils.h>
+#include <utils/ConPrint.h>
 
 
 GestureUI::GestureUI()
@@ -81,99 +83,214 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	vehicle_buttons_visible = false;
 
 	const float min_max_y = gl_ui->getViewportMinMaxY();
+	conPrint("GestureUI::create begin");
 
 	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
 	{
 		const std::string gesture_name = gestures[i];
+		const std::string button_tex_path = gui_client->resources_dir_path + "/buttons/" + gesture_name + ".png";
+
+		// Check if file exists before creating button to avoid crashes
+		if(!FileUtils::fileExists(button_tex_path))
+		{
+			conPrint("WARNING: Gesture button texture not found: " + button_tex_path + ", skipping button creation");
+			continue;
+		}
 
 		GLUIButton::CreateArgs args;
 		args.tooltip = gesture_name;
-		GLUIButtonRef button = new GLUIButton(*gl_ui, opengl_engine,  gui_client->resources_dir_path + "/buttons/" + gesture_name + ".png", Vec2f(0.1f + i * 0.15f, -min_max_y + 0.06f), Vec2f(0.1f, 0.1f), args);
-		button->toggleable = true;
-		button->client_data = gesture_name;
-		button->handler = this;
-		gl_ui->addWidget(button);
+		try
+		{
+			GLUIButtonRef button = new GLUIButton(*gl_ui, opengl_engine, button_tex_path, Vec2f(0.1f + i * 0.15f, -min_max_y + 0.06f), Vec2f(0.1f, 0.1f), args);
+			button->toggleable = true;
+			button->client_data = gesture_name;
+			button->handler = this;
+			gl_ui->addWidget(button);
 
-		gesture_buttons.push_back(button);
+			gesture_buttons.push_back(button);
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("WARNING: Failed to create gesture button for " + gesture_name + ": " + e.what());
+			// Continue with other buttons
+		}
+		catch(...)
+		{
+			conPrint("WARNING: Failed to create gesture button for " + gesture_name + ": unknown exception");
+			// Continue with other buttons
+		}
 	}
+
+	conPrint("GestureUI::create: gesture buttons done");
 
 	// Create left and right tab buttons
 	{
-		GLUIButton::CreateArgs args;
-		args.tooltip = "View gestures";
-		expand_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Waving 1.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
-		expand_button->handler = this;
-		gl_ui->addWidget(expand_button);
+		const std::string expand_tex_path = gui_client->resources_dir_path + "/buttons/Waving 1.png";
+		if(FileUtils::fileExists(expand_tex_path))
+		{
+			GLUIButton::CreateArgs args;
+			args.tooltip = "View gestures";
+			try
+			{
+				expand_button = new GLUIButton(*gl_ui, opengl_engine, expand_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
+				expand_button->handler = this;
+				gl_ui->addWidget(expand_button);
+			}
+			catch(glare::Exception& e)
+			{
+				conPrint("WARNING: Failed to create expand_button: " + e.what());
+			}
+			catch(...)
+			{
+				conPrint("WARNING: Failed to create expand_button: unknown exception");
+			}
+		}
+		else
+		{
+			conPrint("WARNING: Expand button texture not found: " + expand_tex_path);
+		}
 	}
 	
 	{
-		GLUIButton::CreateArgs args;
-		args.tooltip = "Hide gestures";
-		collapse_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/right_tab.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
-		collapse_button->handler = this;
-		gl_ui->addWidget(collapse_button);
+		const std::string collapse_tex_path = gui_client->resources_dir_path + "/buttons/right_tab.png";
+		if(FileUtils::fileExists(collapse_tex_path))
+		{
+			GLUIButton::CreateArgs args;
+			args.tooltip = "Hide gestures";
+			try
+			{
+				collapse_button = new GLUIButton(*gl_ui, opengl_engine, collapse_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
+				collapse_button->handler = this;
+				gl_ui->addWidget(collapse_button);
+			}
+			catch(glare::Exception& e)
+			{
+				conPrint("WARNING: Failed to create collapse_button: " + e.what());
+			}
+			catch(...)
+			{
+				conPrint("WARNING: Failed to create collapse_button: unknown exception");
+			}
+		}
+		else
+		{
+			conPrint("WARNING: Collapse button texture not found: " + collapse_tex_path);
+		}
 	}
+
+	conPrint("GestureUI::create: expand/collapse done");
 	
 	{
 		{
-			GLUIButton::CreateArgs args;
-			args.tooltip = "Summon vehicle";
-			vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/bike.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
-			vehicle_button->handler = this;
-			gl_ui->addWidget(vehicle_button);
+			const std::string vehicle_tex_path = gui_client->resources_dir_path + "/buttons/bike.png";
+			if(FileUtils::fileExists(vehicle_tex_path))
+			{
+				GLUIButton::CreateArgs args;
+				args.tooltip = "Summon vehicle";
+				try
+				{
+					vehicle_button = new GLUIButton(*gl_ui, opengl_engine, vehicle_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
+					vehicle_button->handler = this;
+					gl_ui->addWidget(vehicle_button);
+				}
+				catch(glare::Exception& e)
+				{
+					conPrint("WARNING: Failed to create vehicle_button: " + e.what());
+				}
+				catch(...)
+				{
+					conPrint("WARNING: Failed to create vehicle_button: unknown exception");
+				}
+			}
+			else
+			{
+				conPrint("WARNING: Vehicle button texture not found: " + vehicle_tex_path);
+			}
 		}
 
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon bike";
+			conPrint("GestureUI::create: creating summon_bike_button...");
 			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon bike", Vec2f(0), args);
 			summon_bike_button->setVisible(vehicle_buttons_visible);
 			summon_bike_button->handler = this;
 			gl_ui->addWidget(summon_bike_button);
+			conPrint("GestureUI::create: summon_bike_button created");
 		}
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon car";
+			conPrint("GestureUI::create: creating summon_car_button...");
 			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon car", Vec2f(0), args);
 			summon_car_button->setVisible(vehicle_buttons_visible);
 			summon_car_button->handler = this;
 			gl_ui->addWidget(summon_car_button);
+			conPrint("GestureUI::create: summon_car_button created");
 		}
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon boat";
+			conPrint("GestureUI::create: creating summon_boat_button...");
 			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon boat", Vec2f(0), args);
 			summon_boat_button->setVisible(vehicle_buttons_visible);
 			summon_boat_button->handler = this;
 			gl_ui->addWidget(summon_boat_button);
+			conPrint("GestureUI::create: summon_boat_button created");
 		}
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon jet ski";
+			conPrint("GestureUI::create: creating summon_jetski_button...");
 			summon_jetski_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon jet ski", Vec2f(0), args);
 			summon_jetski_button->setVisible(vehicle_buttons_visible);
 			summon_jetski_button->handler = this;
 			gl_ui->addWidget(summon_jetski_button);
+			conPrint("GestureUI::create: summon_jetski_button created");
 		}
 		{
 			GLUITextButton::CreateArgs args;
 			args.tooltip = "Summon hovercar";
+			conPrint("GestureUI::create: creating summon_hovercar_button...");
 			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon hovercar", Vec2f(0), args);
 			summon_hovercar_button->setVisible(vehicle_buttons_visible);
 			summon_hovercar_button->handler = this;
 			gl_ui->addWidget(summon_hovercar_button);
+			conPrint("GestureUI::create: summon_hovercar_button created");
 		}
 
+		conPrint("GestureUI::create: vehicle-related widgets done");
+
 		{
-			GLUIButton::CreateArgs args;
-			args.tooltip = "Hide vehicles";
-			collapse_vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/down_tab.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
-			collapse_vehicle_button->handler = this;
-			collapse_vehicle_button->setVisible(vehicle_buttons_visible);
-			gl_ui->addWidget(collapse_vehicle_button);
+			const std::string collapse_vehicle_tex_path = gui_client->resources_dir_path + "/buttons/down_tab.png";
+			if(FileUtils::fileExists(collapse_vehicle_tex_path))
+			{
+				GLUIButton::CreateArgs args;
+				args.tooltip = "Hide vehicles";
+				try
+				{
+					collapse_vehicle_button = new GLUIButton(*gl_ui, opengl_engine, collapse_vehicle_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
+					collapse_vehicle_button->handler = this;
+					collapse_vehicle_button->setVisible(vehicle_buttons_visible);
+					gl_ui->addWidget(collapse_vehicle_button);
+				}
+				catch(glare::Exception& e)
+				{
+					conPrint("WARNING: Failed to create collapse_vehicle_button: " + e.what());
+				}
+				catch(...)
+				{
+					conPrint("WARNING: Failed to create collapse_vehicle_button: unknown exception");
+				}
+			}
+			else
+			{
+				conPrint("WARNING: Collapse vehicle button texture not found: " + collapse_vehicle_tex_path);
+			}
 		}
 
 	}
+	conPrint("GestureUI::create completed successfully (before photo/mic widgets)");
 	
 	{
 		GLUIButton::CreateArgs args;

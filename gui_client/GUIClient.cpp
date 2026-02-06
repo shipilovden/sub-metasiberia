@@ -471,37 +471,75 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 {
 	ZoneScoped; // Tracy profiler
 
+	conPrint("GUIClient::afterGLInitInitialise started");
 	opengl_engine = opengl_engine_;
+	conPrint("opengl_engine assigned");
 
-
+	conPrint("Getting only_load_most_important_obs setting...");
 	this->only_load_most_important_obs = settings->getBoolValue(/*MainOptionsDialog::onlyLoadMostImportantObsKey=*/"only_load_most_important_obs", /*default value=*/onlyLoadMostImportantObjectsDefaultValue());
+	conPrint("Setting retrieved");
 
-
-
+	conPrint("Setting reload shaders callback...");
 	opengl_engine->setReloadShadersCallback(this);
+	conPrint("Callback set");
 
+	conPrint("Creating default array texture...");
 	// Add a default array texture.  Will be used for the chunk array texture before the proper one is loaded.
-	std::vector<uint8> tex_data(4*4*3, 200);
-	default_array_tex = new OpenGLTexture(4, 4, opengl_engine.ptr(),
-		tex_data, OpenGLTextureFormat::Format_SRGB_Uint8, OpenGLTexture::Filtering_Nearest,
-		OpenGLTexture::Wrapping_Repeat, false, -1, /* num array images=*/1);
+	// Temporarily disabled to test if this is causing the crash
+	#if 0
+	try
+	{
+		std::vector<uint8> tex_data(4*4*3, 200);
+		conPrint("tex_data vector created");
+		conPrint("About to create OpenGLTexture...");
+		default_array_tex = new OpenGLTexture(4, 4, opengl_engine.ptr(),
+			tex_data, OpenGLTextureFormat::Format_SRGB_Uint8, OpenGLTexture::Filtering_Nearest,
+			OpenGLTexture::Wrapping_Repeat, false, -1, /* num array images=*/1);
+		conPrint("default_array_tex created");
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("ERROR creating default_array_tex: " + e.what());
+		throw;
+	}
+	catch(...)
+	{
+		conPrint("ERROR creating default_array_tex: unknown exception");
+		throw;
+	}
+	#endif
+	conPrint("NOTE: default_array_tex creation temporarily disabled for testing");
 
-
+	conPrint("Initializing animated_texture_manager...");
 	animated_texture_manager->init(opengl_engine.ptr());
+	conPrint("animated_texture_manager initialized");
 
-
+	conPrint("Creating GLUI...");
 	gl_ui = new GLUI();
+	conPrint("GLUI object created");
+	conPrint("Calling gl_ui->create...");
 	gl_ui->create(opengl_engine, (float)device_pixel_ratio, fonts, emoji_fonts, &this->stack_allocator);
+	conPrint("gl_ui->create completed");
 
+	conPrint("Creating gesture_ui...");
 	gesture_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
+	conPrint("gesture_ui created");
 
+	conPrint("Creating ob_info_ui...");
 	ob_info_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
+	conPrint("ob_info_ui created");
 
+	conPrint("Creating misc_info_ui...");
 	misc_info_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
+	conPrint("misc_info_ui created");
 	
+	conPrint("Creating hud_ui...");
 	hud_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
+	conPrint("hud_ui created");
 
+	conPrint("Creating chat_ui...");
 	chat_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
+	conPrint("chat_ui created");
 
 	// Chat UI should be drawn above the movement button if present.
 	const float bottom_left_y = misc_info_ui.movement_button ? misc_info_ui.movement_button->getRect().getMax().y : -gl_ui->getViewportMinMaxY();
