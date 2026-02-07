@@ -59,6 +59,7 @@ private slots:;
 	void on_actionAdd_Voxels_triggered();
 	void on_actionAdd_Spotlight_triggered();
 	void on_actionAdd_Portal_triggered();
+	void on_actionAdd_to_Favorites_triggered();
 	void on_actionAdd_Web_View_triggered();
 	void on_actionAdd_Video_triggered();
 	void on_actionAdd_Audio_Source_triggered();
@@ -157,9 +158,16 @@ private:
 	virtual void closeEvent(QCloseEvent* event) override;
 	virtual void timerEvent(QTimerEvent* event) override;
 	virtual void changeEvent(QEvent *event) override;
+	virtual bool eventFilter(QObject* obj, QEvent* event) override;
 	void startMainTimer();
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
+	void updateFavoritesMenu(); // Update the "Go to Favorites" submenu with current favorites
+	void addFavoriteLocation(const std::string& url, const std::string& name); // Add a location to favorites
+	std::vector<std::pair<std::string, std::string>> getFavoriteLocations(); // Get list of favorite locations (URL, name pairs)
+	void removeFavoriteLocation(const std::string& url); // Remove a favorite location by URL
+	void renameFavoriteLocation(const std::string& old_url, const std::string& new_name); // Rename a favorite location
+	void showFavoriteContextMenu(QAction* action, const QString& url, const QPoint& global_pos); // Show context menu for favorite
 private:
 	void updateStatusBar();
 	void updateDiagnostics();

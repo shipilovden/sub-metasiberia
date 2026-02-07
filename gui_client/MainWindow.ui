@@ -72,6 +72,8 @@
     <addaction name="actionAdd_Decal"/>
     <addaction name="actionAdd_Portal"/>
     <addaction name="separator"/>
+    <addaction name="actionAdd_to_Favorites"/>
+    <addaction name="separator"/>
     <addaction name="actionCopy_Object"/>
     <addaction name="actionPaste_Object"/>
     <addaction name="actionCloneObject"/>
@@ -103,6 +105,13 @@
     <addaction name="actionGoToMainWorld"/>
     <addaction name="actionGoToPersonalWorld"/>
     <addaction name="actionGo_to_CryptoVoxels_World"/>
+    <addaction name="separator"/>
+    <widget class="QMenu" name="menuGo_to_Favorites">
+     <property name="title">
+      <string>Go to Favorites</string>
+     </property>
+    </widget>
+    <addaction name="menuGo_to_Favorites"/>
     <addaction name="separator"/>
     <addaction name="actionSet_Start_Location"/>
    </widget>
@@ -751,6 +760,11 @@
   <action name="actionAdd_Portal">
    <property name="text">
     <string>Add Portal</string>
+   </property>
+  </action>
+  <action name="actionAdd_to_Favorites">
+   <property name="text">
+    <string>Add to Favorites</string>
    </property>
   </action>
   <action name="actionGo_Back">

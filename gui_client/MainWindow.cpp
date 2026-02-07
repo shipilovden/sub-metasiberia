@@ -53,6 +53,12 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QAction>
+#include <QtWidgets/QInputDialog>
+#include <QtCore/QTimer>
+#include <QtGui/QCursor>
+#include <algorithm>
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
 #include "../qt/QtUtils.h"
@@ -377,6 +383,8 @@ void MainWindow::initialiseUI()
 	connect(user_details, SIGNAL(logOutClicked()), this, SLOT(on_actionLogOut_triggered()));
 	connect(user_details, SIGNAL(signUpClicked()), this, SLOT(on_actionSignUp_triggered()));
 	connect(url_widget, SIGNAL(URLChanged()), this, SLOT(URLChangedSlot()));
+	
+	// Note: Favorites menu signal connection is done in afterGLInitInitialise() when UI is fully ready
 
 
 #if !defined(_WIN32)
@@ -556,6 +564,36 @@ void MainWindow::afterGLInitInitialise()
 
 	gui_client.afterGLInitInitialise((double)device_pixel_ratio, ui->glWidget->opengl_engine, fonts, emoji_fonts);
 
+	// Connect favorites menu to update when shown - do this after UI is fully initialized
+	if(ui && ui->menuGo_to_Favorites)
+	{
+		connect(ui->menuGo_to_Favorites, &QMenu::aboutToShow, this, &MainWindow::updateFavoritesMenu);
+		
+		// Install event filter to catch right-click events on menu items
+		ui->menuGo_to_Favorites->installEventFilter(this);
+		
+		// Also set context menu policy to custom to enable context menu events
+		ui->menuGo_to_Favorites->setContextMenuPolicy(Qt::CustomContextMenu);
+		connect(ui->menuGo_to_Favorites, &QMenu::customContextMenuRequested, [this](const QPoint& pos) {
+			// Get the active action (the one currently hovered/under cursor)
+			QAction* action = ui->menuGo_to_Favorites->activeAction();
+			
+			// If no active action, try actionAt
+			if(!action)
+			{
+				action = ui->menuGo_to_Favorites->actionAt(pos);
+			}
+			
+			if(action && action->data().isValid())
+			{
+				const QString url = action->data().toString();
+				if(!url.isEmpty())
+				{
+					showFavoriteContextMenu(action, url, ui->menuGo_to_Favorites->mapToGlobal(pos));
+				}
+			}
+		});
+	}
 
 	if(settings->value("mainwindow/showParcels", QVariant(false)).toBool())
 	{
@@ -1208,6 +1246,151 @@ void MainWindow::changeEvent(QEvent* event)
 	}
 }
 
+bool MainWindow::eventFilter(QObject* obj, QEvent* event)
+{
+	// Handle right-click on favorites menu or its action widgets
+	if(obj == ui->menuGo_to_Favorites || (ui && ui->menuGo_to_Favorites && obj->parent() == ui->menuGo_to_Favorites))
+	{
+		// Debug: log all events to see what we're getting
+		// conPrint("Favorites menu event: " + std::to_string(event->type()));
+		
+		if(event->type() == QEvent::ContextMenu)
+		{
+			QContextMenuEvent* context_event = static_cast<QContextMenuEvent*>(event);
+			
+			// Get the active action (the one currently hovered/under cursor)
+			QAction* action = ui->menuGo_to_Favorites->activeAction();
+			
+			// If no active action, try to find action at position
+			if(!action)
+			{
+				// Try actionAt - convert global position to local
+				const QPoint local_pos = ui->menuGo_to_Favorites->mapFromGlobal(context_event->globalPos());
+				action = ui->menuGo_to_Favorites->actionAt(local_pos);
+			}
+			
+			if(action && action->data().isValid())
+			{
+				const QString url = action->data().toString();
+				if(!url.isEmpty())
+				{
+					// Show context menu
+					QMenu context_menu(this);
+					
+					// Rename action
+					QAction* rename_action = context_menu.addAction(tr("Rename"));
+					connect(rename_action, &QAction::triggered, [this, url, action]() {
+						const QString current_name = action->text();
+						bool ok;
+						const QString new_name = QInputDialog::getText(
+							this,
+							tr("Rename Favorite"),
+							tr("Enter new name:"),
+							QLineEdit::Normal,
+							current_name,
+							&ok
+						);
+						
+						if(ok && !new_name.isEmpty() && new_name != current_name)
+						{
+							renameFavoriteLocation(QtUtils::toStdString(url), QtUtils::toStdString(new_name));
+							showInfoNotification(QtUtils::toStdString(tr("Favorite renamed.")));
+						}
+					});
+					
+					// Delete action
+					QAction* delete_action = context_menu.addAction(tr("Delete"));
+					connect(delete_action, &QAction::triggered, [this, url]() {
+						const int ret = QMessageBox::question(
+							this,
+							tr("Delete Favorite"),
+							tr("Are you sure you want to delete this favorite?"),
+							QMessageBox::Yes | QMessageBox::No,
+							QMessageBox::No
+						);
+						
+						if(ret == QMessageBox::Yes)
+						{
+							removeFavoriteLocation(QtUtils::toStdString(url));
+							showInfoNotification(QtUtils::toStdString(tr("Favorite deleted.")));
+						}
+					});
+					
+					// Show context menu at cursor position
+					context_menu.exec(context_event->globalPos());
+					
+					return true; // Event handled
+				}
+			}
+		}
+		else if(event->type() == QEvent::MouseButtonPress)
+		{
+			QMouseEvent* mouse_event = static_cast<QMouseEvent*>(event);
+			if(mouse_event->button() == Qt::RightButton)
+			{
+				// Get the active action (the one currently hovered)
+				QAction* action = ui->menuGo_to_Favorites->activeAction();
+				
+				if(action && action->data().isValid())
+				{
+					const QString url = action->data().toString();
+					if(!url.isEmpty())
+					{
+						// Show context menu
+						QMenu context_menu(this);
+						
+						// Rename action
+						QAction* rename_action = context_menu.addAction(tr("Rename"));
+						connect(rename_action, &QAction::triggered, [this, url, action]() {
+							const QString current_name = action->text();
+							bool ok;
+							const QString new_name = QInputDialog::getText(
+								this,
+								tr("Rename Favorite"),
+								tr("Enter new name:"),
+								QLineEdit::Normal,
+								current_name,
+								&ok
+							);
+							
+							if(ok && !new_name.isEmpty() && new_name != current_name)
+							{
+								renameFavoriteLocation(QtUtils::toStdString(url), QtUtils::toStdString(new_name));
+								showInfoNotification(QtUtils::toStdString(tr("Favorite renamed.")));
+							}
+						});
+						
+						// Delete action
+						QAction* delete_action = context_menu.addAction(tr("Delete"));
+						connect(delete_action, &QAction::triggered, [this, url]() {
+							const int ret = QMessageBox::question(
+								this,
+								tr("Delete Favorite"),
+								tr("Are you sure you want to delete this favorite?"),
+								QMessageBox::Yes | QMessageBox::No,
+								QMessageBox::No
+							);
+							
+							if(ret == QMessageBox::Yes)
+							{
+								removeFavoriteLocation(QtUtils::toStdString(url));
+								showInfoNotification(QtUtils::toStdString(tr("Favorite deleted.")));
+							}
+						});
+						
+						// Show context menu at cursor position
+						context_menu.exec(QCursor::pos());
+						
+						return true; // Event handled
+					}
+				}
+			}
+		}
+	}
+	
+	// Call base class implementation
+	return QMainWindow::eventFilter(obj, event);
+}
 
 void MainWindow::updateDiagnostics()
 {
@@ -1797,6 +1980,251 @@ void MainWindow::on_actionAdd_Portal_triggered()
 	showInfoNotification("Added portal.");
 }
 
+
+void MainWindow::on_actionAdd_to_Favorites_triggered()
+{
+	const std::string current_url = url_widget->getURL();
+	if(current_url.empty())
+	{
+		showErrorNotification("No URL to add to favorites. Please connect to a server first.");
+		return;
+	}
+
+	// Generate a name for the favorite from the URL
+	std::string favorite_name;
+	try
+	{
+		URLParseResults parse_results = URLParser::parseURL(current_url);
+		favorite_name = parse_results.hostname;
+		if(!parse_results.worldname.empty())
+		{
+			favorite_name += "/" + parse_results.worldname;
+		}
+		// Add position info if present
+		if(parse_results.parsed_x && parse_results.parsed_y && parse_results.parsed_z)
+		{
+			favorite_name += " (" + doubleToStringNDecimalPlaces(parse_results.x, 1) + ", " + 
+				doubleToStringNDecimalPlaces(parse_results.y, 1) + ", " + 
+				doubleToStringNDecimalPlaces(parse_results.z, 1) + ")";
+		}
+	}
+	catch(glare::Exception&)
+	{
+		favorite_name = current_url; // Fallback to full URL if parsing fails
+	}
+
+	addFavoriteLocation(current_url, favorite_name);
+	updateFavoritesMenu();
+	showInfoNotification("Added to favorites: " + favorite_name);
+}
+
+
+void MainWindow::addFavoriteLocation(const std::string& url, const std::string& name)
+{
+	// Get current favorites count
+	const int favorites_count = settings->value("favorites/count", 0).toInt();
+	
+	// Add new favorite
+	settings->setValue("favorites/" + QString::number(favorites_count) + "/url", QtUtils::toQString(url));
+	settings->setValue("favorites/" + QString::number(favorites_count) + "/name", QtUtils::toQString(name));
+	
+	// Increment count
+	settings->setValue("favorites/count", favorites_count + 1);
+}
+
+
+std::vector<std::pair<std::string, std::string>> MainWindow::getFavoriteLocations()
+{
+	std::vector<std::pair<std::string, std::string>> favorites;
+	
+	const int favorites_count = settings->value("favorites/count", 0).toInt();
+	for(int i = 0; i < favorites_count; ++i)
+	{
+		const QString url_key = "favorites/" + QString::number(i) + "/url";
+		const QString name_key = "favorites/" + QString::number(i) + "/name";
+		
+		if(settings->contains(url_key) && settings->contains(name_key))
+		{
+			const std::string url = QtUtils::toStdString(settings->value(url_key).toString());
+			const std::string name = QtUtils::toStdString(settings->value(name_key).toString());
+			favorites.push_back(std::make_pair(url, name));
+		}
+	}
+	
+	return favorites;
+}
+
+
+void MainWindow::updateFavoritesMenu()
+{
+	// Safety checks
+	if(!ui || !settings)
+		return;
+	
+	// Clear existing actions in the favorites menu
+	QMenu* favorites_menu = ui->menuGo_to_Favorites;
+	if(!favorites_menu)
+		return;
+	
+	favorites_menu->clear();
+	
+	// Get all favorites
+	const std::vector<std::pair<std::string, std::string>> favorites = getFavoriteLocations();
+	
+	if(favorites.empty())
+	{
+		QAction* empty_action = favorites_menu->addAction("(No favorites)");
+		empty_action->setEnabled(false);
+		return;
+	}
+	
+	// Add actions for each favorite
+	for(size_t i = 0; i < favorites.size(); ++i)
+	{
+		const std::string& url = favorites[i].first;
+		const std::string& name = favorites[i].second;
+		
+		if(url.empty() || name.empty())
+			continue; // Skip invalid entries
+		
+		QAction* action = favorites_menu->addAction(QtUtils::toQString(name));
+		action->setData(QtUtils::toQString(url)); // Store URL in action data
+		
+		// Connect action to visit the URL - use a safe lambda that checks 'this' is still valid
+		connect(action, &QAction::triggered, [this, url]() {
+			if(this && !url.empty())
+			{
+				visitSubURL(url);
+			}
+		});
+	}
+}
+
+
+void MainWindow::removeFavoriteLocation(const std::string& url)
+{
+	if(!settings || url.empty())
+		return;
+	
+	// Get current favorites
+	std::vector<std::pair<std::string, std::string>> favorites = getFavoriteLocations();
+	
+	// Remove the favorite with matching URL
+	favorites.erase(
+		std::remove_if(favorites.begin(), favorites.end(),
+			[&url](const std::pair<std::string, std::string>& fav) {
+				return fav.first == url;
+			}),
+		favorites.end()
+	);
+	
+	// Clear all favorites from settings
+	const int old_count = settings->value("favorites/count", 0).toInt();
+	for(int i = 0; i < old_count; ++i)
+	{
+		settings->remove("favorites/" + QString::number(i) + "/url");
+		settings->remove("favorites/" + QString::number(i) + "/name");
+	}
+	
+	// Save updated favorites
+	settings->setValue("favorites/count", (int)favorites.size());
+	for(size_t i = 0; i < favorites.size(); ++i)
+	{
+		settings->setValue("favorites/" + QString::number((int)i) + "/url", QtUtils::toQString(favorites[i].first));
+		settings->setValue("favorites/" + QString::number((int)i) + "/name", QtUtils::toQString(favorites[i].second));
+	}
+	
+	// Update menu
+	updateFavoritesMenu();
+}
+
+void MainWindow::renameFavoriteLocation(const std::string& url, const std::string& new_name)
+{
+	if(!settings || url.empty() || new_name.empty())
+		return;
+	
+	// Get current favorites
+	std::vector<std::pair<std::string, std::string>> favorites = getFavoriteLocations();
+	
+	// Find and update the favorite with matching URL
+	for(auto& fav : favorites)
+	{
+		if(fav.first == url)
+		{
+			fav.second = new_name;
+			break;
+		}
+	}
+	
+	// Clear all favorites from settings
+	const int old_count = settings->value("favorites/count", 0).toInt();
+	for(int i = 0; i < old_count; ++i)
+	{
+		settings->remove("favorites/" + QString::number(i) + "/url");
+		settings->remove("favorites/" + QString::number(i) + "/name");
+	}
+	
+	// Save updated favorites
+	settings->setValue("favorites/count", (int)favorites.size());
+	for(size_t i = 0; i < favorites.size(); ++i)
+	{
+		settings->setValue("favorites/" + QString::number((int)i) + "/url", QtUtils::toQString(favorites[i].first));
+		settings->setValue("favorites/" + QString::number((int)i) + "/name", QtUtils::toQString(favorites[i].second));
+	}
+	
+	// Update menu
+	updateFavoritesMenu();
+}
+
+void MainWindow::showFavoriteContextMenu(QAction* action, const QString& url, const QPoint& global_pos)
+{
+	if(!action || url.isEmpty())
+		return;
+	
+	QMenu context_menu(this);
+	
+	// Rename action
+	QAction* rename_action = context_menu.addAction(tr("Rename"));
+	connect(rename_action, &QAction::triggered, [this, url, action]() {
+		const QString current_name = action->text();
+		bool ok;
+		const QString new_name = QInputDialog::getText(
+			this,
+			tr("Rename Favorite"),
+			tr("Enter new name:"),
+			QLineEdit::Normal,
+			current_name,
+			&ok
+		);
+		
+		if(ok && !new_name.isEmpty() && new_name != current_name)
+		{
+			renameFavoriteLocation(QtUtils::toStdString(url), QtUtils::toStdString(new_name));
+			showInfoNotification(QtUtils::toStdString(tr("Favorite renamed.")));
+		}
+	});
+	
+	// Delete action
+	QAction* delete_action = context_menu.addAction(tr("Delete"));
+	connect(delete_action, &QAction::triggered, [this, url]() {
+		const int ret = QMessageBox::question(
+			this,
+			tr("Delete Favorite"),
+			tr("Are you sure you want to delete this favorite?"),
+			QMessageBox::Yes | QMessageBox::No,
+			QMessageBox::No
+		);
+		
+		if(ret == QMessageBox::Yes)
+		{
+			removeFavoriteLocation(QtUtils::toStdString(url));
+			showInfoNotification(QtUtils::toStdString(tr("Favorite deleted.")));
+		}
+	});
+	
+	// Show context menu at cursor position
+	context_menu.exec(global_pos);
+}
 
 void MainWindow::on_actionAdd_Web_View_triggered()
 {
