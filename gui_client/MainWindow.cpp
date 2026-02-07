@@ -1826,7 +1826,7 @@ void MainWindow::on_actionAdd_Web_View_triggered()
 	new_world_object->scale = Vec3f(/*width=*/1.f, /*depth=*/0.02f, /*height=*/1080.f / 1920.f);
 	new_world_object->max_model_lod_level = 0;
 
-	new_world_object->target_url = "https://substrata.info/"; // Use a default URL - indicates to users how to set the URL.
+	new_world_object->target_url = "https://metasiberia.com/"; // Use a default URL - indicates to users how to set the URL.
 
 	new_world_object->materials.resize(2);
 	new_world_object->materials[0] = new WorldMaterial();
