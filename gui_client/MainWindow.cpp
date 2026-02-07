@@ -49,6 +49,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtGui/QMouseEvent>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
+#include <QtGui/QIcon>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
@@ -186,7 +187,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 static std::string computeWindowTitle()
 {
-	return "Substrata v" + ::cyberspace_version;
+	return "Metasiberia Editor beta v" + ::cyberspace_version;
 }
 
 
@@ -385,6 +386,13 @@ void MainWindow::initialiseUI()
 
 
 	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
+	
+	// Set window icon
+	const std::string icon_path = base_dir_path + "/data/resources/icons/metasiberia.ico";
+	if(FileUtils::fileExists(icon_path))
+	{
+		setWindowIcon(QIcon(QtUtils::toQString(icon_path)));
+	}
 
 	ui->materialBrowserDockWidgetContents->init(this, this->base_dir_path, this->appdata_path, /*print output=*/this);
 	connect(ui->materialBrowserDockWidgetContents, SIGNAL(materialSelected(const std::string&)), this, SLOT(materialSelectedInBrowser(const std::string&)));

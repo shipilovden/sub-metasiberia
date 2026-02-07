@@ -1022,6 +1022,8 @@ endif()
 
 
 SET(rc_stuff "../icons/substrata.rc")
+# Copy icon file to build directory so resource compiler can find it
+configure_file("${CMAKE_SOURCE_DIR}/icons/metasiberia.ico" "${CMAKE_BINARY_DIR}/gui_client/metasiberia.ico" COPYONLY)
 
 SOURCE_GROUP(gui_client FILES ${gui_client})
 SOURCE_GROUP(qt FILES ${qt})
