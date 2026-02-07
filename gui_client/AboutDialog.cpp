@@ -29,7 +29,7 @@ AboutDialog::AboutDialog(QWidget* parent, const std::string& appdata_path)
 	this->text->setOpenExternalLinks(true);
 
 #if BUILD_TESTS
-	this->generateCrashLabel->setText("<p><a href=\"#\">Generate Crash</a></p>");
+	this->generateCrashLabel->setText("<p><a href=\"#\">" + tr("Generate Crash") + "</a></p>");
 #else
 	this->generateCrashLabel->hide();
 #endif
