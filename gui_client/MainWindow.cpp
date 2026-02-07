@@ -3094,6 +3094,20 @@ void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 	gui_client.connectToServer(parse_results);
 }
 
+void MainWindow::on_actionGo_to_Substrata_Server_triggered()
+{
+	visitSubURL("sub://substrata.info/");
+}
+
+void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
+{
+	visitSubURL("sub://89.104.70.23/");
+}
+
+void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
+{
+	visitSubURL("sub://176.197.223.42/");
+}
 
 void MainWindow::on_actionGo_to_Parcel_triggered()
 {
