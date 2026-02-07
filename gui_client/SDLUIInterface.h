@@ -9,12 +9,21 @@ Copyright Glare Technologies Limited 2022 -
 #include "UIInterface.h"
 #include <settings/SettingsStore.h>
 #include <SDL.h>
+#include <opengl/ui/GLUITextButton.h>
+#include <opengl/ui/GLUIButton.h>
+#include <opengl/ui/GLUICallbackHandler.h>
+#include <opengl/ui/GLUITextView.h>
+#include <opengl/ui/GLUIInertWidget.h>
 struct SDL_Window;
 class GUIClient;
 class TextRendererFontFace;
+class OpenGLEngine;
+class OpenGLScene;
+template <class T> class Reference;
+class OpenGLTexture;
 
 
-class SDLUIInterface final : public UIInterface
+class SDLUIInterface final : public UIInterface, public GLUICallbackHandler
 {
 public:
 	virtual void appendChatMessage(const std::string& msg) override;
@@ -141,6 +150,34 @@ public:
 
 	Reference<SettingsStore> settings_store;
 	void* d3d11_device;
+	
+	bool show_parcels_enabled;
+	
+	// About dialog
+	void showAboutDialog();
+	void hideAboutDialog();
+	bool isAboutDialogVisible() const { return about_dialog_visible; }
+	bool handleAboutDialogMousePress(const MouseEvent& e); // Check if click is outside dialog
+	
+	// GLUICallbackHandler
+	virtual void eventOccurred(GLUICallbackEvent& event) override;
+	
+private:
+	GLUIInertWidgetRef about_dialog_background_panel;
+	GLUITextViewRef about_dialog_beta_text;
+	GLUITextViewRef about_dialog_title_text;
+	GLUITextViewRef about_dialog_subtitle_text;
+	GLUITextViewRef about_dialog_links_label_text;
+	GLUITextButtonRef about_dialog_telegram_channel_button;
+	GLUITextButtonRef about_dialog_site_button;
+	GLUITextButtonRef about_dialog_github_button;
+	GLUITextButtonRef about_dialog_vk_button1;
+	GLUITextViewRef about_dialog_author_label_text;
+	GLUITextViewRef about_dialog_author_name_text;
+	GLUITextButtonRef about_dialog_vk_button2;
+	GLUITextButtonRef about_dialog_telegram_button;
+	GLUITextButtonRef about_dialog_close_button;
+	bool about_dialog_visible = false;
 
 	//Reference<TextRendererFontFace> font;
 };

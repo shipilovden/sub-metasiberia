@@ -4103,7 +4103,7 @@ void MainWindow::handleURL(const QUrl &url)
 
 void MainWindow::openServerScriptLogSlot()
 {
-	const std::string hostname = gui_client.server_hostname.empty() ? "substrata.info" : gui_client.server_hostname;
+	const std::string hostname = gui_client.server_hostname.empty() ? "89.104.70.23" : gui_client.server_hostname;
 
 	QDesktopServices::openUrl(QtUtils::toQString("https://" + hostname + "/script_log"));
 }
@@ -4548,7 +4548,7 @@ int main(int argc, char *argv[])
 
 		//std::string server_hostname = "substrata.info";
 		//std::string server_userpath = "";
-		std::string server_URL = "sub://substrata.info";
+		std::string server_URL = "sub://89.104.70.23/";
 		bool server_URL_explicitly_specified = false;
 
 		if(parsed_args.isArgPresent("-h"))

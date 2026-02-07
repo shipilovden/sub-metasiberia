@@ -7,11 +7,20 @@ Copyright Glare Technologies Limited 2022 -
 
 
 #include "GUIClient.h"
+#include "URLParser.h"
+#if USE_SDL || EMSCRIPTEN
+#include "SDLUIInterface.h"
+#endif
 #include <tracy/Tracy.hpp>
+#include <utils/ConPrint.h>
+#include <utils/Exception.h>
+#include <utils/StringUtils.h>
+#include <maths/mathstypes.h>
 
 
 MiscInfoUI::MiscInfoUI()
 :	gui_client(NULL),
+	transit_input_visible(false),
 	visible(true)
 {}
 
@@ -28,18 +37,18 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 	gui_client = gui_client_;
 	gl_ui = gl_ui_;
 
-#if EMSCRIPTEN // Only show login, signup and movement buttons on web.
+#if EMSCRIPTEN || USE_SDL // Show login, signup and movement buttons on web and SDL.
 	GLUITextButton::CreateArgs login_args;
-	login_args.tooltip = "Log in to an existing user account";
+	login_args.tooltip = "Войти в существующий аккаунт";
 	login_args.font_size_px = 12;
-	login_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Log in", Vec2f(0.f), login_args);
+	login_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Войти", Vec2f(0.f), login_args);
 	login_button->handler = this;
 	gl_ui->addWidget(login_button);
 
 	GLUITextButton::CreateArgs signup_args;
-	signup_args.tooltip = "Create a new user account";
+	signup_args.tooltip = "Создать новый аккаунт";
 	signup_args.font_size_px = 12;
-	signup_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Sign up", Vec2f(0.f), signup_args);
+	signup_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Зарегистрироваться", Vec2f(0.f), signup_args);
 	signup_button->handler = this;
 	gl_ui->addWidget(signup_button);
 
@@ -51,10 +60,146 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Avatar settings";
+		args.tooltip = "Настройки аватара";
 		avatar_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/avatar.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
 		avatar_button->handler = this;
 		gl_ui->addWidget(avatar_button);
+	}
+
+	{
+		try
+		{
+			GLUIButton::CreateArgs args;
+			args.tooltip = "Транзит";
+			transit_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/transit_icon.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+			transit_button->handler = this;
+			gl_ui->addWidget(transit_button);
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("Warning: Failed to create transit button: " + e.what());
+			// transit_button will remain null, which is fine - it will just not be shown
+		}
+	}
+
+	{
+		try
+		{
+			GLUIButton::CreateArgs args;
+			args.tooltip = "Домой";
+			home_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/home.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+			home_button->handler = this;
+			gl_ui->addWidget(home_button);
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("Warning: Failed to create home button: " + e.what());
+			// home_button will remain null, which is fine - it will just not be shown
+		}
+	}
+
+	{
+		try
+		{
+			GLUIButton::CreateArgs args;
+			args.tooltip = "Показать участки";
+			parcels_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/parcels.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+			parcels_button->handler = this;
+			gl_ui->addWidget(parcels_button);
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("Warning: Failed to create parcels button: " + e.what());
+			// parcels_button will remain null, which is fine - it will just not be shown
+		}
+		
+		// Create anchor button (between home and parcels)
+		{
+			try
+			{
+				GLUIButton::CreateArgs args;
+				args.tooltip = "Заякориться";
+				anchor_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/anchor.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+				anchor_button->handler = this;
+				gl_ui->addWidget(anchor_button);
+			}
+			catch(glare::Exception& e)
+			{
+				conPrint("Warning: Failed to create anchor button: " + e.what());
+				// anchor_button will remain null, which is fine - it will just not be shown
+			}
+		}
+	}
+
+	// Create about button (next to parcels button)
+	{
+		try
+		{
+			GLUIButton::CreateArgs args;
+			args.tooltip = "О программе";
+			about_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/about.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+			about_button->handler = this;
+			gl_ui->addWidget(about_button);
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("Warning: Failed to create about button: " + e.what());
+			// about_button will remain null, which is fine - it will just not be shown
+		}
+	}
+
+    // Create transit input field (like chat input) and thin white outline
+	{
+		GLUILineEdit::CreateArgs create_args;
+		create_args.background_colour = Colour3f(0.1f); // Same gray as chat input
+		create_args.background_alpha = 0.8f; // Slightly transparent like chat input
+		create_args.font_size_px = 12; // Same as chat
+		create_args.width = gl_ui->getUIWidthForDevIndepPixelWidth(200); // Small width
+		transit_input_field = new GLUILineEdit(*gl_ui_, opengl_engine_, Vec2f(0.f), create_args);
+		
+		// Set up Enter key handler to connect to server
+		GLUILineEdit* transit_input_field_ptr = transit_input_field.ptr();
+		MiscInfoUI* this_ptr = this; // Capture 'this' to access transit_input_visible
+		transit_input_field->on_enter_pressed = [transit_input_field_ptr, gui_client_, this_ptr]()
+		{
+			if(!transit_input_field_ptr->getText().empty())
+			{
+				std::string url_string = transit_input_field_ptr->getText();
+				
+				// If URL doesn't start with "sub://", add it
+				if(url_string.find("sub://") != 0)
+				{
+					url_string = "sub://" + url_string;
+				}
+				
+				try
+				{
+					// Parse the URL
+					URLParseResults parse_results = URLParser::parseURL(url_string);
+					
+					// Schedule connection for timerEvent() to avoid blocking UI thread
+					gui_client_->pending_transit_connection = parse_results;
+					gui_client_->has_pending_transit_connection = true;
+					
+					// Clear the input field
+					transit_input_field_ptr->clear();
+					
+					// Hide the input field
+					this_ptr->transit_input_visible = false;
+					if(this_ptr->transit_input_field)
+						this_ptr->transit_input_field->setVisible(false);
+				}
+				catch(glare::Exception& e)
+				{
+					// Show error message
+					conPrint("Error parsing URL: " + e.what());
+					gui_client_->ui_interface->showPlainTextMessageBox("Ошибка разбора URL", e.what());
+				}
+			}
+		};
+		
+        gl_ui->addWidget(transit_input_field);
+		transit_input_field->setVisible(false);
 	}
 #endif
 
@@ -69,6 +214,12 @@ void MiscInfoUI::destroy()
 	checkRemoveAndDeleteWidget(gl_ui, signup_button);
 	checkRemoveAndDeleteWidget(gl_ui, logged_in_button);
 	checkRemoveAndDeleteWidget(gl_ui, avatar_button);
+	checkRemoveAndDeleteWidget(gl_ui, transit_button);
+	checkRemoveAndDeleteWidget(gl_ui, home_button);
+	checkRemoveAndDeleteWidget(gl_ui, anchor_button);
+	checkRemoveAndDeleteWidget(gl_ui, parcels_button);
+	checkRemoveAndDeleteWidget(gl_ui, about_button);
+    checkRemoveAndDeleteWidget(gl_ui, transit_input_field);
 	checkRemoveAndDeleteWidget(gl_ui, admin_msg_text_view);
 	checkRemoveAndDeleteWidget(gl_ui, unit_string_view);
 
@@ -99,6 +250,21 @@ void MiscInfoUI::setVisible(bool visible_)
 	
 	if(avatar_button) 
 		avatar_button->setVisible(visible);
+
+	if(transit_button) 
+		transit_button->setVisible(visible);
+
+	if(home_button)
+		home_button->setVisible(visible);
+	
+	if(anchor_button)
+		anchor_button->setVisible(visible);
+	
+	if(parcels_button)
+		parcels_button->setVisible(visible);
+
+	if(transit_input_field)
+		transit_input_field->setVisible(visible && transit_input_visible);
 
 	if(admin_msg_text_view) 
 		admin_msg_text_view->setVisible(visible);
@@ -309,13 +475,112 @@ void MiscInfoUI::updateWidgetPositions()
 
 		if(avatar_button)
 		{
-			const float avatar_button_w = gl_ui->getUIWidthForDevIndepPixelWidth(40);
+			const float button_size = gl_ui->getUIWidthForDevIndepPixelWidth(40); // Size for both avatar and transit buttons
 
 			// Adjust position slightly differently depending on if we have login/logged-in buttons or not.
+			float avatar_x;
 			if(login_button || logged_in_button)
-				avatar_button->setPosAndDims(/*botleft=*/Vec2f(cur_x - margin * 0.4f, min_max_y - avatar_button_w * 0.82f - margin), Vec2f(avatar_button_w, avatar_button_w));
+				avatar_x = cur_x - margin * 0.4f;
 			else
-				avatar_button->setPosAndDims(/*botleft=*/Vec2f(cur_x - margin * 0.1f, min_max_y - avatar_button_w * 0.82f - margin), Vec2f(avatar_button_w, avatar_button_w));
+				avatar_x = cur_x - margin * 0.1f;
+			
+			const float avatar_y = min_max_y - button_size * 0.82f - margin;
+			const Vec2f button_dims = Vec2f(button_size, button_size);
+			avatar_button->setPosAndDims(/*botleft=*/Vec2f(avatar_x, avatar_y), button_dims);
+			
+			// Position transit button right next to avatar button - use EXACTLY the same size
+			if(transit_button)
+			{
+				const float button_spacing = margin * 0.3f; // Small spacing between buttons
+				const float transit_x = avatar_x + button_size + button_spacing;
+				transit_button->setPosAndDims(/*botleft=*/Vec2f(transit_x, avatar_y), button_dims);
+				
+				// Position home button right next to transit button - use EXACTLY the same size
+				if(home_button)
+				{
+					const float home_x = transit_x + button_size + button_spacing;
+					home_button->setPosAndDims(/*botleft=*/Vec2f(home_x, avatar_y), button_dims);
+					
+					// Position anchor button between home and parcels
+					if(anchor_button)
+					{
+						const float anchor_x = home_x + button_size + button_spacing;
+						anchor_button->setPosAndDims(/*botleft=*/Vec2f(anchor_x, avatar_y), button_dims);
+					}
+					
+					// Position parcels button right next to anchor button (or home if no anchor) - use EXACTLY the same size
+					if(parcels_button)
+					{
+						const float parcels_x = anchor_button ? (anchor_button->rect.getMax().x + button_spacing) : (home_x + button_size + button_spacing);
+						parcels_button->setPosAndDims(/*botleft=*/Vec2f(parcels_x, avatar_y), button_dims);
+					}
+					
+					// Position about button right next to parcels button - use EXACTLY the same size
+					if(about_button)
+					{
+						const float about_x = parcels_button ? (parcels_button->rect.getMax().x + button_spacing) : (anchor_button ? (anchor_button->rect.getMax().x + button_spacing) : (home_x + button_size + button_spacing));
+						about_button->setPosAndDims(/*botleft=*/Vec2f(about_x, avatar_y), button_dims);
+					}
+				}
+				
+                // Position transit input field centered on screen, slightly above cursor line
+                if(transit_input_field)
+                {
+                    const float input_field_width = gl_ui->getUIWidthForDevIndepPixelWidth(500); // Wider input
+                    const float center_x = 0.f;
+                    const float input_field_x = center_x - input_field_width / 2.f;
+                    const float input_field_y = gl_ui->getViewportMinMaxY() * 0.2f; // raise above center ~20% of half-height
+                    transit_input_field->setWidth(input_field_width);
+                    transit_input_field->setPos(Vec2f(input_field_x, input_field_y));
+
+                }
+			}
+		}
+		else if(transit_button)
+		{
+			// If avatar_button doesn't exist, position transit_button independently
+			const float button_w = gl_ui->getUIWidthForDevIndepPixelWidth(40); // Same size as avatar button would be
+			float transit_x;
+			if(login_button || logged_in_button)
+				transit_x = cur_x - margin * 0.4f;
+			else
+				transit_x = cur_x - margin * 0.1f;
+			const float transit_y = min_max_y - button_w * 0.82f - margin;
+			transit_button->setPosAndDims(/*botleft=*/Vec2f(transit_x, transit_y), Vec2f(button_w, button_w));
+			
+			// Position home button right next to transit button - use EXACTLY the same size
+			if(home_button)
+			{
+				const float button_spacing = margin * 0.3f; // Small spacing between buttons
+				const float home_x = transit_x + button_w + button_spacing;
+				home_button->setPosAndDims(/*botleft=*/Vec2f(home_x, transit_y), Vec2f(button_w, button_w));
+				
+				// Position anchor button between home and parcels
+				if(anchor_button)
+				{
+					const float anchor_x = home_x + button_w + button_spacing;
+					anchor_button->setPosAndDims(/*botleft=*/Vec2f(anchor_x, transit_y), Vec2f(button_w, button_w));
+				}
+				
+				// Position parcels button right next to anchor button (or home if no anchor) - use EXACTLY the same size
+				if(parcels_button)
+				{
+					const float parcels_x = anchor_button ? (anchor_button->rect.getMax().x + button_spacing) : (home_x + button_w + button_spacing);
+					parcels_button->setPosAndDims(/*botleft=*/Vec2f(parcels_x, transit_y), Vec2f(button_w, button_w));
+				}
+			}
+			
+            // Position transit input field centered on screen, slightly above cursor line
+            if(transit_input_field)
+            {
+                const float input_field_width = gl_ui->getUIWidthForDevIndepPixelWidth(500); // Wider input
+                const float center_x = 0.f;
+                const float input_field_x = center_x - input_field_width / 2.f;
+                const float input_field_y = gl_ui->getViewportMinMaxY() * 0.2f; // raise above center ~20% of half-height
+                transit_input_field->setWidth(input_field_width);
+                transit_input_field->setPos(Vec2f(input_field_x, input_field_y));
+
+            }
 		}
 
 
@@ -345,9 +610,12 @@ void MiscInfoUI::updateWidgetPositions()
 		{
 			const float spacing = gl_ui->getUIWidthForDevIndepPixelWidth(25);
 
-			const float button_w = myMax(gl_ui->getUIWidthForDevIndepPixelWidth(100), 0.15f);
+			// Joystick size: 66px (doubled from 33px)
+			const float button_w = myMax(gl_ui->getUIWidthForDevIndepPixelWidth(66), 0.05f);
 			const float button_h = button_w;
-			const Vec2f pos = Vec2f(-1.f + 0.4f /*+ spacing*/, -min_max_y + spacing);
+			// Shift joystick right to avoid overlap with enlarged chat button (chat is now 60px instead of 40px)
+			// Original position was -1.f + 0.4f, shift it further right
+			const Vec2f pos = Vec2f(-1.f + 0.55f, -min_max_y + spacing);
 
 			movement_button->setPosAndDims(pos, Vec2f(button_w, button_h));
 		}
@@ -406,6 +674,148 @@ void MiscInfoUI::eventOccurred(GLUICallbackEvent& event)
 		else if(event.widget == avatar_button.ptr())
 		{
 			gui_client->ui_interface->showAvatarSettings();
+			event.accepted = true;
+		}
+		else if(event.widget == transit_button.ptr())
+		{
+            // Toggle transit input field visibility
+			transit_input_visible = !transit_input_visible;
+			if(transit_input_field)
+			{
+				transit_input_field->setVisible(transit_input_visible);
+				updateWidgetPositions(); // Update position
+			}
+			event.accepted = true;
+		}
+		else if(event.widget == home_button.ptr())
+		{
+			// Always connect to sub://vr.metasiberia.com/Admin
+			try
+			{
+				URLParseResults parse_results = URLParser::parseURL("sub://vr.metasiberia.com/Admin");
+				
+				// Schedule connection for timerEvent() to avoid blocking UI thread
+				gui_client->pending_transit_connection = parse_results;
+				gui_client->has_pending_transit_connection = true;
+			}
+			catch(glare::Exception& e)
+			{
+				conPrint("Error parsing home URL: " + e.what());
+				gui_client->ui_interface->showPlainTextMessageBox("Ошибка разбора URL", e.what());
+			}
+			
+			event.accepted = true;
+		}
+		else if(event.widget == anchor_button.ptr())
+		{
+			// Save current position as start location
+#if USE_SDL || EMSCRIPTEN
+			if(gui_client && gui_client->ui_interface)
+			{
+				SDLUIInterface* sdl_ui = dynamic_cast<SDLUIInterface*>(gui_client->ui_interface);
+				if(sdl_ui && sdl_ui->settings_store.nonNull())
+				{
+					try
+					{
+						// Get current position
+						const Vec3d pos = gui_client->cam_controller.getFirstPersonPosition();
+						const double heading_deg = Maths::doubleMod(::radToDegree(gui_client->cam_controller.getAngles().x), 360.0);
+						
+						// Build URL string with current position
+						std::string url;
+						url.reserve(128);
+						url += "sub://";
+						url += gui_client->server_hostname;
+						url += "/";
+						url += gui_client->server_worldname;
+						url += "?x=";
+						url += doubleToStringNDecimalPlaces(pos.x, 1);
+						url += "&y=";
+						url += doubleToStringNDecimalPlaces(pos.y, 1);
+						url += "&z=";
+						url += doubleToStringNDecimalPlaces(pos.z, 2);
+						url += "&heading=";
+						url += doubleToStringNDecimalPlaces(heading_deg, 1);
+						
+						// Save to settings
+						sdl_ui->settings_store->setStringValue("setting/start_location_URL", url);
+						
+						conPrint("Заякорились: сохранено местоположение " + url);
+					}
+					catch(glare::Exception& e)
+					{
+						conPrint("Ошибка при сохранении местоположения: " + e.what());
+					}
+				}
+			}
+#endif
+			event.accepted = true;
+		}
+		else if(event.widget == parcels_button.ptr())
+		{
+			// Toggle show parcels
+#if USE_SDL || EMSCRIPTEN
+			SDLUIInterface* sdl_ui_interface = dynamic_cast<SDLUIInterface*>(gui_client->ui_interface);
+			if(sdl_ui_interface)
+			{
+				sdl_ui_interface->show_parcels_enabled = !sdl_ui_interface->show_parcels_enabled;
+				
+				if(sdl_ui_interface->show_parcels_enabled)
+				{
+					gui_client->addParcelObjects();
+				}
+				else
+				{
+					gui_client->removeParcelObjects();
+				}
+			}
+#endif
+			
+			event.accepted = true;
+		}
+		else if(event.widget == about_button.ptr())
+		{
+			// Toggle about dialog (show if hidden, hide if visible)
+			event.accepted = true;
+#if USE_SDL || EMSCRIPTEN
+			if(gui_client && gui_client->ui_interface)
+			{
+				// Try to cast to SDLUIInterface to call showAboutDialog
+				SDLUIInterface* sdl_ui = dynamic_cast<SDLUIInterface*>(gui_client->ui_interface);
+				if(sdl_ui)
+				{
+					if(sdl_ui->isAboutDialogVisible())
+						sdl_ui->hideAboutDialog();
+					else
+						sdl_ui->showAboutDialog();
+				}
+				else
+				{
+					conPrint("О программе: SDLUIInterface недоступен");
+				}
+			}
+#endif
 		}
 	}
+}
+
+
+bool MiscInfoUI::handleTransitInputMousePress(const MouseEvent& e)
+{
+#if !EMSCRIPTEN
+    if(!transit_input_visible || transit_input_field.isNull() || !gl_ui.nonNull())
+        return false;
+
+    // Convert mouse coordinates to UI coordinates
+    const Vec2f coords = gl_ui->UICoordsForOpenGLCoords(e.gl_coords);
+
+    // If click is outside input field rect, hide it
+    if(!transit_input_field->rect.inOpenRectangle(coords))
+    {
+        transit_input_visible = false;
+        transit_input_field->setVisible(false);
+        return true;
+    }
+#endif
+    return false;
 }
