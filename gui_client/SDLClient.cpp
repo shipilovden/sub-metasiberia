@@ -44,6 +44,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <GL/gl3w.h>
 #include <SDL_opengl.h>
 #include <SDL.h>
+#include <SDL_syswm.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
 #include <string>
@@ -376,15 +377,36 @@ int main(int argc, char** argv)
 #endif
 
 #if EMSCRIPTEN
-		const char* window_name = "Substrata Web Client"; // Seems to get used for the web page title
+		const char* window_name = "Metasiberia Web Client"; // Seems to get used for the web page title
 #else
-		const char* window_name = "Substrata SDL Client";
+		const char* window_name = "Metasiberia SDL beta";
 #endif
 		// SDL_WINDOW_ALLOW_HIGHDPI results in 1:1 drawable (viewport) pixels to device/hardware pixels.
 		// This is too high res for mobile - rendering is too slow.  So just leave it off for now.
 		win = SDL_CreateWindow(window_name, 600, 100, primary_W, primary_H, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 		if(win == nullptr)
 			throw glare::Exception("SDL_CreateWindow Error: " + std::string(SDL_GetError()));
+
+		// Set window icon
+#if defined(_WIN32)
+		const std::string icon_path = base_dir + "/data/resources/icons/metasiberia.ico";
+		if(FileUtils::fileExists(icon_path))
+		{
+			// On Windows, use WinAPI to load ICO
+			HICON hIcon = (HICON)LoadImageA(GetModuleHandle(NULL), icon_path.c_str(), IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+			if(hIcon != NULL)
+			{
+				SDL_SysWMinfo wmInfo;
+				SDL_VERSION(&wmInfo.version);
+				if(SDL_GetWindowWMInfo(win, &wmInfo))
+				{
+					HWND hwnd = wmInfo.info.win.window;
+					SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+					SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+				}
+			}
+		}
+#endif
 
 		cur_canvas_css_W = primary_W;
 		cur_canvas_css_H = primary_H;
