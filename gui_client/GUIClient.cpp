@@ -144,6 +144,7 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	appdata_path(appdata_path_),
 	parsed_args(args),
 	connection_state(ServerConnectionState_NotConnected),
+	has_pending_transit_connection(false),
 	received_world_settings_since_connect_or_world_change(false),
 	logged_in_user_id(UserID::invalidUserID()),
 	logged_in_user_flags(0),
@@ -5399,6 +5400,13 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 {
 	ZoneScoped; // Tracy profiler
 	Timer timer_event_timer;
+
+	// Handle pending transit connection (from SDL UI)
+	if(has_pending_transit_connection)
+	{
+		connectToServer(pending_transit_connection);
+		has_pending_transit_connection = false;
+	}
 
 	if((connection_state == ServerConnectionState_NotConnected) && (retry_connection_timer.elapsed() > 10.0))
 	{

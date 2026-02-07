@@ -812,6 +812,10 @@ public:
 	bool extracted_anim_data_loaded;
 
 	URLParseResults last_url_parse_results;
+	
+	// Pending transit connection (for SDL UI)
+	URLParseResults pending_transit_connection;
+	bool has_pending_transit_connection;
 
 	struct Notification
 	{

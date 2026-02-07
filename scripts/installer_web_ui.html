@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metasiberia Beta - Installation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .progress-container {
+            margin: 30px 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 15px;
+        }
+        
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            color: #333;
+            z-index: 1;
+        }
+        
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .step.active {
+            background: #e8f0fe;
+            border-left-color: #764ba2;
+        }
+        
+        .step.completed {
+            background: #e8f5e9;
+            border-left-color: #4caf50;
+        }
+        
+        .step-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .step-description {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .button:active {
+            transform: translateY(0);
+        }
+        
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .info-box {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .info-box h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        
+        .info-box ul {
+            margin-left: 20px;
+            color: #856404;
+        }
+        
+        .logo {
+            text-align: center;
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🎮</div>
+        <h1>Metasiberia Beta</h1>
+        <p class="subtitle">Virtual Reality Platform Installation</p>
+        
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+                <div class="progress-text" id="progressText">0%</div>
+            </div>
+        </div>
+        
+        <div class="step active" id="step1">
+            <div class="step-title">📦 Step 1: Preparing Installation</div>
+            <div class="step-description">Checking system requirements...</div>
+        </div>
+        
+        <div class="step" id="step2">
+            <div class="step-title">📥 Step 2: Extracting Files</div>
+            <div class="step-description">Installing application files...</div>
+        </div>
+        
+        <div class="step" id="step3">
+            <div class="step-title">🔧 Step 3: Configuring</div>
+            <div class="step-description">Setting up CEF and dependencies...</div>
+        </div>
+        
+        <div class="step" id="step4">
+            <div class="step-title">✅ Step 4: Completing</div>
+            <div class="step-description">Creating shortcuts and finalizing...</div>
+        </div>
+        
+        <div class="info-box">
+            <h3>System Requirements</h3>
+            <ul>
+                <li>Windows 10/11 (64-bit)</li>
+                <li>4 GB RAM minimum (8 GB recommended)</li>
+                <li>DirectX 11 compatible graphics card</li>
+                <li>~2 GB free disk space</li>
+            </ul>
+        </div>
+        
+        <button class="button" id="installButton" onclick="startInstallation()">Start Installation</button>
+    </div>
+    
+    <script>
+        let currentStep = 0;
+        let progress = 0;
+        
+        function updateProgress(percent) {
+            progress = percent;
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = Math.round(percent) + '%';
+        }
+        
+        function setStepActive(stepNum) {
+            // Reset all steps
+            for (let i = 1; i <= 4; i++) {
+                const step = document.getElementById('step' + i);
+                step.classList.remove('active', 'completed');
+            }
+            
+            // Set current step as active
+            if (stepNum <= 4) {
+                document.getElementById('step' + stepNum).classList.add('active');
+            }
+            
+            // Mark previous steps as completed
+            for (let i = 1; i < stepNum; i++) {
+                document.getElementById('step' + i).classList.add('completed');
+            }
+        }
+        
+        function startInstallation() {
+            const button = document.getElementById('installButton');
+            button.disabled = true;
+            button.textContent = 'Installing...';
+            
+            // Simulate installation process
+            simulateInstallation();
+        }
+        
+        function simulateInstallation() {
+            // Step 1: Preparing (0-25%)
+            setStepActive(1);
+            updateProgress(10);
+            setTimeout(() => {
+                updateProgress(25);
+                
+                // Step 2: Extracting (25-60%)
+                setStepActive(2);
+                let extractProgress = 25;
+                const extractInterval = setInterval(() => {
+                    extractProgress += 2;
+                    updateProgress(extractProgress);
+                    if (extractProgress >= 60) {
+                        clearInterval(extractInterval);
+                        
+                        // Step 3: Configuring (60-85%)
+                        setStepActive(3);
+                        let configProgress = 60;
+                        const configInterval = setInterval(() => {
+                            configProgress += 2;
+                            updateProgress(configProgress);
+                            if (configProgress >= 85) {
+                                clearInterval(configInterval);
+                                
+                                // Step 4: Completing (85-100%)
+                                setStepActive(4);
+                                let completeProgress = 85;
+                                const completeInterval = setInterval(() => {
+                                    completeProgress += 2;
+                                    updateProgress(completeProgress);
+                                    if (completeProgress >= 100) {
+                                        clearInterval(completeInterval);
+                                        setStepActive(5);
+                                        button.textContent = 'Installation Complete!';
+                                        button.style.background = 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)';
+                                        
+                                        // Notify parent process (if running in CEF)
+                                        if (window.cef && window.cef.postMessage) {
+                                            window.cef.postMessage('installation_complete');
+                                        }
+                                    }
+                                }, 100);
+                            }
+                        }, 100);
+                    }
+                }, 100);
+            }, 1000);
+        }
+        
+        // Auto-start if running in installer context
+        if (window.location.search.includes('auto=true')) {
+            setTimeout(startInstallation, 500);
+        }
+    </script>
+</body>
+</html>

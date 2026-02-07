@@ -11,6 +11,7 @@ Copyright Glare Technologies Limited 2022 -
 #include <opengl/ui/GLUITextButton.h>
 #include <opengl/ui/GLUICallbackHandler.h>
 #include <opengl/ui/GLUITextView.h>
+#include <opengl/ui/GLUILineEdit.h>
 
 
 class GUIClient;
@@ -56,9 +57,21 @@ private:
 	GLUITextButtonRef signup_button;
 	GLUITextButtonRef logged_in_button; // shows 'logged in as USERNAME'
 	GLUIButtonRef avatar_button;
+	GLUIButtonRef transit_button;
+	GLUIButtonRef home_button;
+	GLUIButtonRef anchor_button;
+	GLUIButtonRef parcels_button;
+	GLUIButtonRef about_button;
+	GLUILineEditRef transit_input_field;
+	bool transit_input_visible;
+
+	// Hide transit input when clicking outside
+	// (moved declaration to public section)
 
 public:
 	GLUIButtonRef movement_button;
+	// Handle mouse press for transit input (needs to be callable from GUIClient)
+	bool handleTransitInputMousePress(const MouseEvent& e);
 private:
 	GLUITextViewRef admin_msg_text_view;
 

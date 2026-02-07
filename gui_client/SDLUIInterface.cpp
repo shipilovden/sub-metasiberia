@@ -20,6 +20,16 @@ Copyright Glare Technologies Limited 2022 -
 #if EMSCRIPTEN
 #include <emscripten.h>
 #endif
+#include <opengl/ui/GLUI.h>
+#include <opengl/ui/GLUITextButton.h>
+#include <opengl/ui/GLUITextView.h>
+#include <opengl/ui/GLUIInertWidget.h>
+#include <graphics/SRGBUtils.h>
+#include <maths/mathstypes.h>
+#include <AESEncryption.h>
+#include <utils/StringUtils.h>
+#include <utils/Exception.h>
+#include <cstring>
 
 
 
@@ -74,7 +84,7 @@ void SDLUIInterface::clearChatMessages()
 
 bool SDLUIInterface::isShowParcelsEnabled() const
 {
-	return false;
+	return show_parcels_enabled;
 }
 
 void SDLUIInterface::updateOnlineUsersList()
@@ -360,12 +370,88 @@ Vec2i SDLUIInterface::getMouseCursorWidgetPos() // Get mouse cursor position, re
 
 std::string SDLUIInterface::getUsernameForDomain(const std::string& domain)
 {
+	if(!settings_store.nonNull())
+		return std::string();
+	
+	// Try to find credentials for this domain
+	// Credentials are stored as: credentials/0/domain, credentials/0/username, credentials/0/encrypted_password, etc.
+	// Or as: credentials/domain/username, credentials/domain/encrypted_password (simpler format)
+	
+	// First try the simpler format: credentials/domain/username
+	std::string username = settings_store->getStringValue("credentials/" + domain + "/username", "");
+	if(!username.empty())
+		return username;
+	
+	// Try the array format: credentials/0/domain, credentials/0/username, etc.
+	for(int i = 0; i < 100; ++i) // Check up to 100 credentials
+	{
+		std::string cred_domain = settings_store->getStringValue("credentials/" + std::to_string(i) + "/domain", "");
+		if(cred_domain.empty())
+			break; // No more credentials
+		
+		if(cred_domain == domain)
+		{
+			return settings_store->getStringValue("credentials/" + std::to_string(i) + "/username", "");
+		}
+	}
+	
 	return std::string();
 }
 
 std::string SDLUIInterface::getDecryptedPasswordForDomain(const std::string& domain)
 {
-	return std::string();
+	if(!settings_store.nonNull())
+		return std::string();
+	
+	// Try to find encrypted password for this domain
+	std::string encrypted_password;
+	
+	// First try the simpler format: credentials/domain/encrypted_password
+	encrypted_password = settings_store->getStringValue("credentials/" + domain + "/encrypted_password", "");
+	
+	// If not found, try the array format
+	if(encrypted_password.empty())
+	{
+		for(int i = 0; i < 100; ++i) // Check up to 100 credentials
+		{
+			std::string cred_domain = settings_store->getStringValue("credentials/" + std::to_string(i) + "/domain", "");
+			if(cred_domain.empty())
+				break; // No more credentials
+			
+			if(cred_domain == domain)
+			{
+				encrypted_password = settings_store->getStringValue("credentials/" + std::to_string(i) + "/encrypted_password", "");
+				break;
+			}
+		}
+	}
+	
+	if(encrypted_password.empty())
+		return std::string();
+	
+	// Decrypt the password using the same logic as CredentialManager
+	try
+	{
+		// Decode base64 to raw bytes
+		std::vector<unsigned char> cyphertex_binary;
+		Base64::decode(encrypted_password, cyphertex_binary);
+		
+		// AES decrypt
+		const std::string key = "RHJKEF_ZAepxYxYkrL3c6rWD";
+		const std::string salt = "P6A3uZ4P";
+		AESEncryption aes(key, salt);
+		std::vector<unsigned char> plaintext_v = aes.decrypt(cyphertex_binary);
+		
+		// Convert to std::string
+		std::string plaintext(plaintext_v.size(), '\0');
+		if(!plaintext_v.empty())
+			std::memcpy(&plaintext[0], plaintext_v.data(), plaintext_v.size());
+		return plaintext;
+	}
+	catch(glare::Exception&)
+	{
+		return "";
+	}
 }
 
 bool SDLUIInterface::inScreenshotTakingMode()
@@ -566,4 +652,385 @@ void SDLUIInterface::makeGLContextCurrent(void* context)
 void* SDLUIInterface::getID3D11Device() const
 {
 	return d3d11_device;
+}
+
+
+void SDLUIInterface::showAboutDialog()
+{
+	if(!gui_client || !gui_client->gl_ui || !gui_client->opengl_engine)
+		return;
+	
+	GLUIRef gl_ui = gui_client->gl_ui;
+	Reference<OpenGLEngine>& opengl_engine = gui_client->opengl_engine;
+	
+	// Create background panel - use same style as PhotoModeUI and avatar preview (0.7f background)
+	if(about_dialog_background_panel.isNull())
+	{
+		GLUIInertWidget::CreateArgs args;
+		args.background_colour = Colour3f(0.7f); // Same light gray as PhotoModeUI and avatar preview
+		args.background_alpha = 0.8f; // Same alpha as working dialogs
+		args.z = -0.488f; // Background behind text/button, same as PhotoModeUI upload widget
+		about_dialog_background_panel = new GLUIInertWidget(*gl_ui, opengl_engine, args);
+		gl_ui->addWidget(about_dialog_background_panel);
+	}
+	
+	// Calculate panel position (centered on screen)
+	const float center_x = 0.f;
+	const float min_max_y = gl_ui->getViewportMinMaxY();
+	const float dialog_w = gl_ui->getUIWidthForDevIndepPixelWidth(650); // Increased from 600 to 650
+	const float dialog_h = gl_ui->getUIWidthForDevIndepPixelWidth(480); // Increased from 400 to 480
+	// Center vertically: min_max_y is top, -min_max_y is bottom, center is at 0
+	const Vec2f dialog_min = Vec2f(center_x - dialog_w/2.f, -dialog_h/2.f);
+	
+	// Position background panel
+	about_dialog_background_panel->setPosAndDims(dialog_min, Vec2f(dialog_w, dialog_h));
+	
+	// Calculate positions - start from top
+	const float text_left_x = dialog_min.x + gl_ui->getUIWidthForDevIndepPixelWidth(40);
+	const float line_height = gl_ui->getUIWidthForDevIndepPixelWidth(28); // Font size (18) + spacing (10)
+	const float line_spacing = gl_ui->getUIWidthForDevIndepPixelWidth(15); // Space between sections
+	float current_y = dialog_min.y + dialog_h - gl_ui->getUIWidthForDevIndepPixelWidth(50);
+	
+	// Common text args
+	GLUITextView::CreateArgs text_args;
+	text_args.background_colour = Colour3f(0.f);
+	text_args.background_alpha = 0.f;
+	text_args.text_colour = toLinearSRGB(Colour3f(0.1f));
+	text_args.text_alpha = 1.0f;
+	text_args.font_size_px = 18;
+	text_args.padding_px = 5;
+	text_args.max_width = dialog_w * 2.0f;
+	text_args.z = -0.5f;
+	text_args.line_0_x_offset = 0.f;
+	
+	// Common button args - white background with dark text (default GLUITextButton style)
+	GLUITextButton::CreateArgs button_args;
+	button_args.font_size_px = 18;
+	button_args.z = -0.5f;
+	// Use default colors: white background, dark text
+	button_args.background_colour = Colour3f(1.f); // White background (default)
+	button_args.text_colour = toLinearSRGB(Colour3f(0.1f)); // Dark text (default)
+	button_args.mouseover_background_colour = toLinearSRGB(Colour3f(0.8f)); // Light gray on hover (default)
+	button_args.mouseover_text_colour = toLinearSRGB(Colour3f(0.1f)); // Dark text on hover (default)
+	
+	// 0. Beta label: "Metasiberia Beta" (centered approximately)
+	if(about_dialog_beta_text.isNull())
+	{
+		GLUITextView::CreateArgs beta_args = text_args;
+		beta_args.font_size_px = 20; // Slightly larger
+		// Approximate text width: "Metasiberia Beta" is about 16 characters * 12 pixels = ~192 pixels
+		// Convert to UI coords and center: dialog_w/2 - text_width/2
+		const float estimated_text_width = gl_ui->getUIWidthForDevIndepPixelWidth(180); // Approximate width
+		const float beta_x = center_x - estimated_text_width / 2.f;
+		beta_args.line_0_x_offset = 0.f; // Start from botleft position
+		about_dialog_beta_text = new GLUITextView(*gl_ui, opengl_engine, "Metasiberia Beta", Vec2f(beta_x, current_y), beta_args);
+		gl_ui->addWidget(about_dialog_beta_text);
+	}
+	else
+	{
+		const float estimated_text_width = gl_ui->getUIWidthForDevIndepPixelWidth(180);
+		const float beta_x = center_x - estimated_text_width / 2.f;
+		about_dialog_beta_text->setPos(Vec2f(beta_x, current_y));
+	}
+	about_dialog_beta_text->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// 1. Title: "Метасибирь - метавселенная из Сибири"
+	if(about_dialog_title_text.isNull())
+	{
+		about_dialog_title_text = new GLUITextView(*gl_ui, opengl_engine, "Метасибирь - метавселенная из Сибири", Vec2f(text_left_x, current_y), text_args);
+		gl_ui->addWidget(about_dialog_title_text);
+	}
+	else
+	{
+		about_dialog_title_text->setPos(Vec2f(text_left_x, current_y));
+	}
+	about_dialog_title_text->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// 2. Links label: "Ссылки:"
+	if(about_dialog_links_label_text.isNull())
+	{
+		about_dialog_links_label_text = new GLUITextView(*gl_ui, opengl_engine, "Ссылки:", Vec2f(text_left_x, current_y), text_args);
+		gl_ui->addWidget(about_dialog_links_label_text);
+	}
+	else
+	{
+		about_dialog_links_label_text->setPos(Vec2f(text_left_x, current_y));
+	}
+	about_dialog_links_label_text->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// 3. Telegram channel and Site buttons in one row (after subtitle)
+	const float button_spacing = gl_ui->getUIWidthForDevIndepPixelWidth(20);
+	const float button_w = gl_ui->getUIWidthForDevIndepPixelWidth(140);
+	
+	if(about_dialog_telegram_channel_button.isNull())
+	{
+		about_dialog_telegram_channel_button = new GLUITextButton(*gl_ui, opengl_engine, "Telegram", Vec2f(text_left_x, current_y), button_args);
+		about_dialog_telegram_channel_button->handler = this;
+		gl_ui->addWidget(about_dialog_telegram_channel_button);
+	}
+	else
+	{
+		about_dialog_telegram_channel_button->setPos(Vec2f(text_left_x, current_y));
+	}
+	about_dialog_telegram_channel_button->setVisible(true);
+	
+	if(about_dialog_site_button.isNull())
+	{
+		about_dialog_site_button = new GLUITextButton(*gl_ui, opengl_engine, "metasiberia.com", Vec2f(text_left_x + button_w + button_spacing, current_y), button_args);
+		about_dialog_site_button->handler = this;
+		gl_ui->addWidget(about_dialog_site_button);
+	}
+	else
+	{
+		about_dialog_site_button->setPos(Vec2f(text_left_x + button_w + button_spacing, current_y));
+	}
+	about_dialog_site_button->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// 4. GitHub and VK buttons in one row (reuse button_spacing and button_w from above)
+	
+	if(about_dialog_github_button.isNull())
+	{
+		about_dialog_github_button = new GLUITextButton(*gl_ui, opengl_engine, "GitHub", Vec2f(text_left_x, current_y), button_args);
+		about_dialog_github_button->handler = this;
+		gl_ui->addWidget(about_dialog_github_button);
+	}
+	else
+	{
+		about_dialog_github_button->setPos(Vec2f(text_left_x, current_y));
+	}
+	about_dialog_github_button->setVisible(true);
+	
+	if(about_dialog_vk_button1.isNull())
+	{
+		about_dialog_vk_button1 = new GLUITextButton(*gl_ui, opengl_engine, "VK", Vec2f(text_left_x + button_w + button_spacing, current_y), button_args);
+		about_dialog_vk_button1->handler = this;
+		gl_ui->addWidget(about_dialog_vk_button1);
+	}
+	else
+	{
+		about_dialog_vk_button1->setPos(Vec2f(text_left_x + button_w + button_spacing, current_y));
+	}
+	about_dialog_vk_button1->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// 5. Author label: "Автор:"
+	if(about_dialog_author_label_text.isNull())
+	{
+		about_dialog_author_label_text = new GLUITextView(*gl_ui, opengl_engine, "Автор:", Vec2f(text_left_x, current_y), text_args);
+		gl_ui->addWidget(about_dialog_author_label_text);
+	}
+	else
+	{
+		about_dialog_author_label_text->setPos(Vec2f(text_left_x, current_y));
+	}
+	about_dialog_author_label_text->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// 5.5. Author name: "Денис Шипилов"
+	if(about_dialog_author_name_text.isNull())
+	{
+		about_dialog_author_name_text = new GLUITextView(*gl_ui, opengl_engine, "Денис Шипилов", Vec2f(text_left_x, current_y), text_args);
+		gl_ui->addWidget(about_dialog_author_name_text);
+	}
+	else
+	{
+		about_dialog_author_name_text->setPos(Vec2f(text_left_x, current_y));
+	}
+	about_dialog_author_name_text->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// 6. VK and Telegram buttons in one row (author's personal)
+	if(about_dialog_vk_button2.isNull())
+	{
+		about_dialog_vk_button2 = new GLUITextButton(*gl_ui, opengl_engine, "VK", Vec2f(text_left_x, current_y), button_args);
+		about_dialog_vk_button2->handler = this;
+		gl_ui->addWidget(about_dialog_vk_button2);
+	}
+	else
+	{
+		about_dialog_vk_button2->setPos(Vec2f(text_left_x, current_y));
+	}
+	about_dialog_vk_button2->setVisible(true);
+	
+	if(about_dialog_telegram_button.isNull())
+	{
+		about_dialog_telegram_button = new GLUITextButton(*gl_ui, opengl_engine, "Telegram", Vec2f(text_left_x + button_w + button_spacing, current_y), button_args);
+		about_dialog_telegram_button->handler = this;
+		gl_ui->addWidget(about_dialog_telegram_button);
+	}
+	else
+	{
+		about_dialog_telegram_button->setPos(Vec2f(text_left_x + button_w + button_spacing, current_y));
+	}
+	about_dialog_telegram_button->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// 7. Subtitle: "Основана и создана на glare-core" (moved to bottom)
+	if(about_dialog_subtitle_text.isNull())
+	{
+		about_dialog_subtitle_text = new GLUITextView(*gl_ui, opengl_engine, "Основана и создана на glare-core", Vec2f(text_left_x, current_y), text_args);
+		gl_ui->addWidget(about_dialog_subtitle_text);
+	}
+	else
+	{
+		about_dialog_subtitle_text->setPos(Vec2f(text_left_x, current_y));
+	}
+	about_dialog_subtitle_text->setVisible(true);
+	current_y -= line_height;
+	current_y -= line_spacing;
+	
+	// Create close button - use same style as other buttons
+	if(about_dialog_close_button.isNull())
+	{
+		GLUITextButton::CreateArgs args = button_args; // Use same args as link buttons
+		args.tooltip = "Закрыть";
+		// Calculate initial position for button
+		const float close_button_w = gl_ui->getUIWidthForDevIndepPixelWidth(120);
+		const float close_button_h = gl_ui->getUIWidthForDevIndepPixelWidth(35);
+		const float close_button_y = dialog_min.y + gl_ui->getUIWidthForDevIndepPixelWidth(25);
+		const float close_button_x = dialog_min.x + (dialog_w - close_button_w) / 2.f;
+		about_dialog_close_button = new GLUITextButton(*gl_ui, opengl_engine, "Закрыть", Vec2f(close_button_x, close_button_y), args);
+		about_dialog_close_button->handler = this;
+		gl_ui->addWidget(about_dialog_close_button);
+		about_dialog_close_button->setVisible(true);
+	}
+	
+	// Update button position if it already exists (reposition each time dialog is shown)
+	if(about_dialog_close_button.nonNull())
+	{
+		const float close_button_w = gl_ui->getUIWidthForDevIndepPixelWidth(120);
+		const float close_button_h = gl_ui->getUIWidthForDevIndepPixelWidth(35);
+		const float close_button_y = dialog_min.y + gl_ui->getUIWidthForDevIndepPixelWidth(25);
+		const float close_button_x = dialog_min.x + (dialog_w - close_button_w) / 2.f;
+		about_dialog_close_button->setPos(Vec2f(close_button_x, close_button_y));
+		about_dialog_close_button->setVisible(true);
+	}
+	
+	// Show all widgets
+	about_dialog_background_panel->setVisible(true);
+	if(about_dialog_beta_text.nonNull()) about_dialog_beta_text->setVisible(true);
+	if(about_dialog_title_text.nonNull()) about_dialog_title_text->setVisible(true);
+	if(about_dialog_links_label_text.nonNull()) about_dialog_links_label_text->setVisible(true);
+	if(about_dialog_telegram_channel_button.nonNull()) about_dialog_telegram_channel_button->setVisible(true);
+	if(about_dialog_site_button.nonNull()) about_dialog_site_button->setVisible(true);
+	if(about_dialog_github_button.nonNull()) about_dialog_github_button->setVisible(true);
+	if(about_dialog_vk_button1.nonNull()) about_dialog_vk_button1->setVisible(true);
+	if(about_dialog_author_label_text.nonNull()) about_dialog_author_label_text->setVisible(true);
+	if(about_dialog_author_name_text.nonNull()) about_dialog_author_name_text->setVisible(true);
+	if(about_dialog_vk_button2.nonNull()) about_dialog_vk_button2->setVisible(true);
+	if(about_dialog_telegram_button.nonNull()) about_dialog_telegram_button->setVisible(true);
+	if(about_dialog_subtitle_text.nonNull()) about_dialog_subtitle_text->setVisible(true);
+	if(about_dialog_close_button.nonNull()) about_dialog_close_button->setVisible(true);
+	
+	about_dialog_visible = true;
+}
+
+
+void SDLUIInterface::hideAboutDialog()
+{
+	if(about_dialog_background_panel.nonNull())
+		about_dialog_background_panel->setVisible(false);
+	if(about_dialog_beta_text.nonNull())
+		about_dialog_beta_text->setVisible(false);
+	if(about_dialog_title_text.nonNull())
+		about_dialog_title_text->setVisible(false);
+	if(about_dialog_subtitle_text.nonNull())
+		about_dialog_subtitle_text->setVisible(false);
+	if(about_dialog_links_label_text.nonNull())
+		about_dialog_links_label_text->setVisible(false);
+	if(about_dialog_telegram_channel_button.nonNull())
+		about_dialog_telegram_channel_button->setVisible(false);
+	if(about_dialog_site_button.nonNull())
+		about_dialog_site_button->setVisible(false);
+	if(about_dialog_github_button.nonNull())
+		about_dialog_github_button->setVisible(false);
+	if(about_dialog_vk_button1.nonNull())
+		about_dialog_vk_button1->setVisible(false);
+	if(about_dialog_author_label_text.nonNull())
+		about_dialog_author_label_text->setVisible(false);
+	if(about_dialog_author_name_text.nonNull())
+		about_dialog_author_name_text->setVisible(false);
+	if(about_dialog_vk_button2.nonNull())
+		about_dialog_vk_button2->setVisible(false);
+	if(about_dialog_telegram_button.nonNull())
+		about_dialog_telegram_button->setVisible(false);
+	if(about_dialog_close_button.nonNull())
+		about_dialog_close_button->setVisible(false);
+	about_dialog_visible = false;
+}
+
+
+bool SDLUIInterface::handleAboutDialogMousePress(const MouseEvent& e)
+{
+	if(!about_dialog_visible)
+		return false;
+	
+	// Convert mouse coordinates to UI coordinates
+	const Vec2f coords = gui_client->gl_ui->UICoordsForOpenGLCoords(e.gl_coords);
+	
+	// Check if click is outside the dialog panel
+	if(about_dialog_background_panel.nonNull())
+	{
+		if(!about_dialog_background_panel->rect.inOpenRectangle(coords))
+		{
+			// Click is outside dialog - close it
+			hideAboutDialog();
+			return true; // Event handled
+		}
+	}
+	
+	return false; // Event not handled (click was inside dialog)
+}
+
+
+void SDLUIInterface::eventOccurred(GLUICallbackEvent& event)
+{
+	// Handle clicks on About dialog buttons
+	if(event.widget == about_dialog_close_button.ptr())
+	{
+		event.accepted = true;
+		hideAboutDialog();
+	}
+	else if(event.widget == about_dialog_telegram_channel_button.ptr())
+	{
+		event.accepted = true;
+		openURL("https://t.me/metasiberia");
+	}
+	else if(event.widget == about_dialog_site_button.ptr())
+	{
+		event.accepted = true;
+		openURL("https://metasiberia.com");
+	}
+	else if(event.widget == about_dialog_github_button.ptr())
+	{
+		event.accepted = true;
+		openURL("https://github.com/Metasiberia/metasiberia");
+	}
+	else if(event.widget == about_dialog_vk_button1.ptr())
+	{
+		event.accepted = true;
+		openURL("https://vk.com/metasiberia");
+	}
+	else if(event.widget == about_dialog_vk_button2.ptr())
+	{
+		event.accepted = true;
+		openURL("https://vk.com/denshipilov");
+	}
+	else if(event.widget == about_dialog_telegram_button.ptr())
+	{
+		event.accepted = true;
+		openURL("https://t.me/denshipilov");
+	}
 }

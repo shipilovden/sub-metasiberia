@@ -577,6 +577,7 @@ int main(int argc, char** argv)
 		sdl_ui_interface->appdata_path = appdata_path;
 		sdl_ui_interface->settings_store = settings_store;
 		sdl_ui_interface->d3d11_device = nullptr;
+		sdl_ui_interface->show_parcels_enabled = false;
 
 
 		gui_client->preConnectInitialise(cache_dir, settings_store, sdl_ui_interface, high_priority_task_manager, worker_allocator);
@@ -627,7 +628,7 @@ int main(int argc, char** argv)
 			URLParser::processQueryKeyValues(queries, url_parse_results);
 		}
 #else
-		std::string server_URL = "sub://substrata.info"; // Default URL
+		std::string server_URL = "sub://89.104.70.23/"; // Default URL
 
 		if(parsed_args.isArgPresent("-h"))
 		{

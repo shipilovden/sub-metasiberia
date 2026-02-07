@@ -169,7 +169,14 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 	const double ob_dist_from_cam = ob->pos.getDist(gui_client->cam_controller.getPosition());
 	const double max_play_dist = maxBrowserDist();
 	[[maybe_unused]]const double unload_dist = maxBrowserDist() * 1.3;
-	[[maybe_unused]] const bool in_process_dist = ob_dist_from_cam < max_play_dist;
+	const bool in_process_dist = ob_dist_from_cam < max_play_dist;
+	
+	// Debug output - always log for webview objects
+	static int debug_counter = 0;
+	if(++debug_counter % 60 == 0) // Log every 60 frames (~1 second)
+	{
+		conPrint("WebViewData::process: ob_dist=" + toString(ob_dist_from_cam) + ", max_dist=" + toString(max_play_dist) + ", in_process=" + toString(in_process_dist) + ", target_url='" + ob->target_url + "', opengl_engine_ob=" + toString(ob->opengl_engine_ob.nonNull()) + ", browser=" + toString(browser.nonNull()));
+	}
 
 #if EMSCRIPTEN
 	if(in_process_dist)
@@ -264,19 +271,32 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 
 	if(in_process_dist)
 	{
-		if(CEF::isInitialised())
+		const bool cef_initialized = CEF::isInitialised();
+		if(!cef_initialized)
 		{
-			if(browser.isNull() && !ob->target_url.empty() && ob->opengl_engine_ob.nonNull())
+			static int cef_warn_counter = 0;
+			if(++cef_warn_counter % 300 == 0) // Warn every 5 seconds
 			{
-				const bool URL_in_whitelist = gui_client->url_whitelist.isURLPrefixInWhitelist(ob->target_url);
+				conPrint("WebViewData::process: CEF not initialized! Cannot load webview.");
+			}
+		}
+		if(cef_initialized)
+		{
+			const bool has_url = !ob->target_url.empty();
+			const bool has_opengl_ob = ob->opengl_engine_ob.nonNull();
+			const bool browser_is_null = browser.isNull();
+			
+			if(browser_is_null && has_url && has_opengl_ob)
+			{
+				// Auto-load web view when player approaches (in_process_dist is true).
+				// Always auto-load when in proximity distance, no security checks needed.
+				const bool should_auto_load = in_process_dist || user_clicked_to_load;
+				
+				conPrint("WebViewData::process: should_auto_load=" + toString(should_auto_load) + ", in_process_dist=" + toString(in_process_dist) + ", user_clicked=" + toString(user_clicked_to_load) + ", target_url='" + ob->target_url + "'");
 
-				// If the user is logged in to their personal world, and the user created the object, consider the URL to be safe.
-				const bool webview_is_safe = gui_client->logged_in_user_id.valid() && 
-					(!gui_client->server_worldname.empty() && (gui_client->server_worldname == gui_client->logged_in_user_name)) && // If this is the personal world of the user:
-					(gui_client->logged_in_user_id == ob->creator_id);
-
-				if(user_clicked_to_load || URL_in_whitelist || webview_is_safe)
+				if(should_auto_load)
 				{
+					conPrint("WebViewData::process: Creating browser, target_url: " + ob->target_url);
 					gui_client->logMessage("Creating browser, target_url: " + ob->target_url);
 
 					if(ob->opengl_engine_ob.nonNull())
@@ -287,62 +307,40 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 					}
 
 					browser = new EmbeddedBrowser();
+					conPrint("WebViewData::process: Calling browser->create()...");
 					browser->create(ob->target_url, viewport_width, viewport_height, gui_client, ob, /*mat index=*/0, /*apply_to_emission_texture=*/true, OpenGLTexture::Wrapping_Clamp, opengl_engine);
+					conPrint("WebViewData::process: browser->create() completed");
 				}
 				else
 				{
-					if(ob->opengl_engine_ob->materials[0].emission_texture.isNull())
+					static int skip_counter = 0;
+					if(++skip_counter % 300 == 0)
 					{
-						gui_client->setGLWidgetContextAsCurrent(); // Make sure the correct context is current while making OpenGL calls.
-
-						//assert(!showing_click_to_load_text);
-						ob->opengl_engine_ob->materials[0].emission_texture = makeTextTexture(opengl_engine, gui_client->gl_ui.ptr(), ob->target_url);
-						opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
-						showing_click_to_load_text = true;
+						conPrint("WebViewData::process: Skipping auto-load, should_auto_load=false");
 					}
 				}
+			}
+			else
+			{
+				static int cond_counter = 0;
+				if(++cond_counter % 300 == 0)
+				{
+					conPrint("WebViewData::process: Conditions not met - browser_null=" + toString(browser_is_null) + ", has_url=" + toString(has_url) + ", has_opengl_ob=" + toString(has_opengl_ob));
+				}
+			}
 
+			// Update loaded_target_url if it changed
+			if(!ob->target_url.empty())
+			{
 				this->loaded_target_url = ob->target_url;
 			}
 
 			// If target url has changed, tell webview to load it
 			if(browser.nonNull() && (ob->target_url != this->loaded_target_url))
 			{
-				// conPrint("Webview loading URL '" + ob->target_url + "'...");
-
-				const bool URL_in_whitelist = gui_client->url_whitelist.isURLPrefixInWhitelist(ob->target_url);
-
-				// If the user is logged in to their personal world, and the user created the object, consider the URL to be safe.
-				const bool webview_is_safe = gui_client->logged_in_user_id.valid() && 
-					(!gui_client->server_worldname.empty() && (gui_client->server_worldname == gui_client->logged_in_user_name)) && // If this is the personal world of the user:
-					(gui_client->logged_in_user_id == ob->creator_id);
-
-				if(URL_in_whitelist || webview_is_safe)
-				{
-					browser->navigate(ob->target_url);
-
-					this->loaded_target_url = ob->target_url;
-				}
-				else
-				{
-					gui_client->logMessage("Closing browser (URL changed), target_url: " + ob->target_url);
-					browser = NULL;
-
-					// Remove audio source
-					if(ob->audio_source.nonNull())
-					{
-						gui_client->audio_engine.removeSource(ob->audio_source);
-						ob->audio_source = NULL;
-					}
-
-					gui_client->setGLWidgetContextAsCurrent(); // Make sure the correct context is current while making OpenGL calls.
-
-					user_clicked_to_load = false;
-					ob->opengl_engine_ob->materials[0].emission_texture = makeTextTexture(opengl_engine, gui_client->gl_ui.ptr(), ob->target_url);
-					opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
-					showing_click_to_load_text = true;
-				}
-
+				// Always navigate to new URL, no security checks needed
+				browser->navigate(ob->target_url);
+				this->loaded_target_url = ob->target_url;
 			}
 
 			// While the webview is not visible by the camera, we discard any dirty-rect updates.  
@@ -368,6 +366,7 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 	{
 		if(browser.nonNull())
 		{
+			conPrint("WebViewData::process: Closing browser (out of view distance), target_url: " + ob->target_url);
 			gui_client->logMessage("Closing browser (out of view distance), target_url: " + ob->target_url);
 			browser = NULL;
 
