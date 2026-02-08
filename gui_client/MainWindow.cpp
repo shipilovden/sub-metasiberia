@@ -58,6 +58,8 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QInputDialog>
 #include <QtCore/QTimer>
 #include <QtGui/QCursor>
+#include <QtGui/QImage>
+#include <QtGui/QPixmap>
 #include <algorithm>
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
@@ -250,6 +252,7 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(ui->materialBrowserDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->environmentDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->worldSettingsDockWidget->toggleViewAction());
+	ui->menuWindow->addAction(ui->webcamDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->chatDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->helpInfoDockWidget->toggleViewAction());
 #if INDIGO_SUPPORT
@@ -358,6 +361,8 @@ void MainWindow::initialiseUI()
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->chatMessageLineEdit, SIGNAL(returnPressed()), this, SLOT(sendChatMessageSlot()));
+	
+	connect(ui->webcamEnableCheckBox, SIGNAL(toggled(bool)), this, SLOT(on_webcamEnableCheckBox_toggled(bool)));
 	connect(ui->glWidget, SIGNAL(mousePressed(QMouseEvent*)), this, SLOT(glWidgetMousePressed(QMouseEvent*)));
 	connect(ui->glWidget, SIGNAL(mouseReleased(QMouseEvent*)), this, SLOT(glWidgetMouseReleased(QMouseEvent*)));
 	connect(ui->glWidget, SIGNAL(mouseDoubleClickedSignal(QMouseEvent*)), this, SLOT(glWidgetMouseDoubleClicked(QMouseEvent*)));
@@ -1027,6 +1032,28 @@ void MainWindow::clearChatMessages()
 		ui->chatMessagesTextEdit->clear();
 }
 
+void MainWindow::setWebcamWindowVisible(bool visible)
+{
+	// This is called from GUIClient::setWebcamEnabled() when user clicks the webcam button icon
+	// Just show/hide the window - don't call setWebcamEnabled() again to avoid recursion
+	// Block signals temporarily to prevent visibilityChanged from firing
+	ui->webcamDockWidget->blockSignals(true);
+	if(visible)
+	{
+		ui->webcamDockWidget->show();
+		// Update checkbox state to match current webcam state
+		ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
+	}
+	else
+	{
+		ui->webcamDockWidget->hide();
+		// Clear the label when hiding
+		ui->webcamLabel->clear();
+		ui->webcamLabel->setText("Webcam feed will appear here");
+	}
+	ui->webcamDockWidget->blockSignals(false);
+}
+
 
 bool MainWindow::isShowParcelsEnabled() const
 {
@@ -1240,6 +1267,22 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 	if(GPU_render_stats_widget)
 		GPU_render_stats_widget->addFrameTime((float)opengl_engine->last_total_draw_GPU_time);
+
+	// Update webcam display in Qt UI
+	if(ui->webcamDockWidget->isVisible() && gui_client.webcam_capture.isEnabled())
+	{
+#if defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(USE_SDL)
+		QImage* frame_ptr = static_cast<QImage*>(gui_client.getWebcamFrameAsQImage());
+		if(frame_ptr && !frame_ptr->isNull())
+		{
+			ui->webcamLabel->setPixmap(QPixmap::fromImage(*frame_ptr).scaled(
+				ui->webcamLabel->size(), 
+				Qt::KeepAspectRatio, 
+				Qt::SmoothTransformation
+			));
+		}
+#endif
+	}
 }
 
 
@@ -2935,6 +2978,24 @@ void MainWindow::on_actionReset_Layout_triggered()
 	this->addDockWidget(Qt::RightDockWidgetArea, ui->chatDockWidget, Qt::Vertical);
 	ui->chatDockWidget->show();
 
+	// Initialize webcam dock widget (hidden by default)
+	ui->webcamDockWidget->setFloating(false);
+	this->addDockWidget(Qt::RightDockWidgetArea, ui->webcamDockWidget, Qt::Vertical);
+	ui->webcamDockWidget->hide();
+	
+	// Connect webcam dock widget visibility - just update checkbox state when window is shown
+	// Don't automatically enable/disable webcam - user must use checkbox
+	connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+		if(visible)
+		{
+			// Update checkbox state to match current webcam state when window is shown
+			ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
+		}
+	});
+	
+	// Initialize checkbox state
+	ui->webcamEnableCheckBox->setChecked(false);
+
 	ui->materialBrowserDockWidget->setFloating(false);
 	this->addDockWidget(Qt::TopDockWidgetArea, ui->materialBrowserDockWidget, Qt::Horizontal);
 	ui->materialBrowserDockWidget->show();
@@ -3777,6 +3838,18 @@ void MainWindow::diagnosticsReloadTerrain()
 	// Just leave terrain_system null, will be reinitialised in MainWindow::updateGroundPlane().
 }
 
+
+void MainWindow::on_webcamEnableCheckBox_toggled(bool checked)
+{
+	gui_client.setWebcamEnabled(checked);
+	
+	// Clear the label when disabling
+	if(!checked)
+	{
+		ui->webcamLabel->clear();
+		ui->webcamLabel->setText("Webcam feed will appear here");
+	}
+}
 
 void MainWindow::sendChatMessageSlot()
 {
