@@ -351,7 +351,10 @@ void MainWindow::initialiseUI()
 	connect(ui->diagnosticsWidget, SIGNAL(reloadTerrainSignal()), this, SLOT(diagnosticsReloadTerrain()));
 
 	ui->environmentOptionsWidget->init(settings);
-	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
+	bool connected = connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
+	printf("[MainWindow] Connected environmentOptionsWidget settingChanged signal: %s\n", connected ? "true" : "false");
+	
+	// Set initial Northern Lights setting after opengl_engine is created (will be done in afterGLInitInitialise or when glWidget is ready)
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->chatMessageLineEdit, SIGNAL(returnPressed()), this, SLOT(sendChatMessageSlot()));
@@ -563,6 +566,13 @@ void MainWindow::afterGLInitInitialise()
 	const auto device_pixel_ratio = ui->glWidget->devicePixelRatio(); // For retina screens this is 2, meaning the gl viewport width is in physical pixels, which have twice the density of qt pixel coordinates.
 
 	gui_client.afterGLInitInitialise((double)device_pixel_ratio, ui->glWidget->opengl_engine, fonts, emoji_fonts);
+
+	// Set initial Northern Lights (Aurora) setting
+	if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene() != nullptr)
+	{
+		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+	}
 
 	// Connect favorites menu to update when shown - do this after UI is fully initialized
 	if(ui && ui->menuGo_to_Favorites)
@@ -3853,11 +3863,38 @@ void MainWindow::environmentSettingChangedSlot()
 {
 	if(ui->glWidget->opengl_engine.nonNull())
 	{
+		Reference<OpenGLEngine> opengl_engine = ui->glWidget->opengl_engine;
+		
 		const float theta = myClamp(::degreeToRad((float)ui->environmentOptionsWidget->sunThetaRealControl->value()), 0.01f, Maths::pi<float>() - 0.01f);
 		const float phi   = ::degreeToRad((float)ui->environmentOptionsWidget->sunPhiRealControl->value());
 		const Vec4f sundir = GeometrySampling::dirForSphericalCoords(phi, theta);
 
 		opengl_engine->setSunDir(sundir);
+		
+		// Update Northern Lights (Aurora) setting
+		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		OpenGLScene* scene = opengl_engine->getCurrentScene();
+		if(scene != nullptr)
+		{
+			scene->draw_aurora = northern_lights_enabled;
+			const Vec4f current_sun_dir = opengl_engine->getSunDir();
+			printf("[MainWindow] environmentSettingChangedSlot: draw_aurora set to %s (scene->draw_aurora = %s, sun_dir.z = %f)\n", 
+				northern_lights_enabled ? "true" : "false",
+				scene->draw_aurora ? "true" : "false",
+				current_sun_dir[2]);
+			
+			// Force widget repaint to refresh rendering immediately
+			// bindStandardTexturesToTextureUnits() is called every frame in render loop, so texture will be rebound automatically
+			ui->glWidget->repaint();
+		}
+		else
+		{
+			printf("[MainWindow] environmentSettingChangedSlot: getCurrentScene() returned nullptr!\n");
+		}
+	}
+	else
+	{
+		printf("[MainWindow] environmentSettingChangedSlot: opengl_engine is null!\n");
 	}
 }
 
