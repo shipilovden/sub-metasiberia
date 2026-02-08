@@ -89,6 +89,8 @@ public:
 	virtual void showAvatarSettings() = 0; // Show avatar settings dialog.
 	virtual bool isAvatarSettingsDialogVisible() const { return false; } // Check if avatar settings dialog is visible (SDL only)
 	
+	virtual void setWebcamWindowVisible(bool visible) {} // Show/hide webcam window (Qt only)
+	
 	virtual void setUIForSelectedObject() = 0; // Enable/disable delete object action etc. based on if there is a selected object or not.
 
 	
