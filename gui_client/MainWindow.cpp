@@ -3088,7 +3088,7 @@ void MainWindow::on_actionSignUp_triggered()
 		conPrint("username: " + username);
 		conPrint("email:    " + email);
 		conPrint("password: " + password);
-		//this->last_login_username = username;
+		conPrint("Signing up on server: " + gui_client.server_hostname);
 
 		// Make message packet and enqueue to send
 		MessageUtils::initPacket(scratch_packet, Protocol::SignUpMessage);

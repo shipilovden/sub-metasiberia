@@ -35,7 +35,9 @@ LoginDialog::LoginDialog(QSettings* settings_, CredentialManager& credential_man
 	this->buttonBox->button(QDialogButtonBox::Ok)->setText("Log in");
 
 	this->resetPasswordLabel->setOpenExternalLinks(true);
-	this->resetPasswordLabel->setText("<a href=\"https://substrata.info/reset_password\">Forgot password?</a>");
+	// Build reset password URL using current server hostname
+	const std::string reset_password_url = "https://" + server_hostname + "/reset_password";
+	this->resetPasswordLabel->setText(QString("<a href=\"%1\">Forgot password?</a>").arg(QString::fromStdString(reset_password_url)));
 
 	connect(this->buttonBox, SIGNAL(accepted()), this, SLOT(accepted()));
 }
