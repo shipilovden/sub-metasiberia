@@ -18,6 +18,8 @@ Copyright Glare Technologies Limited 2021 -
 #include <vector>
 struct GLObject;
 class OpenGLEngine;
+class AnimationManager;
+class ResourceManager;
 
 
 struct AnimEvents
@@ -126,15 +128,16 @@ public:
 	Vec4f getLastLeftEyePosition() const;
 	Vec4f getLastRightEyePosition() const;
 
-	void performGesture(double cur_time, const std::string& gesture_name, const URLString& gesture_anim_URL, bool animate_head, bool loop_anim, AnimationManager& animation_manager, ResourceManager& resource_manager);
+	void performGesture(double cur_time, const std::string& gesture_name, bool animate_head, bool loop_anim, AnimationManager& animation_manager, ResourceManager& resource_manager);
 	void stopGesture(double cur_time/*, const std::string& gesture_name*/);
 
-	void setPendingGesture(const std::string& gesture_name, const URLString& gesture_anim_URL, bool animate_head, bool loop_anim); // Set if we wanted this avatar to perform the gesture but the animation file wasn't present.  To play when it's downloaded.
+	void setPendingGesture(const std::string& gesture_name, bool animate_head, bool loop_anim); // Set if we wanted this avatar to perform the gesture but the animation file wasn't present.  To play when it's downloaded.
 	void performPendingGesture(double cur_time, AnimationManager& animation_manager, ResourceManager& resource_manager);
 
 	const Vec3d& getLastVel() const { return last_vel; }
 
-	static void extractAvatarAnimInfo(const std::string& input_glb_path, const std::string& output_path);
+	// Build .subanim processed animation files from animation GLBs.
+	static void processAnimationData();
 
 	// Returns animation length
 	static float processAndConvertGLBAnimToSubanim(const std::string& glb_path, const std::string& anim_name, const std::string& output_subanim_path);
@@ -269,7 +272,6 @@ private:
 
 public:
 	std::string pending_gesture_name; // Set if we wanted this avatar to perform the gesture but the animation file wasn't present.  To play when it's downloaded.
-	URLString pending_gesture_URL;
 	bool pending_gesture_animate_head;
 	bool pending_gesture_loop_anim;
 };
