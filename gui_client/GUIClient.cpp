@@ -2983,7 +2983,7 @@ void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const R
 		if(gesture_ui.getCurrentGesturePlaying(gesture_name, gesture_URL, animate_head, loop_anim)) // If we should be playing a gesture according to the UI:
 		{
 			const double cur_time = Clock::getTimeSinceInit(); // Used for animation, interpolation etc..
-			avatar->graphics.performGesture(cur_time, gesture_name, gesture_URL, animate_head, loop_anim, animation_manager, *resource_manager);
+			avatar->graphics.performGesture(cur_time, gesture_name, animate_head, loop_anim, animation_manager, *resource_manager);
 		}
 	}
 
@@ -8747,10 +8747,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 			if(m->avatar_uid != client_avatar_uid) // Ignore messages about our own avatar
 			{
-				// For backwards compatibility, if gesture_URL was not sent, just use the gesture name with ".subanim" appended.
-				const URLString anim_resource_URL = m->gesture_URL.empty() ? (URLString(m->gesture_name) + ".subanim") : m->gesture_URL;
-				const bool anim_head = BitUtils::isBitSet(m->flags, SingleGestureSettings::FLAG_ANIMATE_HEAD);
-				const bool anim_loop = BitUtils::isBitSet(m->flags, SingleGestureSettings::FLAG_LOOP);
+				const URLString anim_resource_URL = URLString(m->gesture_name) + ".subanim";
 				if(resource_manager->isFileForURLPresent(anim_resource_URL))
 				{
 					if(world_state)
@@ -8761,7 +8758,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						if(res != this->world_state->avatars.end())
 						{
 							Avatar* avatar = res->second.getPointer();
-							avatar->graphics.performGesture(cur_time, m->gesture_name, anim_resource_URL, anim_head, anim_loop, animation_manager, *resource_manager);
+							avatar->graphics.performGesture(cur_time, m->gesture_name, GestureUI::animateHead(m->gesture_name), GestureUI::loopAnim(m->gesture_name), animation_manager, *resource_manager);
 						}
 					}
 				}
@@ -14981,6 +14978,8 @@ void GUIClient::performGestureClicked(const std::string& gesture_name, const URL
 	// Change camera view to third person if it's not already, so we can see the gesture
 	ui_interface->enableThirdPersonCameraIfNotAlreadyEnabled();
 
+	const URLString anim_resource_URL = URLString(gesture_name) + ".subanim";
+
 	if(resource_manager->isFileForURLPresent(anim_resource_URL))
 	{
 		Lock lock(this->world_state->mutex);
@@ -14989,7 +14988,7 @@ void GUIClient::performGestureClicked(const std::string& gesture_name, const URL
 		{
 			Avatar* av = it->second.getPointer();
 			if(av->isOurAvatar())
-				av->graphics.performGesture(cur_time, gesture_name, anim_resource_URL, animate_head, loop_anim, animation_manager, *resource_manager);
+				av->graphics.performGesture(cur_time, gesture_name, animate_head, loop_anim, animation_manager, *resource_manager);
 		}
 	}
 	else
@@ -15010,7 +15009,7 @@ void GUIClient::performGestureClicked(const std::string& gesture_name, const URL
 			{
 				Avatar* av = it->second.getPointer();
 				if(av->isOurAvatar())
-					av->graphics.setPendingGesture(gesture_name, anim_resource_URL, animate_head, loop_anim);
+					av->graphics.setPendingGesture(gesture_name, animate_head, loop_anim);
 			}
 		}
 	}
