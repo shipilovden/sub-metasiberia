@@ -47,6 +47,14 @@
     </property>
     <addaction name="actionReset_Layout"/>
     <addaction name="actionEnter_Fullscreen"/>
+    <widget class="QMenu" name="menuLanguage">
+     <property name="title">
+      <string>Language</string>
+     </property>
+     <addaction name="actionLanguage_English"/>
+     <addaction name="actionLanguage_Russian"/>
+    </widget>
+    <addaction name="menuLanguage"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
     <property name="title">
@@ -816,6 +824,22 @@
   <action name="actionEnter_Fullscreen">
    <property name="text">
     <string>Enter Fullscreen Mode</string>
+   </property>
+  </action>
+  <action name="actionLanguage_English">
+   <property name="text">
+    <string>English</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionLanguage_Russian">
+   <property name="text">
+    <string>Русский</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
    </property>
   </action>
   <action name="actionSummon_Car">
