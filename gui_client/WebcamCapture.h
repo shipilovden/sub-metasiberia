@@ -13,6 +13,13 @@ Copyright Glare Technologies Limited 2024 -
 #include <opengl/OpenGLEngine.h>
 #include <string>
 
+#if defined(_WIN32)
+// Forward declarations for Windows Media Foundation types
+struct IMFMediaSource;
+struct IMFSourceReader;
+struct IMFMediaType;
+#endif
+
 class GUIClient;
 
 /*=====================================================================

@@ -493,6 +493,8 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	
 	hud_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
 	chat_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
+	
+	webcam_capture.create(/*gui_client_=*/this, gl_ui, opengl_engine);
 
 	// Chat UI should be drawn above the movement button if present.
 	const float bottom_left_y = misc_info_ui.movement_button ? misc_info_ui.movement_button->getRect().getMax().y : -gl_ui->getViewportMinMaxY();
@@ -1025,8 +1027,10 @@ void GUIClient::shutdown()
 	gesture_ui.destroy();
 	
 	hud_ui.destroy();
-
+	
 	chat_ui.destroy();
+	
+	webcam_capture.destroy();
 
 	photo_mode_ui.destroy();
 
@@ -5642,6 +5646,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	
 	gesture_ui.think();
 	hud_ui.think();
+	webcam_capture.update();
 	if(minimap)
 		minimap->think();
 
@@ -15067,6 +15072,12 @@ void GUIClient::setMicForVoiceChatEnabled(bool enabled)
 			mic_read_thread_manager.killThreadsNonBlocking();
 		}
 	}
+}
+
+
+void GUIClient::setWebcamEnabled(bool enabled)
+{
+	webcam_capture.setEnabled(enabled);
 }
 
 
