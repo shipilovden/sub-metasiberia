@@ -1181,7 +1181,12 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	// Update URL Bar
 	if(this->url_widget->shouldBeUpdated())
 	{
-		this->url_widget->setURL(gui_client.getCurrentURL());
+		std::string current_url = gui_client.getCurrentURL();
+		this->url_widget->setURL(current_url);
+		
+		// Update parcel editor with current server URL
+		if(!current_url.empty())
+			ui->parcelEditor->setCurrentServerURL(current_url);
 	}
 
 	const QPoint gl_pos = ui->glWidget->mapToGlobal(QPoint(200, 10));
@@ -3991,6 +3996,9 @@ void MainWindow::visitSubURL(const std::string& URL) // Visit a substrata 'sub:/
 	try
 	{
 		gui_client.visitSubURL(URL);
+		
+		// Update parcel editor with new server URL
+		ui->parcelEditor->setCurrentServerURL(URL);
 	}
 	catch(glare::Exception& e) // Handle URL parse failure
 	{
@@ -4169,6 +4177,11 @@ void MainWindow::showParcelEditor()
 void MainWindow::setParcelEditorForParcel(const Parcel& parcel)
 {
 	ui->parcelEditor->setFromParcel(parcel);
+	
+	// Update parcel editor with current server URL
+	std::string current_url = gui_client.getCurrentURL();
+	if(!current_url.empty())
+		ui->parcelEditor->setCurrentServerURL(current_url);
 }
 
 
