@@ -201,6 +201,11 @@ public:
 	void setPhotoModeEnabled(bool enabled);
 	void setMicForVoiceChatEnabled(bool enabled);
 	void setWebcamEnabled(bool enabled);
+#if defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(USE_SDL)
+	// Get current webcam frame as QImage (for Qt UI)
+	// Implementation in .cpp file to avoid Qt header dependency
+	void* getWebcamFrameAsQImage() const; // Returns QImage* (cast to QImage* in implementation)
+#endif
 
 	void startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_level);
 	void startDownloadingResourcesForAvatar(Avatar* ob, int ob_lod_level, bool our_avatar);
