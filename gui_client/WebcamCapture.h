@@ -41,6 +41,18 @@ public:
 
 	void update(); // Call this periodically to update the video frame
 
+	// Get current frame as QImage (for Qt UI)
+	// Returns null QImage if no frame is available
+#if defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(USE_SDL)
+	// Implementation in .cpp file to avoid Qt header dependency
+	void* getCurrentFrameAsQImage() const; // Returns QImage* (cast to QImage* in implementation)
+#endif
+
+	// Get frame buffer (for Qt UI)
+	Reference<ImageMap<uint8, UInt8ComponentValueTraits>> getFrameBuffer() const { return frame_buffer; }
+	int getFrameWidth() const { return frame_width; }
+	int getFrameHeight() const { return frame_height; }
+
 private:
 	void startCapture();
 	void stopCapture();
@@ -60,6 +72,7 @@ private:
 	IMFMediaType* media_type;
 	int frame_width;
 	int frame_height;
+	GUID video_subtype; // Format of video from camera (RGB32, YUY2, etc.)
 	Timer frame_timer;
 	double last_frame_time;
 	Reference<ImageMap<uint8, UInt8ComponentValueTraits>> frame_buffer;

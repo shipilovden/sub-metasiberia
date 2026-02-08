@@ -584,12 +584,31 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 			else if(button == webcam_button.ptr())
 			{
 				event.accepted = true;
+#if USE_SDL || EMSCRIPTEN
+				// For SDL version, webcam button toggles webcam on/off directly
+				// (No separate window like in Qt version)
 				gui_client->setWebcamEnabled(webcam_button->toggled);
 
 				if(webcam_button->toggled)
 					webcam_button->tooltip = "Disable webcam";
 				else
 					webcam_button->tooltip = "Enable webcam";
+#else
+				// For Qt version, webcam button just opens/closes the webcam window
+				// User must use checkbox inside the window to enable/disable webcam
+				if(webcam_button->toggled)
+				{
+					// Show webcam window
+					gui_client->ui_interface->setWebcamWindowVisible(true);
+					webcam_button->tooltip = "Close webcam window";
+				}
+				else
+				{
+					// Hide webcam window
+					gui_client->ui_interface->setWebcamWindowVisible(false);
+					webcam_button->tooltip = "Open webcam window";
+				}
+#endif
 			}
 		}
 

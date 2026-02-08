@@ -114,6 +114,7 @@ private slots:;
 	void diagnosticsReloadTerrain();
 	void sendChatMessageSlot();
 	void sendLightmapNeededFlagsSlot();
+	void on_webcamEnableCheckBox_toggled(bool checked);
 
 	void glWidgetMousePressed(QMouseEvent* e);
 	void glWidgetMouseReleased(QMouseEvent* e);
@@ -194,6 +195,8 @@ public:
 	virtual void showPlainTextMessageBox(const std::string& title, const std::string& msg) override;
 
 	virtual void logMessage(const std::string& msg) override; // Appends to LogWindow log display.
+	
+	virtual void setWebcamWindowVisible(bool visible) override; // Show/hide webcam window
 
 	// Lua scripting:
 	// A lua script created by the logged in user printed something

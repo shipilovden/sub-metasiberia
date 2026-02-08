@@ -15078,7 +15078,18 @@ void GUIClient::setMicForVoiceChatEnabled(bool enabled)
 void GUIClient::setWebcamEnabled(bool enabled)
 {
 	webcam_capture.setEnabled(enabled);
+	// Don't automatically show/hide window - user controls window visibility separately
+	// Window is shown/hidden only by clicking the webcam icon button or menu item
 }
+
+#if defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(USE_SDL)
+#include <QtGui/QImage>
+void* GUIClient::getWebcamFrameAsQImage() const
+{
+	// Return QImage as void* to avoid Qt header dependency in .h file
+	return webcam_capture.getCurrentFrameAsQImage();
+}
+#endif
 
 
 void GUIClient::createImageObject(const std::string& local_image_path)
