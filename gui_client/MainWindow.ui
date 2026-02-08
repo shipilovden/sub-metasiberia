@@ -106,6 +106,10 @@
     <addaction name="actionGoToPersonalWorld"/>
     <addaction name="actionGo_to_CryptoVoxels_World"/>
     <addaction name="separator"/>
+    <addaction name="actionGo_to_Substrata_Server"/>
+    <addaction name="actionGo_to_Metasiberia_Server"/>
+    <addaction name="actionGo_to_Shki_nvkz_Server"/>
+    <addaction name="separator"/>
     <widget class="QMenu" name="menuGo_to_Favorites">
      <property name="title">
       <string>Go to Favorites</string>
@@ -550,6 +554,21 @@
   <action name="actionGo_to_CryptoVoxels_World">
    <property name="text">
     <string>Go to Cryptovoxels World</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Substrata_Server">
+   <property name="text">
+    <string>Go to Substrata Server</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Metasiberia_Server">
+   <property name="text">
+    <string>Go to Metasiberia Server</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Shki_nvkz_Server">
+   <property name="text">
+    <string>Go to Shki-nvkz Server</string>
    </property>
   </action>
   <action name="actionExport_view_to_Indigo">

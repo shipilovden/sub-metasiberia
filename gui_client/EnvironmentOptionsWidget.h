@@ -21,6 +21,8 @@ public:
 	~EnvironmentOptionsWidget();
 
 	void init(QSettings* settings_);
+	
+	bool getNorthernLightsEnabled() const;
 
 signals:;
 	void settingChanged();

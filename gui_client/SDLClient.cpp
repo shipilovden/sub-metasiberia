@@ -741,7 +741,9 @@ int main(int argc, char** argv)
 		if(bloom)
 			opengl_engine->getCurrentScene()->bloom_strength = 0.3f;
 
-		opengl_engine->getCurrentScene()->draw_aurora = true;
+		// Northern Lights (Aurora) setting - controlled by environment options
+		const bool northern_lights_enabled = settings_store->getBoolValue("environment_options/northern_lights", /*default val=*/true);
+		opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
 
 		
 		
