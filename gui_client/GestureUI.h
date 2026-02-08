@@ -73,6 +73,8 @@ private:
 
 	GLUIButtonRef microphone_button; // TODO: move out of GestureUI or rename GestureUI.
 
+	GLUIButtonRef webcam_button; // Webcam toggle button
+
 	GLUIImageRef mic_level_image;
 
 	bool gestures_visible;

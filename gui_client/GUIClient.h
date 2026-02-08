@@ -18,6 +18,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "HeadUpDisplayUI.h"
 #include "PhotoModeUI.h"
 #include "ChatUI.h"
+#include "WebcamCapture.h"
 #include "DownloadingResourceQueue.h"
 #include "LoadItemQueue.h"
 #include "MeshManager.h"
@@ -199,6 +200,7 @@ public:
 	void setSelfieModeEnabled(bool enabled);
 	void setPhotoModeEnabled(bool enabled);
 	void setMicForVoiceChatEnabled(bool enabled);
+	void setWebcamEnabled(bool enabled);
 
 	void startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_level);
 	void startDownloadingResourcesForAvatar(Avatar* ob, int ob_lod_level, bool our_avatar);
@@ -683,6 +685,7 @@ public:
 	HeadUpDisplayUI hud_ui; // Draws stuff like markers for other avatars
 	ChatUI chat_ui; // Draws chat user-interface, showing chat from other users plus the line edit for chatting.
 	PhotoModeUI photo_mode_ui;
+	WebcamCapture webcam_capture; // Webcam capture and display
 	Reference<MiniMap> minimap;
 
 	bool running_destructor;

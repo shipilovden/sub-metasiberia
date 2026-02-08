@@ -85,6 +85,9 @@ public:
 	virtual void startLightmapFlagTimer() override;
 
 	virtual void showAvatarSettings() override; // Show avatar settings dialog.
+	virtual bool isAvatarSettingsDialogVisible() const override { return avatar_settings_dialog_visible; }
+	void hideAvatarSettings();
+	bool handleAvatarSettingsDialogMousePress(const MouseEvent& e); // Check if click is outside dialog
 
 	virtual void setCamRotationOnMouseDragEnabled(bool enabled) override;
 	virtual bool isCursorHidden() override;
@@ -178,6 +181,14 @@ private:
 	GLUITextButtonRef about_dialog_telegram_button;
 	GLUITextButtonRef about_dialog_close_button;
 	bool about_dialog_visible = false;
+	
+	// Avatar Settings dialog
+	GLUIInertWidgetRef avatar_settings_dialog_background_panel;
+	GLUITextViewRef avatar_settings_dialog_title_text;
+	GLUIButtonRef avatar_settings_readyplayerme_button;
+	GLUIButtonRef avatar_settings_avaturnme_button;
+	GLUITextButtonRef avatar_settings_close_button;
+	bool avatar_settings_dialog_visible = false;
 
 	//Reference<TextRendererFontFace> font;
 };

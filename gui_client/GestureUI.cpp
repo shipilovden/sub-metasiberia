@@ -293,6 +293,34 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	}
 
 	{	
+		const std::string webcam_tex_path = gui_client->resources_dir_path + "/buttons/webcam.png";
+		if(FileUtils::fileExists(webcam_tex_path))
+		{
+			GLUIButton::CreateArgs args;
+			args.tooltip = "Enable webcam";
+			try
+			{
+				webcam_button = new GLUIButton(*gl_ui, opengl_engine, webcam_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
+				webcam_button->toggleable = true;
+				webcam_button->handler = this;
+				gl_ui->addWidget(webcam_button);
+			}
+			catch(glare::Exception& e)
+			{
+				conPrint("WARNING: Failed to create webcam_button: " + e.what());
+			}
+			catch(...)
+			{
+				conPrint("WARNING: Failed to create webcam_button: unknown exception");
+			}
+		}
+		else
+		{
+			conPrint("WARNING: Webcam button texture not found: " + webcam_tex_path);
+		}
+	}
+
+	{	
 		mic_level_image = new GLUIImage(*gl_ui, opengl_engine, ""/*gui_client->base_dir_path + "/resources/buttons/mic_level.png"*/, Vec2f(0), Vec2f(0.1f, 0.1f), "Microphone input indicator");
 		gl_ui->addWidget(mic_level_image);
 	}
@@ -308,6 +336,7 @@ void GestureUI::destroy()
 	checkRemoveAndDeleteWidget(gl_ui, vehicle_button);
 	checkRemoveAndDeleteWidget(gl_ui, photo_mode_button);
 	checkRemoveAndDeleteWidget(gl_ui, microphone_button);
+	checkRemoveAndDeleteWidget(gl_ui, webcam_button);
 	checkRemoveAndDeleteWidget(gl_ui, mic_level_image);
 	checkRemoveAndDeleteWidget(gl_ui, summon_bike_button);
 	checkRemoveAndDeleteWidget(gl_ui, summon_car_button);
@@ -408,6 +437,9 @@ void GestureUI::updateWidgetPositions()
 			const float mic_button_x = selfie_button_x + BUTTON_W + SPACING;
 			microphone_button->setPosAndDims(Vec2f(mic_button_x, -min_max_y + SPACING), Vec2f(BUTTON_W, BUTTON_H));
 
+			const float webcam_button_x = mic_button_x + BUTTON_W + SPACING;
+			webcam_button->setPosAndDims(Vec2f(webcam_button_x, -min_max_y + SPACING), Vec2f(BUTTON_W, BUTTON_H));
+
 			mic_level_image->setPosAndDims(Vec2f(mic_button_x + BUTTON_W * 0.8f, -min_max_y + SPACING + BUTTON_H * 0.2f), Vec2f(BUTTON_H * 0.2f, 0));
 
 
@@ -447,6 +479,7 @@ void GestureUI::setVisible(bool visible)
 		vehicle_button->setVisible(visible);
 		photo_mode_button->setVisible(visible);
 		microphone_button->setVisible(visible);
+		webcam_button->setVisible(visible);
 		mic_level_image->setVisible(visible);
 	}
 }
@@ -547,6 +580,16 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 					microphone_button->tooltip = "Disable microphone for voice chat";
 				else
 					microphone_button->tooltip = "Enable microphone for voice chat";
+			}
+			else if(button == webcam_button.ptr())
+			{
+				event.accepted = true;
+				gui_client->setWebcamEnabled(webcam_button->toggled);
+
+				if(webcam_button->toggled)
+					webcam_button->tooltip = "Disable webcam";
+				else
+					webcam_button->tooltip = "Enable webcam";
 			}
 		}
 

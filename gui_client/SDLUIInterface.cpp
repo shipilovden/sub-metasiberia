@@ -21,6 +21,7 @@ Copyright Glare Technologies Limited 2022 -
 #include <emscripten.h>
 #endif
 #include <opengl/ui/GLUI.h>
+#include <opengl/ui/GLUIButton.h>
 #include <opengl/ui/GLUITextButton.h>
 #include <opengl/ui/GLUITextView.h>
 #include <opengl/ui/GLUIInertWidget.h>
@@ -285,8 +286,173 @@ void SDLUIInterface::showAvatarSettings() // Show avatar settings dialog.
 	EM_ASM({
 		showAvatarSettingsWidget();
 	});
+#else
+	// Create SDL avatar settings dialog with two icon buttons
+	GLUIRef gl_ui = gui_client->gl_ui;
+	Reference<OpenGLEngine> opengl_engine = gui_client->opengl_engine;
+	
+	// Dialog dimensions
+	const float dialog_w = gl_ui->getUIWidthForDevIndepPixelWidth(400);
+	const float dialog_h = gl_ui->getUIWidthForDevIndepPixelWidth(300);
+	// Center of screen in GLUI coordinates: (0, 0) is center, not (0.5, 0.5)
+	const float center_x = 0.f;
+	const float center_y = 0.f;
+	const Vec2f dialog_min = Vec2f(center_x - dialog_w / 2.f, center_y - dialog_h / 2.f);
+	const Vec2f dialog_max = Vec2f(center_x + dialog_w / 2.f, center_y + dialog_h / 2.f);
+	
+	// Create background panel - use same style as About dialog (light gray)
+	if(avatar_settings_dialog_background_panel.isNull())
+	{
+		GLUIInertWidget::CreateArgs panel_args;
+		panel_args.background_colour = Colour3f(0.7f); // Same light gray as About dialog
+		panel_args.background_alpha = 0.8f; // Same alpha as About dialog
+		panel_args.z = -0.488f; // Background behind text/button, same as About dialog
+		avatar_settings_dialog_background_panel = new GLUIInertWidget(*gl_ui, opengl_engine, panel_args);
+		avatar_settings_dialog_background_panel->setPosAndDims(dialog_min, Vec2f(dialog_w, dialog_h));
+		gl_ui->addWidget(avatar_settings_dialog_background_panel);
+	}
+	else
+	{
+		avatar_settings_dialog_background_panel->setPosAndDims(dialog_min, Vec2f(dialog_w, dialog_h));
+	}
+	
+	// Text args for title
+	GLUITextView::CreateArgs text_args;
+	text_args.font_size_px = 20;
+	text_args.padding_px = 5;
+	text_args.max_width = dialog_w * 2.0f;
+	text_args.z = -0.5f;
+	text_args.line_0_x_offset = 0.f;
+	
+	// Title: "Настройки аватара"
+	const float title_y = dialog_max.y - gl_ui->getUIWidthForDevIndepPixelWidth(40);
+	const float title_x = dialog_min.x + gl_ui->getUIWidthForDevIndepPixelWidth(20);
+	
+	if(avatar_settings_dialog_title_text.isNull())
+	{
+		avatar_settings_dialog_title_text = new GLUITextView(*gl_ui, opengl_engine, "Настройки аватара", Vec2f(title_x, title_y), text_args);
+		gl_ui->addWidget(avatar_settings_dialog_title_text);
+	}
+	else
+	{
+		avatar_settings_dialog_title_text->setPos(Vec2f(title_x, title_y));
+	}
+	avatar_settings_dialog_title_text->setVisible(true);
+	
+	// Button dimensions
+	const float button_size = gl_ui->getUIWidthForDevIndepPixelWidth(120);
+	const float button_spacing = gl_ui->getUIWidthForDevIndepPixelWidth(30);
+	const float buttons_y = center_y - gl_ui->getUIWidthForDevIndepPixelWidth(20);
+	const float total_buttons_width = button_size * 2 + button_spacing;
+	const float buttons_start_x = center_x - total_buttons_width / 2.f;
+	
+	// ReadyPlayerMe button - set z to be in front of background panel
+	const float readyplayerme_x = buttons_start_x;
+	if(avatar_settings_readyplayerme_button.isNull())
+	{
+		GLUIButton::CreateArgs button_args;
+		avatar_settings_readyplayerme_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/ReadyPlayerMe.png", 
+			Vec2f(readyplayerme_x, buttons_y), Vec2f(button_size, button_size), button_args);
+		avatar_settings_readyplayerme_button->handler = this;
+		avatar_settings_readyplayerme_button->setZ(-0.5f); // In front of background panel (z = -0.488)
+		gl_ui->addWidget(avatar_settings_readyplayerme_button);
+	}
+	else
+	{
+		avatar_settings_readyplayerme_button->setPosAndDims(Vec2f(readyplayerme_x, buttons_y), Vec2f(button_size, button_size));
+		avatar_settings_readyplayerme_button->setZ(-0.5f); // Ensure z is correct
+	}
+	avatar_settings_readyplayerme_button->setVisible(true);
+	
+	// AvaturnMe button - set z to be in front of background panel
+	const float avaturnme_x = readyplayerme_x + button_size + button_spacing;
+	if(avatar_settings_avaturnme_button.isNull())
+	{
+		GLUIButton::CreateArgs button_args;
+		avatar_settings_avaturnme_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/avaturnme.png", 
+			Vec2f(avaturnme_x, buttons_y), Vec2f(button_size, button_size), button_args);
+		avatar_settings_avaturnme_button->handler = this;
+		avatar_settings_avaturnme_button->setZ(-0.5f); // In front of background panel (z = -0.488)
+		gl_ui->addWidget(avatar_settings_avaturnme_button);
+	}
+	else
+	{
+		avatar_settings_avaturnme_button->setPosAndDims(Vec2f(avaturnme_x, buttons_y), Vec2f(button_size, button_size));
+		avatar_settings_avaturnme_button->setZ(-0.5f); // Ensure z is correct
+	}
+	avatar_settings_avaturnme_button->setVisible(true);
+	
+	// Close button - use same style as About dialog buttons
+	GLUITextButton::CreateArgs close_button_args;
+	close_button_args.font_size_px = 18;
+	close_button_args.z = -0.5f;
+	close_button_args.background_colour = toLinearSRGB(Colour3f(1.f)); // White background (default)
+	close_button_args.text_colour = toLinearSRGB(Colour3f(0.1f)); // Dark text (default)
+	close_button_args.mouseover_background_colour = toLinearSRGB(Colour3f(0.8f)); // Light gray on hover (default)
+	close_button_args.mouseover_text_colour = toLinearSRGB(Colour3f(0.1f)); // Dark text on hover (default)
+	
+	const float close_button_w = gl_ui->getUIWidthForDevIndepPixelWidth(100);
+	const float close_button_h = gl_ui->getUIWidthForDevIndepPixelWidth(30);
+	const float close_button_y = dialog_min.y + gl_ui->getUIWidthForDevIndepPixelWidth(20);
+	const float close_button_x = dialog_min.x + (dialog_w - close_button_w) / 2.f;
+	
+	if(avatar_settings_close_button.isNull())
+	{
+		close_button_args.tooltip = "Закрыть";
+		avatar_settings_close_button = new GLUITextButton(*gl_ui, opengl_engine, "Закрыть", Vec2f(close_button_x, close_button_y), close_button_args);
+		avatar_settings_close_button->handler = this;
+		gl_ui->addWidget(avatar_settings_close_button);
+	}
+	else
+	{
+		avatar_settings_close_button->setPos(Vec2f(close_button_x, close_button_y));
+	}
+	avatar_settings_close_button->setVisible(true);
+	
+	// Show all widgets
+	avatar_settings_dialog_background_panel->setVisible(true);
+	avatar_settings_dialog_visible = true;
 #endif
 }
+
+void SDLUIInterface::hideAvatarSettings()
+{
+	if(avatar_settings_dialog_background_panel.nonNull())
+		avatar_settings_dialog_background_panel->setVisible(false);
+	if(avatar_settings_dialog_title_text.nonNull())
+		avatar_settings_dialog_title_text->setVisible(false);
+	if(avatar_settings_readyplayerme_button.nonNull())
+		avatar_settings_readyplayerme_button->setVisible(false);
+	if(avatar_settings_avaturnme_button.nonNull())
+		avatar_settings_avaturnme_button->setVisible(false);
+	if(avatar_settings_close_button.nonNull())
+		avatar_settings_close_button->setVisible(false);
+	avatar_settings_dialog_visible = false;
+}
+
+
+bool SDLUIInterface::handleAvatarSettingsDialogMousePress(const MouseEvent& e)
+{
+	if(!avatar_settings_dialog_visible)
+		return false;
+	
+	// Convert mouse coordinates to UI coordinates
+	const Vec2f coords = gui_client->gl_ui->UICoordsForOpenGLCoords(e.gl_coords);
+	
+	// Check if click is outside the dialog panel
+	if(avatar_settings_dialog_background_panel.nonNull())
+	{
+		if(!avatar_settings_dialog_background_panel->rect.inOpenRectangle(coords))
+		{
+			// Click is outside dialog - close it
+			hideAvatarSettings();
+			return true; // Event handled
+		}
+	}
+	
+	return false; // Event not handled (click was inside dialog)
+}
+
 
 void SDLUIInterface::setCamRotationOnMouseDragEnabled(bool enabled)
 {
@@ -1032,5 +1198,23 @@ void SDLUIInterface::eventOccurred(GLUICallbackEvent& event)
 	{
 		event.accepted = true;
 		openURL("https://t.me/denshipilov");
+	}
+	// Handle clicks on Avatar Settings dialog buttons
+	else if(event.widget == avatar_settings_close_button.ptr())
+	{
+		event.accepted = true;
+		hideAvatarSettings();
+	}
+	else if(event.widget == avatar_settings_readyplayerme_button.ptr())
+	{
+		event.accepted = true;
+		openURL("https://substrata.readyplayer.me/avatar");
+		hideAvatarSettings();
+	}
+	else if(event.widget == avatar_settings_avaturnme_button.ptr())
+	{
+		event.accepted = true;
+		openURL("https://avaturn.me/");
+		hideAvatarSettings();
 	}
 }

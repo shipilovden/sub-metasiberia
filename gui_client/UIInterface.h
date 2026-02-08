@@ -87,6 +87,7 @@ public:
 	virtual void startLightmapFlagTimer() = 0;
 
 	virtual void showAvatarSettings() = 0; // Show avatar settings dialog.
+	virtual bool isAvatarSettingsDialogVisible() const { return false; } // Check if avatar settings dialog is visible (SDL only)
 	
 	virtual void setUIForSelectedObject() = 0; // Enable/disable delete object action etc. based on if there is a selected object or not.
 
