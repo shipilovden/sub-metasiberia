@@ -3,7 +3,7 @@ WebcamCapture.cpp
 -----------------
 Copyright Glare Technologies Limited 2024 -
 =====================================================================*/
-#include "WebcamCapture.h"
+#include "webcam/WebcamCapture.h"
 #include "GUIClient.h"
 #include <opengl/ui/GLUIImage.h>
 #include <opengl/OpenGLTexture.h>

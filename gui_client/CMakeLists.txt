@@ -9,6 +9,9 @@ endif()
 include(../cmake/shared_settings.cmake)
 include(../cmake/shared_cxx_settings.cmake)
 
+# Ensure gui_client is in include path for webcam/ subfolder and other headers
+include_directories(${CMAKE_SOURCE_DIR}/gui_client)
+
 if(NOT EMSCRIPTEN)
 	include(../cmake/winter.cmake)
 endif()
@@ -91,6 +94,10 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client TerrainSpecSectionWidget)
 	addMocFileRule(gui_client WorldSettingsWidget)
 	addMocFileRule(gui_client CreateObjectsDialog)
+	addMocFileRule(gui_client/webcam WebcamWindow)
+	addMocFileRule(gui_client/webcam WebcamVideoView)
+	addMocFileRule(gui_client/webcam WebcamControlPanel)
+	addMocFileRule(gui_client/webcam WebcamSettingsDialog)
 
 	addMocFileRule(qt FileSelectWidget)
 	addMocFileRule(qt RealControl)
@@ -265,8 +272,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/ScriptedObjectProximityChecker.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/ScriptedObjectProximityChecker.h
 ${CMAKE_SOURCE_DIR}/gui_client/PhotoModeUI.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/PhotoModeUI.h
-${CMAKE_SOURCE_DIR}/gui_client/WebcamCapture.cpp
-${CMAKE_SOURCE_DIR}/gui_client/WebcamCapture.h
+${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.cpp
+${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.h
 ${CMAKE_SOURCE_DIR}/gui_client/GarbageDeleterThread.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GarbageDeleterThread.h
 )
@@ -377,6 +384,14 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.ui
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.h
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamVideoView.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamVideoView.h
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamControlPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamControlPanel.h
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamSettingsDialog.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamSettingsDialog.h
 	)
 endif()
 
@@ -414,6 +429,10 @@ if(NOT USE_SDL)
 	${CMAKE_SOURCE_DIR}/gui_client/moc_TerrainSpecSectionWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_WorldSettingsWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_CreateObjectsDialog.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamControlPanel.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamVideoView.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
 
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AddObjectDialog.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h
@@ -1282,12 +1301,16 @@ elseif(WIN32)
 			optimized Qt5Core
 			optimized Qt5OpenGL
 			optimized Qt5Widgets
+			optimized Qt5Multimedia
+			optimized Qt5MultimediaWidgets
 			optimized Qt5Gamepad
 			debug qtmaind
 			debug Qt5Guid
 			debug Qt5Cored
 			debug Qt5OpenGLd
 			debug Qt5Widgetsd
+			debug Qt5Multimediad
+			debug Qt5MultimediaWidgetsd
 			debug Qt5Gamepadd
 		)
 	endif()
@@ -1388,6 +1411,7 @@ else() # linux
 		Qt5OpenGL
 		Qt5Widgets
 		Qt5Multimedia
+		Qt5MultimediaWidgets
 		Qt5Network
 		Qt5Gamepad
 		dl

@@ -92,6 +92,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "../graphics/PNGDecoder.h"
 #include "../graphics/jpegdecoder.h"
 #include "../opengl/RenderStatsWidget.h"
+#if defined(USE_QT)
+#include "webcam/WebcamWindow.h"
+#endif
 #if defined(_WIN32)
 #include "../video/WMFVideoReader.h"
 #endif
@@ -150,6 +153,9 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	user_details(NULL),
 	ui(NULL),
 	minidump_sender(NULL)
+#if defined(USE_QT)
+	, webcam_window(nullptr)
+#endif
 	//game_controller(NULL)
 {
 	ZoneScoped; // Tracy profiler
@@ -239,6 +245,28 @@ void MainWindow::initialiseUI()
 		ui = new Ui::MainWindow();
 		ui->setupUi(this);
 	}
+
+#if defined(USE_QT)
+	// Replace webcam dock content with full WebcamWindow (camera list, settings, etc.) before restoreState
+	try {
+		webcam_window = new WebcamWindow(this);
+		ui->webcamDockWidget->setWidget(webcam_window);
+	} catch (const std::exception& e) {
+		logMessage("Webcam window init failed: " + std::string(e.what()) + " (using simple webcam UI)");
+		webcam_window = nullptr;
+		connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+			if(visible) ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
+		});
+		ui->webcamEnableCheckBox->setChecked(false);
+	} catch (...) {
+		logMessage("Webcam window init failed (unknown exception) (using simple webcam UI)");
+		webcam_window = nullptr;
+		connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+			if(visible) ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
+		});
+		ui->webcamEnableCheckBox->setChecked(false);
+	}
+#endif
 
 	setAcceptDrops(true);
 
@@ -1034,23 +1062,21 @@ void MainWindow::clearChatMessages()
 
 void MainWindow::setWebcamWindowVisible(bool visible)
 {
-	// This is called from GUIClient::setWebcamEnabled() when user clicks the webcam button icon
-	// Just show/hide the window - don't call setWebcamEnabled() again to avoid recursion
-	// Block signals temporarily to prevent visibilityChanged from firing
+	// This is called when user clicks the webcam button icon — show/hide the dock
 	ui->webcamDockWidget->blockSignals(true);
 	if(visible)
-	{
 		ui->webcamDockWidget->show();
-		// Update checkbox state to match current webcam state
+	else
+		ui->webcamDockWidget->hide();
+#if !defined(USE_QT)
+	if(visible)
 		ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
-	}
 	else
 	{
-		ui->webcamDockWidget->hide();
-		// Clear the label when hiding
 		ui->webcamLabel->clear();
 		ui->webcamLabel->setText("Webcam feed will appear here");
 	}
+#endif
 	ui->webcamDockWidget->blockSignals(false);
 }
 
@@ -1268,21 +1294,21 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	if(GPU_render_stats_widget)
 		GPU_render_stats_widget->addFrameTime((float)opengl_engine->last_total_draw_GPU_time);
 
-	// Update webcam display in Qt UI
-	if(ui->webcamDockWidget->isVisible() && gui_client.webcam_capture.isEnabled())
+	// Update webcam display in Qt UI (legacy path: only when WebcamWindow failed to create)
+#if defined(_WIN32) && !defined(EMSCRIPTEN) && defined(USE_QT)
+	if(!webcam_window && ui->webcamDockWidget->isVisible() && gui_client.webcam_capture.isEnabled())
 	{
-#if defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(USE_SDL)
 		QImage* frame_ptr = static_cast<QImage*>(gui_client.getWebcamFrameAsQImage());
 		if(frame_ptr && !frame_ptr->isNull())
 		{
 			ui->webcamLabel->setPixmap(QPixmap::fromImage(*frame_ptr).scaled(
-				ui->webcamLabel->size(), 
-				Qt::KeepAspectRatio, 
+				ui->webcamLabel->size(),
+				Qt::KeepAspectRatio,
 				Qt::SmoothTransformation
 			));
 		}
-#endif
 	}
+#endif
 }
 
 
@@ -2982,19 +3008,22 @@ void MainWindow::on_actionReset_Layout_triggered()
 	ui->webcamDockWidget->setFloating(false);
 	this->addDockWidget(Qt::RightDockWidgetArea, ui->webcamDockWidget, Qt::Vertical);
 	ui->webcamDockWidget->hide();
-	
-	// Connect webcam dock widget visibility - just update checkbox state when window is shown
-	// Don't automatically enable/disable webcam - user must use checkbox
+
+#if defined(USE_QT)
+	if (!webcam_window) {
+		connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+			if(visible)
+				ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
+		});
+		ui->webcamEnableCheckBox->setChecked(false);
+	}
+#else
 	connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
 		if(visible)
-		{
-			// Update checkbox state to match current webcam state when window is shown
 			ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
-		}
 	});
-	
-	// Initialize checkbox state
 	ui->webcamEnableCheckBox->setChecked(false);
+#endif
 
 	ui->materialBrowserDockWidget->setFloating(false);
 	this->addDockWidget(Qt::TopDockWidgetArea, ui->materialBrowserDockWidget, Qt::Horizontal);
@@ -5030,6 +5059,9 @@ int main(int argc, char *argv[])
 	// Note that this is deliberately constructed outside of the try..catch block below, because QErrorMessage crashes when displayed if
 	// GuiClientApplication has been destroyed. (stupid qt).
 	GuiClientApplication app(argc, argv);
+
+	// Ensure Qt finds plugins (platforms, mediaservice for webcam) next to the exe when run from Release/ output dir
+	QCoreApplication::addLibraryPath(QCoreApplication::applicationDirPath());
 
 	try
 	{

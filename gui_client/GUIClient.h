@@ -18,7 +18,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "HeadUpDisplayUI.h"
 #include "PhotoModeUI.h"
 #include "ChatUI.h"
-#include "WebcamCapture.h"
+#include "webcam/WebcamCapture.h"
 #include "DownloadingResourceQueue.h"
 #include "LoadItemQueue.h"
 #include "MeshManager.h"
@@ -424,6 +424,12 @@ public:
 	void setObjectLoadDistance(float new_dist);
 
 	void setOnlyLoadMostImportantObs(bool only_load_most_important_obs);
+
+	// Check if LOD should be disabled for current server (e.g., Shki-nvkz server)
+	bool shouldDisableLODForCurrentServer() const;
+	
+	// Get effective LOD level for object, considering server-specific settings
+	int getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const;
 
 	//----------------------- LuaScriptOutputHandler interface -----------------------
 	virtual void printFromLuaScript(LuaScript* script, const char* s, size_t len) override;

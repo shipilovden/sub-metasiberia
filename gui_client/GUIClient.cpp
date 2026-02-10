@@ -82,6 +82,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <utils/IncludeHalf.h>
 #include "../utils/MemAlloc.h"
 #include "../utils/UTF8Utils.h"
+#include "../utils/BitUtils.h"
 #include "../networking/Networking.h"
 #include "../networking/URL.h"
 #include "../graphics/ImageMap.h"
@@ -848,8 +849,9 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 		{}
 
 		// If we can't create a dedicated upload thread, use async uploads with VBO/PBO pools, except on Mac on which async stuff is broken (of course).
+		// For Shki-nvkz server, disable pools to avoid memory issues with large models
 #if !defined(__APPLE__)
-		if(allow_async_GPU_uploads)
+		if(allow_async_GPU_uploads && !shouldDisableLODForCurrentServer())
 		{
 			pbo_pool = new PBOPool();
 			vbo_pool       = new VBOPool(GL_ARRAY_BUFFER);
@@ -2127,10 +2129,16 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 	const Vec4f campos = cam_controller.getPosition().toVec4fPoint();
 
 	// Check object is in proximity.  Otherwise we might load objects outside of proximity, for example large objects transitioning from LOD level 1 to LOD level 2 or vice-versa.
+	// Exception: selected objects are always loaded (in_proximity is forced to true in selectObject)
 	if(!ob->in_proximity)
+	{
+		conPrint("loadModelForObject: Object " + ob->uid.toString() + " not in proximity, skipping");
 		return;
+	}
+	
+	conPrint("loadModelForObject: Loading model for object UID: " + ob->uid.toString() + ", model_url: " + std::string(ob->model_url) + ", in_proximity: " + toString(ob->in_proximity));
 
-	const int ob_lod_level = ob->getLODLevel(campos);
+	const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 	
 	// If we have a model loaded, that is not the placeholder model, and it has the correct LOD level, we don't need to do anything.
 	//if(ob->opengl_engine_ob.nonNull() && !ob->using_placeholder_model && (ob->loaded_model_lod_level == ob_model_lod_level) && (ob->/*loaded_lod_level*/loading_lod_level == ob_lod_level))
@@ -2736,7 +2744,8 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 
 		if(load_placeholder)
 		{
-			if(ob->opengl_engine_ob.isNull() && !BitUtils::isBitSet(ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH))
+			// Don't use LOD chunk placeholder for selected objects - they should load the full model
+			if(ob->opengl_engine_ob.isNull() && !BitUtils::isBitSet(ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH) && !ob->is_selected)
 			{
 				// We will use part of the chunk geometry as the placeholder graphics for this object, while it is loading.
 				// Use the sub-range of the indices from the LOD chunk geometry that correspond to this object.
@@ -2891,9 +2900,17 @@ void GUIClient::loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const
 
 	loadScriptForObject(ob, world_state_lock); // Load any script for the object.
 
-	// If we replaced the model for selected_ob, reselect it in the OpenGL engine
+	// If we replaced the model for selected_ob, reselect it in the OpenGL engine and ensure it's always visible
 	if(this->selected_ob == ob)
-		opengl_engine->selectObject(ob->opengl_engine_ob);
+	{
+		// Ensure selected objects are always visible
+		if(ob->opengl_engine_ob.nonNull())
+		{
+			ob->opengl_engine_ob->always_visible = true;
+			opengl_engine->selectObject(ob->opengl_engine_ob);
+			conPrint("loadPresentObjectGraphicsAndPhysicsModels: Selected object " + ob->uid.toString() + " model loaded, set always_visible=true");
+		}
+	}
 }
 
 
@@ -4068,6 +4085,9 @@ void GUIClient::checkForLODChanges(Timer& timer_event_timer)
 		const bool use_server_using_lod_chunks = this->server_using_lod_chunks;
 
 
+		// If LOD is disabled for this server, process all objects with fixed LOD -1 (maximum quality)
+		const bool lod_disabled = shouldDisableLODForCurrentServer();
+		
 		const Vec4f cam_pos = cam_controller.getPosition().toVec4fPoint();
 		const float proj_len_viewable_threshold = only_load_most_important_obs ? 0.02f : 0.f; // Objects with a projected length >= this value will be loaded
 		const float load_everything_distance2   = only_load_most_important_obs ? Maths::square(60.f) : this->load_distance2; // Load everything <= this distance.
@@ -4101,27 +4121,83 @@ void GUIClient::checkForLODChanges(Timer& timer_event_timer)
 			const float proj_len = ob->getBiasedAABBLength() * recip_dist;
 
 			bool in_proximity = (proj_len > proj_len_viewable_threshold) || (cam_to_ob_d2 <= load_everything_distance2);
+			
+			// Debug logging for object 4197
+			if(ob->uid.value() == 4197)
+			{
+				conPrint("*** checkForLODChanges: OBJECT 4197 ***");
+				conPrint("  - cam_to_ob_d2: " + toString(cam_to_ob_d2) + ", load_everything_distance2: " + toString(load_everything_distance2));
+				conPrint("  - proj_len: " + toString(proj_len) + ", proj_len_viewable_threshold: " + toString(proj_len_viewable_threshold));
+				conPrint("  - in_proximity (before LOD chunk check): " + toString(in_proximity));
+				conPrint("  - exclude_from_lod_chunk_mesh: " + toString(ob->exclude_from_lod_chunk_mesh));
+				conPrint("  - opengl_engine_ob: " + toString(ob->opengl_engine_ob.nonNull()));
+				conPrint("  - using_placeholder_model: " + toString(ob->using_placeholder_model));
+			}
 
 			// If this object is in a chunk region, and we are displaying the chunk, then don't show the object.
+			// Exception: selected objects are always visible (exclude_from_lod_chunk_mesh is forced to true in selectObject)
+			// Exception: for servers with disabled LOD, all objects should be visible (exclude from LOD chunk)
 			const Vec3i chunk_coords(Maths::floorToInt(centroid[0] / chunk_w), Maths::floorToInt(centroid[1] / chunk_w), 0);
-			if(use_server_using_lod_chunks && shouldDisplayLODChunk(chunk_coords, cam_pos) && !ob->exclude_from_lod_chunk_mesh)
+			if(lod_disabled)
+			{
+				// For servers with disabled LOD, exclude all objects from LOD chunk to ensure visibility
+				if(!ob->exclude_from_lod_chunk_mesh)
+				{
+					ob->exclude_from_lod_chunk_mesh = true;
+					BitUtils::setBit(ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH);
+				}
+			}
+			else if(use_server_using_lod_chunks && shouldDisplayLODChunk(chunk_coords, cam_pos) && !ob->exclude_from_lod_chunk_mesh)
+			{
 				in_proximity = false;
+				// Log if this is the selected object being hidden
+				if(ob->is_selected)
+					conPrint("WARNING: Selected object " + ob->uid.toString() + " would be hidden by LOD chunk, but exclude_from_lod_chunk_mesh=" + toString(ob->exclude_from_lod_chunk_mesh));
+				// Debug logging for object 4197
+				if(ob->uid.value() == 4197)
+				{
+					conPrint("*** OBJECT 4197 HIDDEN BY LOD CHUNK ***");
+					conPrint("  - chunk_coords: (" + toString(chunk_coords.x) + ", " + toString(chunk_coords.y) + ", " + toString(chunk_coords.z) + ")");
+					conPrint("  - use_server_using_lod_chunks: " + toString(use_server_using_lod_chunks));
+					conPrint("  - shouldDisplayLODChunk: " + toString(shouldDisplayLODChunk(chunk_coords, cam_pos)));
+					conPrint("  - exclude_from_lod_chunk_mesh: " + toString(ob->exclude_from_lod_chunk_mesh));
+				}
+			}
 
 			assert(ob->exclude_from_lod_chunk_mesh == BitUtils::isBitSet(ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH));
 
 			bool object_changed = false;
 			if(!in_proximity) // If object is out of load distance:
 			{
-				if(ob->in_proximity) // If an object was in proximity to the camera, and moved out of load distance:
+				// Exception: selected objects are always kept loaded and visible
+				if(ob->is_selected)
 				{
+					// Keep selected objects in proximity and loaded
+					in_proximity = true;
+					if(!ob->in_proximity)
+					{
+						ob->in_proximity = true;
+						loadModelForObject(ob, lock);
+						object_changed = true;
+					}
+				}
+				else if(ob->in_proximity) // If an object was in proximity to the camera, and moved out of load distance:
+				{
+					if(ob->uid.value() == 4197)
+						conPrint("*** OBJECT 4197 UNLOADING (out of proximity) ***");
 					unloadObject(ob);
 					ob->in_proximity = false;
 					object_changed = true;
 				}
+				else if(ob->uid.value() == 4197)
+				{
+					conPrint("*** OBJECT 4197 NOT IN PROXIMITY (not loading) ***");
+					conPrint("  - current in_proximity flag: " + toString(ob->in_proximity));
+				}
 			}
 			else // Else if object is within load distance:
 			{
-				const int lod_level = ob->getLODLevel(cam_to_ob_d2);
+				const int lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 
 				if((lod_level != ob->current_lod_level)/* || ob->opengl_engine_ob.isNull()*/)
 				{
@@ -4260,25 +4336,35 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 	// Data is uploaded - assign the loaded model for any objects using waiting for this model:
 	WorldStateLock lock(this->world_state->mutex);
 
-	const ModelProcessingKey model_loading_key(lod_model_url, dynamic_physics_shape);
-	auto res = this->loading_model_URL_to_world_ob_UID_map.find(model_loading_key);
-	if(res != this->loading_model_URL_to_world_ob_UID_map.end())
-	{
-		std::set<UID>& waiting_obs = res->second;
-		for(auto it = waiting_obs.begin(); it != waiting_obs.end(); ++it)
+		const ModelProcessingKey model_loading_key(lod_model_url, dynamic_physics_shape);
+		auto res = this->loading_model_URL_to_world_ob_UID_map.find(model_loading_key);
+		if(res != this->loading_model_URL_to_world_ob_UID_map.end())
 		{
-			const UID waiting_uid = *it;
-
-			auto res2 = this->world_state->objects.find(waiting_uid);
-			if(res2 != this->world_state->objects.end())
+			std::set<UID>& waiting_obs = res->second;
+			conPrint("handleUploadedMeshData: Model loaded for URL: " + std::string(lod_model_url) + ", waiting objects: " + toString(waiting_obs.size()));
+			for(auto it = waiting_obs.begin(); it != waiting_obs.end(); ++it)
 			{
-				WorldObject* ob = res2.getValue().ptr();
+				const UID waiting_uid = *it;
+
+				auto res2 = this->world_state->objects.find(waiting_uid);
+				if(res2 != this->world_state->objects.end())
+				{
+					WorldObject* ob = res2.getValue().ptr();
+					conPrint("handleUploadedMeshData: Processing object UID: " + waiting_uid.toString() + ", is_selected: " + toString(ob->is_selected) + ", in_proximity: " + toString(ob->in_proximity));
 
 				//ob->aabb_os = mesh_data->aabb_os;
 
-				if(ob->in_proximity)
+				// Selected objects should always load their models, even if not in proximity
+				if(ob->in_proximity || ob->is_selected)
 				{
-					const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+					// Force selected objects to be in proximity for model loading
+					if(ob->is_selected && !ob->in_proximity)
+					{
+						ob->in_proximity = true;
+						conPrint("handleUploadedMeshData: Selected object " + waiting_uid.toString() + " not in proximity, forcing in_proximity=true");
+					}
+					
+					const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 					const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
 								
 					// Check the object wants this particular LOD level model right now:
@@ -4575,6 +4661,29 @@ void GUIClient::setObjectLoadDistance(float new_dist)
 void GUIClient::setOnlyLoadMostImportantObs(bool only_load_most_important_obs_)
 {
 	only_load_most_important_obs = only_load_most_important_obs_;
+}
+
+
+bool GUIClient::shouldDisableLODForCurrentServer() const
+{
+	// Disable LOD for Shki-nvkz server (176.197.223.42) and Metasiberia server (89.104.70.23) to ensure large models are always visible
+	return (server_hostname == "176.197.223.42") || (server_hostname == "89.104.70.23");
+}
+
+
+int GUIClient::getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const
+{
+	if(shouldDisableLODForCurrentServer())
+	{
+		// For servers with disabled LOD, always use LOD level -1 (maximum quality) regardless of distance
+		// This ensures large models are always visible and rendered at full quality
+		return -1;
+	}
+	else
+	{
+		// For other servers, use normal LOD calculation
+		return ob->getLODLevel(campos);
+	}
 }
 
 
@@ -4899,8 +5008,9 @@ void GUIClient::processLoading(Timer& timer_event_timer)
 
 			// We want to get a free VBO, memcpy our geometry data to it, and then start uploading it to the GPU.
 			// Use separate buffers for vert and index data for async uploads, as required by WebGL.
-			VBORef vert_vbo  = vbo_pool      ->getUnusedVBO(message->vert_data_size_B);
-			VBORef index_vbo = index_vbo_pool->getUnusedVBO(message->index_data_size_B);
+			// For Shki-nvkz server, disable pools to use sync queue (allows models > 256 MB)
+			VBORef vert_vbo  = shouldDisableLODForCurrentServer() ? VBORef() : (vbo_pool      ? vbo_pool      ->getUnusedVBO(message->vert_data_size_B) : VBORef());
+			VBORef index_vbo = shouldDisableLODForCurrentServer() ? VBORef() : (index_vbo_pool ? index_vbo_pool->getUnusedVBO(message->index_data_size_B) : VBORef());
 			if(vert_vbo && index_vbo)
 			{
 				ArrayRef<uint8> vert_data, index_data;
@@ -4998,7 +5108,8 @@ void GUIClient::processLoading(Timer& timer_event_timer)
 				}
 
 				runtimeCheck(source_data.data());
-				PBORef pbo = pbo_pool->getUnusedVBO(source_data.size());
+				// For Shki-nvkz server, disable pools to use sync queue (allows textures > 256 MB)
+				PBORef pbo = shouldDisableLODForCurrentServer() ? PBORef() : (pbo_pool ? pbo_pool->getUnusedVBO(source_data.size()) : PBORef());
 				if(pbo)
 				{
 					//conPrint("------- Uploading texture of " + uInt64ToStringCommaSeparated(source_data.size()) + " B using PBO " + toHexString((uint64)pbo.ptr()) + "-------");
@@ -6641,7 +6752,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 							enableMaterialisationEffectOnOb(*ob); // Enable materialisation effect before we call loadModelForObject() below.
 
 						// Make sure lod level is set before calling loadModelForObject(), which will start downloads based on the lod level.
-						ob->current_lod_level = ob->getLODLevel(cam_controller.getPosition());
+						ob->current_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 
 						ob->in_proximity = ob->getCentroidWS().getDist2(campos) < this->load_distance2;
 						const Vec3i chunk_coords(Maths::floorToInt(ob->getCentroidWS()[0] / chunk_w), Maths::floorToInt(ob->getCentroidWS()[1] / chunk_w), 0);
@@ -6673,7 +6784,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 								// Update materials in opengl engine.
 								glare::ArenaFrame frame(arena_allocator);
-								const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+								const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 								for(size_t i=0; i<ob->materials.size(); ++i)
 									if(i < opengl_ob->materials.size())
 										ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
@@ -6755,7 +6866,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 				else if(ob->from_remote_lightmap_url_dirty)
 				{
 					// Try and download any resources we don't have for this object
-					const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+					const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 					startDownloadingResourcesForObject(ob, ob_lod_level);
 
 					// Update materials in opengl engine, so it picks up the new lightmap URL
@@ -8278,7 +8389,13 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		{
 			ModelLoadedThreadMessage* loaded_msg = checkedDowncastPtr<ModelLoadedThreadMessage>(msg);
 
-			if(vbo_pool && (loaded_msg->total_geom_size_B <= vbo_pool->getLargestVBOSize()))
+			// For Shki-nvkz server, always use sync queue for maximum quality (allows models > 256 MB)
+			if(shouldDisableLODForCurrentServer())
+			{
+				conPrint("LOD disabled for this server, using sync queue for maximum quality. Size: " + toString(loaded_msg->total_geom_size_B) + " B");
+				model_loaded_messages_to_process.push_back(loaded_msg);
+			}
+			else if(vbo_pool && (loaded_msg->total_geom_size_B <= vbo_pool->getLargestVBOSize()))
 				async_model_loaded_messages_to_process.push_back(loaded_msg);
 			else
 				model_loaded_messages_to_process.push_back(loaded_msg);
@@ -8296,7 +8413,13 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			}
 			else
 			{
-				if(pbo_pool && (loaded_msg->texture_data->frame_size_B <= pbo_pool->getLargestPBOSize()))
+				// For Shki-nvkz server, always use sync queue for maximum quality (allows textures > 256 MB)
+				if(shouldDisableLODForCurrentServer())
+				{
+					conPrint("LOD disabled for this server, using sync queue for texture. Size: " + toString(loaded_msg->texture_data->frame_size_B) + " B");
+					texture_loaded_messages_to_process.push_back(loaded_msg);
+				}
+				else if(pbo_pool && (loaded_msg->texture_data->frame_size_B <= pbo_pool->getLargestPBOSize()))
 					async_texture_loaded_messages_to_process.push_back(loaded_msg);
 				else
 					texture_loaded_messages_to_process.push_back(loaded_msg);
@@ -9062,7 +9185,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						{
 							WorldObject* ob = it.getValue().ptr();
 
-							const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+							const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 
 							//if(ob->using_placeholder_model)
 							{
@@ -10666,7 +10789,7 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 						opengl_ob->ob_to_world_matrix = obToWorldMatrix(*in_world_ob);
 						opengl_engine->updateObjectTransformData(*opengl_ob);
 
-						const int ob_lod_level = in_world_ob->getLODLevel(cam_controller.getPosition());
+						const int ob_lod_level = getEffectiveLODLevel(in_world_ob.ptr(), cam_controller.getPosition());
 
 						// Update materials in opengl engine.
 						glare::ArenaFrame frame(arena_allocator);
@@ -11806,7 +11929,7 @@ void GUIClient::objectEdited()
 		// Note that server will also generate LOD textures, however the client may want to display a particular LOD texture immediately, so generate on the client as well.
 		//TEMP LODGeneration::generateLODTexturesForMaterialsIfNotPresent(selected_ob->materials, *resource_manager, *task_manager);
 
-		const int ob_lod_level = this->selected_ob->getLODLevel(cam_controller.getPosition());
+		const int ob_lod_level = getEffectiveLODLevel(this->selected_ob.ptr(), cam_controller.getPosition());
 		const float max_dist_for_ob_lod_level = selected_ob->getMaxDistForLODLevel(ob_lod_level);
 
 		startLoadingTexturesForObject(*this->selected_ob, ob_lod_level, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level/*TEMP*/);
@@ -12641,6 +12764,22 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 	//-------------------------------- Do disconnect process --------------------------------
 	disconnectFromServerAndClearAllObjects();
 	//-------------------------------- End disconnect process --------------------------------
+
+	// Special settings for Shki-nvkz server (176.197.223.42) and Metasiberia server (89.104.70.23):
+	// - Increase load distance to 5000 to ensure large models are loaded
+	// - Disable VBO/PBO pools to avoid memory issues with large models
+	if(server_hostname == "176.197.223.42" || server_hostname == "89.104.70.23")
+	{
+		// Increase load distance to 5000 for these servers
+		const float increased_load_distance = 5000.0f;
+		proximity_loader.setLoadDistance(increased_load_distance);
+		this->load_distance = increased_load_distance;
+		this->load_distance2 = increased_load_distance * increased_load_distance;
+		
+		// Disable VBO/PBO pools for these servers to avoid memory issues with large models
+		// Pools will be set to NULL in postConnectInitialise() if they were created
+		conPrint("Large models server detected (" + server_hostname + "): load distance set to 5000, VBO/PBO pools will be disabled");
+	}
 
 
 	//-------------------------------- Do connect process --------------------------------
@@ -13578,7 +13717,7 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 	{
 		const Matrix4f ob_to_world = obToWorldMatrix(*ob);
 
-		const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+		const int ob_lod_level = getEffectiveLODLevel(ob.ptr(), cam_controller.getPosition());
 
 		js::Vector<bool, 16> mat_transparent(ob->materials.size());
 		for(size_t i=0; i<ob->materials.size(); ++i)
@@ -14345,6 +14484,8 @@ static bool isObjectDecal(const WorldObjectRef& ob)
 void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 {
 	assert(ob.nonNull());
+	
+	conPrint("=== selectObject CALLED: UID=" + ob->uid.toString() + ", model_url=" + std::string(ob->model_url) + " ===");
 
 	// Deselect any existing object
 	deselectObject();
@@ -14373,11 +14514,78 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 
 	createPathControlledPathVisObjects(*this->selected_ob);
 
-	// Mark the materials on the hit object as selected
+	const bool have_edit_permissions = objectModificationAllowed(*this->selected_ob);
+
+	// Force load model for selected object FIRST, before trying to select it in OpenGL engine
+	// This ensures selected objects are always visible in the editor
+	{
+		WorldStateLock lock(this->world_state->mutex);
+		// Temporarily set in_proximity to true to allow model loading
+		const bool was_in_proximity = this->selected_ob->in_proximity;
+		const bool was_exclude_from_lod_chunk = this->selected_ob->exclude_from_lod_chunk_mesh;
+		const uint32 was_flags = this->selected_ob->flags;
+		const int was_loading_lod_level = this->selected_ob->loading_or_loaded_lod_level;
+		
+		// Force object to be in proximity and not in LOD chunk for selected objects
+		this->selected_ob->in_proximity = true;
+		this->selected_ob->exclude_from_lod_chunk_mesh = true; // Exclude from LOD chunk to ensure visibility
+		// Also set the bit in flags to ensure consistency
+		BitUtils::setBit(this->selected_ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH);
+		
+		// Reset loading state to force reload
+		this->selected_ob->loading_or_loaded_lod_level = -10; // Invalid value to force reload
+		
+		conPrint("selectObject: Force loading model for selected object UID: " + this->selected_ob->uid.toString() + 
+			", model_url: " + std::string(this->selected_ob->model_url) + 
+			", in_proximity: " + toString(this->selected_ob->in_proximity) +
+			", exclude_from_lod_chunk: " + toString(this->selected_ob->exclude_from_lod_chunk_mesh) +
+			", flags bit set: " + toString(BitUtils::isBitSet(this->selected_ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH)) +
+			", opengl_engine_ob: " + toString(this->selected_ob->opengl_engine_ob.nonNull()));
+		
+		loadModelForObject(this->selected_ob.ptr(), lock);
+		
+		conPrint("selectObject: After loadModelForObject, opengl_engine_ob: " + toString(this->selected_ob->opengl_engine_ob.nonNull()) +
+			", using_placeholder_model: " + toString(this->selected_ob->using_placeholder_model) +
+			", model_url empty: " + toString(this->selected_ob->model_url.empty()));
+		
+		// Ensure the object is added to OpenGL engine if it was created
+		if(this->selected_ob->opengl_engine_ob.nonNull())
+		{
+			// Make sure object is always visible (for selected objects in editor)
+			this->selected_ob->opengl_engine_ob->always_visible = true;
+			
+			// Explicitly add to OpenGL engine if not already added (in case it was removed)
+			// Check if object is in the engine by trying to add it (addObject handles duplicates)
+			opengl_engine->addObject(this->selected_ob->opengl_engine_ob);
+			
+			conPrint("selectObject: Object added to OpenGL engine and set always_visible, using_placeholder: " + toString(this->selected_ob->using_placeholder_model));
+		}
+		else
+		{
+			conPrint("WARNING: selectObject: opengl_engine_ob is NULL after loadModelForObject - model may still be loading asynchronously");
+		}
+		
+		// Restore original state (or keep it true if it should be)
+		if(!was_in_proximity)
+		{
+			// Re-check proximity based on actual distance, but keep in_proximity = true for selected objects
+			// to ensure they remain loaded
+			this->selected_ob->in_proximity = true; // Keep true for selected objects
+		}
+		// Keep exclude_from_lod_chunk_mesh = true and flag set for selected objects to ensure they're always visible
+		// Don't restore the flag - keep it set for selected objects
+	}
+
+	// Mark the materials on the hit object as selected (AFTER loading the model)
 	if(this->selected_ob->opengl_engine_ob.nonNull())
 	{
 		opengl_engine->selectObject(selected_ob->opengl_engine_ob);
 		opengl_engine->setSelectionOutlineColour(DEFAULT_OUTLINE_COLOUR);
+		conPrint("selectObject: Object selected in OpenGL engine");
+	}
+	else
+	{
+		conPrint("WARNING: selectObject: opengl_engine_ob is NULL after loadModelForObject for UID=" + this->selected_ob->uid.toString());
 	}
 
 	// Turn on voxel grid drawing if this is a voxel object
@@ -14388,8 +14596,6 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 
 		opengl_engine->objectMaterialsUpdated(*this->selected_ob->opengl_engine_ob);
 	}
-
-	const bool have_edit_permissions = objectModificationAllowed(*this->selected_ob);
 
 	// Add an object placement beam
 	if(have_edit_permissions)
