@@ -7,11 +7,10 @@ Copyright Glare Technologies Limited 2021 -
 
 
 #include "GUIClient.h"
+#include "GestureManagerUI.h"
 #include <settings/SettingsStore.h>
 #include <graphics/SRGBUtils.h>
 #include <tracy/Tracy.hpp>
-#include <utils/FileUtils.h>
-#include <utils/ConPrint.h>
 
 
 GestureUI::GestureUI()
@@ -26,150 +25,6 @@ GestureUI::~GestureUI()
 {}
 
 
-// Column 0: Animation name
-// Column 1: Should the animation data control the head (e.g. override the procedural lookat anim)?
-// Column 2: Should the animation automatically loop.
-// Column 3: Animation duration (from debug output in OpenGLEngine.cpp, conPrint("anim_datum_a..  etc..")
-static const char* gestures[] = {
-	"Clapping",						"",				"Loop",		"",
-	"Dancing",						"AnimHead",		"Loop",		"",
-	"Excited",						"AnimHead",		"Loop",		"6.5666666",
-	"Looking",						"AnimHead",		"",			"8.016666",
-	"Quick Informal Bow",			"AnimHead",		"",			"2.75",
-	"Rejected",						"AnimHead",		"",			"4.8166666",
-	"Sit",							"",				"Loop",		"",
-	"Sitting On Ground",			"",				"Loop",		"",
-	"Sitting Talking",				"",				"Loop",		"",
-	"Sleeping Idle",				"AnimHead",		"Loop",		"",
-	"Standing React Death Forward",	"AnimHead",		"",			"3.6833334",
-	"Waving 1",						"",				"Loop",		"",
-	"Waving 2",						"",				"",			"3.1833334",
-	"Yawn",							"AnimHead",		"",			"8.35"
-};
-
-static const int NUM_GESTURE_FIELDS = 4;
-
-static_assert((staticArrayNumElems(gestures) % NUM_GESTURE_FIELDS) == 0, "(staticArrayNumElems(gestures) % NUM_GESTURE_FIELDS) == 0");
-
-
-std::string GestureUI::trUI(const char* english, const char* russian) const
-{
-	if(gui_client && gui_client->getSettingsStore() &&
-		gui_client->getSettingsStore()->getStringValue("ui/language", "en") == "ru")
-		return russian;
-	return english;
-}
-
-
-void GestureUI::rebuildVehicleTextButtons()
-{
-	if(!gl_ui || !opengl_engine)
-		return;
-
-	if(summon_bike_button.nonNull())     gl_ui->removeWidget(summon_bike_button);
-	if(summon_car_button.nonNull())      gl_ui->removeWidget(summon_car_button);
-	if(summon_boat_button.nonNull())     gl_ui->removeWidget(summon_boat_button);
-	if(summon_jetski_button.nonNull())   gl_ui->removeWidget(summon_jetski_button);
-	if(summon_hovercar_button.nonNull()) gl_ui->removeWidget(summon_hovercar_button);
-
-	{
-		GLUITextButton::CreateArgs args;
-		args.tooltip = trUI("Summon bike", "Вызвать байк");
-		summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon bike", "Вызвать байк"), Vec2f(0), args);
-		summon_bike_button->setVisible(vehicle_buttons_visible);
-		summon_bike_button->handler = this;
-		gl_ui->addWidget(summon_bike_button);
-	}
-	{
-		GLUITextButton::CreateArgs args;
-		args.tooltip = trUI("Summon car", "Вызвать машину");
-		summon_car_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon car", "Вызвать машину"), Vec2f(0), args);
-		summon_car_button->setVisible(vehicle_buttons_visible);
-		summon_car_button->handler = this;
-		gl_ui->addWidget(summon_car_button);
-	}
-	{
-		GLUITextButton::CreateArgs args;
-		args.tooltip = trUI("Summon boat", "Вызвать лодку");
-		summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon boat", "Вызвать лодку"), Vec2f(0), args);
-		summon_boat_button->setVisible(vehicle_buttons_visible);
-		summon_boat_button->handler = this;
-		gl_ui->addWidget(summon_boat_button);
-	}
-	{
-		GLUITextButton::CreateArgs args;
-		args.tooltip = trUI("Summon jet ski", "Вызвать гидроцикл");
-		summon_jetski_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon jet ski", "Вызвать гидроцикл"), Vec2f(0), args);
-		summon_jetski_button->setVisible(vehicle_buttons_visible);
-		summon_jetski_button->handler = this;
-		gl_ui->addWidget(summon_jetski_button);
-	}
-	{
-		GLUITextButton::CreateArgs args;
-		args.tooltip = trUI("Summon hovercar", "Вызвать ховеркар");
-		summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon hovercar", "Вызвать ховеркар"), Vec2f(0), args);
-		summon_hovercar_button->setVisible(vehicle_buttons_visible);
-		summon_hovercar_button->handler = this;
-		gl_ui->addWidget(summon_hovercar_button);
-	}
-}
-
-
-void GestureUI::refreshDynamicTooltips()
-{
-	if(expand_button.nonNull())          expand_button->tooltip = trUI("View gestures", "Показать жесты");
-	if(collapse_button.nonNull())        collapse_button->tooltip = trUI("Hide gestures", "Скрыть жесты");
-	if(vehicle_button.nonNull())         vehicle_button->tooltip = trUI("Summon vehicle", "Вызвать транспорт");
-	if(collapse_vehicle_button.nonNull()) collapse_vehicle_button->tooltip = trUI("Hide vehicles", "Скрыть транспорт");
-	if(photo_mode_button.nonNull())      photo_mode_button->tooltip = trUI("Photo mode", "Фоторежим");
-
-	if(microphone_button.nonNull())
-		microphone_button->tooltip = microphone_button->toggled ?
-			trUI("Disable microphone for voice chat", "Выключить микрофон для голосового чата") :
-			trUI("Enable microphone for voice chat", "Включить микрофон для голосового чата");
-
-	if(webcam_button.nonNull())
-	{
-#if USE_SDL || EMSCRIPTEN
-		webcam_button->tooltip = webcam_button->toggled ?
-			trUI("Disable webcam", "Выключить веб-камеру") :
-			trUI("Enable webcam", "Включить веб-камеру");
-#else
-		webcam_button->tooltip = webcam_button->toggled ?
-			trUI("Close webcam window", "Закрыть окно веб-камеры") :
-			trUI("Open webcam window", "Открыть окно веб-камеры");
-#endif
-	}
-}
-
-
-void GestureUI::refreshLanguage()
-{
-	rebuildVehicleTextButtons();
-	refreshDynamicTooltips();
-	updateWidgetPositions();
-}
-
-bool GestureUI::animateHead(const std::string& gesture)
-{
-	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
-		if(gestures[i] == gesture)
-			return std::string(gestures[i+1]) == "AnimHead";
-	assert(0);
-	return false;
-}
-
-
-bool GestureUI::loopAnim(const std::string& gesture)
-{
-	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
-		if(gestures[i] == gesture)
-			return std::string(gestures[i+2]) == "Loop";
-	assert(0);
-	return false;
-}
-
-
 void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_, GLUIRef gl_ui_)
 {
 	ZoneScoped; // Tracy profiler
@@ -181,201 +36,109 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	gestures_visible        = gui_client->getSettingsStore()->getBoolValue("GestureUI/gestures_visible",        /*default val=*/false);
 	vehicle_buttons_visible = false;
 
-	const float min_max_y = gl_ui->getViewportMinMaxY();
+	// Start with the default gestures.  These can be overridden with the user's custom settings when they log in.
+	this->gesture_settings = GestureSettings::defaultGestureSettings();
 
-	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
+	rebuildGestureWidgets();
+
 	{
-		const std::string gesture_name = gestures[i];
-		const std::string button_tex_path = gui_client->resources_dir_path + "/buttons/" + gesture_name + ".png";
-
-		// Check if file exists before creating button to avoid crashes
-		if(!FileUtils::fileExists(button_tex_path))
-		{
-			conPrint("WARNING: Gesture button texture not found: " + button_tex_path + ", skipping button creation");
-			continue;
-		}
-
 		GLUIButton::CreateArgs args;
-		args.tooltip = gesture_name;
-		try
-		{
-			GLUIButtonRef button = new GLUIButton(*gl_ui, opengl_engine, button_tex_path, Vec2f(0.1f + i * 0.15f, -min_max_y + 0.06f), Vec2f(0.1f, 0.1f), args);
-			button->toggleable = true;
-			button->client_data = gesture_name;
-			button->handler = this;
-			gl_ui->addWidget(button);
+		args.tooltip = "Manage gestures";
+		edit_gestures_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/plus.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		edit_gestures_button->handler = this;
+		gl_ui->addWidget(edit_gestures_button);
+	}
 
-			gesture_buttons.push_back(button);
-		}
-		catch(glare::Exception& e)
-		{
-			conPrint("WARNING: Failed to create gesture button for " + gesture_name + ": " + e.what());
-			// Continue with other buttons
-		}
-		catch(...)
-		{
-			conPrint("WARNING: Failed to create gesture button for " + gesture_name + ": unknown exception");
-			// Continue with other buttons
-		}
+	{
+		GLUIButton::CreateArgs args;
+		args.tooltip = "Close gesture manager";
+		close_gesture_manager_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/white_x.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		close_gesture_manager_button->handler = this;
+		gl_ui->addWidget(close_gesture_manager_button);
+		close_gesture_manager_button->setVisible(false);
 	}
 
 	// Create left and right tab buttons
 	{
-		const std::string expand_tex_path = gui_client->resources_dir_path + "/buttons/Waving 1.png";
-		if(FileUtils::fileExists(expand_tex_path))
-		{
-			GLUIButton::CreateArgs args;
-			args.tooltip = "View gestures";
-			try
-			{
-				expand_button = new GLUIButton(*gl_ui, opengl_engine, expand_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
-				expand_button->handler = this;
-				gl_ui->addWidget(expand_button);
-			}
-			catch(glare::Exception& e)
-			{
-				conPrint("WARNING: Failed to create expand_button: " + e.what());
-			}
-			catch(...)
-			{
-				conPrint("WARNING: Failed to create expand_button: unknown exception");
-			}
-		}
-		else
-		{
-			conPrint("WARNING: Expand button texture not found: " + expand_tex_path);
-		}
+		GLUIButton::CreateArgs args;
+		args.tooltip = "View gestures";
+		expand_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Waving 1.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		expand_button->handler = this;
+		gl_ui->addWidget(expand_button);
 	}
 	
 	{
-		const std::string collapse_tex_path = gui_client->resources_dir_path + "/buttons/right_tab.png";
-		if(FileUtils::fileExists(collapse_tex_path))
-		{
-			GLUIButton::CreateArgs args;
-			args.tooltip = "Hide gestures";
-			try
-			{
-				collapse_button = new GLUIButton(*gl_ui, opengl_engine, collapse_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
-				collapse_button->handler = this;
-				gl_ui->addWidget(collapse_button);
-			}
-			catch(glare::Exception& e)
-			{
-				conPrint("WARNING: Failed to create collapse_button: " + e.what());
-			}
-			catch(...)
-			{
-				conPrint("WARNING: Failed to create collapse_button: unknown exception");
-			}
-		}
-		else
-		{
-			conPrint("WARNING: Collapse button texture not found: " + collapse_tex_path);
-		}
+		GLUIButton::CreateArgs args;
+		args.tooltip = "Hide gestures";
+		collapse_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/right_tab.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		collapse_button->handler = this;
+		gl_ui->addWidget(collapse_button);
 	}
-
+	
 	{
 		{
-			const std::string vehicle_tex_path = gui_client->resources_dir_path + "/buttons/bike.png";
-			if(FileUtils::fileExists(vehicle_tex_path))
-			{
-				GLUIButton::CreateArgs args;
-				args.tooltip = trUI("Summon vehicle", "Вызвать транспорт");
-				try
-				{
-					vehicle_button = new GLUIButton(*gl_ui, opengl_engine, vehicle_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
-					vehicle_button->handler = this;
-					gl_ui->addWidget(vehicle_button);
-				}
-				catch(glare::Exception& e)
-				{
-					conPrint("WARNING: Failed to create vehicle_button: " + e.what());
-				}
-				catch(...)
-				{
-					conPrint("WARNING: Failed to create vehicle_button: unknown exception");
-				}
-			}
-			else
-			{
-				conPrint("WARNING: Vehicle button texture not found: " + vehicle_tex_path);
-			}
+			GLUIButton::CreateArgs args;
+			args.tooltip = "Summon vehicle";
+			vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/bike.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
+			vehicle_button->handler = this;
+			gl_ui->addWidget(vehicle_button);
 		}
 
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = trUI("Summon bike", "Вызвать байк");
-			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon bike", "Вызвать байк"), Vec2f(0), args);
+			args.tooltip = "Summon bike";
+			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon bike", Vec2f(0), args);
 			summon_bike_button->setVisible(vehicle_buttons_visible);
 			summon_bike_button->handler = this;
 			gl_ui->addWidget(summon_bike_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = trUI("Summon car", "Вызвать машину");
-			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon car", "Вызвать машину"), Vec2f(0), args);
+			args.tooltip = "Summon car";
+			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon car", Vec2f(0), args);
 			summon_car_button->setVisible(vehicle_buttons_visible);
 			summon_car_button->handler = this;
 			gl_ui->addWidget(summon_car_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = trUI("Summon boat", "Вызвать лодку");
-			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon boat", "Вызвать лодку"), Vec2f(0), args);
+			args.tooltip = "Summon boat";
+			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon boat", Vec2f(0), args);
 			summon_boat_button->setVisible(vehicle_buttons_visible);
 			summon_boat_button->handler = this;
 			gl_ui->addWidget(summon_boat_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = trUI("Summon jet ski", "Вызвать гидроцикл");
-			summon_jetski_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon jet ski", "Вызвать гидроцикл"), Vec2f(0), args);
+			args.tooltip = "Summon jet ski";
+			summon_jetski_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon jet ski", Vec2f(0), args);
 			summon_jetski_button->setVisible(vehicle_buttons_visible);
 			summon_jetski_button->handler = this;
 			gl_ui->addWidget(summon_jetski_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = trUI("Summon hovercar", "Вызвать ховеркар");
-			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon hovercar", "Вызвать ховеркар"), Vec2f(0), args);
+			args.tooltip = "Summon hovercar";
+			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon hovercar", Vec2f(0), args);
 			summon_hovercar_button->setVisible(vehicle_buttons_visible);
 			summon_hovercar_button->handler = this;
 			gl_ui->addWidget(summon_hovercar_button);
 		}
 
 		{
-			const std::string collapse_vehicle_tex_path = gui_client->resources_dir_path + "/buttons/down_tab.png";
-			if(FileUtils::fileExists(collapse_vehicle_tex_path))
-			{
-				GLUIButton::CreateArgs args;
-				args.tooltip = trUI("Hide vehicles", "Скрыть транспорт");
-				try
-				{
-					collapse_vehicle_button = new GLUIButton(*gl_ui, opengl_engine, collapse_vehicle_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
-					collapse_vehicle_button->handler = this;
-					collapse_vehicle_button->setVisible(vehicle_buttons_visible);
-					gl_ui->addWidget(collapse_vehicle_button);
-				}
-				catch(glare::Exception& e)
-				{
-					conPrint("WARNING: Failed to create collapse_vehicle_button: " + e.what());
-				}
-				catch(...)
-				{
-					conPrint("WARNING: Failed to create collapse_vehicle_button: unknown exception");
-				}
-			}
-			else
-			{
-				conPrint("WARNING: Collapse vehicle button texture not found: " + collapse_vehicle_tex_path);
-			}
+			GLUIButton::CreateArgs args;
+			args.tooltip = "Hide vehicles";
+			collapse_vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/down_tab.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+			collapse_vehicle_button->handler = this;
+			collapse_vehicle_button->setVisible(vehicle_buttons_visible);
+			gl_ui->addWidget(collapse_vehicle_button);
 		}
 
 	}
 	
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = trUI("Photo mode", "Фоторежим");
+		args.tooltip = "Photo mode";
 		photo_mode_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Selfie.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
 		photo_mode_button->toggleable = true;
 		photo_mode_button->handler = this;
@@ -384,39 +147,11 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	
 	{	
 		GLUIButton::CreateArgs args;
-		args.tooltip = trUI("Enable microphone for voice chat", "Включить микрофон для голосового чата");
+		args.tooltip = "Enable microphone for voice chat";
 		microphone_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/microphone.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
 		microphone_button->toggleable = true;
 		microphone_button->handler = this;
 		gl_ui->addWidget(microphone_button);
-	}
-
-	{	
-		const std::string webcam_tex_path = gui_client->resources_dir_path + "/buttons/webcam.png";
-		if(FileUtils::fileExists(webcam_tex_path))
-		{
-			GLUIButton::CreateArgs args;
-			args.tooltip = trUI("Enable webcam", "Включить веб-камеру");
-			try
-			{
-				webcam_button = new GLUIButton(*gl_ui, opengl_engine, webcam_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
-				webcam_button->toggleable = true;
-				webcam_button->handler = this;
-				gl_ui->addWidget(webcam_button);
-			}
-			catch(glare::Exception& e)
-			{
-				conPrint("WARNING: Failed to create webcam_button: " + e.what());
-			}
-			catch(...)
-			{
-				conPrint("WARNING: Failed to create webcam_button: unknown exception");
-			}
-		}
-		else
-		{
-			conPrint("WARNING: Webcam button texture not found: " + webcam_tex_path);
-		}
 	}
 
 	{	
@@ -430,12 +165,14 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 
 void GestureUI::destroy()
 {
+	checkRemoveAndDeleteWidget(gl_ui, edit_gestures_button);
+	gesture_manager = NULL;
+
 	checkRemoveAndDeleteWidget(gl_ui, expand_button);
 	checkRemoveAndDeleteWidget(gl_ui, collapse_button);
 	checkRemoveAndDeleteWidget(gl_ui, vehicle_button);
 	checkRemoveAndDeleteWidget(gl_ui, photo_mode_button);
 	checkRemoveAndDeleteWidget(gl_ui, microphone_button);
-	checkRemoveAndDeleteWidget(gl_ui, webcam_button);
 	checkRemoveAndDeleteWidget(gl_ui, mic_level_image);
 	checkRemoveAndDeleteWidget(gl_ui, summon_bike_button);
 	checkRemoveAndDeleteWidget(gl_ui, summon_car_button);
@@ -453,6 +190,38 @@ void GestureUI::destroy()
 }
 
 
+void GestureUI::rebuildGestureWidgets()
+{
+	// Remove existing gesture buttons (if any)
+	for(size_t i=0; i<gesture_buttons.size(); ++i)
+		gl_ui->removeWidget(gesture_buttons[i]);
+	gesture_buttons.resize(0);
+
+
+	// Add gesture buttons
+	const float min_max_y = gl_ui->getViewportMinMaxY();
+
+	for(size_t i=0; i<gesture_settings.gesture_settings.size(); ++i)
+	{
+		const SingleGestureSettings& setting = gesture_settings.gesture_settings[i];
+
+		const std::string gesture_name = setting.friendly_name;
+
+		const std::string tex_name = GestureSettings::isDefaultGestureName(setting.friendly_name) ? setting.friendly_name : "Waving 1";
+
+		GLUIButton::CreateArgs args;
+		args.tooltip = gesture_name;
+		GLUIButtonRef button = new GLUIButton(*gl_ui, opengl_engine,  gui_client->resources_dir_path + "/buttons/" + tex_name + ".png", Vec2f(0.1f + i * 0.15f, -min_max_y + 0.06f), Vec2f(0.1f, 0.1f), args);
+		button->toggleable = true;
+		button->client_data = gesture_name;
+		button->handler = this;
+		gl_ui->addWidget(button);
+
+		gesture_buttons.push_back(button);
+	}
+}
+
+
 void GestureUI::think()
 {
 	if(gl_ui.nonNull())
@@ -466,6 +235,19 @@ void GestureUI::think()
 			untoggle_button_time = -1;
 		}
 	}
+
+	if(gesture_manager)
+		gesture_manager->think();
+}
+
+
+void GestureUI::setCurrentGestureSettings(const GestureSettings& gesture_settings_)
+{
+	gesture_settings = gesture_settings_;
+
+	rebuildGestureWidgets();
+
+	updateWidgetPositions();
 }
 
 
@@ -493,6 +275,15 @@ void GestureUI::updateWidgetPositions()
 {
 	if(gl_ui.nonNull())
 	{
+		if(gesture_manager)
+		{
+			gesture_manager->updateWidgetPositions();
+
+			const Vec2f close_dims = Vec2f(gl_ui->getUIWidthForDevIndepPixelWidth(25));
+			const Vec2f close_margin = Vec2f(gl_ui->getUIWidthForDevIndepPixelWidth(8)); // Extra margin around close button
+			close_gesture_manager_button->setPosAndDims(gesture_manager->grid_container->getRect().getMax() - close_dims - close_margin, close_dims);
+		}
+
 		const float min_max_y = gl_ui->getViewportMinMaxY();
 
 		const float BUTTON_W = gl_ui->getUIWidthForDevIndepPixelWidth(BUTTON_W_PIXELS);
@@ -505,12 +296,17 @@ void GestureUI::updateWidgetPositions()
 		const float GESTURES_LEFT_X = gestures_visible ? (1 - (BUTTON_W * NUM_BUTTONS_PER_ROW + SPACING * NUM_BUTTONS_PER_ROW)) : 1000;
 
 		const float gestures_bottom_margin = (GESTURES_LEFT_X < 0.3f) ? gl_ui->getUIWidthForDevIndepPixelWidth(120) : SPACING; // If gesture buttons would overlap with other buttons (e.g. on narrow screens), move up.
+		float max_gesture_buttons_y = -min_max_y + gestures_bottom_margin;
 		for(size_t i=0; i<gesture_buttons.size(); ++i)
 		{
 			const float x = (i % NUM_BUTTONS_PER_ROW) * (BUTTON_W + SPACING) + GESTURES_LEFT_X;
 			const float y = (i / NUM_BUTTONS_PER_ROW) * (BUTTON_H + SPACING);
 			gesture_buttons[i]->setPosAndDims(Vec2f(x, -min_max_y + y + gestures_bottom_margin), Vec2f(BUTTON_W, BUTTON_H));
+			gesture_buttons[i]->setVisible(gestures_visible);
+			max_gesture_buttons_y = myMax(max_gesture_buttons_y, gesture_buttons[i]->getRect().getMax().y);
 		}
+
+		edit_gestures_button->setPosAndDims(Vec2f(GESTURES_LEFT_X, max_gesture_buttons_y + SPACING), Vec2f(gl_ui->getUIWidthForDevIndepPixelWidth(40)));
 
 		if(collapse_button)
 		{
@@ -535,9 +331,6 @@ void GestureUI::updateWidgetPositions()
 
 			const float mic_button_x = selfie_button_x + BUTTON_W + SPACING;
 			microphone_button->setPosAndDims(Vec2f(mic_button_x, -min_max_y + SPACING), Vec2f(BUTTON_W, BUTTON_H));
-
-			const float webcam_button_x = mic_button_x + BUTTON_W + SPACING;
-			webcam_button->setPosAndDims(Vec2f(webcam_button_x, -min_max_y + SPACING), Vec2f(BUTTON_W, BUTTON_H));
 
 			mic_level_image->setPosAndDims(Vec2f(mic_button_x + BUTTON_W * 0.8f, -min_max_y + SPACING + BUTTON_H * 0.2f), Vec2f(BUTTON_H * 0.2f, 0));
 
@@ -578,7 +371,6 @@ void GestureUI::setVisible(bool visible)
 		vehicle_button->setVisible(visible);
 		photo_mode_button->setVisible(visible);
 		microphone_button->setVisible(visible);
-		webcam_button->setVisible(visible);
 		mic_level_image->setVisible(visible);
 	}
 }
@@ -591,31 +383,33 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 		GLUIButton* button = dynamic_cast<GLUIButton*>(event.widget);
 		if(button)
 		{
-			for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
+			for(size_t i=0; i<gesture_settings.gesture_settings.size(); ++i)
 			{
-				const std::string gesture_name = gestures[i];
+				const std::string gesture_name = gesture_settings.gesture_settings[i].friendly_name;
 				if(gesture_name == event.widget->client_data)
 				{
 					event.accepted = true;
-					const bool animate_head = std::string(gestures[i+1]) == "AnimHead";
-					const bool loop			= std::string(gestures[i+2]) == "Loop";
+					const bool animate_head = BitUtils::isBitSet(gesture_settings.gesture_settings[i].flags, SingleGestureSettings::FLAG_ANIMATE_HEAD);
+					const bool loop			= BitUtils::isBitSet(gesture_settings.gesture_settings[i].flags, SingleGestureSettings::FLAG_LOOP);
+
+					const URLString& anim_URL = gesture_settings.gesture_settings[i].anim_URL;
 
 					if(button->toggleable)
 					{
 						if(button->toggled)
 						{
-							gui_client->performGestureClicked(event.widget->client_data, animate_head, /*loop anim=*/loop);
+							gui_client->performGestureClicked(gesture_name, anim_URL, animate_head, /*loop anim=*/loop);
 
 							if(!loop)
-								untoggle_button_time = timer.elapsed() + ::stringToDouble(gestures[i+3]); // Make button untoggle when gesture has finished.
+								untoggle_button_time = timer.elapsed() + gesture_settings.gesture_settings[i].anim_duration; // Make button untoggle when gesture has finished.
 							else
 								untoggle_button_time = -1;
 						}
 						else
-							gui_client->stopGestureClicked(event.widget->client_data);
+							gui_client->stopGestureClicked(gesture_name);
 					}
 					else
-						gui_client->performGestureClicked(event.widget->client_data, animate_head, /*loop anim=*/false);
+						gui_client->performGestureClicked(gesture_name, anim_URL, animate_head, /*loop anim=*/false);
 
 					// Untoggle any other toggled buttons.
 					for(size_t z=0; z<gesture_buttons.size(); ++z)
@@ -637,6 +431,13 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				gestures_visible = false;
 				updateWidgetPositions();
 				gui_client->getSettingsStore()->setBoolValue("GestureUI/gestures_visible", gestures_visible);
+			}
+			else if(button == close_gesture_manager_button.ptr())
+			{
+				event.accepted = true;
+				gestures_visible = false;
+				this->gesture_manager = nullptr;
+				close_gesture_manager_button->setVisible(false);
 			}
 			else if(button == vehicle_button.ptr())
 			{
@@ -676,38 +477,27 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				gui_client->setMicForVoiceChatEnabled(microphone_button->toggled);
 
 				if(microphone_button->toggled)
-					microphone_button->tooltip = trUI("Disable microphone for voice chat", "Выключить микрофон для голосового чата");
+					microphone_button->tooltip = "Disable microphone for voice chat";
 				else
-					microphone_button->tooltip = trUI("Enable microphone for voice chat", "Включить микрофон для голосового чата");
+					microphone_button->tooltip = "Enable microphone for voice chat";
 			}
-			else if(button == webcam_button.ptr())
-			{
-				event.accepted = true;
-#if USE_SDL || EMSCRIPTEN
-				// For SDL version, webcam button toggles webcam on/off directly
-				// (No separate window like in Qt version)
-				gui_client->setWebcamEnabled(webcam_button->toggled);
+		}
 
-				if(webcam_button->toggled)
-					webcam_button->tooltip = trUI("Disable webcam", "Выключить веб-камеру");
-				else
-					webcam_button->tooltip = trUI("Enable webcam", "Включить веб-камеру");
-#else
-				// For Qt version, webcam button just opens/closes the webcam window
-				// User must use checkbox inside the window to enable/disable webcam
-				if(webcam_button->toggled)
-				{
-					// Show webcam window
-					gui_client->ui_interface->setWebcamWindowVisible(true);
-					webcam_button->tooltip = trUI("Close webcam window", "Закрыть окно веб-камеры");
-				}
-				else
-				{
-					// Hide webcam window
-					gui_client->ui_interface->setWebcamWindowVisible(false);
-					webcam_button->tooltip = trUI("Open webcam window", "Открыть окно веб-камеры");
-				}
-#endif
+		if(event.widget == edit_gestures_button.ptr())
+		{
+			// hide gestures
+			event.accepted = true;
+			gestures_visible = false;
+			updateWidgetPositions();
+			gui_client->getSettingsStore()->setBoolValue("GestureUI/gestures_visible", gestures_visible);
+
+			if(!gesture_manager)
+			{
+				gesture_manager = new GestureManagerUI(opengl_engine, gui_client, gl_ui, this->gesture_settings);
+
+				close_gesture_manager_button->setVisible(true);
+
+				updateWidgetPositions();
 			}
 		}
 
@@ -793,7 +583,7 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 }
 
 
-bool GestureUI::getCurrentGesturePlaying(std::string& gesture_name_out, bool& animate_head_out, bool& loop_out)
+bool GestureUI::getCurrentGesturePlaying(std::string& gesture_name_out, URLString& gesture_URL_out, bool& animate_head_out, bool& loop_out)
 {
 	for(size_t z=0; z<gesture_buttons.size(); ++z)
 	{
@@ -802,15 +592,16 @@ bool GestureUI::getCurrentGesturePlaying(std::string& gesture_name_out, bool& an
 			const std::string button_gesture_name = gesture_buttons[z]->client_data;
 
 			// Find matching gesture
-			for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
+			for(size_t i=0; i<gesture_settings.gesture_settings.size(); ++i)
 			{
-				const std::string gesture_name = gestures[i];
+				const std::string gesture_name = gesture_settings.gesture_settings[i].friendly_name;
 				if(button_gesture_name == gesture_name)
 				{
-					const bool animate_head = std::string(gestures[i+1]) == "AnimHead";
-					const bool loop			= std::string(gestures[i+2]) == "Loop";
+					const bool animate_head = BitUtils::isBitSet(gesture_settings.gesture_settings[i].flags, SingleGestureSettings::FLAG_ANIMATE_HEAD);
+					const bool loop			= BitUtils::isBitSet(gesture_settings.gesture_settings[i].flags, SingleGestureSettings::FLAG_LOOP);
 
 					gesture_name_out = gesture_name;
+					gesture_URL_out = gesture_settings.gesture_settings[i].anim_URL;
 					animate_head_out = animate_head;
 					loop_out = loop;
 					return true;

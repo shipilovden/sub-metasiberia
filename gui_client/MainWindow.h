@@ -9,7 +9,6 @@ Copyright Glare Technologies Limited 2024 -
 #include "UIInterface.h"
 #include "GUIClient.h"
 #include "CredentialManager.h"
-#include "RuntimeTranslation.h"
 #include <utils/ArgumentParser.h>
 #include <utils/Timer.h>
 #include <utils/ComObHandle.h>
@@ -30,9 +29,6 @@ struct IMFDXGIDeviceManager;
 struct _SDL_GameController;
 class RenderStatsWidget;
 class MiniDmpSender;
-#if defined(USE_QT)
-class WebcamWindow;
-#endif
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -63,7 +59,6 @@ private slots:;
 	void on_actionAdd_Voxels_triggered();
 	void on_actionAdd_Spotlight_triggered();
 	void on_actionAdd_Portal_triggered();
-	void on_actionAdd_to_Favorites_triggered();
 	void on_actionAdd_Web_View_triggered();
 	void on_actionAdd_Video_triggered();
 	void on_actionAdd_Audio_Source_triggered();
@@ -82,9 +77,6 @@ private slots:;
 	void on_actionGoToMainWorld_triggered();
 	void on_actionGoToPersonalWorld_triggered();
 	void on_actionGo_to_CryptoVoxels_World_triggered();
-	void on_actionGo_to_Substrata_Server_triggered();
-	void on_actionGo_to_Metasiberia_Server_triggered();
-	void on_actionGo_to_Shki_nvkz_Server_triggered();
 	void on_actionGo_to_Parcel_triggered();
 	void on_actionGo_to_Position_triggered();
 	void on_actionSet_Start_Location_triggered();
@@ -113,14 +105,11 @@ private slots:;
 	void on_actionDelete_All_Parcel_Objects_triggered();
 	void on_actionEnter_Fullscreen_triggered();
 	void on_actionGo_Back_triggered();
-	void on_actionLanguage_English_triggered();
-	void on_actionLanguage_Russian_triggered();
 
 	void diagnosticsWidgetChanged();
 	void diagnosticsReloadTerrain();
 	void sendChatMessageSlot();
 	void sendLightmapNeededFlagsSlot();
-	void on_webcamEnableCheckBox_toggled(bool checked);
 
 	void glWidgetMousePressed(QMouseEvent* e);
 	void glWidgetMouseReleased(QMouseEvent* e);
@@ -168,22 +157,13 @@ private:
 	virtual void closeEvent(QCloseEvent* event) override;
 	virtual void timerEvent(QTimerEvent* event) override;
 	virtual void changeEvent(QEvent *event) override;
-	virtual bool eventFilter(QObject* obj, QEvent* event) override;
 	void startMainTimer();
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
-	void updateFavoritesMenu(); // Update the "Go to Favorites" submenu with current favorites
-	void addFavoriteLocation(const std::string& url, const std::string& name); // Add a location to favorites
-	std::vector<std::pair<std::string, std::string>> getFavoriteLocations(); // Get list of favorite locations (URL, name pairs)
-	void removeFavoriteLocation(const std::string& url); // Remove a favorite location by URL
-	void renameFavoriteLocation(const std::string& old_url, const std::string& new_name); // Rename a favorite location
-	void showFavoriteContextMenu(QAction* action, const QString& url, const QPoint& global_pos); // Show context menu for favorite
 private:
 	void updateStatusBar();
 	void updateDiagnostics();
 	void runScreenshotCode();
-	void applyInterfaceLanguage(const RuntimeTranslation::UILanguage language);
-	void updateLanguageActionState();
 
 	virtual void dragEnterEvent(QDragEnterEvent* event) override;
 	virtual void dropEvent(QDropEvent* event) override;
@@ -203,8 +183,6 @@ public:
 	virtual void showPlainTextMessageBox(const std::string& title, const std::string& msg) override;
 
 	virtual void logMessage(const std::string& msg) override; // Appends to LogWindow log display.
-	
-	virtual void setWebcamWindowVisible(bool visible) override; // Show/hide webcam window
 
 	// Lua scripting:
 	// A lua script created by the logged in user printed something
@@ -315,6 +293,9 @@ public:
 	virtual void makeGLContextCurrent(void* context) override;
 
 	virtual void* getID3D11Device() const override;
+
+	// File selection
+	virtual std::string showOpenFileDialog(const std::string& caption, const std::vector<FileTypeFilter>& file_type_filters, const std::string& settings_key) override; // Returns path to file selected or empty string if cancelled.
 	//------------------------------------------------- End UIInterface -----------------------------------------------------------
 
 public:
@@ -357,9 +338,6 @@ public:
 private:
 	bool need_help_info_dock_widget_position; // We may need to position the Help info dock widget to the bottom right of the GL view.
 	// But we need to wait until the gl view has been resized before we do this, so set this flag to do in a timer event.
-	bool help_info_is_default_text;
-	RuntimeTranslation::UILanguage current_ui_language;
-	RuntimeTranslation::RuntimeTranslator* runtime_translator;
 	
 	QTimer* update_ob_editor_transform_timer;
 	QTimer* lightmap_flag_timer;
@@ -396,8 +374,4 @@ public:
 	Reference<RenderStatsWidget> GPU_render_stats_widget;
 
 	MiniDmpSender* minidump_sender;
-
-#if defined(USE_QT)
-	WebcamWindow* webcam_window;
-#endif
 };
