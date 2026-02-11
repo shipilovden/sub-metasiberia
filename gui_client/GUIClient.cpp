@@ -837,6 +837,11 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	// The preferred way to do uploads to the GPU is on a dedicated thread.  Using a dedicated thread avoids the many potential (and actual) stalls in various OpenGL calls on the main thread, even with async uploads.
 	// Currently I have only implemented this on Windows.  It may be possible on some other platforms as well.
 	bool allow_gl_upload_thread = true;
+#if defined(_WIN32) && !defined(USE_SDL) && !SUBSTRATA_QT6
+	// Qt5 Windows build: shared-context upload path is unstable with very large models.
+	// Keep uploads on the main GL context to avoid missing geometry.
+	allow_gl_upload_thread = false;
+#endif
 #if SUBSTRATA_QT6
 	// Qt6 build: disable OpenGLUploadThread until crashes are resolved.
 	allow_gl_upload_thread = false;
@@ -866,6 +871,10 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	else
 	{
 		bool allow_async_GPU_uploads = true;
+#if defined(_WIN32) && !defined(USE_SDL) && !SUBSTRATA_QT6
+		// Qt5 Windows build: avoid VBO/PBO async uploads for large model reliability.
+		allow_async_GPU_uploads = false;
+#endif
 #if SUBSTRATA_QT6
 		// Qt6 build: disable async GPU uploads until rendering artifacts are resolved.
 		allow_async_GPU_uploads = false;

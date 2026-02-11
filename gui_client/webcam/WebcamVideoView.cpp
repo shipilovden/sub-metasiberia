@@ -9,19 +9,11 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QVBoxLayout>
 #include <QtGui/QResizeEvent>
 #include <QtMultimedia/QCamera>
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 #include <QtMultimediaWidgets/QVideoWidget>
-#else
-#include <QtMultimediaWidgets/QCameraViewfinder>
-#endif
 
 WebcamVideoView::WebcamVideoView(QWidget* parent)
 	: QWidget(parent)
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 	, video_widget_(nullptr)
-#else
-	, viewfinder_(nullptr)
-#endif
 	, placeholder_label_(nullptr)
 	, camera_(nullptr)
 	, placeholder_visible(true)
@@ -30,17 +22,10 @@ WebcamVideoView::WebcamVideoView(QWidget* parent)
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
 
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 	video_widget_ = new QVideoWidget(this);
 	video_widget_->setMinimumSize(320, 240);
 	video_widget_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	layout->addWidget(video_widget_, 1);
-#else
-	viewfinder_ = new QCameraViewfinder(this);
-	viewfinder_->setMinimumSize(320, 240);
-	viewfinder_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-	layout->addWidget(viewfinder_, 1);
-#endif
 
 	placeholder_label_ = new QLabel(this);
 	placeholder_label_->setText(tr("Webcam feed will appear here"));
@@ -60,8 +45,8 @@ void WebcamVideoView::setCamera(QCamera* camera)
 		return;
 	camera_ = camera;
 #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-	if (viewfinder_ && camera_)
-		camera_->setViewfinder(viewfinder_);
+	if (video_widget_ && camera_)
+		camera_->setViewfinder(video_widget_);
 #endif
 }
 

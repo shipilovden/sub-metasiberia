@@ -11,7 +11,7 @@
 #include "../utils/RefCounted.h"
 #include "../utils/GlareAllocator.h"
 #include <QtCore/QEvent>
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#if SUBSTRATA_QT6
 #include <QtOpenGLWidgets/QOpenGLWidget>
 #else
 #include <QtOpenGL/QGLWidget>
@@ -26,7 +26,7 @@ class QSettings;
 
 
 class AvatarPreviewWidget : public 
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#if SUBSTRATA_QT6
 	QOpenGLWidget
 #else
 	QGLWidget

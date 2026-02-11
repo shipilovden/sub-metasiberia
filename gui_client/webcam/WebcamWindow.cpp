@@ -204,7 +204,7 @@ void WebcamWindow::startCamera()
 	connect(image_capture_.data(), &QCameraImageCapture::imageSaved, this, &WebcamWindow::onImageSaved);
 	connect(image_capture_.data(), QOverload<int, QCameraImageCapture::Error, const QString&>::of(&QCameraImageCapture::error), this, [this](int id, QCameraImageCapture::Error error, const QString& errorString) { onImageCaptureError(id, static_cast<int>(error), errorString); });
 
-	camera_->setViewfinder(video_view_->viewfinder());
+	camera_->setViewfinder(video_view_->videoWidget());
 	applyPhotoEncodingSettings();
 	camera_->setCaptureMode(QCamera::CaptureViewfinder);
 	video_view_->setCamera(camera_.data());

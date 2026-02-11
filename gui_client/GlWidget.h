@@ -12,7 +12,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "../utils/Reference.h"
 #include "../utils/RefCounted.h"
 #include <QtCore/QEvent>
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#if SUBSTRATA_QT6
 #include <QtOpenGLWidgets/QOpenGLWidget>
 #else
 #include <QtOpenGL/QGLWidget>
@@ -33,7 +33,7 @@ class QGamepad;
 
 
 class GlWidget : public
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#if SUBSTRATA_QT6
 	QOpenGLWidget
 #else
 	QGLWidget

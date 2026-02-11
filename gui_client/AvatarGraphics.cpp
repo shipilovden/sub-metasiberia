@@ -663,9 +663,16 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, const Vec3d& pos,
 				}
 				else // else if (nearly) stationary:
 				{
+					// Keep idle avatar yaw tracking camera smoothly. This avoids visual "double/trail"
+					// artifacts when quickly rotating in place.
+					const float rot_blend_frac = myMin(1.f, (float)(10 * dt));
+					Vec3f rot_diff = cam_rotation - this->avatar_rotation;
+					rot_diff.z = mod2PiDiff(rot_diff.z);
+					this->avatar_rotation = this->avatar_rotation + rot_diff * rot_blend_frac;
+
 					const double turn_anim_duration = 57.0 / 60;// Left and right turn anims are 57 frames at 60fps
 
-					if(cur_time < turn_anim_end_time) // If we are currently performing a turn left/right anim:
+					if(false && cur_time < turn_anim_end_time) // Disabled: caused artifacts on rapid yaw changes.
 					{
 						// Slowly rotate in the turn direction.
 						const float turn_sign = turning_left ? 1.f : -1.f;
@@ -730,7 +737,7 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, const Vec3d& pos,
 
 						// conPrint("cam_rotation.z: " + doubleToStringNSigFigs(cam_rotation.z, 3) + ", avatar_rotation.z: " + doubleToStringNSigFigs(avatar_rotation.z, 3));
 
-						if(std::fabs(yaw_diff) > ::degreeToRad(118.f))
+						if(false && std::fabs(yaw_diff) > ::degreeToRad(118.f))
 						{
 							avatar_rotation_at_turn_start = avatar_rotation;
 

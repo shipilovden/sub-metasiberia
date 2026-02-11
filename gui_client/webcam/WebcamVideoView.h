@@ -12,11 +12,7 @@ QT_BEGIN_NAMESPACE
 class QLabel;
 class QCamera;
 class QResizeEvent;
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 class QVideoWidget;
-#else
-class QCameraViewfinder;
-#endif
 QT_END_NAMESPACE
 
 class WebcamVideoView : public QWidget
@@ -30,11 +26,7 @@ public:
 	void setPlaceholderVisible(bool visible);
 	bool isPlaceholderVisible() const { return placeholder_visible; }
 
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 	QVideoWidget* videoWidget() const { return video_widget_; }
-#else
-	QCameraViewfinder* viewfinder() const { return viewfinder_; }
-#endif
 
 protected:
 	void resizeEvent(QResizeEvent* event) override;
@@ -42,11 +34,7 @@ protected:
 private:
 	void updateOverlayVisibility();
 
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 	QVideoWidget* video_widget_;
-#else
-	QCameraViewfinder* viewfinder_;
-#endif
 	QLabel* placeholder_label_;
 	QCamera* camera_;
 	bool placeholder_visible;
