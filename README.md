@@ -31,16 +31,6 @@ Metasiberia is a virtual world project created using the open-source Substrata s
 
 ## Community and Support
 
-## Development
-
-See [docs/building.txt](docs/building.txt) for build instructions.
-
-### Build System
-Complete build instructions and automation scripts are available in the `Metasiberia_Build_System` directory.
-
-### Contributing
-We welcome contributions to the Metasiberia project. The codebase is based on the open-source Substrata platform.
-
 ## Credits
 
 **Metasiberia** is inspired and based on **Substrata**
