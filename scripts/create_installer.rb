@@ -22,7 +22,7 @@ def get_version
     end
   end
   # Default version if not found (semantic versioning format)
-  '0.0.0.1'
+  '0.0.2'
 end
 
 def check_inno_setup

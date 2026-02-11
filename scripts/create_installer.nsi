@@ -1,9 +1,9 @@
 ; NSIS Installer Script for Metasiberia Beta
 ; Creates installer with all required files
 
-; Version can be overridden via command line: /DMyAppVersion="0.0.1"
+; Version can be overridden via command line: /DMyAppVersion="0.0.2"
 !ifndef MyAppVersion
-  !define MyAppVersion "0.0.1"
+  !define MyAppVersion "0.0.2"
 !endif
 
 !define MyAppName "Metasiberia Beta"
@@ -39,6 +39,9 @@ SetCompressorDictSize 32
 !define MUI_ABORTWARNING
 !define MUI_ICON "${SourceDir}\data\resources\icons\metasiberia.ico"
 !define MUI_UNICON "${SourceDir}\data\resources\icons\metasiberia.ico"
+!define MUI_LANGDLL_ALLLANGUAGES
+!define MUI_LANGDLL_WINDOWTITLE "Installer Language"
+!define MUI_LANGDLL_INFO "Please choose the installer language:"
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
@@ -60,6 +63,29 @@ SetCompressorDictSize 32
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "Russian"
 
+Function .onInit
+  ; Show language chooser with English preselected by default.
+  StrCpy $LANGUAGE ${LANG_ENGLISH}
+  !insertmacro MUI_LANGDLL_DISPLAY
+
+  ; If an older installation exists, offer to uninstall it first.
+  ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MyAppName}" "InstallLocation"
+  ${If} $R1 != ""
+    StrCpy $INSTDIR $R1
+  ${EndIf}
+
+  ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MyAppName}" "UninstallString"
+  ${If} $R0 != ""
+    MessageBox MB_ICONQUESTION|MB_YESNO "A previous ${MyAppName} installation was found. Uninstall it now?" IDNO done
+    ExecWait '"$R0" /S'
+  ${EndIf}
+done:
+FunctionEnd
+
+Function .onInstSuccess
+  !insertmacro MUI_LANGDLL_SAVELANGUAGE
+FunctionEnd
+
 ; Installer Sections
 Section "Main Application" SecMain
   SectionIn RO
@@ -68,8 +94,12 @@ Section "Main Application" SecMain
   
   ; Main executables
   File "${SourceDir}\${MyAppExeName}"
-  File /nonfatal "${SourceDir}\server.exe"
-  File /nonfatal "${SourceDir}\browser_process.exe"
+  !if /FileExists "${SourceDir}\server.exe"
+    File "${SourceDir}\server.exe"
+  !endif
+  !if /FileExists "${SourceDir}\browser_process.exe"
+    File "${SourceDir}\browser_process.exe"
+  !endif
   
   ; Qt DLLs
   File /nonfatal "${SourceDir}\Qt5Core.dll"
@@ -115,6 +145,9 @@ Section "Main Application" SecMain
   
   SetOutPath "$INSTDIR\gamepads"
   File /nonfatal /r "${SourceDir}\gamepads\*"
+
+  SetOutPath "$INSTDIR\mediaservice"
+  File /nonfatal /r "${SourceDir}\mediaservice\*"
   
   ; Directories
   SetOutPath "$INSTDIR\data"
@@ -134,6 +167,7 @@ Section "Main Application" SecMain
   ; Registry entries
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MyAppName}" "DisplayName" "${MyAppName}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MyAppName}" "UninstallString" "$INSTDIR\Uninstall.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MyAppName}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MyAppName}" "Publisher" "${MyAppPublisher}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MyAppName}" "URLInfoAbout" "${MyAppURL}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MyAppName}" "DisplayVersion" "${MyAppVersion}"
@@ -199,6 +233,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\styles"
   RMDir /r "$INSTDIR\imageformats"
   RMDir /r "$INSTDIR\gamepads"
+  RMDir /r "$INSTDIR\mediaservice"
   
   ; Remove shortcuts
   Delete "$DESKTOP\${MyAppName}.lnk"
@@ -210,4 +245,3 @@ Section "Uninstall"
   ; Remove installation directory if empty
   RMDir "$INSTDIR"
 SectionEnd
-

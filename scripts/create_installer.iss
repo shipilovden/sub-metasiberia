@@ -1,10 +1,10 @@
 ; Inno Setup Script for Metasiberia Beta
 ; Creates installer with web-based UI using CEF
 
-; Version can be overridden via command line: /DMyAppVersion="0.0.0.1"
-; Metasiberia uses semantic versioning format (e.g., "0.0.0.1", "0.0.0.2", "0.1.0.0", etc.)
+; Version can be overridden via command line: /DMyAppVersion="0.0.2"
+; Metasiberia uses semantic versioning format (e.g., "0.0.2", "0.0.3", "0.1.0", etc.)
 #ifndef MyAppVersion
-  #define MyAppVersion "0.0.0.1"
+  #define MyAppVersion "0.0.2"
 #endif
 
 #define MyAppName "Metasiberia SDL beta"

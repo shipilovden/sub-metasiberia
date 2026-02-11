@@ -12,6 +12,9 @@ Copyright Glare Technologies Limited 2021 -
 #include <tracy/Tracy.hpp>
 #include <utils/FileUtils.h>
 #include <utils/ConPrint.h>
+#include <utils/Base64.h>
+#include <utils/BufferViewInStream.h>
+#include <algorithm>
 
 
 GestureUI::GestureUI()
@@ -26,48 +29,72 @@ GestureUI::~GestureUI()
 {}
 
 
-// Column 0: Animation name
-// Column 1: Should the animation data control the head (e.g. override the procedural lookat anim)?
-// Column 2: Should the animation automatically loop.
-// Column 3: Animation duration (from debug output in OpenGLEngine.cpp, conPrint("anim_datum_a..  etc..")
-static const char* gestures[] = {
-	"Clapping",						"",				"Loop",		"",
-	"Dancing",						"AnimHead",		"Loop",		"",
-	"Excited",						"AnimHead",		"Loop",		"6.5666666",
-	"Looking",						"AnimHead",		"",			"8.016666",
-	"Quick Informal Bow",			"AnimHead",		"",			"2.75",
-	"Rejected",						"AnimHead",		"",			"4.8166666",
-	"Sit",							"",				"Loop",		"",
-	"Sitting On Ground",			"",				"Loop",		"",
-	"Sitting Talking",				"",				"Loop",		"",
-	"Sleeping Idle",				"AnimHead",		"Loop",		"",
-	"Standing React Death Forward",	"AnimHead",		"",			"3.6833334",
-	"Waving 1",						"",				"Loop",		"",
-	"Waving 2",						"",				"",			"3.1833334",
-	"Yawn",							"AnimHead",		"",			"8.35"
-};
+namespace
+{
+static const char* GESTURE_SETTINGS_BASE64_KEY = "GestureUI/gesture_settings_base64";
 
-static const int NUM_GESTURE_FIELDS = 4;
 
-static_assert((staticArrayNumElems(gestures) % NUM_GESTURE_FIELDS) == 0, "(staticArrayNumElems(gestures) % NUM_GESTURE_FIELDS) == 0");
+static const SingleGestureSettings* findGestureSettings(const std::vector<SingleGestureSettings>& settings, const std::string& name)
+{
+	for(size_t i=0; i<settings.size(); ++i)
+		if(settings[i].friendly_name == name)
+			return &settings[i];
+
+	return NULL;
+}
+
+
+static std::vector<SingleGestureSettings> defaultGestureSettingsVector()
+{
+	return GestureSettings::defaultGestureSettings().gesture_settings;
+}
+
+
+static std::vector<SingleGestureSettings> loadGestureSettingsFromProfile(SettingsStore* settings_store)
+{
+	std::vector<SingleGestureSettings> settings = defaultGestureSettingsVector();
+	if(settings_store == NULL)
+		return settings;
+
+	const std::string encoded = settings_store->getStringValue(GESTURE_SETTINGS_BASE64_KEY, "");
+	if(encoded.empty())
+		return settings;
+
+	try
+	{
+		std::vector<unsigned char> decoded;
+		Base64::decode(encoded, decoded);
+		if(decoded.empty())
+			return settings;
+
+		BufferViewInStream stream(ArrayRef<uint8>(decoded.data(), decoded.size()));
+		GestureSettings parsed;
+		readGestureSettingsFromStream(stream, parsed);
+		if(!parsed.gesture_settings.empty())
+			settings = parsed.gesture_settings;
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint(std::string("WARNING: Failed to load gesture settings from profile, using defaults: ") + e.what());
+	}
+
+	return settings;
+}
+} // namespace
 
 bool GestureUI::animateHead(const std::string& gesture)
 {
-	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
-		if(gestures[i] == gesture)
-			return std::string(gestures[i+1]) == "AnimHead";
-	assert(0);
-	return false;
+	const std::vector<SingleGestureSettings> settings = defaultGestureSettingsVector();
+	const SingleGestureSettings* setting = findGestureSettings(settings, gesture);
+	return setting && ((setting->flags & SingleGestureSettings::FLAG_ANIMATE_HEAD) != 0);
 }
 
 
 bool GestureUI::loopAnim(const std::string& gesture)
 {
-	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
-		if(gestures[i] == gesture)
-			return std::string(gestures[i+2]) == "Loop";
-	assert(0);
-	return false;
+	const std::vector<SingleGestureSettings> settings = defaultGestureSettingsVector();
+	const SingleGestureSettings* setting = findGestureSettings(settings, gesture);
+	return setting && ((setting->flags & SingleGestureSettings::FLAG_LOOP) != 0);
 }
 
 
@@ -81,12 +108,13 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 
 	gestures_visible        = gui_client->getSettingsStore()->getBoolValue("GestureUI/gestures_visible",        /*default val=*/false);
 	vehicle_buttons_visible = false;
+	gesture_settings = loadGestureSettingsFromProfile(gui_client->getSettingsStore().ptr());
 
 	const float min_max_y = gl_ui->getViewportMinMaxY();
 
-	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
+	for(size_t i=0; i<gesture_settings.size(); ++i)
 	{
-		const std::string gesture_name = gestures[i];
+		const std::string gesture_name = gesture_settings[i].friendly_name;
 		const std::string button_tex_path = gui_client->resources_dir_path + "/buttons/" + gesture_name + ".png";
 
 		// Check if file exists before creating button to avoid crashes
@@ -492,14 +520,14 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 		GLUIButton* button = dynamic_cast<GLUIButton*>(event.widget);
 		if(button)
 		{
-			for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
+			for(size_t i=0; i<gesture_settings.size(); ++i)
 			{
-				const std::string gesture_name = gestures[i];
+				const std::string gesture_name = gesture_settings[i].friendly_name;
 				if(gesture_name == event.widget->client_data)
 				{
 					event.accepted = true;
-					const bool animate_head = std::string(gestures[i+1]) == "AnimHead";
-					const bool loop			= std::string(gestures[i+2]) == "Loop";
+					const bool animate_head = ((gesture_settings[i].flags & SingleGestureSettings::FLAG_ANIMATE_HEAD) != 0);
+					const bool loop			= ((gesture_settings[i].flags & SingleGestureSettings::FLAG_LOOP) != 0);
 
 					if(button->toggleable)
 					{
@@ -508,7 +536,7 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 							gui_client->performGestureClicked(event.widget->client_data, animate_head, /*loop anim=*/loop);
 
 							if(!loop)
-								untoggle_button_time = timer.elapsed() + ::stringToDouble(gestures[i+3]); // Make button untoggle when gesture has finished.
+								untoggle_button_time = timer.elapsed() + std::max(0.05, (double)gesture_settings[i].anim_duration); // Make button untoggle when gesture has finished.
 							else
 								untoggle_button_time = -1;
 						}
@@ -703,13 +731,13 @@ bool GestureUI::getCurrentGesturePlaying(std::string& gesture_name_out, bool& an
 			const std::string button_gesture_name = gesture_buttons[z]->client_data;
 
 			// Find matching gesture
-			for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
+			for(size_t i=0; i<gesture_settings.size(); ++i)
 			{
-				const std::string gesture_name = gestures[i];
+				const std::string gesture_name = gesture_settings[i].friendly_name;
 				if(button_gesture_name == gesture_name)
 				{
-					const bool animate_head = std::string(gestures[i+1]) == "AnimHead";
-					const bool loop			= std::string(gestures[i+2]) == "Loop";
+					const bool animate_head = ((gesture_settings[i].flags & SingleGestureSettings::FLAG_ANIMATE_HEAD) != 0);
+					const bool loop			= ((gesture_settings[i].flags & SingleGestureSettings::FLAG_LOOP) != 0);
 
 					gesture_name_out = gesture_name;
 					animate_head_out = animate_head;

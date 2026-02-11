@@ -4,7 +4,7 @@
 param(
     [string]$SourceDir = "C:\programming\substrata_output_qt\vs2022\cyberspace_x64\Release",
     [string]$OutputDir = "C:\programming\substrata_output_qt\installers",
-    [string]$Version = "0.0.1",
+    [string]$Version = "0.0.2",
     [string]$NSISPath = "makensis"
 )
 
