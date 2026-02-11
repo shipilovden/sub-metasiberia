@@ -6,21 +6,23 @@ Copyright Glare Technologies Limited 2021 -
 #pragma once
 
 
+#include "../shared/GestureSettings.h"
 #include <opengl/ui/GLUI.h>
 #include <opengl/ui/GLUIButton.h>
 #include <opengl/ui/GLUITextButton.h>
 #include <opengl/ui/GLUIImage.h>
 #include <opengl/ui/GLUICallbackHandler.h>
-#include "../shared/GestureSettings.h"
 
 
 class GUIClient;
+class GestureManagerUI;
 
 
 /*=====================================================================
 GestureUI
 ---------
-
+Buttons for playing gestures.
+Also some misc. other buttons like microphone and photo mode buttons.
 =====================================================================*/
 class GestureUI : public GLUICallbackHandler
 {
@@ -33,6 +35,8 @@ public:
 
 	void think();
 
+	void setCurrentGestureSettings(const GestureSettings& gesture_settings);
+
 	//bool handleMouseClick(const Vec2f& gl_coords);
 	//bool handleMouseMoved(const Vec2f& gl_coords);
 	void viewportResized(int w, int h);
@@ -43,7 +47,7 @@ public:
 
 	// Get the current gesture being performed, according to the UI state (i.e. which button is toggled).
 	// Returns true if a gesture is being performed, false otherwise.
-	bool getCurrentGesturePlaying(std::string& gesture_name_out, bool& animate_head_out, bool& loop_out);
+	bool getCurrentGesturePlaying(std::string& gesture_name_out, URLString& gesture_URL_out, bool& animate_head_out, bool& loop_out);
 
 	void stopAnyGesturePlaying();
 
@@ -52,20 +56,20 @@ public:
 	void untoggleMicButton();
 
 	void setCurrentMicLevel(float linear_level, float display_level);
-	void refreshLanguage();
-
-	static bool animateHead(const std::string& gesture);
-	static bool loopAnim(const std::string& gesture);
 
 private:
-	std::string trUI(const char* english, const char* russian) const;
-	void rebuildVehicleTextButtons();
-	void refreshDynamicTooltips();
+	void rebuildGestureWidgets();
 	void updateWidgetPositions();
 //public:
 	GUIClient* gui_client;
 
 	std::vector<GLUIButtonRef> gesture_buttons;
+
+	GLUIButtonRef edit_gestures_button;
+	Reference<GestureManagerUI> gesture_manager;
+	GLUIButtonRef close_gesture_manager_button;
+
+	GestureSettings gesture_settings;
 
 	GLUIButtonRef expand_button;
 	GLUIButtonRef collapse_button;
@@ -77,8 +81,6 @@ private:
 	GLUIButtonRef photo_mode_button;
 
 	GLUIButtonRef microphone_button; // TODO: move out of GestureUI or rename GestureUI.
-
-	GLUIButtonRef webcam_button; // Webcam toggle button
 
 	GLUIImageRef mic_level_image;
 
@@ -94,8 +96,6 @@ private:
 	GLUIRef gl_ui;
 
 	Reference<OpenGLEngine> opengl_engine;
-
-	std::vector<SingleGestureSettings> gesture_settings;
 
 	Timer timer;
 	double untoggle_button_time;

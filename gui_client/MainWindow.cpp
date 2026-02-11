@@ -29,7 +29,6 @@ Copyright Glare Technologies Limited 2024 -
 #include "LoginDialog.h"
 #include "SignUpDialog.h"
 #include "GoToParcelDialog.h"
-#include "RuntimeTranslation.h"
 #include <settings/QSettingsStore.h>
 #include "URLWidget.h"
 #include "URLWhitelist.h"
@@ -47,23 +46,12 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QMimeData>
 #include <QtCore/QSettings>
 #include <QtCore/QLoggingCategory>
-#include <QtCore/QCoreApplication>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
-#include <QtGui/QIcon>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
-#include <QtWidgets/QMenu>
-#include <QtWidgets/qaction.h>
-#include <QtWidgets/QActionGroup>
-#include <QtWidgets/QInputDialog>
-#include <QtCore/QTimer>
-#include <QtGui/QCursor>
-#include <QtGui/QImage>
-#include <QtGui/QPixmap>
-#include <algorithm>
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
 #include "../qt/QtUtils.h"
@@ -138,9 +126,6 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	parsed_args(args),
 	QMainWindow(parent),
 	need_help_info_dock_widget_position(false),
-	help_info_is_default_text(true),
-	current_ui_language(RuntimeTranslation::UILanguage::English),
-	runtime_translator(nullptr),
 	log_window(NULL),
 	in_CEF_message_loop(false),
 	should_close(false),
@@ -201,17 +186,14 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 static std::string computeWindowTitle()
 {
-	return "Metasiberia Editor beta v" + ::cyberspace_version;
+	return "Substrata v" + ::cyberspace_version;
 }
 
 
-static QString defaultHelpInfoMessageText()
-{
-	return QCoreApplication::translate("MainWindow", "Use the W/A/S/D keys and arrow keys to move and look around.\n") +
-		QCoreApplication::translate("MainWindow", "Click and drag the mouse on the 3D view to look around.\n") +
-		QCoreApplication::translate("MainWindow", "Space key: jump\n") +
-		QCoreApplication::translate("MainWindow", "Double-click an object to select it.");
-}
+static const char* default_help_info_message = "Use the W/A/S/D keys and arrow keys to move and look around.\n"
+	"Click and drag the mouse on the 3D view to look around.\n"
+	"Space key: jump\n"
+	"Double-click an object to select it.";
 
 
 void MainWindow::startMainTimer()
@@ -249,49 +231,6 @@ void MainWindow::initialiseUI()
 		ui->setupUi(this);
 	}
 
-	if(runtime_translator == nullptr)
-		runtime_translator = new RuntimeTranslation::RuntimeTranslator(this);
-
-	{
-		QActionGroup* language_action_group = new QActionGroup(this);
-		language_action_group->setExclusive(true);
-		language_action_group->addAction(ui->actionLanguage_English);
-		language_action_group->addAction(ui->actionLanguage_Russian);
-	}
-
-	const QString language_code = settings->value("ui/language", "en").toString();
-	applyInterfaceLanguage(language_code == "ru" ? RuntimeTranslation::UILanguage::Russian : RuntimeTranslation::UILanguage::English);
-
-#if defined(USE_QT)
-	// Replace webcam dock content with full WebcamWindow (camera list, settings, etc.) before restoreState
-#if SUBSTRATA_USE_QT_MULTIMEDIA
-	try {
-		webcam_window = new WebcamWindow(this);
-		ui->webcamDockWidget->setWidget(webcam_window);
-	} catch (const std::exception& e) {
-		logMessage("Webcam window init failed: " + std::string(e.what()) + " (using simple webcam UI)");
-		webcam_window = nullptr;
-		connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
-			if(visible) ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
-		});
-		ui->webcamEnableCheckBox->setChecked(false);
-	} catch (...) {
-		logMessage("Webcam window init failed (unknown exception) (using simple webcam UI)");
-		webcam_window = nullptr;
-		connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
-			if(visible) ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
-		});
-		ui->webcamEnableCheckBox->setChecked(false);
-	}
-#else
-	webcam_window = nullptr;
-	connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
-		if(visible) ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
-	});
-	ui->webcamEnableCheckBox->setChecked(false);
-#endif
-#endif
-
 	setAcceptDrops(true);
 
 	update_ob_editor_transform_timer = new QTimer(this);
@@ -304,7 +243,6 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(ui->materialBrowserDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->environmentDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->worldSettingsDockWidget->toggleViewAction());
-	ui->menuWindow->addAction(ui->webcamDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->chatDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->helpInfoDockWidget->toggleViewAction());
 #if INDIGO_SUPPORT
@@ -406,15 +344,10 @@ void MainWindow::initialiseUI()
 	connect(ui->diagnosticsWidget, SIGNAL(reloadTerrainSignal()), this, SLOT(diagnosticsReloadTerrain()));
 
 	ui->environmentOptionsWidget->init(settings);
-	bool connected = connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
-	printf("[MainWindow] Connected environmentOptionsWidget settingChanged signal: %s\n", connected ? "true" : "false");
-	
-	// Set initial Northern Lights setting after opengl_engine is created (will be done in afterGLInitInitialise or when glWidget is ready)
+	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->chatMessageLineEdit, SIGNAL(returnPressed()), this, SLOT(sendChatMessageSlot()));
-	
-	connect(ui->webcamEnableCheckBox, SIGNAL(toggled(bool)), this, SLOT(on_webcamEnableCheckBox_toggled(bool)));
 	connect(ui->glWidget, SIGNAL(mousePressed(QMouseEvent*)), this, SLOT(glWidgetMousePressed(QMouseEvent*)));
 	connect(ui->glWidget, SIGNAL(mouseReleased(QMouseEvent*)), this, SLOT(glWidgetMouseReleased(QMouseEvent*)));
 	connect(ui->glWidget, SIGNAL(mouseDoubleClickedSignal(QMouseEvent*)), this, SLOT(glWidgetMouseDoubleClicked(QMouseEvent*)));
@@ -443,8 +376,6 @@ void MainWindow::initialiseUI()
 	connect(user_details, SIGNAL(logOutClicked()), this, SLOT(on_actionLogOut_triggered()));
 	connect(user_details, SIGNAL(signUpClicked()), this, SLOT(on_actionSignUp_triggered()));
 	connect(url_widget, SIGNAL(URLChanged()), this, SLOT(URLChangedSlot()));
-	
-	// Note: Favorites menu signal connection is done in afterGLInitInitialise() when UI is fully ready
 
 
 #if !defined(_WIN32)
@@ -454,13 +385,6 @@ void MainWindow::initialiseUI()
 
 
 	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
-	
-	// Set window icon
-	const std::string icon_path = base_dir_path + "/data/resources/icons/metasiberia.ico";
-	if(FileUtils::fileExists(icon_path))
-	{
-		setWindowIcon(QIcon(QtUtils::toQString(icon_path)));
-	}
 
 	ui->materialBrowserDockWidgetContents->init(this, this->base_dir_path, this->appdata_path, /*print output=*/this);
 	connect(ui->materialBrowserDockWidgetContents, SIGNAL(materialSelected(const std::string&)), this, SLOT(materialSelectedInBrowser(const std::string&)));
@@ -476,8 +400,7 @@ void MainWindow::initialiseUI()
 	setUIForSelectedObject();
 
 	// Update help text
-	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
-	this->help_info_is_default_text = true;
+	this->ui->helpInfoLabel->setText(default_help_info_message);
 
 	if(!settings->contains("mainwindow/geometry"))
 		need_help_info_dock_widget_position = true;
@@ -625,43 +548,6 @@ void MainWindow::afterGLInitInitialise()
 
 	gui_client.afterGLInitInitialise((double)device_pixel_ratio, ui->glWidget->opengl_engine, fonts, emoji_fonts);
 
-	// Set initial Northern Lights (Aurora) setting
-	if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene() != nullptr)
-	{
-		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
-		ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
-	}
-
-	// Connect favorites menu to update when shown - do this after UI is fully initialized
-	if(ui && ui->menuGo_to_Favorites)
-	{
-		connect(ui->menuGo_to_Favorites, &QMenu::aboutToShow, this, &MainWindow::updateFavoritesMenu);
-		
-		// Install event filter to catch right-click events on menu items
-		ui->menuGo_to_Favorites->installEventFilter(this);
-		
-		// Also set context menu policy to custom to enable context menu events
-		ui->menuGo_to_Favorites->setContextMenuPolicy(Qt::CustomContextMenu);
-		connect(ui->menuGo_to_Favorites, &QMenu::customContextMenuRequested, [this](const QPoint& pos) {
-			// Get the active action (the one currently hovered/under cursor)
-			QAction* action = ui->menuGo_to_Favorites->activeAction();
-			
-			// If no active action, try actionAt
-			if(!action)
-			{
-				action = ui->menuGo_to_Favorites->actionAt(pos);
-			}
-			
-			if(action && action->data().isValid())
-			{
-				const QString url = action->data().toString();
-				if(!url.isEmpty())
-				{
-					showFavoriteContextMenu(action, url, ui->menuGo_to_Favorites->mapToGlobal(pos));
-				}
-			}
-		});
-	}
 
 	if(settings->value("mainwindow/showParcels", QVariant(false)).toBool())
 	{
@@ -1085,28 +971,6 @@ void MainWindow::clearChatMessages()
 		ui->chatMessagesTextEdit->clear();
 }
 
-void MainWindow::setWebcamWindowVisible(bool visible)
-{
-	// This is called from GUIClient::setWebcamEnabled() when user clicks the webcam button icon
-	// Just show/hide the window - don't call setWebcamEnabled() again to avoid recursion
-	// Block signals temporarily to prevent visibilityChanged from firing
-	ui->webcamDockWidget->blockSignals(true);
-	if(visible)
-	{
-		ui->webcamDockWidget->show();
-		// Update checkbox state to match current webcam state
-		ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
-	}
-	else
-	{
-		ui->webcamDockWidget->hide();
-		// Clear the label when hiding
-		ui->webcamLabel->clear();
-		ui->webcamLabel->setText("Webcam feed will appear here");
-	}
-	ui->webcamDockWidget->blockSignals(false);
-}
-
 
 bool MainWindow::isShowParcelsEnabled() const
 {
@@ -1261,12 +1125,7 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	// Update URL Bar
 	if(this->url_widget->shouldBeUpdated())
 	{
-		std::string current_url = gui_client.getCurrentURL();
-		this->url_widget->setURL(current_url);
-		
-		// Update parcel editor with current server URL
-		if(!current_url.empty())
-			ui->parcelEditor->setCurrentServerURL(current_url);
+		this->url_widget->setURL(gui_client.getCurrentURL());
 	}
 
 	const QPoint gl_pos = ui->glWidget->mapToGlobal(QPoint(200, 10));
@@ -1320,22 +1179,6 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 	if(GPU_render_stats_widget)
 		GPU_render_stats_widget->addFrameTime((float)opengl_engine->last_total_draw_GPU_time);
-
-	// Update webcam display in Qt UI
-	if(ui->webcamDockWidget->isVisible() && gui_client.webcam_capture.isEnabled())
-	{
-#if defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(USE_SDL)
-		QImage* frame_ptr = static_cast<QImage*>(gui_client.getWebcamFrameAsQImage());
-		if(frame_ptr && !frame_ptr->isNull())
-		{
-			ui->webcamLabel->setPixmap(QPixmap::fromImage(*frame_ptr).scaled(
-				ui->webcamLabel->size(), 
-				Qt::KeepAspectRatio, 
-				Qt::SmoothTransformation
-			));
-		}
-#endif
-	}
 }
 
 
@@ -1355,209 +1198,8 @@ void MainWindow::changeEvent(QEvent* event)
 			startMainTimer();
 		}
 	}
-
-	if(event->type() == QEvent::LanguageChange)
-	{
-		updateLanguageActionState();
-		if(help_info_is_default_text && ui)
-			ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
-	}
-
-	QMainWindow::changeEvent(event);
 }
 
-
-void MainWindow::updateLanguageActionState()
-{
-	if(!ui)
-		return;
-
-	const bool russian_selected = (current_ui_language == RuntimeTranslation::UILanguage::Russian);
-	ui->actionLanguage_Russian->setChecked(russian_selected);
-	ui->actionLanguage_English->setChecked(!russian_selected);
-}
-
-
-void MainWindow::applyInterfaceLanguage(const RuntimeTranslation::UILanguage language)
-{
-	if(runtime_translator == nullptr || ui == nullptr)
-		return;
-
-	QCoreApplication::removeTranslator(runtime_translator);
-	if(language == RuntimeTranslation::UILanguage::Russian)
-		QCoreApplication::installTranslator(runtime_translator);
-
-	current_ui_language = language;
-
-	settings->setValue("ui/language", language == RuntimeTranslation::UILanguage::Russian ? "ru" : "en");
-
-	ui->retranslateUi(this);
-	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
-	updateLanguageActionState();
-	updateFavoritesMenu();
-	gui_client.gesture_ui.refreshLanguage();
-
-	if(help_info_is_default_text)
-		ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
-}
-
-
-void MainWindow::on_actionLanguage_English_triggered()
-{
-	applyInterfaceLanguage(RuntimeTranslation::UILanguage::English);
-}
-
-
-void MainWindow::on_actionLanguage_Russian_triggered()
-{
-	applyInterfaceLanguage(RuntimeTranslation::UILanguage::Russian);
-}
-
-bool MainWindow::eventFilter(QObject* obj, QEvent* event)
-{
-	// Handle right-click on favorites menu or its action widgets
-	if(obj == ui->menuGo_to_Favorites || (ui && ui->menuGo_to_Favorites && obj->parent() == ui->menuGo_to_Favorites))
-	{
-		// Debug: log all events to see what we're getting
-		// conPrint("Favorites menu event: " + std::to_string(event->type()));
-		
-		if(event->type() == QEvent::ContextMenu)
-		{
-			QContextMenuEvent* context_event = static_cast<QContextMenuEvent*>(event);
-			
-			// Get the active action (the one currently hovered/under cursor)
-			QAction* action = ui->menuGo_to_Favorites->activeAction();
-			
-			// If no active action, try to find action at position
-			if(!action)
-			{
-				// Try actionAt - convert global position to local
-				const QPoint local_pos = ui->menuGo_to_Favorites->mapFromGlobal(context_event->globalPos());
-				action = ui->menuGo_to_Favorites->actionAt(local_pos);
-			}
-			
-			if(action && action->data().isValid())
-			{
-				const QString url = action->data().toString();
-				if(!url.isEmpty())
-				{
-					// Show context menu
-					QMenu context_menu(this);
-					
-					// Rename action
-					QAction* rename_action = context_menu.addAction(tr("Rename"));
-					connect(rename_action, &QAction::triggered, [this, url, action]() {
-						const QString current_name = action->text();
-						bool ok;
-						const QString new_name = QInputDialog::getText(
-							this,
-							tr("Rename Favorite"),
-							tr("Enter new name:"),
-							QLineEdit::Normal,
-							current_name,
-							&ok
-						);
-						
-						if(ok && !new_name.isEmpty() && new_name != current_name)
-						{
-							renameFavoriteLocation(QtUtils::toStdString(url), QtUtils::toStdString(new_name));
-							showInfoNotification(QtUtils::toStdString(tr("Favorite renamed.")));
-						}
-					});
-					
-					// Delete action
-					QAction* delete_action = context_menu.addAction(tr("Delete"));
-					connect(delete_action, &QAction::triggered, [this, url]() {
-						const int ret = QMessageBox::question(
-							this,
-							tr("Delete Favorite"),
-							tr("Are you sure you want to delete this favorite?"),
-							QMessageBox::Yes | QMessageBox::No,
-							QMessageBox::No
-						);
-						
-						if(ret == QMessageBox::Yes)
-						{
-							removeFavoriteLocation(QtUtils::toStdString(url));
-							showInfoNotification(QtUtils::toStdString(tr("Favorite deleted.")));
-						}
-					});
-					
-					// Show context menu at cursor position
-					context_menu.exec(context_event->globalPos());
-					
-					return true; // Event handled
-				}
-			}
-		}
-		else if(event->type() == QEvent::MouseButtonPress)
-		{
-			QMouseEvent* mouse_event = static_cast<QMouseEvent*>(event);
-			if(mouse_event->button() == Qt::RightButton)
-			{
-				// Get the active action (the one currently hovered)
-				QAction* action = ui->menuGo_to_Favorites->activeAction();
-				
-				if(action && action->data().isValid())
-				{
-					const QString url = action->data().toString();
-					if(!url.isEmpty())
-					{
-						// Show context menu
-						QMenu context_menu(this);
-						
-						// Rename action
-						QAction* rename_action = context_menu.addAction(tr("Rename"));
-						connect(rename_action, &QAction::triggered, [this, url, action]() {
-							const QString current_name = action->text();
-							bool ok;
-							const QString new_name = QInputDialog::getText(
-								this,
-								tr("Rename Favorite"),
-								tr("Enter new name:"),
-								QLineEdit::Normal,
-								current_name,
-								&ok
-							);
-							
-							if(ok && !new_name.isEmpty() && new_name != current_name)
-							{
-								renameFavoriteLocation(QtUtils::toStdString(url), QtUtils::toStdString(new_name));
-								showInfoNotification(QtUtils::toStdString(tr("Favorite renamed.")));
-							}
-						});
-						
-						// Delete action
-						QAction* delete_action = context_menu.addAction(tr("Delete"));
-						connect(delete_action, &QAction::triggered, [this, url]() {
-							const int ret = QMessageBox::question(
-								this,
-								tr("Delete Favorite"),
-								tr("Are you sure you want to delete this favorite?"),
-								QMessageBox::Yes | QMessageBox::No,
-								QMessageBox::No
-							);
-							
-							if(ret == QMessageBox::Yes)
-							{
-								removeFavoriteLocation(QtUtils::toStdString(url));
-								showInfoNotification(QtUtils::toStdString(tr("Favorite deleted.")));
-							}
-						});
-						
-						// Show context menu at cursor position
-						context_menu.exec(QCursor::pos());
-						
-						return true; // Event handled
-					}
-				}
-			}
-		}
-	}
-	
-	// Call base class implementation
-	return QMainWindow::eventFilter(obj, event);
-}
 
 void MainWindow::updateDiagnostics()
 {
@@ -1867,7 +1509,7 @@ static void enqueueMessageToSend(ClientThread& client_thread, SocketBufferOutStr
 
 void MainWindow::on_actionAvatarSettings_triggered()
 {
-	AvatarSettingsDialog dialog(this->base_dir_path, this->settings, gui_client.resource_manager);
+	AvatarSettingsDialog dialog(this->base_dir_path, this->settings, gui_client.resource_manager, &gui_client.animation_manager);
 	const int res = dialog.exec();
 	ui->glWidget->makeCurrent();// Change back from the dialog GL context to the mainwindow GL context.
 
@@ -2148,251 +1790,6 @@ void MainWindow::on_actionAdd_Portal_triggered()
 }
 
 
-void MainWindow::on_actionAdd_to_Favorites_triggered()
-{
-	const std::string current_url = url_widget->getURL();
-	if(current_url.empty())
-	{
-		showErrorNotification("No URL to add to favorites. Please connect to a server first.");
-		return;
-	}
-
-	// Generate a name for the favorite from the URL
-	std::string favorite_name;
-	try
-	{
-		URLParseResults parse_results = URLParser::parseURL(current_url);
-		favorite_name = parse_results.hostname;
-		if(!parse_results.worldname.empty())
-		{
-			favorite_name += "/" + parse_results.worldname;
-		}
-		// Add position info if present
-		if(parse_results.parsed_x && parse_results.parsed_y && parse_results.parsed_z)
-		{
-			favorite_name += " (" + doubleToStringNDecimalPlaces(parse_results.x, 1) + ", " + 
-				doubleToStringNDecimalPlaces(parse_results.y, 1) + ", " + 
-				doubleToStringNDecimalPlaces(parse_results.z, 1) + ")";
-		}
-	}
-	catch(glare::Exception&)
-	{
-		favorite_name = current_url; // Fallback to full URL if parsing fails
-	}
-
-	addFavoriteLocation(current_url, favorite_name);
-	updateFavoritesMenu();
-	showInfoNotification("Added to favorites: " + favorite_name);
-}
-
-
-void MainWindow::addFavoriteLocation(const std::string& url, const std::string& name)
-{
-	// Get current favorites count
-	const int favorites_count = settings->value("favorites/count", 0).toInt();
-	
-	// Add new favorite
-	settings->setValue("favorites/" + QString::number(favorites_count) + "/url", QtUtils::toQString(url));
-	settings->setValue("favorites/" + QString::number(favorites_count) + "/name", QtUtils::toQString(name));
-	
-	// Increment count
-	settings->setValue("favorites/count", favorites_count + 1);
-}
-
-
-std::vector<std::pair<std::string, std::string>> MainWindow::getFavoriteLocations()
-{
-	std::vector<std::pair<std::string, std::string>> favorites;
-	
-	const int favorites_count = settings->value("favorites/count", 0).toInt();
-	for(int i = 0; i < favorites_count; ++i)
-	{
-		const QString url_key = "favorites/" + QString::number(i) + "/url";
-		const QString name_key = "favorites/" + QString::number(i) + "/name";
-		
-		if(settings->contains(url_key) && settings->contains(name_key))
-		{
-			const std::string url = QtUtils::toStdString(settings->value(url_key).toString());
-			const std::string name = QtUtils::toStdString(settings->value(name_key).toString());
-			favorites.push_back(std::make_pair(url, name));
-		}
-	}
-	
-	return favorites;
-}
-
-
-void MainWindow::updateFavoritesMenu()
-{
-	// Safety checks
-	if(!ui || !settings)
-		return;
-	
-	// Clear existing actions in the favorites menu
-	QMenu* favorites_menu = ui->menuGo_to_Favorites;
-	if(!favorites_menu)
-		return;
-	
-	favorites_menu->clear();
-	
-	// Get all favorites
-	const std::vector<std::pair<std::string, std::string>> favorites = getFavoriteLocations();
-	
-	if(favorites.empty())
-	{
-		QAction* empty_action = favorites_menu->addAction(tr("(No favorites)"));
-		empty_action->setEnabled(false);
-		return;
-	}
-	
-	// Add actions for each favorite
-	for(size_t i = 0; i < favorites.size(); ++i)
-	{
-		const std::string& url = favorites[i].first;
-		const std::string& name = favorites[i].second;
-		
-		if(url.empty() || name.empty())
-			continue; // Skip invalid entries
-		
-		QAction* action = favorites_menu->addAction(QtUtils::toQString(name));
-		action->setData(QtUtils::toQString(url)); // Store URL in action data
-		
-		// Connect action to visit the URL - use a safe lambda that checks 'this' is still valid
-		connect(action, &QAction::triggered, [this, url]() {
-			if(this && !url.empty())
-			{
-				visitSubURL(url);
-			}
-		});
-	}
-}
-
-
-void MainWindow::removeFavoriteLocation(const std::string& url)
-{
-	if(!settings || url.empty())
-		return;
-	
-	// Get current favorites
-	std::vector<std::pair<std::string, std::string>> favorites = getFavoriteLocations();
-	
-	// Remove the favorite with matching URL
-	favorites.erase(
-		std::remove_if(favorites.begin(), favorites.end(),
-			[&url](const std::pair<std::string, std::string>& fav) {
-				return fav.first == url;
-			}),
-		favorites.end()
-	);
-	
-	// Clear all favorites from settings
-	const int old_count = settings->value("favorites/count", 0).toInt();
-	for(int i = 0; i < old_count; ++i)
-	{
-		settings->remove("favorites/" + QString::number(i) + "/url");
-		settings->remove("favorites/" + QString::number(i) + "/name");
-	}
-	
-	// Save updated favorites
-	settings->setValue("favorites/count", (int)favorites.size());
-	for(size_t i = 0; i < favorites.size(); ++i)
-	{
-		settings->setValue("favorites/" + QString::number((int)i) + "/url", QtUtils::toQString(favorites[i].first));
-		settings->setValue("favorites/" + QString::number((int)i) + "/name", QtUtils::toQString(favorites[i].second));
-	}
-	
-	// Update menu
-	updateFavoritesMenu();
-}
-
-void MainWindow::renameFavoriteLocation(const std::string& url, const std::string& new_name)
-{
-	if(!settings || url.empty() || new_name.empty())
-		return;
-	
-	// Get current favorites
-	std::vector<std::pair<std::string, std::string>> favorites = getFavoriteLocations();
-	
-	// Find and update the favorite with matching URL
-	for(auto& fav : favorites)
-	{
-		if(fav.first == url)
-		{
-			fav.second = new_name;
-			break;
-		}
-	}
-	
-	// Clear all favorites from settings
-	const int old_count = settings->value("favorites/count", 0).toInt();
-	for(int i = 0; i < old_count; ++i)
-	{
-		settings->remove("favorites/" + QString::number(i) + "/url");
-		settings->remove("favorites/" + QString::number(i) + "/name");
-	}
-	
-	// Save updated favorites
-	settings->setValue("favorites/count", (int)favorites.size());
-	for(size_t i = 0; i < favorites.size(); ++i)
-	{
-		settings->setValue("favorites/" + QString::number((int)i) + "/url", QtUtils::toQString(favorites[i].first));
-		settings->setValue("favorites/" + QString::number((int)i) + "/name", QtUtils::toQString(favorites[i].second));
-	}
-	
-	// Update menu
-	updateFavoritesMenu();
-}
-
-void MainWindow::showFavoriteContextMenu(QAction* action, const QString& url, const QPoint& global_pos)
-{
-	if(!action || url.isEmpty())
-		return;
-	
-	QMenu context_menu(this);
-	
-	// Rename action
-	QAction* rename_action = context_menu.addAction(tr("Rename"));
-	connect(rename_action, &QAction::triggered, [this, url, action]() {
-		const QString current_name = action->text();
-		bool ok;
-		const QString new_name = QInputDialog::getText(
-			this,
-			tr("Rename Favorite"),
-			tr("Enter new name:"),
-			QLineEdit::Normal,
-			current_name,
-			&ok
-		);
-		
-		if(ok && !new_name.isEmpty() && new_name != current_name)
-		{
-			renameFavoriteLocation(QtUtils::toStdString(url), QtUtils::toStdString(new_name));
-			showInfoNotification(QtUtils::toStdString(tr("Favorite renamed.")));
-		}
-	});
-	
-	// Delete action
-	QAction* delete_action = context_menu.addAction(tr("Delete"));
-	connect(delete_action, &QAction::triggered, [this, url]() {
-		const int ret = QMessageBox::question(
-			this,
-			tr("Delete Favorite"),
-			tr("Are you sure you want to delete this favorite?"),
-			QMessageBox::Yes | QMessageBox::No,
-			QMessageBox::No
-		);
-		
-		if(ret == QMessageBox::Yes)
-		{
-			removeFavoriteLocation(QtUtils::toStdString(url));
-			showInfoNotification(QtUtils::toStdString(tr("Favorite deleted.")));
-		}
-	});
-	
-	// Show context menu at cursor position
-	context_menu.exec(global_pos);
-}
-
 void MainWindow::on_actionAdd_Web_View_triggered()
 {
 	const float quad_w = 0.4f;
@@ -2421,7 +1818,7 @@ void MainWindow::on_actionAdd_Web_View_triggered()
 	new_world_object->scale = Vec3f(/*width=*/1.f, /*depth=*/0.02f, /*height=*/1080.f / 1920.f);
 	new_world_object->max_model_lod_level = 0;
 
-	new_world_object->target_url = "https://metasiberia.com/"; // Use a default URL - indicates to users how to set the URL.
+	new_world_object->target_url = "https://substrata.info/"; // Use a default URL - indicates to users how to set the URL.
 
 	new_world_object->materials.resize(2);
 	new_world_object->materials[0] = new WorldMaterial();
@@ -3087,24 +2484,6 @@ void MainWindow::on_actionReset_Layout_triggered()
 	this->addDockWidget(Qt::RightDockWidgetArea, ui->chatDockWidget, Qt::Vertical);
 	ui->chatDockWidget->show();
 
-	// Initialize webcam dock widget (hidden by default)
-	ui->webcamDockWidget->setFloating(false);
-	this->addDockWidget(Qt::RightDockWidgetArea, ui->webcamDockWidget, Qt::Vertical);
-	ui->webcamDockWidget->hide();
-	
-	// Connect webcam dock widget visibility - just update checkbox state when window is shown
-	// Don't automatically enable/disable webcam - user must use checkbox
-	connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
-		if(visible)
-		{
-			// Update checkbox state to match current webcam state when window is shown
-			ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
-		}
-	});
-	
-	// Initialize checkbox state
-	ui->webcamEnableCheckBox->setChecked(false);
-
 	ui->materialBrowserDockWidget->setFloating(false);
 	this->addDockWidget(Qt::TopDockWidgetArea, ui->materialBrowserDockWidget, Qt::Horizontal);
 	ui->materialBrowserDockWidget->show();
@@ -3197,7 +2576,7 @@ void MainWindow::on_actionSignUp_triggered()
 		conPrint("username: " + username);
 		conPrint("email:    " + email);
 		conPrint("password: " + password);
-		conPrint("Signing up on server: " + gui_client.server_hostname);
+		//this->last_login_username = username;
 
 		// Make message packet and enqueue to send
 		MessageUtils::initPacket(scratch_packet, Protocol::SignUpMessage);
@@ -3279,20 +2658,6 @@ void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 	gui_client.connectToServer(parse_results);
 }
 
-void MainWindow::on_actionGo_to_Substrata_Server_triggered()
-{
-	visitSubURL("sub://substrata.info/");
-}
-
-void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
-{
-	visitSubURL("sub://89.104.70.23/");
-}
-
-void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
-{
-	visitSubURL("sub://176.197.223.42/");
-}
 
 void MainWindow::on_actionGo_to_Parcel_triggered()
 {
@@ -3948,18 +3313,6 @@ void MainWindow::diagnosticsReloadTerrain()
 }
 
 
-void MainWindow::on_webcamEnableCheckBox_toggled(bool checked)
-{
-	gui_client.setWebcamEnabled(checked);
-	
-	// Clear the label when disabling
-	if(!checked)
-	{
-		ui->webcamLabel->clear();
-		ui->webcamLabel->setText("Webcam feed will appear here");
-	}
-}
-
 void MainWindow::sendChatMessageSlot()
 {
 	//conPrint("MainWindow::sendChatMessageSlot()");
@@ -4050,38 +3403,11 @@ void MainWindow::environmentSettingChangedSlot()
 {
 	if(ui->glWidget->opengl_engine.nonNull())
 	{
-		Reference<OpenGLEngine> opengl_engine = ui->glWidget->opengl_engine;
-		
 		const float theta = myClamp(::degreeToRad((float)ui->environmentOptionsWidget->sunThetaRealControl->value()), 0.01f, Maths::pi<float>() - 0.01f);
 		const float phi   = ::degreeToRad((float)ui->environmentOptionsWidget->sunPhiRealControl->value());
 		const Vec4f sundir = GeometrySampling::dirForSphericalCoords(phi, theta);
 
 		opengl_engine->setSunDir(sundir);
-		
-		// Update Northern Lights (Aurora) setting
-		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
-		OpenGLScene* scene = opengl_engine->getCurrentScene();
-		if(scene != nullptr)
-		{
-			scene->draw_aurora = northern_lights_enabled;
-			const Vec4f current_sun_dir = opengl_engine->getSunDir();
-			printf("[MainWindow] environmentSettingChangedSlot: draw_aurora set to %s (scene->draw_aurora = %s, sun_dir.z = %f)\n", 
-				northern_lights_enabled ? "true" : "false",
-				scene->draw_aurora ? "true" : "false",
-				current_sun_dir[2]);
-			
-			// Force widget repaint to refresh rendering immediately
-			// bindStandardTexturesToTextureUnits() is called every frame in render loop, so texture will be rebound automatically
-			ui->glWidget->repaint();
-		}
-		else
-		{
-			printf("[MainWindow] environmentSettingChangedSlot: getCurrentScene() returned nullptr!\n");
-		}
-	}
-	else
-	{
-		printf("[MainWindow] environmentSettingChangedSlot: opengl_engine is null!\n");
 	}
 }
 
@@ -4178,9 +3504,6 @@ void MainWindow::visitSubURL(const std::string& URL) // Visit a substrata 'sub:/
 	try
 	{
 		gui_client.visitSubURL(URL);
-		
-		// Update parcel editor with new server URL
-		ui->parcelEditor->setCurrentServerURL(URL);
 	}
 	catch(glare::Exception& e) // Handle URL parse failure
 	{
@@ -4339,15 +3662,13 @@ bool MainWindow::hasFocus()
 
 void MainWindow::setHelpInfoLabelToDefaultText()
 {
-	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
-	this->help_info_is_default_text = true;
+	this->ui->helpInfoLabel->setText(default_help_info_message);
 }
 
 
 void MainWindow::setHelpInfoLabel(const std::string& text)
 {
 	this->ui->helpInfoLabel->setText(QtUtils::toQString(text));
-	this->help_info_is_default_text = false;
 }
 
 
@@ -4361,11 +3682,6 @@ void MainWindow::showParcelEditor()
 void MainWindow::setParcelEditorForParcel(const Parcel& parcel)
 {
 	ui->parcelEditor->setFromParcel(parcel);
-	
-	// Update parcel editor with current server URL
-	std::string current_url = gui_client.getCurrentURL();
-	if(!current_url.empty())
-		ui->parcelEditor->setCurrentServerURL(current_url);
 }
 
 
@@ -4637,6 +3953,7 @@ void MainWindow::glWidgetKeyPressed(QKeyEvent* e)
 	if(e->key() == Qt::Key_F6)
 	{
 		ui->glWidget->opengl_engine->show_ssao = !ui->glWidget->opengl_engine->show_ssao;
+		conPrint("Toggling show_ssao to " + boolToString(ui->glWidget->opengl_engine->show_ssao));
 	}
 	if(e->key() == Qt::Key_F7)
 	{
@@ -4779,7 +4096,7 @@ void MainWindow::handleURL(const QUrl &url)
 
 void MainWindow::openServerScriptLogSlot()
 {
-	const std::string hostname = gui_client.server_hostname.empty() ? "89.104.70.23" : gui_client.server_hostname;
+	const std::string hostname = gui_client.server_hostname.empty() ? "substrata.info" : gui_client.server_hostname;
 
 	QDesktopServices::openUrl(QtUtils::toQString("https://" + hostname + "/script_log"));
 }
@@ -4929,6 +4246,37 @@ void* MainWindow::getID3D11Device() const
 #else
 	return nullptr;
 #endif
+}
+
+
+std::string MainWindow::showOpenFileDialog(const std::string& caption, const std::vector<FileTypeFilter>& file_type_filters, const std::string& settings_key)
+{
+	QString previous_file = "";
+
+	QSettings local_settings("Glare Technologies", "Cyberspace");
+
+	std::string filter; // e.g. "Images (*.png *.xpm *.jpg);;Text files (*.txt);;XML files (*.xml)"  (see https://doc.qt.io/qt-6/qfiledialog.html)
+	for(size_t i=0; i<file_type_filters.size(); ++i)
+	{
+		const FileTypeFilter& f = file_type_filters[i];
+		filter += f.description + " (";
+		for(size_t z=0; z<f.file_types.size(); ++z)
+		{
+			filter += "*." + f.file_types[z];
+			if(z + 1 < f.file_types.size())
+				filter += " ";
+		}
+		filter += ")";
+		if(i + 1 < file_type_filters.size())
+			filter += ";;";
+	}
+
+	const QString file = QFileDialog::getOpenFileName(this, QtUtils::toQString(caption), previous_file, QtUtils::toQString(filter));
+
+	if(!file.isNull())
+		local_settings.setValue(QtUtils::toQString(settings_key), QtUtils::toQString(FileUtils::getDirectory(QtUtils::toIndString(file)))); // Store dir selected
+
+	return QtUtils::toStdString(file);
 }
 
 
@@ -5193,7 +4541,7 @@ int main(int argc, char *argv[])
 		syntax["-h"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Specify hostname to connect to
 		syntax["-u"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Specify server URL to connect to
 		syntax["-linku"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Specify server URL to connect to, when a user has clicked on a substrata URL hyperlink.
-		syntax["--extractanims"] = std::vector<ArgumentParser::ArgumentType>(2, ArgumentParser::ArgumentType_string); // Extract animation data
+		syntax["--processanims"] = std::vector<ArgumentParser::ArgumentType>(); // Build animation data
 		syntax["--screenshotslave"] = std::vector<ArgumentParser::ArgumentType>(); // Run GUI as a screenshot-taking slave.
 		syntax["--testscreenshot"] = std::vector<ArgumentParser::ArgumentType>(); // Test screenshot taking
 		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine
@@ -5210,21 +4558,17 @@ int main(int argc, char *argv[])
 			return 0;
 		}
 
-		// Extract the avatar animation data from a GLTF file.
-		// E.g. --extractanims "D:\models\readyplayerme_avatar_animation_18.glb" "D:\models\extracted_avatar_anim.bin"
-		if(parsed_args.isArgPresent("--extractanims"))
+		// Build .subanim processed animation files from animation GLBs.
+		if(parsed_args.isArgPresent("--processanims"))
 		{
-			const std::string input_path  = parsed_args.getArgStringValue("--extractanims", 0);
-			const std::string output_path = parsed_args.getArgStringValue("--extractanims", 1);
-
-			AvatarGraphics::extractAvatarAnimInfo(input_path, output_path);
+			AvatarGraphics::processAnimationData();
 			return 0;
 		}
 
 
 		//std::string server_hostname = "substrata.info";
 		//std::string server_userpath = "";
-		std::string server_URL = "sub://89.104.70.23/";
+		std::string server_URL = "sub://substrata.info";
 		bool server_URL_explicitly_specified = false;
 
 		if(parsed_args.isArgPresent("-h"))
