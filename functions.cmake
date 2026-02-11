@@ -48,9 +48,14 @@ endfunction()
 
 # Function for adding a rebuild-mocfile command/dependency
 function(addMocFileRule dir header_name)
+	set(MOC_QT6_DEFINE 0)
+	if(INDIGO_QT_VERSION MATCHES "^6(\\.|$)")
+		set(MOC_QT6_DEFINE 1)
+	endif()
+
 	add_custom_command(
 		OUTPUT ${CMAKE_SOURCE_DIR}/${dir}/moc_${header_name}.cpp
-		COMMAND ${INDIGO_QT_DIR}/bin/moc ${CMAKE_SOURCE_DIR}/${dir}/${header_name}.h > ${CMAKE_SOURCE_DIR}/${dir}/moc_${header_name}.cpp
+		COMMAND ${INDIGO_QT_DIR}/bin/moc -DSUBSTRATA_QT6=${MOC_QT6_DEFINE} ${CMAKE_SOURCE_DIR}/${dir}/${header_name}.h > ${CMAKE_SOURCE_DIR}/${dir}/moc_${header_name}.cpp
 		DEPENDS ${CMAKE_SOURCE_DIR}/${dir}/${header_name}.h
 	)
 endfunction()
