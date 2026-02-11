@@ -2,26 +2,23 @@
 WebcamVideoView.h
 -----------------
 Copyright Glare Technologies Limited 2024 -
-Central video area: QCameraViewfinder + placeholder overlay when disabled.
+Central video area with placeholder overlay when disabled.
 =====================================================================*/
 #pragma once
 
 #include <QtWidgets/QWidget>
-#include <QtCore/QScopedPointer>
 
 QT_BEGIN_NAMESPACE
-class QCameraViewfinder;
 class QLabel;
 class QCamera;
 class QResizeEvent;
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+class QVideoWidget;
+#else
+class QCameraViewfinder;
+#endif
 QT_END_NAMESPACE
 
-/*=====================================================================
-WebcamVideoView
----------------
-Widget that occupies 90–95% of the window: shows live video from
-QCameraViewfinder or a centered placeholder when the camera is disabled.
-=====================================================================*/
 class WebcamVideoView : public QWidget
 {
 	Q_OBJECT
@@ -29,14 +26,15 @@ public:
 	explicit WebcamVideoView(QWidget* parent = nullptr);
 	~WebcamVideoView();
 
-	// Set the camera to display; pass nullptr to show placeholder only.
 	void setCamera(QCamera* camera);
-
-	// Show/hide the placeholder text (e.g. when camera is disabled).
 	void setPlaceholderVisible(bool visible);
 	bool isPlaceholderVisible() const { return placeholder_visible; }
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	QVideoWidget* videoWidget() const { return video_widget_; }
+#else
 	QCameraViewfinder* viewfinder() const { return viewfinder_; }
+#endif
 
 protected:
 	void resizeEvent(QResizeEvent* event) override;
@@ -44,7 +42,11 @@ protected:
 private:
 	void updateOverlayVisibility();
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	QVideoWidget* video_widget_;
+#else
 	QCameraViewfinder* viewfinder_;
+#endif
 	QLabel* placeholder_label_;
 	QCamera* camera_;
 	bool placeholder_visible;

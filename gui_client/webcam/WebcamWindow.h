@@ -2,33 +2,37 @@
 WebcamWindow.h
 --------------
 Copyright Glare Technologies Limited 2024 -
-Main webcam widget: video view + control panel, QCamera integration.
+Main webcam widget: video view + control panel.
 =====================================================================*/
 #pragma once
 
 #include <QtWidgets/QWidget>
 #include <QtCore/QScopedPointer>
+#include <QtCore/QList>
+#include <QtGui/QImage>
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtMultimedia/QCamera>
+#include <QtMultimedia/QCameraDevice>
+#include <QtMultimedia/QCameraFormat>
+#include <QtMultimedia/QImageCapture>
+#include <QtMultimedia/QMediaDevices>
+#include <QtMultimedia/QMediaCaptureSession>
+#include <QtMultimedia/QMediaRecorder>
+using WebcamViewfinderSettingsType = QCameraFormat;
+#else
 #include <QtMultimedia/QCamera>
 #include <QtMultimedia/QCameraInfo>
 #include <QtMultimedia/QCameraViewfinderSettings>
 #include <QtMultimedia/QCameraImageCapture>
 #include <QtMultimedia/QMediaRecorder>
-#include <QtCore/QList>
-#include <QtGui/QImage>
+using WebcamViewfinderSettingsType = QCameraViewfinderSettings;
+#endif
 
 class WebcamVideoView;
 class WebcamControlPanel;
-class WebcamSettingsDialog;
 class QLabel;
 
-/*=====================================================================
-WebcamWindow
-------------
-Central area: WebcamVideoView. Bottom: WebcamControlPanel.
-Owns QCamera, QCameraImageCapture, QMediaRecorder; wires enable, camera
-selection, photo, record, stop, settings.
-=====================================================================*/
 class WebcamWindow : public QWidget
 {
 	Q_OBJECT
@@ -36,7 +40,6 @@ public:
 	explicit WebcamWindow(QWidget* parent = nullptr);
 	~WebcamWindow();
 
-	// Whether webcam is enabled (checkbox state).
 	bool isWebcamEnabled() const;
 	void setWebcamEnabled(bool enabled);
 
@@ -49,20 +52,22 @@ private slots:
 	void onOpenFolderClicked();
 	void onSettingsClicked();
 	void onRecorderStateChanged();
-	void onRecorderError(QMediaRecorder::Error error);
-	void onCameraStateChanged(QCamera::State state);
-	void onCameraError(QCamera::Error error);
+	void onRecorderError();
+	void onCameraStateChanged();
+	void onCameraError();
 	void onImageSaved(int id, const QString& path);
 	void onImageCaptured(int id, const QImage& image);
-	void onImageCaptureError(int id, QCameraImageCapture::Error error, const QString& errorString);
+	void onImageCaptureError(int id, int error, const QString& errorString);
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	void onReadyForCapture(bool ready);
+#endif
 
 private:
 	QString getWebcamSaveDirectory() const;
 	void refreshCameraList();
 	void startCamera();
 	void stopCamera();
-	void applyViewfinderSettings(const QCameraViewfinderSettings& s);
+	void applyViewfinderSettings(const WebcamViewfinderSettingsType& settings);
 	void applyPhotoEncodingSettings();
 	void applyVideoEncodingSettings();
 	void updateStatusLabel();
@@ -72,16 +77,23 @@ private:
 	QLabel* preview_info_label_;
 	WebcamControlPanel* panel_;
 	QScopedPointer<QCamera> camera_;
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	QMediaDevices* media_devices_;
+	QMediaCaptureSession capture_session_;
+	QScopedPointer<QImageCapture> image_capture_;
+	QList<QCameraDevice> camera_infos_;
+#else
 	QScopedPointer<QCameraImageCapture> image_capture_;
-	QScopedPointer<QMediaRecorder> media_recorder_;
 	QList<QCameraInfo> camera_infos_;
-	QCameraViewfinderSettings viewfinder_settings_;
+#endif
+	QScopedPointer<QMediaRecorder> media_recorder_;
+	WebcamViewfinderSettingsType viewfinder_settings_;
 	bool recording_;
-	bool pending_start_;  // load() was called; on LoadedState we apply viewfinder settings then start()
-	QString last_video_path_;  // path of last recorded video (to show in status when stopped)
-	QString last_recorder_error_;  // текст ошибки рекордера (если был signal error)
-	QString pending_photo_path_;  // when set, we wait for readyForCapture then capture to this path
-	QString next_photo_save_path_;  // when capturing to buffer, path where to save the QImage
-	int photo_quality_;        // 1-100 for JPEG
-	qreal video_bitrate_mbps_; // video encoding bitrate in Mbps
+	bool pending_start_;
+	QString last_video_path_;
+	QString last_recorder_error_;
+	QString pending_photo_path_;
+	QString next_photo_save_path_;
+	int photo_quality_;
+	qreal video_bitrate_mbps_;
 };

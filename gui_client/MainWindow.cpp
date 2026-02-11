@@ -18,7 +18,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "UserDetailsWidget.h"
 #include "AvatarSettingsDialog.h"
 #include "AddObjectDialog.h"
-#if SUBSTRATA_USE_QT_MULTIMEDIA
+#if SUBSTRATA_USE_QT_MULTIMEDIA && !SUBSTRATA_QT6
 #include "AddVideoDialog.h"
 #endif
 #include "MainOptionsDialog.h"
@@ -2467,7 +2467,7 @@ void MainWindow::on_actionAdd_Web_View_triggered()
 
 void MainWindow::on_actionAdd_Video_triggered()
 {
-#if SUBSTRATA_USE_QT_MULTIMEDIA
+#if SUBSTRATA_USE_QT_MULTIMEDIA && !SUBSTRATA_QT6
 	try
 	{
 		const float quad_w = 0.4f;
@@ -2558,7 +2558,7 @@ void MainWindow::on_actionAdd_Video_triggered()
 		m.exec();
 	}
 #else
-	QMessageBox::information(this, tr("Video"), tr("Add Video dialog is disabled in this Qt6 build."));
+		QMessageBox::information(this, tr("Video"), tr("Add Video dialog is disabled in this Qt6 build."));
 #endif
 }
 
@@ -5206,6 +5206,12 @@ int main(int argc, char *argv[])
 //	QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 //	QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 //	QtWebEngineQuick::initialize();
+
+#if defined(_WIN32) && (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	// Qt6 may default to FFmpeg backend, which can leave camera enumeration/preview
+	// non-functional on some Windows setups. Force native Windows backend.
+	qputenv("QT_MEDIA_BACKEND", QByteArray("windows"));
+#endif
 
 	// Note that this is deliberately constructed outside of the try..catch block below, because QErrorMessage crashes when displayed if
 	// GuiClientApplication has been destroyed. (stupid qt).

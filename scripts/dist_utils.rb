@@ -26,7 +26,7 @@ end
 # Remove nested plugin/locales dirs (e.g. platforms/platforms, gamepads/gamepads) that can break Qt loader
 def removeNestedPluginDirs(target_dir)
 	return if !OS.windows?
-	["platforms", "gamepads", "imageformats", "styles", "locales", "mediaservice"].each do |sub|
+	["platforms", "gamepads", "imageformats", "styles", "locales", "mediaservice", "multimedia"].each do |sub|
 		nested = "#{target_dir}/#{sub}/#{sub}"
 		if File.directory?(nested)
 			FileUtils.rm_r(nested, :verbose => true)
@@ -39,19 +39,37 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 		return
 	end
 	
-	# Get Qt path.
-	glare_core_libs_dir = getAndCheckEnvVar('GLARE_CORE_LIBS')
-	qt_dir = "#{glare_core_libs_dir}/Qt/#{$qt_version}-vs#{vs_version}-64"
+	# Use configured/overridden Qt dir from config-lib.rb (supports Qt5 and Qt6 layouts).
+	qt_dir = $indigo_qt_dir
+	if qt_dir.nil? || qt_dir.strip.empty?
+		glare_core_libs_dir = getAndCheckEnvVar('GLARE_CORE_LIBS')
+		qt_dir = "#{glare_core_libs_dir}/Qt/#{$qt_version}-vs#{vs_version}-64"
+	end
+
 	lib_path = "#{qt_dir}/bin"
 	plugins_path = "#{qt_dir}/plugins"
+	qt6 = $qt_version.to_s.start_with?("6")
+	dll_suffix = copy_debug ? "d" : ""
 	
-	# Qt dlls.
-	dll_files = ["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Multimedia", "Qt5MultimediaWidgets", "Qt5Network", "Qt5Gamepad"]
+	# Qt runtime DLLs.
+	dll_files = if qt6
+		["Qt6Core", "Qt6Gui", "Qt6OpenGL", "Qt6OpenGLWidgets", "Qt6Widgets", "Qt6Multimedia", "Qt6MultimediaWidgets", "Qt6Network", "Qt6Core5Compat"]
+	else
+		["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Multimedia", "Qt5MultimediaWidgets", "Qt5Network", "Qt5Gamepad"]
+	end
+	mandatory_dlls = if qt6
+		["Qt6Core", "Qt6Gui", "Qt6Widgets", "Qt6Multimedia", "Qt6MultimediaWidgets"]
+	else
+		["Qt5Core", "Qt5Gui", "Qt5Widgets", "Qt5Multimedia", "Qt5MultimediaWidgets"]
+	end
 
-		
 	dll_files.each do |dll_file|
-		FileUtils.cp("#{lib_path}/#{dll_file}.dll", target_dir, :verbose => true) if !copy_debug
-		FileUtils.cp("#{lib_path}/#{dll_file}d.dll", target_dir, :verbose => true) if copy_debug
+		dll_path = "#{lib_path}/#{dll_file}#{dll_suffix}.dll"
+		if File.exist?(dll_path)
+			FileUtils.cp(dll_path, target_dir, :verbose => true)
+		elsif mandatory_dlls.include?(dll_file)
+			raise "Required Qt DLL not found: #{dll_path}"
+		end
 	end
 	
 	# Imageformats
@@ -63,8 +81,8 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	image_formats = ["qjpeg"]
 		
 	image_formats.each do |format|
-		FileUtils.cp("#{imageformats_dir}/#{format}.dll",  imageformats_target_dir, :verbose => true) if !copy_debug
-		FileUtils.cp("#{imageformats_dir}/#{format}d.dll", imageformats_target_dir, :verbose => true) if copy_debug
+		src = "#{imageformats_dir}/#{format}#{dll_suffix}.dll"
+		FileUtils.cp(src, imageformats_target_dir, :verbose => true) if File.exist?(src)
 	end
 	
 	# Seems to work without copying runtime DLLs into these dirs.
@@ -78,35 +96,59 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	
 	FileUtils.mkdir_p(platforms_dir_target_dir, :verbose => true)
 	
-	FileUtils.cp("#{platforms_dir}/qwindows.dll",  platforms_dir_target_dir, :verbose => true) if !copy_debug
-	FileUtils.cp("#{platforms_dir}/qwindowsd.dll", platforms_dir_target_dir, :verbose => true) if copy_debug
+	qwindows_src = "#{platforms_dir}/qwindows#{dll_suffix}.dll"
+	FileUtils.cp(qwindows_src, platforms_dir_target_dir, :verbose => true) if File.exist?(qwindows_src)
 	
 	# Styles
 	styles_dir = "#{plugins_path}/styles"
 	styles_dir_target_dir = "#{target_dir}/styles"
 	
 	FileUtils.mkdir_p(styles_dir_target_dir, :verbose => true)
-	
-	FileUtils.cp("#{styles_dir}/qwindowsvistastyle.dll",  styles_dir_target_dir, :verbose => true) if !copy_debug
-	FileUtils.cp("#{styles_dir}/qwindowsvistastyled.dll", styles_dir_target_dir, :verbose => true) if copy_debug
-	
-	# Gamepads
-	gamepads_dir = "#{plugins_path}/gamepads"
-	gamepads_dir_target_dir = "#{target_dir}/gamepads"
-	
-	FileUtils.mkdir_p(gamepads_dir_target_dir, :verbose => true)
-	
-	FileUtils.cp("#{gamepads_dir}/xinputgamepad.dll",  gamepads_dir_target_dir, :verbose => true) if !copy_debug
-	FileUtils.cp("#{gamepads_dir}/xinputgamepadd.dll", gamepads_dir_target_dir, :verbose => true) if copy_debug
 
-	# Mediaservice (required for Qt Multimedia / webcam: QCamera, QCameraViewfinder)
-	mediaservice_dir = "#{plugins_path}/mediaservice"
-	mediaservice_target_dir = "#{target_dir}/mediaservice"
-	if File.directory?(mediaservice_dir)
-		FileUtils.mkdir_p(mediaservice_target_dir, :verbose => true)
-		["wmfengine", "dsengine"].each do |plugin|
-			FileUtils.cp("#{mediaservice_dir}/#{plugin}.dll",  mediaservice_target_dir, :verbose => true) if !copy_debug && File.exist?("#{mediaservice_dir}/#{plugin}.dll")
-			FileUtils.cp("#{mediaservice_dir}/#{plugin}d.dll", mediaservice_target_dir, :verbose => true) if copy_debug && File.exist?("#{mediaservice_dir}/#{plugin}d.dll")
+	["qwindowsvistastyle", "qmodernwindowsstyle"].each do |style_plugin|
+		style_src = "#{styles_dir}/#{style_plugin}#{dll_suffix}.dll"
+		FileUtils.cp(style_src, styles_dir_target_dir, :verbose => true) if File.exist?(style_src)
+	end
+
+	# Gamepads (Qt5)
+	if !qt6
+		gamepads_dir = "#{plugins_path}/gamepads"
+		gamepads_dir_target_dir = "#{target_dir}/gamepads"
+		
+		if File.directory?(gamepads_dir)
+			FileUtils.mkdir_p(gamepads_dir_target_dir, :verbose => true)
+			gamepad_src = "#{gamepads_dir}/xinputgamepad#{dll_suffix}.dll"
+			FileUtils.cp(gamepad_src, gamepads_dir_target_dir, :verbose => true) if File.exist?(gamepad_src)
+		end
+	end
+
+	# Multimedia backend plugins (required for webcam/camera support)
+	if qt6
+		multimedia_dir = "#{plugins_path}/multimedia"
+		multimedia_target_dir = "#{target_dir}/multimedia"
+		if File.directory?(multimedia_dir)
+			FileUtils.mkdir_p(multimedia_target_dir, :verbose => true)
+			found_backend = false
+			["windowsmediaplugin", "ffmpegmediaplugin"].each do |plugin|
+				src = "#{multimedia_dir}/#{plugin}#{dll_suffix}.dll"
+				if File.exist?(src)
+					FileUtils.cp(src, multimedia_target_dir, :verbose => true)
+					found_backend = true
+				end
+			end
+			raise "No Qt6 multimedia backend plugin copied from #{multimedia_dir}" if !found_backend
+		else
+			raise "Qt6 multimedia plugin directory not found: #{multimedia_dir}"
+		end
+	else
+		mediaservice_dir = "#{plugins_path}/mediaservice"
+		mediaservice_target_dir = "#{target_dir}/mediaservice"
+		if File.directory?(mediaservice_dir)
+			FileUtils.mkdir_p(mediaservice_target_dir, :verbose => true)
+			["wmfengine", "dsengine"].each do |plugin|
+				src = "#{mediaservice_dir}/#{plugin}#{dll_suffix}.dll"
+				FileUtils.cp(src, mediaservice_target_dir, :verbose => true) if File.exist?(src)
+			end
 		end
 	end
 

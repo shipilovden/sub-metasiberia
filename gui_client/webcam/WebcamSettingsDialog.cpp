@@ -4,15 +4,24 @@ WebcamSettingsDialog.cpp
 Copyright Glare Technologies Limited 2024 -
 =====================================================================*/
 #include "webcam/WebcamSettingsDialog.h"
+
 #include <QtMultimedia/QCamera>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtMultimedia/QCameraDevice>
+#include <QtCore/QSet>
+#include <algorithm>
+#endif
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QGroupBox>
-#include <QtCore/QPair>
 
-WebcamSettingsDialog::WebcamSettingsDialog(QCamera* camera, const QCameraViewfinderSettings& current,
-	int photo_quality, qreal video_bitrate_mbps, QWidget* parent)
+WebcamSettingsDialog::WebcamSettingsDialog(
+	QCamera* camera,
+	const WebcamDialogViewfinderSettingsType& current,
+	int photo_quality,
+	qreal video_bitrate_mbps,
+	QWidget* parent)
 	: QDialog(parent)
 	, camera_(camera)
 	, resolution_combo_(nullptr)
@@ -40,8 +49,8 @@ WebcamSettingsDialog::WebcamSettingsDialog(QCamera* camera, const QCameraViewfin
 	photo_quality_label_ = new QLabel(this);
 	photo_form->addRow(tr("JPEG quality:"), photo_quality_slider_);
 	photo_form->addRow(QString(), photo_quality_label_);
-	connect(photo_quality_slider_, &QSlider::valueChanged, this, [this](int v) {
-		photo_quality_label_->setText(QString::number(v) + "%");
+	connect(photo_quality_slider_, &QSlider::valueChanged, this, [this](int value) {
+		photo_quality_label_->setText(QString::number(value) + "%");
 	});
 	photo_quality_label_->setText(QString::number(photo_quality_slider_->value()) + "%");
 	main->addWidget(photo_group);
@@ -63,7 +72,34 @@ WebcamSettingsDialog::WebcamSettingsDialog(QCamera* camera, const QCameraViewfin
 
 	populateFromCamera();
 
-	// Restore selection to current viewfinder
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	if (!current.isNull())
+	{
+		const QSize current_res = current.resolution();
+		const int current_fps = static_cast<int>(qRound(current.maxFrameRate()));
+		for (int i = 0; i < resolution_combo_->count(); ++i)
+		{
+			if (resolution_combo_->itemData(i).toSize() == current_res)
+			{
+				resolution_combo_->setCurrentIndex(i);
+				break;
+			}
+		}
+		for (int i = 0; i < fps_combo_->count(); ++i)
+		{
+			if (fps_combo_->itemData(i).toInt() == current_fps)
+			{
+				fps_combo_->setCurrentIndex(i);
+				break;
+			}
+		}
+	}
+
+	connect(resolution_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+		refreshFpsForCurrentResolution();
+		emit viewfinderSettingsChanged();
+	});
+#else
 	QSize cur = current.resolution();
 	qreal minF = current.minimumFrameRate();
 	qreal maxF = current.maximumFrameRate();
@@ -77,16 +113,17 @@ WebcamSettingsDialog::WebcamSettingsDialog(QCamera* camera, const QCameraViewfin
 	}
 	for (int i = 0; i < fps_combo_->count() && i < fps_ranges_.size(); ++i)
 	{
-		const QPair<qreal,qreal>& r = fps_ranges_[i];
-		if (qFuzzyCompare(r.first, minF) && qFuzzyCompare(r.second, maxF))
+		const QPair<qreal, qreal>& range = fps_ranges_[i];
+		if (qFuzzyCompare(range.first, minF) && qFuzzyCompare(range.second, maxF))
 		{
 			fps_combo_->setCurrentIndex(i);
 			break;
 		}
 	}
 
-	// Live apply: when user changes resolution or FPS, emit so preview updates immediately
 	connect(resolution_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &WebcamSettingsDialog::viewfinderSettingsChanged);
+#endif
+
 	connect(fps_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &WebcamSettingsDialog::viewfinderSettingsChanged);
 }
 
@@ -97,41 +134,133 @@ void WebcamSettingsDialog::populateFromCamera()
 {
 	if (!camera_)
 		return;
-	// Camera should be in Loaded or Active state to query supported settings
-	QList<QSize> res = camera_->supportedViewfinderResolutions();
-	if (!res.isEmpty())
+
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	camera_formats_ = camera_->cameraDevice().videoFormats();
+	if (camera_formats_.isEmpty())
+		return;
+
+	QSet<QString> seen_resolutions;
+	QList<QSize> unique_resolutions;
+	for (const QCameraFormat& format : camera_formats_)
+	{
+		if (!format.isNull() && format.resolution().isValid())
+		{
+			const QSize res = format.resolution();
+			const QString key = QString::number(res.width()) + "x" + QString::number(res.height());
+			if (!seen_resolutions.contains(key))
+			{
+				seen_resolutions.insert(key);
+				unique_resolutions.append(res);
+			}
+		}
+	}
+
+	std::sort(unique_resolutions.begin(), unique_resolutions.end(), [](const QSize& a, const QSize& b) {
+		const int area_a = a.width() * a.height();
+		const int area_b = b.width() * b.height();
+		if (area_a != area_b)
+			return area_a > area_b;
+		return a.width() > b.width();
+	});
+
+	resolution_combo_->clear();
+	for (const QSize& res : unique_resolutions)
+		resolution_combo_->addItem(QString("%1 x %2").arg(res.width()).arg(res.height()), res);
+
+	refreshFpsForCurrentResolution();
+#else
+	QList<QSize> resolutions = camera_->supportedViewfinderResolutions();
+	if (!resolutions.isEmpty())
 	{
 		resolution_combo_->clear();
-		resolutions_ = res;
-		for (const QSize& s : res)
-			resolution_combo_->addItem(QString("%1 x %2").arg(s.width()).arg(s.height()), s);
+		resolutions_ = resolutions;
+		for (const QSize& size : resolutions_)
+			resolution_combo_->addItem(QString("%1 x %2").arg(size.width()).arg(size.height()), size);
 	}
+
 	QList<QCamera::FrameRateRange> ranges = camera_->supportedViewfinderFrameRateRanges();
 	if (!ranges.isEmpty())
 	{
 		fps_combo_->clear();
 		fps_ranges_.clear();
-		for (const QCamera::FrameRateRange& r : ranges)
+		for (const QCamera::FrameRateRange& range : ranges)
 		{
-			fps_ranges_.append(qMakePair(r.minimumFrameRate, r.maximumFrameRate));
-			fps_combo_->addItem(QString("%1 - %2 FPS").arg(r.minimumFrameRate).arg(r.maximumFrameRate));
+			fps_ranges_.append(qMakePair(range.minimumFrameRate, range.maximumFrameRate));
+			fps_combo_->addItem(QString("%1 - %2 FPS").arg(range.minimumFrameRate).arg(range.maximumFrameRate));
 		}
 	}
+#endif
 }
 
-QCameraViewfinderSettings WebcamSettingsDialog::getViewfinderSettings() const
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+void WebcamSettingsDialog::refreshFpsForCurrentResolution()
 {
-	QCameraViewfinderSettings s;
-	if (resolution_combo_->currentIndex() >= 0 && resolution_combo_->currentData().isValid())
-		s.setResolution(resolution_combo_->currentData().toSize());
-	int fi = fps_combo_->currentIndex();
-	if (fi >= 0 && fi < fps_ranges_.size())
+	fps_combo_->clear();
+	if (resolution_combo_->currentIndex() < 0)
+		return;
+
+	const QSize selected_res = resolution_combo_->currentData().toSize();
+	QSet<int> fps_set;
+	QList<int> fps_values;
+
+	for (const QCameraFormat& format : camera_formats_)
 	{
-		const QPair<qreal,qreal>& r = fps_ranges_[fi];
-		s.setMinimumFrameRate(r.first);
-		s.setMaximumFrameRate(r.second);
+		if (format.resolution() == selected_res)
+		{
+			const int fps = static_cast<int>(qRound(format.maxFrameRate()));
+			if (fps > 0 && !fps_set.contains(fps))
+			{
+				fps_set.insert(fps);
+				fps_values.append(fps);
+			}
+		}
 	}
-	return s;
+
+	std::sort(fps_values.begin(), fps_values.end());
+	for (int fps : fps_values)
+		fps_combo_->addItem(QString::number(fps) + tr(" FPS"), fps);
+}
+#endif
+
+WebcamDialogViewfinderSettingsType WebcamSettingsDialog::getViewfinderSettings() const
+{
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	if (resolution_combo_->currentIndex() < 0)
+		return QCameraFormat();
+
+	const QSize selected_res = resolution_combo_->currentData().toSize();
+	const int selected_fps = fps_combo_->currentData().toInt();
+
+	QCameraFormat best_match;
+	for (const QCameraFormat& format : camera_formats_)
+	{
+		if (format.resolution() != selected_res)
+			continue;
+
+		const int fps = static_cast<int>(qRound(format.maxFrameRate()));
+		if (selected_fps <= 0 || fps == selected_fps)
+			return format;
+		if (best_match.isNull())
+			best_match = format;
+	}
+
+	return best_match;
+#else
+	QCameraViewfinderSettings settings;
+	if (resolution_combo_->currentIndex() >= 0 && resolution_combo_->currentData().isValid())
+		settings.setResolution(resolution_combo_->currentData().toSize());
+
+	const int fps_index = fps_combo_->currentIndex();
+	if (fps_index >= 0 && fps_index < fps_ranges_.size())
+	{
+		const QPair<qreal, qreal>& range = fps_ranges_[fps_index];
+		settings.setMinimumFrameRate(range.first);
+		settings.setMaximumFrameRate(range.second);
+	}
+
+	return settings;
+#endif
 }
 
 int WebcamSettingsDialog::getPhotoQuality() const
@@ -143,3 +272,4 @@ qreal WebcamSettingsDialog::getVideoBitrateMbps() const
 {
 	return video_bitrate_spin_ ? video_bitrate_spin_->value() : 5.0;
 }
+
