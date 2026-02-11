@@ -28,10 +28,13 @@ Copyright Glare Technologies Limited 2023 -
 #include "../qt/QtUtils.h"
 #include <QtGui/QMouseEvent>
 #include <QtCore/QSettings>
-#include <QtWidgets/QShortcut>
+#include <QtGui/qshortcut.h>
+#if SUBSTRATA_USE_QT_GAMEPAD
 #include <QtGamepad/QGamepad>
+#include <QtGamepad/QGamepadManager>
+#endif
 #include <QtGui/QOpenGLContext>
-#if defined(_WIN32)
+#if defined(_WIN32) && (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 #include <QtPlatformHeaders/QWGLNativeContext>
 #endif
 #include <tracy/Tracy.hpp>
@@ -103,7 +106,9 @@ GlWidget::GlWidget(QWidget *parent)
 	cam_move_on_key_input_enabled(true),
 	near_draw_dist(0.22f), // As large as possible as we can get without clipping becoming apparent.
 	max_draw_dist(1000.f),
+#if SUBSTRATA_USE_QT_GAMEPAD
 	gamepad(NULL),
+#endif
 	print_output(NULL),
 	settings(NULL),
 	take_map_screenshot(false),
@@ -159,7 +164,7 @@ GlWidget::GlWidget(QWidget *parent)
 
 void GlWidget::initGamepadsSlot()
 {
-#if 1 // If use Qt for gamepad input:
+#if SUBSTRATA_USE_QT_GAMEPAD // If use Qt for gamepad input:
 	// See if we have any attached gamepads
 	QGamepadManager* manager = QGamepadManager::instance();
 
@@ -221,8 +226,10 @@ void GlWidget::resizeGL(int width_, int height_)
 {
 	assert(QGLContext::currentContext() == this->context());
 
-	viewport_w = width_;
-	viewport_h = height_;
+	const int fb_w = (int)std::round(width_ * this->devicePixelRatioF());
+	const int fb_h = (int)std::round(height_ * this->devicePixelRatioF());
+	viewport_w = fb_w;
+	viewport_h = fb_h;
 
 	if(this->opengl_engine)
 	{
@@ -242,9 +249,24 @@ void GlWidget::resizeGL(int width_, int height_)
 
 void GlWidget::initializeGL()
 {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called."  (https://doc.qt.io/qt-5/qglwidget.html#initializeGL)
+#endif
 
 	const std::string opengl_vendor	= std::string((const char*)glGetString(GL_VENDOR));
+	const std::string opengl_renderer = std::string((const char*)glGetString(GL_RENDERER));
+	const std::string opengl_version  = std::string((const char*)glGetString(GL_VERSION));
+	conPrint("OpenGL vendor: " + opengl_vendor);
+	conPrint("OpenGL renderer: " + opengl_renderer);
+	conPrint("OpenGL version: " + opengl_version);
+
+#if QT_VERSION_MAJOR >= 6
+	// Qt6 QOpenGLWidget may use an sRGB framebuffer. Disable fixed-function sRGB conversion here
+	// because final_imaging_frag_shader.glsl already outputs non-linear (tone-mapped) colour.
+	glDisable(GL_FRAMEBUFFER_SRGB);
+	// Qt6 build: disable blob shadows (black patch following avatar).
+	PlatformUtils::setEnvironmentVariable("SUBSTRATA_DISABLE_BLOB_SHADOWS", "1");
+#endif
 	const bool is_AMD    = StringUtils::containsString(toLowerCase(opengl_vendor), "ati") || StringUtils::containsString(toLowerCase(opengl_vendor), "amd");
 	const bool is_Nvidia = StringUtils::containsString(toLowerCase(opengl_vendor), "nvidia");
 
@@ -263,6 +285,12 @@ void GlWidget::initializeGL()
 		bloom    = settings->value(MainOptionsDialog::BloomKey(),	/*default val=*/true).toBool();
 		use_SSAO = settings->value(MainOptionsDialog::SSAOKey(),    /*default val=*/default_use_SSAO).toBool();
 	}
+#if QT_VERSION_MAJOR >= 6
+	// Qt6 build: disable shadow mapping to remove the moving black patch.
+	shadows = false;
+	// Qt6 build: disable SSAO, likely source of moving dark patch.
+	use_SSAO = false;
+#endif
 
 	// Enable debug output (glDebugMessageCallback) in Debug and RelWithDebugInfo mode, e.g. when BUILD_TESTS is 1.
 	// Don't enable in Release mode, in case it has a performance cost.
@@ -284,6 +312,16 @@ void GlWidget::initializeGL()
 	engine_settings.allow_multi_draw_indirect = this->allow_multi_draw_indirect;
 	engine_settings.allow_bindless_textures = this->allow_bindless_textures;
 	engine_settings.ssao = use_SSAO;
+#if QT_VERSION_MAJOR >= 6
+	engine_settings.ssao_support = false;
+	engine_settings.render_to_offscreen_renderbuffers = false;
+	engine_settings.screenspace_refl_and_refr = false;
+	engine_settings.depth_fog = false;
+	engine_settings.render_sun_and_clouds = false;
+	engine_settings.render_water_caustics = false;
+	engine_settings.msaa_samples = -1;
+	bloom = false;
+#endif
 
 #ifdef OSX
 	// Force SSAO to false for now on Mac, as when it's enabled, the number of texture units exceeds the max (16) for the terrain shader.
@@ -358,7 +396,7 @@ void GlWidget::initializeGL()
 
 void* GlWidget::makeNewSharedGLContext()
 {
-#if defined(_WIN32)
+#if defined(_WIN32) && (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	QOpenGLContext* window_context = this->context()->contextHandle();
 	
 	QOpenGLContext* new_window_context = new QOpenGLContext();
@@ -375,6 +413,9 @@ void* GlWidget::makeNewSharedGLContext()
 	HGLRC hglrc = nativeContext.context();
 
 	return hglrc;
+#elif defined(_WIN32)
+	// Qt6 native context access uses QNativeInterface; not wired up here yet.
+	return nullptr;
 #else
 	return nullptr;
 #endif
@@ -383,7 +424,9 @@ void* GlWidget::makeNewSharedGLContext()
 
 void GlWidget::paintGL()
 {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called."  (https://doc.qt.io/qt-5/qglwidget.html#initializeGL)
+#endif
 	if(opengl_engine.isNull())
 		return;
 

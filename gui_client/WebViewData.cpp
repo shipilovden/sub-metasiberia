@@ -309,6 +309,7 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 					browser = new EmbeddedBrowser();
 					conPrint("WebViewData::process: Calling browser->create()...");
 					browser->create(ob->target_url, viewport_width, viewport_height, gui_client, ob, /*mat index=*/0, /*apply_to_emission_texture=*/true, OpenGLTexture::Wrapping_Clamp, opengl_engine);
+					this->loaded_target_url = ob->target_url;
 					conPrint("WebViewData::process: browser->create() completed");
 				}
 				else
@@ -329,14 +330,8 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 				}
 			}
 
-			// Update loaded_target_url if it changed
-			if(!ob->target_url.empty())
-			{
-				this->loaded_target_url = ob->target_url;
-			}
-
-			// If target url has changed, tell webview to load it
-			if(browser.nonNull() && (ob->target_url != this->loaded_target_url))
+			// If target url has changed, tell webview to load it immediately (e.g. user edited Target URL in editor and pressed Enter)
+			if(browser.nonNull() && !ob->target_url.empty() && (ob->target_url != this->loaded_target_url))
 			{
 				// Always navigate to new URL, no security checks needed
 				browser->navigate(ob->target_url);

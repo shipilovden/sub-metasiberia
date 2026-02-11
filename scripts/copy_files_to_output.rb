@@ -66,6 +66,8 @@ def copy_files(vs_version, substrata_repos_dir, glare_core_repos_dir, config = n
 			copyBugSplatRedist(output_dir) if $copy_bugsplat
 			copyQtRedistWindows(vs_version, output_dir, is_debug)
 			copySDLRedistWindows(vs_version, output_dir, is_debug)
+			# Clean nested plugin/locales dirs (e.g. platforms/platforms) that can prevent app from starting
+			removeNestedPluginDirs(output_dir)
 		rescue => e
 			puts "Warning: Failed to copy files for #{config_name}: #{e.message}"
 		end

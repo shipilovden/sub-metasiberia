@@ -349,3 +349,4 @@ bool SDLUIInterface::handleAboutDialogMousePress(const MouseEvent& e)
 	
 	return false; // Event not handled (click was inside dialog)
 }
+

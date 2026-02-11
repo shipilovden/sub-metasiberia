@@ -49,6 +49,7 @@ private slots:
 	void onOpenFolderClicked();
 	void onSettingsClicked();
 	void onRecorderStateChanged();
+	void onRecorderError(QMediaRecorder::Error error);
 	void onCameraStateChanged(QCamera::State state);
 	void onCameraError(QCamera::Error error);
 	void onImageSaved(int id, const QString& path);
@@ -78,6 +79,7 @@ private:
 	bool recording_;
 	bool pending_start_;  // load() was called; on LoadedState we apply viewfinder settings then start()
 	QString last_video_path_;  // path of last recorded video (to show in status when stopped)
+	QString last_recorder_error_;  // текст ошибки рекордера (если был signal error)
 	QString pending_photo_path_;  // when set, we wait for readyForCapture then capture to this path
 	QString next_photo_save_path_;  // when capturing to buffer, path where to save the QImage
 	int photo_quality_;        // 1-100 for JPEG

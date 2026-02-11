@@ -18,7 +18,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "UserDetailsWidget.h"
 #include "AvatarSettingsDialog.h"
 #include "AddObjectDialog.h"
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 #include "AddVideoDialog.h"
+#endif
 #include "MainOptionsDialog.h"
 #include "FindObjectDialog.h"
 #include "ListObjectsNearbyDialog.h"
@@ -43,6 +45,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../shared/LODGeneration.h"
 #include "../shared/ImageDecoding.h"
 #include "../shared/MessageUtils.h"
+#include "../shared/ResourceManager.h"
 #include <QtCore/QMimeData>
 #include <QtCore/QSettings>
 #include <QtCore/QLoggingCategory>
@@ -54,15 +57,17 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QMenu>
-#include <QtWidgets/QAction>
+#include <QtWidgets/qaction.h>
 #include <QtWidgets/QInputDialog>
 #include <QtCore/QTimer>
 #include <QtGui/QCursor>
 #include <QtGui/QImage>
 #include <QtGui/QPixmap>
 #include <algorithm>
+#if SUBSTRATA_USE_QT_GAMEPAD
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
+#endif
 #include "../qt/QtUtils.h"
 #ifdef _MSC_VER
 #pragma warning(pop) // Re-enable warnings
@@ -93,7 +98,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "../graphics/jpegdecoder.h"
 #include "../opengl/RenderStatsWidget.h"
 #if defined(USE_QT)
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 #include "webcam/WebcamWindow.h"
+#endif
 #endif
 #if defined(_WIN32)
 #include "../video/WMFVideoReader.h"
@@ -108,6 +115,8 @@ Copyright Glare Technologies Limited 2024 -
 #ifdef _WIN32
 #include <d3d11.h>
 #include <d3d11_4.h>
+#include <DbgHelp.h>
+#include <windows.h>
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -118,6 +127,83 @@ Copyright Glare Technologies Limited 2024 -
 
 #include <tracy/Tracy.hpp>
 
+#if defined(_WIN32)
+#pragma comment(lib, "Dbghelp.lib")
+static std::string g_crash_log_path;
+
+static void writeCrashLine(HANDLE file, const std::string& line)
+{
+	if(file == INVALID_HANDLE_VALUE)
+		return;
+	const std::string with_newline = line + "\r\n";
+	DWORD written = 0;
+	WriteFile(file, with_newline.data(), (DWORD)with_newline.size(), &written, NULL);
+}
+
+static LONG WINAPI SubstrataUnhandledExceptionFilter(EXCEPTION_POINTERS* exception_info)
+{
+	HANDLE file = INVALID_HANDLE_VALUE;
+	if(!g_crash_log_path.empty())
+		file = CreateFileA(g_crash_log_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	const DWORD exception_code = exception_info ? exception_info->ExceptionRecord->ExceptionCode : 0;
+	const void* exception_address = exception_info ? exception_info->ExceptionRecord->ExceptionAddress : nullptr;
+
+	writeCrashLine(file, "Unhandled exception caught.");
+	writeCrashLine(file, "Exception code: 0x" + toHexString(exception_code));
+	writeCrashLine(file, "Exception address: 0x" + toHexString((uint64)exception_address));
+
+	HANDLE process = GetCurrentProcess();
+	SymInitialize(process, NULL, TRUE);
+
+	void* stack[64];
+	const USHORT frames = CaptureStackBackTrace(0, 64, stack, NULL);
+	writeCrashLine(file, "Stack trace:");
+	
+	SYMBOL_INFO* symbol = (SYMBOL_INFO*)std::malloc(sizeof(SYMBOL_INFO) + 256);
+	if(symbol)
+	{
+		symbol->MaxNameLen = 255;
+		symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+		for(USHORT i = 0; i < frames; ++i)
+		{
+			DWORD64 addr = (DWORD64)stack[i];
+			DWORD64 displacement = 0;
+			if(SymFromAddr(process, addr, &displacement, symbol))
+			{
+				writeCrashLine(file, std::string("#") + toString(i) + " " + symbol->Name + " + 0x" + toHexString((uint64)displacement));
+			}
+			else
+			{
+				writeCrashLine(file, std::string("#") + toString(i) + " 0x" + toHexString((uint64)addr));
+			}
+		}
+		std::free(symbol);
+	}
+
+	SymCleanup(process);
+	if(file != INVALID_HANDLE_VALUE)
+		CloseHandle(file);
+
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void installCrashHandler(const std::string& log_path)
+{
+	g_crash_log_path = log_path;
+	SetUnhandledExceptionFilter(SubstrataUnhandledExceptionFilter);
+}
+#endif
+
+
+// Qt6 removed pos() from QMouseEvent/QWheelEvent, use position().
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+static inline QPoint qtEventPos(const QMouseEvent* e) { return e->position().toPoint(); }
+static inline QPoint qtEventPos(const QWheelEvent* e) { return e->position().toPoint(); }
+#else
+static inline QPoint qtEventPos(const QMouseEvent* e) { return e->pos(); }
+static inline QPoint qtEventPos(const QWheelEvent* e) { return e->pos(); }
+#endif
 
 // If we are building on Windows, and we are not in Release mode (e.g. BUILD_TESTS is enabled), then make sure the console window is shown.
 #if defined(_WIN32) && defined(BUILD_TESTS)
@@ -238,7 +324,9 @@ void MainWindow::initialiseUI()
 {
 	ZoneScoped; // Tracy profiler
 
+#if SUBSTRATA_USE_QT_GAMEPAD
 	QGamepadManager::instance(); // Creating the instance here before any windows are created is required for querying gamepads to work.
+#endif
 
 	{
 		ZoneScopedN("setupUi"); // Tracy profiler
@@ -248,6 +336,7 @@ void MainWindow::initialiseUI()
 
 #if defined(USE_QT)
 	// Replace webcam dock content with full WebcamWindow (camera list, settings, etc.) before restoreState
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 	try {
 		webcam_window = new WebcamWindow(this);
 		ui->webcamDockWidget->setWidget(webcam_window);
@@ -266,6 +355,13 @@ void MainWindow::initialiseUI()
 		});
 		ui->webcamEnableCheckBox->setChecked(false);
 	}
+#else
+	webcam_window = nullptr;
+	connect(ui->webcamDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+		if(visible) ui->webcamEnableCheckBox->setChecked(gui_client.webcam_capture.isEnabled());
+	});
+	ui->webcamEnableCheckBox->setChecked(false);
+#endif
 #endif
 
 	setAcceptDrops(true);
@@ -485,7 +581,7 @@ void MainWindow::initialiseUI()
 			throw glare::Exception("GetAdapter failed: " + PlatformUtils::COMErrorString(hr));
 		DXGI_ADAPTER_DESC desc;
 		adapter->GetDesc(&desc);
-		logMessage("Direct3D device adapter: " + StringUtils::PlatformToUTF8UnicodeEncoding(desc.Description) + ", LUID: {" + toString((uint32)desc.AdapterLuid.LowPart) + ", " + toString(desc.AdapterLuid.HighPart) + "}");
+		logMessage("Direct3D device adapter: " + StringUtils::PlatformToUTF8UnicodeEncoding(desc.Description) + ", LUID: {" + toString((uint32)desc.AdapterLuid.LowPart) + ", " + toString((int64)desc.AdapterLuid.HighPart) + "}");
 	}
 #endif //_WIN32
 
@@ -1278,7 +1374,11 @@ void MainWindow::timerEvent(QTimerEvent* event)
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 		ui->glWidget->update();
 #else
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+		ui->glWidget->update();
+#else
 		ui->glWidget->updateGL();
+#endif
 #endif
 		//if(timer.elapsed() > 0.020)
 		//	conPrint(doubleToStringNDecimalPlaces(Clock::getTimeSinceInit(), 3) + ": updateGL() took " + timer.elapsedStringNSigFigs(4));
@@ -1689,7 +1789,11 @@ void MainWindow::runScreenshotCode()
 			{
 				conPrint("Taking screenshot...");
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+				ui->glWidget->update(); // Make sure QOpenGLWidget::paintGL gets called to set camera transform, sensor width etc.
+#else
 				ui->glWidget->updateGL(); // Make sure QGLWidget::paintGL gets called to set camera transform, sensor width etc.
+#endif
 
 				opengl_engine->setMainViewportDims(target_viewport_w, target_viewport_h);
 				ImageMapUInt8Ref map = opengl_engine->drawToBufferAndReturnImageMap();
@@ -2363,6 +2467,7 @@ void MainWindow::on_actionAdd_Web_View_triggered()
 
 void MainWindow::on_actionAdd_Video_triggered()
 {
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 	try
 	{
 		const float quad_w = 0.4f;
@@ -2382,7 +2487,7 @@ void MainWindow::on_actionAdd_Video_triggered()
 			return;
 		}
 
-		AddVideoDialog dialog(this->settings, gui_client.resource_manager, 
+		AddVideoDialog dialog(this->settings, gui_client.resource_manager,
 #ifdef _WIN32
 			this->device_manager.ptr
 #else
@@ -2452,6 +2557,9 @@ void MainWindow::on_actionAdd_Video_triggered()
 		m.showMessage(QtUtils::toQString(e.what()));
 		m.exec();
 	}
+#else
+	QMessageBox::information(this, tr("Video"), tr("Add Video dialog is disabled in this Qt6 build."));
+#endif
 }
 
 
@@ -4157,10 +4265,11 @@ void MainWindow::glWidgetMousePressed(QMouseEvent* e)
 	if(!opengl_engine)
 		return;
 
-	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
+	const QPoint p = qtEventPos(e);
+	const Vec2f widget_pos((float)p.x(), (float)p.y());
 
 	MouseEvent mouse_event;
-	mouse_event.cursor_pos = Vec2i(e->pos().x(), e->pos().y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
+	mouse_event.cursor_pos = Vec2i(p.x(), p.y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
 	mouse_event.gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
 	mouse_event.button = fromQtMouseButton(e->button());
 	mouse_event.modifiers = fromQtModifiers(e->modifiers());
@@ -4177,11 +4286,12 @@ void MainWindow::glWidgetMouseReleased(QMouseEvent* e)
 	if(!opengl_engine)
 		return;
 
-	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
+	const QPoint p = qtEventPos(e);
+	const Vec2f widget_pos((float)p.x(), (float)p.y());
 	const Vec2f gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
 
 	MouseEvent mouse_event;
-	mouse_event.cursor_pos = Vec2i(e->pos().x(), e->pos().y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
+	mouse_event.cursor_pos = Vec2i(p.x(), p.y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
 	mouse_event.gl_coords = gl_coords;
 	mouse_event.button = fromQtMouseButton(e->button());
 	mouse_event.modifiers = fromQtModifiers(e->modifiers());
@@ -4374,11 +4484,12 @@ void MainWindow::showScreenshots()
 
 void MainWindow::doObjectSelectionTraceForMouseEvent(QMouseEvent* e)
 {
-	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
+	const QPoint p = qtEventPos(e);
+	const Vec2f widget_pos((float)p.x(), (float)p.y());
 	const Vec2f gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
 
 	MouseEvent mouse_event;
-	mouse_event.cursor_pos = Vec2i(e->pos().x(), e->pos().y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
+	mouse_event.cursor_pos = Vec2i(p.x(), p.y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
 	mouse_event.gl_coords = gl_coords;
 	mouse_event.button = fromQtMouseButton(e->button());
 	mouse_event.modifiers = fromQtModifiers(e->modifiers());
@@ -4391,11 +4502,12 @@ void MainWindow::glWidgetMouseDoubleClicked(QMouseEvent* e)
 {
 	//conPrint("MainWindow::glWidgetMouseDoubleClicked()");
 
-	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
+	const QPoint p = qtEventPos(e);
+	const Vec2f widget_pos((float)p.x(), (float)p.y());
 	const Vec2f gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
 
 	MouseEvent mouse_event;
-	mouse_event.cursor_pos = Vec2i(e->pos().x(), e->pos().y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
+	mouse_event.cursor_pos = Vec2i(p.x(), p.y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
 	mouse_event.gl_coords = gl_coords;
 	mouse_event.button = fromQtMouseButton(e->button());
 	mouse_event.modifiers = fromQtModifiers(e->modifiers());
@@ -4409,11 +4521,12 @@ void MainWindow::glWidgetMouseMoved(QMouseEvent* e)
 	if(ui->glWidget->opengl_engine.isNull() || !ui->glWidget->opengl_engine->initSucceeded())
 		return;
 
-	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
+	const QPoint p = qtEventPos(e);
+	const Vec2f widget_pos((float)p.x(), (float)p.y());
 	const Vec2f gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
 
 	MouseEvent mouse_event;
-	mouse_event.cursor_pos = Vec2i(e->pos().x(), e->pos().y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
+	mouse_event.cursor_pos = Vec2i(p.x(), p.y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
 	mouse_event.gl_coords = gl_coords;
 	mouse_event.modifiers = fromQtModifiers(e->modifiers());
 	mouse_event.button_state = fromQTMouseButtons(e->buttons());
@@ -4623,11 +4736,12 @@ void MainWindow::glWidgetFocusOut()
 
 void MainWindow::glWidgetMouseWheelEvent(QWheelEvent* e)
 {
-	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
+	const QPoint p = qtEventPos(e);
+	const Vec2f widget_pos((float)p.x(), (float)p.y());
 	const Vec2f gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
 
 	MouseWheelEvent mouse_event;
-	mouse_event.cursor_pos = Vec2i(e->pos().x(), e->pos().y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
+	mouse_event.cursor_pos = Vec2i(p.x(), p.y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
 	mouse_event.gl_coords = gl_coords;
 	mouse_event.angle_delta = Vec2f((float)e->angleDelta().x() / 8.f, (float)e->angleDelta().y() / 8.f); // angleDelta() returns "the relative amount that the wheel was rotated, in eighths of a degree".
 	mouse_event.modifiers = fromQtModifiers(e->modifiers());
@@ -4770,6 +4884,7 @@ float MainWindow::gamepadAxisRightY()
 
 #else
 
+#if SUBSTRATA_USE_QT_GAMEPAD
 bool MainWindow::gamepadAttached()
 {
 	return ui->glWidget->gamepad != nullptr;
@@ -4804,6 +4919,42 @@ float MainWindow::gamepadAxisRightY()
 {
 	return ui->glWidget->gamepad ? (float)ui->glWidget->gamepad->axisRightY() : 0.0f;
 }
+#else
+bool MainWindow::gamepadAttached()
+{
+	return false;
+}
+
+float MainWindow::gamepadButtonL2()
+{
+	return 0.0f;
+}
+
+float MainWindow::gamepadButtonR2()
+{
+	return 0.0f;
+}
+
+float MainWindow::gamepadAxisLeftX()
+{
+	return 0.0f;
+}
+
+float MainWindow::gamepadAxisLeftY()
+{
+	return 0.0f;
+}
+
+float MainWindow::gamepadAxisRightX()
+{
+	return 0.0f;
+}
+
+float MainWindow::gamepadAxisRightY()
+{
+	return 0.0f;
+}
+#endif
 #endif
 
 
@@ -5077,6 +5228,9 @@ int main(int argc, char *argv[])
 
 		const std::string cyberspace_base_dir_path = PlatformUtils::getResourceDirectoryPath();
 		const std::string appdata_path = PlatformUtils::getOrCreateAppDataDirectory("Cyberspace");
+#if defined(_WIN32)
+		installCrashHandler(appdata_path + "/qt6_crash.log");
+#endif
 
 		try
 		{
@@ -5235,11 +5389,31 @@ int main(int argc, char *argv[])
 					server_URL = start_loc_URL_setting;
 			}
 
+			bool disable_autoconnect = false;
 			try
 			{
-				URLParseResults parse_results = URLParser::parseURL(server_URL);
+				const std::string val = PlatformUtils::getEnvironmentVariable("SUBSTRATA_NO_AUTOCONNECT");
+				if(!val.empty())
+				{
+					const std::string lower_val = toLowerCase(val);
+					if((lower_val == "1") || (lower_val == "true") || (lower_val == "yes"))
+						disable_autoconnect = true;
+				}
+			}
+			catch(glare::Exception& )
+			{}
 
-				mw.gui_client.connectToServer(parse_results);
+			try
+			{
+				if(!disable_autoconnect && !server_URL.empty())
+				{
+					URLParseResults parse_results = URLParser::parseURL(server_URL);
+					mw.gui_client.connectToServer(parse_results);
+				}
+				else if(disable_autoconnect)
+				{
+					mw.logMessage("Autoconnect disabled due to SUBSTRATA_NO_AUTOCONNECT env var.");
+				}
 			}
 			catch(glare::Exception& e)
 			{

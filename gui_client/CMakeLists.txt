@@ -1,6 +1,9 @@
 # gui_client
 
 set(CURRENT_TARGET gui_client)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(NOT USE_SDL)
 	programAvailable(${INDIGO_QT_DIR}/bin/moc)
@@ -67,7 +70,9 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client AvatarSettingsDialog)
 	addMocFileRule(gui_client AvatarPreviewWidget)
 	addMocFileRule(gui_client AddObjectDialog)
-	addMocFileRule(gui_client AddVideoDialog)
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
+		addMocFileRule(gui_client AddVideoDialog)
+	endif()
 	addMocFileRule(gui_client AddObjectPreviewWidget)
 	addMocFileRule(gui_client ObjectEditor)
 	addMocFileRule(gui_client EnvironmentOptionsWidget)
@@ -94,10 +99,6 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client TerrainSpecSectionWidget)
 	addMocFileRule(gui_client WorldSettingsWidget)
 	addMocFileRule(gui_client CreateObjectsDialog)
-	addMocFileRule(gui_client/webcam WebcamWindow)
-	addMocFileRule(gui_client/webcam WebcamVideoView)
-	addMocFileRule(gui_client/webcam WebcamControlPanel)
-	addMocFileRule(gui_client/webcam WebcamSettingsDialog)
 
 	addMocFileRule(qt FileSelectWidget)
 	addMocFileRule(qt RealControl)
@@ -106,7 +107,9 @@ if(NOT USE_SDL)
 
 	# Rules to compile the .ui files into ui_xx.h, using 'uic'.
 	addUIFileRule(gui_client AddObjectDialog)
-	addUIFileRule(gui_client AddVideoDialog)
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
+		addUIFileRule(gui_client AddVideoDialog)
+	endif()
 	addUIFileRule(gui_client AvatarSettingsDialog)
 	addUIFileRule(gui_client MainWindow)
 	addUIFileRule(gui_client ObjectEditor)
@@ -138,6 +141,38 @@ if(NOT USE_SDL)
 	#addUIFileRule(qt RgbColourPicker)
 endif()
 
+set(INDIGO_QT_IS6 FALSE)
+set(SUBSTRATA_USE_QT_MULTIMEDIA TRUE)
+if(NOT USE_SDL)
+	if(INDIGO_QT_VERSION MATCHES "^6(\\.|$)")
+		set(INDIGO_QT_IS6 TRUE)
+		set(SUBSTRATA_USE_QT_MULTIMEDIA FALSE)
+		add_definitions(-DSUBSTRATA_USE_QT_GAMEPAD=0)
+	else()
+		add_definitions(-DSUBSTRATA_USE_QT_GAMEPAD=1)
+	endif()
+endif()
+
+if(INDIGO_QT_IS6)
+	add_definitions(-DSUBSTRATA_QT6=1)
+else()
+	add_definitions(-DSUBSTRATA_QT6=0)
+endif()
+
+if(SUBSTRATA_USE_QT_MULTIMEDIA)
+	add_definitions(-DSUBSTRATA_USE_QT_MULTIMEDIA=1)
+else()
+	add_definitions(-DSUBSTRATA_USE_QT_MULTIMEDIA=0)
+endif()
+
+if(NOT USE_SDL)
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
+		addMocFileRule(gui_client/webcam WebcamWindow)
+		addMocFileRule(gui_client/webcam WebcamVideoView)
+		addMocFileRule(gui_client/webcam WebcamControlPanel)
+		addMocFileRule(gui_client/webcam WebcamSettingsDialog)
+	endif()
+endif()
 
 
 SET(gui_client
@@ -297,9 +332,7 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/AddObjectDialog.ui
 		${CMAKE_SOURCE_DIR}/gui_client/AddObjectPreviewWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AddObjectPreviewWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.ui
+		
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarPreviewWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarPreviewWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.cpp
@@ -384,6 +417,15 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.ui
+	)
+endif()
+
+if(SUBSTRATA_USE_QT_MULTIMEDIA)
+	SET(gui_client ${gui_client}
+		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.h
+		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.ui
+		${CMAKE_SOURCE_DIR}/gui_client/SubstrataVideoSurface.h
 		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.h
 		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamVideoView.cpp
@@ -403,7 +445,6 @@ if(NOT USE_SDL)
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarSettingsDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarPreviewWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AddObjectDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AddVideoDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AddObjectPreviewWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ObjectEditor.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_EnvironmentOptionsWidget.cpp
@@ -429,13 +470,8 @@ if(NOT USE_SDL)
 	${CMAKE_SOURCE_DIR}/gui_client/moc_TerrainSpecSectionWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_WorldSettingsWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_CreateObjectsDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamControlPanel.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamVideoView.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
 
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AddObjectDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AvatarSettingsDialog.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_ObjectEditor.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_EnvironmentOptionsWidget.h
@@ -462,6 +498,17 @@ if(NOT USE_SDL)
 	${CMAKE_SOURCE_DIR}/gui_client/ui_WorldSettingsWidget.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_CreateObjectsDialog.h
 	)
+
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
+		SET(gui_client ${gui_client}
+			${CMAKE_SOURCE_DIR}/gui_client/moc_AddVideoDialog.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamControlPanel.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamVideoView.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h
+		)
+	endif()
 
 
 	SET(qt
@@ -1151,6 +1198,10 @@ add_definitions(-DGUI_CLIENT=1)
 
 include(../cmake/shared_target_settings.cmake)
 
+	if(WIN32 AND INDIGO_QT_IS6)
+		target_compile_options(${CURRENT_TARGET} PRIVATE /permissive-)
+	endif()
+
 if(USE_SDL)
 	include_directories(${SDL_BUILD_DIR}/include/SDL2)
 	
@@ -1243,6 +1294,7 @@ elseif(WIN32)
 	endif()
 
 	target_link_libraries(${CURRENT_TARGET}
+		Dbghelp
 		OpenGL32
 
 		# Media foundation video reading:
@@ -1279,40 +1331,47 @@ elseif(WIN32)
 			optimized "${SDL_BUILD_DIR}/RelWithDebInfo/SDL2main.lib" 
 		)
 	else() # Else use Qt:
-		target_link_libraries(${CURRENT_TARGET}
-		
-				# Qt 6:
-		#	optimized Qt6Gui
-		#	optimized Qt6Core
-		#	optimized Qt6OpenGL
-		#	optimized Qt6Widgets
-		#	optimized Qt6OpenGLWidgets
-		#	optimized Qt6Core5Compat
-		#	debug Qt6Guid
-		#	debug Qt6Cored
-		#	debug Qt6OpenGLd
-		#	debug Qt6Widgetsd
-		#	debug Qt6OpenGLWidgetsd
-		#	debug Qt6Core5Compatd
-			
-			# Qt 5:
-			optimized qtmain
-			optimized Qt5Gui
-			optimized Qt5Core
-			optimized Qt5OpenGL
-			optimized Qt5Widgets
-			optimized Qt5Multimedia
-			optimized Qt5MultimediaWidgets
-			optimized Qt5Gamepad
-			debug qtmaind
-			debug Qt5Guid
-			debug Qt5Cored
-			debug Qt5OpenGLd
-			debug Qt5Widgetsd
-			debug Qt5Multimediad
-			debug Qt5MultimediaWidgetsd
-			debug Qt5Gamepadd
-		)
+		if(INDIGO_QT_IS6)
+			target_link_libraries(${CURRENT_TARGET}
+				optimized Qt6EntryPoint
+				optimized Qt6Gui
+				optimized Qt6Core
+				optimized Qt6OpenGL
+				optimized Qt6OpenGLWidgets
+				optimized Qt6Widgets
+				optimized Qt6Multimedia
+				optimized Qt6MultimediaWidgets
+				optimized Qt6Core5Compat
+				debug Qt6EntryPointd
+				debug Qt6Guid
+				debug Qt6Cored
+				debug Qt6OpenGLd
+				debug Qt6OpenGLWidgetsd
+				debug Qt6Widgetsd
+				debug Qt6Multimediad
+				debug Qt6MultimediaWidgetsd
+				debug Qt6Core5Compatd
+			)
+		else()
+			target_link_libraries(${CURRENT_TARGET}
+				optimized qtmain
+				optimized Qt5Gui
+				optimized Qt5Core
+				optimized Qt5OpenGL
+				optimized Qt5Widgets
+				optimized Qt5Multimedia
+				optimized Qt5MultimediaWidgets
+				optimized Qt5Gamepad
+				debug qtmaind
+				debug Qt5Guid
+				debug Qt5Cored
+				debug Qt5OpenGLd
+				debug Qt5Widgetsd
+				debug Qt5Multimediad
+				debug Qt5MultimediaWidgetsd
+				debug Qt5Gamepadd
+			)
+		endif()
 	endif()
 	
 	# Chromium embedded framework

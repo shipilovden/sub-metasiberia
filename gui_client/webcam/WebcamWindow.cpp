@@ -111,10 +111,12 @@ void WebcamWindow::startCamera()
 	// CaptureToBuffer + QImage::save() — бэкенд Windows часто не пишет файл сам (Could not save image to file)
 	image_capture_->setCaptureDestination(QCameraImageCapture::CaptureToBuffer);
 	media_recorder_.reset(new QMediaRecorder(camera_.data()));
+	media_recorder_->setMuted(true);  // без аудио — WMF на Windows часто падает при захвате микрофона
 
 	connect(camera_.data(), &QCamera::errorOccurred, this, &WebcamWindow::onCameraError);
 	connect(camera_.data(), &QCamera::stateChanged, this, &WebcamWindow::onCameraStateChanged);
 	connect(media_recorder_.data(), &QMediaRecorder::stateChanged, this, &WebcamWindow::onRecorderStateChanged);
+	connect(media_recorder_.data(), QOverload<QMediaRecorder::Error>::of(&QMediaRecorder::error), this, &WebcamWindow::onRecorderError);
 	connect(image_capture_.data(), &QCameraImageCapture::imageCaptured, this, &WebcamWindow::onImageCaptured);
 	connect(image_capture_.data(), &QCameraImageCapture::imageSaved, this, &WebcamWindow::onImageSaved);
 	connect(image_capture_.data(), QOverload<int, QCameraImageCapture::Error, const QString&>::of(&QCameraImageCapture::error), this, &WebcamWindow::onImageCaptureError);
@@ -181,6 +183,9 @@ void WebcamWindow::applyVideoEncodingSettings()
 	if (!media_recorder_)
 		return;
 	QVideoEncoderSettings s;
+	QStringList codecs = media_recorder_->supportedVideoCodecs();
+	if (!codecs.isEmpty())
+		s.setCodec(codecs.first());
 	s.setBitRate(static_cast<int>(video_bitrate_mbps_ * 1000000));
 	media_recorder_->setVideoSettings(s);
 }
@@ -347,14 +352,42 @@ void WebcamWindow::onRecordClicked()
 	if (!media_recorder_ || !camera_)
 		return;
 	QString path = getWebcamSaveDirectory();
-	QString file = path + "/metasiberia_webcam_" + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") + ".mp4";
+	QString baseName = "metasiberia_webcam_" + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+	// На Windows WMF часто не стартует с MP4 — пробуем WMV (нативный контейнер)
+	QStringList containers = media_recorder_->supportedContainers();
+	QString ext = "mp4";
+	QString mime;
+	if (containers.contains("video/x-ms-wmv") || containers.contains("wmv")) {
+		ext = "wmv";
+		mime = "video/x-ms-wmv";
+	} else if (containers.contains("video/mp4") || containers.contains("mp4")) {
+		ext = "mp4";
+		mime = "video/mp4";
+	} else if (!containers.isEmpty()) {
+		mime = containers.first();
+		ext = (mime.contains("wmv", Qt::CaseInsensitive)) ? "wmv" : "mp4";
+	}
+#if defined(Q_OS_WIN)
+	// WMF часто возвращает пустой supportedContainers — принудительно пробуем WMV
+	if (mime.isEmpty()) {
+		mime = "video/x-ms-wmv";
+		ext = "wmv";
+	}
+#endif
+	QString file = QDir(path).absoluteFilePath(baseName + "." + ext);
 	last_video_path_ = file;
+	last_recorder_error_.clear();
+	if (!mime.isEmpty())
+		media_recorder_->setContainerFormat(mime);
 	applyVideoEncodingSettings();
 	media_recorder_->setOutputLocation(QUrl::fromLocalFile(file));
-	media_recorder_->record();
-	recording_ = true;
+	// Небольшая задержка перед record() — даём пайплайну камеры стабилизироваться (часто помогает на Windows)
 	panel_->setRecordingState(true);
-	updateStatusLabel();
+	panel_->setStatusText(tr("• Starting…"), false);
+	QTimer::singleShot(350, this, [this]() {
+		if (!media_recorder_ || last_video_path_.isEmpty()) return;
+		media_recorder_->record();
+	});
 }
 
 void WebcamWindow::onOpenFolderClicked()
@@ -366,6 +399,16 @@ void WebcamWindow::onStopClicked()
 {
 	if (media_recorder_)
 		media_recorder_->stop();
+	if (!last_video_path_.isEmpty() && !recording_)
+	{
+		panel_->setStatusText(tr("• Recording failed"), true);
+		QString msg = tr("Video recording did not start. Check settings and try again.");
+		if (!last_recorder_error_.isEmpty())
+			msg += "\n\n" + last_recorder_error_;
+		QMessageBox::warning(this, tr("Webcam"), msg);
+		last_video_path_.clear();
+		last_recorder_error_.clear();
+	}
 	recording_ = false;
 	panel_->setRecordingState(false);
 	updateStatusLabel();
@@ -413,19 +456,49 @@ void WebcamWindow::onSettingsClicked()
 
 void WebcamWindow::onRecorderStateChanged()
 {
-	if (media_recorder_ && media_recorder_->state() == QMediaRecorder::StoppedState)
+	if (!media_recorder_)
+		return;
+	QMediaRecorder::State state = media_recorder_->state();
+	if (state == QMediaRecorder::RecordingState)
+	{
+		recording_ = true;
+		panel_->setRecordingState(true);
+		updateStatusLabel();
+	}
+	else if (state == QMediaRecorder::StoppedState)
 	{
 		recording_ = false;
 		panel_->setRecordingState(false);
 		if (!last_video_path_.isEmpty())
 		{
-			panel_->setStatusText(tr("• Saved: %1").arg(QFileInfo(last_video_path_).fileName()), false);
-			panel_->statusLabel()->setToolTip(tr("Saved to: %1").arg(last_video_path_));
-			QTimer::singleShot(4000, this, [this]() { updateStatusLabel(); panel_->statusLabel()->setToolTip(QString()); });
+			if (QFileInfo(last_video_path_).exists())
+			{
+				panel_->setStatusText(tr("• Saved: %1").arg(QFileInfo(last_video_path_).fileName()), false);
+				panel_->statusLabel()->setToolTip(tr("Saved to: %1").arg(last_video_path_));
+				QTimer::singleShot(4000, this, [this]() { updateStatusLabel(); panel_->statusLabel()->setToolTip(QString()); });
+			}
+			else
+			{
+				panel_->setStatusText(tr("• Recording failed"), true);
+				QMessageBox::warning(this, tr("Webcam"), tr("Video was not saved to file.\n%1").arg(last_video_path_));
+			}
+			last_video_path_.clear();
 		}
-		else
-			updateStatusLabel();
+		updateStatusLabel();
 	}
+}
+
+void WebcamWindow::onRecorderError(QMediaRecorder::Error error)
+{
+	Q_UNUSED(error);
+	recording_ = false;
+	panel_->setRecordingState(false);
+	last_recorder_error_ = media_recorder_ ? media_recorder_->errorString() : QString();
+	last_video_path_.clear();
+	QString err = last_recorder_error_;
+	panel_->setStatusText(tr("• Recording failed"), true);
+	QMessageBox::warning(this, tr("Webcam"), tr("Video recording error: %1").arg(err.isEmpty() ? tr("Unknown error") : err));
+	updateStatusLabel();
 }
 
 void WebcamWindow::onCameraStateChanged(QCamera::State state)

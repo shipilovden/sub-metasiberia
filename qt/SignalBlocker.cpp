@@ -12,7 +12,7 @@ Generated at Tue Feb 26 14:29:40 +0100 2013
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 #include <QtGui/QAction>
 #else
-#include <QtWidgets/QAction>
+#include <QtWidgets/qaction.h>
 #endif
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QDoubleSpinBox>

@@ -11,8 +11,12 @@ $vs_version = 2022 # Visual Studio version used to build libraries and Substrata
 # 5.15.16 is the latest released open source version in the pre-6.0 series as of November 2024.
 # NOTE: should match the qt_version in substrata-private config-lib.rb.
 $qt_version = "5.15.16" if OS.windows?
-$qt_version = "5.15.10" if OS.mac? 
+$qt_version = "5.15.10" if OS.mac?
 $qt_version = "5.15.10" if OS.linux?
+
+# Optional override via environment variables for alternate Qt installs (e.g. Qt6).
+qt_version_override = ENV['SUBSTRATA_QT_VERSION']
+$qt_version = qt_version_override unless qt_version_override.nil? || qt_version_override.strip.empty?
 
 
 $llvm_version = "15.0.7" # NOTE: Also defined in SUBSTRATA_LLVM_VERSION in CMakeLists.txt.
@@ -27,11 +31,15 @@ end
 
 indigo_qt_base_dir = "#{glare_core_libs_dir}/Qt"
 
+qt_dir_override = ENV['SUBSTRATA_QT_DIR']
+
 $indigo_qt_dir = ""
 if OS.unix?
-	$indigo_qt_dir = "#{indigo_qt_base_dir}/#{$qt_version}"
+	$indigo_qt_dir = qt_dir_override unless qt_dir_override.nil? || qt_dir_override.strip.empty?
+	$indigo_qt_dir = "#{indigo_qt_base_dir}/#{$qt_version}" if $indigo_qt_dir == ""
 else
-	$indigo_qt_dir = "#{indigo_qt_base_dir}/#{$qt_version}-vs#{$vs_version}-64"
+	$indigo_qt_dir = qt_dir_override unless qt_dir_override.nil? || qt_dir_override.strip.empty?
+	$indigo_qt_dir = "#{indigo_qt_base_dir}/#{$qt_version}-vs#{$vs_version}-64" if $indigo_qt_dir == ""
 end
 
 

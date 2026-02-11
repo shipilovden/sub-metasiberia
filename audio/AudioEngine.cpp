@@ -172,6 +172,7 @@ float SoundFile::minVal() const
 
 AudioEngine::AudioEngine()
 :	audio(NULL),
+	device(NULL),
 	resonance(NULL),
 	initialised(false)
 {
@@ -813,6 +814,10 @@ void AudioEngine::setMasterVolume(float volume)
 
 void AudioEngine::shutdown()
 {
+	if(!initialised)
+		return;
+	initialised = false;
+
 	thread_manager.killThreadsBlocking();
 	
 #if USE_MINIAUDIO

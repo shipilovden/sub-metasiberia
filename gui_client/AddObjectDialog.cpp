@@ -394,7 +394,11 @@ void AddObjectDialog::timerEvent(QTimerEvent* event)
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 	objectPreviewGLWidget->update();
 #else
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	objectPreviewGLWidget->update();
+#else
 	objectPreviewGLWidget->updateGL();
+#endif
 #endif
 
 	// Check msg queue

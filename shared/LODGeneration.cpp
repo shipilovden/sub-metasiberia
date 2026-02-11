@@ -190,7 +190,11 @@ static Reference<ImageMapUInt8> convertUInt16ToUInt8ImageMap(const ImageMap<uint
 
 void generateLODTexture(const std::string& base_tex_path, int lod_level, const std::string& LOD_tex_path, glare::TaskManager& task_manager)
 {
-	const int new_max_w_h = (lod_level == 0) ? 1024 : ((lod_level == 1) ? 256 : 64);
+	// Increased LOD texture sizes to reduce compression artifacts at distance:
+	// LOD 0: 1024x1024 (unchanged - highest quality)
+	// LOD 1: 512x512 (was 256x256) - 4x more pixels
+	// LOD 2: 256x256 (was 64x64) - 16x more pixels
+	const int new_max_w_h = (lod_level == 0) ? 1024 : ((lod_level == 1) ? 512 : 256);
 	const int min_w_h = 1;
 
 	Reference<Map2D> map;

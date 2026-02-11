@@ -102,7 +102,9 @@ void AddObjectPreviewWidget::shutdown()
 
 void AddObjectPreviewWidget::resizeGL(int width_, int height_)
 {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called." (https://doc.qt.io/qt-5/qglwidget.html#resizeGL)
+#endif
 
 	viewport_w = width_;
 	viewport_h = height_;
@@ -123,7 +125,9 @@ void AddObjectPreviewWidget::resizeGL(int width_, int height_)
 
 void AddObjectPreviewWidget::initializeGL()
 {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called."  (https://doc.qt.io/qt-5/qglwidget.html#initializeGL)
+#endif
 
 	std::string data_dir = base_dir_path + "/data";
 #if BUILD_TESTS
@@ -206,7 +210,9 @@ void AddObjectPreviewWidget::initializeGL()
 
 void AddObjectPreviewWidget::paintGL()
 {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called."  (https://doc.qt.io/qt-5/qglwidget.html#initializeGL)
+#endif
 
 	if(opengl_engine.isNull())
 		return;

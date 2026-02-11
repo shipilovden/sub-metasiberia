@@ -111,7 +111,9 @@ void AvatarPreviewWidget::shutdown()
 
 void AvatarPreviewWidget::resizeGL(int width_, int height_)
 {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called." (https://doc.qt.io/qt-5/qglwidget.html#resizeGL)
+#endif
 
 	viewport_w = width_;
 	viewport_h = height_;
@@ -131,7 +133,9 @@ void AvatarPreviewWidget::resizeGL(int width_, int height_)
 
 void AvatarPreviewWidget::initializeGL()
 {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called."  (https://doc.qt.io/qt-5/qglwidget.html#initializeGL)
+#endif
 
 	std::string data_dir = base_dir_path + "/data";
 #if BUILD_TESTS

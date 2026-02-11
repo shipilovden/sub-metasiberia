@@ -267,7 +267,11 @@ void AvatarSettingsDialog::timerEvent(QTimerEvent* event)
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 	avatarPreviewGLWidget->update();
 #else
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	avatarPreviewGLWidget->update();
+#else
 	avatarPreviewGLWidget->updateGL();
+#endif
 #endif
 
 	// Once the OpenGL widget has initialised, we can add the model.

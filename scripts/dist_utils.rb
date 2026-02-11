@@ -23,6 +23,17 @@ def getCmakeBuildDir(vs_version, config)
 end
 
 
+# Remove nested plugin/locales dirs (e.g. platforms/platforms, gamepads/gamepads) that can break Qt loader
+def removeNestedPluginDirs(target_dir)
+	return if !OS.windows?
+	["platforms", "gamepads", "imageformats", "styles", "locales", "mediaservice"].each do |sub|
+		nested = "#{target_dir}/#{sub}/#{sub}"
+		if File.directory?(nested)
+			FileUtils.rm_r(nested, :verbose => true)
+		end
+	end
+end
+
 def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	if (!OS.windows?)
 		return
@@ -35,7 +46,7 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	plugins_path = "#{qt_dir}/plugins"
 	
 	# Qt dlls.
-	dll_files = ["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Gamepad"]
+	dll_files = ["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Multimedia", "Qt5MultimediaWidgets", "Qt5Network", "Qt5Gamepad"]
 
 		
 	dll_files.each do |dll_file|
@@ -87,6 +98,20 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	
 	FileUtils.cp("#{gamepads_dir}/xinputgamepad.dll",  gamepads_dir_target_dir, :verbose => true) if !copy_debug
 	FileUtils.cp("#{gamepads_dir}/xinputgamepadd.dll", gamepads_dir_target_dir, :verbose => true) if copy_debug
+
+	# Mediaservice (required for Qt Multimedia / webcam: QCamera, QCameraViewfinder)
+	mediaservice_dir = "#{plugins_path}/mediaservice"
+	mediaservice_target_dir = "#{target_dir}/mediaservice"
+	if File.directory?(mediaservice_dir)
+		FileUtils.mkdir_p(mediaservice_target_dir, :verbose => true)
+		["wmfengine", "dsengine"].each do |plugin|
+			FileUtils.cp("#{mediaservice_dir}/#{plugin}.dll",  mediaservice_target_dir, :verbose => true) if !copy_debug && File.exist?("#{mediaservice_dir}/#{plugin}.dll")
+			FileUtils.cp("#{mediaservice_dir}/#{plugin}d.dll", mediaservice_target_dir, :verbose => true) if copy_debug && File.exist?("#{mediaservice_dir}/#{plugin}d.dll")
+		end
+	end
+
+	# Remove any nested plugin dirs (e.g. platforms/platforms) that can break Qt
+	removeNestedPluginDirs(target_dir)
 
 	# copyVCRedist(vs_version, platforms_dir_target_dir, false)
 end

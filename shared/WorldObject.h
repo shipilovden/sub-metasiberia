@@ -629,11 +629,29 @@ int WorldObject::getLODLevel(const Vec4f& campos) const
 	const float recip_dist = (campos - this->centroid_ws).fastApproxRecipLength();
 	const float proj_len = biased_aabb_len * recip_dist;
 
-	if(proj_len > 0.6f)
+	/*
+	Adaptive LOD thresholds (2024):
+	- Thresholds are reduced for larger objects to maintain quality at distance
+	- For objects with biased_aabb_len >= 50 units, thresholds are reduced by up to 60%
+	- Base thresholds: lod -1 if proj_len > 0.3, lod 0 if > 0.08, lod 1 if > 0.015, lod 2 otherwise
+	- Large objects stay at higher quality LOD levels longer, reducing texture compression artifacts
+	*/
+	// Adaptive LOD thresholds based on object size: larger objects stay at higher quality LOD levels longer
+	// For large objects (biased_aabb_len >= 50), reduce thresholds by up to 60% to maintain quality at distance
+	// For medium objects (biased_aabb_len >= 20), reduce thresholds by up to 40%
+	// Small objects use standard thresholds
+	const float size_factor = myClamp<float>(biased_aabb_len / 50.f, 0.f, 1.f); // 0 for small objects, 1 for objects >= 50 units
+	const float threshold_reduction = size_factor * 0.6f; // Up to 60% reduction for large objects
+	
+	const float threshold_lod_minus1 = 0.3f * (1.f - threshold_reduction);
+	const float threshold_lod0 = 0.08f * (1.f - threshold_reduction);
+	const float threshold_lod1 = 0.015f * (1.f - threshold_reduction);
+
+	if(proj_len > threshold_lod_minus1)
 		return -1;
-	else if(proj_len > 0.16f)
+	else if(proj_len > threshold_lod0)
 		return 0;
-	else if(proj_len > 0.03f)
+	else if(proj_len > threshold_lod1)
 		return 1;
 	else
 		return 2;
@@ -654,12 +672,21 @@ lod level 2 if proj_len <= 0.03
 float WorldObject::getMaxDistForLODLevel(int level)
 {
 	const float eps_factor = 1.001f; // Make distance slightly larger to account for fastApproxRecipLength() usage in getLODLevel().
+	
+	// Adaptive LOD thresholds based on object size (same logic as getLODLevel)
+	const float size_factor = myClamp<float>(biased_aabb_len / 50.f, 0.f, 1.f);
+	const float threshold_reduction = size_factor * 0.6f;
+	
+	const float threshold_lod_minus1 = 0.3f * (1.f - threshold_reduction);
+	const float threshold_lod0 = 0.08f * (1.f - threshold_reduction);
+	const float threshold_lod1 = 0.015f * (1.f - threshold_reduction);
+	
 	if(level == -1)
-		return biased_aabb_len * (eps_factor / 0.6f);
+		return biased_aabb_len * (eps_factor / threshold_lod_minus1);
 	else if(level == 0)
-		return biased_aabb_len * (eps_factor  / 0.16f);
+		return biased_aabb_len * (eps_factor / threshold_lod0);
 	else if(level == 1)
-		return biased_aabb_len * (eps_factor  / 0.03f);
+		return biased_aabb_len * (eps_factor / threshold_lod1);
 	else
 		return std::numeric_limits<float>::max();
 }
@@ -674,11 +701,19 @@ int WorldObject::getLODLevel(float cam_to_ob_d2) const
 
 	const float proj_len = biased_aabb_len * recip_dist;
 
-	if(proj_len > 0.6f)
+	// Adaptive LOD thresholds based on object size (same logic as getLODLevel(Vec4f))
+	const float size_factor = myClamp<float>(biased_aabb_len / 50.f, 0.f, 1.f);
+	const float threshold_reduction = size_factor * 0.6f;
+	
+	const float threshold_lod_minus1 = 0.3f * (1.f - threshold_reduction);
+	const float threshold_lod0 = 0.08f * (1.f - threshold_reduction);
+	const float threshold_lod1 = 0.015f * (1.f - threshold_reduction);
+
+	if(proj_len > threshold_lod_minus1)
 		return -1;
-	else if(proj_len > 0.16f)
+	else if(proj_len > threshold_lod0)
 		return 0;
-	else if(proj_len > 0.03f)
+	else if(proj_len > threshold_lod1)
 		return 1;
 	else
 		return 2;

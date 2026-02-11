@@ -128,7 +128,11 @@ static const Colour3f axis_arrows_mouseover_cols[] = { Colour3f(1,0.45f,0.3f),  
 
 static const float DECAL_EDGE_AABB_WIDTH = 0.02f;
 
+#if SUBSTRATA_QT6
+static const bool LOD_CHUNK_SUPPORT = false; // Disable LOD chunks in Qt6 (black patch issue).
+#else
 static const bool LOD_CHUNK_SUPPORT = true;
+#endif
 static const float chunk_w = 128.f;
 static const float recip_chunk_w = 1.f / chunk_w;
 
@@ -411,7 +415,29 @@ void GUIClient::postConnectInitialise()
 
 	// Init audio engine immediately if we are not on the web.  Web browsers need to wait for an input gesture is completed before trying to play sounds.
 #ifndef EMSCRIPTEN
-	initAudioEngine();
+	bool enable_audio = true;
+#if SUBSTRATA_QT6
+	// Qt6 build: disable audio by default until audio init crash is resolved.
+	enable_audio = false;
+#endif
+	{
+		std::string val;
+		if(PlatformUtils::isEnvironmentVariableDefined("SUBSTRATA_ENABLE_AUDIO"))
+			val = PlatformUtils::getEnvironmentVariable("SUBSTRATA_ENABLE_AUDIO");
+		if(!val.empty())
+		{
+			const std::string lower_val = toLowerCase(val);
+			if((lower_val == "0") || (lower_val == "false") || (lower_val == "no"))
+				enable_audio = false;
+			else if((lower_val == "1") || (lower_val == "true") || (lower_val == "yes"))
+				enable_audio = true;
+		}
+	}
+
+	if(enable_audio)
+		initAudioEngine();
+	else
+		logMessage("Audio engine disabled due to SUBSTRATA_ENABLE_AUDIO environment variable.");
 #endif
 
 	checkCreateResourceDownloadThreads();
@@ -811,6 +837,10 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	// The preferred way to do uploads to the GPU is on a dedicated thread.  Using a dedicated thread avoids the many potential (and actual) stalls in various OpenGL calls on the main thread, even with async uploads.
 	// Currently I have only implemented this on Windows.  It may be possible on some other platforms as well.
 	bool allow_gl_upload_thread = true;
+#if SUBSTRATA_QT6
+	// Qt6 build: disable OpenGLUploadThread until crashes are resolved.
+	allow_gl_upload_thread = false;
+#endif
 	try
 	{
 		const std::string val = PlatformUtils::getEnvironmentVariable("SUBSTRATA_ALLOW_GL_UPLOAD_THREAD");
@@ -836,6 +866,10 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	else
 	{
 		bool allow_async_GPU_uploads = true;
+#if SUBSTRATA_QT6
+		// Qt6 build: disable async GPU uploads until rendering artifacts are resolved.
+		allow_async_GPU_uploads = false;
+#endif
 		try
 		{
 			const std::string val = PlatformUtils::getEnvironmentVariable("SUBSTRATA_ALLOW_ASYNC_GPU_UPLOADS");
@@ -13002,6 +13036,8 @@ void GUIClient::checkCreateResourceDownloadThreads()
 #if defined(EMSCRIPTEN)
 		emscripten_resource_downloader.init(&msg_queue, resource_manager, server_hostname, server_port, &this->num_non_net_resources_downloading, &this->download_queue, this);
 #else
+		if((this->connection_state != ServerConnectionState_Connected) || this->server_hostname.empty())
+			return;
 		
 		if(resource_download_thread_manager.getNumThreads() == 0)
 		{
@@ -16334,5 +16370,3 @@ void GUIClient::showScriptMessage(const std::string& message)
 		script_messages.pop_front(); // remove from list
 	}
 }
-
-
