@@ -31,6 +31,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "LoginDialog.h"
 #include "SignUpDialog.h"
 #include "GoToParcelDialog.h"
+#include "RuntimeTranslation.h"
 #include <settings/QSettingsStore.h>
 #include "URLWidget.h"
 #include "URLWhitelist.h"
@@ -49,6 +50,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QMimeData>
 #include <QtCore/QSettings>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/QCoreApplication>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
@@ -58,6 +60,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/qaction.h>
+#include <QtWidgets/QActionGroup>
 #include <QtWidgets/QInputDialog>
 #include <QtCore/QTimer>
 #include <QtGui/QCursor>
@@ -224,6 +227,9 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	parsed_args(args),
 	QMainWindow(parent),
 	need_help_info_dock_widget_position(false),
+	help_info_is_default_text(true),
+	current_ui_language(RuntimeTranslation::UILanguage::English),
+	runtime_translator(nullptr),
 	log_window(NULL),
 	in_CEF_message_loop(false),
 	should_close(false),
@@ -291,10 +297,13 @@ static std::string computeWindowTitle()
 }
 
 
-static const char* default_help_info_message = "Use the W/A/S/D keys and arrow keys to move and look around.\n"
-	"Click and drag the mouse on the 3D view to look around.\n"
-	"Space key: jump\n"
-	"Double-click an object to select it.";
+static QString defaultHelpInfoMessageText()
+{
+	return QCoreApplication::translate("MainWindow", "Use the W/A/S/D keys and arrow keys to move and look around.\n") +
+		QCoreApplication::translate("MainWindow", "Click and drag the mouse on the 3D view to look around.\n") +
+		QCoreApplication::translate("MainWindow", "Space key: jump\n") +
+		QCoreApplication::translate("MainWindow", "Double-click an object to select it.");
+}
 
 
 void MainWindow::startMainTimer()
@@ -333,6 +342,19 @@ void MainWindow::initialiseUI()
 		ui = new Ui::MainWindow();
 		ui->setupUi(this);
 	}
+
+	if(runtime_translator == nullptr)
+		runtime_translator = new RuntimeTranslation::RuntimeTranslator(this);
+
+	{
+		QActionGroup* language_action_group = new QActionGroup(this);
+		language_action_group->setExclusive(true);
+		language_action_group->addAction(ui->actionLanguage_English);
+		language_action_group->addAction(ui->actionLanguage_Russian);
+	}
+
+	const QString language_code = settings->value("ui/language", "en").toString();
+	applyInterfaceLanguage(language_code == "ru" ? RuntimeTranslation::UILanguage::Russian : RuntimeTranslation::UILanguage::English);
 
 #if defined(USE_QT)
 	// Replace webcam dock content with full WebcamWindow (camera list, settings, etc.) before restoreState
@@ -548,7 +570,8 @@ void MainWindow::initialiseUI()
 	setUIForSelectedObject();
 
 	// Update help text
-	this->ui->helpInfoLabel->setText(default_help_info_message);
+	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
+	this->help_info_is_default_text = true;
 
 	if(!settings->contains("mainwindow/geometry"))
 		need_help_info_dock_widget_position = true;
@@ -1428,6 +1451,62 @@ void MainWindow::changeEvent(QEvent* event)
 			startMainTimer();
 		}
 	}
+
+	if(event->type() == QEvent::LanguageChange)
+	{
+		updateLanguageActionState();
+		if(help_info_is_default_text && ui)
+			ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
+	}
+
+	QMainWindow::changeEvent(event);
+}
+
+
+void MainWindow::updateLanguageActionState()
+{
+	if(!ui)
+		return;
+
+	const bool russian_selected = (current_ui_language == RuntimeTranslation::UILanguage::Russian);
+	ui->actionLanguage_Russian->setChecked(russian_selected);
+	ui->actionLanguage_English->setChecked(!russian_selected);
+}
+
+
+void MainWindow::applyInterfaceLanguage(const RuntimeTranslation::UILanguage language)
+{
+	if(runtime_translator == nullptr || ui == nullptr)
+		return;
+
+	QCoreApplication::removeTranslator(runtime_translator);
+	if(language == RuntimeTranslation::UILanguage::Russian)
+		QCoreApplication::installTranslator(runtime_translator);
+
+	current_ui_language = language;
+
+	settings->setValue("ui/language", language == RuntimeTranslation::UILanguage::Russian ? "ru" : "en");
+
+	ui->retranslateUi(this);
+	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
+	updateLanguageActionState();
+	updateFavoritesMenu();
+	gui_client.gesture_ui.refreshLanguage();
+
+	if(help_info_is_default_text)
+		ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
+}
+
+
+void MainWindow::on_actionLanguage_English_triggered()
+{
+	applyInterfaceLanguage(RuntimeTranslation::UILanguage::English);
+}
+
+
+void MainWindow::on_actionLanguage_Russian_triggered()
+{
+	applyInterfaceLanguage(RuntimeTranslation::UILanguage::Russian);
 }
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
@@ -2261,7 +2340,7 @@ void MainWindow::updateFavoritesMenu()
 	
 	if(favorites.empty())
 	{
-		QAction* empty_action = favorites_menu->addAction("(No favorites)");
+		QAction* empty_action = favorites_menu->addAction(tr("(No favorites)"));
 		empty_action->setEnabled(false);
 		return;
 	}
@@ -4369,13 +4448,15 @@ bool MainWindow::hasFocus()
 
 void MainWindow::setHelpInfoLabelToDefaultText()
 {
-	this->ui->helpInfoLabel->setText(default_help_info_message);
+	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
+	this->help_info_is_default_text = true;
 }
 
 
 void MainWindow::setHelpInfoLabel(const std::string& text)
 {
 	this->ui->helpInfoLabel->setText(QtUtils::toQString(text));
+	this->help_info_is_default_text = false;
 }
 
 

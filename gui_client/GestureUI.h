@@ -52,11 +52,15 @@ public:
 	void untoggleMicButton();
 
 	void setCurrentMicLevel(float linear_level, float display_level);
+	void refreshLanguage();
 
 	static bool animateHead(const std::string& gesture);
 	static bool loopAnim(const std::string& gesture);
 
 private:
+	std::string trUI(const char* english, const char* russian) const;
+	void rebuildVehicleTextButtons();
+	void refreshDynamicTooltips();
 	void updateWidgetPositions();
 //public:
 	GUIClient* gui_client;

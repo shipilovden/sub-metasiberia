@@ -389,6 +389,8 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.h
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.ui
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindowTestCode.txt
+		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.h
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.h
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.ui
@@ -1220,6 +1222,11 @@ ${settings}
 add_definitions(-DGUI_CLIENT=1)
 
 include(../cmake/shared_target_settings.cmake)
+
+if(MSVC)
+	# Ensure UTF-8 source decoding for Cyrillic UI strings in all configs.
+	target_compile_options(${CURRENT_TARGET} PRIVATE /utf-8)
+endif()
 
 	if(WIN32 AND INDIGO_QT_IS6)
 		target_compile_options(${CURRENT_TARGET} PRIVATE /permissive-)
