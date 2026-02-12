@@ -11,6 +11,7 @@ Copyright Glare Technologies Limited 2021 -
 #include <opengl/ui/GLUITextButton.h>
 #include <opengl/ui/GLUIImage.h>
 #include <opengl/ui/GLUICallbackHandler.h>
+#include "../shared/GestureSettings.h"
 
 
 class GUIClient;
@@ -51,11 +52,15 @@ public:
 	void untoggleMicButton();
 
 	void setCurrentMicLevel(float linear_level, float display_level);
+	void refreshLanguage();
 
 	static bool animateHead(const std::string& gesture);
 	static bool loopAnim(const std::string& gesture);
 
 private:
+	std::string trUI(const char* english, const char* russian) const;
+	void rebuildVehicleTextButtons();
+	void refreshDynamicTooltips();
 	void updateWidgetPositions();
 //public:
 	GUIClient* gui_client;
@@ -89,6 +94,8 @@ private:
 	GLUIRef gl_ui;
 
 	Reference<OpenGLEngine> opengl_engine;
+
+	std::vector<SingleGestureSettings> gesture_settings;
 
 	Timer timer;
 	double untoggle_button_time;

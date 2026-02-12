@@ -24,6 +24,7 @@
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QErrorMessage>
 #include <QtCore/QTimer>
+#include <QtCore/QCoreApplication>
 #include <QtWidgets/QColorDialog>
 #include <set>
 #include <stack>
@@ -150,28 +151,30 @@ ObjectEditor::~ObjectEditor()
 void ObjectEditor::updateInfoLabel(const WorldObject& ob)
 {
 	const std::string creator_name = !ob.creator_name.empty() ? ob.creator_name :
-		(ob.creator_id.valid() ? ("user id: " + ob.creator_id.toString()) : "[Unknown]");
+		(ob.creator_id.valid() ? (QtUtils::toStdString(QCoreApplication::translate("ObjectEditor", "user id: ")) + ob.creator_id.toString()) : QtUtils::toStdString(QCoreApplication::translate("ObjectEditor", "[Unknown]")));
 
-	std::string ob_type;
+	QString ob_type;
 	switch(ob.object_type)
 	{
-	case WorldObject::ObjectType_Generic: ob_type = "Generic object"; break;
-	case WorldObject::ObjectType_Hypercard: ob_type = "Hypercard"; break;
-	case WorldObject::ObjectType_VoxelGroup: ob_type = "Voxel Group"; break;
-	case WorldObject::ObjectType_Spotlight: ob_type = "Spotlight"; break;
-	case WorldObject::ObjectType_WebView: ob_type = "Web View"; break;
-	case WorldObject::ObjectType_Video: ob_type = "Video"; break;
-	case WorldObject::ObjectType_Text: ob_type = "Text"; break;
-	case WorldObject::ObjectType_Portal: ob_type = "Portal"; break;
+	case WorldObject::ObjectType_Generic: ob_type = QCoreApplication::translate("ObjectEditor", "Generic object"); break;
+	case WorldObject::ObjectType_Hypercard: ob_type = QCoreApplication::translate("ObjectEditor", "Hypercard"); break;
+	case WorldObject::ObjectType_VoxelGroup: ob_type = QCoreApplication::translate("ObjectEditor", "Voxel Group"); break;
+	case WorldObject::ObjectType_Spotlight: ob_type = QCoreApplication::translate("ObjectEditor", "Spotlight"); break;
+	case WorldObject::ObjectType_WebView: ob_type = QCoreApplication::translate("ObjectEditor", "Web View"); break;
+	case WorldObject::ObjectType_Video: ob_type = QCoreApplication::translate("ObjectEditor", "Video"); break;
+	case WorldObject::ObjectType_Text: ob_type = QCoreApplication::translate("ObjectEditor", "Text"); break;
+	case WorldObject::ObjectType_Portal: ob_type = QCoreApplication::translate("ObjectEditor", "Portal"); break;
 	}
 
-	std::string info_text = ob_type + " (UID: " + ob.uid.toString() + "), \ncreated by '" + creator_name + "' " + ob.created_time.timeAgoDescription();
+	QString info_text = ob_type + " (UID: " + QtUtils::toQString(ob.uid.toString()) + "), \n" +
+		QCoreApplication::translate("ObjectEditor", "created by") + " '" + QtUtils::toQString(creator_name) + "' " +
+		QtUtils::toQString(ob.created_time.timeAgoDescription());
 	
 	// Show last-modified time only if it differs from created_time.
 	if(ob.created_time.time != ob.last_modified_time.time)
-		info_text += ", last modified " + ob.last_modified_time.timeAgoDescription();
+		info_text += ", " + QCoreApplication::translate("ObjectEditor", "last modified") + " " + QtUtils::toQString(ob.last_modified_time.timeAgoDescription());
 
-	this->infoLabel->setText(QtUtils::toQString(info_text));
+	this->infoLabel->setText(info_text);
 }
 
 
@@ -390,7 +393,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 
 	if(ob.lightmap_baking)
 	{
-		lightmapBakeStatusLabel->setText("Lightmap is baking...");
+		lightmapBakeStatusLabel->setText(QCoreApplication::translate("ObjectEditor", "Lightmap is baking..."));
 	}
 	else
 	{
@@ -599,11 +602,11 @@ void ObjectEditor::objectLightmapURLUpdated(const WorldObject& ob)
 
 	if(ob.lightmap_baking)
 	{
-		lightmapBakeStatusLabel->setText("Lightmap is baking...");
+		lightmapBakeStatusLabel->setText(QCoreApplication::translate("ObjectEditor", "Lightmap is baking..."));
 	}
 	else
 	{
-		lightmapBakeStatusLabel->setText("Lightmap baked.");
+		lightmapBakeStatusLabel->setText(QCoreApplication::translate("ObjectEditor", "Lightmap baked."));
 	}
 
 	updateInfoLabel(ob); // Update info label, which includes last-modified time.
@@ -743,7 +746,7 @@ void ObjectEditor::on_editScriptPushButton_clicked(bool checked)
 
 void ObjectEditor::on_bakeLightmapPushButton_clicked(bool checked)
 {
-	lightmapBakeStatusLabel->setText("Lightmap is baking...");
+	lightmapBakeStatusLabel->setText(QCoreApplication::translate("ObjectEditor", "Lightmap is baking..."));
 
 	emit bakeObjectLightmap();
 }
@@ -751,7 +754,7 @@ void ObjectEditor::on_bakeLightmapPushButton_clicked(bool checked)
 
 void ObjectEditor::on_bakeLightmapHighQualPushButton_clicked(bool checked)
 {
-	lightmapBakeStatusLabel->setText("Lightmap is baking...");
+	lightmapBakeStatusLabel->setText(QCoreApplication::translate("ObjectEditor", "Lightmap is baking..."));
 
 	emit bakeObjectLightmapHighQual();
 }

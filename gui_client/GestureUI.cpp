@@ -51,6 +51,105 @@ static const int NUM_GESTURE_FIELDS = 4;
 
 static_assert((staticArrayNumElems(gestures) % NUM_GESTURE_FIELDS) == 0, "(staticArrayNumElems(gestures) % NUM_GESTURE_FIELDS) == 0");
 
+
+std::string GestureUI::trUI(const char* english, const char* russian) const
+{
+	if(gui_client && gui_client->getSettingsStore() &&
+		gui_client->getSettingsStore()->getStringValue("ui/language", "en") == "ru")
+		return russian;
+	return english;
+}
+
+
+void GestureUI::rebuildVehicleTextButtons()
+{
+	if(!gl_ui || !opengl_engine)
+		return;
+
+	if(summon_bike_button.nonNull())     gl_ui->removeWidget(summon_bike_button);
+	if(summon_car_button.nonNull())      gl_ui->removeWidget(summon_car_button);
+	if(summon_boat_button.nonNull())     gl_ui->removeWidget(summon_boat_button);
+	if(summon_jetski_button.nonNull())   gl_ui->removeWidget(summon_jetski_button);
+	if(summon_hovercar_button.nonNull()) gl_ui->removeWidget(summon_hovercar_button);
+
+	{
+		GLUITextButton::CreateArgs args;
+		args.tooltip = trUI("Summon bike", "Вызвать байк");
+		summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon bike", "Вызвать байк"), Vec2f(0), args);
+		summon_bike_button->setVisible(vehicle_buttons_visible);
+		summon_bike_button->handler = this;
+		gl_ui->addWidget(summon_bike_button);
+	}
+	{
+		GLUITextButton::CreateArgs args;
+		args.tooltip = trUI("Summon car", "Вызвать машину");
+		summon_car_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon car", "Вызвать машину"), Vec2f(0), args);
+		summon_car_button->setVisible(vehicle_buttons_visible);
+		summon_car_button->handler = this;
+		gl_ui->addWidget(summon_car_button);
+	}
+	{
+		GLUITextButton::CreateArgs args;
+		args.tooltip = trUI("Summon boat", "Вызвать лодку");
+		summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon boat", "Вызвать лодку"), Vec2f(0), args);
+		summon_boat_button->setVisible(vehicle_buttons_visible);
+		summon_boat_button->handler = this;
+		gl_ui->addWidget(summon_boat_button);
+	}
+	{
+		GLUITextButton::CreateArgs args;
+		args.tooltip = trUI("Summon jet ski", "Вызвать гидроцикл");
+		summon_jetski_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon jet ski", "Вызвать гидроцикл"), Vec2f(0), args);
+		summon_jetski_button->setVisible(vehicle_buttons_visible);
+		summon_jetski_button->handler = this;
+		gl_ui->addWidget(summon_jetski_button);
+	}
+	{
+		GLUITextButton::CreateArgs args;
+		args.tooltip = trUI("Summon hovercar", "Вызвать ховеркар");
+		summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine, trUI("Summon hovercar", "Вызвать ховеркар"), Vec2f(0), args);
+		summon_hovercar_button->setVisible(vehicle_buttons_visible);
+		summon_hovercar_button->handler = this;
+		gl_ui->addWidget(summon_hovercar_button);
+	}
+}
+
+
+void GestureUI::refreshDynamicTooltips()
+{
+	if(expand_button.nonNull())          expand_button->tooltip = trUI("View gestures", "Показать жесты");
+	if(collapse_button.nonNull())        collapse_button->tooltip = trUI("Hide gestures", "Скрыть жесты");
+	if(vehicle_button.nonNull())         vehicle_button->tooltip = trUI("Summon vehicle", "Вызвать транспорт");
+	if(collapse_vehicle_button.nonNull()) collapse_vehicle_button->tooltip = trUI("Hide vehicles", "Скрыть транспорт");
+	if(photo_mode_button.nonNull())      photo_mode_button->tooltip = trUI("Photo mode", "Фоторежим");
+
+	if(microphone_button.nonNull())
+		microphone_button->tooltip = microphone_button->toggled ?
+			trUI("Disable microphone for voice chat", "Выключить микрофон для голосового чата") :
+			trUI("Enable microphone for voice chat", "Включить микрофон для голосового чата");
+
+	if(webcam_button.nonNull())
+	{
+#if USE_SDL || EMSCRIPTEN
+		webcam_button->tooltip = webcam_button->toggled ?
+			trUI("Disable webcam", "Выключить веб-камеру") :
+			trUI("Enable webcam", "Включить веб-камеру");
+#else
+		webcam_button->tooltip = webcam_button->toggled ?
+			trUI("Close webcam window", "Закрыть окно веб-камеры") :
+			trUI("Open webcam window", "Открыть окно веб-камеры");
+#endif
+	}
+}
+
+
+void GestureUI::refreshLanguage()
+{
+	rebuildVehicleTextButtons();
+	refreshDynamicTooltips();
+	updateWidgetPositions();
+}
+
 bool GestureUI::animateHead(const std::string& gesture)
 {
 	for(size_t i=0; i<staticArrayNumElems(gestures); i += NUM_GESTURE_FIELDS)
@@ -181,7 +280,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 			if(FileUtils::fileExists(vehicle_tex_path))
 			{
 				GLUIButton::CreateArgs args;
-				args.tooltip = "Summon vehicle";
+				args.tooltip = trUI("Summon vehicle", "Вызвать транспорт");
 				try
 				{
 					vehicle_button = new GLUIButton(*gl_ui, opengl_engine, vehicle_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
@@ -205,40 +304,40 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon bike";
-			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon bike", Vec2f(0), args);
+			args.tooltip = trUI("Summon bike", "Вызвать байк");
+			summon_bike_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon bike", "Вызвать байк"), Vec2f(0), args);
 			summon_bike_button->setVisible(vehicle_buttons_visible);
 			summon_bike_button->handler = this;
 			gl_ui->addWidget(summon_bike_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon car";
-			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon car", Vec2f(0), args);
+			args.tooltip = trUI("Summon car", "Вызвать машину");
+			summon_car_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon car", "Вызвать машину"), Vec2f(0), args);
 			summon_car_button->setVisible(vehicle_buttons_visible);
 			summon_car_button->handler = this;
 			gl_ui->addWidget(summon_car_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon boat";
-			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon boat", Vec2f(0), args);
+			args.tooltip = trUI("Summon boat", "Вызвать лодку");
+			summon_boat_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon boat", "Вызвать лодку"), Vec2f(0), args);
 			summon_boat_button->setVisible(vehicle_buttons_visible);
 			summon_boat_button->handler = this;
 			gl_ui->addWidget(summon_boat_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon jet ski";
-			summon_jetski_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon jet ski", Vec2f(0), args);
+			args.tooltip = trUI("Summon jet ski", "Вызвать гидроцикл");
+			summon_jetski_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon jet ski", "Вызвать гидроцикл"), Vec2f(0), args);
 			summon_jetski_button->setVisible(vehicle_buttons_visible);
 			summon_jetski_button->handler = this;
 			gl_ui->addWidget(summon_jetski_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Summon hovercar";
-			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, "Summon hovercar", Vec2f(0), args);
+			args.tooltip = trUI("Summon hovercar", "Вызвать ховеркар");
+			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, trUI("Summon hovercar", "Вызвать ховеркар"), Vec2f(0), args);
 			summon_hovercar_button->setVisible(vehicle_buttons_visible);
 			summon_hovercar_button->handler = this;
 			gl_ui->addWidget(summon_hovercar_button);
@@ -249,7 +348,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 			if(FileUtils::fileExists(collapse_vehicle_tex_path))
 			{
 				GLUIButton::CreateArgs args;
-				args.tooltip = "Hide vehicles";
+				args.tooltip = trUI("Hide vehicles", "Скрыть транспорт");
 				try
 				{
 					collapse_vehicle_button = new GLUIButton(*gl_ui, opengl_engine, collapse_vehicle_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
@@ -276,7 +375,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Photo mode";
+		args.tooltip = trUI("Photo mode", "Фоторежим");
 		photo_mode_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Selfie.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
 		photo_mode_button->toggleable = true;
 		photo_mode_button->handler = this;
@@ -285,7 +384,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	
 	{	
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Enable microphone for voice chat";
+		args.tooltip = trUI("Enable microphone for voice chat", "Включить микрофон для голосового чата");
 		microphone_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/microphone.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
 		microphone_button->toggleable = true;
 		microphone_button->handler = this;
@@ -297,7 +396,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		if(FileUtils::fileExists(webcam_tex_path))
 		{
 			GLUIButton::CreateArgs args;
-			args.tooltip = "Enable webcam";
+			args.tooltip = trUI("Enable webcam", "Включить веб-камеру");
 			try
 			{
 				webcam_button = new GLUIButton(*gl_ui, opengl_engine, webcam_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
@@ -577,9 +676,9 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				gui_client->setMicForVoiceChatEnabled(microphone_button->toggled);
 
 				if(microphone_button->toggled)
-					microphone_button->tooltip = "Disable microphone for voice chat";
+					microphone_button->tooltip = trUI("Disable microphone for voice chat", "Выключить микрофон для голосового чата");
 				else
-					microphone_button->tooltip = "Enable microphone for voice chat";
+					microphone_button->tooltip = trUI("Enable microphone for voice chat", "Включить микрофон для голосового чата");
 			}
 			else if(button == webcam_button.ptr())
 			{
@@ -590,9 +689,9 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				gui_client->setWebcamEnabled(webcam_button->toggled);
 
 				if(webcam_button->toggled)
-					webcam_button->tooltip = "Disable webcam";
+					webcam_button->tooltip = trUI("Disable webcam", "Выключить веб-камеру");
 				else
-					webcam_button->tooltip = "Enable webcam";
+					webcam_button->tooltip = trUI("Enable webcam", "Включить веб-камеру");
 #else
 				// For Qt version, webcam button just opens/closes the webcam window
 				// User must use checkbox inside the window to enable/disable webcam
@@ -600,13 +699,13 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				{
 					// Show webcam window
 					gui_client->ui_interface->setWebcamWindowVisible(true);
-					webcam_button->tooltip = "Close webcam window";
+					webcam_button->tooltip = trUI("Close webcam window", "Закрыть окно веб-камеры");
 				}
 				else
 				{
 					// Hide webcam window
 					gui_client->ui_interface->setWebcamWindowVisible(false);
-					webcam_button->tooltip = "Open webcam window";
+					webcam_button->tooltip = trUI("Open webcam window", "Открыть окно веб-камеры");
 				}
 #endif
 			}
