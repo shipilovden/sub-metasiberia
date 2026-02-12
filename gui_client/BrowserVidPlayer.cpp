@@ -180,8 +180,29 @@ static std::string makeEmbedHTMLForVideoURL(const std::string& video_url, int wi
 
 			return embed_html;
 		}
+		else if(hasSuffix(toLowerCase(parsed_URL.path), ".mp4") || hasSuffix(toLowerCase(parsed_URL.path), ".webm") || hasSuffix(toLowerCase(parsed_URL.path), ".ogg"))
+		{
+			const bool autoplay = BitUtils::isBitSet(ob->flags, WorldObject::VIDEO_AUTOPLAY);
+			const bool loop     = BitUtils::isBitSet(ob->flags, WorldObject::VIDEO_LOOP);
+			const bool muted    = BitUtils::isBitSet(ob->flags, WorldObject::VIDEO_MUTED);
+
+			const std::string attributes = "controls playsinline " + std::string(autoplay ? "autoplay " : "") + std::string(loop ? "loop " : "") + std::string(muted ? "muted " : "");
+
+			const std::string html =
+				"<html>"
+				"	<head>"
+				"	</head>"
+				"	<body style=\"margin:0\">"
+				"		<video " + attributes + " name=\"media\" id=\"thevid\" width=\"" + toString(width) + "px\" height=\"" + toString(height) + "px\">"
+				"			<source src=\"" + web::Escaping::HTMLEscape(video_url) + "\" />"
+				"		</video>"
+				"	</body>"
+				"</html>";
+
+			return html;
+		}
 		else
-			throw glare::Exception("only YouTube and Twitch HTTP URLS accepted currently.");
+			throw glare::Exception("Only YouTube, Twitch, or direct video file HTTP URLs are accepted currently.");
 	}
 	else // Else non-http:
 	{
