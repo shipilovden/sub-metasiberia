@@ -70,7 +70,7 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client AvatarSettingsDialog)
 	addMocFileRule(gui_client AvatarPreviewWidget)
 	addMocFileRule(gui_client AddObjectDialog)
-	if(SUBSTRATA_USE_QT_MULTIMEDIA AND (NOT INDIGO_QT_VERSION MATCHES "^6(\\.|$)"))
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
 		addMocFileRule(gui_client AddVideoDialog)
 	endif()
 	addMocFileRule(gui_client AddObjectPreviewWidget)
@@ -107,7 +107,7 @@ if(NOT USE_SDL)
 
 	# Rules to compile the .ui files into ui_xx.h, using 'uic'.
 	addUIFileRule(gui_client AddObjectDialog)
-	if(SUBSTRATA_USE_QT_MULTIMEDIA AND (NOT INDIGO_QT_VERSION MATCHES "^6(\\.|$)"))
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
 		addUIFileRule(gui_client AddVideoDialog)
 	endif()
 	addUIFileRule(gui_client AvatarSettingsDialog)
@@ -173,10 +173,8 @@ if(NOT USE_SDL)
 	if(SUBSTRATA_USE_QT_MULTIMEDIA)
 		# Ensure multimedia-specific generated files are created after the final
 		# SUBSTRATA_USE_QT_MULTIMEDIA value is known.
-		if(NOT INDIGO_QT_IS6)
-			addMocFileRule(gui_client AddVideoDialog)
-			addUIFileRule(gui_client AddVideoDialog)
-		endif()
+		addMocFileRule(gui_client AddVideoDialog)
+		addUIFileRule(gui_client AddVideoDialog)
 
 		addMocFileRule(gui_client/webcam WebcamWindow)
 		addMocFileRule(gui_client/webcam WebcamVideoView)
@@ -446,7 +444,7 @@ if(SUBSTRATA_USE_QT_MULTIMEDIA)
 		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamSettingsDialog.h
 	)
 
-	if(NOT INDIGO_QT_IS6)
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
 		SET(gui_client ${gui_client}
 			${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.cpp
 			${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.h
@@ -525,7 +523,7 @@ if(NOT USE_SDL)
 			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
 		)
 
-		if(NOT INDIGO_QT_IS6)
+		if(SUBSTRATA_USE_QT_MULTIMEDIA)
 			SET(gui_client ${gui_client}
 				${CMAKE_SOURCE_DIR}/gui_client/moc_AddVideoDialog.cpp
 				${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h

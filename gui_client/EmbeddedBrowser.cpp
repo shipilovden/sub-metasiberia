@@ -1002,12 +1002,14 @@ public:
 	{
 		if(cef_browser && cef_browser->GetHost())
 		{
-			//mBrowser->GetHost()->SendFocusEvent(true);
+			const float clamped_uv_x = myClamp(uv_x, 0.f, 1.f);
+			const float clamped_uv_y = myClamp(uv_y, 0.f, 1.f);
+			cef_browser->GetHost()->SetFocus(true);
 
 			CefMouseEvent cef_mouse_event;
 			//cef_mouse_event.Reset();
-			cef_mouse_event.x = (int)(uv_x         * width);
-			cef_mouse_event.y = (int)((1.f - uv_y) * height);
+			cef_mouse_event.x = (int)(clamped_uv_x         * width);
+			cef_mouse_event.y = (int)((1.f - clamped_uv_y) * height);
 			cef_mouse_event.modifiers = cef_modifiers;
 
 			int last_click_count = 1;
@@ -1019,10 +1021,13 @@ public:
 	{
 		if(cef_browser && cef_browser->GetHost())
 		{
+			const float clamped_uv_x = myClamp(uv_x, 0.f, 1.f);
+			const float clamped_uv_y = myClamp(uv_y, 0.f, 1.f);
+
 			CefMouseEvent cef_mouse_event;
 			//cef_mouse_event.Reset();
-			cef_mouse_event.x = (int)(uv_x         * width);
-			cef_mouse_event.y = (int)((1.f - uv_y) * height);
+			cef_mouse_event.x = (int)(clamped_uv_x         * width);
+			cef_mouse_event.y = (int)((1.f - clamped_uv_y) * height);
 			cef_mouse_event.modifiers = cef_modifiers;
 
 			bool mouse_leave = false;
@@ -1034,10 +1039,13 @@ public:
 	{
 		if(cef_browser && cef_browser->GetHost())
 		{
+			const float clamped_uv_x = myClamp(uv_x, 0.f, 1.f);
+			const float clamped_uv_y = myClamp(uv_y, 0.f, 1.f);
+
 			CefMouseEvent cef_mouse_event;
 			//cef_mouse_event.Reset();
-			cef_mouse_event.x = (int)(uv_x         * width);
-			cef_mouse_event.y = (int)((1.f - uv_y) * height);
+			cef_mouse_event.x = (int)(clamped_uv_x         * width);
+			cef_mouse_event.y = (int)((1.f - clamped_uv_y) * height);
 			cef_mouse_event.modifiers = cef_modifiers;
 
 			cef_browser->GetHost()->SendMouseWheelEvent(cef_mouse_event, (int)delta_x, (int)delta_y);

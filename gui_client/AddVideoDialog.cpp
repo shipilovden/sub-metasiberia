@@ -7,7 +7,9 @@ Copyright Glare Technologies Limited 2023 -
 
 
 #include "IncludeOpenGL.h"
+#if !defined(_WIN32) && !SUBSTRATA_QT6
 #include "SubstrataVideoSurface.h"
+#endif
 #include "../qt/QtUtils.h"
 #include "../utils/PlatformUtils.h"
 #include "../utils/ConPrint.h"

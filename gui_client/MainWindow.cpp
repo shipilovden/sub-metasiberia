@@ -18,7 +18,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "UserDetailsWidget.h"
 #include "AvatarSettingsDialog.h"
 #include "AddObjectDialog.h"
-#if SUBSTRATA_USE_QT_MULTIMEDIA && !SUBSTRATA_QT6
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 #include "AddVideoDialog.h"
 #endif
 #include "MainOptionsDialog.h"
@@ -60,7 +60,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/qaction.h>
-#include <QtWidgets/QActionGroup>
+#include <QtGui/QActionGroup>
 #include <QtWidgets/QInputDialog>
 #include <QtCore/QTimer>
 #include <QtGui/QCursor>
@@ -2546,7 +2546,7 @@ void MainWindow::on_actionAdd_Web_View_triggered()
 
 void MainWindow::on_actionAdd_Video_triggered()
 {
-#if SUBSTRATA_USE_QT_MULTIMEDIA && !SUBSTRATA_QT6
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 	try
 	{
 		const float quad_w = 0.4f;
@@ -2636,8 +2636,6 @@ void MainWindow::on_actionAdd_Video_triggered()
 		m.showMessage(QtUtils::toQString(e.what()));
 		m.exec();
 	}
-#else
-		QMessageBox::information(this, tr("Video"), tr("Add Video dialog is disabled in this Qt6 build."));
 #endif
 }
 

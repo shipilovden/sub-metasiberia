@@ -13478,10 +13478,16 @@ void GUIClient::mousePressed(MouseEvent& e)
 			if(ob->web_view_data.nonNull()) // If this is a web-view object:
 			{
 				ob->web_view_data->mousePressed(&e, uvs);
+				e.accepted = true;
+				ui_interface->setCamRotationOnMouseDragEnabled(false);
+				return;
 			}
 			else if(ob->browser_vid_player.nonNull()) // If this is a video object:
 			{
 				ob->browser_vid_player->mousePressed(&e, uvs);
+				e.accepted = true;
+				ui_interface->setCamRotationOnMouseDragEnabled(false);
+				return;
 			}
 		}
 	}
@@ -13691,10 +13697,14 @@ void GUIClient::mouseReleased(MouseEvent& e)
 			if(ob->web_view_data.nonNull()) // If this is a web-view object:
 			{
 				ob->web_view_data->mouseReleased(&e, uvs);
+				e.accepted = true;
+				return;
 			}
 			else if(ob->browser_vid_player.nonNull()) // If this is a video object:
 			{
 				ob->browser_vid_player->mouseReleased(&e, uvs);
+				e.accepted = true;
+				return;
 			}
 		}
 	}
