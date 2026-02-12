@@ -2522,25 +2522,10 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				ob->browser_vid_player = new BrowserVidPlayer();
 				this->browser_vid_player_obs.insert(ob);
 #else
-				// If we are playing an Mp4 file, then handle it with the AnimatedTextureManager system, 
-				// which will use a Windows Media Foundation (WMF) player on Windows, and a CEF-based player on other systems.
-				if((ob->materials.size() >= 1) && hasSuffix(ob->materials[0]->emission_texture_url, "mp4"))
-				{
-					opengl_ob->materials[0].emission_tex_path = ob->materials[0]->emission_texture_url;
-
-					if(ob->animated_tex_data.isNull())
-					{
-						ob->animated_tex_data = new AnimatedTexObData();
-						this->obs_with_animated_tex.insert(ob);
-					}
-
-					ob->animated_tex_data->rescanObjectForAnimatedTextures(opengl_engine.ptr(), ob, rng, *animated_texture_manager);
-				}
-				else
-				{
-					ob->browser_vid_player = new BrowserVidPlayer();
-					this->browser_vid_player_obs.insert(ob);
-				}
+				// Route dedicated video objects via BrowserVidPlayer so users get interactive
+				// player controls (play/pause/seek/volume) on the video surface.
+				ob->browser_vid_player = new BrowserVidPlayer();
+				this->browser_vid_player_obs.insert(ob);
 #endif
 			}
 		}
