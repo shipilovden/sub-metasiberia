@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "UIInterface.h"
 #include "GUIClient.h"
 #include "CredentialManager.h"
+#include "RuntimeTranslation.h"
 #include <utils/ArgumentParser.h>
 #include <utils/Timer.h>
 #include <utils/ComObHandle.h>
@@ -29,6 +30,9 @@ struct IMFDXGIDeviceManager;
 struct _SDL_GameController;
 class RenderStatsWidget;
 class MiniDmpSender;
+#if defined(USE_QT)
+class WebcamWindow;
+#endif
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -109,6 +113,8 @@ private slots:;
 	void on_actionDelete_All_Parcel_Objects_triggered();
 	void on_actionEnter_Fullscreen_triggered();
 	void on_actionGo_Back_triggered();
+	void on_actionLanguage_English_triggered();
+	void on_actionLanguage_Russian_triggered();
 
 	void diagnosticsWidgetChanged();
 	void diagnosticsReloadTerrain();
@@ -176,6 +182,8 @@ private:
 	void updateStatusBar();
 	void updateDiagnostics();
 	void runScreenshotCode();
+	void applyInterfaceLanguage(const RuntimeTranslation::UILanguage language);
+	void updateLanguageActionState();
 
 	virtual void dragEnterEvent(QDragEnterEvent* event) override;
 	virtual void dropEvent(QDropEvent* event) override;
@@ -349,6 +357,9 @@ public:
 private:
 	bool need_help_info_dock_widget_position; // We may need to position the Help info dock widget to the bottom right of the GL view.
 	// But we need to wait until the gl view has been resized before we do this, so set this flag to do in a timer event.
+	bool help_info_is_default_text;
+	RuntimeTranslation::UILanguage current_ui_language;
+	RuntimeTranslation::RuntimeTranslator* runtime_translator;
 	
 	QTimer* update_ob_editor_transform_timer;
 	QTimer* lightmap_flag_timer;
@@ -385,4 +396,8 @@ public:
 	Reference<RenderStatsWidget> GPU_render_stats_widget;
 
 	MiniDmpSender* minidump_sender;
+
+#if defined(USE_QT)
+	WebcamWindow* webcam_window;
+#endif
 };
