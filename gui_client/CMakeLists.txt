@@ -6,273 +6,8 @@ if(NOT USE_SDL)
 	programAvailable(${INDIGO_QT_DIR}/bin/moc)
 endif()
 
-		addMocFileRule(gui_client/webcam WebcamWindow)
-		addMocFileRule(gui_client/webcam WebcamVideoView)
-		addMocFileRule(gui_client/webcam WebcamControlPanel)
-		addMocFileRule(gui_client/webcam WebcamSettingsDialog)
-	endif()
-endif()
-
-
-SET(gui_client
-${CMAKE_SOURCE_DIR}/gui_client/AnimatedTextureManager.cpp
-${CMAKE_SOURCE_DIR}/gui_client/AnimatedTextureManager.h
-${CMAKE_SOURCE_DIR}/gui_client/AvatarGraphics.cpp
-${CMAKE_SOURCE_DIR}/gui_client/AvatarGraphics.h
-${CMAKE_SOURCE_DIR}/gui_client/BikePhysics.cpp
-${CMAKE_SOURCE_DIR}/gui_client/BikePhysics.h
-${CMAKE_SOURCE_DIR}/gui_client/BiomeManager.cpp
-${CMAKE_SOURCE_DIR}/gui_client/BiomeManager.h
-${CMAKE_SOURCE_DIR}/gui_client/BoatPhysics.cpp
-${CMAKE_SOURCE_DIR}/gui_client/BoatPhysics.h
-${CMAKE_SOURCE_DIR}/gui_client/BrowserVidPlayer.cpp
-${CMAKE_SOURCE_DIR}/gui_client/BrowserVidPlayer.h
-${CMAKE_SOURCE_DIR}/gui_client/BuildScatteringInfoTask.cpp
-${CMAKE_SOURCE_DIR}/gui_client/BuildScatteringInfoTask.h
-${CMAKE_SOURCE_DIR}/gui_client/CameraController.cpp
-${CMAKE_SOURCE_DIR}/gui_client/CameraController.h
-${CMAKE_SOURCE_DIR}/gui_client/CarPhysics.cpp
-${CMAKE_SOURCE_DIR}/gui_client/CarPhysics.h
-${CMAKE_SOURCE_DIR}/gui_client/CEF.cpp
-${CMAKE_SOURCE_DIR}/gui_client/CEF.h
-${CMAKE_SOURCE_DIR}/gui_client/CEFInternal.cpp
-${CMAKE_SOURCE_DIR}/gui_client/CEFInternal.h
-${CMAKE_SOURCE_DIR}/gui_client/ClientSenderThread.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ClientSenderThread.h
-${CMAKE_SOURCE_DIR}/gui_client/ClientThread.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ClientThread.h
-${CMAKE_SOURCE_DIR}/gui_client/ClientUDPHandlerThread.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ClientUDPHandlerThread.h
-${CMAKE_SOURCE_DIR}/gui_client/CMakeLists.txt
-${CMAKE_SOURCE_DIR}/gui_client/CredentialManager.cpp
-${CMAKE_SOURCE_DIR}/gui_client/CredentialManager.h
-${CMAKE_SOURCE_DIR}/gui_client/DownloadingResourceQueue.cpp
-${CMAKE_SOURCE_DIR}/gui_client/DownloadingResourceQueue.h
-${CMAKE_SOURCE_DIR}/gui_client/DownloadResourcesThread.cpp
-${CMAKE_SOURCE_DIR}/gui_client/DownloadResourcesThread.h
-${CMAKE_SOURCE_DIR}/gui_client/EmbeddedBrowser.cpp
-${CMAKE_SOURCE_DIR}/gui_client/EmbeddedBrowser.h
-${CMAKE_SOURCE_DIR}/gui_client/GestureUI.cpp
-${CMAKE_SOURCE_DIR}/gui_client/GestureUI.h
-${CMAKE_SOURCE_DIR}/gui_client/GUIClient.cpp
-${CMAKE_SOURCE_DIR}/gui_client/GUIClient.h
-${CMAKE_SOURCE_DIR}/gui_client/HashedObGrid.h
-${CMAKE_SOURCE_DIR}/gui_client/HeadUpDisplayUI.cpp
-${CMAKE_SOURCE_DIR}/gui_client/HeadUpDisplayUI.h
-${CMAKE_SOURCE_DIR}/gui_client/HoverCarPhysics.cpp
-${CMAKE_SOURCE_DIR}/gui_client/HoverCarPhysics.h
-${CMAKE_SOURCE_DIR}/gui_client/Imposter.cpp
-${CMAKE_SOURCE_DIR}/gui_client/Imposter.h
-${CMAKE_SOURCE_DIR}/gui_client/IndigoConversion.cpp
-${CMAKE_SOURCE_DIR}/gui_client/IndigoConversion.h
-${CMAKE_SOURCE_DIR}/gui_client/JoltUtils.h
-${CMAKE_SOURCE_DIR}/gui_client/LoadAudioTask.cpp
-${CMAKE_SOURCE_DIR}/gui_client/LoadAudioTask.h
-${CMAKE_SOURCE_DIR}/gui_client/LoadItemQueue.cpp
-${CMAKE_SOURCE_DIR}/gui_client/LoadItemQueue.h
-${CMAKE_SOURCE_DIR}/gui_client/LoadModelTask.cpp
-${CMAKE_SOURCE_DIR}/gui_client/LoadModelTask.h
-${CMAKE_SOURCE_DIR}/gui_client/LoadScriptTask.cpp
-${CMAKE_SOURCE_DIR}/gui_client/LoadScriptTask.h
-${CMAKE_SOURCE_DIR}/gui_client/LoadTextureTask.cpp
-${CMAKE_SOURCE_DIR}/gui_client/LoadTextureTask.h
-${CMAKE_SOURCE_DIR}/gui_client/MakeHypercardTextureTask.cpp
-${CMAKE_SOURCE_DIR}/gui_client/MakeHypercardTextureTask.h
-${CMAKE_SOURCE_DIR}/gui_client/MeshBuilding.cpp
-${CMAKE_SOURCE_DIR}/gui_client/MeshBuilding.h
-${CMAKE_SOURCE_DIR}/gui_client/MeshManager.cpp
-${CMAKE_SOURCE_DIR}/gui_client/MeshManager.h
-${CMAKE_SOURCE_DIR}/gui_client/MiniMap.cpp
-${CMAKE_SOURCE_DIR}/gui_client/MiniMap.h
-${CMAKE_SOURCE_DIR}/gui_client/MiscInfoUI.cpp
-${CMAKE_SOURCE_DIR}/gui_client/MiscInfoUI.h
-${CMAKE_SOURCE_DIR}/gui_client/ModelLoading.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ModelLoading.h
-${CMAKE_SOURCE_DIR}/gui_client/NetDownloadResourcesThread.cpp
-${CMAKE_SOURCE_DIR}/gui_client/NetDownloadResourcesThread.h
-${CMAKE_SOURCE_DIR}/gui_client/ObInfoUI.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ObInfoUI.h
-${CMAKE_SOURCE_DIR}/gui_client/ObjectPathController.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ObjectPathController.h
-${CMAKE_SOURCE_DIR}/gui_client/ParticleManager.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ParticleManager.h
-${CMAKE_SOURCE_DIR}/gui_client/PhysicsObject.cpp
-${CMAKE_SOURCE_DIR}/gui_client/PhysicsObject.h
-${CMAKE_SOURCE_DIR}/gui_client/PhysicsWorld.cpp
-${CMAKE_SOURCE_DIR}/gui_client/PhysicsWorld.h
-${CMAKE_SOURCE_DIR}/gui_client/PlayerPhysics.cpp
-${CMAKE_SOURCE_DIR}/gui_client/PlayerPhysics.h
-${CMAKE_SOURCE_DIR}/gui_client/PlayerPhysicsInput.h
-${CMAKE_SOURCE_DIR}/gui_client/ProximityLoader.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ProximityLoader.h
-${CMAKE_SOURCE_DIR}/gui_client/ResourceProcessing.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ResourceProcessing.h
-${CMAKE_SOURCE_DIR}/gui_client/SaveResourcesDBThread.cpp
-${CMAKE_SOURCE_DIR}/gui_client/SaveResourcesDBThread.h
-${CMAKE_SOURCE_DIR}/gui_client/Scripting.cpp
-${CMAKE_SOURCE_DIR}/gui_client/Scripting.h
-${CMAKE_SOURCE_DIR}/gui_client/TerrainDecalManager.cpp
-${CMAKE_SOURCE_DIR}/gui_client/TerrainDecalManager.h
-${CMAKE_SOURCE_DIR}/gui_client/TerrainScattering.cpp
-${CMAKE_SOURCE_DIR}/gui_client/TerrainScattering.h
-${CMAKE_SOURCE_DIR}/gui_client/TerrainSystem.cpp
-${CMAKE_SOURCE_DIR}/gui_client/TerrainSystem.h
-${CMAKE_SOURCE_DIR}/gui_client/TerrainTests.cpp
-${CMAKE_SOURCE_DIR}/gui_client/TerrainTests.h
-${CMAKE_SOURCE_DIR}/gui_client/TestSuite.cpp
-${CMAKE_SOURCE_DIR}/gui_client/TestSuite.h
-${CMAKE_SOURCE_DIR}/gui_client/ThreadMessages.h
-${CMAKE_SOURCE_DIR}/gui_client/UIInterface.h
-${CMAKE_SOURCE_DIR}/gui_client/UndoBuffer.cpp
-${CMAKE_SOURCE_DIR}/gui_client/UndoBuffer.h
-${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.cpp
-${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.h
-${CMAKE_SOURCE_DIR}/gui_client/URLParser.cpp
-${CMAKE_SOURCE_DIR}/gui_client/URLParser.h
-${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.cpp
-${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.h
-${CMAKE_SOURCE_DIR}/gui_client/VehiclePhysics.h
-${CMAKE_SOURCE_DIR}/gui_client/WebViewData.cpp
-${CMAKE_SOURCE_DIR}/gui_client/WebViewData.h
-${CMAKE_SOURCE_DIR}/gui_client/WinterShaderEvaluator.cpp
-${CMAKE_SOURCE_DIR}/gui_client/WinterShaderEvaluator.h
-${CMAKE_SOURCE_DIR}/gui_client/WorldState.cpp
-${CMAKE_SOURCE_DIR}/gui_client/WorldState.h
-${CMAKE_SOURCE_DIR}/gui_client/EmscriptenResourceDownloader.cpp
-${CMAKE_SOURCE_DIR}/gui_client/EmscriptenResourceDownloader.h
-${CMAKE_SOURCE_DIR}/gui_client/ChatUI.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ChatUI.h
-${CMAKE_SOURCE_DIR}/gui_client/ScriptedObjectProximityChecker.cpp
-${CMAKE_SOURCE_DIR}/gui_client/ScriptedObjectProximityChecker.h
-${CMAKE_SOURCE_DIR}/gui_client/PhotoModeUI.cpp
-${CMAKE_SOURCE_DIR}/gui_client/PhotoModeUI.h
-${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.cpp
-${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.h
-${CMAKE_SOURCE_DIR}/gui_client/GarbageDeleterThread.cpp
-${CMAKE_SOURCE_DIR}/gui_client/GarbageDeleterThread.h
-)
-
-
-if(USE_SDL)
-	SET(gui_client ${gui_client}
-		${CMAKE_SOURCE_DIR}/gui_client/SDLClient.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/SDLUIInterface.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/SDLUIInterface.h
-	)
-else()
-	SET(gui_client ${gui_client}
-		${CMAKE_SOURCE_DIR}/gui_client/IndigoView.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/IndigoView.h
-		${CMAKE_SOURCE_DIR}/gui_client/AboutDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/AboutDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/AboutDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/AddObjectDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/AddObjectDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/AddObjectDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/AddObjectPreviewWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/AddObjectPreviewWidget.h
-		
-		${CMAKE_SOURCE_DIR}/gui_client/AvatarPreviewWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/AvatarPreviewWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/DiagnosticsWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/DiagnosticsWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/DiagnosticsWidget.ui
-		${CMAKE_SOURCE_DIR}/gui_client/EnvironmentOptionsWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/EnvironmentOptionsWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/EnvironmentOptionsWidget.ui
-		${CMAKE_SOURCE_DIR}/gui_client/FindObjectDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/FindObjectDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/FindObjectDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/GlWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/GlWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/GoToParcelDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/GoToParcelDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/GoToParcelDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/GoToPositionDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/GoToPositionDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/GoToPositionDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/GuiClientApplication.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/GuiClientApplication.h
-		${CMAKE_SOURCE_DIR}/gui_client/ISLSyntaxHighlighter.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ISLSyntaxHighlighter.h
-		${CMAKE_SOURCE_DIR}/gui_client/ListObjectsNearbyDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ListObjectsNearbyDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/ListObjectsNearbyDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/LoginDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/LoginDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/LoginDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/LogWindow.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/LogWindow.h
-		${CMAKE_SOURCE_DIR}/gui_client/LogWindow.ui
-		${CMAKE_SOURCE_DIR}/gui_client/MainOptionsDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/MainOptionsDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/MainOptionsDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.h
-		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.ui
-		${CMAKE_SOURCE_DIR}/gui_client/MainWindowTestCode.txt
-		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.h
-		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.h
-		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.ui
-		${CMAKE_SOURCE_DIR}/gui_client/MaterialEditor.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/MaterialEditor.h
-		${CMAKE_SOURCE_DIR}/gui_client/MaterialEditor.ui
-		${CMAKE_SOURCE_DIR}/gui_client/ObjectEditor.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ObjectEditor.h
-		${CMAKE_SOURCE_DIR}/gui_client/ObjectEditor.ui
-		${CMAKE_SOURCE_DIR}/gui_client/ParcelEditor.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ParcelEditor.h
-		${CMAKE_SOURCE_DIR}/gui_client/ParcelEditor.ui
-		${CMAKE_SOURCE_DIR}/gui_client/TerrainSpecSectionWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/TerrainSpecSectionWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/TerrainSpecSectionWidget.ui
-		${CMAKE_SOURCE_DIR}/gui_client/ShaderEditorDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ShaderEditorDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/ShaderEditorDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/ResetPasswordDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ResetPasswordDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/ResetPasswordDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/SignUpDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/SignUpDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/SignUpDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/SubstrataVideoSurface.h
-		${CMAKE_SOURCE_DIR}/gui_client/UserDetailsWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/UserDetailsWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/UserDetailsWidget.ui
-		${CMAKE_SOURCE_DIR}/gui_client/WorldSettingsWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/WorldSettingsWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/WorldSettingsWidget.ui
-		${CMAKE_SOURCE_DIR}/gui_client/URLWidget.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/URLWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/URLWidget.ui
-		${CMAKE_SOURCE_DIR}/gui_client/ShaderEditorOutputTextEdit.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ShaderEditorOutputTextEdit.h
-		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.ui
-	)
-endif()
-
-if(SUBSTRATA_USE_QT_MULTIMEDIA)
-	SET(gui_client ${gui_client}
-		${CMAKE_SOURCE_DIR}/gui_client/SubstrataVideoSurface.h
-		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.h
-		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamVideoView.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamVideoView.h
-		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamControlPanel.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamControlPanel.h
-		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamSettingsDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamSettingsDialog.h
-	)
+include(../cmake/shared_settings.cmake)
+include(../cmake/shared_cxx_settings.cmake)
 
 if(NOT EMSCRIPTEN)
 	include(../cmake/winter.cmake)
@@ -530,8 +265,6 @@ ${CMAKE_SOURCE_DIR}/gui_client/ScriptedObjectProximityChecker.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/ScriptedObjectProximityChecker.h
 ${CMAKE_SOURCE_DIR}/gui_client/PhotoModeUI.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/PhotoModeUI.h
-${CMAKE_SOURCE_DIR}/gui_client/WebcamCapture.cpp
-${CMAKE_SOURCE_DIR}/gui_client/WebcamCapture.h
 ${CMAKE_SOURCE_DIR}/gui_client/GarbageDeleterThread.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GarbageDeleterThread.h
 ${CMAKE_SOURCE_DIR}/gui_client/AnimationManager.cpp
@@ -1295,8 +1028,6 @@ endif()
 
 
 SET(rc_stuff "../icons/substrata.rc")
-# Copy icon file to build directory so resource compiler can find it
-configure_file("${CMAKE_SOURCE_DIR}/icons/metasiberia.ico" "${CMAKE_BINARY_DIR}/gui_client/metasiberia.ico" COPYONLY)
 
 SOURCE_GROUP(gui_client FILES ${gui_client})
 SOURCE_GROUP(qt FILES ${qt})
@@ -1403,15 +1134,6 @@ add_definitions(-DGUI_CLIENT=1)
 
 include(../cmake/shared_target_settings.cmake)
 
-if(MSVC)
-	# Ensure UTF-8 source decoding for Cyrillic UI strings in all configs.
-	target_compile_options(${CURRENT_TARGET} PRIVATE /utf-8)
-endif()
-
-	if(WIN32 AND INDIGO_QT_IS6)
-		target_compile_options(${CURRENT_TARGET} PRIVATE /permissive-)
-	endif()
-
 if(USE_SDL)
 	include_directories(${SDL_BUILD_DIR}/include/SDL2)
 	
@@ -1504,7 +1226,6 @@ elseif(WIN32)
 	endif()
 
 	target_link_libraries(${CURRENT_TARGET}
-		Dbghelp
 		OpenGL32
 
 		# Media foundation video reading:
@@ -1541,47 +1262,36 @@ elseif(WIN32)
 			optimized "${SDL_BUILD_DIR}/RelWithDebInfo/SDL2main.lib" 
 		)
 	else() # Else use Qt:
-		if(INDIGO_QT_IS6)
-			target_link_libraries(${CURRENT_TARGET}
-				optimized Qt6EntryPoint
-				optimized Qt6Gui
-				optimized Qt6Core
-				optimized Qt6OpenGL
-				optimized Qt6OpenGLWidgets
-				optimized Qt6Widgets
-				optimized Qt6Multimedia
-				optimized Qt6MultimediaWidgets
-				optimized Qt6Core5Compat
-				debug Qt6EntryPointd
-				debug Qt6Guid
-				debug Qt6Cored
-				debug Qt6OpenGLd
-				debug Qt6OpenGLWidgetsd
-				debug Qt6Widgetsd
-				debug Qt6Multimediad
-				debug Qt6MultimediaWidgetsd
-				debug Qt6Core5Compatd
-			)
-		else()
-			target_link_libraries(${CURRENT_TARGET}
-				optimized qtmain
-				optimized Qt5Gui
-				optimized Qt5Core
-				optimized Qt5OpenGL
-				optimized Qt5Widgets
-				optimized Qt5Multimedia
-				optimized Qt5MultimediaWidgets
-				optimized Qt5Gamepad
-				debug qtmaind
-				debug Qt5Guid
-				debug Qt5Cored
-				debug Qt5OpenGLd
-				debug Qt5Widgetsd
-				debug Qt5Multimediad
-				debug Qt5MultimediaWidgetsd
-				debug Qt5Gamepadd
-			)
-		endif()
+		target_link_libraries(${CURRENT_TARGET}
+		
+				# Qt 6:
+		#	optimized Qt6Gui
+		#	optimized Qt6Core
+		#	optimized Qt6OpenGL
+		#	optimized Qt6Widgets
+		#	optimized Qt6OpenGLWidgets
+		#	optimized Qt6Core5Compat
+		#	debug Qt6Guid
+		#	debug Qt6Cored
+		#	debug Qt6OpenGLd
+		#	debug Qt6Widgetsd
+		#	debug Qt6OpenGLWidgetsd
+		#	debug Qt6Core5Compatd
+			
+			# Qt 5:
+			optimized qtmain
+			optimized Qt5Gui
+			optimized Qt5Core
+			optimized Qt5OpenGL
+			optimized Qt5Widgets
+			optimized Qt5Gamepad
+			debug qtmaind
+			debug Qt5Guid
+			debug Qt5Cored
+			debug Qt5OpenGLd
+			debug Qt5Widgetsd
+			debug Qt5Gamepadd
+		)
 	endif()
 	
 	# Chromium embedded framework
@@ -1680,7 +1390,6 @@ else() # linux
 		Qt5OpenGL
 		Qt5Widgets
 		Qt5Multimedia
-		Qt5MultimediaWidgets
 		Qt5Network
 		Qt5Gamepad
 		dl
