@@ -1503,12 +1503,14 @@ void PhotoModeUI::uploadPhoto()
 		chat_id = getOptionalEnvVar("METASIBERIA_TELEGRAM_PHOTO_CHAT_ID");
 
 	bool started_any_external_upload = false;
+	bool telegram_missing_config = false;
+	bool vk_missing_config = false;
 
 	if(telegram_enabled)
 	{
 		if(bot_token.empty() || chat_id.empty())
 		{
-			gui_client->showErrorNotification("Telegram upload is not configured.  Set settings keys telegram/bot_token and telegram/photo_upload_chat_id (or env vars METASIBERIA_TELEGRAM_BOT_TOKEN and METASIBERIA_TELEGRAM_PHOTO_CHAT_ID).");
+			telegram_missing_config = true;
 		}
 		else
 		{
@@ -1546,11 +1548,11 @@ void PhotoModeUI::uploadPhoto()
 	{
 		if(vk_token.empty())
 		{
-			gui_client->showErrorNotification("VK upload is not configured.  Set settings key vk/access_token (or env var METASIBERIA_VK_ACCESS_TOKEN).  Do not store tokens in AGENTS.md, use AGENTS_SECRETS.local.md.");
+			vk_missing_config = true;
 		}
 		else if(vk_group_id == 0 && vk_group_screen_name.empty())
 		{
-			gui_client->showErrorNotification("VK upload is not configured.  Set vk/group_id (or vk/group_screen_name).");
+			vk_missing_config = true;
 		}
 		else
 		{
@@ -1568,11 +1570,27 @@ void PhotoModeUI::uploadPhoto()
 	}
 
 	if(started_any_external_upload)
+	{
+		// Avoid showing a hard error if at least one destination succeeded to start.
+		if(telegram_missing_config)
+			gui_client->showInfoNotification("Telegram upload skipped (not configured).");
+		if(vk_missing_config)
+			gui_client->showInfoNotification("VK upload skipped (not configured).");
 		return;
+	}
 
 	// If user requested external uploads but none were started (misconfiguration), don't fall back to legacy upload.
 	if(any_external_requested)
+	{
+		// Provide a single actionable error message.
+		if(telegram_missing_config && vk_missing_config)
+			gui_client->showErrorNotification("Upload photo is not configured. Configure Telegram (METASIBERIA_TELEGRAM_BOT_TOKEN + METASIBERIA_TELEGRAM_PHOTO_CHAT_ID) and/or VK (METASIBERIA_VK_ACCESS_TOKEN).");
+		else if(telegram_missing_config)
+			gui_client->showErrorNotification("Telegram upload is not configured. Set telegram/bot_token + telegram/photo_upload_chat_id (or env vars METASIBERIA_TELEGRAM_BOT_TOKEN + METASIBERIA_TELEGRAM_PHOTO_CHAT_ID).");
+		else if(vk_missing_config)
+			gui_client->showErrorNotification("VK upload is not configured. Set vk/access_token (or env var METASIBERIA_VK_ACCESS_TOKEN).");
 		return;
+	}
 
 	// Legacy upload-to-website path (Substrata protocol).  Kept for compatibility/tests.
 	const std::string username = gui_client->ui_interface->getUsernameForDomain(gui_client->server_hostname);
