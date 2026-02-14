@@ -64,14 +64,15 @@ function Get-VersionFromHeader {
 function Set-VersionInHeader {
     param([string]$HeaderPath, [string]$NewVersion)
     $text = Get-Content -Raw -Path $HeaderPath
-    $newText = [Regex]::Replace(
-        $text,
-        '(cyberspace_version\s*=\s*")([^"]+)(";)',
-        ("`$1{0}`$3" -f $NewVersion),
-        [System.Text.RegularExpressions.RegexOptions]::None
-    )
+    $newText = [Regex]::Replace($text, '(cyberspace_version\s*=\s*")([^"]+)(";)', {
+        param($m)
+        return ($m.Groups[1].Value + $NewVersion + $m.Groups[3].Value)
+    })
     if($newText -eq $text) { throw "Failed to update version in $HeaderPath" }
-    if(-not $DryRun) { Set-Content -Path $HeaderPath -Value $newText -Encoding UTF8 }
+    if(-not $DryRun) {
+        # Write UTF-8 without BOM to avoid introducing hidden characters in Version.h.
+        [System.IO.File]::WriteAllText($HeaderPath, $newText, (New-Object System.Text.UTF8Encoding($false)))
+    }
 }
 
 function Parse-SemVer {
