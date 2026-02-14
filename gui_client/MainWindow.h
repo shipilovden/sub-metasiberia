@@ -29,6 +29,7 @@ struct IMFDXGIDeviceManager;
 struct _SDL_GameController;
 class RenderStatsWidget;
 class MiniDmpSender;
+class UpdateManager;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -127,6 +128,8 @@ private slots:;
 	void glWidgetCutShortcutTriggered();
 	void glWidgetCopyShortcutTriggered();
 	void glWidgetPasteShortcutTriggered();
+	void onUpdateCheckFinished();
+	void onUpdateAvailabilityChanged(bool available);
 
 	void enterFullScreenMode();
 	void exitFromFullScreenMode();
@@ -333,6 +336,7 @@ public:
 
 	UserDetailsWidget* user_details;
 	URLWidget* url_widget;
+	UpdateManager* update_manager;
 
 	double last_timerEvent_CPU_work_elapsed;
 	double last_updateGL_time;
