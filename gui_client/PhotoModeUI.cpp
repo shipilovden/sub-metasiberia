@@ -1571,11 +1571,8 @@ void PhotoModeUI::uploadPhoto()
 
 	if(started_any_external_upload)
 	{
-		// Avoid showing a hard error if at least one destination succeeded to start.
-		if(telegram_missing_config)
-			gui_client->showInfoNotification("Telegram upload skipped (not configured).");
-		if(vk_missing_config)
-			gui_client->showInfoNotification("VK upload skipped (not configured).");
+		// If at least one destination started (e.g. Telegram), keep UX clean and don't spam notifications
+		// about other destinations being unconfigured.
 		return;
 	}
 
