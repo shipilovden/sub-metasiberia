@@ -31,11 +31,11 @@ function Exec {
 }
 
 function ExecNative {
-    param([string]$File, [string[]]$Args)
-    $argStr = ($Args | ForEach-Object { if($_ -match "\\s") { '"' + $_ + '"' } else { $_ } }) -join " "
+    param([string]$File, [string[]]$Arguments)
+    $argStr = ($Arguments | ForEach-Object { if($_ -match "\\s") { '\"' + $_ + '\"' } else { $_ } }) -join " "
     Write-Host "$File $argStr"
     if(-not $DryRun) {
-        & $File @Args
+        & $File @Arguments
         if($LASTEXITCODE -ne 0) { throw ("Command failed with exit code {0}: {1} {2}" -f $LASTEXITCODE, $File, $argStr) }
     }
 }
