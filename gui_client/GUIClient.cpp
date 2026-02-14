@@ -578,6 +578,9 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 
 	chat_ui.create(opengl_engine, /*gui_client_=*/this, gl_ui);
 
+	// Webcam capture uses Media Foundation on Windows; update runs from GUIClient::timerEvent() when enabled.
+	webcam_capture.create(/*gui_client_=*/this, gl_ui, opengl_engine);
+
 	// Chat UI should be drawn above the movement button if present.
 	const float bottom_left_y = misc_info_ui.movement_button ? misc_info_ui.movement_button->getRect().getMax().y : -gl_ui->getViewportMinMaxY();
 	chat_ui.setDrawAreaBottomLeftY(bottom_left_y);
@@ -1113,6 +1116,8 @@ void GUIClient::shutdown()
 	chat_ui.destroy();
 
 	photo_mode_ui.destroy();
+
+	webcam_capture.destroy();
 
 	minimap = nullptr;
 
@@ -5571,6 +5576,8 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 	if(gl_ui.nonNull())
 		gl_ui->think();
+
+	webcam_capture.update();
 
 	// If we are connected to a server, send a UDP packet to it occasionally, so the server can work out which UDP port
 	// we are listening on.
@@ -15151,6 +15158,20 @@ void GUIClient::performGestureClicked(const std::string& gesture_name, const URL
 	}
 	sent_perform_gesture_without_stop_gesture = true;
 }
+
+
+void GUIClient::setWebcamEnabled(bool enabled)
+{
+	webcam_capture.setEnabled(enabled);
+}
+
+
+#if defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(USE_SDL)
+void* GUIClient::getWebcamFrameAsQImage() const
+{
+	return webcam_capture.getCurrentFrameAsQImage();
+}
+#endif
 
 
 void GUIClient::stopGesture()
