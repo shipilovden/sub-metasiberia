@@ -1445,9 +1445,6 @@ void WorkerThread::doRun()
 							// Get gesture animation file if we don't have it
 							if(client_user_id.valid() && hasExtension(gesture_URL, "subanim")) // Only do for logged-in users
 								sendGetFileMessageIfNeeded(gesture_URL);
-
-								enqueuePacketToBroadcast(scratch_packet);
-							//}
 							break;
 						}
 					case Protocol::AvatarStopGesture:

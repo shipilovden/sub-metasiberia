@@ -208,6 +208,13 @@ void GestureManagerUI::eventOccurred(GLUICallbackEvent& event)
 {
 	if(gui_client)
 	{
+		if(!gui_client->isLoggedIn())
+		{
+			event.accepted = true;
+			gui_client->showErrorNotification("You must be logged in to add/enable gestures.");
+			return;
+		}
+
 		GLUIButton* button = dynamic_cast<GLUIButton*>(event.widget);
 		if(button)
 		{

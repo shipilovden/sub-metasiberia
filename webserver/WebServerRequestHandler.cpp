@@ -285,6 +285,14 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			AccountHandlers::handleEthSignMessagePost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/account_add_gesture_post")
+		{
+			AccountHandlers::handleAddGesturePost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/account_delete_gesture_post")
+		{
+			AccountHandlers::handleDeleteGesturePost(*this->world_state, request, reply_info);
+		}
 		else if(request.path == "/make_parcel_into_nft_post")
 		{
 			AccountHandlers::handleMakeParcelIntoNFTPost(*this->world_state, request, reply_info);
@@ -547,6 +555,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		else if(request.path == "/account")
 		{
 			AccountHandlers::renderUserAccountPage(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/account_gestures")
+		{
+			AccountHandlers::renderGestureSettingsPage(*this->world_state, request, reply_info);
 		}
 		else if(request.path == "/prove_eth_address_owner")
 		{
