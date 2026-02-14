@@ -31,17 +31,17 @@ Copyright Glare Technologies Limited 2022 -
 #include <QtCore/QTimer>
 
 
-AvatarSettingsDialog::AvatarSettingsDialog(const std::string& base_dir_path_, QSettings* settings_, Reference<ResourceManager> resource_manager_, AnimationManager* anim_manager_)
-:	base_dir_path(base_dir_path_),
-	settings(settings_),
-	resource_manager(resource_manager_),
+AvatarSettingsDialog::AvatarSettingsDialog(QWidget* parent)
+:	QWidget(parent),
+	settings(nullptr),
 	done_initial_load(false),
+	initialised(false),
+	preview_timer_id(0),
+	pending_show_error_dialogs(false),
 	pre_ob_to_world_matrix(Matrix4f::identity()),
-	anim_manager(anim_manager_)
+	anim_manager(nullptr)
 {
 	setupUi(this);
-
-	texture_server = new TextureServer(/*use_canonical_path_keys=*/false);
 
 	this->usernameLabel->hide();
 	this->usernameLineEdit->hide();
@@ -54,12 +54,47 @@ AvatarSettingsDialog::AvatarSettingsDialog(const std::string& base_dir_path_, QS
 	this->createReadyPlayerMeLabel->setText(QtUtils::toQString(display_str));
 	this->createReadyPlayerMeLabel->setOpenExternalLinks(true);
 
-	this->avatarPreviewGLWidget->init(base_dir_path, settings_, texture_server);
+	connect(this->avatarSelectWidget, SIGNAL(filenameChanged(QString&)), this, SLOT(avatarFilenameChanged(QString&)));
+	connect(this->buttonBox, SIGNAL(accepted()), this, SLOT(accepted()));
+	connect(this->buttonBox, SIGNAL(rejected()), this, SLOT(rejected()));
 
-	// Load main window geometry and state
-	this->restoreGeometry(settings->value("AvatarSettingsDialog/geometry").toByteArray());
+	connect(this->animationComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(animationComboBoxIndexChanged(int)));
+}
 
-	//this->usernameLineEdit->setText(settings->value("username").toString());
+
+AvatarSettingsDialog::~AvatarSettingsDialog()
+{
+	stopPreviewTimerIfNeeded();
+	shutdownGL();
+}
+
+
+void AvatarSettingsDialog::shutdownGL()
+{
+	if(!initialised)
+		return;
+
+	// Make sure we have set the widget gl context to current as we destroy OpenGL stuff.
+	this->avatarPreviewGLWidget->makeCurrent();
+
+	preview_gl_ob = NULL;
+	avatarPreviewGLWidget->shutdown();
+	avatarPreviewGLWidget->doneCurrent();
+}
+
+
+void AvatarSettingsDialog::init(const std::string& base_dir_path_, QSettings* settings_, Reference<ResourceManager> resource_manager_, AnimationManager* anim_manager_)
+{
+	if(initialised)
+		return;
+
+	base_dir_path = base_dir_path_;
+	settings = settings_;
+	resource_manager = resource_manager_;
+	anim_manager = anim_manager_;
+
+	texture_server = new TextureServer(/*use_canonical_path_keys=*/false);
+	this->avatarPreviewGLWidget->init(base_dir_path, settings, texture_server);
 
 	{
 		SignalBlocker b(this->avatarSelectWidget);
@@ -67,71 +102,115 @@ AvatarSettingsDialog::AvatarSettingsDialog(const std::string& base_dir_path_, QS
 		this->avatarSelectWidget->setFilename(settings->value("avatarPath").toString());
 	}
 
-	connect(this->avatarSelectWidget, SIGNAL(filenameChanged(QString&)), this, SLOT(avatarFilenameChanged(QString&)));
-	connect(this->buttonBox, SIGNAL(accepted()), this, SLOT(accepted()));
-	connect(this, SIGNAL(finished(int)), this, SLOT(dialogFinished()));
+	done_initial_load = false;
+	initialised = true;
 
-	connect(this->animationComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(animationComboBoxIndexChanged(int)));
-
-	startTimer(10);
+	startPreviewTimerIfNeeded();
 }
 
 
-AvatarSettingsDialog::~AvatarSettingsDialog()
+void AvatarSettingsDialog::startPreviewTimerIfNeeded()
 {
-	settings->setValue("AvatarSettingsDialog/geometry", saveGeometry());
+	if(!initialised)
+		return;
+	if(!this->isVisible())
+		return;
+	if(preview_timer_id != 0)
+		return;
+
+	preview_timer_id = startTimer(10);
 }
 
 
-void AvatarSettingsDialog::shutdownGL()
+void AvatarSettingsDialog::stopPreviewTimerIfNeeded()
 {
-	// Make sure we have set the widget gl context to current as we destroy OpenGL stuff.
-	this->avatarPreviewGLWidget->makeCurrent();
+	if(preview_timer_id == 0)
+		return;
 
-	preview_gl_ob = NULL;
-	avatarPreviewGLWidget->shutdown();
+	killTimer(preview_timer_id);
+	preview_timer_id = 0;
 }
 
 
-//std::string AvatarSettingsDialog::getAvatarName()
-//{
-//	return QtUtils::toStdString(usernameLineEdit->text());
-//}
-
-
-// Called when user presses ESC key, or clicks OK or cancel button.
-void AvatarSettingsDialog::dialogFinished()
+void AvatarSettingsDialog::resetToSavedSettings()
 {
-	//this->settings->setValue("username", this->usernameLineEdit->text());
+	if(!initialised)
+		return;
 
-	shutdownGL();
+	const QString path_q = settings->value("avatarPath").toString();
+	{
+		SignalBlocker b(this->avatarSelectWidget);
+		this->avatarSelectWidget->setFilename(path_q);
+	}
+
+	const std::string path = QtUtils::toStdString(path_q);
+	this->result_path = path;
+
+	// If preview engine is ready, reload immediately; otherwise timerEvent() will do initial load later.
+	if(avatarPreviewGLWidget->opengl_engine.nonNull() && avatarPreviewGLWidget->opengl_engine->initSucceeded())
+	{
+		done_initial_load = true;
+		loadModelIntoPreview(path, /*show_error_dialogs=*/false);
+	}
+	else
+	{
+		done_initial_load = false;
+		pending_load_path.clear();
+	}
 }
 
 
 void AvatarSettingsDialog::accepted()
 {
+	if(!initialised)
+		return;
+
 	this->settings->setValue("avatarPath", this->avatarSelectWidget->filename());
-	//this->settings->setValue("username", this->usernameLineEdit->text());
+	emit acceptedSignal();
+}
+
+
+void AvatarSettingsDialog::rejected()
+{
+	if(!initialised)
+		return;
+
+	// Don't persist any changes on cancel; revert UI to saved settings.
+	resetToSavedSettings();
+	emit rejectedSignal();
 }
 
 
 void AvatarSettingsDialog::avatarFilenameChanged(QString& filename)
 {
+	if(!initialised)
+		return;
+
 	const std::string path = QtUtils::toIndString(filename);
 	const bool changed = this->result_path != path;
 	this->result_path = path;
-	
-	// conPrint("AvatarSettingsDialog::avatarFilenameChanged: filename = " + path);
 
-	if(changed)
+	if(!changed)
+		return;
+
+	// Defer model load until the preview OpenGL engine has initialised.
+	pending_load_path = path;
+	pending_show_error_dialogs = true;
+
+	if(avatarPreviewGLWidget->opengl_engine.nonNull() && avatarPreviewGLWidget->opengl_engine->initSucceeded())
 	{
-		loadModelIntoPreview(path, /*show_error_dialogs=*/true);
+		loadModelIntoPreview(pending_load_path, /*show_error_dialogs=*/pending_show_error_dialogs);
+		pending_load_path.clear();
+		pending_show_error_dialogs = false;
 	}
 }
 
 
 void AvatarSettingsDialog::animationComboBoxIndexChanged(int index)
 {
+	if(preview_gl_ob.isNull())
+		return;
+
 	const std::string anim_name = QtUtils::toStdString(this->animationComboBox->itemText(index));
 	preview_gl_ob->current_anim_i = myMax(0, preview_gl_ob->mesh_data->animation_data.getAnimationIndex(anim_name));
 }
@@ -157,6 +236,11 @@ void AvatarSettingsDialog::loadModelIntoPreview(const std::string& local_path, b
 		local_path;
 
 	this->avatarPreviewGLWidget->makeCurrent();
+	struct DoneCurrent
+	{
+		AvatarPreviewWidget* w;
+		~DoneCurrent() { if(w) w->doneCurrent(); }
+	} done_current{ this->avatarPreviewGLWidget };
 
 	this->pre_ob_to_world_matrix = Matrix4f::identity();
 
@@ -274,28 +358,51 @@ void AvatarSettingsDialog::loadModelIntoPreview(const std::string& local_path, b
 }
 
 
-// Will be called when the user clicks the 'X' button.
-void AvatarSettingsDialog::closeEvent(QCloseEvent* event)
+void AvatarSettingsDialog::showEvent(QShowEvent* event)
 {
-	shutdownGL();
+	QWidget::showEvent(event);
+	startPreviewTimerIfNeeded();
+}
+
+
+void AvatarSettingsDialog::hideEvent(QHideEvent* event)
+{
+	QWidget::hideEvent(event);
+	stopPreviewTimerIfNeeded();
 }
 
 
 void AvatarSettingsDialog::timerEvent(QTimerEvent* event)
 {
+	if(!initialised)
+		return;
+
 	avatarPreviewGLWidget->makeCurrent();
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 	avatarPreviewGLWidget->update();
 #else
 	avatarPreviewGLWidget->updateGL();
 #endif
+	avatarPreviewGLWidget->doneCurrent();
 
-	// Once the OpenGL widget has initialised, we can add the model.
-	if(avatarPreviewGLWidget->opengl_engine.nonNull() && avatarPreviewGLWidget->opengl_engine->initSucceeded() && !done_initial_load)
+	if(avatarPreviewGLWidget->opengl_engine.nonNull() && avatarPreviewGLWidget->opengl_engine->initSucceeded())
 	{
-		const QString path = settings->value("avatarPath").toString();
-		this->result_path = QtUtils::toStdString(path);
-		loadModelIntoPreview(QtUtils::toStdString(path), /*show_error_dialogs=*/false);
-		done_initial_load = true;
+		// If there is a pending user-selected path, load it now.
+		if(!pending_load_path.empty())
+		{
+			loadModelIntoPreview(pending_load_path, /*show_error_dialogs=*/pending_show_error_dialogs);
+			pending_load_path.clear();
+			pending_show_error_dialogs = false;
+			done_initial_load = true;
+		}
+
+		// Once the OpenGL widget has initialised, we can add the initial model.
+		if(!done_initial_load)
+		{
+			const QString path = settings->value("avatarPath").toString();
+			this->result_path = QtUtils::toStdString(path);
+			loadModelIntoPreview(QtUtils::toStdString(path), /*show_error_dialogs=*/false);
+			done_initial_load = true;
+		}
 	}
 }

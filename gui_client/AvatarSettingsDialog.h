@@ -13,6 +13,7 @@ Copyright Glare Technologies Limited 2022 -
 #include <utils/ThreadManager.h>
 #include <graphics/BatchedMesh.h>
 #include <QtCore/QString>
+#include <QtWidgets/QWidget>
 class QSettings;
 class AnimationManager;
 struct GLObject;
@@ -28,35 +29,50 @@ AvatarSettingsDialog
 #pragma warning(disable:4324) // Disable 'structure was padded due to __declspec(align())' warning.
 #endif
 
-class AvatarSettingsDialog : public QDialog, private Ui_AvatarSettingsDialog
+// NOTE: Despite the historical name, this is now an embedded widget used inside a QDockWidget (see MainWindow.ui).
+class AvatarSettingsDialog : public QWidget, private Ui_AvatarSettingsDialog
 {
 	Q_OBJECT
 public:
-	AvatarSettingsDialog(const std::string& base_dir_path_, QSettings* settings, Reference<ResourceManager> resource_manager, AnimationManager* anim_manager);
+	AvatarSettingsDialog(QWidget* parent = nullptr);
 	~AvatarSettingsDialog();
 
-	//std::string getAvatarName();
+	void init(const std::string& base_dir_path_, QSettings* settings, Reference<ResourceManager> resource_manager, AnimationManager* anim_manager);
+	void resetToSavedSettings();
+
+signals:;
+	void acceptedSignal();
+	void rejectedSignal();
+
 private slots:;
 	void accepted();
-	void dialogFinished();
+	void rejected();
 
 	void avatarFilenameChanged(QString& filename);
 
 	void animationComboBoxIndexChanged(int index);
 	
 private:
-	virtual void closeEvent(QCloseEvent *event);
+	virtual void showEvent(QShowEvent* event) override;
+	virtual void hideEvent(QHideEvent* event) override;
 	virtual void timerEvent(QTimerEvent* event);
 
 	void loadModelIntoPreview(const std::string& local_path, bool show_error_dialogs);
 
 	void shutdownGL();
 
+	void startPreviewTimerIfNeeded();
+	void stopPreviewTimerIfNeeded();
+
 	QSettings* settings;
 
 	Reference<GLObject> preview_gl_ob;
 
 	bool done_initial_load;
+	bool initialised;
+	int preview_timer_id;
+	std::string pending_load_path;
+	bool pending_show_error_dialogs;
 public:
 	std::string result_path;
 
