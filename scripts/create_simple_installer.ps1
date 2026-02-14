@@ -4,7 +4,7 @@
 
 param(
     [string]$SourceDir = "",
-    [string]$OutputDir = "C:\programming\substrata_output_qt\installers",
+    [string]$OutputDir = "C:\programming\substrata_output\installers",
     [string]$AppName = "Metasiberia Beta",
     [string]$Version = "",
     [ValidateSet("Release", "RelWithDebInfo")]
@@ -17,15 +17,31 @@ $ErrorActionPreference = "Stop"
 function Resolve-DefaultSourceDir {
     param([string]$PreferredConfig)
 
-    $base = "C:\programming\substrata_output_qt\vs2022\cyberspace_x64"
-    $preferred = Join-Path $base $PreferredConfig
-    if (Test-Path (Join-Path $preferred "gui_client.exe")) { return $preferred }
+    $outputRoots = New-Object System.Collections.Generic.List[string]
+    if (-not [string]::IsNullOrWhiteSpace($env:CYBERSPACE_OUTPUT)) {
+        $outputRoots.Add($env:CYBERSPACE_OUTPUT)
+    }
+
+    # Common local output roots (in order of preference).
+    $outputRoots.Add("C:\programming\substrata_output_qt")
+    $outputRoots.Add("C:\programming\substrata_output")
+    $outputRoots.Add("C:\programming\substrata_output_qt6")
+    $outputRoots.Add("C:\programming\substrata_output_sdl")
 
     $fallbackConfig = if ($PreferredConfig -eq "Release") { "RelWithDebInfo" } else { "Release" }
-    $fallback = Join-Path $base $fallbackConfig
-    if (Test-Path (Join-Path $fallback "gui_client.exe")) { return $fallback }
 
-    throw "Could not find gui_client.exe in '$preferred' or '$fallback'."
+    foreach ($root in $outputRoots) {
+        if ([string]::IsNullOrWhiteSpace($root)) { continue }
+
+        $base = Join-Path $root "vs2022\cyberspace_x64"
+        $preferred = Join-Path $base $PreferredConfig
+        if (Test-Path (Join-Path $preferred "gui_client.exe")) { return $preferred }
+
+        $fallback = Join-Path $base $fallbackConfig
+        if (Test-Path (Join-Path $fallback "gui_client.exe")) { return $fallback }
+    }
+
+    throw "Could not find gui_client.exe in any known output folder. Set -SourceDir explicitly if needed."
 }
 
 function Resolve-Version {

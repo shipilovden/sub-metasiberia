@@ -87,6 +87,7 @@ private slots:;
 	void on_actionTake_Screenshot_triggered();
 	void on_actionShow_Screenshot_Folder_triggered();
 	void on_actionAbout_Substrata_triggered();
+	void on_actionUpdate_triggered();
 	void on_actionOptions_triggered();
 	void on_actionUndo_triggered();
 	void on_actionRedo_triggered();

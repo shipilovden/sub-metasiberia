@@ -2888,6 +2888,13 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 }
 
 
+void MainWindow::on_actionUpdate_triggered()
+{
+	// Placeholder for update logic (implemented later).
+	QMessageBox::information(this, "Update", "Update is not implemented yet.");
+}
+
+
 void MainWindow::on_actionOptions_triggered()
 {
 	const std::string prev_audio_input_dev_name = QtUtils::toStdString(settings->value(MainOptionsDialog::inputDeviceNameKey(), "Default").toString());
