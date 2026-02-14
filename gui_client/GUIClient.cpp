@@ -8378,11 +8378,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		{
 			ModelLoadedThreadMessage* loaded_msg = checkedDowncastPtr<ModelLoadedThreadMessage>(msg);
 
-			// Decide whether we can use async VBO upload.  Check vertex and index buffers independently.
-			// Using total_geom_size_B here is too conservative and can push large meshes onto the sync path unnecessarily.
-			if(vbo_pool && index_vbo_pool &&
-				(loaded_msg->vert_data_size_B  <= vbo_pool->getLargestVBOSize()) &&
-				(loaded_msg->index_data_size_B <= index_vbo_pool->getLargestVBOSize()))
+			// Route to async upload queue only if geometry fits in the largest upload VBO.
+			// This matches the historical logic used when tuning for large models (e.g. College_glb).
+			if(vbo_pool && (loaded_msg->total_geom_size_B <= vbo_pool->getLargestVBOSize()))
 				async_model_loaded_messages_to_process.push_back(loaded_msg);
 			else
 				model_loaded_messages_to_process.push_back(loaded_msg);
