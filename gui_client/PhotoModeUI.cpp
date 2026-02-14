@@ -12,7 +12,9 @@ Copyright Glare Technologies Limited 2025 -
 #include "../shared/ImageDecoding.h"
 #include <graphics/jpegdecoder.h>
 #include <graphics/SRGBUtils.h>
+#include "HTTPClient.h"
 #include <networking/TLSSocket.h>
+#include <utils/Clock.h>
 #include <utils/StringUtils.h>
 #include <utils/PlatformUtils.h>
 #include <utils/FileChecksum.h>
@@ -175,7 +177,7 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Upload photo to the website";
+		args.tooltip = "Upload photo to Telegram (requires telegram settings)";
 		upload_photo_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Upload photo", Vec2f(0), args);
 		upload_photo_button->handler = this;
 		gl_ui->addWidget(upload_photo_button);
@@ -1018,8 +1020,128 @@ public:
 };
 
 
+static std::string getOptionalEnvVar(const char* name)
+{
+	try
+	{
+		if(PlatformUtils::isEnvironmentVariableDefined(name))
+			return PlatformUtils::getEnvironmentVariable(name);
+	}
+	catch(...) {}
+	return std::string();
+}
+
+
+class UploadPhotoToTelegramThread : public MessageableThread
+{
+public:
+	void doRun() override
+	{
+		try
+		{
+			if(bot_token.empty() || chat_id.empty())
+				throw glare::Exception("Telegram upload is not configured.");
+
+			// Load resource from disk
+			MemMappedFile file(upload_image_jpeg_path);
+
+			const std::string boundary =
+				"------------------------metasiberia_" + toString((uint64)Clock::getSecsSince1970()) + "_" + toString((uint64)(uintptr_t)this);
+
+			std::string body;
+			body.reserve(1024 + caption.size() + (size_t)file.fileSize());
+
+			auto appendField = [&](const char* name, const std::string& value)
+			{
+				body += "--" + boundary + "\r\n";
+				body += "Content-Disposition: form-data; name=\"";
+				body += name;
+				body += "\"\r\n\r\n";
+				body += value;
+				body += "\r\n";
+			};
+
+			appendField("chat_id", chat_id);
+			if(!caption.empty())
+				appendField("caption", caption);
+
+			// Photo part
+			body += "--" + boundary + "\r\n";
+			body += "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n";
+			body += "Content-Type: image/jpeg\r\n\r\n";
+			body.append((const char*)file.fileData(), (size_t)file.fileSize());
+			body += "\r\n--" + boundary + "--\r\n";
+
+			HTTPClientRef client = new HTTPClient();
+			client->additional_headers.push_back("User-Agent: Metasiberia client");
+
+			const std::string url = "https://api.telegram.org/bot" + bot_token + "/sendPhoto";
+
+			std::string response_body;
+			HTTPClient::ResponseInfo response = client->sendPost(
+				url,
+				body,
+				"multipart/form-data; boundary=" + boundary,
+				response_body
+			);
+
+			if(response.response_code != 200 || (response_body.find("\"ok\":true") == std::string::npos))
+			{
+				std::string snippet = response_body;
+				if(snippet.size() > 4000)
+					snippet = snippet.substr(0, 4000);
+				throw glare::Exception("Telegram API returned HTTP " + toString(response.response_code) + ". Response: " + snippet);
+			}
+
+			out_msg_queue->enqueue(new InfoMessage("Photo posted to Telegram"));
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("UploadPhotoToTelegramThread glare::Exception: " + e.what());
+			out_msg_queue->enqueue(new ErrorMessage("Telegram upload failed: " + e.what()));
+		}
+	}
+
+	std::string upload_image_jpeg_path;
+	std::string caption;
+	std::string bot_token;
+	std::string chat_id;
+	ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue = nullptr;
+};
+
+
 void PhotoModeUI::uploadPhoto()
 {
+	const bool telegram_enabled = settings->getBoolValue("telegram/upload_photo_enabled", /*default=*/true);
+
+	std::string bot_token = settings->getStringValue("telegram/bot_token", "");
+	if(bot_token.empty())
+		bot_token = getOptionalEnvVar("METASIBERIA_TELEGRAM_BOT_TOKEN");
+
+	std::string chat_id = settings->getStringValue("telegram/photo_upload_chat_id", "");
+	if(chat_id.empty())
+		chat_id = getOptionalEnvVar("METASIBERIA_TELEGRAM_PHOTO_CHAT_ID");
+
+	if(telegram_enabled)
+	{
+		if(bot_token.empty() || chat_id.empty())
+		{
+			gui_client->showErrorNotification("Telegram upload is not configured.  Set settings keys telegram/bot_token and telegram/photo_upload_chat_id (or env vars METASIBERIA_TELEGRAM_BOT_TOKEN and METASIBERIA_TELEGRAM_PHOTO_CHAT_ID).");
+			return;
+		}
+
+		Reference<UploadPhotoToTelegramThread> thread = new UploadPhotoToTelegramThread();
+		thread->caption = last_caption.substr(0, 1024); // Telegram caption limit for photos.
+		thread->upload_image_jpeg_path = upload_image_jpeg_path;
+		thread->bot_token = bot_token;
+		thread->chat_id = chat_id;
+		thread->out_msg_queue = &gui_client->msg_queue;
+
+		upload_thread_manager.addThread(thread);
+		return;
+	}
+
+	// Legacy upload-to-website path (Substrata protocol).  Kept for compatibility/tests.
 	const std::string username = gui_client->ui_interface->getUsernameForDomain(gui_client->server_hostname);
 	const std::string password = gui_client->ui_interface->getDecryptedPasswordForDomain(gui_client->server_hostname);
 
