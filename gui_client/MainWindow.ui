@@ -525,6 +525,24 @@
     </layout>
    </widget>
   </widget>
+  <widget class="QDockWidget" name="avatarSettingsDockWidget">
+   <property name="visible">
+    <bool>false</bool>
+   </property>
+   <property name="windowTitle">
+    <string>Avatar Settings</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number>
+   </attribute>
+   <widget class="QWidget" name="avatarSettingsDockWidgetContents">
+    <layout class="QVBoxLayout" name="verticalLayout_avatarSettings">
+     <item>
+      <widget class="AvatarSettingsDialog" name="avatarSettingsWidget" native="true"/>
+     </item>
+    </layout>
+   </widget>
+  </widget>
   <action name="actionAvatarSettings">
    <property name="text">
     <string>Avatar Settings</string>
@@ -927,6 +945,12 @@
    <class>WorldSettingsWidget</class>
    <extends>QWidget</extends>
    <header>WorldSettingsWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>AvatarSettingsDialog</class>
+   <extends>QWidget</extends>
+   <header>AvatarSettingsDialog.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
