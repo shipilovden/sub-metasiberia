@@ -9,6 +9,9 @@ endif()
 include(../cmake/shared_settings.cmake)
 include(../cmake/shared_cxx_settings.cmake)
 
+# Needed for webcam/* headers that are included as "webcam/..." from within gui_client/webcam sources.
+include_directories(${CMAKE_SOURCE_DIR}/gui_client)
+
 if(NOT EMSCRIPTEN)
 	include(../cmake/winter.cmake)
 endif()
@@ -93,6 +96,12 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client TerrainSpecSectionWidget)
 	addMocFileRule(gui_client WorldSettingsWidget)
 	addMocFileRule(gui_client CreateObjectsDialog)
+
+	# Webcam Qt UI (Qt Multimedia).  Not built for SDL configurations.
+	addMocFileRule(gui_client/webcam WebcamWindow)
+	addMocFileRule(gui_client/webcam WebcamVideoView)
+	addMocFileRule(gui_client/webcam WebcamControlPanel)
+	addMocFileRule(gui_client/webcam WebcamSettingsDialog)
 
 	addMocFileRule(qt FileSelectWidget)
 	addMocFileRule(qt RealControl)
@@ -253,8 +262,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/URLParser.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.h
 ${CMAKE_SOURCE_DIR}/gui_client/VehiclePhysics.h
-${CMAKE_SOURCE_DIR}/gui_client/WebcamCapture.cpp
-${CMAKE_SOURCE_DIR}/gui_client/WebcamCapture.h
+${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.cpp
+${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.h
 ${CMAKE_SOURCE_DIR}/gui_client/WebViewData.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/WebViewData.h
 ${CMAKE_SOURCE_DIR}/gui_client/WinterShaderEvaluator.cpp
@@ -387,6 +396,16 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.ui
+
+		# Webcam Qt UI (Qt Multimedia).  Not built for SDL configurations.
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.h
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamVideoView.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamVideoView.h
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamControlPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamControlPanel.h
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamSettingsDialog.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamSettingsDialog.h
 	)
 endif()
 
@@ -426,6 +445,12 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_TerrainSpecSectionWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_WorldSettingsWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_CreateObjectsDialog.cpp
+
+	# Webcam Qt UI (Qt Multimedia)
+	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamControlPanel.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamVideoView.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
 
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AddObjectDialog.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h
@@ -1294,12 +1319,16 @@ elseif(WIN32)
 			optimized Qt5Core
 			optimized Qt5OpenGL
 			optimized Qt5Widgets
+			optimized Qt5Multimedia
+			optimized Qt5MultimediaWidgets
 			optimized Qt5Gamepad
 			debug qtmaind
 			debug Qt5Guid
 			debug Qt5Cored
 			debug Qt5OpenGLd
 			debug Qt5Widgetsd
+			debug Qt5Multimediad
+			debug Qt5MultimediaWidgetsd
 			debug Qt5Gamepadd
 		)
 	endif()
@@ -1400,6 +1429,7 @@ else() # linux
 		Qt5OpenGL
 		Qt5Widgets
 		Qt5Multimedia
+		Qt5MultimediaWidgets
 		Qt5Network
 		Qt5Gamepad
 		dl

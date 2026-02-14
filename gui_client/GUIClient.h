@@ -18,7 +18,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "HeadUpDisplayUI.h"
 #include "PhotoModeUI.h"
 #include "ChatUI.h"
-#include "WebcamCapture.h"
+#include "webcam/WebcamCapture.h"
 #include "DownloadingResourceQueue.h"
 #include "LoadItemQueue.h"
 #include "MeshManager.h"

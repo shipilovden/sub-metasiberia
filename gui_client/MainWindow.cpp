@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "UpdateDialog.h"
 #include "UpdateManager.h"
 #include "CreateObjectsDialog.h"
+#include "webcam/WebcamWindow.h"
 #include "ClientThread.h"
 #include "GoToPositionDialog.h"
 #include "LogWindow.h"
@@ -145,7 +146,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	user_details(NULL),
 	ui(NULL),
 	minidump_sender(NULL),
-	update_manager(NULL)
+	update_manager(NULL),
+	webcam_window(NULL)
 	//game_controller(NULL)
 {
 	ZoneScoped; // Tracy profiler
@@ -234,6 +236,25 @@ void MainWindow::initialiseUI()
 		ZoneScopedN("setupUi"); // Tracy profiler
 		ui = new Ui::MainWindow();
 		ui->setupUi(this);
+	}
+
+	// Replace webcam dock content with full WebcamWindow (camera list, settings, etc.) before restoreState.
+	// If it fails for any reason, keep the existing simple webcam UI (label + checkbox) as a fallback.
+	webcam_window = NULL;
+	try
+	{
+		webcam_window = new WebcamWindow(this);
+		ui->webcamDockWidget->setWidget(webcam_window);
+	}
+	catch(glare::Exception& e)
+	{
+		logMessage("Webcam window init failed: " + std::string(e.what()) + " (using simple webcam UI)");
+		webcam_window = NULL;
+	}
+	catch(...)
+	{
+		logMessage("Webcam window init failed (unknown exception) (using simple webcam UI)");
+		webcam_window = NULL;
 	}
 
 	setAcceptDrops(true);
@@ -1128,8 +1149,9 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	mouse_cursor_state.ctrl_key_down = ctrl_key_down;
 	gui_client.timerEvent(mouse_cursor_state);
 
-	// Update webcam dock (Qt).  Actual capture/update runs inside GUIClient::timerEvent().
-	if(ui->webcamDockWidget->isVisible())
+	// Update webcam dock (Qt).
+	// Legacy path only (simple UI).  If WebcamWindow is active, it owns its own preview.
+	if(!webcam_window && ui->webcamDockWidget->isVisible())
 	{
 		if(ui->webcamEnableCheckBox->isChecked())
 		{
@@ -2930,6 +2952,10 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 
 void MainWindow::on_webcamEnableCheckBox_toggled(bool checked)
 {
+	// If the full WebcamWindow is active, it owns capture and UI.
+	if(webcam_window)
+		return;
+
 	// Keep capture state in sync with checkbox state.
 	gui_client.setWebcamEnabled(checked);
 
@@ -2949,8 +2975,13 @@ void MainWindow::setWebcamWindowVisible(bool visible)
 	ui->webcamDockWidget->setVisible(visible);
 
 	// If user hides the dock, stop capturing to avoid background CPU usage.
-	if(!visible && ui->webcamEnableCheckBox)
-		ui->webcamEnableCheckBox->setChecked(false);
+	if(!visible)
+	{
+		if(webcam_window)
+			webcam_window->setWebcamEnabled(false);
+		else if(ui->webcamEnableCheckBox)
+			ui->webcamEnableCheckBox->setChecked(false);
+	}
 }
 
 

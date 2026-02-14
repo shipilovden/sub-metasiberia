@@ -35,7 +35,7 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	plugins_path = "#{qt_dir}/plugins"
 	
 	# Qt dlls.
-	dll_files = ["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Gamepad"]
+	dll_files = ["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Gamepad", "Qt5Multimedia", "Qt5MultimediaWidgets"]
 
 		
 	dll_files.each do |dll_file|
@@ -87,6 +87,23 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	
 	FileUtils.cp("#{gamepads_dir}/xinputgamepad.dll",  gamepads_dir_target_dir, :verbose => true) if !copy_debug
 	FileUtils.cp("#{gamepads_dir}/xinputgamepadd.dll", gamepads_dir_target_dir, :verbose => true) if copy_debug
+
+	# Multimedia services (needed for webcam / camera support).
+	mediaservice_dir = "#{plugins_path}/mediaservice"
+	mediaservice_target_dir = "#{target_dir}/mediaservice"
+	if File.directory?(mediaservice_dir)
+		FileUtils.mkdir_p(mediaservice_target_dir, :verbose => true)
+
+		Dir.glob("#{mediaservice_dir}/*.dll").each do |path|
+			name = File.basename(path)
+			if copy_debug
+				next if !name.end_with?("d.dll")
+			else
+				next if name.end_with?("d.dll")
+			end
+			FileUtils.cp(path, mediaservice_target_dir, :verbose => true)
+		end
+	end
 
 	# copyVCRedist(vs_version, platforms_dir_target_dir, false)
 end
