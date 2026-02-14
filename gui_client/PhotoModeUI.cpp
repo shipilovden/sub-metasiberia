@@ -1133,22 +1133,60 @@ static void throwVKErrorIfPresent(const JSONParser& parser, const JSONNode& root
 }
 
 
-static uint64 parseVKGroupIdFromScreenName(const std::string& access_token, const std::string& screen_name)
+static std::string makeVKMethodURL(const std::string& api_host, const char* method_name)
 {
-	// Resolve group id via groups.getById.  Requires only a valid access token.
-	HTTPClientRef client = new HTTPClient();
-	client->additional_headers.push_back("User-Agent: Metasiberia client");
+	if(api_host.empty())
+		return std::string("https://api.vk.ru/method/") + method_name;
 
-	const std::string url =
-		"https://api.vk.com/method/groups.getById?"
-		"group_id=" + web::Escaping::URLEscape(screen_name) +
-		"&access_token=" + web::Escaping::URLEscape(access_token) +
-		"&v=5.131";
+	// Allow passing full base URL like "https://api.vk.ru" just in case.
+	const bool has_scheme = (api_host.find("://") != std::string::npos);
+	const std::string base = has_scheme ? api_host : ("https://" + api_host);
+	return base + "/method/" + method_name;
+}
+
+static std::string makeFormBody(const std::vector<std::pair<std::string, std::string>>& params)
+{
+	std::string body;
+	body.reserve(params.size() * 32);
+
+	for(size_t i=0; i<params.size(); ++i)
+	{
+		if(i > 0)
+			body += "&";
+		body += web::Escaping::URLEscape(params[i].first);
+		body += "=";
+		body += web::Escaping::URLEscape(params[i].second);
+	}
+
+	return body;
+}
+
+static std::string vkCallPOST(HTTPClient& client, const std::string& api_host, const char* method_name, const std::vector<std::pair<std::string, std::string>>& params)
+{
+	const std::string url = makeVKMethodURL(api_host, method_name);
+	const std::string body = makeFormBody(params);
 
 	std::string response_body;
-	HTTPClient::ResponseInfo resp = client->downloadFile(url, response_body);
+	HTTPClient::ResponseInfo resp = client.sendPost(url, body, "application/x-www-form-urlencoded", response_body);
 	if(resp.response_code != 200)
-		throw glare::Exception("VK API returned HTTP " + toString(resp.response_code) + ". Response: " + safeSnippet(response_body, 2000));
+		throw glare::Exception(std::string("VK API ") + method_name + " returned HTTP " + toString(resp.response_code) + ". Response: " + safeSnippet(response_body, 2000));
+
+	return response_body;
+}
+
+
+static uint64 parseVKGroupIdFromScreenName(HTTPClient& client, const std::string& api_host, const std::string& api_version, const std::string& screen_name)
+{
+	// Resolve group id via groups.getById.  Requires a valid access token (supplied via Authorization header).
+	const std::string response_body = vkCallPOST(
+		client,
+		api_host,
+		"groups.getById",
+		{
+			{"group_id", screen_name},
+			{"v", api_version},
+		}
+	);
 
 	JSONParser parser;
 	parser.parseBuffer(response_body.c_str(), response_body.size());
@@ -1174,27 +1212,31 @@ public:
 			if(access_token.empty())
 				throw glare::Exception("VK upload is not configured.");
 
+			const std::string use_api_host = api_host.empty() ? "api.vk.ru" : api_host;
+			const std::string use_api_version = api_version.empty() ? "5.199" : api_version;
+
 			uint64 use_group_id = group_id;
-			if(use_group_id == 0 && !group_screen_name.empty())
-				use_group_id = parseVKGroupIdFromScreenName(access_token, group_screen_name);
-			if(use_group_id == 0)
-				throw glare::Exception("VK upload is not configured (missing vk/group_id or vk/group_screen_name).");
 
 			HTTPClientRef client = new HTTPClient();
 			client->additional_headers.push_back("User-Agent: Metasiberia client");
+			client->additional_headers.push_back("Authorization: Bearer " + access_token);
+
+			if(use_group_id == 0 && !group_screen_name.empty())
+				use_group_id = parseVKGroupIdFromScreenName(*client, use_api_host, use_api_version, group_screen_name);
+			if(use_group_id == 0)
+				throw glare::Exception("VK upload is not configured (missing vk/group_id or vk/group_screen_name).");
 
 			// 1) Get upload server
 			{
-				const std::string url =
-					"https://api.vk.com/method/photos.getWallUploadServer?"
-					"group_id=" + toString(use_group_id) +
-					"&access_token=" + web::Escaping::URLEscape(access_token) +
-					"&v=5.131";
-
-				std::string response_body;
-				HTTPClient::ResponseInfo resp = client->downloadFile(url, response_body);
-				if(resp.response_code != 200)
-					throw glare::Exception("VK API photos.getWallUploadServer returned HTTP " + toString(resp.response_code) + ". Response: " + safeSnippet(response_body, 2000));
+				const std::string response_body = vkCallPOST(
+					*client,
+					use_api_host,
+					"photos.getWallUploadServer",
+					{
+						{"group_id", toString(use_group_id)},
+						{"v", use_api_version},
+					}
+				);
 
 				JSONParser parser;
 				parser.parseBuffer(response_body.c_str(), response_body.size());
@@ -1253,19 +1295,18 @@ public:
 			// 3) Save wall photo
 			std::string attachment;
 			{
-				const std::string url =
-					"https://api.vk.com/method/photos.saveWallPhoto?"
-					"group_id=" + toString(use_group_id) +
-					"&server=" + toString(server) +
-					"&photo=" + web::Escaping::URLEscape(photo) +
-					"&hash=" + web::Escaping::URLEscape(hash) +
-					"&access_token=" + web::Escaping::URLEscape(access_token) +
-					"&v=5.131";
-
-				std::string response_body;
-				HTTPClient::ResponseInfo resp = client->downloadFile(url, response_body);
-				if(resp.response_code != 200)
-					throw glare::Exception("VK API photos.saveWallPhoto returned HTTP " + toString(resp.response_code) + ". Response: " + safeSnippet(response_body, 2000));
+				const std::string response_body = vkCallPOST(
+					*client,
+					use_api_host,
+					"photos.saveWallPhoto",
+					{
+						{"group_id", toString(use_group_id)},
+						{"server", toString(server)},
+						{"photo", photo},
+						{"hash", hash},
+						{"v", use_api_version},
+					}
+				);
 
 				JSONParser parser;
 				parser.parseBuffer(response_body.c_str(), response_body.size());
@@ -1289,19 +1330,18 @@ public:
 			// 4) Post to wall
 			{
 				const int owner_id = -(int)use_group_id;
-				const std::string url =
-					"https://api.vk.com/method/wall.post?"
-					"owner_id=" + toString(owner_id) +
-					"&from_group=1" +
-					"&message=" + web::Escaping::URLEscape(message) +
-					"&attachments=" + web::Escaping::URLEscape(attachment) +
-					"&access_token=" + web::Escaping::URLEscape(access_token) +
-					"&v=5.131";
-
-				std::string response_body;
-				HTTPClient::ResponseInfo resp = client->downloadFile(url, response_body);
-				if(resp.response_code != 200)
-					throw glare::Exception("VK API wall.post returned HTTP " + toString(resp.response_code) + ". Response: " + safeSnippet(response_body, 2000));
+				const std::string response_body = vkCallPOST(
+					*client,
+					use_api_host,
+					"wall.post",
+					{
+						{"owner_id", toString(owner_id)},
+						{"from_group", "1"},
+						{"message", message},
+						{"attachments", attachment},
+						{"v", use_api_version},
+					}
+				);
 
 				JSONParser parser;
 				parser.parseBuffer(response_body.c_str(), response_body.size());
@@ -1323,6 +1363,8 @@ public:
 	std::string access_token;
 	uint64 group_id = 0;
 	std::string group_screen_name;
+	std::string api_host;
+	std::string api_version;
 	ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue = nullptr;
 
 private:
@@ -1544,6 +1586,14 @@ void PhotoModeUI::uploadPhoto()
 	if(vk_group_screen_name.empty())
 		vk_group_screen_name = getOptionalEnvVar("METASIBERIA_VK_GROUP_SCREEN_NAME");
 
+	std::string vk_api_host = settings->getStringValue("vk/api_host", "api.vk.ru");
+	if(vk_api_host.empty())
+		vk_api_host = getOptionalEnvVar("METASIBERIA_VK_API_HOST");
+
+	std::string vk_api_version = settings->getStringValue("vk/api_version", "5.199");
+	if(vk_api_version.empty())
+		vk_api_version = getOptionalEnvVar("METASIBERIA_VK_API_VERSION");
+
 	if(vk_enabled)
 	{
 		if(vk_token.empty())
@@ -1562,6 +1612,8 @@ void PhotoModeUI::uploadPhoto()
 			thread->access_token = vk_token;
 			thread->group_id = vk_group_id;
 			thread->group_screen_name = vk_group_screen_name;
+			thread->api_host = vk_api_host;
+			thread->api_version = vk_api_version;
 			thread->out_msg_queue = &gui_client->msg_queue;
 
 			upload_thread_manager.addThread(thread);
