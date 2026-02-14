@@ -299,7 +299,7 @@ void GUIClient::preConnectInitialise(const std::string& cache_dir_, const Refere
 {
 	ZoneScoped; // Tracy profiler
 
-	conPrint("Substrata version " + cyberspace_version);
+	conPrint("Metasiberia Beta version " + cyberspace_version);
 
 	cache_dir = cache_dir_;
 	settings = settings_store_;
@@ -8750,7 +8750,10 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		break;
 		case Msg_ClientProtocolTooOldMessage:
 		{
-			ui_interface->showHTMLMessageBox("Client too old", "<p>Sorry, your Substrata client is too old.</p><p>Please download and install an updated client from <a href=\"https://substrata.info/\">substrata.info</a></p>");
+			ui_interface->showHTMLMessageBox("Client too old",
+				"<p>Sorry, your Metasiberia client is too old.</p>"
+				"<p>Please use <b>Help -> Update</b> or download and install the latest version from "
+				"<a href=\"https://github.com/shipilovden/substrata-metasiberia/releases\">GitHub Releases</a>.</p>");
 		}
 		break;
 		case Msg_ClientDisconnectedFromServerMessage:

@@ -193,7 +193,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 static std::string computeWindowTitle()
 {
-	return "Substrata v" + ::cyberspace_version;
+	return "Metasiberia Beta v" + ::cyberspace_version;
 }
 
 
@@ -4609,8 +4609,8 @@ int main(int argc, char *argv[])
 
 		// BugSplat initialization.
 		minidump_sender = new MiniDmpSender(
-			L"Substrata", // database
-			L"Substrata", // app
+			L"Metasiberia", // database
+			L"Metasiberia Beta", // app
 			StringUtils::UTF8ToPlatformUnicodeEncoding(cyberspace_version).c_str(), // version
 			NULL, // app identifier
 			MDSF_USEGUARDMEMORY | MDSF_LOGFILE | MDSF_PREVENTHIJACKING // flags
@@ -4751,8 +4751,8 @@ int main(int argc, char *argv[])
 		else if(parsed_args.isArgPresent("-linku"))
 		{
 #if defined(_WIN32)
-			// If we already have a Substrata application open on this computer, we want to tell that one to go to the URL, instead of opening another Substrata.
-			// Search for an already existing Window called "Substrata vx.y"
+			// If we already have a Metasiberia application open on this computer, we want to tell that one to go to the URL, instead of opening another instance.
+			// Search for an already existing Window called "Metasiberia Beta vx.y"
 			// If it exists, send a Windows message to that process, telling it to open the URL, and return from this process.
 			// TODO: work out how to do this on Mac and Linux, if it's needed.
 			const std::string target_window_title = computeWindowTitle();
