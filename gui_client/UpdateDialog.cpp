@@ -245,7 +245,8 @@ void UpdateDialog::onDownloadClicked()
 	cancel_requested = false;
 
 	dl_client = new HTTPClient();
-	dl_client->user_agent = "metasiberia-client";
+	// Keep explicit header (works even if user_agent isn't used for GET on some builds).
+	dl_client->additional_headers.push_back("User-Agent: metasiberia-client");
 	dl_client->additional_headers.push_back("Accept: */*");
 
 	const std::string url = std::string(asset.url.toString().toUtf8().constData());
