@@ -68,6 +68,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/Exception.h"
 #include "../utils/TaskManager.h"
 #include "../utils/SocketBufferOutStream.h"
+#include "../utils/BufferOutStream.h"
 #include "../utils/StringUtils.h"
 #include "../utils/FileUtils.h"
 #include "../utils/FileChecksum.h"
@@ -75,6 +76,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/OpenSSL.h"
 #include "../utils/CryptoRNG.h"
 #include "../utils/FileInStream.h"
+#include "../utils/BufferViewInStream.h"
 #include "../utils/IncludeXXHash.h"
 #include "../utils/IndigoXMLDoc.h"
 #include "../utils/FastPoolAllocator.h"
@@ -328,6 +330,71 @@ void GUIClient::preConnectInitialise(const std::string& cache_dir_, const Refere
 }
 
 
+namespace
+{
+static std::string gestureSettingsLocalDirPath(const std::string& appdata_path)
+{
+	return appdata_path + "/gesture_settings";
+}
+
+
+static std::string gestureSettingsLocalPathForUser(const std::string& appdata_path, const std::string& server_hostname, const UserID& user_id)
+{
+	if(!user_id.valid())
+		return std::string();
+
+	const std::string use_host = server_hostname.empty() ? "unknown_host" : FileUtils::makeOSFriendlyFilename(server_hostname);
+
+	return gestureSettingsLocalDirPath(appdata_path) + "/" + use_host + "_user_" + toString(user_id.value()) + ".bin";
+}
+
+
+static bool tryLoadGestureSettingsFromDisk(const std::string& path, GestureSettings& settings_out)
+{
+	try
+	{
+		if(path.empty() || !FileUtils::fileExists(path))
+			return false;
+
+		std::vector<unsigned char> file_data;
+		FileUtils::readEntireFile(path, file_data);
+
+		BufferViewInStream in_stream(ArrayRef<uint8>((const uint8*)file_data.data(), file_data.size()));
+		readGestureSettingsFromStream(in_stream, settings_out);
+		return true;
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("WARNING: failed to load gesture settings from '" + path + "': " + e.what());
+		return false;
+	}
+}
+
+
+static void trySaveGestureSettingsToDisk(const std::string& path, const GestureSettings& settings)
+{
+	try
+	{
+		if(path.empty())
+			return;
+
+		const std::string dir = FileUtils::getDirectory(path);
+		if(!dir.empty())
+			FileUtils::createDirIfDoesNotExist(dir);
+
+		BufferOutStream out_stream;
+		settings.writeToStream(out_stream);
+
+		FileUtils::writeEntireFileAtomically(path, (const char*)out_stream.buf.data(), out_stream.buf.size());
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("WARNING: failed to save gesture settings to '" + path + "': " + e.what());
+	}
+}
+} // end anonymous namespace
+
+
 // These animations will be included in both the web and native distributions.
 static const char* movement_anim_names[] = {
 	"Idle",
@@ -389,6 +456,22 @@ void GUIClient::postConnectInitialise()
 	// Add built-in animations as external resources
 	for(size_t i=0; i<staticArrayNumElems(movement_anim_names); ++i)
 		resource_manager->addExternalResource(/*URL=*/URLString(movement_anim_names[i]) + ".subanim", /*local (abs) path=*/resources_dir_path + "/animations/" + std::string(movement_anim_names[i]) + ".subanim");
+
+	// Add built-in gesture animations as external resources.
+	// These are shipped with the client (see resources/animations).  This avoids needing the server to host the default gesture anim files.
+	{
+		const GestureSettings default_gesture_settings = GestureSettings::defaultGestureSettings();
+		for(size_t i=0; i<default_gesture_settings.gesture_settings.size(); ++i)
+		{
+			const URLString& anim_URL = default_gesture_settings.gesture_settings[i].anim_URL;
+			if(anim_URL.empty())
+				continue;
+
+			const std::string local_anim_path = resources_dir_path + "/animations/" + toStdString(anim_URL);
+			if(FileUtils::fileExists(local_anim_path))
+				resource_manager->addExternalResource(/*URL=*/anim_URL, /*local (abs) path=*/local_anim_path);
+		}
+	}
 
 
 	// Add capsule mesh resource (used for audio objects)
@@ -1661,10 +1744,6 @@ void GUIClient::handleDownloadedAnimationResource(const std::string local_path, 
 {
 	conPrint("GUIClient::handleDownloadedAnimationResource(): local_path: " + local_path);
 
-	const std::string gesture_name = toStdString(::removeDotAndExtension(resource->URL));
-
-	conPrint("gesture_name: " + gesture_name);
-
 	// Iterate over avatars, peform gesture for any avatars that were waiting for the gesture anim to download.
 	{
 		Lock lock(this->world_state->mutex);
@@ -1672,7 +1751,7 @@ void GUIClient::handleDownloadedAnimationResource(const std::string local_path, 
 		for(auto it = this->world_state->avatars.begin(); it != this->world_state->avatars.end(); ++it)
 		{
 			Avatar* av = it->second.getPointer();
-			if(av->graphics.pending_gesture_name == gesture_name)
+			if(!av->graphics.pending_gesture_URL.empty() && (av->graphics.pending_gesture_URL == resource->URL))
 			{
 				const double cur_time = Clock::getTimeSinceInit();
 				av->graphics.performPendingGesture(cur_time, animation_manager, *resource_manager);
@@ -8747,7 +8826,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 			if(m->avatar_uid != client_avatar_uid) // Ignore messages about our own avatar
 			{
-				const URLString anim_resource_URL = URLString(m->gesture_name) + ".subanim";
+				const URLString anim_resource_URL = m->gesture_URL.empty() ? (URLString(m->gesture_name) + ".subanim") : m->gesture_URL;
+				const bool animate_head = BitUtils::isBitSet(m->flags, SingleGestureSettings::FLAG_ANIMATE_HEAD);
+				const bool loop_anim    = BitUtils::isBitSet(m->flags, SingleGestureSettings::FLAG_LOOP);
 				if(resource_manager->isFileForURLPresent(anim_resource_URL))
 				{
 					if(world_state)
@@ -8758,7 +8839,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						if(res != this->world_state->avatars.end())
 						{
 							Avatar* avatar = res->second.getPointer();
-							avatar->graphics.performGesture(cur_time, m->gesture_name, GestureUI::animateHead(m->gesture_name), GestureUI::loopAnim(m->gesture_name), animation_manager, *resource_manager);
+							avatar->graphics.performGesture(cur_time, m->gesture_name, anim_resource_URL, animate_head, loop_anim, animation_manager, *resource_manager);
 						}
 					}
 				}
@@ -8770,6 +8851,18 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 					info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(2.f, /*importance_factor=*/1.f);
 					info.used_by_other = true;
 					startDownloadingResource(anim_resource_URL, /*centroid_ws=*/cam_controller.getPosition().toVec4fPoint(), 2.f, info);
+
+					// Play once the animation is downloaded.
+					if(world_state.nonNull())
+					{
+						Lock lock(this->world_state->mutex);
+						auto res = this->world_state->avatars.find(m->avatar_uid);
+						if(res != this->world_state->avatars.end())
+						{
+							Avatar* avatar = res->second.getPointer();
+							avatar->graphics.setPendingGesture(m->gesture_name, anim_resource_URL, animate_head, loop_anim);
+						}
+					}
 				}
 			}
 		}
@@ -8875,9 +8968,24 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 			misc_info_ui.showLoggedInButton(m->username);
 
-			// If this server has sent the user's custom gesture settings, update the gesture UI with them.
-			if(!m->gesture_settings.gesture_settings.empty())
-				gesture_ui.setCurrentGestureSettings(m->gesture_settings);
+			// Prefer locally saved gesture settings (so they persist across reboots on this client).
+			// If none exist, fall back to server-provided settings.  Finally fall back to defaults.
+			{
+				const std::string local_gesture_settings_path = gestureSettingsLocalPathForUser(appdata_path, server_hostname, logged_in_user_id);
+
+				GestureSettings local_settings;
+				if(tryLoadGestureSettingsFromDisk(local_gesture_settings_path, local_settings) && !local_settings.gesture_settings.empty())
+				{
+					gesture_ui.setCurrentGestureSettings(local_settings);
+				}
+				else if(!m->gesture_settings.gesture_settings.empty())
+				{
+					gesture_ui.setCurrentGestureSettings(m->gesture_settings);
+					trySaveGestureSettingsToDisk(local_gesture_settings_path, m->gesture_settings);
+				}
+				else
+					gesture_ui.setCurrentGestureSettings(GestureSettings::defaultGestureSettings());
+			}
 
 
 			// Send AvatarFullUpdate message, to change the nametag on our avatar.
@@ -8908,6 +9016,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 			misc_info_ui.showLogInAndSignUpButtons();
 
+			// Logged-out users can't add/enable gestures, so reset to defaults.
+			gesture_ui.setCurrentGestureSettings(GestureSettings::defaultGestureSettings());
+
 			// Send AvatarFullUpdate message, to change the nametag on our avatar.
 			const Vec3d cam_angles = this->cam_controller.getAvatarAngles();
 			Avatar avatar;
@@ -8934,6 +9045,13 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->logged_in_user_flags = 0;
 
 			misc_info_ui.showLoggedInButton(m->username);
+
+			// New users start with default gesture settings locally.
+			{
+				const GestureSettings defaults = GestureSettings::defaultGestureSettings();
+				gesture_ui.setCurrentGestureSettings(defaults);
+				trySaveGestureSettingsToDisk(gestureSettingsLocalPathForUser(appdata_path, server_hostname, logged_in_user_id), defaults);
+			}
 
 			// Send AvatarFullUpdate message, to change the nametag on our avatar.
 			const Vec3d cam_angles = this->cam_controller.getAvatarAngles();
@@ -14973,14 +15091,19 @@ void GUIClient::reloadShaders()
 
 void GUIClient::performGestureClicked(const std::string& gesture_name, const URLString& anim_resource_URL, bool animate_head, bool loop_anim)
 {
+	if(!this->logged_in_user_id.valid())
+	{
+		showErrorNotification("You must be logged in to perform gestures.");
+		return;
+	}
+
 	const double cur_time = Clock::getTimeSinceInit(); // Used for animation, interpolation etc..
 
 	// Change camera view to third person if it's not already, so we can see the gesture
 	ui_interface->enableThirdPersonCameraIfNotAlreadyEnabled();
+	const URLString use_anim_resource_URL = anim_resource_URL.empty() ? (URLString(gesture_name) + ".subanim") : anim_resource_URL;
 
-	const URLString anim_resource_URL = URLString(gesture_name) + ".subanim";
-
-	if(resource_manager->isFileForURLPresent(anim_resource_URL))
+	if(resource_manager->isFileForURLPresent(use_anim_resource_URL))
 	{
 		Lock lock(this->world_state->mutex);
 
@@ -14988,7 +15111,7 @@ void GUIClient::performGestureClicked(const std::string& gesture_name, const URL
 		{
 			Avatar* av = it->second.getPointer();
 			if(av->isOurAvatar())
-				av->graphics.performGesture(cur_time, gesture_name, animate_head, loop_anim, animation_manager, *resource_manager);
+				av->graphics.performGesture(cur_time, gesture_name, use_anim_resource_URL, animate_head, loop_anim, animation_manager, *resource_manager);
 		}
 	}
 	else
@@ -14999,7 +15122,7 @@ void GUIClient::performGestureClicked(const std::string& gesture_name, const URL
 			info.pos = cam_controller.getPosition();
 			info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(2.f, /*importance_factor=*/1.f);
 			info.used_by_other = true;
-			startDownloadingResource(anim_resource_URL, /*centroid_ws=*/cam_controller.getPosition().toVec4fPoint(), 2.f, info);
+			startDownloadingResource(use_anim_resource_URL, /*centroid_ws=*/cam_controller.getPosition().toVec4fPoint(), 2.f, info);
 		}
 
 		// Set a variable on the avatar so we know to start playing the gesture when the animation file is downloaded.
@@ -15009,7 +15132,7 @@ void GUIClient::performGestureClicked(const std::string& gesture_name, const URL
 			{
 				Avatar* av = it->second.getPointer();
 				if(av->isOurAvatar())
-					av->graphics.setPendingGesture(gesture_name, animate_head, loop_anim);
+					av->graphics.setPendingGesture(gesture_name, use_anim_resource_URL, animate_head, loop_anim);
 			}
 		}
 	}
@@ -15021,7 +15144,7 @@ void GUIClient::performGestureClicked(const std::string& gesture_name, const URL
 		MessageUtils::initPacket(scratch_packet, Protocol::AvatarPerformGesture);
 		writeToStream(this->client_avatar_uid, scratch_packet);
 		scratch_packet.writeStringLengthFirst(gesture_name);
-		scratch_packet.writeStringLengthFirst(anim_resource_URL);
+		scratch_packet.writeStringLengthFirst(use_anim_resource_URL);
 		scratch_packet.writeUInt32(flags);
 
 		enqueueMessageToSend(*this->client_thread, scratch_packet);
@@ -15523,11 +15646,14 @@ void GUIClient::goBack()
 
 void GUIClient::gestureSettingsChanged(const GestureSettings& new_gesture_settings)
 {
-	// Send UserGestureSettingsChanged message to server
-	MessageUtils::initPacket(scratch_packet, Protocol::UserGestureSettingsChanged);
-	new_gesture_settings.writeToStream(scratch_packet);
-	enqueueMessageToSend(*client_thread, scratch_packet);
+	if(!this->logged_in_user_id.valid())
+	{
+		showErrorNotification("You must be logged in to add/enable gestures.");
+		return;
+	}
 
+	// Persist gesture settings locally so they survive client reboots.
+	trySaveGestureSettingsToDisk(gestureSettingsLocalPathForUser(appdata_path, server_hostname, logged_in_user_id), new_gesture_settings);
 
 	// Update gesture UI.
 	gesture_ui.setCurrentGestureSettings(new_gesture_settings);

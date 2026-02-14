@@ -32,8 +32,11 @@ Copyright Glare Technologies Limited 2022 -
 #include "../server/ServerWorldState.h"
 #include "../server/UserWebSession.h"
 #include "../server/SubEthTransaction.h"
+#include "../shared/GestureSettings.h"
 #include "../ethereum/Signing.h"
 #include "../ethereum/Infura.h"
+#include <FileUtils.h>
+#include <algorithm>
 
 
 namespace AccountHandlers
@@ -174,6 +177,8 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 
 		page += "<h2>Account</h2>\n";
 		page += "<a href=\"/change_password\">Change password</a>";
+		page += "<br/>";
+		page += "<a href=\"/account_gestures\">Gestures</a>";
 
 
 		page += "<h2>Developer</h2>\n";
@@ -185,6 +190,262 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 	page += WebServerResponseUtils::standardFooter(request, /*include_email_link=*/true);
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+}
+
+
+static std::string escapeAndQuote(const std::string& s)
+{
+	return "\"" + web::Escaping::HTMLEscape(s) + "\"";
+}
+
+
+void renderGestureSettingsPage(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	std::string page;
+
+	{ // lock scope
+		WorldStateLock lock(world_state.mutex);
+
+		const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+		if(logged_in_user == NULL)
+		{
+			page += WebServerResponseUtils::standardHTMLHeader(*world_state.web_data_store, request, "Gestures");
+			page += "You must be logged in to manage gestures.";
+			page += WebServerResponseUtils::standardFooter(request, /*include_email_link=*/true);
+			web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+			return;
+		}
+
+		page += WebServerResponseUtils::standardHeader(world_state, request, /*page title=*/"Gestures");
+		page += "<div class=\"main\">   \n";
+
+		const std::string msg_for_user = world_state.getAndRemoveUserWebMessage(logged_in_user->id);
+		if(!msg_for_user.empty())
+			page += "<div class=\"msg\">" + web::Escaping::HTMLEscape(msg_for_user) + "</div>  \n";
+
+		page += "<p><a href=\"/account\">Back to account</a></p>\n";
+
+		page += "<h2>Your gestures</h2>\n";
+		page += "<p>Note: gesture name should match the animation name stored inside the <code>.subanim</code> file.</p>\n";
+
+		page += "<table>\n";
+		page += "<tr><th>Name</th><th>Animation URL</th><th>Animate head</th><th>Loop</th><th>Actions</th></tr>\n";
+
+		for(size_t i=0; i<logged_in_user->gesture_settings.gesture_settings.size(); ++i)
+		{
+			const SingleGestureSettings& s = logged_in_user->gesture_settings.gesture_settings[i];
+			const bool animate_head = (s.flags & SingleGestureSettings::FLAG_ANIMATE_HEAD) != 0;
+			const bool loop_anim    = (s.flags & SingleGestureSettings::FLAG_LOOP) != 0;
+
+			page += "<tr>";
+			page += "<td>" + web::Escaping::HTMLEscape(s.friendly_name) + "</td>";
+			page += "<td><code>" + web::Escaping::HTMLEscape(toStdString(s.anim_URL)) + "</code></td>";
+			page += "<td>" + std::string(animate_head ? "yes" : "no") + "</td>";
+			page += "<td>" + std::string(loop_anim ? "yes" : "no") + "</td>";
+			page += "<td>";
+			page += "<form action=\"/account_delete_gesture_post\" method=\"post\" style=\"display:inline;\">";
+			page += "<input type=\"hidden\" name=\"gesture_name\" value=" + escapeAndQuote(s.friendly_name) + ">";
+			page += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete gesture?');\">";
+			page += "</form>";
+			page += "</td>";
+			page += "</tr>\n";
+		}
+
+		page += "</table>\n";
+
+		page += "<h2>Add / update gesture</h2>\n";
+		page += "<form action=\"/account_add_gesture_post\" method=\"post\" enctype=\"multipart/form-data\">";
+		page += "Gesture name: <input type=\"text\" name=\"gesture_name\" required=\"required\"><br/>\n";
+		page += "Animate head: <input type=\"checkbox\" name=\"animate_head\" value=\"checked\"><br/>\n";
+		page += "Loop: <input type=\"checkbox\" name=\"loop\" value=\"checked\"><br/>\n";
+		page += "<br/>\n";
+		page += "Option A: paste existing <code>.subanim</code> URL (already on server):<br/>\n";
+		page += "<input type=\"text\" name=\"anim_url\" size=\"80\" value=\"\"><br/>\n";
+		page += "<br/>\n";
+		page += "Option B: upload a new <code>.subanim</code> file:<br/>\n";
+		page += "<input type=\"file\" name=\"file\" value=\"\"><br/>\n";
+		page += "<br/>\n";
+		page += "<input type=\"submit\" value=\"Save gesture\">";
+		page += "</form>\n";
+
+		page += "</div>   \n"; // end main div
+	}
+
+	page += WebServerResponseUtils::standardFooter(request, /*include_email_link=*/true);
+	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page);
+}
+
+
+void handleAddGesturePost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const web::UnsafeString gesture_name_field = request.getPostField("gesture_name");
+		const web::UnsafeString anim_url_field = request.getPostField("anim_url");
+		const bool animate_head = request.getPostField("animate_head") == "checked";
+		const bool loop_anim    = request.getPostField("loop") == "checked";
+
+		if(gesture_name_field.empty())
+			throw glare::Exception("Gesture name must not be empty.");
+
+		const std::string gesture_name = gesture_name_field.str();
+		if(gesture_name.size() > SingleGestureSettings::MAX_NAME_SIZE)
+			throw glare::Exception("Gesture name too long.");
+
+		URLString anim_URL;
+		bool uploaded_new_file = false;
+
+		if(!anim_url_field.empty())
+		{
+			const std::string url_str = anim_url_field.str();
+			if(url_str.size() > SingleGestureSettings::MAX_NAME_SIZE)
+				throw glare::Exception("Animation URL too long.");
+			if(::getExtension(url_str) != "subanim")
+				throw glare::Exception("anim_url must end with .subanim");
+
+			anim_URL = URLString(url_str.begin(), url_str.end());
+		}
+		else
+		{
+			Reference<web::FormField> file_field = request.getPostFieldForNameIfPresent("file");
+			if(!(file_field && !file_field->filename.empty() && !file_field->content.empty()))
+				throw glare::Exception("Provide anim_url or upload a .subanim file.");
+
+			const std::string filename = file_field->filename.str();
+			if(::getExtension(filename) != "subanim")
+				throw glare::Exception("Only .subanim uploads are supported via web currently.");
+
+			if(file_field->content.size() > 100 * 1024 * 1024)
+				throw glare::Exception("Uploaded file too large.");
+
+			// Write to a temporary file, then import into the server resource system.
+			uint8 rnd_bytes[8];
+			CryptoRNG::getRandomBytes(rnd_bytes, sizeof(rnd_bytes));
+			const std::string rnd = StringUtils::convertByteArrayToHexString(rnd_bytes, sizeof(rnd_bytes));
+
+			const std::string tmp_path = PlatformUtils::getTempDirPath() + "/gesture_upload_" + rnd + ".subanim";
+			FileUtils::writeEntireFile(tmp_path, (const char*)file_field->content.data(), file_field->content.size());
+
+			// NOTE: ResourceManager will copy it into /server_resources with a URL based on hash.
+			anim_URL = world_state.resource_manager->copyLocalFileToResourceDirAndReturnURL(tmp_path);
+			FileUtils::deleteFile(tmp_path);
+
+			uploaded_new_file = true;
+		}
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			if(logged_in_user == NULL)
+				throw glare::Exception("You must be logged in.");
+
+			// If user provided a URL, try to mark the resource as present if the file already exists on disk.
+			// This helps when resources are copied into /server_resources out-of-band.
+			if(!uploaded_new_file)
+			{
+				// If the resource isn't present in the map yet, but the file exists, mark it present.
+				if(!world_state.resource_manager->isFileForURLPresent(anim_URL))
+				{
+					const std::string abs_path = world_state.resource_manager->pathForURL(anim_URL);
+					if(FileUtils::fileExists(abs_path))
+						world_state.resource_manager->setResourceAsLocallyPresentForURL(anim_URL);
+				}
+			}
+
+			// Persist resource metadata so it survives restart.
+			const ResourceRef res = world_state.resource_manager->getExistingResourceForURL(anim_URL);
+			if(res.nonNull())
+				world_state.addResourceAsDBDirty(res);
+
+			// Update or insert gesture.
+			bool updated_existing = false;
+			for(size_t i=0; i<logged_in_user->gesture_settings.gesture_settings.size(); ++i)
+			{
+				SingleGestureSettings& s = logged_in_user->gesture_settings.gesture_settings[i];
+				if(s.friendly_name == gesture_name)
+				{
+					s.anim_URL = anim_URL;
+					s.flags = (animate_head ? SingleGestureSettings::FLAG_ANIMATE_HEAD : 0) | (loop_anim ? SingleGestureSettings::FLAG_LOOP : 0);
+					updated_existing = true;
+					break;
+				}
+			}
+
+			if(!updated_existing)
+			{
+				if(logged_in_user->gesture_settings.gesture_settings.size() >= GestureSettings::MAX_GESTURE_SETTINGS_SIZE)
+					throw glare::Exception("Too many gestures.");
+
+				SingleGestureSettings s;
+				s.friendly_name = gesture_name;
+				s.anim_URL = anim_URL;
+				s.flags = (animate_head ? SingleGestureSettings::FLAG_ANIMATE_HEAD : 0) | (loop_anim ? SingleGestureSettings::FLAG_LOOP : 0);
+				s.anim_duration = 1.0f;
+
+				logged_in_user->gesture_settings.gesture_settings.push_back(s);
+			}
+
+			world_state.addUserAsDBDirty(logged_in_user);
+			world_state.markAsChanged();
+			world_state.setUserWebMessage(logged_in_user->id, "Saved gesture '" + gesture_name + "'. URL: " + toStdString(anim_URL));
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/account_gestures");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleAddGesturePost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleDeleteGesturePost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const web::UnsafeString gesture_name_field = request.getPostField("gesture_name");
+		if(gesture_name_field.empty())
+			throw glare::Exception("Missing gesture_name");
+
+		const std::string gesture_name = gesture_name_field.str();
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			if(logged_in_user == NULL)
+				throw glare::Exception("You must be logged in.");
+
+			auto& v = logged_in_user->gesture_settings.gesture_settings;
+			const size_t old_size = v.size();
+			v.erase(std::remove_if(v.begin(), v.end(), [&](const SingleGestureSettings& s) { return s.friendly_name == gesture_name; }), v.end());
+
+			if(v.size() == old_size)
+				world_state.setUserWebMessage(logged_in_user->id, "Gesture not found.");
+			else
+				world_state.setUserWebMessage(logged_in_user->id, "Deleted gesture '" + gesture_name + "'.");
+
+			world_state.addUserAsDBDirty(logged_in_user);
+			world_state.markAsChanged();
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/account_gestures");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleDeleteGesturePost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
 }
 
 

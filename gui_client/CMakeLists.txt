@@ -251,6 +251,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/URLParser.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.h
 ${CMAKE_SOURCE_DIR}/gui_client/VehiclePhysics.h
+${CMAKE_SOURCE_DIR}/gui_client/WebcamCapture.cpp
+${CMAKE_SOURCE_DIR}/gui_client/WebcamCapture.h
 ${CMAKE_SOURCE_DIR}/gui_client/WebViewData.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/WebViewData.h
 ${CMAKE_SOURCE_DIR}/gui_client/WinterShaderEvaluator.cpp

@@ -178,6 +178,7 @@ public:
 
 
 	Reference<SettingsStore> getSettingsStore() { return settings; }
+	bool isLoggedIn() const { return logged_in_user_id.valid(); }
 
 	void setGLWidgetContextAsCurrent();
 	Vec2i getGlWidgetPosInGlobalSpace();
