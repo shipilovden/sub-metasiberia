@@ -30,6 +30,7 @@ struct _SDL_GameController;
 class RenderStatsWidget;
 class MiniDmpSender;
 class UpdateManager;
+class WebcamWindow;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -383,4 +384,5 @@ public:
 	Reference<RenderStatsWidget> GPU_render_stats_widget;
 
 	MiniDmpSender* minidump_sender;
+	WebcamWindow* webcam_window;
 };
