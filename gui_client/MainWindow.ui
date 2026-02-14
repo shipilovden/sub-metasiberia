@@ -143,6 +143,7 @@
      <string>Help</string>
     </property>
     <addaction name="actionAbout_Substrata"/>
+    <addaction name="actionUpdate"/>
    </widget>
    <widget class="QMenu" name="menuAvatar">
     <property name="title">
@@ -637,6 +638,11 @@
   <action name="actionAbout_Substrata">
    <property name="text">
     <string>About Metasiberia</string>
+   </property>
+  </action>
+  <action name="actionUpdate">
+   <property name="text">
+    <string>Update</string>
    </property>
   </action>
   <action name="actionOptions">
