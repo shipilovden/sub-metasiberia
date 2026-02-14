@@ -41,7 +41,11 @@ function ExecNative {
 }
 
 function Require-Path {
-    param([string]$Path)
+    param(
+        [string]$Path,
+        [bool]$AllowMissingOnDryRun = $false
+    )
+    if($DryRun -and $AllowMissingOnDryRun) { return }
     if(-not (Test-Path $Path)) { throw "Missing path: $Path" }
 }
 
@@ -146,7 +150,7 @@ ExecNative "git" @("push", $Remote, $tag)
 ExecNative "powershell" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\programming\\qt_build.ps1")
 
 $sourceDir = "C:\\programming\\substrata_output_qt\\vs2022\\cyberspace_x64\\$Config"
-Require-Path (Join-Path $sourceDir "gui_client.exe")
+Require-Path (Join-Path $sourceDir "gui_client.exe") -AllowMissingOnDryRun $true
 
 # Create installer (writes to substrata_output\\installers by default)
 $env:CYBERSPACE_OUTPUT = "C:\\programming\\substrata_output_qt"
@@ -158,7 +162,7 @@ ExecNative "powershell" @(
 )
 
 $installerPath = "C:\\programming\\substrata_output\\installers\\MetasiberiaBeta-Setup-$tag.exe"
-Require-Path $installerPath
+Require-Path $installerPath -AllowMissingOnDryRun $true
 
 # Publish GitHub release + upload installer
 $releaseArgs = @("release", "create", $tag, $installerPath, "-R", $Repo, "--title", $title, "--notes", $Notes, "--verify-tag")
