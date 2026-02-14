@@ -72,7 +72,7 @@ function Set-VersionInHeader {
 
 function Parse-SemVer {
     param([string]$V)
-    $m = [Regex]::Match($V, '^(\\d+)\\.(\\d+)\\.(\\d+)$')
+    $m = [Regex]::Match($V, '^(\d+)\.(\d+)\.(\d+)$')
     if(-not $m.Success) { throw "Invalid version (expected X.Y.Z): $V" }
     return @{
         major = [int]$m.Groups[1].Value
