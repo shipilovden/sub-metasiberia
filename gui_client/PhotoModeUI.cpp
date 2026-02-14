@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2025 -
 #include <graphics/SRGBUtils.h>
 #include "HTTPClient.h"
 #include <networking/TLSSocket.h>
+#include <algorithm>
 #include <utils/Clock.h>
 #include <utils/StringUtils.h>
 #include <utils/PlatformUtils.h>
@@ -1110,9 +1111,117 @@ public:
 };
 
 
+static std::string trimAndCollapseWhitespace(const std::string& s, size_t max_len)
+{
+	std::string out;
+	out.reserve(std::min(max_len, s.size()));
+
+	bool last_was_space = false;
+	for(size_t i=0; i<s.size() && out.size() < max_len; ++i)
+	{
+		const unsigned char c = (unsigned char)s[i];
+		const bool is_space = (c == ' ' || c == '\t' || c == '\n' || c == '\r');
+		if(is_space)
+		{
+			if(!out.empty() && !last_was_space)
+				out.push_back(' ');
+			last_was_space = true;
+		}
+		else
+		{
+			out.push_back((char)c);
+			last_was_space = false;
+		}
+	}
+
+	// Trim trailing space
+	while(!out.empty() && out.back() == ' ')
+		out.pop_back();
+
+	return out;
+}
+
+
+static std::string getDefaultTelegramHashtags()
+{
+	return "#metasiberia #metasiberiabeta #screenshot #metaversefromsiberia";
+}
+
+
+static std::string buildTelegramCaption(
+	const GUIClient& gui_client,
+	const Reference<SettingsStore>& settings,
+	const std::string& user_caption,
+	const std::string& username,
+	const ParcelID& in_parcel_id)
+{
+	// Telegram photo caption limit is 1024 chars.
+	const size_t MAX_CAPTION_LEN = 1024;
+
+	const std::string title = settings->getStringValue("telegram/photo_caption_title", "Metasiberia Beta");
+	std::string hashtags = settings->getStringValue("telegram/photo_hashtags", "");
+	if(hashtags.empty())
+		hashtags = getDefaultTelegramHashtags();
+
+	const std::string safe_user_caption = trimAndCollapseWhitespace(user_caption, /*max_len=*/400);
+
+	const std::string sub_url = gui_client.getCurrentURL();
+
+	const std::string hostname = gui_client.server_hostname.empty() ? std::string("substrata.info") : gui_client.server_hostname;
+	const bool use_http = (hostname == "localhost") || (hostname == "127.0.0.1");
+	const std::string web_url = (use_http ? "http://" : "https://") + hostname + gui_client.getCurrentWebClientURLPath();
+
+	std::string caption;
+	caption.reserve(512);
+
+	caption += title + "\n";
+
+	if(!safe_user_caption.empty())
+		caption += safe_user_caption + "\n";
+
+	if(!username.empty())
+		caption += "By: " + username + "\n";
+
+	if(!gui_client.server_worldname.empty())
+		caption += "World: " + gui_client.server_worldname + "\n";
+
+	if(in_parcel_id.valid())
+		caption += "Parcel: " + in_parcel_id.toString() + "\n";
+
+	caption += "Location (client): " + sub_url + "\n";
+	caption += "Location (web): " + web_url + "\n\n";
+
+	caption += hashtags;
+
+	if(caption.size() > MAX_CAPTION_LEN)
+	{
+		// Keep the tail (hashtags) where possible.
+		const std::string suffix = "\n\n" + hashtags;
+		const size_t keep_prefix_len = (MAX_CAPTION_LEN > suffix.size() + 3) ? (MAX_CAPTION_LEN - suffix.size() - 3) : 0;
+		caption = caption.substr(0, keep_prefix_len) + "..." + suffix;
+		if(caption.size() > MAX_CAPTION_LEN)
+			caption.resize(MAX_CAPTION_LEN);
+	}
+
+	return caption;
+}
+
+
 void PhotoModeUI::uploadPhoto()
 {
 	const bool telegram_enabled = settings->getBoolValue("telegram/upload_photo_enabled", /*default=*/true);
+
+	const std::string username_for_server = gui_client->ui_interface->getUsernameForDomain(gui_client->server_hostname);
+
+	// Find out which parcel we are in, if any.
+	// NOTE: use avatar position or camera position? Or focus target position?
+	ParcelID in_parcel_id = ParcelID::invalidParcelID();
+	{
+		Lock lock(gui_client->world_state->mutex);
+		const Parcel* cam_parcel = gui_client->world_state->getParcelPointIsIn(gui_client->cam_controller.getPosition());
+		if(cam_parcel)
+			in_parcel_id = cam_parcel->id;
+	}
 
 	std::string bot_token = settings->getStringValue("telegram/bot_token", "");
 	if(bot_token.empty())
@@ -1131,7 +1240,7 @@ void PhotoModeUI::uploadPhoto()
 		}
 
 		Reference<UploadPhotoToTelegramThread> thread = new UploadPhotoToTelegramThread();
-		thread->caption = last_caption.substr(0, 1024); // Telegram caption limit for photos.
+		thread->caption = buildTelegramCaption(*gui_client, settings, last_caption, username_for_server, in_parcel_id);
 		thread->upload_image_jpeg_path = upload_image_jpeg_path;
 		thread->bot_token = bot_token;
 		thread->chat_id = chat_id;
@@ -1144,16 +1253,6 @@ void PhotoModeUI::uploadPhoto()
 	// Legacy upload-to-website path (Substrata protocol).  Kept for compatibility/tests.
 	const std::string username = gui_client->ui_interface->getUsernameForDomain(gui_client->server_hostname);
 	const std::string password = gui_client->ui_interface->getDecryptedPasswordForDomain(gui_client->server_hostname);
-
-	// Find out which parcel we are in, if any.
-	// NOTE: use avatar position or camera position? Or focus target position?
-	ParcelID in_parcel_id = ParcelID::invalidParcelID();
-	{
-		Lock lock(gui_client->world_state->mutex);
-		const Parcel* cam_parcel = gui_client->world_state->getParcelPointIsIn(gui_client->cam_controller.getPosition()); 
-		if(cam_parcel)
-			in_parcel_id = cam_parcel->id;
-	}
 
 	Reference<UploadPhotoThread> thread = new UploadPhotoThread();
 	thread->caption = last_caption.substr(0, 10000);
