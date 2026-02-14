@@ -280,6 +280,7 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(ui->materialBrowserDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->environmentDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->worldSettingsDockWidget->toggleViewAction());
+	ui->menuWindow->addAction(ui->avatarSettingsDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->chatDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->helpInfoDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->webcamDockWidget->toggleViewAction());
@@ -364,6 +365,7 @@ void MainWindow::initialiseUI()
 		this->ui->materialBrowserDockWidget->hide();
 		this->ui->environmentDockWidget->hide();
 		this->ui->worldSettingsWidget->hide();
+		this->ui->avatarSettingsDockWidget->hide();
 		this->ui->diagnosticsDockWidget->hide();
 		this->ui->worldSettingsDockWidget->hide();
 	}
@@ -374,6 +376,9 @@ void MainWindow::initialiseUI()
 
 
 	ui->worldSettingsWidget->init(this);
+	ui->avatarSettingsWidget->init(this->base_dir_path, this->settings, gui_client.resource_manager, &gui_client.animation_manager);
+	connect(ui->avatarSettingsWidget, SIGNAL(acceptedSignal()), this, SLOT(avatarSettingsAcceptedSlot()));
+	connect(ui->avatarSettingsWidget, SIGNAL(rejectedSignal()), this, SLOT(avatarSettingsRejectedSlot()));
 
 	ui->objectEditor->init();
 
@@ -1571,15 +1576,24 @@ static void enqueueMessageToSend(ClientThread& client_thread, SocketBufferOutStr
 
 void MainWindow::on_actionAvatarSettings_triggered()
 {
-	AvatarSettingsDialog dialog(this->base_dir_path, this->settings, gui_client.resource_manager, &gui_client.animation_manager);
-	const int res = dialog.exec();
-	ui->glWidget->makeCurrent();// Change back from the dialog GL context to the mainwindow GL context.
+	// Make it feel like the built-in editor: show as a dock tab in the main window.
+	tabifyDockWidget(ui->editorDockWidget, ui->avatarSettingsDockWidget);
+	ui->avatarSettingsDockWidget->setFloating(false);
+	ui->avatarSettingsDockWidget->show();
+	ui->avatarSettingsDockWidget->raise();
+	ui->avatarSettingsWidget->resetToSavedSettings();
+}
 
-	if((res == QDialog::Accepted) && dialog.loaded_mesh.nonNull()) //  loaded_object.nonNull()) // If the dialog was accepted, and we loaded something:
+
+void MainWindow::avatarSettingsAcceptedSlot()
+{
+	ui->glWidget->makeCurrent(); // Ensure avatar update happens on the main GL context.
+
+	if(ui->avatarSettingsWidget->loaded_mesh.nonNull())
 	{
 		try
 		{
-			gui_client.updateOurAvatarModel(dialog.loaded_mesh, dialog.result_path, dialog.pre_ob_to_world_matrix, dialog.loaded_materials);
+			gui_client.updateOurAvatarModel(ui->avatarSettingsWidget->loaded_mesh, ui->avatarSettingsWidget->result_path, ui->avatarSettingsWidget->pre_ob_to_world_matrix, ui->avatarSettingsWidget->loaded_materials);
 		}
 		catch(glare::Exception& e)
 		{
@@ -1590,6 +1604,14 @@ void MainWindow::on_actionAvatarSettings_triggered()
 			m.exec();
 		}
 	}
+
+	ui->avatarSettingsDockWidget->hide();
+}
+
+
+void MainWindow::avatarSettingsRejectedSlot()
+{
+	ui->avatarSettingsDockWidget->hide();
 }
 
 

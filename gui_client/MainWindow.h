@@ -55,6 +55,8 @@ signals:;
 
 private slots:;
 	void on_actionAvatarSettings_triggered();
+	void avatarSettingsAcceptedSlot();
+	void avatarSettingsRejectedSlot();
 	void on_actionAddObject_triggered();
 	void on_actionAddHypercard_triggered();
 	void on_actionAdd_Text_triggered();
