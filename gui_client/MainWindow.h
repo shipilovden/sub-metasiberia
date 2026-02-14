@@ -149,6 +149,7 @@ private slots:;
 	void updateObjectEditorObTransformSlot();
 	void handleURL(const QUrl& url);
 	void openServerScriptLogSlot();
+	void on_webcamEnableCheckBox_toggled(bool checked);
 public:
 	bool connectedToUsersWorldOrGodUser();
 	void webViewMouseDoubleClicked(QMouseEvent* e);
@@ -300,6 +301,9 @@ public:
 
 	// File selection
 	virtual std::string showOpenFileDialog(const std::string& caption, const std::vector<FileTypeFilter>& file_type_filters, const std::string& settings_key) override; // Returns path to file selected or empty string if cancelled.
+
+	// Webcam (Qt only)
+	virtual void setWebcamWindowVisible(bool visible) override;
 	//------------------------------------------------- End UIInterface -----------------------------------------------------------
 
 public:

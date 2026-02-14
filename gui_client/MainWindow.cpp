@@ -50,6 +50,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QTimer>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QPixmap>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QFileDialog>
@@ -260,6 +261,7 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(ui->worldSettingsDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->chatDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->helpInfoDockWidget->toggleViewAction());
+	ui->menuWindow->addAction(ui->webcamDockWidget->toggleViewAction());
 #if INDIGO_SUPPORT
 	ui->menuWindow->addAction(ui->indigoViewDockWidget->toggleViewAction());
 #endif
@@ -1125,6 +1127,29 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	mouse_cursor_state.alt_key_down = alt_key_down;
 	mouse_cursor_state.ctrl_key_down = ctrl_key_down;
 	gui_client.timerEvent(mouse_cursor_state);
+
+	// Update webcam dock (Qt).  Actual capture/update runs inside GUIClient::timerEvent().
+	if(ui->webcamDockWidget->isVisible())
+	{
+		if(ui->webcamEnableCheckBox->isChecked())
+		{
+#if defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(USE_SDL)
+			QImage* qimg = static_cast<QImage*>(gui_client.getWebcamFrameAsQImage());
+			if(qimg && !qimg->isNull())
+				ui->webcamLabel->setPixmap(QPixmap::fromImage(*qimg));
+			else
+				ui->webcamLabel->setText("Waiting for webcam frame...");
+#else
+			ui->webcamLabel->setText("Webcam capture is not supported on this platform/build.");
+			ui->webcamLabel->setPixmap(QPixmap());
+#endif
+		}
+		else
+		{
+			ui->webcamLabel->setText("Webcam disabled");
+			ui->webcamLabel->setPixmap(QPixmap());
+		}
+	}
 
 #if INDIGO_SUPPORT
 	if(this->ui->indigoView)
@@ -2900,6 +2925,32 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 {
 	AboutDialog d(this, appdata_path);
 	d.exec();
+}
+
+
+void MainWindow::on_webcamEnableCheckBox_toggled(bool checked)
+{
+	// Keep capture state in sync with checkbox state.
+	gui_client.setWebcamEnabled(checked);
+
+	if(!checked)
+	{
+		ui->webcamLabel->setText("Webcam disabled");
+		ui->webcamLabel->setPixmap(QPixmap());
+	}
+}
+
+
+void MainWindow::setWebcamWindowVisible(bool visible)
+{
+	if(!ui || !ui->webcamDockWidget)
+		return;
+
+	ui->webcamDockWidget->setVisible(visible);
+
+	// If user hides the dock, stop capturing to avoid background CPU usage.
+	if(!visible && ui->webcamEnableCheckBox)
+		ui->webcamEnableCheckBox->setChecked(false);
 }
 
 
