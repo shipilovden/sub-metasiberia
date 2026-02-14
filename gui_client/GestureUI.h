@@ -81,6 +81,7 @@ private:
 	GLUIButtonRef photo_mode_button;
 
 	GLUIButtonRef microphone_button; // TODO: move out of GestureUI or rename GestureUI.
+	GLUIButtonRef webcam_button; // Toggles webcam window (Qt) or webcam capture (SDL).
 
 	GLUIImageRef mic_level_image;
 
