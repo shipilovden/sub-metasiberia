@@ -80,6 +80,8 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client IndigoView)
 	addMocFileRule(gui_client ShaderEditorDialog)
 	addMocFileRule(gui_client AboutDialog)
+	addMocFileRule(gui_client UpdateDialog)
+	addMocFileRule(gui_client UpdateManager)
 	addMocFileRule(gui_client MainOptionsDialog)
 	addMocFileRule(gui_client MainOptionsDialog)
 	addMocFileRule(gui_client GoToParcelDialog)
@@ -342,6 +344,10 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.h
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.ui
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindowTestCode.txt
+		${CMAKE_SOURCE_DIR}/gui_client/UpdateDialog.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/UpdateDialog.h
+		${CMAKE_SOURCE_DIR}/gui_client/UpdateManager.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/UpdateManager.h
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.h
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.ui
@@ -384,7 +390,7 @@ else()
 	)
 endif()
 
-if(NOT USE_SDL)
+	if(NOT USE_SDL)
 	SET(gui_client ${gui_client}
 	${CMAKE_SOURCE_DIR}/gui_client/moc_MainWindow.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_GuiClientApplication.cpp
@@ -408,6 +414,8 @@ if(NOT USE_SDL)
 	${CMAKE_SOURCE_DIR}/gui_client/moc_IndigoView.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ShaderEditorDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AboutDialog.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateDialog.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateManager.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_MainOptionsDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_GoToParcelDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_GoToPositionDialog.cpp

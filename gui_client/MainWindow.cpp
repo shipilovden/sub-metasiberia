@@ -11,6 +11,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
 #include "AboutDialog.h"
+#include "UpdateDialog.h"
+#include "UpdateManager.h"
 #include "CreateObjectsDialog.h"
 #include "ClientThread.h"
 #include "GoToPositionDialog.h"
@@ -46,6 +48,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QMimeData>
 #include <QtCore/QSettings>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/QTimer>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
@@ -140,7 +143,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	settings(NULL),
 	user_details(NULL),
 	ui(NULL),
-	minidump_sender(NULL)
+	minidump_sender(NULL),
+	update_manager(NULL)
 	//game_controller(NULL)
 {
 	ZoneScoped; // Tracy profiler
@@ -232,6 +236,17 @@ void MainWindow::initialiseUI()
 	}
 
 	setAcceptDrops(true);
+
+	// --- Update manager (GitHub Releases) ---
+	update_manager = new UpdateManager(this);
+	connect(update_manager, &UpdateManager::updateCheckFinished, this, &MainWindow::onUpdateCheckFinished);
+	connect(update_manager, &UpdateManager::updateAvailabilityChanged, this, &MainWindow::onUpdateAvailabilityChanged);
+
+	// Kick off an async update check once the event loop is running.
+	QTimer::singleShot(1500, this, [this]() {
+		if(update_manager)
+			update_manager->checkForUpdatesAsync(/*force=*/true);
+	});
 
 	update_ob_editor_transform_timer = new QTimer(this);
 	update_ob_editor_transform_timer->setSingleShot(true);
@@ -2890,8 +2905,8 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 
 void MainWindow::on_actionUpdate_triggered()
 {
-	// Placeholder for update logic (implemented later).
-	QMessageBox::information(this, "Update", "Update is not implemented yet.");
+	UpdateDialog d(update_manager, this);
+	d.exec();
 }
 
 
@@ -2929,6 +2944,53 @@ void MainWindow::on_actionOptions_triggered()
 			&gui_client.mic_read_status
 		);
 		gui_client.mic_read_thread_manager.addThread(mic_read_thread);
+	}
+}
+
+
+void MainWindow::onUpdateCheckFinished()
+{
+	onUpdateAvailabilityChanged(update_manager && update_manager->updateAvailable());
+}
+
+
+void MainWindow::onUpdateAvailabilityChanged(bool available)
+{
+	if(!ui || !ui->actionUpdate || !update_manager)
+		return;
+
+	// Default UI state.
+	ui->actionUpdate->setText("Update");
+
+	if(update_manager->checkInProgress())
+		return;
+
+	if(!update_manager->lastErrorString().isEmpty())
+	{
+		statusBar()->showMessage("Update check failed: " + update_manager->lastErrorString(), 15000);
+		return;
+	}
+
+	if(!update_manager->hasCheckResult())
+		return;
+
+	if(available)
+	{
+		const QString tag = update_manager->latest().tag;
+		ui->actionUpdate->setText("Update (" + tag + ")");
+
+		// Notify once per tag.
+		const QString last_notified = settings ? settings->value("update/last_notified_tag", "").toString() : QString();
+		if(settings && (last_notified != tag))
+		{
+			settings->setValue("update/last_notified_tag", tag);
+			statusBar()->showMessage("Update available: " + tag, 20000);
+			QMessageBox::information(this, "Update available", "A new version is available: " + tag + "\n\nOpen Help -> Update to download and install.");
+		}
+	}
+	else
+	{
+		statusBar()->showMessage("You are up to date.", 8000);
 	}
 }
 
