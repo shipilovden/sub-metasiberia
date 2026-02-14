@@ -139,13 +139,28 @@ void UpdateManager::runRequestInBackground(uint32_t request_id)
 		try
 		{
 			Reference<HTTPClient> client = new HTTPClient();
-			client->user_agent = "metasiberia-client";
+			// GitHub API requires a User-Agent for GET requests with our HTTPClient implementation.
+			client->additional_headers.push_back("User-Agent: metasiberia-client");
 			client->additional_headers.push_back("Accept: application/vnd.github+json");
 
 			std::string body;
 			HTTPClient::ResponseInfo resp = client->downloadFile(GITHUB_RELEASES_URL, body);
 			if(resp.response_code != 200)
-				throw glare::Exception("GitHub API returned HTTP " + std::to_string(resp.response_code));
+			{
+				QString extra;
+				// Try to extract GitHub's error message from JSON if possible.
+				QJsonParseError parse_err;
+				const QJsonDocument err_doc = QJsonDocument::fromJson(QByteArray(body.data(), (int)body.size()), &parse_err);
+				if(parse_err.error == QJsonParseError::NoError && err_doc.isObject())
+				{
+					const QString msg = err_doc.object().value("message").toString();
+					if(!msg.isEmpty())
+						extra = " (" + msg + ")";
+				}
+
+				const std::string extra_utf8 = extra.isEmpty() ? std::string() : std::string(extra.toUtf8().constData());
+				throw glare::Exception("GitHub API returned HTTP " + std::to_string(resp.response_code) + ": " + resp.response_message + extra_utf8);
+			}
 
 			QJsonParseError json_err;
 			const QJsonDocument doc = QJsonDocument::fromJson(QByteArray(body.data(), (int)body.size()), &json_err);
