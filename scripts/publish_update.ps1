@@ -52,7 +52,7 @@ function Get-RepoRoot {
 
 function Get-VersionFromHeader {
     param([string]$HeaderPath)
-    $line = Select-String -Path $HeaderPath -Pattern 'cyberspace_version\\s*=\\s*\"([^\"]+)\"' | Select-Object -First 1
+    $line = Select-String -Path $HeaderPath -Pattern 'cyberspace_version\s*=\s*"([^"]+)"' | Select-Object -First 1
     if(-not $line) { throw "Could not parse cyberspace_version from $HeaderPath" }
     return $line.Matches[0].Groups[1].Value
 }
@@ -62,7 +62,7 @@ function Set-VersionInHeader {
     $text = Get-Content -Raw -Path $HeaderPath
     $newText = [Regex]::Replace(
         $text,
-        '(cyberspace_version\\s*=\\s*\")([^\"]+)(\";)',
+        '(cyberspace_version\s*=\s*")([^"]+)(";)',
         ("`$1{0}`$3" -f $NewVersion),
         [System.Text.RegularExpressions.RegexOptions]::None
     )
