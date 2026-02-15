@@ -169,6 +169,10 @@ REG.RU hosting metasiberia.com (ISPmanager):
 
 ## 9) Данные сайта, пользователи и “база”
 
+### 9.0 Что такое webserver_fragments
+`webserver_fragments` — это набор HTML-фрагментов (`*.htmlfrag`), которые встроенный C++ webserver подгружает с диска для некоторых страниц (about/docs/help и т.п.).  
+Это не “отдельный сайт”, а часть сервера: страницы собираются из C++ обработчиков + этих шаблонов/фрагментов.
+
 ### 9.1 Где лежат данные сайта на основном сервере
 Факт по `89.104.70.23`:
 - Public files (CSS/JS/PNG) используются из: `/root/cyberspace_server_state/webserver_public_files`
@@ -179,6 +183,13 @@ REG.RU hosting metasiberia.com (ISPmanager):
 Рекомендация: исходники web-части держим в git (в этом репозитории), а на сервер выкатываем синхронизацией.
 Добавлен скрипт деплоя статики/фрагментов на основной сервер:
 - `scripts/deploy_web_to_metasiberia_v2.ps1`
+
+Перед первой выкладкой (чтобы ничего не потерять), можно снять snapshot текущих серверных директорий:
+- `scripts/snapshot_web_from_metasiberia_v2.ps1`
+
+Важно:
+- На сервере сейчас `webserver_public_files_dir` и `webclient_dir` уже переопределены в `/root/cyberspace_server_state/...` (через `substrata_server_config.xml`).
+- `webserver_fragments_dir` пока НЕ переопределен, значит на Linux по умолчанию используется `/var/www/cyberspace/webserver_fragments`.
 
 ### 9.3 Пользователи и “БД” (как сейчас устроено)
 Сервер хранит состояние (включая пользователей, парсели, сессии и т.п.) в файле базы:
@@ -192,6 +203,17 @@ Web-админка (основные страницы):
 - `/admin` (главная)
 - `/admin_users` (список пользователей)
 - `/admin_user/<id>` (карточка пользователя)
+
+## 10) Figma MCP (для быстрой работы с дизайном)
+Figma MCP (Talk To Figma MCP) — это локальный dev-инструмент. Он не “часть прод-сайта”, а связка:
+- локальный сокет-сервер на твоем ПК (`ws://localhost:3055`);
+- плагин в Figma;
+- инструменты в IDE (Cursor/Codex), которые могут читать контекст дизайна.
+
+Скрипт запуска локального сокет-сервера:
+- `scripts/start_figma_mcp_socket.ps1`
+
+Данные подключения (file key / channel / порт) см. `C:\programming\AGENTS.md`.
 
 Полезные операции (на сервере, под root):
 - Сделать быстрый backup базы перед выкатыванием изменений:
