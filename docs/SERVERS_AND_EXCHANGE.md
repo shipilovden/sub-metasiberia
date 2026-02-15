@@ -190,6 +190,7 @@ REG.RU hosting metasiberia.com (ISPmanager):
 Важно:
 - На сервере сейчас `webserver_public_files_dir` и `webclient_dir` уже переопределены в `/root/cyberspace_server_state/...` (через `substrata_server_config.xml`).
 - `webserver_fragments_dir` пока НЕ переопределен, значит на Linux по умолчанию используется `/var/www/cyberspace/webserver_fragments`.
+- На Linux сервер использует inotify-watcher. Поэтому выкладка должна обновлять содержимое директорий *in-place* (без `mv`/rename самой директории), иначе watcher “теряет” обновления. Скрипт деплоя учитывает это (rsync).
 
 ### 9.3 Пользователи и “БД” (как сейчас устроено)
 Сервер хранит состояние (включая пользователей, парсели, сессии и т.п.) в файле базы:
