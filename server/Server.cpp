@@ -193,6 +193,8 @@ static ServerConfig parseServerConfig(const std::string& config_path)
 	config.webclient_dir						= XMLParseUtils::parseStringWithDefault(root_elem, "webclient_dir", /*default val=*/"");
 	config.tls_certificate_path					= XMLParseUtils::parseStringWithDefault(root_elem, "tls_certificate_path", /*default val=*/"");
 	config.tls_private_key_path					= XMLParseUtils::parseStringWithDefault(root_elem, "tls_private_key_path", /*default val=*/"");
+	config.canonical_web_hostname				= XMLParseUtils::parseStringWithDefault(root_elem, "canonical_web_hostname", /*default val=*/"");
+	config.letsencrypt_webroot_dir				= XMLParseUtils::parseStringWithDefault(root_elem, "letsencrypt_webroot_dir", /*default val=*/"");
 	config.allow_light_mapper_bot_full_perms	= XMLParseUtils::parseBoolWithDefault(root_elem, "allow_light_mapper_bot_full_perms", /*default val=*/false);
 	config.update_parcel_sales					= XMLParseUtils::parseBoolWithDefault(root_elem, "update_parcel_sales", /*default val=*/false);
 	config.do_lua_http_request_rate_limiting	= XMLParseUtils::parseBoolWithDefault(root_elem, "do_lua_http_request_rate_limiting", /*default val=*/true);

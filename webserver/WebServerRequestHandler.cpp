@@ -70,20 +70,92 @@ WebServerRequestHandler::~WebServerRequestHandler()
 
 void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web::ReplyInfo& reply_info)
 {
+	// Support for Let's Encrypt http-01 validation: serve challenge file over HTTP.
+	// This must work without redirecting to https, because the TLS certificate may not exist yet.
+	if(::hasPrefix(request.path, "/.well-known/acme-challenge/"))
+	{
+		const std::string webroot = world_state->server_config.letsencrypt_webroot_dir;
+		if(webroot.empty())
+		{
+			web::ResponseUtils::writeHTTPNotFoundHeaderAndData(reply_info, "ACME challenge handling is not configured.");
+			return;
+		}
+
+		const std::string filename = ::eatPrefix(request.path, "/.well-known/acme-challenge/");
+		if(!FileUtils::isPathSafe(filename))
+		{
+			web::ResponseUtils::writeHTTPNotFoundHeaderAndData(reply_info, "invalid/unsafe file query");
+			return;
+		}
+
+		try
+		{
+			std::string contents;
+			FileUtils::readEntireFile(webroot + "/.well-known/acme-challenge/" + filename, contents);
+			web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, contents);
+		}
+		catch(FileUtils::FileUtilsExcep& e)
+		{
+			web::ResponseUtils::writeHTTPNotFoundHeaderAndData(reply_info, "Failed to load file '" + filename + "': " + e.what());
+		}
+		return;
+	}
+
+	auto buildQueryString = [&request]() -> std::string
+	{
+		if(request.URL_params.empty())
+			return "";
+		std::string q = "?";
+		for(size_t i=0; i<request.URL_params.size(); ++i)
+		{
+			if(i > 0) q += "&";
+			q += web::Escaping::URLEscape(request.URL_params[i].key);
+			q += "=";
+			q += web::Escaping::URLEscape(request.URL_params[i].value.str());
+		}
+		return q;
+	};
+
+	auto stripPort = [](const std::string& host) -> std::string
+	{
+		// For typical Host headers like "example.com:443".
+		// (We don't handle IPv6 literals here; those aren't expected for our deployment.)
+		const size_t colon_i = host.find(':');
+		if(colon_i == std::string::npos)
+			return host;
+		return host.substr(0, colon_i);
+	};
+
+	const std::string host_header = request.getHostHeader();
+	const std::string host_no_port = stripPort(host_header);
+	const std::string canonical_host = world_state->server_config.canonical_web_hostname;
+
+	// If configured, redirect to the canonical hostname (preserving path + query).
+	// Leave localhost and empty Host header untouched (dev/testing).
+	if(!canonical_host.empty() && !host_no_port.empty() && (host_no_port != "localhost") && (host_no_port != canonical_host))
+	{
+		// If canonical hostname is configured, assume we want the canonical URL to be HTTPS.
+		// (If HTTPS isn't set up for the canonical hostname yet, leave canonical_web_hostname empty until it is.)
+		const std::string scheme = "https://";
+		const std::string response =
+			"HTTP/1.1 301 Redirect\r\n"
+			"Location: " + scheme + canonical_host + request.path + buildQueryString() + "\r\n"
+			"Content-Length: 0\r\n"
+			"\r\n";
+		reply_info.socket->writeData(response.c_str(), response.size());
+		return;
+	}
+
 	if(!request.tls_connection)
 	{
 		// Redirect to https (unless the server is running on localhost, which we will allow to use non-https for testing)
 
-		// Find the hostname the request was sent to - look through the headers for 'host'.
-		std::string hostname;
-		for(size_t i=0; i<request.headers.size(); ++i)
-			if(StringUtils::equalCaseInsensitive(request.headers[i].key, "host"))
-				hostname = toString(request.headers[i].value);
-		if(hostname != "localhost")
+		const std::string hostname = host_header;
+		if(host_no_port != "localhost")
 		{
 			const std::string response = 
 				"HTTP/1.1 301 Redirect\r\n" // 301 = Moved Permanently
-				"Location: https://" + hostname + request.path + "\r\n"
+				"Location: https://" + hostname + request.path + buildQueryString() + "\r\n"
 				"Content-Length: 0\r\n"
 				"\r\n";
 			reply_info.socket->writeData(response.c_str(), response.size());

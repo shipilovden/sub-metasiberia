@@ -223,7 +223,10 @@ void handleLoginPost(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			// Valid credentials.
 			web::ResponseUtils::writeRawString(reply_info, "HTTP/1.1 302 Redirect" + CRLF);
 			web::ResponseUtils::writeRawString(reply_info, "Location: " + return_URL + CRLF);
-			web::ResponseUtils::writeRawString(reply_info, "Set-Cookie: site-b=" + session_id + "; Path=/; Max-Age=7776000; HttpOnly" + CRLF); // Max-Age is 90 days.
+			std::string cookie = "Set-Cookie: site-b=" + session_id + "; Path=/; Max-Age=7776000; HttpOnly; SameSite=Lax"; // Max-Age is 90 days.
+			if(request_info.tls_connection)
+				cookie += "; Secure";
+			web::ResponseUtils::writeRawString(reply_info, cookie + CRLF);
 			// HttpOnly forbids JavaScript from accessing the cookie (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie)
 			web::ResponseUtils::writeRawString(reply_info, "Content-Length: 0" + CRLF); // NOTE: not sure if content-length is needed for 302 redirect.
 			web::ResponseUtils::writeRawString(reply_info, CRLF);
@@ -247,7 +250,11 @@ void handleLogoutPost(const web::RequestInfo& request_info, web::ReplyInfo& repl
 {
 	web::ResponseUtils::writeRawString(reply_info, "HTTP/1.1 302 Redirect" + CRLF);
 	web::ResponseUtils::writeRawString(reply_info, "Location: /" + CRLF);
-	web::ResponseUtils::writeRawString(reply_info, "Set-Cookie: site-b=; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT" + CRLF); // Clear cookie
+	std::string cookie = "Set-Cookie: site-b=; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax";
+	// Do not set Secure on logout cookie unconditionally, as this handler may be called over HTTP in dev.
+	if(request_info.tls_connection)
+		cookie += "; Secure";
+	web::ResponseUtils::writeRawString(reply_info, cookie + CRLF); // Clear cookie
 	web::ResponseUtils::writeRawString(reply_info, "Content-Length: 0" + CRLF); // NOTE: not sure if content-length is needed for 302 redirect.
 	web::ResponseUtils::writeRawString(reply_info, CRLF);
 }
@@ -386,7 +393,7 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 
 			reply += "HTTP/1.1 302 Redirect" + CRLF;
 			reply += "Location: " + return_URL + CRLF;
-			reply += "Set-Cookie: site-b=" + session->id + "; Path=/; Max-Age=7776000; HttpOnly" + CRLF; // Max-Age is 90 days.
+			reply += "Set-Cookie: site-b=" + session->id + "; Path=/; Max-Age=7776000; HttpOnly; SameSite=Lax" + (request_info.tls_connection ? "; Secure" : "") + CRLF; // Max-Age is 90 days.
 			// HttpOnly forbids JavaScript from accessing the cookie (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie)
 			reply += "Content-Length: 0" + CRLF; // NOTE: not sure if content-length is needed for 302 redirect.
 			reply += CRLF;

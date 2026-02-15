@@ -20,6 +20,15 @@ public:
 
 	std::string tls_certificate_path; // empty string = use default.
 	std::string tls_private_key_path; // empty string = use default.
+
+	// If set, webserver will redirect requests to the canonical hostname (preserving path + query).
+	// This allows keeping IP access working while promoting a stable domain-based URL.
+	std::string canonical_web_hostname; // e.g. "vr.metasiberia.com"
+
+	// If set, webserver will serve ACME http-01 challenge files from this directory.
+	// (Used for Let's Encrypt without stopping the server.)
+	// Challenge files are expected at: <letsencrypt_webroot_dir>/.well-known/acme-challenge/<token>
+	std::string letsencrypt_webroot_dir;
 	
 	bool allow_light_mapper_bot_full_perms; // Allow lightmapper bot (User account with name "lightmapperbot" to have full write permissions.
 
