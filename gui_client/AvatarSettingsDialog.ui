@@ -106,11 +106,52 @@
       </attribute>
       <layout class="QVBoxLayout" name="vroidTabLayout">
        <item>
-        <widget class="QLabel" name="vroidPlaceholderLabel">
+        <widget class="QLabel" name="vroidStatusLabel">
          <property name="text">
-          <string>VRoid (coming soon)</string>
+          <string>VRoid: not logged in</string>
          </property>
         </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="vroidButtonsLayout">
+         <item>
+          <widget class="QPushButton" name="vroidLoginButton">
+           <property name="text">
+            <string>Login</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="vroidFetchModelsButton">
+           <property name="text">
+            <string>Fetch models</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="vroidLogoutButton">
+           <property name="text">
+            <string>Logout</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="vroidHorizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QListWidget" name="vroidModelsListWidget"/>
        </item>
        <item>
         <spacer name="vroidVerticalSpacer">

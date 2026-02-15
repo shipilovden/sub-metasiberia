@@ -25,6 +25,7 @@ Copyright Glare Technologies Limited 2022 -
 #include "../utils/TaskManager.h"
 #include "../qt/QtUtils.h"
 #include "../qt/SignalBlocker.h"
+#include "VRoidAuthFlow.h"
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
 #include <QtCore/QSettings>
@@ -39,7 +40,8 @@ AvatarSettingsDialog::AvatarSettingsDialog(QWidget* parent)
 	preview_timer_id(0),
 	pending_show_error_dialogs(false),
 	pre_ob_to_world_matrix(Matrix4f::identity()),
-	anim_manager(nullptr)
+	anim_manager(nullptr),
+	vroid_auth_flow(nullptr)
 {
 	setupUi(this);
 
@@ -59,6 +61,10 @@ AvatarSettingsDialog::AvatarSettingsDialog(QWidget* parent)
 	connect(this->buttonBox, SIGNAL(rejected()), this, SLOT(rejected()));
 
 	connect(this->animationComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(animationComboBoxIndexChanged(int)));
+
+	// VRoid tab: initial UI state (wiring is done in init() when QSettings is available).
+	this->vroidFetchModelsButton->setEnabled(false);
+	this->vroidLogoutButton->setEnabled(false);
 }
 
 
@@ -104,6 +110,64 @@ void AvatarSettingsDialog::init(const std::string& base_dir_path_, QSettings* se
 
 	done_initial_load = false;
 	initialised = true;
+
+	// VRoid auth flow (uses local QSettings for token storage).
+	vroid_auth_flow = new VRoidAuthFlow(settings, this);
+
+	connect(this->vroidLoginButton, &QPushButton::clicked, this, [this]()
+	{
+		if(vroid_auth_flow)
+			vroid_auth_flow->startLogin();
+	});
+	connect(this->vroidLogoutButton, &QPushButton::clicked, this, [this]()
+	{
+		if(vroid_auth_flow)
+			vroid_auth_flow->logout();
+		this->vroidModelsListWidget->clear();
+		this->vroidFetchModelsButton->setEnabled(false);
+		this->vroidLogoutButton->setEnabled(false);
+	});
+	connect(this->vroidFetchModelsButton, &QPushButton::clicked, this, [this]()
+	{
+		if(vroid_auth_flow)
+			vroid_auth_flow->fetchMyCharacterModels();
+	});
+
+	connect(vroid_auth_flow, &VRoidAuthFlow::statusChanged, this, [this](const QString& s)
+	{
+		this->vroidStatusLabel->setText(s);
+	});
+	connect(vroid_auth_flow, &VRoidAuthFlow::loginSucceeded, this, [this]()
+	{
+		this->vroidFetchModelsButton->setEnabled(true);
+		this->vroidLogoutButton->setEnabled(true);
+	});
+	connect(vroid_auth_flow, &VRoidAuthFlow::loginFailed, this, [this](const QString& err)
+	{
+		this->vroidStatusLabel->setText("VRoid: login failed");
+		QMessageBox::warning(this, "VRoid", err);
+	});
+	connect(vroid_auth_flow, &VRoidAuthFlow::modelsUpdated, this, [this](const QStringList& items)
+	{
+		this->vroidModelsListWidget->clear();
+		this->vroidModelsListWidget->addItems(items);
+	});
+	connect(vroid_auth_flow, &VRoidAuthFlow::modelsFailed, this, [this](const QString& err)
+	{
+		QMessageBox::warning(this, "VRoid", err);
+	});
+
+	// Restore state.
+	if(vroid_auth_flow->hasAccessToken())
+	{
+		this->vroidStatusLabel->setText("VRoid: logged in.");
+		this->vroidFetchModelsButton->setEnabled(true);
+		this->vroidLogoutButton->setEnabled(true);
+	}
+	else
+	{
+		this->vroidStatusLabel->setText("VRoid: not logged in");
+	}
 
 	startPreviewTimerIfNeeded();
 }
