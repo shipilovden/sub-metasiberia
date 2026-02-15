@@ -50,6 +50,7 @@ const std::string standardHTMLHeader(WebDataStore& data_store, const web::Reques
 		"		<meta http-equiv=\"Content-Security-Policy\" content=\"frame-src youtube.com www.youtube.com player.vimeo.com vimeocdn.com; img-src 'self' i.ytimg.com i.vimeocdn.com; default-src 'self';\" />	\n" 
 		"		<title>" + web::Escaping::HTMLEscape(page_title) + "</title>\n"
 		"		<link href=\"/files/main.css?hash=" + data_store.main_css_hash + "\" rel=\"stylesheet\" />\n"
+		"		<link rel=\"icon\" href=\"/files/favicon.ico\" sizes=\"any\">\n"
 		"		<link rel=\"icon\" type=\"image/png\" href=\"/files/favicon.png\">\n"
 		+ extra_header_tags + 
 		"	</head>\n";
@@ -100,9 +101,7 @@ const std::string standardFooter(const web::RequestInfo& request_info, bool incl
 	std::string page_out;
 	page_out +=
 		"	<hr/>																						\n"
-		"	<div class=\"footer\">Metasiberia is based on <a href=\"https://substrata.info\">Substrata</a>.				\n"
-		"	Community: <a href=\"https://t.me/metasiberia_channel\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\">VK</a><br/>	\n"
-		"	</div>																						\n"
+		"	<div class=\"footer\">Community: <a href=\"https://t.me/metasiberia_channel\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\">VK</a></div>	\n"
 		"	<div class=\"footer\"><a href=\"/faq\">F.A.Q.</a> | <a href=\"/terms\">Terms of use</a> | <a href=\"/bot_status\">Bot status</a> | <a href=\"/map\">Map</a></div>				\n"
 		"	</body>																						\n"
 		"</html>																						\n";
