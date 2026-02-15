@@ -68,6 +68,7 @@ const pages = [
   { category: "Admin", name: "Admin Parcels", path: "/admin_parcels", requiresAuth: true },
   { category: "Admin", name: "Admin News", path: "/admin_news_posts", requiresAuth: true }
 ];
+const authAvailable = Boolean(storageStatePath || cookieHeader || (adminUser && adminPass));
 
 console.log("Base:", baseUrl);
 console.log("Out:", outDir);
@@ -132,7 +133,7 @@ await ensureLoggedIn();
 
 const items = [];
 for (const pg of pages) {
-  if (pg.requiresAuth && !(storageStatePath || (adminUser && adminPass))) {
+  if (pg.requiresAuth && !authAvailable) {
     console.log("SKIP (auth required):", pg.path);
     continue;
   }
