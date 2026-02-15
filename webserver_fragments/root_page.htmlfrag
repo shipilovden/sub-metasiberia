@@ -1,46 +1,10 @@
-<div class="top-logo-section">
-	<img src="/files/logo_main_page.png" width="110px" alt="Metasiberia"/>
+<div class="msb-root-hero">
+	<div class="msb-root-hero-title">metasiberia</div>
 </div>
 
-<div class="root-rest-of-body">
-	<h2>Metasiberia</h2>
-	<p>
-		Metasiberia is a shared 3D world. Create your own world, build, explore parcels, and meet other people online.
-	</p>
-
-	<p>
-		<a href="/webclient">Enter Metasiberia in your browser</a>
-	</p>
-
-	<p>
-		<a href="/signup">Sign up</a> |
-		<a href="/login">Log in</a> |
-		<a href="/map">Map</a>
-	</p>
-
-	<h2>Latest Photos</h2>
-	PHOTOS_HTML
-	<p><a href="/photos">View all photos</a></p>
-
-	<h2>News</h2>
-	LATEST_NEWS_HTML
-	<p><a href="/news">See all news</a></p>
-
-	<h2>Create A World</h2>
-	<p>Create your own Metasiberia world for free.</p>
-	<form action="/create_world_post" method="post">
-		<label for="world_name">World name:</label>
-		<input type="text" name="world_name" id="world_name" value="">
-		<input type="submit" value="Create World">
-	</form>
-
-	<h2>Community</h2>
-	<p>
-		<a href="https://t.me/metasiberia_channel">Telegram</a> |
-		<a href="https://vk.com/metasiberia_official">VK</a>
-	</p>
-
-	<h2>Docs</h2>
-	<p><a href="/about_substrata">About Metasiberia</a></p>
+<div class="msb-root-hero-links">
+	<a href="/webclient">Webclient</a> |
+	<a href="/signup">Sign up</a> |
+	<a href="/login">Log in</a> |
+	<a href="/map">Map</a>
 </div>
-
