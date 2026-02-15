@@ -17,6 +17,7 @@ Copyright Glare Technologies Limited 2022 -
 class QSettings;
 class AnimationManager;
 struct GLObject;
+class VRoidAuthFlow;
 
 
 /*=====================================================================
@@ -88,6 +89,8 @@ public:
 
 	Reference<TextureServer> texture_server;
 	AnimationManager* anim_manager;
+
+	VRoidAuthFlow* vroid_auth_flow;
 };
 
 #ifdef _WIN32
