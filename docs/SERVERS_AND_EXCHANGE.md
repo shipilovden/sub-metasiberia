@@ -186,8 +186,15 @@ REG.RU hosting metasiberia.com (ISPmanager):
 
 Суперадмин (god user):
 - `UserID == 0` (`shared/UserID.h`).
+  - Практически: самый первый зарегистрированный пользователь на новом пустом сервере получает id `0` и становится суперадмином.
 
 Web-админка (основные страницы):
 - `/admin` (главная)
 - `/admin_users` (список пользователей)
 - `/admin_user/<id>` (карточка пользователя)
+
+Полезные операции (на сервере, под root):
+- Сделать быстрый backup базы перед выкатыванием изменений:
+  - `cp -a /root/cyberspace_server_state/server_state.bin /root/cyberspace_server_state/server_state.bin.bak_$(date +%Y%m%d_%H%M%S)`
+- Проверить, что сервер жив и слушает порты:
+  - `ss -lntp | egrep ':(80|443|7600)\\s'`
