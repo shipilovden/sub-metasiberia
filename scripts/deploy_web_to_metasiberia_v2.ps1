@@ -48,29 +48,21 @@ function Deploy-Tar($localDirName, $localDirPath, $remoteDir) {
   # IMPORTANT (Linux): the server uses inotify watches on these directories.
   # Replacing the directory (mv/rename) breaks the watch descriptor (it watches the old inode),
   # so we must update contents IN PLACE. We still create a backup copy.
-  $remoteCmd = @"
-set -e
-tmpdir='/tmp/${localDirName}.__deploy_tmp__${timestamp}'
-bakdir='${remoteDir}.__bak__${timestamp}'
+  # NOTE: pass a single-line command to ssh to avoid argument splitting/newline issues.
+  $tmpDir = "/tmp/${localDirName}.__deploy_tmp__${timestamp}"
+  $bakDir = "${remoteDir}.__bak__${timestamp}"
 
-mkdir -p '$remoteDir'
-rm -rf "\$tmpdir"
-mkdir -p "\$tmpdir"
+  $remoteCmd =
+    "set -e; " +
+    "mkdir -p $remoteDir; " +
+    "rm -rf $tmpDir; mkdir -p $tmpDir; " +
+    "tar -xzf $remoteTgz -C $tmpDir; rm -f $remoteTgz; " +
+    "rm -rf $bakDir; cp -a $remoteDir $bakDir; " +
+    "rsync -a --delete $tmpDir/$localDirName/ $remoteDir/; " +
+    "rm -rf $tmpDir; " +
+    "echo OK"
 
-tar -xzf '$remoteTgz' -C "\$tmpdir"
-rm -f '$remoteTgz'
-
-if [ -d '$remoteDir' ]; then
-  rm -rf "\$bakdir"
-  cp -a '$remoteDir' "\$bakdir"
-fi
-
-rsync -a --delete "\$tmpdir/$localDirName/" '$remoteDir/'
-rm -rf "\$tmpdir"
-echo 'OK'
-"@
-
-  ssh $SshHost $remoteCmd
+  & ssh $SshHost $remoteCmd | Out-Null
 }
 
 if (-not $SkipPublicFiles) {
