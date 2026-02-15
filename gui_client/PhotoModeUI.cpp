@@ -1129,6 +1129,12 @@ static void throwVKErrorIfPresent(const JSONParser& parser, const JSONNode& root
 	const JSONNode& err_obj = root.getChildObject(parser, "error");
 	const std::string msg = err_obj.getChildStringValueWithDefaultVal(parser, "error_msg", "VK API error");
 	const int code = err_obj.getChildIntValueWithDefaultVal(parser, "error_code", -1);
+
+	// Common pitfall: using a community (group) token for methods that require a user token.
+	// VK returns error 27 for "method is unavailable with group auth."
+	if(code == 27)
+		throw glare::Exception("VK API error 27: " + msg + "  This typically means you are using a community (group) token. For posting photos to a community wall, VK requires a USER access token (standalone app / implicit flow) with scopes like photos, wall, groups.");
+
 	throw glare::Exception("VK API error " + toString(code) + ": " + msg);
 }
 
@@ -1193,12 +1199,31 @@ static uint64 parseVKGroupIdFromScreenName(HTTPClient& client, const std::string
 	const JSONNode& root = parser.nodes[0];
 	throwVKErrorIfPresent(parser, root);
 
-	const JSONNode& arr = root.getChildArray(parser, "response");
-	if(arr.child_indices.empty())
-		throw glare::Exception("VK API groups.getById returned empty response array.");
+	// VK can return either:
+	// - {"response":[{...}]} (classic)
+	// - {"response":{"groups":[{...}], "profiles":[...]}} (newer / some endpoints)
+	const JSONNode& resp_node = root.getChildNode(parser, "response");
+	if(resp_node.type == JSONNode::Type_Array)
+	{
+		if(resp_node.child_indices.empty())
+			throw glare::Exception("VK API groups.getById returned empty response array.");
 
-	const JSONNode& group_obj = parser.nodes[arr.child_indices[0]];
-	return (uint64)group_obj.getChildUIntValue(parser, "id");
+		const JSONNode& group_obj = parser.nodes[resp_node.child_indices[0]];
+		return (uint64)group_obj.getChildUIntValue(parser, "id");
+	}
+	else if(resp_node.type == JSONNode::Type_Object)
+	{
+		const JSONNode& groups_arr = resp_node.getChildArray(parser, "groups");
+		if(groups_arr.child_indices.empty())
+			throw glare::Exception("VK API groups.getById returned empty response.groups array.");
+
+		const JSONNode& group_obj = parser.nodes[groups_arr.child_indices[0]];
+		return (uint64)group_obj.getChildUIntValue(parser, "id");
+	}
+	else
+	{
+		throw glare::Exception("Unexpected VK API groups.getById response type: " + JSONNode::typeString(resp_node.type));
+	}
 }
 
 
