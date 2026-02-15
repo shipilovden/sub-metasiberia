@@ -1,126 +1,46 @@
-
-
-<div class="top-logo-section"><img src="/files/logo_main_page.png" width="100px"/></div>
-<div class="top-section">
-	
-	<img id="top-image" src="/files/night_hillside.jpg" class="top-image" />
-
-	<div class="top-section-text-container">
-		<div class="top-intro-section">
-Our mission is to create the metaverse.  Substrata is open-source, with as few technical limits as possible.
-Experience long view distances and massive worlds.
-		</div>
-
-		<div class="play-webclient-div"><a href="/webclient">Enter Substrata in your browser</a></div>
-	</div>
+<div class="top-logo-section">
+	<img src="/files/logo_main_page.png" width="110px" alt="Metasiberia"/>
 </div>
-
-<div class="hidden" id="top-image-paths">
-/files/night_hillside.jpg,
-/files/screenshot_1707832339.jpg,
-/files/hillside.jpg
-</div>
-
-<link rel="prefetch" href="/files/night_hillside.jpg" as="image" />
-<link rel="prefetch" href="/files/screenshot_1707832339.jpg" as="image" />
-<link rel="prefetch" href="/files/hillside.jpg" as="image" />
-
-
-<p>
-<!--Substrata is a powerful and free metaverse.  Chat with other users, race motorcycles against them, or explore places that other users have created.-->
-<!--Our mission is to create the metaverse.  Substrata is open-source, with as few technical limits as possible.
-Experience long view distances and massive worlds.-->
-
-</p>
-
-<!--<iframe width="650" height="365" src="https://www.youtube.com/embed/x2upXpaS4fk" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen=""></iframe>-->
-
-
 
 <div class="root-rest-of-body">
+	<h2>Metasiberia</h2>
+	<p>
+		Metasiberia is a shared 3D world. Create your own world, build, explore parcels, and meet other people online.
+	</p>
 
-<h2>Welcome to the Substrata metaverse</h2>
-<p>
-Chat with other users, race motorcycles against them, build in your own personal world, or buy a land parcel and build your metaverse presence in the main world.
-</p>
-<p>
-Substrata is almost completely open-source, check out the source code <a href="https://github.com/glaretechnologies/substrata">on GitHub here</a>.
-</p>
+	<p>
+		<a href="/webclient">Enter Metasiberia in your browser</a>
+	</p>
 
+	<p>
+		<a href="/signup">Sign up</a> |
+		<a href="/login">Log in</a> |
+		<a href="/map">Map</a>
+	</p>
 
+	<h2>Latest Photos</h2>
+	PHOTOS_HTML
+	<p><a href="/photos">View all photos</a></p>
 
-<h2>Photos</h2>
+	<h2>News</h2>
+	LATEST_NEWS_HTML
+	<p><a href="/news">See all news</a></p>
 
-PHOTOS_HTML
+	<h2>Create A World</h2>
+	<p>Create your own Metasiberia world for free.</p>
+	<form action="/create_world_post" method="post">
+		<label for="world_name">World name:</label>
+		<input type="text" name="world_name" id="world_name" value="">
+		<input type="submit" value="Create World">
+	</form>
 
-<p>
-<a href="/photos">View all photos</a>
-</p>
+	<h2>Community</h2>
+	<p>
+		<a href="https://t.me/metasiberia_channel">Telegram</a> |
+		<a href="https://vk.com/metasiberia_official">VK</a>
+	</p>
 
-<h2 id="downloads">Downloads</h2>
-<p>You can enter <a href="/webclient">Substrata in your browser</a>.  Alternatively, explore Substrata with the faster native client:</p>
-<p>
-Windows - <a href="https://downloads.indigorenderer.com/dist/cyberspace/Substrata_v1.6.26_Setup.exe">Substrata_v1.6.26_Setup.exe</a>
-</p>
-<p>	
-MacOS - <a href="https://downloads.indigorenderer.com/dist/cyberspace/Substrata_v1.6.26_x64.pkg">Substrata_v1.6.26_x64.pkg</a>
-</p>	
-<p>	
-Linux - <a href="https://downloads.indigorenderer.com/dist/cyberspace/Substrata_v1.6.26.tar.gz">Substrata_v1.6.26.tar.gz</a>
-</p>
-
-
-
-<h2>Latest News</h2>
-
-LATEST_NEWS_HTML
-
-<a href="/news">See all news</a> or find us on Twitter/X:
-<a href="https://twitter.com/SubstrataVr" ><img width="20px" src="/files/twitter.png" />@SubstrataVr</a>
-
-
-
-<h2 id="createaworld">Create a World</h2>
-
-Create your own Substrata world for free!
-
-<form action="/create_world_post" method="post">
-<label for="world_name">World name:</label> <input type="text" name="world_name" id="world_name" value="">
-<input type="submit" value="Create World">
-</form>
-
-
-<h2>Buy a land parcel</h2>
-
-LAND_PARCELS_FOR_SALE_HTML
-
-<a href="/parcel_auction_list">View all parcels for sale</a>
-
-<h2>Community</h2>
-
-<p>
-<a href="https://discord.gg/R6tfYn3" ><img width="200px" src="/files/join_us_on_discord.png" /></a>
-</p>
-<!--
-<p>
-<a href="https://twitter.com/SubstrataVr" ><img width="60px" src="/files/twitter.png" />@SubstrataVr</a>
-</p>
--->
-
-<h2>Events</h2>
-
-EVENTS_HTML
-
-<a href="/events">See all events</a> or <a href="/create_event">Create an event</a>
-
-<h2>Docs</h2>
-<p><a href="/about_substrata">Read about our goals and plans for Substrata</a></p>
-<p><a href="/about_scripting">Scripting in Substrata</a></p>
-<p><a href="/running_your_own_server">Running your own Substrata server</a></p>
-<p><a href="/about_chatbots">Chatbots in Substrata</a></p>
-
-<br/><br/>
-
-</div> <!-- end root-rest-of-body div-->
-
+	<h2>Docs</h2>
+	<p><a href="/about_substrata">About Metasiberia</a></p>
+</div>
 

@@ -85,7 +85,7 @@ const std::string standardHeader(ServerAllWorldsState& world_state, const web::R
 	}
 	page_out += 
 	"	</div>																									\n" // End login div
-	"	<a href=\"/\"><img src=\"/files/logo_small.png\" alt=\"substrata logo\" class=\"substrata-logo-top-small\"/></a>											\n"
+	"	<a href=\"/\"><img src=\"/files/logo_small.png\" alt=\"metasiberia logo\" class=\"substrata-logo-top-small\"/></a>											\n"
 	
 	"	<header>																								\n"
 	"		<h1>" + web::Escaping::HTMLEscape(page_title) + "</h1>												\n"
@@ -100,8 +100,8 @@ const std::string standardFooter(const web::RequestInfo& request_info, bool incl
 	std::string page_out;
 	page_out +=
 		"	<hr/>																						\n"
-		"	<div class=\"footer\">Substrata is made by <a href=\"http://glaretechnologies.com\">Glare Technologies</a>.		\n"
-		"	Contact us at contact@glaretechnologies.com<br/>											\n"
+		"	<div class=\"footer\">Metasiberia is based on <a href=\"https://substrata.info\">Substrata</a>.				\n"
+		"	Community: <a href=\"https://t.me/metasiberia_channel\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\">VK</a><br/>	\n"
 		"	</div>																						\n"
 		"	<div class=\"footer\"><a href=\"/faq\">F.A.Q.</a> | <a href=\"/terms\">Terms of use</a> | <a href=\"/bot_status\">Bot status</a> | <a href=\"/map\">Map</a></div>				\n"
 		"	</body>																						\n"
