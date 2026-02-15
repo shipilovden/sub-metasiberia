@@ -1167,7 +1167,7 @@ static std::string buildTelegramCaption(
 
 	const std::string sub_url = gui_client.getCurrentURL();
 
-	const std::string hostname = gui_client.server_hostname.empty() ? std::string("substrata.info") : gui_client.server_hostname;
+	const std::string hostname = gui_client.server_hostname.empty() ? std::string("vr.metasiberia.com") : gui_client.server_hostname;
 	const bool use_http = (hostname == "localhost") || (hostname == "127.0.0.1");
 	const std::string web_url = (use_http ? "http://" : "https://") + hostname + gui_client.getCurrentWebClientURLPath();
 

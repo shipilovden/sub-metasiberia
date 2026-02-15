@@ -1105,7 +1105,7 @@ void WorkerThread::doRun()
 		if(client_protocol_version < 38) // We can't handle protocol versions < 38
 		{
 			socket->writeUInt32(Protocol::ClientProtocolTooOld);
-			socket->writeStringLengthFirst("Sorry, your Substrata client is too old. Please download and install an updated client from https://substrata.info/.");
+			socket->writeStringLengthFirst("Sorry, your Substrata client is too old. Please download and install an updated client from https://vr.metasiberia.com/.");
 
 			//socket->writeStringLengthFirst("Sorry, your client protocol version (" + toString(client_protocol_version) + ") is too old, require version " + 
 			//	toString(Protocol::CyberspaceProtocolVersion) + ".  Please install an updated client from https://substrata.info/.");

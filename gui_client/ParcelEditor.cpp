@@ -101,7 +101,7 @@ void ParcelEditor::setCurrentServerURL(const std::string& server_url)
 	current_server_url = server_url;
 	
 	// Parse URL to extract hostname
-	std::string hostname = "substrata.info"; // Default fallback
+	std::string hostname = "vr.metasiberia.com"; // Default fallback
 	
 	if(!current_server_url.empty())
 	{
@@ -130,7 +130,7 @@ void ParcelEditor::setCurrentServerURL(const std::string& server_url)
 void ParcelEditor::on_showOnWebLabel_linkActivated(const QString&)
 {
 	// Extract hostname from server URL
-	std::string hostname = "substrata.info"; // Default fallback
+	std::string hostname = "vr.metasiberia.com"; // Default fallback
 	
 	if(!current_server_url.empty())
 	{

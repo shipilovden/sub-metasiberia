@@ -10,7 +10,7 @@
 #define MyAppName "Metasiberia SDL beta"
 #define MyAppPublisher "Metasiberia"
 #define MyAppAuthor "Denis Shipilov"
-#define MyAppURL "https://substrata.info/"
+#define MyAppURL "https://vr.metasiberia.com/"
 #define MyAppExeName "gui_client.exe"
 #define SourceDir "C:\programming\substrata_output\vs2022\cyberspace_x64\RelWithDebInfo"
 #define OutputDir "C:\programming\substrata_output\installers"

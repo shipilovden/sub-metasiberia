@@ -1880,7 +1880,7 @@ void MainWindow::on_actionAdd_Web_View_triggered()
 	new_world_object->scale = Vec3f(/*width=*/1.f, /*depth=*/0.02f, /*height=*/1080.f / 1920.f);
 	new_world_object->max_model_lod_level = 0;
 
-	new_world_object->target_url = "https://substrata.info/"; // Use a default URL - indicates to users how to set the URL.
+	new_world_object->target_url = "https://vr.metasiberia.com/"; // Use a default URL - indicates to users how to set the URL.
 
 	new_world_object->materials.resize(2);
 	new_world_object->materials[0] = new WorldMaterial();
@@ -4247,7 +4247,7 @@ void MainWindow::handleURL(const QUrl &url)
 
 void MainWindow::openServerScriptLogSlot()
 {
-	const std::string hostname = gui_client.server_hostname.empty() ? "substrata.info" : gui_client.server_hostname;
+	const std::string hostname = gui_client.server_hostname.empty() ? "vr.metasiberia.com" : gui_client.server_hostname;
 
 	QDesktopServices::openUrl(QtUtils::toQString("https://" + hostname + "/script_log"));
 }
@@ -4717,9 +4717,9 @@ int main(int argc, char *argv[])
 		}
 
 
-		//std::string server_hostname = "substrata.info";
+		//std::string server_hostname = "vr.metasiberia.com";
 		//std::string server_userpath = "";
-		std::string server_URL = "sub://substrata.info";
+		std::string server_URL = "sub://vr.metasiberia.com";
 		bool server_URL_explicitly_specified = false;
 
 		if(parsed_args.isArgPresent("-h"))

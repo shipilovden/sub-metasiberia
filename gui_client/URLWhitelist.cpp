@@ -54,6 +54,7 @@ void URLWhitelist::loadDefaultWhitelist()
 
 		// Misc
 		"substrata.info/",
+		"vr.metasiberia.com/",
 		"nonfungibletc.com/",
 		"codyellingham.com/",
 		"www.codyellingham.com/",

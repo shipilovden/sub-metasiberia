@@ -217,7 +217,7 @@ void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* serv
 
 				const std::string URL = server->world_state->getCredential("discord_photo_webhook_URL");
 				const std::string post_content = 
-					"{ \"content\": \"https://substrata.info/photo/" + toString(photo->id) + "\" }";
+					"{ \"content\": \"https://vr.metasiberia.com/photo/" + toString(photo->id) + "\" }";
 
 				std::string response_data;
 				HTTPClient::ResponseInfo response = client->sendPost(URL, post_content, 
