@@ -28,7 +28,7 @@ if (-not (Test-Path $fragsSrc))  { throw "Missing dir: $fragsSrc" }
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
 function Deploy-Tar($localDirName, $localDirPath, $remoteDir) {
-  Write-Host "Deploy: $localDirName -> $SshHost:$remoteDir"
+  Write-Host "Deploy: $localDirName -> ${SshHost}:$remoteDir"
 
   # PowerShell pipelines are not binary-safe, so we avoid `tar ... | ssh ...`.
   $localTgz = Join-Path $env:TEMP ("${localDirName}_$timestamp.tgz")
