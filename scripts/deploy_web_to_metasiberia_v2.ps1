@@ -59,6 +59,8 @@ function Deploy-Tar($localDirName, $localDirPath, $remoteDir) {
     "tar -xzf $remoteTgz -C $tmpDir; rm -f $remoteTgz; " +
     "rm -rf $bakDir; cp -a $remoteDir $bakDir; " +
     "rsync -a --delete $tmpDir/$localDirName/ $remoteDir/; " +
+    # Trigger the server's inotify watcher (it doesn't watch rename/move events by default).
+    "echo ping > $remoteDir/__reload_ping.txt; rm -f $remoteDir/__reload_ping.txt; " +
     "rm -rf $tmpDir; " +
     "echo OK"
 
