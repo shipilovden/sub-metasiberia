@@ -16,6 +16,7 @@ function Assert-Command($name) {
 
 Assert-Command ssh
 Assert-Command tar
+Assert-Command scp
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $publicSrc = Join-Path $repoRoot "webserver_public_files"
@@ -33,10 +34,26 @@ function Deploy-Tar($localDirName, $localDirPath, $remoteDir) {
   $remoteTmp = "$remoteDir.__deploy_tmp__$timestamp"
   $remoteBak = "$remoteDir.__bak__$timestamp"
 
+  # PowerShell pipelines are not binary-safe, so we avoid `tar ... | ssh ...`.
+  $localTgz = Join-Path $env:TEMP ("${localDirName}_$timestamp.tgz")
+  $remoteTgz = "/tmp/${localDirName}_$timestamp.tgz"
+
+  Push-Location $repoRoot
+  try {
+    tar -czf $localTgz $localDirName
+  }
+  finally {
+    Pop-Location
+  }
+
+  & scp $localTgz "$SshHost`:$remoteTgz" | Out-Null
+  Remove-Item -Force $localTgz
+
   $remoteCmd = @"
 set -e
 mkdir -p '$remoteTmp'
-tar -xzf - -C '$remoteTmp'
+tar -xzf '$remoteTgz' -C '$remoteTmp'
+rm -f '$remoteTgz'
 if [ -d '$remoteDir' ]; then
   mv '$remoteDir' '$remoteBak'
 fi
@@ -44,13 +61,7 @@ mv '$remoteTmp/$localDirName' '$remoteDir'
 echo 'OK'
 "@
 
-  Push-Location $repoRoot
-  try {
-    tar -czf - $localDirName | ssh $SshHost $remoteCmd
-  }
-  finally {
-    Pop-Location
-  }
+  ssh $SshHost $remoteCmd
 }
 
 if (-not $SkipPublicFiles) {
@@ -62,4 +73,3 @@ if (-not $SkipFragments) {
 }
 
 Write-Host "Done."
-
