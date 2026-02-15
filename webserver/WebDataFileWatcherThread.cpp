@@ -44,7 +44,9 @@ static HANDLE makeWaitHandleForDir(const std::string& dir, bool watch_subtree)
 #else // else on Linux:
 static int makeWatchDescriptorForDir(int inotify_fd, const std::string& dir)
 {
-	const int watch_descriptor = inotify_add_watch(inotify_fd, dir.c_str(), IN_MODIFY | IN_CREATE | IN_DELETE);
+	// Note: tools like rsync often update files by writing a temp file then renaming it into place.
+	// That produces IN_MOVED_TO/IN_MOVED_FROM events instead of IN_MODIFY.
+	const int watch_descriptor = inotify_add_watch(inotify_fd, dir.c_str(), IN_MODIFY | IN_CREATE | IN_DELETE | IN_MOVED_TO | IN_MOVED_FROM);
 	if(watch_descriptor == -1)
 		throw glare::Exception("inotify_add_watch failed: " + PlatformUtils::getLastErrorString());
 	return watch_descriptor;
