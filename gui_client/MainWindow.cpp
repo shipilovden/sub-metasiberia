@@ -556,6 +556,15 @@ void MainWindow::afterGLInitInitialise()
 {
 	ZoneScoped; // Tracy profiler
 
+	// Ensure the main GL context is current while we create GL resources (UI textures, etc).
+	// Without this, resources can be created against the wrong QGLWidget context, which manifests as black quads.
+	ui->glWidget->makeCurrent();
+	struct DoneCurrent
+	{
+		GlWidget* w;
+		~DoneCurrent() { if(w) w->doneCurrent(); }
+	} done_current{ ui->glWidget };
+
 	
 	if(settings->value("mainwindow/flyMode", QVariant(false)).toBool())
 	{

@@ -15,77 +15,118 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QWidget" name="widget" native="true">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
      </property>
-     <layout class="QFormLayout" name="formLayout">
-      <item row="6" column="0">
-       <widget class="QWidget" name="widget_2" native="true"/>
-      </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="usernameLineEdit"/>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="usernameLabel">
-        <property name="text">
-         <string>Your name:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="FileSelectWidget" name="avatarSelectWidget"/>
-      </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label_2">
-        <property name="text">
-         <string>Model:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Preview animation</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="1">
-       <widget class="QComboBox" name="animationComboBox"/>
-      </item>
-      <item row="4" column="1">
-       <spacer name="verticalSpacer">
-        <property name="orientation">
-         <enum>Qt::Vertical</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>20</width>
-          <height>40</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item row="3" column="1">
-       <widget class="QLabel" name="createReadyPlayerMeLabel">
-        <property name="text">
-         <string>Create ReadyPlayerme avatars at XXX</string>
-        </property>
-   </widget>
-  </item>
- </layout>
- </widget>
-   </item>
-   <item>
-    <widget class="QWidget" name="centralWidget" native="true">
-     <layout class="QVBoxLayout" name="verticalLayout_2">
-      <item>
-       <widget class="AvatarPreviewWidget" name="avatarPreviewGLWidget" native="true"/>
-      </item>
-     </layout>
+     <widget class="QWidget" name="avatarTab">
+      <attribute name="title">
+       <string>Avatar</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="avatarTabLayout">
+       <item>
+        <widget class="QWidget" name="widget" native="true">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QFormLayout" name="formLayout">
+          <item row="6" column="0">
+           <widget class="QWidget" name="widget_2" native="true"/>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="usernameLineEdit"/>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="usernameLabel">
+            <property name="text">
+             <string>Your name:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="FileSelectWidget" name="avatarSelectWidget"/>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_2">
+            <property name="text">
+             <string>Model:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>Preview animation</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QComboBox" name="animationComboBox"/>
+          </item>
+          <item row="4" column="1">
+           <spacer name="verticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLabel" name="createReadyPlayerMeLabel">
+            <property name="text">
+             <string>Create ReadyPlayerme avatars at XXX</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="centralWidget" native="true">
+         <layout class="QVBoxLayout" name="verticalLayout_2">
+          <item>
+           <widget class="AvatarPreviewWidget" name="avatarPreviewGLWidget" native="true"/>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="vroidTab">
+      <attribute name="title">
+       <string>VRoid</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="vroidTabLayout">
+       <item>
+        <widget class="QLabel" name="vroidPlaceholderLabel">
+         <property name="text">
+          <string>VRoid (coming soon)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="vroidVerticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
    <item>
