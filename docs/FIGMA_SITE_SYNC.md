@@ -41,6 +41,25 @@ Admin:
 Плюсы: получаем редактируемые слои, а не просто картинки.
 Минусы: качество импорта зависит от плагина.
 
+### Вариант A2 (бесплатный, полностью покрывает весь сайт): скриншоты + наш Figma-плагин
+1. Снять скриншоты страниц Playwright-скриптом:
+   - Папка: `substrata/tools/site_capture`
+   - Установка: `npm i`
+   - Запуск (public страницы): `node capture.mjs --base https://vr.metasiberia.com`
+   - Или одной командой через wrapper:
+     - `powershell -ExecutionPolicy Bypass -File C:\programming\substrata\scripts\capture_site_for_figma.ps1`
+2. Для страниц, требующих логин (account/admin):
+   - Вариант 1: задать env vars `METASIBERIA_ADMIN_USER`, `METASIBERIA_ADMIN_PASS` и повторить запуск.
+   - Вариант 2: использовать `storageState.json` (Playwright) и передать `--storageState <path>`.
+   - Вариант 3: передать cookie сессии:
+     - `powershell -ExecutionPolicy Bypass -File C:\programming\substrata\scripts\capture_site_for_figma.ps1 -Cookie "<cookie_header_value>"`
+3. Установить development plugin в Figma:
+   - `substrata/tools/figma/metasiberia_site_importer/manifest.json`
+4. В плагине выбрать `manifest.json` из папки скриншотов и все PNG, нажать `Import`.
+
+Плюсы: бесплатно, выгружается весь сайт.
+Минусы: сначала это референс-скриншоты (дальше поверх них собираем живые компоненты и дизайн-систему).
+
 ### Вариант B (быстрый fallback): фреймы со скриншотами + поверх “обводка”
 1. Сделать скриншоты ключевых страниц (желательно full-page).
 2. Вставить скриншоты в Figma как изображения (Place image).
@@ -63,4 +82,3 @@ Admin:
 См. скрипт: `substrata/scripts/snapshot_site_pages.ps1`
 
 Он сохраняет HTML/ассеты (для публичных страниц) в локальную папку и позволяет быстро сравнивать изменения сайта без ручного копирования.
-

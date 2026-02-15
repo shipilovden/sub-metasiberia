@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Metasiberia Site Importer</title>
+    <style>
+      body { font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 16px; }
+      h2 { margin: 0 0 8px; font-size: 14px; }
+      p { margin: 8px 0; color: #333; }
+      .muted { color: #666; }
+      input[type="file"] { width: 100%; }
+      .row { margin: 12px 0; }
+      button { padding: 8px 10px; }
+      .btns { display: flex; gap: 8px; }
+      textarea { width: 100%; height: 90px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .warn { background: #fff4e5; border: 1px solid #ffd8a8; padding: 8px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h2>Metasiberia Site Importer</h2>
+    <p class="muted">Импортирует PNG-скриншоты сайта в текущий Figma-файл. Без платных плагинов.</p>
+
+    <div class="row warn">
+      <div><b>Нужно:</b></div>
+      <div>1) `manifest.json` из `capture_site_screenshots`</div>
+      <div>2) PNG файлы, которые указаны в manifest</div>
+    </div>
+
+    <div class="row">
+      <div><b>Manifest</b></div>
+      <input id="manifest" type="file" accept="application/json,.json" />
+    </div>
+
+    <div class="row">
+      <div><b>PNG files</b></div>
+      <input id="images" type="file" accept="image/png,.png" multiple />
+    </div>
+
+    <div class="row">
+      <div><b>Log</b></div>
+      <textarea id="log" readonly></textarea>
+    </div>
+
+    <div class="btns">
+      <button id="import">Import</button>
+      <button id="close">Close</button>
+    </div>
+
+    <script>
+      const elManifest = document.getElementById("manifest");
+      const elImages = document.getElementById("images");
+      const elLog = document.getElementById("log");
+      const log = (s) => { elLog.value += s + "\\n"; elLog.scrollTop = elLog.scrollHeight; };
+
+      function readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onerror = () => reject(r.error);
+          r.onload = () => resolve(String(r.result || ""));
+          r.readAsText(file);
+        });
+      }
+
+      function readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onerror = () => reject(r.error);
+          r.onload = () => resolve(r.result);
+          r.readAsArrayBuffer(file);
+        });
+      }
+
+      document.getElementById("import").onclick = async () => {
+        try {
+          if (!elManifest.files || elManifest.files.length !== 1) throw new Error("Pick manifest.json");
+          const manifestText = await readFileAsText(elManifest.files[0]);
+          const manifest = JSON.parse(manifestText);
+
+          const items = (manifest && manifest.items) || [];
+          if (!Array.isArray(items) || items.length === 0) throw new Error("Manifest has no items");
+
+          const imgMap = new Map();
+          for (const f of (elImages.files || [])) imgMap.set(f.name, f);
+
+          const out = [];
+          for (const it of items) {
+            const fileName = it.file;
+            if (!fileName) throw new Error("Manifest item missing 'file'");
+
+            const f = imgMap.get(fileName);
+            if (!f) throw new Error("Missing PNG: " + fileName);
+            const buf = await readFileAsArrayBuffer(f);
+            out.push({
+              category: it.category || "Website",
+              name: it.name || it.path || it.url || fileName,
+              url: it.url || "",
+              width: it.width || 1440,
+              height: it.height || 900,
+              bytes: Array.from(new Uint8Array(buf))
+            });
+          }
+
+          log("Importing " + out.length + " items...");
+          parent.postMessage({ pluginMessage: { type: "import", payload: { items: out } } }, "*");
+        } catch (e) {
+          log("ERROR: " + (e && e.message ? e.message : String(e)));
+        }
+      };
+
+      document.getElementById("close").onclick = () => {
+        parent.postMessage({ pluginMessage: { type: "close" } }, "*");
+      };
+    </script>
+  </body>
+</html>
+
