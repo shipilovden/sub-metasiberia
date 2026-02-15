@@ -84,9 +84,9 @@ REG.RU hosting metasiberia.com (ISPmanager):
 
 Пример (концептуально):
 ```xml
-<server_config>
+<config>
   <letsencrypt_webroot_dir>/root/cyberspace_server_state/letsencrypt_webroot</letsencrypt_webroot_dir>
-</server_config>
+</config>
 ```
 
 После этого можно использовать `certbot` в режиме webroot (конкретные команды зависят от окружения на сервере).
@@ -102,10 +102,13 @@ REG.RU hosting metasiberia.com (ISPmanager):
 
 Пример (концептуально):
 ```xml
-<server_config>
+<config>
   <canonical_web_hostname>vr.metasiberia.com</canonical_web_hostname>
-</server_config>
+</config>
 ```
+
+### 4.1 Факт по текущему TLS на Metasiberia v2 (снимок на 2026-02-15)
+В state dir обычно лежат `MyCertificate.crt` и `MyKey.key`. На основном сервере они сейчас указывают на Let's Encrypt cert для `vr.metasiberia.com` (через symlink в `/etc/letsencrypt/live/...`).
 
 ## 5) Почта: отправка писем и “почтовая аутентификация” домена
 
