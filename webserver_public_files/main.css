@@ -37,6 +37,11 @@ body {
 .msb-root-hero-links a:hover {
 	text-decoration: underline;
 }
+
+/* Hide the generic server footer on the root page; the root landing is intentionally minimal. */
+body.root-body .footer {
+	display: none;
+}
 .root-body {
 	/*margin-top: 46px;*/
 	margin-top: 20px;
