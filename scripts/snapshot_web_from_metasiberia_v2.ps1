@@ -16,6 +16,7 @@ function Assert-Command($name) {
 
 Assert-Command ssh
 Assert-Command tar
+Assert-Command scp
 
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
   $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -32,10 +33,20 @@ function Pull-RemoteDir($remoteDir, $localName) {
   $localPath = Join-Path $OutDir $localName
   New-Item -ItemType Directory -Force -Path $localPath | Out-Null
 
-  Write-Host "Snapshot: $SshHost:$remoteDir -> $localPath"
+  Write-Host "Snapshot: ${SshHost}:$remoteDir -> $localPath"
 
-  $remoteCmd = "set -e; cd '$remoteDir'; tar -czf - ."
-  & ssh $SshHost $remoteCmd | tar -xzf - -C $localPath
+  # PowerShell pipelines are not binary-safe, so we avoid `ssh ... | tar ...`.
+  $remoteTgz = "/tmp/${localName}_$((Get-Date).ToString('yyyyMMdd_HHmmss')).tgz"
+  $localTgz  = Join-Path $OutDir ($localName + ".tgz")
+
+  $packCmd = "set -e; cd '$remoteDir'; tar -czf '$remoteTgz' ."
+  & ssh $SshHost $packCmd | Out-Null
+
+  & scp "$SshHost`:$remoteTgz" $localTgz | Out-Null
+  & ssh $SshHost "rm -f '$remoteTgz'" | Out-Null
+
+  tar -xzf $localTgz -C $localPath
+  Remove-Item -Force $localTgz
 }
 
 Pull-RemoteDir -remoteDir $ServerPublicDir  -localName "webserver_public_files"
@@ -43,4 +54,3 @@ Pull-RemoteDir -remoteDir $ServerFragmentsDir -localName "webserver_fragments"
 Pull-RemoteDir -remoteDir $ServerWebClientDir -localName "webclient"
 
 Write-Host "Done. Snapshot saved to: $OutDir"
-
