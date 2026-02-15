@@ -559,7 +559,7 @@ void renderMetadata(ServerAllWorldsState& world_state, const web::RequestInfo& r
 
 		std::string page = "{"
 			"\"name\":\"Parcel " + toString(parcel_id) + "\","
-			"\"external_url\":\"https://substrata.info/parcel/" + toString(parcel_id) + "\"," // "This is the URL that will appear below the asset's image on OpenSea and will allow users to leave OpenSea and view the item on your site."
+			"\"external_url\":\"https://vr.metasiberia.com/parcel/" + toString(parcel_id) + "\"," // "This is the URL that will appear below the asset's image on OpenSea and will allow users to leave OpenSea and view the item on your site."
 			;
 
 		{ // lock scope
@@ -577,7 +577,7 @@ void renderMetadata(ServerAllWorldsState& world_state, const web::RequestInfo& r
 			{
 				const uint64 screenshot_id = parcel->screenshot_ids[0];
 
-				page += "\"image\":\"https://substrata.info/screenshot/" + toString(screenshot_id) + "\",";
+				page += "\"image\":\"https://vr.metasiberia.com/screenshot/" + toString(screenshot_id) + "\",";
 			}
 
 			std::string descrip;
@@ -590,7 +590,7 @@ void renderMetadata(ServerAllWorldsState& world_state, const web::RequestInfo& r
 			const double dist_from_orig = centre.getDist(Vec3d(0, 0, 0));
 
 			descrip += "Location: x: " + toString((int)centre.x) + ", y: " + toString((int)centre.y) + " (" + doubleToStringNSigFigs(dist_from_orig, 2) + " m from the origin).";
-			descrip += "  Visit https://substrata.info/parcel/" + toString(parcel_id) + " for more info.";
+			descrip += "  Visit https://vr.metasiberia.com/parcel/" + toString(parcel_id) + " for more info.";
 
 			page += "\"description\":\"" + web::Escaping::JSONEscape(descrip) + "\","; // "A human readable description of the item. Markdown is supported."
 

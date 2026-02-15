@@ -26,6 +26,7 @@ REG.RU hosting metasiberia.com (ISPmanager):
 ### 1.1 Metasiberia v2 (основной)
 - IP: `89.104.70.23`
 - Роль: основной Substrata server + встроенный C++ webserver (сайт/админка/регистрация).
+- Публичный домен (основной): `https://vr.metasiberia.com/`
 - Текущие URL (по IP):
   - `https://89.104.70.23/`
   - `https://89.104.70.23/signup`
@@ -40,6 +41,9 @@ REG.RU hosting metasiberia.com (ISPmanager):
 ### 1.2 TheRift (второй сервер)
 - IP: `95.163.227.206`
 - Роль: отдельный сервер/площадка (назначение уточняется).
+- Рекомендуемое использование (чтобы не рисковать продом):
+  - staging/тестовый сервер для проверки новых сборок `server` и web-изменений перед выкатыванием на `Metasiberia v2`;
+  - площадка для нагрузочных/интеграционных тестов, чтобы не влиять на пользователей.
 - Доступ: SSH (пароль в `C:\programming\AGENTS_SECRETS.local.md`).
 - Примечание: если SSH ругается на host key mismatch, сначала проверить отпечаток ключа и обновить `known_hosts` осознанно.
 
@@ -68,8 +72,12 @@ REG.RU hosting metasiberia.com (ISPmanager):
 ### 2.2 Факт по DNS (снимок на 2026-02-15)
 - `metasiberia.com` -> `176.57.65.17`
 - `www.metasiberia.com` -> `176.57.65.17`
-- `vr.metasiberia.com` -> `89.111.168.233`
+- `vr.metasiberia.com` -> `89.104.70.23`
 - `89.104.70.23` reverse: `89-104-70-23.cloudvps.regruhosting.ru`
+
+### 2.3 Текущее состояние миграции (2026-02-15)
+- `https://vr.metasiberia.com/` считается основным публичным адресом сервера/сайта.
+- Прямой доступ по IP (`https://89.104.70.23/`) сохраняем как fallback/диагностику.
 
 ## 3) TLS (Let's Encrypt) без остановки сервера
 
@@ -158,3 +166,28 @@ REG.RU hosting metasiberia.com (ISPmanager):
 2. Выпустить TLS сертификат на поддомен через ACME http-01 webroot.
 3. Обновить credentials: `email_sending_reset_webserver_hostname=<поддомен>`.
 4. Включить `canonical_web_hostname=<поддомен>` (после проверки, что DNS+TLS готовы).
+
+## 9) Данные сайта, пользователи и “база”
+
+### 9.1 Где лежат данные сайта на основном сервере
+Факт по `89.104.70.23`:
+- Public files (CSS/JS/PNG) используются из: `/root/cyberspace_server_state/webserver_public_files`
+- Webclient (wasm/html) используется из: `/root/cyberspace_server_state/webclient`
+- HTML fragments: сейчас `webserver_fragments_dir` в конфиге закомментирован; фактически фрагменты берутся из дефолтного пути (см. `AGENTS.md`), либо из дистрибутива сервера. Если нужно удобно редактировать фрагменты, рекомендуется явно задать `webserver_fragments_dir` в `/root/cyberspace_server_state/substrata_server_config.xml` и держать их рядом со state dir.
+
+### 9.2 Быстрое редактирование сайта (рекомендуемый workflow)
+Рекомендация: исходники web-части держим в git (в этом репозитории), а на сервер выкатываем синхронизацией.
+Добавлен скрипт деплоя статики/фрагментов на основной сервер:
+- `scripts/deploy_web_to_metasiberia_v2.ps1`
+
+### 9.3 Пользователи и “БД” (как сейчас устроено)
+Сервер хранит состояние (включая пользователей, парсели, сессии и т.п.) в файле базы:
+- `/root/cyberspace_server_state/server_state.bin`
+
+Суперадмин (god user):
+- `UserID == 0` (`shared/UserID.h`).
+
+Web-админка (основные страницы):
+- `/admin` (главная)
+- `/admin_users` (список пользователей)
+- `/admin_user/<id>` (карточка пользователя)
