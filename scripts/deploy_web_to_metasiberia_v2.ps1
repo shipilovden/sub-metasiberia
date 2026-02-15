@@ -30,10 +30,6 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 function Deploy-Tar($localDirName, $localDirPath, $remoteDir) {
   Write-Host "Deploy: $localDirName -> $SshHost:$remoteDir"
 
-  # Extract to a temp directory then atomically replace. This avoids half-written trees if the connection drops.
-  $remoteTmp = "$remoteDir.__deploy_tmp__$timestamp"
-  $remoteBak = "$remoteDir.__bak__$timestamp"
-
   # PowerShell pipelines are not binary-safe, so we avoid `tar ... | ssh ...`.
   $localTgz = Join-Path $env:TEMP ("${localDirName}_$timestamp.tgz")
   $remoteTgz = "/tmp/${localDirName}_$timestamp.tgz"
@@ -49,15 +45,28 @@ function Deploy-Tar($localDirName, $localDirPath, $remoteDir) {
   & scp $localTgz "$SshHost`:$remoteTgz" | Out-Null
   Remove-Item -Force $localTgz
 
+  # IMPORTANT (Linux): the server uses inotify watches on these directories.
+  # Replacing the directory (mv/rename) breaks the watch descriptor (it watches the old inode),
+  # so we must update contents IN PLACE. We still create a backup copy.
   $remoteCmd = @"
 set -e
-mkdir -p '$remoteTmp'
-tar -xzf '$remoteTgz' -C '$remoteTmp'
+tmpdir='/tmp/${localDirName}.__deploy_tmp__${timestamp}'
+bakdir='${remoteDir}.__bak__${timestamp}'
+
+mkdir -p '$remoteDir'
+rm -rf "\$tmpdir"
+mkdir -p "\$tmpdir"
+
+tar -xzf '$remoteTgz' -C "\$tmpdir"
 rm -f '$remoteTgz'
+
 if [ -d '$remoteDir' ]; then
-  mv '$remoteDir' '$remoteBak'
+  rm -rf "\$bakdir"
+  cp -a '$remoteDir' "\$bakdir"
 fi
-mv '$remoteTmp/$localDirName' '$remoteDir'
+
+rsync -a --delete "\$tmpdir/$localDirName/" '$remoteDir/'
+rm -rf "\$tmpdir"
 echo 'OK'
 "@
 
