@@ -35,7 +35,8 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	plugins_path = "#{qt_dir}/plugins"
 	
 	# Qt dlls.
-	dll_files = ["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Gamepad", "Qt5Multimedia", "Qt5MultimediaWidgets"]
+	# Qt5Multimedia depends on Qt5Network, so include it explicitly.
+	dll_files = ["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Network", "Qt5Gamepad", "Qt5Multimedia", "Qt5MultimediaWidgets"]
 
 		
 	dll_files.each do |dll_file|
