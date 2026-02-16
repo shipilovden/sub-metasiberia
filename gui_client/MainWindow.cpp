@@ -79,6 +79,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/BufferOutStream.h"
 #include "../utils/IndigoXMLDoc.h"
 #include "../utils/LimitedAllocator.h"
+#include <Escaping.h>
 #include "../networking/MySocket.h"
 #include "../graphics/ImageMap.h"
 #include "../graphics/FormatDecoderGLTF.h"
@@ -140,6 +141,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	run_as_screenshot_slave(false),
 	taking_map_screenshot(false),
 	test_screenshot_taking(false),
+	screenshot_target_worldname_set(false),
 	running_destructor(false),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder),
 	settings(NULL),
@@ -1297,6 +1299,8 @@ void MainWindow::runScreenshotCode()
 					conPrint("Reading command from screenshot_command_socket etc...");
 					const std::string command = test_screenshot_taking ? "takescreenshot" : screenshot_command_socket->readStringLengthFirst(1000);
 					conPrint("Read screenshot command: " + command);
+					screenshot_target_worldname_set = false;
+					screenshot_target_worldname.clear();
 					if(command == "takescreenshot")
 					{
 						if(test_screenshot_taking)
@@ -1359,6 +1363,49 @@ void MainWindow::runScreenshotCode()
 						screenshot_highlight_parcel_id = -1;
 						taking_map_screenshot = true;
 					}
+					else if(command == "takemapscreenshot_world")
+					{
+						const std::string world_name = screenshot_command_socket->readStringLengthFirst(10000);
+						const int tile_x = screenshot_command_socket->readInt32();
+						const int tile_y = screenshot_command_socket->readInt32();
+						const int tile_z = screenshot_command_socket->readInt32();
+						screenshot_output_path = screenshot_command_socket->readStringLengthFirst(1000);
+
+						screenshot_target_worldname_set = true;
+						screenshot_target_worldname = world_name;
+
+						const int TILE_WIDTH_PX = 256; // Works the easiest with leaflet.js
+						const float TILE_WIDTH_M = 5120.f / (1 << tile_z);
+						const double pos_x = (tile_x + 0.5) * TILE_WIDTH_M;
+						const double pos_y = (tile_y + 0.5) * TILE_WIDTH_M;
+						const double pos_z = 200.0;
+						const double heading_deg = 0.0;
+
+						// Switch to the requested world if needed, then let the normal "loaded_all" logic wait until everything is ready.
+						if(gui_client.server_worldname != world_name)
+						{
+							std::string URL = "sub://" + gui_client.server_hostname + "/";
+							URL += web::Escaping::URLEscape(world_name);
+							URL += "?x=" + doubleToStringNDecimalPlaces(pos_x, 1) + "&y=" + doubleToStringNDecimalPlaces(pos_y, 1) + "&z=" + doubleToStringNDecimalPlaces(pos_z, 2) +
+								"&heading=" + doubleToStringNDecimalPlaces(heading_deg, 1);
+							gui_client.visitSubURL(URL, /*push_cur_URL_on_nav_stack=*/false, /*adjust_cur_URL_pos_back=*/false);
+
+							total_timer.reset();
+							time_since_last_screenshot.reset();
+							time_since_last_waiting_msg.reset();
+						}
+
+						screenshot_campos = Vec3d(pos_x, pos_y, pos_z);
+						screenshot_camangles = Vec3d(
+							0, // Heading
+							3.14, // pitch
+							0 // roll
+						);
+						screenshot_ortho_sensor_width_m = TILE_WIDTH_M;
+						screenshot_width_px = TILE_WIDTH_PX;
+						screenshot_highlight_parcel_id = -1;
+						taking_map_screenshot = true;
+					}
 					else if(command == "quit")
 					{
 						conPrint("Received quit command, exiting...");
@@ -1383,6 +1430,10 @@ void MainWindow::runScreenshotCode()
 	{
 		if(!screenshot_output_path.empty()) // If we are in screenshot-taking mode:
 		{
+			// If we were asked to take a map screenshot for a specific world, wait until we are actually in that world.
+			if(screenshot_target_worldname_set && (gui_client.server_worldname != screenshot_target_worldname))
+				return;
+
 			gui_client.cam_controller.setAngles(screenshot_camangles);
 			gui_client.cam_controller.setFirstAndThirdPersonPositions(screenshot_campos);
 			gui_client.player_physics.setEyePosition(screenshot_campos);
@@ -1487,6 +1538,8 @@ void MainWindow::runScreenshotCode()
 
 				// Reset screenshot state
 				screenshot_output_path.clear();
+				screenshot_target_worldname_set = false;
+				screenshot_target_worldname.clear();
 
 				time_since_last_screenshot.reset();
 

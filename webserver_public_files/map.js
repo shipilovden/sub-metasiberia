@@ -18,49 +18,18 @@ const maxNativeZoom = 6;
 const minZoom = 0;
 const maxZoom = 10;
 
-if (isRootWorld) {
-    L.tileLayer('/tile?x={x}&y={y}&z={z}', {
-        zoomOffset: 0,
-        minZoom: minZoom,
-        maxZoom: maxZoom,
-        minNativeZoom: minNativeZoom,
-        maxNativeZoom: maxNativeZoom,
-        noWrap: true,
-    }).addTo(mymap);
-} else {
-    // For non-root worlds we currently show a lightweight local grid background (no server tiles),
-    // while still rendering parcel outlines for the selected world.
-    L.gridLayer({
-        minZoom: minZoom,
-        maxZoom: maxZoom,
-        noWrap: true,
-        createTile: function (coords) {
-            const tile = document.createElement('canvas');
-            tile.width = 256;
-            tile.height = 256;
+const tileUrl = isRootWorld
+    ? '/tile?x={x}&y={y}&z={z}'
+    : ('/tile?world=' + encodeURIComponent(worldParam) + '&x={x}&y={y}&z={z}');
 
-            const ctx = tile.getContext('2d');
-            ctx.fillStyle = '#f7f9fb';
-            ctx.fillRect(0, 0, 256, 256);
-
-            ctx.strokeStyle = '#e3e8ef';
-            ctx.lineWidth = 1;
-            for (let x = 0; x <= 256; x += 32) {
-                ctx.beginPath();
-                ctx.moveTo(x + 0.5, 0);
-                ctx.lineTo(x + 0.5, 256);
-                ctx.stroke();
-            }
-            for (let y = 0; y <= 256; y += 32) {
-                ctx.beginPath();
-                ctx.moveTo(0, y + 0.5);
-                ctx.lineTo(256, y + 0.5);
-                ctx.stroke();
-            }
-            return tile;
-        },
-    }).addTo(mymap);
-}
+L.tileLayer(tileUrl, {
+    zoomOffset: 0,
+    minZoom: minZoom,
+    maxZoom: maxZoom,
+    minNativeZoom: minNativeZoom,
+    maxNativeZoom: maxNativeZoom,
+    noWrap: true,
+}).addTo(mymap);
 
 
 var info = L.control();

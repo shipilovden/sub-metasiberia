@@ -198,16 +198,18 @@ int main(int argc, char* argv[])
 							}
 							else if(request_type == Protocol::TileScreenShotRequest)
 							{
+								const std::string world_name = socket->readStringLengthFirst(10000);
 								const int tile_x = socket->readInt32();
 								const int tile_y = socket->readInt32();
 								const int tile_z = socket->readInt32();
 
-								conPrint("tile: (" + toString(tile_x) + ", " + toString(tile_y) + ", " + toString(tile_z) + ")");
+								conPrint("tile world='" + world_name + "', tile=(" + toString(tile_x) + ", " + toString(tile_y) + ", " + toString(tile_z) + ")");
 
 								const std::string screenshot_filename = "tile_" + toString(tile_x) + "_" + toString(tile_y) + "_" + toString(tile_z) + "_" + StringUtils::convertByteArrayToHexString(data, NUM_BYTES) + ".jpg";
 								screenshot_path = PlatformUtils::getTempDirPath() + "/" + screenshot_filename;
 
-								packet.writeStringLengthFirst("takemapscreenshot");
+								packet.writeStringLengthFirst("takemapscreenshot_world");
+								packet.writeStringLengthFirst(world_name);
 								packet.writeInt32(tile_x);
 								packet.writeInt32(tile_y);
 								packet.writeInt32(tile_z);
