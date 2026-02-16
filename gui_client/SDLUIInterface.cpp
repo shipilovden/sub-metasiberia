@@ -620,6 +620,14 @@ std::string SDLUIInterface::getDecryptedPasswordForDomain(const std::string& dom
 	}
 }
 
+std::string SDLUIInterface::showOpenFileDialog(const std::string& caption, const std::vector<FileTypeFilter>& file_type_filters, const std::string& settings_key)
+{
+	(void)caption;
+	(void)file_type_filters;
+	(void)settings_key;
+	return std::string();
+}
+
 bool SDLUIInterface::inScreenshotTakingMode()
 {
 	return false;

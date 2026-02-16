@@ -70,121 +70,126 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 			page += "<div class=\"msg\">" + web::Escaping::HTMLEscape(msg_for_user) + "</div>  \n";
 
 
-		//-------------------------------- List parcels owned by user --------------------------------
-
-		page += "<h2>Parcels</h2>\n";
+		const std::string user_name = logged_in_user->name;
+		const std::string user_initial = user_name.empty() ? "?" : std::string(1, user_name[0]);
 
 		Reference<ServerWorldState> root_world = world_state.getRootWorldState();
 
+		std::string parcels_html;
+		int owned_parcel_count = 0;
 		for(auto it = root_world->parcels.begin(); it != root_world->parcels.end(); ++it)
 		{
 			const Parcel* parcel = it->second.ptr();
-
-			// Look up owner
 			if(parcel->owner_id == logged_in_user->id)
 			{
-				page += "<p>\n";
-				page += "<a href=\"/parcel/" + parcel->id.toString() + "\">Parcel " + parcel->id.toString() + "</a><br/>" +
-					"description: " + web::Escaping::HTMLEscape(parcel->description);// +"<br/>" +
-					//"created " + parcel->created_time.timeAgoDescription();
+				owned_parcel_count++;
+				parcels_html += "<div class=\"msb-card\">";
+				parcels_html += "<div><a href=\"/parcel/" + parcel->id.toString() + "\">Parcel " + parcel->id.toString() + "</a></div>";
+				parcels_html += "<div>" + web::Escaping::HTMLEscape(parcel->description) + "</div>";
 				if(parcel->nft_status == Parcel::NFTStatus_NotNFT)
-					page += "<br/><a href=\"/make_parcel_into_nft?parcel_id=" + parcel->id.toString() + "\">Mint as a NFT</a>";
-				page += "</p>\n";
-				//page += "<br/>  \n";
+					parcels_html += "<div><a href=\"/make_parcel_into_nft?parcel_id=" + parcel->id.toString() + "\">Mint as a NFT</a></div>";
+				parcels_html += "</div>";
 			}
 		}
+		if(parcels_html.empty())
+			parcels_html = "<div class=\"msb-card\">You do not own parcels yet.</div>";
 
-		//-------------------------------- List worlds owned by user --------------------------------
-
-		page += "<h2>Worlds</h2>\n";
-
+		std::string worlds_html;
+		int owned_world_count = 0;
 		for(auto it = world_state.world_states.begin(); it != world_state.world_states.end(); ++it)
 		{
 			const ServerWorldState* world = it->second.ptr();
-
 			if(world->details.owner_id == logged_in_user->id)
 			{
-				page += "<div>\n";
-				page += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world->details.name) + "\">" + web::Escaping::HTMLEscape(world->details.name) + "</a>";
-				page += "</div>\n";
+				owned_world_count++;
+				worlds_html += "<div class=\"msb-card\"><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world->details.name) + "\">" + web::Escaping::HTMLEscape(world->details.name) + "</a></div>";
 			}
 		}
+		if(worlds_html.empty())
+			worlds_html = "<div class=\"msb-card\">You don't have personal worlds yet.</div>";
 
-		page += "<p><a href=\"/create_world\">Create a new world</a></p>\n";
-
-		//-------------------------------- List events created by user --------------------------------
-		page += "<h2>Events</h2>\n";
+		std::string events_html;
+		int created_event_count = 0;
 		for(auto it = world_state.events.begin(); it != world_state.events.end(); ++it)
 		{
 			const SubEvent* event = it->second.ptr();
 			if(event->creator_id == logged_in_user->id)
 			{
-				page += "<div><a href=\"/event/" + toString(event->id) + "\">" + web::Escaping::HTMLEscape(event->title) + "</a></div>";
+				created_event_count++;
+				events_html += "<div class=\"msb-card\"><a href=\"/event/" + toString(event->id) + "\">" + web::Escaping::HTMLEscape(event->title) + "</a></div>";
 			}
 		}
+		if(events_html.empty())
+			events_html = "<div class=\"msb-card\">No events created yet.</div>";
 
-		//-------------------------------- List chatbots owned/created by user --------------------------------
-		page += "<h2>ChatBots</h2>\n";
+		std::string chatbots_html;
+		int chatbot_count = 0;
+		// Look through all chatbots in all worlds.  NOTE: slow
+		for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
 		{
-			int num_chatbots = 0;
-			// Look through all chatbots in all worlds.  NOTE: slow
-			for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+			ServerWorldState* world = world_it->second.ptr();
+			for(auto it = world->getChatBots(lock).begin(); it != world->getChatBots(lock).end(); ++it)
 			{
-				ServerWorldState* world = world_it->second.ptr();
-				for(auto it = world->getChatBots(lock).begin(); it != world->getChatBots(lock).end(); ++it)
+				const ChatBot* chatbot = it->second.ptr();
+				if(chatbot->owner_id == logged_in_user->id)
 				{
-					const ChatBot* chatbot = it->second.ptr();
-					if(chatbot->owner_id == logged_in_user->id)
-					{
-						// This chatbot belongs to the user
-						page += "<div><a href=\"/edit_chatbot?chatbot_id=" + toString(chatbot->id) + "\">" + web::Escaping::HTMLEscape(chatbot->name) + " (ID: " + toString(chatbot->id) + ")</a></div>";
-						num_chatbots++;
-					}
+					chatbot_count++;
+					chatbots_html += "<div class=\"msb-card\"><a href=\"/edit_chatbot?chatbot_id=" + toString(chatbot->id) + "\">" + web::Escaping::HTMLEscape(chatbot->name) + " (ID: " + toString(chatbot->id) + ")</a></div>";
 				}
 			}
-
-			if(num_chatbots == 0)
-				page += "<p>You haven't created any chatbots.</p>";
 		}
+		if(chatbots_html.empty())
+			chatbots_html = "<div class=\"msb-card\">You haven't created any chatbots.</div>";
 
+		page += "<div class=\"msb-card-grid\">";
+		page += "<section class=\"msb-card\">";
+		page += "<div class=\"msb-avatar\" title=\"Avatar placeholder\">" + web::Escaping::HTMLEscape(user_initial) + "</div>";
+		page += "<h2>" + web::Escaping::HTMLEscape(logged_in_user->name) + "</h2>";
+		page += "<div>Joined: " + logged_in_user->created_time.timeAgoDescription() + "</div>";
+		page += "<div>Email: " + web::Escaping::HTMLEscape(logged_in_user->email_address) + "</div>";
+		page += "<div>Avatar model URL: <code>" + web::Escaping::HTMLEscape(toStdString(logged_in_user->avatar_settings.model_url)) + "</code></div>";
+		page += "</section>";
+
+		page += "<section class=\"msb-card\">";
+		page += "<h2>Quick actions</h2>";
+		page += "<div><a href=\"/create_world\">Create a new world</a></div>";
+		page += "<div><a href=\"/new_chatbot\">Create a new ChatBot</a></div>";
+		page += "<div><a href=\"/change_password\">Change password</a></div>";
+		page += "<div><a href=\"/account_gestures\">Gestures</a></div>";
+		page += "<button type=\"button\" class=\"msb-accordion-toggle\" data-accordion-target=\"account-dev-tools\">Developer tools</button>";
+		page += "<div id=\"account-dev-tools\" class=\"msb-accordion-panel\">";
+		page += "<div><a href=\"/script_log\">Show script log</a></div>";
+		page += "<div><a href=\"/secrets\">Show secrets (for Lua scripting)</a></div>";
+		page += "</div>";
+		page += "</section>";
+
+		page += "<section class=\"msb-card\">";
+		page += "<h2>Stats</h2>";
+		page += "<div>Parcels: " + toString(owned_parcel_count) + "</div>";
+		page += "<div>Worlds: " + toString(owned_world_count) + "</div>";
+		page += "<div>Events: " + toString(created_event_count) + "</div>";
+		page += "<div>ChatBots: " + toString(chatbot_count) + "</div>";
+		page += "</section>";
+		page += "</div>";
+
+		page += "<h2>Parcels</h2><div class=\"msb-card-grid\">" + parcels_html + "</div>";
+		page += "<h2>Worlds</h2><div class=\"msb-card-grid\">" + worlds_html + "</div>";
+		page += "<h2>Events</h2><div class=\"msb-card-grid\">" + events_html + "</div>";
+		page += "<h2>ChatBots</h2><div class=\"msb-card-grid\">" + chatbots_html + "</div>";
 		page += "<p><a href=\"/new_chatbot\">Create a new ChatBot</a></p>";
 
-
-
-
 		page += "<h2>Ethereum</h2>\n";
-
 		page += "Linked Ethereum address: ";
-
 		if(logged_in_user->controlled_eth_address.empty())
 			page += "No address linked.";
 		else
-		{
 			page += "<span class=\"eth-address\">" + web::Escaping::HTMLEscape(logged_in_user->controlled_eth_address) + "</span>";
-			page += "<br/>";
-			page += "This is an address that you control, and for which control of the address has been proven to the Substrata server.";
-		}
 
-
-		page += "<br/>";
-		page += "<br/>";
+		page += "<br/><br/>";
 		page += "<a href=\"/prove_eth_address_owner\">Link an Ethereum address and prove you own it by signing a message</a>";
-		
-		page += "<br/>";
-		page += "<br/>";
+		page += "<br/><br/>";
 		page += "<a href=\"/prove_parcel_owner_by_nft\">Claim ownership of a parcel on substrata.info based on NFT ownership</a>";
-
-
-		page += "<h2>Account</h2>\n";
-		page += "<a href=\"/change_password\">Change password</a>";
-		page += "<br/>";
-		page += "<a href=\"/account_gestures\">Gestures</a>";
-
-
-		page += "<h2>Developer</h2>\n";
-		page += "<p><a href=\"/script_log\">Show script log</a></p>";
-
-		page += "<p><a href=\"/secrets\">Show secrets (for Lua scripting)</a></p>";
+		page += "</div>\n";
 	}
 
 	page += WebServerResponseUtils::standardFooter(request, /*include_email_link=*/true);

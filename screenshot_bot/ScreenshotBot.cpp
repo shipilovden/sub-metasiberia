@@ -6,9 +6,9 @@ Copyright Glare Technologies Limited 2025 -
 
 
 #include "../shared/Protocol.h"
-#include <networking/networking.h>
+#include <networking/Networking.h>
 #include <networking/TLSSocket.h>
-#include <networking/url.h>
+#include <networking/URL.h>
 #include <utils/SocketBufferOutStream.h>
 #include <PlatformUtils.h>
 #include <Clock.h>
@@ -220,37 +220,55 @@ int main(int argc, char* argv[])
 
 							if(process == NULL)
 							{
-								// Command a gui_client process to take the screenshot
+								bool connected_to_existing_gui = false;
 
-								const std::string gui_client_path = config.substrata_client_path;
-
-								std::vector<std::string> command_line_args;
-								command_line_args.push_back(gui_client_path);
-								command_line_args.push_back("-h");
-								command_line_args.push_back(server_hostname);
-								command_line_args.push_back("--screenshotslave");
-
-								process = new glare::Process(gui_client_path, command_line_args);
-
-								conPrint("Connecting to Substrata GUI process via socket...");
-
-								// Establish socket connection to gui process
-								while(1)
+#if !defined(_WIN32)
+								// On Linux, prefer connecting to an already running screenshotslave GUI process
+								// (for example, managed by systemd), to avoid repeatedly spawning child GUI processes.
+								try
 								{
-									try
-									{
-										to_gui_socket = new MySocket("localhost", 34534);
-										to_gui_socket->setUseNetworkByteOrder(false);
-										break;
-									}
-									catch(glare::Exception& e)
-									{
-										conPrint("Excep while connecting to local GUI process: " + e.what() + " waiting to try again...");
-										PlatformUtils::Sleep(1000);
-									}
+									to_gui_socket = new MySocket("localhost", 34534);
+									to_gui_socket->setUseNetworkByteOrder(false);
+									connected_to_existing_gui = true;
+									conPrint("Connected to existing Substrata GUI process via socket.");
 								}
+								catch(glare::Exception&)
+								{}
+#endif
 
-								conPrint("Connected to Substrata GUI process via socket.");
+								if(!connected_to_existing_gui)
+								{
+									// Command a gui_client process to take the screenshot
+									const std::string gui_client_path = config.substrata_client_path;
+
+									std::vector<std::string> command_line_args;
+									command_line_args.push_back(gui_client_path);
+									command_line_args.push_back("-h");
+									command_line_args.push_back(server_hostname);
+									command_line_args.push_back("--screenshotslave");
+
+									process = new glare::Process(gui_client_path, command_line_args);
+
+									conPrint("Connecting to Substrata GUI process via socket...");
+
+									// Establish socket connection to gui process
+									while(1)
+									{
+										try
+										{
+											to_gui_socket = new MySocket("localhost", 34534);
+											to_gui_socket->setUseNetworkByteOrder(false);
+											break;
+										}
+										catch(glare::Exception& e)
+										{
+											conPrint("Excep while connecting to local GUI process: " + e.what() + " waiting to try again...");
+											PlatformUtils::Sleep(1000);
+										}
+									}
+
+									conPrint("Connected to Substrata GUI process via socket.");
+								}
 							}
 
 							to_gui_socket->write(packet.buf.data(), packet.buf.size());
@@ -269,7 +287,9 @@ int main(int argc, char* argv[])
 									got_result = true;
 								}
 
-								// Print out any stdout from GUI client
+								// Print out any stdout from GUI client.
+								// NOTE: glare::Process::isStdOutReadable() is not implemented on Linux.
+#if defined(_WIN32)
 								while(process->isStdOutReadable())
 								{
 									const std::string output = process->readStdOut();
@@ -278,6 +298,7 @@ int main(int argc, char* argv[])
 										if(!isAllWhitespace(lines[i]))
 											conPrint("\tGUI_CLIENT> " + lines[i]);
 								}
+#endif
 							}
 
 							if(result == 0) // If success:
@@ -327,7 +348,12 @@ int main(int argc, char* argv[])
 							conPrint("Closed socket..");
 
 							conPrint("Terminating GUI process..");
+#if defined(_WIN32)
 							process->terminateProcess();
+#else
+							// glare::Process::terminateProcess() is not implemented on Linux.
+							// Drop the process handle and let the child exit on its own.
+#endif
 
 							std::string output, err_output;
 							process->readAllRemainingStdOutAndStdErr(output, err_output);

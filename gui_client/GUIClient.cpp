@@ -112,6 +112,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <BugSplat.h>
 #endif
 #include <clocale>
+#include <exception>
 #if defined(EMSCRIPTEN)
 #include <emscripten/emscripten.h>
 #include <unistd.h>
@@ -482,9 +483,13 @@ void GUIClient::postConnectInitialise()
 		resource_manager->addExternalResource(/*URL=*/capsule_model_URL, /*local (abs) path=*/capsule_local_model_path);
 	}
 
-	// Init audio engine immediately if we are not on the web.  Web browsers need to wait for an input gesture is completed before trying to play sounds.
+	// Init audio engine immediately if we are not on the web.
+	// Web browsers need to wait for an input gesture is completed before trying to play sounds.
+	// For screenshot slave mode (used by screenshot_bot on headless Linux), avoid audio init
+	// to prevent ALSA/Pulse backend failures from aborting the process.
 #ifndef EMSCRIPTEN
-	initAudioEngine();
+	if(!parsed_args.isArgPresent("--screenshotslave"))
+		initAudioEngine();
 #endif
 
 	checkCreateResourceDownloadThreads();
@@ -531,6 +536,14 @@ void GUIClient::initAudioEngine()
 	catch(glare::Exception& e) 
 	{
 		logMessage("Audio engine could not be initialised: " + e.what());
+	}
+	catch(std::exception& e)
+	{
+		logMessage(std::string("Audio engine initialisation failed with std::exception: ") + e.what());
+	}
+	catch(...)
+	{
+		logMessage("Audio engine initialisation failed with unknown exception.");
 	}
 }
 
@@ -5846,33 +5859,46 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 		animated_texture_manager->think(this, opengl_engine.ptr(), anim_time, dt);
 
 
-		// Process web-view objects
-		for(auto it = web_view_obs.begin(); it != web_view_obs.end(); ++it)
+		const bool screenshot_slave_mode = parsed_args.isArgPresent("--screenshotslave");
+		if(!screenshot_slave_mode)
 		{
-			WorldObject* ob = it->ptr();
+			// Process web-view objects
+			for(auto it = web_view_obs.begin(); it != web_view_obs.end(); ++it)
+			{
+				WorldObject* ob = it->ptr();
 
-			try
-			{
-				ob->web_view_data->process(this, opengl_engine.ptr(), ob, anim_time, dt);
+				try
+				{
+					ob->web_view_data->process(this, opengl_engine.ptr(), ob, anim_time, dt);
+				}
+				catch(glare::Exception& e)
+				{
+					logMessage("Excep while processing webview: " + e.what());
+				}
 			}
-			catch(glare::Exception& e)
+
+			// Process browser vid player objects
+			for(auto it = browser_vid_player_obs.begin(); it != browser_vid_player_obs.end(); ++it)
 			{
-				logMessage("Excep while processing webview: " + e.what());
+				WorldObject* ob = it->ptr();
+
+				try
+				{
+					ob->browser_vid_player->process(this, opengl_engine.ptr(), ob, anim_time, dt);
+				}
+				catch(glare::Exception& e)
+				{
+					logMessage("Excep while processing browser vid player: " + e.what());
+				}
 			}
 		}
-
-		// Process browser vid player objects
-		for(auto it = browser_vid_player_obs.begin(); it != browser_vid_player_obs.end(); ++it)
+		else
 		{
-			WorldObject* ob = it->ptr();
-
-			try
+			static bool printed_skip_msg = false;
+			if(!printed_skip_msg)
 			{
-				ob->browser_vid_player->process(this, opengl_engine.ptr(), ob, anim_time, dt);
-			}
-			catch(glare::Exception& e)
-			{
-				logMessage("Excep while processing browser vid player: " + e.what());
+				conPrint("GUIClient: skipping webview/video processing in screenshot slave mode.");
+				printed_skip_msg = true;
 			}
 		}
 
@@ -16324,5 +16350,3 @@ void GUIClient::showScriptMessage(const std::string& message)
 		script_messages.pop_front(); // remove from list
 	}
 }
-
-

@@ -76,6 +76,8 @@ ChatBot::EventHandlerResults ChatBot::userMovedNearToBotAvatar(AvatarRef other_a
 	conPrint("----User moved near chatbot " + toString(id) + "----");
 
 	EventHandlerResults res;
+	if(isDisabled())
+		return res;
 
 	// Add to list of avatars nearby the chatbot.
 	auto other_res = other_avatar_info.find(other_avatar);
@@ -96,6 +98,8 @@ ChatBot::EventHandlerResults ChatBot::userMovedAwayFromBotAvatar(AvatarRef other
 	conPrint("----User moved away from chatbot " + toString(id) + "----");
 
 	EventHandlerResults res;
+	if(isDisabled())
+		return res;
 
 	auto other_res = other_avatar_info.find(other_avatar);
 	if(other_res != other_avatar_info.end())
@@ -139,6 +143,8 @@ ChatBot::EventHandlerResults ChatBot::userMovedAwayFromBotAvatar(AvatarRef other
 ChatBot::EventHandlerResults ChatBot::processHeardChatMessage(const std::string& msg, AvatarRef sender_avatar, const std::string& avatar_name, Server* server, uint32 client_capabilities, WorldStateLock& lock)
 {
 	EventHandlerResults res;
+	if(isDisabled())
+		return res;
 
 	// Backwards compatible handling for old clients that don't send UserMovedNearToAvatar and userMovedAwayFromBotAvatar msgs:
 	// Just add any avatar that chats near the chatbot to other_avatar_info.
@@ -381,6 +387,15 @@ void ChatBot::sendChatMessage(const string_view message, Server* server, WorldSt
 ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 {
 	ThinkResults think_results;
+	if(isDisabled())
+	{
+		if(llm_thread)
+		{
+			think_results.llm_thread_being_killed = llm_thread;
+			llm_thread = nullptr;
+		}
+		return think_results;
+	}
 
 	if(sentences_received_timer.isRunning() && (sentences_received_timer.elapsed() > 0.3))
 	{

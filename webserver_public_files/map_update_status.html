@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Map Update Status</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+    .card { border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .metric { min-width: 150px; }
+    .bar-wrap { background: #e5e7eb; border-radius: 6px; height: 16px; overflow: hidden; margin-top: 8px; }
+    .bar { background: #0b7fab; height: 16px; width: 0; transition: width 0.4s ease; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #e5e7eb; padding: 8px; text-align: left; font-size: 14px; }
+    th { background: #f9fafb; }
+    .muted { color: #6b7280; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Map Update Status</h1>
+  <div class="muted">Data source: <code>/files/map_progress.json</code>, <code>/files/map_refresh_status.json</code></div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Current Progress</h2>
+    <div class="row">
+      <div class="metric">Done: <strong id="done">-</strong></div>
+      <div class="metric">Not done: <strong id="not-done">-</strong></div>
+      <div class="metric">Total: <strong id="total">-</strong></div>
+      <div class="metric">Updated: <strong id="updated">-</strong></div>
+    </div>
+    <div class="bar-wrap"><div id="progress-bar" class="bar"></div></div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Last Refresh Action</h2>
+    <pre id="refresh-status" style="margin:0; white-space:pre-wrap">loading...</pre>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Recent Samples</h2>
+    <table>
+      <thead><tr><th>Timestamp</th><th>Done</th><th>Not done</th><th>Total</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <script>
+    async function loadJson(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status + " for " + url);
+      return await res.json();
+    }
+
+    function setText(id, text) {
+      document.getElementById(id).textContent = text;
+    }
+
+    function fillRows(points) {
+      const tbody = document.getElementById("rows");
+      tbody.innerHTML = "";
+      const items = (points || []).slice(-48).reverse();
+      for (const p of items) {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          "<td>" + (p.ts || "-") + "</td>" +
+          "<td>" + (p.done ?? "-") + "</td>" +
+          "<td>" + (p.not_done ?? "-") + "</td>" +
+          "<td>" + (p.total ?? "-") + "</td>";
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function refresh() {
+      try {
+        const progress = await loadJson("/files/map_progress.json");
+        const status = progress.last_status || {};
+        const done = Number(status.done ?? status.after_done ?? 0);
+        const notDone = Number(status.not_done ?? status.after_not_done ?? 0);
+        const total = Number(status.total ?? status.after_total ?? done + notDone);
+        const pct = total > 0 ? (done / total) * 100 : 0;
+
+        setText("done", String(done));
+        setText("not-done", String(notDone));
+        setText("total", String(total));
+        setText("updated", status.updated_at || progress.updated_at || "-");
+        document.getElementById("progress-bar").style.width = pct.toFixed(1) + "%";
+        fillRows(progress.points || []);
+
+        const refreshStatus = await loadJson("/files/map_refresh_status.json");
+        document.getElementById("refresh-status").textContent = JSON.stringify(refreshStatus, null, 2);
+      } catch (e) {
+        document.getElementById("refresh-status").textContent = "Failed to load status: " + e.message;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 60000);
+  </script>
+</body>
+</html>
+

@@ -49,9 +49,15 @@ public:
 #endif
 
 	// Get frame buffer (for Qt UI)
+#if defined(_WIN32)
 	Reference<ImageMap<uint8, UInt8ComponentValueTraits>> getFrameBuffer() const { return frame_buffer; }
 	int getFrameWidth() const { return frame_width; }
 	int getFrameHeight() const { return frame_height; }
+#else
+	Reference<ImageMap<uint8, UInt8ComponentValueTraits>> getFrameBuffer() const { return Reference<ImageMap<uint8, UInt8ComponentValueTraits>>(); }
+	int getFrameWidth() const { return 0; }
+	int getFrameHeight() const { return 0; }
+#endif
 
 private:
 	void startCapture();

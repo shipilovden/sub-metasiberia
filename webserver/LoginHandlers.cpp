@@ -124,7 +124,7 @@ void setUserWebMessageForLoggedInUser(ServerAllWorldsState& world_state, const w
 
 void renderLoginPage(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
-	std::string page_out = WebServerResponseUtils::standardHTMLHeader(*world_state.web_data_store, request_info, "Login to Substrata");
+	std::string page_out = WebServerResponseUtils::standardHTMLHeader(*world_state.web_data_store, request_info, "Log in to Metasiberia");
 
 	const web::UnsafeString msg = request_info.getURLParam("msg");
 

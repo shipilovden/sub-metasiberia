@@ -50,6 +50,7 @@ const std::string standardHTMLHeader(WebDataStore& data_store, const web::Reques
 		"		<meta http-equiv=\"Content-Security-Policy\" content=\"frame-src youtube.com www.youtube.com player.vimeo.com vimeocdn.com; img-src 'self' i.ytimg.com i.vimeocdn.com; default-src 'self';\" />	\n" 
 		"		<title>" + web::Escaping::HTMLEscape(page_title) + "</title>\n"
 		"		<link href=\"/files/main.css?hash=" + data_store.main_css_hash + "\" rel=\"stylesheet\" />\n"
+		"		<script src=\"/files/site.js?hash=" + data_store.site_js_hash + "\" defer></script>\n"
 		"		<link rel=\"icon\" href=\"/files/favicon.ico\" sizes=\"any\">\n"
 		"		<link rel=\"icon\" type=\"image/png\" href=\"/files/favicon.png\">\n"
 		+ extra_header_tags + 

@@ -70,5 +70,6 @@ public:
 
 
 	std::string main_css_hash GUARDED_BY(hash_mutex);
+	std::string site_js_hash GUARDED_BY(hash_mutex);
 	Mutex hash_mutex;
 };

@@ -34,6 +34,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <HashMap.h>
 #include <map>
 #include <unordered_set>
+#include <deque>
 class ServerWorldState;
 class ServerAllWorldsState;
 class WebDataStore;
@@ -103,6 +104,14 @@ struct MigrationVersionInfo
 	uint32 migration_version;
 	DatabaseKey database_key;
 	bool db_dirty; // If true, there is a change that has not been saved to the DB.
+};
+
+struct AdminActionLogEntry
+{
+	TimeStamp time;
+	UserID user_id;
+	std::string username;
+	std::string action;
 };
 
 
@@ -346,6 +355,8 @@ public:
 
 	bool isInReadOnlyMode();
 
+	void addAdminAuditLogEntry(const UserID& user_id, const std::string& username, const std::string& action) REQUIRES(mutex);
+
 	void clearAndReset(); // Just for fuzzing
 
 	void addPersonalWorldForUser(const UserRef user, WorldStateLock& lock) REQUIRES(mutex);
@@ -394,6 +405,7 @@ public:
 	static const uint64 LUA_HTTP_REQUESTS_FEATURE_FLAG                    = 2; // Are Lua-initiated HTTP requests enabled?
 	static const uint64 DO_WORLD_MAINTENANCE_FEATURE_FLAG                 = 4; // Should world maintenance tasks run? (e.g. WorldMaintenance::removeOldVehicles())
 	static const uint64 CHATBOTS_FEATURE_FLAG                             = 8; // Should ChatBots run?
+	static const uint64 ALLOW_PERSONAL_WORLD_PARCEL_CREATION_FEATURE_FLAG = 16; // Allow owners to create parcels in personal worlds.
 	FeatureFlagInfo feature_flag_info GUARDED_BY(mutex);
 
 
@@ -423,6 +435,8 @@ public:
 	std::map<UserID, Reference<UserScriptLog> > user_script_log GUARDED_BY(mutex);
 
 	std::map<UserID, std::string> user_web_messages GUARDED_BY(mutex); // For displaying an informational or error message on the next webpage served to a user.
+
+	std::deque<AdminActionLogEntry> admin_action_log GUARDED_BY(mutex);
 
 	// Sets of objects that should be written to (updated) in the database.
 	std::unordered_set<ResourceRef, ResourceRefHash>					db_dirty_resources				GUARDED_BY(mutex);

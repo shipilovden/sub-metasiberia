@@ -1986,12 +1986,29 @@ void ServerAllWorldsState::setWorldState(const std::string& world_name, Referenc
 }
 
 
+void ServerAllWorldsState::addAdminAuditLogEntry(const UserID& user_id, const std::string& username, const std::string& action)
+{
+	AdminActionLogEntry entry;
+	entry.time = TimeStamp::currentTime();
+	entry.user_id = user_id;
+	entry.username = username;
+	entry.action = action;
+
+	admin_action_log.push_back(entry);
+
+	const size_t MAX_ENTRIES = 500;
+	while(admin_action_log.size() > MAX_ENTRIES)
+		admin_action_log.pop_front();
+}
+
+
 FeatureFlagInfo::FeatureFlagInfo()
 :	feature_flags(
 		ServerAllWorldsState::SERVER_SCRIPT_EXEC_FEATURE_FLAG | // Enable scripts by default
 		ServerAllWorldsState::LUA_HTTP_REQUESTS_FEATURE_FLAG | 
 		ServerAllWorldsState::DO_WORLD_MAINTENANCE_FEATURE_FLAG |
-		ServerAllWorldsState::CHATBOTS_FEATURE_FLAG
+		ServerAllWorldsState::CHATBOTS_FEATURE_FLAG |
+		ServerAllWorldsState::ALLOW_PERSONAL_WORLD_PARCEL_CREATION_FEATURE_FLAG
 	),
 	db_dirty(false) 
 {}

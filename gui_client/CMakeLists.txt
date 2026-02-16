@@ -1422,6 +1422,12 @@ else() # linux
 
 	add_definitions(-D__LINUX_PULSE__) # Add config choice define for RTAudio
 
+	if(USE_SDL)
+		target_link_libraries(${CURRENT_TARGET} PRIVATE
+			SDL2
+		)
+	endif()
+
 	target_link_libraries(${CURRENT_TARGET} PRIVATE
 		GL
 		Qt5Gui

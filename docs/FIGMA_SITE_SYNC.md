@@ -66,10 +66,11 @@ Admin:
 1. Убедиться, что запущен сокет-сервер:
    - `bunx cursor-talk-to-figma-socket`
 2. В Figma открыть файл, куда импортируем (например Metasiberia-Lab) и подключить TalkToFigma плагин к каналу.
+   - Канал берём из строки в плагине: `Connected to server in channel: XXXXXXXX`
 3. Снять скриншоты сайта в папку `out_...`:
    - `powershell -ExecutionPolicy Bypass -File C:\programming\substrata\scripts\capture_site_for_figma.ps1 -Cookie "<cookie>"`
 4. Импортировать в открытый Figma-файл:
-   - `powershell -ExecutionPolicy Bypass -File C:\programming\substrata\scripts\import_site_capture_to_figma_via_talk_to_figma.ps1 -Channel 0xfhnf3f -InDir <out_dir>`
+   - `powershell -ExecutionPolicy Bypass -File C:\programming\substrata\scripts\import_site_capture_to_figma_via_talk_to_figma.ps1 -Channel <CHANNEL_FROM_PLUGIN> -InDir <out_dir>`
 
 Примечание: для A3 я расширил локальный Figma dev-плагин TalkToFigma командой `create_image_rect` (в `_tmp_talk_to_figma/src/cursor_mcp_plugin/code.js`). После обновления файла может потребоваться перезагрузить/переимпортировать dev plugin в Figma.
 
