@@ -86,6 +86,13 @@ struct MapTileInfo
 };
 
 
+struct PendingMapTileScreenshot
+{
+	std::string world_name; // Empty string for the main/root world.
+	Vec3<int> tile_coords;
+};
+
+
 struct FeatureFlagInfo
 {
 	FeatureFlagInfo();
@@ -322,6 +329,7 @@ public:
 	uint64 getNextOrderUID(); // Gets and then increments next_order_uid.  Locks mutex.
 	uint64 getNextSubEthTransactionUID();
 	uint64 getNextScreenshotUID();
+	uint64 getNextScreenshotUIDUnlocked(WorldStateLock& /*lock*/) REQUIRES(mutex); // For callers already holding mutex.
 	uint64 getNextNewsPostUID();
 	uint64 getNextEventUID();
 	uint64 getNextPhotoUID();
@@ -393,7 +401,11 @@ public:
 	HashMap<UserID, Reference<SubstrataLuaVM>, UserIDHasher> lua_vms;
 
 	// For the map:
-	MapTileInfo map_tile_info;
+	MapTileInfo& getMapTileInfoForWorld(const std::string& world_name, WorldStateLock& /*world_state_lock*/) REQUIRES(mutex);
+	const MapTileInfo& getMapTileInfoForWorld(const std::string& world_name, WorldStateLock& /*world_state_lock*/) const REQUIRES(mutex);
+
+	std::map<std::string, MapTileInfo> map_tile_info_for_world GUARDED_BY(mutex); // Key: world name, empty string for root.
+	std::deque<PendingMapTileScreenshot> pending_map_tile_screenshots GUARDED_BY(mutex);
 
 	LastParcelUpdateInfo last_parcel_update_info;
 
@@ -471,13 +483,14 @@ private:
 	UID next_avatar_uid GUARDED_BY(mutex);
 	uint64 next_order_uid GUARDED_BY(mutex);
 	uint64 next_sub_eth_transaction_uid GUARDED_BY(mutex);
+	uint64 next_screenshot_uid GUARDED_BY(mutex);
 	uint64 next_chatbot_uid GUARDED_BY(mutex);
 
 	Database database GUARDED_BY(mutex);
 };
 
 
-Reference<ServerWorldState> ServerAllWorldsState::getRootWorldState() 
+inline Reference<ServerWorldState> ServerAllWorldsState::getRootWorldState() 
 {
 #ifndef NDEBUG
 	{
@@ -486,4 +499,27 @@ Reference<ServerWorldState> ServerAllWorldsState::getRootWorldState()
 	}
 #endif
 	return root_world_state;
+}
+
+
+inline MapTileInfo& ServerAllWorldsState::getMapTileInfoForWorld(const std::string& world_name, WorldStateLock& /*world_state_lock*/)
+{
+	// Mutex is expected to be held (REQUIRES(mutex)), WorldStateLock is used for API consistency.
+	return map_tile_info_for_world[world_name];
+}
+
+
+inline const MapTileInfo& ServerAllWorldsState::getMapTileInfoForWorld(const std::string& world_name, WorldStateLock& /*world_state_lock*/) const
+{
+	auto it = map_tile_info_for_world.find(world_name);
+	if(it != map_tile_info_for_world.end())
+		return it->second;
+
+	// Fallback to root world tiles if no entry exists for this world yet.
+	auto it_root = map_tile_info_for_world.find("");
+	if(it_root != map_tile_info_for_world.end())
+		return it_root->second;
+
+	static MapTileInfo empty;
+	return empty;
 }

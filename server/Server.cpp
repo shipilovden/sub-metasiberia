@@ -62,7 +62,8 @@ Copyright Glare Technologies Limited 2023 -
 
 void updateMapTiles(ServerAllWorldsState& world_state)
 {
-	uint64 next_shot_id = world_state.getNextScreenshotUID();
+	WorldStateLock lock(world_state.mutex);
+	MapTileInfo& map_tile_info = world_state.getMapTileInfoForWorld(/*world_name=*/"", lock);
 
 	const int z_begin = 0;
 	const int z_end = 7;
@@ -103,12 +104,12 @@ void updateMapTiles(ServerAllWorldsState& world_state)
 			{
 				const Vec3<int> v(x, y, z);
 
-				if(world_state.map_tile_info.info.count(v) == 0)
+				if(map_tile_info.info.count(v) == 0)
 				{
 
 					TileInfo info;
 					info.cur_tile_screenshot = new Screenshot();
-					info.cur_tile_screenshot->id = next_shot_id++;
+					info.cur_tile_screenshot->id = world_state.getNextScreenshotUIDUnlocked(lock);
 					info.cur_tile_screenshot->created_time = TimeStamp::currentTime();
 					info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
 					info.cur_tile_screenshot->is_map_tile = true;
@@ -116,13 +117,18 @@ void updateMapTiles(ServerAllWorldsState& world_state)
 					info.cur_tile_screenshot->tile_y = y;
 					info.cur_tile_screenshot->tile_z = z;
 
-					world_state.map_tile_info.info[v] = info;
+					map_tile_info.info[v] = info;
 
 					conPrint("Added map tile screenshot: " + v.toString());
 
 					world_state.markAsChanged();
 
-					world_state.map_tile_info.db_dirty = true;
+					map_tile_info.db_dirty = true;
+
+					PendingMapTileScreenshot pending;
+					pending.world_name = ""; // root world
+					pending.tile_coords = v;
+					world_state.pending_map_tile_screenshots.push_back(pending);
 				}
 			}
 		}

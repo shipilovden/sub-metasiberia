@@ -331,6 +331,8 @@ public:
 	float screenshot_ortho_sensor_width_m;
 	Vec3d screenshot_campos;
 	Vec3d screenshot_camangles;
+	bool screenshot_target_worldname_set;
+	std::string screenshot_target_worldname;
 	
 	Timer time_since_last_screenshot;
 	Timer time_since_last_waiting_msg;

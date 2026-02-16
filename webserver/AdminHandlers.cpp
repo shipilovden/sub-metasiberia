@@ -1033,16 +1033,23 @@ void renderMapPage(ServerAllWorldsState& world_state, const web::RequestInfo& re
 
 		page_out += "<h2>Map Info</h2>\n";
 
-		for(auto it = world_state.map_tile_info.info.begin(); it != world_state.map_tile_info.info.end(); ++it)
+		for(auto it_world = world_state.map_tile_info_for_world.begin(); it_world != world_state.map_tile_info_for_world.end(); ++it_world)
 		{
-			Vec3<int> v = it->first;
-			const TileInfo& info = it->second;
+			const std::string& world_name = it_world->first;
+			const MapTileInfo& map_tile_info = it_world->second;
 
-			page_out += "Tile Coords: " + v.toString();
-			if(info.cur_tile_screenshot.nonNull())
-				page_out += std::string("  ID: ") + toString(info.cur_tile_screenshot->id) + ", state: " + ((info.cur_tile_screenshot->state == Screenshot::ScreenshotState_notdone) ? "Not done" : "Done");
+			size_t done_count = 0;
+			for(auto it = map_tile_info.info.begin(); it != map_tile_info.info.end(); ++it)
+			{
+				const TileInfo& info = it->second;
+				if(info.cur_tile_screenshot.nonNull() && info.cur_tile_screenshot->state == Screenshot::ScreenshotState_done)
+					done_count++;
+			}
 
-			page_out += "<br/>";
+			page_out += "<div class=\"grouped-region\">";
+			page_out += "<b>World:</b> " + web::Escaping::HTMLEscape(world_name.empty() ? std::string("(root)") : world_name) + "<br/>";
+			page_out += "<b>Tiles:</b> " + toString(map_tile_info.info.size()) + ", <b>done:</b> " + toString(done_count);
+			page_out += "</div>";
 		}
 	} // End Lock scope
 
@@ -2808,19 +2815,30 @@ void handleRegenMapTilesPost(ServerAllWorldsState& world_state, const web::Reque
 	{
 		{ // Lock scope
 
-			Lock lock(world_state.mutex);
+			WorldStateLock lock(world_state.mutex);
 
-			// Mark all tile sceenshots as not done.
-			for(auto it = world_state.map_tile_info.info.begin(); it != world_state.map_tile_info.info.end(); ++it)
+			// Mark all tile screenshots as not done (for all worlds), and enqueue them so the screenshot bot can regenerate.
+			for(auto it_world = world_state.map_tile_info_for_world.begin(); it_world != world_state.map_tile_info_for_world.end(); ++it_world)
 			{
-				TileInfo& tile_info = it->second;
-				if(tile_info.cur_tile_screenshot.nonNull())
+				const std::string& world_name = it_world->first;
+				MapTileInfo& map_tile_info = it_world->second;
+
+				for(auto it = map_tile_info.info.begin(); it != map_tile_info.info.end(); ++it)
 				{
-					tile_info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
+					const Vec3<int> key = it->first;
+					TileInfo& tile_info = it->second;
+					if(tile_info.cur_tile_screenshot.nonNull())
+						tile_info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
+
+					PendingMapTileScreenshot pending;
+					pending.world_name = world_name;
+					pending.tile_coords = key;
+					world_state.pending_map_tile_screenshots.push_back(pending);
 				}
+
+				map_tile_info.db_dirty = true;
 			}
 
-			world_state.map_tile_info.db_dirty = true;
 			world_state.markAsChanged();
 			//world_state.setUserWebMessage("Regenerating map tiles.");
 
@@ -2850,27 +2868,36 @@ void handleRecreateMapTilesPost(ServerAllWorldsState& world_state, const web::Re
 	{
 		{ // Lock scope
 
-			Lock lock(world_state.mutex);
+			WorldStateLock lock(world_state.mutex);
 
-			uint64 next_shot_id = world_state.getNextScreenshotUID();
-
-			for(auto it = world_state.map_tile_info.info.begin(); it != world_state.map_tile_info.info.end(); ++it)
+			for(auto it_world = world_state.map_tile_info_for_world.begin(); it_world != world_state.map_tile_info_for_world.end(); ++it_world)
 			{
-				const Vec3<int> key = it->first;
+				const std::string& world_name = it_world->first;
+				MapTileInfo& map_tile_info = it_world->second;
 
-				TileInfo& tile_info = it->second;
+				for(auto it = map_tile_info.info.begin(); it != map_tile_info.info.end(); ++it)
+				{
+					const Vec3<int> key = it->first;
+					TileInfo& tile_info = it->second;
 
-				tile_info.cur_tile_screenshot = new Screenshot();
-				tile_info.cur_tile_screenshot->id = next_shot_id++;
-				tile_info.cur_tile_screenshot->created_time = TimeStamp::currentTime();
-				tile_info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
-				tile_info.cur_tile_screenshot->is_map_tile = true;
-				tile_info.cur_tile_screenshot->tile_x = key.x;
-				tile_info.cur_tile_screenshot->tile_y = key.y;
-				tile_info.cur_tile_screenshot->tile_z = key.z;
+					tile_info.cur_tile_screenshot = new Screenshot();
+					tile_info.cur_tile_screenshot->id = world_state.getNextScreenshotUIDUnlocked(lock);
+					tile_info.cur_tile_screenshot->created_time = TimeStamp::currentTime();
+					tile_info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
+					tile_info.cur_tile_screenshot->is_map_tile = true;
+					tile_info.cur_tile_screenshot->tile_x = key.x;
+					tile_info.cur_tile_screenshot->tile_y = key.y;
+					tile_info.cur_tile_screenshot->tile_z = key.z;
+
+					PendingMapTileScreenshot pending;
+					pending.world_name = world_name;
+					pending.tile_coords = key;
+					world_state.pending_map_tile_screenshots.push_back(pending);
+				}
+
+				map_tile_info.db_dirty = true;
 			}
 
-			world_state.map_tile_info.db_dirty = true;
 			world_state.markAsChanged();
 			//world_state.setUserWebMessage("Regenerating map tiles.");
 

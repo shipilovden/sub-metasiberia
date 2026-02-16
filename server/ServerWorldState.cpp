@@ -96,6 +96,7 @@ ServerAllWorldsState::ServerAllWorldsState()
 	next_object_uid = UID(0);
 	next_order_uid = 0;
 	next_sub_eth_transaction_uid = 0;
+	next_screenshot_uid = 0;
 	next_chatbot_uid = 0;
 
 	setWorldState(/*world name=*/"", new ServerWorldState());
@@ -167,7 +168,7 @@ static const uint32 EOS_CHUNK = 1000;
 
 
 static const uint32 PARCEL_SALE_UPDATE_VERSION = 1;
-static const uint32 MAP_TILE_INFO_VERSION = 1;
+static const uint32 MAP_TILE_INFO_VERSION = 2; // v2: includes world name (string) at start of record.  v1 had implicit root world.
 static const uint32 ETH_INFO_CHUNK_VERSION = 1;
 static const uint32 FEATURE_FLAG_CHUNK_VERSION = 1;
 static const uint32 OBJECT_STORAGE_ITEM_VERSION = 1;
@@ -516,8 +517,23 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 				else if(chunk == MAP_TILE_INFO_CHUNK)
 				{
 					const uint32 map_tile_info_version = stream.readInt32();
-					if(map_tile_info_version != MAP_TILE_INFO_VERSION)
+
+					std::string world_name;
+					if(map_tile_info_version == 1)
+					{
+						world_name = ""; // v1 had implicit root world.
+					}
+					else if(map_tile_info_version == MAP_TILE_INFO_VERSION)
+					{
+						world_name = stream.readStringLengthFirst(10000);
+					}
+					else
+					{
 						throw glare::Exception("invalid map_tile_info_version: " + toString(map_tile_info_version));
+					}
+
+					MapTileInfo& map_tile_info = getMapTileInfoForWorld(world_name, lock);
+					map_tile_info.info.clear();
 
 					const int num_tiles = stream.readInt32();
 					for(int i=0; i<num_tiles; ++i)
@@ -739,8 +755,23 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 			else if(chunk == MAP_TILE_INFO_CHUNK)
 			{
 				const uint32 map_tile_info_version = stream.readInt32();
-				if(map_tile_info_version != MAP_TILE_INFO_VERSION)
+
+				std::string world_name;
+				if(map_tile_info_version == 1)
+				{
+					world_name = ""; // v1 had implicit root world.
+				}
+				else if(map_tile_info_version == MAP_TILE_INFO_VERSION)
+				{
+					world_name = stream.readStringLengthFirst(10000);
+				}
+				else
+				{
 					throw glare::Exception("invalid map_tile_info_version: " + toString(map_tile_info_version));
+				}
+
+				MapTileInfo& map_tile_info = getMapTileInfoForWorld(world_name, lock);
+				map_tile_info.info.clear();
 
 				const int num_tiles = stream.readInt32();
 				for(int i=0; i<num_tiles; ++i)
@@ -811,6 +842,28 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 	// }
 
 	//conPrint("min_next_nonce: " + toString(eth_info.min_next_nonce));
+
+	// Set next_screenshot_uid based on loaded data (fast ID allocation in hot paths).
+	{
+		uint64 highest_id = 0;
+		for(auto it = screenshots.begin(); it != screenshots.end(); ++it)
+			highest_id = myMax(highest_id, it->first);
+
+		for(auto it_world = map_tile_info_for_world.begin(); it_world != map_tile_info_for_world.end(); ++it_world)
+		{
+			for(auto it = it_world->second.info.begin(); it != it_world->second.info.end(); ++it)
+			{
+				const TileInfo& tile_info = it->second;
+				if(tile_info.cur_tile_screenshot.nonNull())
+					highest_id = myMax(highest_id, tile_info.cur_tile_screenshot->id);
+				if(tile_info.prev_tile_screenshot.nonNull())
+					highest_id = myMax(highest_id, tile_info.prev_tile_screenshot->id);
+			}
+		}
+
+		next_screenshot_uid = highest_id + 1;
+	}
+
 	conPrint("Loaded " + toString(num_obs) + " object(s), " + toString(user_id_to_users.size()) + " user(s), " +
 		toString(num_parcels) + " parcel(s), " + toString(num_resources) + " resource(s), " + toString(num_orders) + " order(s), " + 
 		toString(num_sessions) + " session(s), " + toString(num_auctions) + " auction(s), " + toString(num_screenshots) + " screenshot(s), " + 
@@ -860,7 +913,8 @@ void ServerAllWorldsState::addEverythingToDirtySets()
 	for(auto it = sub_eth_transactions.begin(); it != sub_eth_transactions.end(); ++it)
 		db_dirty_sub_eth_transactions.insert(it->second);
 
-	map_tile_info.db_dirty = true;
+	for(auto it = map_tile_info_for_world.begin(); it != map_tile_info_for_world.end(); ++it)
+		it->second.db_dirty = true;
 
 	last_parcel_update_info.db_dirty = true;
 
@@ -880,6 +934,7 @@ void ServerAllWorldsState::clearAndReset() // Just for fuzzing
 	Lock lock(mutex);
 	next_object_uid = UID(0);
 	next_avatar_uid = UID(0);
+	next_screenshot_uid = 0;
 }
 
 
@@ -1657,17 +1712,24 @@ void ServerAllWorldsState::serialiseToDisk(WorldStateLock& lock)
 			db_dirty_events.clear();
 		}
 
-		// Write MAP_TILE_INFO_CHUNK
-		if(map_tile_info.db_dirty)
+		// Write MAP_TILE_INFO_CHUNK (per-world)
+		for(auto it = map_tile_info_for_world.begin(); it != map_tile_info_for_world.end(); ++it)
 		{
+			const std::string& world_name = it->first;
+			MapTileInfo& map_tile_info = it->second;
+
+			if(!map_tile_info.db_dirty)
+				continue;
+
 			temp_buf.clear();
 			temp_buf.writeUInt32(MAP_TILE_INFO_CHUNK);
 			temp_buf.writeUInt32(MAP_TILE_INFO_VERSION);
+			temp_buf.writeStringLengthFirst(world_name);
 			temp_buf.writeInt32((int)map_tile_info.info.size());
-			for(auto it=map_tile_info.info.begin(); it != map_tile_info.info.end(); ++it)
+			for(auto it2 = map_tile_info.info.begin(); it2 != map_tile_info.info.end(); ++it2)
 			{
-				Vec3<int> v = it->first;
-				const TileInfo& tile_info = it->second;
+				Vec3<int> v = it2->first;
+				const TileInfo& tile_info = it2->second;
 
 				temp_buf.writeInt32(v.x);
 				temp_buf.writeInt32(v.y);
@@ -1689,7 +1751,7 @@ void ServerAllWorldsState::serialiseToDisk(WorldStateLock& lock)
 
 			map_tile_info.db_dirty = false;
 
-			num_tiles_written = map_tile_info.info.size();
+			num_tiles_written += map_tile_info.info.size();
 		}
 
 		// Write LAST_PARCEL_SALE_UPDATE_CHUNK
@@ -1849,26 +1911,13 @@ uint64 ServerAllWorldsState::getNextSubEthTransactionUID()
 uint64 ServerAllWorldsState::getNextScreenshotUID()
 {
 	Lock lock(mutex);
-
-	uint64 highest_id = 0;
-
-	for(auto it = screenshots.begin(); it != screenshots.end(); ++it)
-		highest_id = myMax(highest_id, it->first);
+	return next_screenshot_uid++;
+}
 
 
-	// Consider ids from map tile screenshots as well
-	for(auto it = map_tile_info.info.begin(); it != map_tile_info.info.end(); ++it)
-	{
-		const TileInfo& tile_info = it->second;
-
-		if(tile_info.cur_tile_screenshot.nonNull())
-			highest_id = myMax(highest_id, tile_info.cur_tile_screenshot->id);
-
-		if(tile_info.prev_tile_screenshot.nonNull())
-			highest_id = myMax(highest_id, tile_info.prev_tile_screenshot->id);
-	}
-
-	return highest_id + 1;
+uint64 ServerAllWorldsState::getNextScreenshotUIDUnlocked(WorldStateLock& /*lock*/)
+{
+	return next_screenshot_uid++;
 }
 
 

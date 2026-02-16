@@ -500,9 +500,10 @@ void WorkerThread::handleScreenshotBotConnection()
 		{
 			// Poll server state for a screenshot request
 			ScreenshotRef screenshot;
+			std::string screenshot_world_name; // Only used for map tiles.
 
 			{ // lock scope
-				Lock lock(server->world_state->mutex);
+				WorldStateLock lock(server->world_state->mutex);
 
 				server->world_state->last_screenshot_bot_contact_time = TimeStamp::currentTime();
 
@@ -518,14 +519,47 @@ void WorkerThread::handleScreenshotBotConnection()
 
 				if(screenshot.isNull())
 				{
-					// Find first screenshot in map_tile_info map in ScreenshotState_notdone state.  NOTE: slow linear scan.
-					for(auto it = server->world_state->map_tile_info.info.begin(); it != server->world_state->map_tile_info.info.end(); ++it)
+					// Prefer the pending queue (avoids repeated linear scans).
+					while(!server->world_state->pending_map_tile_screenshots.empty() && screenshot.isNull())
 					{
-						TileInfo& tile_info = it->second;
+						const PendingMapTileScreenshot pending = server->world_state->pending_map_tile_screenshots.front();
+						server->world_state->pending_map_tile_screenshots.pop_front();
+
+						MapTileInfo& map_tile_info = server->world_state->getMapTileInfoForWorld(pending.world_name, lock);
+						auto res = map_tile_info.info.find(pending.tile_coords);
+						if(res == map_tile_info.info.end())
+							continue;
+
+						TileInfo& tile_info = res->second;
 						if(tile_info.cur_tile_screenshot.nonNull() && tile_info.cur_tile_screenshot->state == Screenshot::ScreenshotState_notdone)
 						{
 							screenshot = tile_info.cur_tile_screenshot;
+							screenshot_world_name = pending.world_name;
 							break;
+						}
+					}
+
+					// Fallback: slow scan (e.g. after loading old DB data where the pending queue was not persisted).
+					if(screenshot.isNull())
+					{
+						for(auto it_world = server->world_state->map_tile_info_for_world.begin(); it_world != server->world_state->map_tile_info_for_world.end(); ++it_world)
+						{
+							const std::string& world_name = it_world->first;
+							MapTileInfo& map_tile_info = it_world->second;
+
+							for(auto it = map_tile_info.info.begin(); it != map_tile_info.info.end(); ++it)
+							{
+								TileInfo& tile_info = it->second;
+								if(tile_info.cur_tile_screenshot.nonNull() && tile_info.cur_tile_screenshot->state == Screenshot::ScreenshotState_notdone)
+								{
+									screenshot = tile_info.cur_tile_screenshot;
+									screenshot_world_name = world_name;
+									break;
+								}
+							}
+
+							if(screenshot.nonNull())
+								break;
 						}
 					}
 				}
@@ -550,6 +584,8 @@ void WorkerThread::handleScreenshotBotConnection()
 				{
 					socket->writeUInt32(Protocol::TileScreenShotRequest);
 
+					// Include world name so the screenshot bot can switch worlds on the GUI slave.
+					socket->writeStringLengthFirst(screenshot_world_name);
 					socket->writeInt32(screenshot->tile_x);
 					socket->writeInt32(screenshot->tile_y);
 					socket->writeInt32(screenshot->tile_z);
@@ -585,11 +621,12 @@ void WorkerThread::handleScreenshotBotConnection()
 
 
 					// Add map tile as a resource too, for access by embedded minimap on client.
+					URLString tile_URL; // Only used for map tiles.
 					if(screenshot->is_map_tile)
 					{
 						// Copy screenshot into resource dir and add as a resource
-						const URLString URL = toURLString(screenshot_filename);
-						ResourceRef resource = server->world_state->resource_manager->getOrCreateResourceForURL(URL); // Will create a new Resource ob if not already inserted.
+						tile_URL = toURLString(screenshot_filename);
+						ResourceRef resource = server->world_state->resource_manager->getOrCreateResourceForURL(tile_URL); // Will create a new Resource ob if not already inserted.
 						const std::string local_abs_path = server->world_state->resource_manager->getLocalAbsPathForResource(*resource);
 
 						FileUtils::copyFile(screenshot_path, local_abs_path); 
@@ -601,24 +638,45 @@ void WorkerThread::handleScreenshotBotConnection()
 							Lock lock(server->world_state->mutex);
 							server->world_state->addResourceAsDBDirty(resource);
 						}
-
-						screenshot->URL = URL;
 					}
 
-
-					screenshot->state = Screenshot::ScreenshotState_done;
-					screenshot->local_path = screenshot_path;
-
 					{
-						Lock lock(server->world_state->mutex);
+						WorldStateLock lock(server->world_state->mutex);
+
+						// Update screenshot state under the world_state mutex so other threads (webserver, clients) don't race on these fields.
+						screenshot->state = Screenshot::ScreenshotState_done;
+						screenshot->local_path = screenshot_path;
+						if(screenshot->is_map_tile)
+							screenshot->URL = tile_URL;
+
 						server->world_state->addScreenshotAsDBDirty(screenshot);
 
 						if(screenshot->is_map_tile) // If we received a tile screenshot, mark map tile info as dirty to get it saved.
-							server->world_state->map_tile_info.db_dirty = true;
+						{
+							MapTileInfo& map_tile_info = server->world_state->getMapTileInfoForWorld(screenshot_world_name, lock);
+							map_tile_info.db_dirty = true;
+							server->world_state->markAsChanged();
+						}
 					}
 				}
 				else
-					throw glare::Exception("Client reported screenshot taking failed.");
+				{
+					conPrint("Screenshot bot reported screenshot taking failed.");
+
+					// If screenshot bot failed, keep the tile request in the queue so it can be retried later.
+					// (The request stays in ScreenshotState_notdone.)
+					if(screenshot->is_map_tile)
+					{
+						WorldStateLock lock(server->world_state->mutex);
+						PendingMapTileScreenshot pending;
+						pending.world_name = screenshot_world_name;
+						pending.tile_coords = Vec3<int>(screenshot->tile_x, screenshot->tile_y, screenshot->tile_z);
+						server->world_state->pending_map_tile_screenshots.push_back(pending);
+					}
+
+					if(!fuzzing)
+						PlatformUtils::Sleep(1000);
+				}
 			}
 			else
 			{
@@ -3158,12 +3216,21 @@ void WorkerThread::doRun()
 
 							std::vector<std::string> result_URLs(num_tiles);
 							{
-								Lock lock(world_state->mutex);
+								WorldStateLock lock(world_state->mutex);
+
+								const std::string world_name = cur_world_state.nonNull() ? cur_world_state->details.name : std::string();
+								MapTileInfo& map_tile_info = world_state->getMapTileInfoForWorld(world_name, lock);
 
 								for(size_t i=0; i<tile_coords.size(); ++i)
 								{
-									auto res = world_state->map_tile_info.info.find(tile_coords[i]);
-									if(res != world_state->map_tile_info.info.end())
+									const Vec3<int> v(tile_coords[i].x, tile_coords[i].y, tile_coords[i].z);
+
+									// Guardrails against abusive/accidental huge tile coordinates.
+									if(v.z < 0 || v.z > 6 || std::abs(v.x) > 4096 || std::abs(v.y) > 4096)
+										continue;
+
+									auto res = map_tile_info.info.find(v);
+									if(res != map_tile_info.info.end())
 									{
 										const TileInfo& tile_info = res->second;
 										if(tile_info.cur_tile_screenshot.nonNull())
@@ -3176,6 +3243,28 @@ void WorkerThread::doRun()
 										}
 
 										// conPrint("QueryMapTiles: Found result_URLs[i]: " + result_URLs[i]);
+									}
+									else
+									{
+										// Lazy-create a tile screenshot request for this world/tile.
+										TileInfo info;
+										info.cur_tile_screenshot = new Screenshot();
+										info.cur_tile_screenshot->id = world_state->getNextScreenshotUIDUnlocked(lock);
+										info.cur_tile_screenshot->created_time = TimeStamp::currentTime();
+										info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
+										info.cur_tile_screenshot->is_map_tile = true;
+										info.cur_tile_screenshot->tile_x = v.x;
+										info.cur_tile_screenshot->tile_y = v.y;
+										info.cur_tile_screenshot->tile_z = v.z;
+
+										map_tile_info.info[v] = info;
+										map_tile_info.db_dirty = true;
+										world_state->markAsChanged();
+
+										PendingMapTileScreenshot pending;
+										pending.world_name = world_name;
+										pending.tile_coords = v;
+										world_state->pending_map_tile_screenshots.push_back(pending);
 									}
 								}
 							}
