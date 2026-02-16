@@ -42,7 +42,8 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 	last_requested_tile_z(-1000),
 	map_width_ws(500.f),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder),
-	visible(true)
+	visible(true),
+	fullscreen(false)
 {
 	opengl_engine = opengl_engine_;
 	gui_client = gui_client_;
@@ -81,6 +82,14 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 		collapse_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/right_tab.png", /*botleft=*/Vec2f(10.f), /*dims=*/Vec2f(0.1f), args);
 		collapse_button->handler = this;
 		gl_ui->addWidget(collapse_button);
+	}
+
+	{
+		GLUIButton::CreateArgs args;
+		args.tooltip = "Fullscreen map";
+		fullscreen_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/expand_chat_icon.png", /*botleft=*/Vec2f(10.f), /*dims=*/Vec2f(0.1f), args);
+		fullscreen_button->handler = this;
+		gl_ui->addWidget(fullscreen_button);
 	}
 
 	{
@@ -169,6 +178,12 @@ MiniMap::~MiniMap()
 			collapse_button = NULL;
 		}
 
+		if(fullscreen_button.nonNull())
+		{
+			gl_ui->removeWidget(fullscreen_button);
+			fullscreen_button = NULL;
+		}
+
 		if(expand_button.nonNull())
 		{
 			gl_ui->removeWidget(expand_button);
@@ -220,6 +235,7 @@ void MiniMap::setWidgetVisibility()
 	{
 		this->expand_button->setVisible(visible && !expanded);
 		this->collapse_button->setVisible(visible && expanded);
+		this->fullscreen_button->setVisible(visible && expanded);
 
 		minimap_image->setVisible(expanded && visible);
 
@@ -721,7 +737,8 @@ void MiniMap::handleMouseMoved(MouseEvent& mouse_event)
 	if(expanded)
 	{
 		const float extra_mouse_over_px = 10;
-		const float to_button_left_w = gl_ui->getUIWidthForDevIndepPixelWidth(button_spacing_px + button_w_px + extra_mouse_over_px);
+		// Make the hover region wide enough for both collapse + fullscreen buttons.
+		const float to_button_left_w = gl_ui->getUIWidthForDevIndepPixelWidth((button_spacing_px + button_w_px) * 2 + extra_mouse_over_px);
 
 		const Vec2f last_minimap_bot_left_pos = minimap_image->rect.getMin();
 		const bool mouse_over = 
@@ -729,6 +746,7 @@ void MiniMap::handleMouseMoved(MouseEvent& mouse_event)
 			coords.y > (last_minimap_bot_left_pos.y - gl_ui->getUIWidthForDevIndepPixelWidth(extra_mouse_over_px));
 
 		collapse_button->setVisible(mouse_over && visible);
+		fullscreen_button->setVisible(mouse_over && visible);
 	}
 }
 
@@ -741,16 +759,44 @@ void MiniMap::updateWidgetPositions()
 		{
 			const float minimap_width = computeMiniMapWidth();
 			const float y_margin = computeMiniMapTopMargin();
-			minimap_image->setPosAndDims(Vec2f(1 - minimap_width - x_margin, gl_ui->getViewportMinMaxY() - minimap_width - y_margin), Vec2f(minimap_width));
+
+			const Vec2f minimap_botleft = fullscreen ?
+				Vec2f(x_margin, gl_ui->getViewportMinMaxY() - minimap_width - x_margin) :
+				Vec2f(1 - minimap_width - x_margin, gl_ui->getViewportMinMaxY() - minimap_width - y_margin);
+
+			minimap_image->setPosAndDims(minimap_botleft, Vec2f(minimap_width));
 			minimap_image->setZ(BACKGROUND_IMAGE_Z);
 
 			//last_minimap_bot_left_pos = minimap_image->rect.getMin();
 
-			Vec2f minimap_botleft = minimap_image->getPos();
+			// Reuse minimap_botleft computed above (depends on fullscreen state).
 			//---------------------------- Update collapse_button ----------------------------
 			const float button_w = gl_ui->getUIWidthForDevIndepPixelWidth(button_w_px);
 			const float button_h = gl_ui->getUIWidthForDevIndepPixelWidth(button_h_px);
-			collapse_button->setPosAndDims(Vec2f(minimap_botleft.x - gl_ui->getUIWidthForDevIndepPixelWidth(button_w_px + button_spacing_px), minimap_botleft.y), Vec2f(button_w, button_h));
+			const float button_spacing = gl_ui->getUIWidthForDevIndepPixelWidth(button_spacing_px);
+
+			if(fullscreen)
+			{
+				// Place buttons on top of the fullscreen map (top-right corner).
+				collapse_button->setPosAndDims(
+					Vec2f(minimap_botleft.x + minimap_width - button_w - button_spacing, minimap_botleft.y + minimap_width - button_h - button_spacing),
+					Vec2f(button_w, button_h)
+				);
+			}
+			else
+			{
+				// Place button just left of the map (normal mode).
+				collapse_button->setPosAndDims(
+					Vec2f(minimap_botleft.x - gl_ui->getUIWidthForDevIndepPixelWidth(button_w_px + button_spacing_px), minimap_botleft.y),
+					Vec2f(button_w, button_h)
+				);
+			}
+
+			//---------------------------- Update fullscreen_button ----------------------------
+			fullscreen_button->setPosAndDims(
+				Vec2f(collapse_button->rect.getMin().x - button_w - button_spacing, collapse_button->rect.getMin().y),
+				Vec2f(button_w, button_h)
+			);
 
 			//---------------------------- Update expand_button ----------------------------
 			const float expand_button_w_px = 36;
@@ -784,12 +830,22 @@ Vec2f MiniMap::mapUICoordsForWorldSpacePos(const Vec3d& pos)
 
 float MiniMap::computeMiniMapWidth()
 {
+	if(fullscreen)
+	{
+		const float max_w = 1.f - 2 * x_margin;
+		const float max_h = gl_ui->getViewportMinMaxY() - 2 * x_margin;
+		return myClamp(myMin(max_w, max_h), 0.f, 1.f);
+	}
+
 	return myClamp(gl_ui->getUIWidthForDevIndepPixelWidth(250), 0.f, 1.f);
 }
 
 
 float MiniMap::computeMiniMapTopMargin()
 {
+	if(fullscreen)
+		return x_margin;
+
 	if(computeMiniMapWidth() > 0.8f) // If minimap extends sufficiently far across screen (will be case for narrow screens such as on phones)
 		return gl_ui->getUIWidthForDevIndepPixelWidth(60); // lower map so does not cover login/signup buttons.
 	else
@@ -949,13 +1005,21 @@ void MiniMap::eventOccurred(GLUICallbackEvent& event)
 	{
 		assert(expanded);
 		expanded = false;
+		fullscreen = false;
+	}
+	else if(event.widget == this->fullscreen_button.ptr())
+	{
+		assert(expanded);
+		fullscreen = !fullscreen;
 	}
 	else if(event.widget == this->expand_button.ptr())
 	{
 		assert(!expanded);
 		expanded = true;
+		fullscreen = false;
 	}
 
+	updateWidgetPositions();
 	setWidgetVisibility();
 
 	gui_client->getSettingsStore()->setBoolValue("setting/show_minimap", expanded);
