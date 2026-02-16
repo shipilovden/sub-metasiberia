@@ -41,7 +41,7 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 	//std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Substrata");
 	//const bool logged_in = LoginHandlers::isLoggedInAsNick(data_store, request_info);
 
-	std::string page_out = WebServerResponseUtils::standardHTMLHeader(data_store, request_info, /*page title=*/"Substrata");
+	std::string page_out = WebServerResponseUtils::standardHTMLHeader(data_store, request_info, /*page title=*/"Metasiberia");
 	page_out +=
 		"	<body class=\"root-body\">\n"
 		"	<div id=\"login\">\n"; // Start login div
@@ -780,7 +780,7 @@ void renderRunningYourOwnServerPage(ServerAllWorldsState& world_state, WebDataSt
 
 void renderNotFoundPage(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
-	std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, "Substrata");
+	std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, "Metasiberia");
 
 	//---------- Right column -------------
 	page_out += "<div class=\"right\">"; // right div

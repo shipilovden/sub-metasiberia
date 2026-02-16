@@ -14,16 +14,184 @@ Copyright Glare Technologies Limited 2021 -
 #include "WebServerResponseUtils.h"
 #include "LoginHandlers.h"
 #include "WorldHandlers.h"
+#include "WebDataStore.h"
 #include "../server/ServerWorldState.h"
+#include <IncludeXXHash.h>
 #include <ConPrint.h>
 #include <Exception.h>
 #include <Lock.h>
 #include <Parser.h>
 #include <Escaping.h>
+#include <StringUtils.h>
+#include <Base64.h>
+#include <CryptoRNG.h>
+#include <ContainerUtils.h>
+#include <algorithm>
 
 
 namespace AdminHandlers
 {
+
+static std::string getUserNameForID(ServerAllWorldsState& world_state, const UserID& user_id)
+{
+	const auto res = world_state.user_id_to_users.find(user_id);
+	return (res != world_state.user_id_to_users.end()) ? res->second->name : std::string();
+}
+
+
+static std::string shortHashForWebFile(const Reference<WebDataStoreFile>& file)
+{
+	if(file.isNull())
+		return "n/a";
+
+	const uint64 hash = XXH64(file->uncompressed_data.data(), file->uncompressed_data.size(), /*seed=*/1);
+	return toHexString(hash).substr(0, 8);
+}
+
+
+static bool chatbotMatchesFilters(const std::string& world_name_filter, const std::string& username_filter, const std::string& chatbot_world_name, const std::string& owner_name)
+{
+	if(!world_name_filter.empty() && (chatbot_world_name != world_name_filter))
+		return false;
+	if(!username_filter.empty() && (owner_name != username_filter))
+		return false;
+	return true;
+}
+
+
+static bool getUserIDForUsername(ServerAllWorldsState& world_state, const std::string& username, UserID& user_id_out)
+{
+	const auto user_res = world_state.name_to_users.find(username);
+	if(user_res == world_state.name_to_users.end())
+		return false;
+
+	user_id_out = user_res->second->id;
+	return true;
+}
+
+
+static bool parseCommaSeparatedUsernamesToIDs(ServerAllWorldsState& world_state, const std::string& usernames_csv, std::vector<UserID>& user_ids_out, std::string& error_out)
+{
+	const std::vector<std::string> username_fields = ::split(usernames_csv, ',');
+	for(size_t i=0; i<username_fields.size(); ++i)
+	{
+		const std::string username = stripHeadAndTailWhitespace(username_fields[i]);
+		if(username.empty())
+			continue;
+
+		UserID user_id;
+		if(!getUserIDForUsername(world_state, username, user_id))
+		{
+			error_out = "Could not find user '" + username + "'.";
+			return false;
+		}
+
+		if(!ContainerUtils::contains(user_ids_out, user_id))
+			user_ids_out.push_back(user_id);
+	}
+
+	return true;
+}
+
+
+static std::string generateReadablePassword()
+{
+	const size_t NUM_RANDOM_BYTES = 12;
+	uint8 random_bytes[NUM_RANDOM_BYTES];
+	CryptoRNG::getRandomBytes(random_bytes, NUM_RANDOM_BYTES);
+
+	std::string raw;
+	Base64::encode(random_bytes, NUM_RANDOM_BYTES, raw);
+	std::string password;
+	password.reserve(raw.size());
+
+	for(size_t i=0; i<raw.size(); ++i)
+	{
+		const char c = raw[i];
+		if(c == '=')
+			continue;
+		password.push_back((c == '+' || c == '/') ? '_' : c);
+	}
+
+	if(password.size() > 18)
+		password.resize(18);
+	if(password.size() < 12)
+		password += "M7p";
+
+	return password;
+}
+
+
+static std::string parseWorldNameFromSubURL(const std::string& sub_url)
+{
+	if(!hasPrefix(sub_url, "sub://"))
+		return sub_url;
+
+	const size_t host_start = 6; // after "sub://"
+	const size_t slash_pos = sub_url.find('/', host_start);
+	if(slash_pos == std::string::npos)
+		return ""; // URL points to root world.
+
+	const size_t world_start = slash_pos + 1;
+	const size_t query_pos = sub_url.find('?', world_start);
+	const std::string world_part = (query_pos == std::string::npos) ? sub_url.substr(world_start) : sub_url.substr(world_start, query_pos - world_start);
+	return web::Escaping::URLUnescape(world_part);
+}
+
+
+static std::string normaliseWorldNameField(const std::string& world_field)
+{
+	const std::string trimmed = stripHeadAndTailWhitespace(world_field);
+	if(trimmed.empty() || trimmed == "/" || trimmed == "root" || trimmed == "main")
+		return "";
+
+	if(hasPrefix(trimmed, "sub://"))
+		return parseWorldNameFromSubURL(trimmed);
+
+	if(hasPrefix(trimmed, "http://") || hasPrefix(trimmed, "https://"))
+	{
+		const size_t world_path_pos = trimmed.find("/world/");
+		if(world_path_pos != std::string::npos)
+		{
+			const size_t world_start = world_path_pos + 7;
+			const size_t query_pos = trimmed.find('?', world_start);
+			const std::string world_part = (query_pos == std::string::npos) ? trimmed.substr(world_start) : trimmed.substr(world_start, query_pos - world_start);
+			return web::Escaping::URLUnescape(world_part);
+		}
+
+		const size_t world_query_pos = trimmed.find("world=");
+		if(world_query_pos != std::string::npos)
+		{
+			const size_t world_start = world_query_pos + 6;
+			const size_t amp_pos = trimmed.find('&', world_start);
+			const std::string world_part = (amp_pos == std::string::npos) ? trimmed.substr(world_start) : trimmed.substr(world_start, amp_pos - world_start);
+			return web::Escaping::URLUnescape(world_part);
+		}
+	}
+
+	return trimmed;
+}
+
+
+static double parseDoubleFieldForParcelCreation(const web::RequestInfo& request, const std::string& field_name)
+{
+	std::string s = stripHeadAndTailWhitespace(request.getPostField(field_name).str());
+	if(s.empty())
+		throw glare::Exception("Missing field '" + field_name + "'.");
+	std::replace(s.begin(), s.end(), ',', '.');
+	return stringToDouble(s);
+}
+
+
+static std::string featureFlagNameForBit(const uint64 bitflag)
+{
+	if(bitflag == ServerAllWorldsState::SERVER_SCRIPT_EXEC_FEATURE_FLAG) return "SERVER_SCRIPT_EXEC";
+	if(bitflag == ServerAllWorldsState::LUA_HTTP_REQUESTS_FEATURE_FLAG) return "LUA_HTTP_REQUESTS";
+	if(bitflag == ServerAllWorldsState::DO_WORLD_MAINTENANCE_FEATURE_FLAG) return "DO_WORLD_MAINTENANCE";
+	if(bitflag == ServerAllWorldsState::CHATBOTS_FEATURE_FLAG) return "CHATBOTS";
+	if(bitflag == ServerAllWorldsState::ALLOW_PERSONAL_WORLD_PARCEL_CREATION_FEATURE_FLAG) return "ALLOW_PERSONAL_WORLD_PARCEL_CREATION";
+	return "UNKNOWN_FLAG";
+}
 
 
 std::string sharedAdminHeader(ServerAllWorldsState& world_state, const web::RequestInfo& request_info)
@@ -32,7 +200,7 @@ std::string sharedAdminHeader(ServerAllWorldsState& world_state, const web::Requ
 
 	page_out += "<p><a href=\"/admin\">Main admin page</a> | <a href=\"/admin_users\">Users</a> | <a href=\"/admin_parcels\">Parcels</a> | ";
 	page_out += "<a href=\"/admin_parcel_auctions\">Parcel Auctions</a> | <a href=\"/admin_orders\">Orders</a> | <a href=\"/admin_sub_eth_transactions\">Eth Transactions</a> | <a href=\"/admin_map\">Map</a> | ";
-	page_out += "<a href=\"/admin_news_posts\">News Posts</a> | <a href=\"/admin_lod_chunks\">LOD Chunks</a> | <a href=\"/admin_worlds\">Worlds</a> </p>";
+	page_out += "<a href=\"/admin_news_posts\">News Posts</a> | <a href=\"/admin_lod_chunks\">LOD Chunks</a> | <a href=\"/admin_worlds\">Worlds</a> | <a href=\"/admin_chatbots\">ChatBots</a> </p>";
 
 	return page_out;
 }
@@ -49,6 +217,41 @@ void renderMainAdminPage(ServerAllWorldsState& world_state, const web::RequestIn
 	std::string page_out = sharedAdminHeader(world_state, request_info);
 
 	page_out += "<p>Welcome!</p><br/><br/>";
+	page_out += "<h2>Superadmin parcel tools</h2>";
+	page_out += "<p><a href=\"/admin_parcels\">Open parcels admin page</a></p>";
+
+	page_out += "<form action=\"/admin_create_parcel\" method=\"post\">";
+	page_out += "<label for=\"admin-create-root-owner\">Owner username</label><br/>";
+	page_out += "<input id=\"admin-create-root-owner\" type=\"text\" name=\"owner_username\" value=\"\" title=\"Username that will own the new root-world parcel\"><br/>";
+	page_out += "<label for=\"admin-create-root-editors\">Editors usernames (comma-separated)</label><br/>";
+	page_out += "<input id=\"admin-create-root-editors\" type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated usernames with edit rights\"><br/>";
+	page_out += "<label for=\"admin-create-root-world\">World (name or link, empty=root)</label><br/>";
+	page_out += "<input id=\"admin-create-root-world\" type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sub://... link\"><br/>";
+	page_out += "<label for=\"admin-create-origin-x\">Origin X</label><br/>";
+	page_out += "<input id=\"admin-create-origin-x\" type=\"text\" name=\"origin_x\" value=\"0\"><br/>";
+	page_out += "<label for=\"admin-create-origin-y\">Origin Y</label><br/>";
+	page_out += "<input id=\"admin-create-origin-y\" type=\"text\" name=\"origin_y\" value=\"0\"><br/>";
+	page_out += "<label for=\"admin-create-size-x\">Size X</label><br/>";
+	page_out += "<input id=\"admin-create-size-x\" type=\"text\" name=\"size_x\" value=\"16\"><br/>";
+	page_out += "<label for=\"admin-create-size-y\">Size Y</label><br/>";
+	page_out += "<input id=\"admin-create-size-y\" type=\"text\" name=\"size_y\" value=\"16\"><br/>";
+	page_out += "<label for=\"admin-create-min-z\">Min Z</label><br/>";
+	page_out += "<input id=\"admin-create-min-z\" type=\"text\" name=\"min_z\" value=\"-1\"><br/>";
+	page_out += "<label for=\"admin-create-max-z\">Max Z</label><br/>";
+	page_out += "<input id=\"admin-create-max-z\" type=\"text\" name=\"max_z\" value=\"4\"><br/>";
+	page_out += "<input type=\"submit\" value=\"Create new parcel\" title=\"Create a parcel using configured world and coordinates\" onclick=\"return confirm('Create parcel with these settings?');\" >";
+	page_out += "</form>";
+
+	page_out += "<form onsubmit=\"window.location='/parcel/' + document.getElementById('admin-open-parcel-id').value; return false;\">";
+	page_out += "parcel id: <input type=\"number\" id=\"admin-open-parcel-id\" value=\"1\" min=\"1\"> ";
+	page_out += "<input type=\"submit\" value=\"Open parcel page (edit tools)\">";
+	page_out += "</form>";
+
+	page_out += "<form onsubmit=\"window.location='/admin_set_parcel_owner/' + document.getElementById('admin-set-owner-parcel-id').value; return false;\">";
+	page_out += "parcel id: <input type=\"number\" id=\"admin-set-owner-parcel-id\" value=\"1\" min=\"1\"> ";
+	page_out += "<input type=\"submit\" value=\"Open set owner form\">";
+	page_out += "</form>";
+	page_out += "<hr/>";
 
 	{ // Lock scope
 		Lock lock(world_state.mutex);
@@ -138,9 +341,73 @@ void renderMainAdminPage(ServerAllWorldsState& world_state, const web::RequestIn
 
 		page_out += "<form action=\"/admin_set_feature_flag_post\" method=\"post\">";
 		page_out += "<input type=\"hidden\" name=\"flag_bit_index\" value=\"" + toString(BitUtils::highestSetBitIndex(ServerAllWorldsState::CHATBOTS_FEATURE_FLAG)) + "\">";
-		page_out += "<input type=\"number\" name=\"new_value\" value=\"" + toString(chatbots_enabled ? 1 : 0) + "\">";
-		page_out += "<input type=\"submit\" value=\"Run chatbots\" onclick=\"return confirm('Are you sure you want to change chatbots?');\" >";
+		page_out += "<input type=\"hidden\" name=\"new_value\" value=\"" + toString(chatbots_enabled ? 0 : 1) + "\">";
+		page_out += "<input type=\"submit\" value=\"" + std::string(chatbots_enabled ? "Disable chatbots" : "Enable chatbots") + "\" onclick=\"return confirm('Are you sure you want to change chatbots?');\" >";
 		page_out += "</form>";
+
+		page_out += "<p>Create parcels in user/personal worlds: <span class=\"feature-enabled\">superadmin only</span>.</p>";
+	}
+
+	{
+		std::string fragments_dir = "n/a";
+		std::string public_files_dir = "n/a";
+		std::string webclient_dir = "n/a";
+		std::string main_css_hash = "n/a";
+		std::string logo_small_hash = "n/a";
+		std::string logo_main_hash = "n/a";
+
+		WebDataStore* data_store = world_state.web_data_store;
+		if(data_store)
+		{
+			{
+				Lock lock(data_store->hash_mutex);
+				if(!data_store->main_css_hash.empty())
+					main_css_hash = data_store->main_css_hash;
+			}
+
+			{
+				Lock lock(data_store->mutex);
+				fragments_dir = data_store->fragments_dir;
+				public_files_dir = data_store->public_files_dir;
+				webclient_dir = data_store->webclient_dir;
+
+				auto logo_small_res = data_store->public_files.find("logo_small.png");
+				if(logo_small_res != data_store->public_files.end())
+					logo_small_hash = shortHashForWebFile(logo_small_res->second);
+
+				auto logo_main_res = data_store->public_files.find("logo_main_page.png");
+				if(logo_main_res != data_store->public_files.end())
+					logo_main_hash = shortHashForWebFile(logo_main_res->second);
+			}
+		}
+
+		page_out += "<br/><hr/>";
+		page_out += "<h2>Web assets status</h2>";
+		page_out += "<div>fragments_dir: <code>" + web::Escaping::HTMLEscape(fragments_dir) + "</code></div>";
+		page_out += "<div>public_files_dir: <code>" + web::Escaping::HTMLEscape(public_files_dir) + "</code></div>";
+		page_out += "<div>webclient_dir: <code>" + web::Escaping::HTMLEscape(webclient_dir) + "</code></div>";
+		page_out += "<div>main.css hash: <code>" + web::Escaping::HTMLEscape(main_css_hash) + "</code></div>";
+		page_out += "<div>logo_small.png hash: <code>" + web::Escaping::HTMLEscape(logo_small_hash) + "</code></div>";
+		page_out += "<div>logo_main_page.png hash: <code>" + web::Escaping::HTMLEscape(logo_main_hash) + "</code></div>";
+
+		page_out += "<form action=\"/admin_reload_web_data_post\" method=\"post\">";
+		page_out += "<input type=\"submit\" value=\"Force reload web data now\" onclick=\"return confirm('Reload web data from disk now?');\" >";
+		page_out += "</form>";
+	}
+
+	{
+		Lock lock(world_state.mutex);
+		page_out += "<br/><hr/>";
+		page_out += "<h2>Admin audit log</h2>";
+		page_out += "<div>Recent actions (newest first):</div>";
+
+		int num_shown = 0;
+		for(auto it = world_state.admin_action_log.rbegin(); it != world_state.admin_action_log.rend() && num_shown < 100; ++it, ++num_shown)
+		{
+			const AdminActionLogEntry& e = *it;
+			page_out += "<div>" + e.time.RFC822FormatedString() + " | user " + e.user_id.toString() + " (" + web::Escaping::HTMLEscape(e.username) + ") | " +
+				web::Escaping::HTMLEscape(e.action) + "</div>";
+		}
 	}
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
@@ -160,27 +427,24 @@ void renderUsersPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 	{ // Lock scope
 		Lock lock(world_state.mutex);
 
-		// Print out users
 		page_out += "<h2>Users</h2>\n";
+		page_out += "<div class=\"msb-table-wrap\">";
+		page_out += "<table class=\"msb-table\" aria-label=\"Users table\">";
+		page_out += "<thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Joined</th><th>ETH address</th></tr></thead>";
+		page_out += "<tbody>";
 
 		for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
 		{
 			const User* user = it->second.ptr();
-			page_out += "<div>\n";
-			page_out += "<a href=\"/admin_user/" + user->id.toString() + "\">id: " + user->id.toString() + "</a>,       username: " + web::Escaping::HTMLEscape(user->name) + ",       email: " + web::Escaping::HTMLEscape(user->email_address) + ",      joined " + user->created_time.timeAgoDescription() +
-				"  linked eth address: <span class=\"eth-address\">" + user->controlled_eth_address + "</span>";
-			page_out += "</div>\n";
+			page_out += "<tr>";
+			page_out += "<td><a href=\"/admin_user/" + user->id.toString() + "\">" + user->id.toString() + "</a></td>";
+			page_out += "<td>" + web::Escaping::HTMLEscape(user->name) + "</td>";
+			page_out += "<td>" + web::Escaping::HTMLEscape(user->email_address) + "</td>";
+			page_out += "<td>" + web::Escaping::HTMLEscape(user->created_time.timeAgoDescription()) + "</td>";
+			page_out += "<td><span class=\"eth-address\">" + web::Escaping::HTMLEscape(user->controlled_eth_address) + "</span></td>";
+			page_out += "</tr>\n";
 		}
-
-		/*page_out += "<table>";
-		for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
-		{
-		const User* user = it->second.ptr();
-		page_out += "<tr>\n";
-		page_out += "<td>" + user->id.toString() + "</td><td>" + web::Escaping::HTMLEscape(user->name) + "</td><td>" + web::Escaping::HTMLEscape(user->email_address) + "</td><td>" + user->created_time.timeAgoDescription() + "</td>";
-		page_out += "</tr>\n";
-		}
-		page_out += "</table>";*/
+		page_out += "</tbody></table></div>";
 	} // End Lock scope
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
@@ -209,6 +473,13 @@ void renderAdminUserPage(ServerAllWorldsState& world_state, const web::RequestIn
 
 	{ // Lock scope
 		Lock lock(world_state.mutex);
+		const User* logged_in_admin = LoginHandlers::getLoggedInUser(world_state, request);
+		if(logged_in_admin)
+		{
+			const std::string msg = world_state.getAndRemoveUserWebMessage(logged_in_admin->id);
+			if(!msg.empty())
+				page_out += "<div class=\"msg\">" + web::Escaping::HTMLEscape(msg) + "</div>";
+		}
 
 		page_out += "<h2>User " + toString(user_id) + "</h2>\n";
 
@@ -251,6 +522,17 @@ void renderAdminUserPage(ServerAllWorldsState& world_state, const web::RequestIn
 			page_out += "<input type=\"number\" name=\"allow\" value=\"" + toString(BitUtils::isBitSet(user->flags, User::ALLOW_DYN_TEX_UPDATE_CHECKING) ? 1 : 0) + "\">";
 			page_out += "<input type=\"submit\" value=\"Allow user to do dynamic texture update checking (1 / 0)\" onclick=\"return confirm('Are you sure you want to allow user to do dynamic texture update checking?');\" >";
 			page_out += "</form>";
+
+			page_out += "<hr/>";
+			page_out += "<h3>Reset user password (superadmin)</h3>";
+			page_out += "<div class=\"field-description\">Sets a new password without old password. Generated password is shown once after submit.</div>";
+			page_out += "<form action=\"/admin_reset_user_password_post\" method=\"post\">";
+			page_out += "<input type=\"hidden\" name=\"user_id\" value=\"" + toString(user_id) + "\">";
+			page_out += "<label for=\"admin-new-password\">Manual new password (optional)</label><br/>";
+			page_out += "<input id=\"admin-new-password\" type=\"text\" name=\"new_password\" value=\"\" title=\"Leave empty to auto-generate\"><br/>";
+			page_out += "<label><input type=\"checkbox\" name=\"generate\" value=\"1\" checked=\"checked\"> Auto-generate secure password if empty</label><br/>";
+			page_out += "<input type=\"submit\" value=\"Reset password now\" title=\"Reset this user's password\" onclick=\"return confirm('Reset password for this user now?');\" >";
+			page_out += "</form>";
 		}
 	} // End Lock scope
 
@@ -286,7 +568,17 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		//-----------------------
 		page_out += "<hr/>";
 		page_out += "<form action=\"/admin_create_parcel\" method=\"post\">";
-		page_out += "<input type=\"submit\" value=\"Create new parcel\" onclick=\"return confirm('Are you sure you want to create a parcel?');\" >";
+		page_out += "<div class=\"field-description\">Configure where and how the parcel should be created.</div>";
+		page_out += "World (name or link): <input type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sub://... link. Leave empty for root world\"><br/>";
+		page_out += "Owner username: <input type=\"text\" name=\"owner_username\" value=\"\" title=\"Username that will own the new parcel\"><br/>";
+		page_out += "Editors usernames: <input type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated usernames with edit rights\"><br/>";
+		page_out += "Origin X: <input type=\"text\" name=\"origin_x\" value=\"0\" title=\"Parcel bottom-left X coordinate\"> ";
+		page_out += "Origin Y: <input type=\"text\" name=\"origin_y\" value=\"0\" title=\"Parcel bottom-left Y coordinate\"><br/>";
+		page_out += "Size X: <input type=\"text\" name=\"size_x\" value=\"16\" title=\"Parcel width on X axis\"> ";
+		page_out += "Size Y: <input type=\"text\" name=\"size_y\" value=\"16\" title=\"Parcel width on Y axis\"><br/>";
+		page_out += "Min Z: <input type=\"text\" name=\"min_z\" value=\"-1\" title=\"Minimum parcel build height\"> ";
+		page_out += "Max Z: <input type=\"text\" name=\"max_z\" value=\"4\" title=\"Maximum parcel build height\"><br/>";
+		page_out += "<input type=\"submit\" value=\"Create new parcel\" title=\"Create a parcel in selected world using these coordinates\" onclick=\"return confirm('Create parcel with these settings?');\" >";
 		page_out += "</form>";
 		page_out += "<hr/>";
 		//-----------------------
@@ -331,6 +623,13 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			page_out += "</div>    \n";
 
 			page_out += " <a href=\"/admin_create_parcel_auction/" + parcel->id.toString() + "\">Create auction</a>";
+			page_out += " | <a href=\"/parcel/" + parcel->id.toString() + "\">Edit parcel</a>";
+			page_out += " | <a href=\"/admin_set_parcel_owner/" + parcel->id.toString() + "\">Set owner</a>";
+			page_out += " | <a href=\"/add_parcel_writer?parcel_id=" + parcel->id.toString() + "\">Manage editors</a>";
+			page_out += " | <form action=\"/admin_delete_parcel\" method=\"post\" style=\"display: inline;\">";
+			page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+			page_out += "<input type=\"submit\" value=\"Delete parcel\" onclick=\"return confirm('Are you sure you want to delete parcel " + parcel->id.toString() + "?');\" >";
+			page_out += "</form>";
 
 			page_out += "</p>\n";
 			page_out += "<br/>  \n";
@@ -930,18 +1229,123 @@ void renderAdminWorldsPage(ServerAllWorldsState& all_worlds_state, const web::Re
 		WorldStateLock lock(all_worlds_state.mutex);
 
 		page_out += "<h2>Worlds</h2>\n";
+		page_out += "<div class=\"msb-table-wrap\">";
+		page_out += "<table class=\"msb-table\" aria-label=\"Worlds table\">";
+		page_out += "<thead><tr><th>World</th><th>Created (UTC)</th><th>Owner</th><th>Description</th></tr></thead>";
+		page_out += "<tbody>";
 
 		for(auto it = all_worlds_state.world_states.begin(); it != all_worlds_state.world_states.end(); ++it)
 		{
 			ServerWorldState* world_state = it->second.ptr();
+			const std::string world_name = world_state->details.name.empty() ? std::string("Main world") : world_state->details.name;
+			const std::string owner_name = getUserNameForID(all_worlds_state, world_state->details.owner_id);
+			const std::string owner_display = owner_name.empty() ? std::string("[unknown]") : owner_name;
+			const std::string description = world_state->details.description.empty() ? std::string("-") : world_state->details.description.substr(0, 400);
 
-			page_out += "<div><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world_state->details.name) + "\">" + web::Escaping::HTMLEscape(world_state->details.name) + "</a>";
-			page_out += " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Created: " + world_state->details.created_time.dayAndTimeStringUTC();
-			if(!world_state->details.description.empty())
-				page_out += " &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  description: <i>" + web::Escaping::HTMLEscape(world_state->details.description.substr(0, 200)) + "</i>";
-			page_out += "</div>\n";
+			page_out += "<tr>";
+			page_out += "<td><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world_state->details.name) + "\">" + web::Escaping::HTMLEscape(world_name) + "</a></td>";
+			page_out += "<td>" + world_state->details.created_time.dayAndTimeStringUTC() + "</td>";
+			page_out += "<td>" + web::Escaping::HTMLEscape(owner_display) + "</td>";
+			page_out += "<td><i>" + web::Escaping::HTMLEscape(description) + "</i></td>";
+			page_out += "</tr>\n";
 		}
+
+		page_out += "</tbody></table></div>";
 	} // End Lock scope
+
+	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
+}
+
+
+void renderAdminChatBotsPage(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	const std::string world_name_filter = stripHeadAndTailWhitespace(request.getURLParam("world_name").str());
+	const std::string username_filter = stripHeadAndTailWhitespace(request.getURLParam("username").str());
+
+	std::string page_out = sharedAdminHeader(world_state, request);
+	page_out += "<h2>ChatBots</h2>\n";
+
+	page_out += "<form action=\"/admin_chatbots\" method=\"get\">";
+	page_out += "world name: <input type=\"text\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name_filter) + "\"> ";
+	page_out += "owner username: <input type=\"text\" name=\"username\" value=\"" + web::Escaping::HTMLEscape(username_filter) + "\"> ";
+	page_out += "<input type=\"submit\" value=\"Filter\">";
+	page_out += "</form>";
+
+	page_out += "<form action=\"/admin_set_chatbots_disabled_post\" method=\"post\">";
+	page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name_filter) + "\">";
+	page_out += "<input type=\"hidden\" name=\"username\" value=\"" + web::Escaping::HTMLEscape(username_filter) + "\">";
+	page_out += "<input type=\"hidden\" name=\"new_value\" value=\"1\">";
+	page_out += "<input type=\"submit\" value=\"Disable matching chatbots\" onclick=\"return confirm('Disable all matching chatbots?');\" >";
+	page_out += "</form>";
+
+	page_out += "<form action=\"/admin_set_chatbots_disabled_post\" method=\"post\">";
+	page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name_filter) + "\">";
+	page_out += "<input type=\"hidden\" name=\"username\" value=\"" + web::Escaping::HTMLEscape(username_filter) + "\">";
+	page_out += "<input type=\"hidden\" name=\"new_value\" value=\"0\">";
+	page_out += "<input type=\"submit\" value=\"Enable matching chatbots\" onclick=\"return confirm('Enable all matching chatbots?');\" >";
+	page_out += "</form>";
+
+	page_out += "<form action=\"/admin_delete_chatbots_post\" method=\"post\">";
+	page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name_filter) + "\">";
+	page_out += "<input type=\"hidden\" name=\"username\" value=\"" + web::Escaping::HTMLEscape(username_filter) + "\">";
+	page_out += "<input type=\"submit\" value=\"Delete matching chatbots\" onclick=\"return confirm('Delete all matching chatbots?');\" >";
+	page_out += "</form>";
+	page_out += "<hr/>";
+
+	{ // lock scope
+		WorldStateLock lock(world_state.mutex);
+
+		int num_total = 0;
+		int num_filtered = 0;
+
+		for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+		{
+			ServerWorldState* world = world_it->second.ptr();
+
+			for(auto it = world->getChatBots(lock).begin(); it != world->getChatBots(lock).end(); ++it)
+			{
+				num_total++;
+				ChatBot* chatbot = it->second.ptr();
+
+				const std::string owner_name = getUserNameForID(world_state, chatbot->owner_id);
+				if(!chatbotMatchesFilters(world_name_filter, username_filter, world_it->first, owner_name))
+					continue;
+
+				num_filtered++;
+
+				const bool disabled = BitUtils::isBitSet(chatbot->flags, ChatBot::DISABLED_FLAG);
+
+				page_out += "<div>";
+				page_out += "ChatBot <a href=\"/edit_chatbot?chatbot_id=" + toString(chatbot->id) + "\">" + toString(chatbot->id) + "</a>";
+				page_out += " | name: <b>" + web::Escaping::HTMLEscape(chatbot->name) + "</b>";
+				page_out += " | world: " + (world_it->first.empty() ? std::string("Main world") : web::Escaping::HTMLEscape(world_it->first));
+				page_out += " | owner: " + web::Escaping::HTMLEscape(owner_name.empty() ? std::string("[unknown]") : owner_name);
+				page_out += " | state: " + std::string(disabled ? "<span class=\"feature-disabled\">disabled</span>" : "<span class=\"feature-enabled\">enabled</span>");
+
+				page_out += " | <form action=\"/admin_set_chatbot_disabled_post\" method=\"post\" style=\"display: inline;\">";
+				page_out += "<input type=\"hidden\" name=\"chatbot_id\" value=\"" + toString(chatbot->id) + "\">";
+				page_out += "<input type=\"hidden\" name=\"new_value\" value=\"" + toString(disabled ? 0 : 1) + "\">";
+				page_out += "<input type=\"submit\" value=\"" + std::string(disabled ? "Enable" : "Disable") + "\" onclick=\"return confirm('Change chatbot state?');\" >";
+				page_out += "</form>";
+
+				page_out += " <form action=\"/admin_delete_chatbot_post\" method=\"post\" style=\"display: inline;\">";
+				page_out += "<input type=\"hidden\" name=\"chatbot_id\" value=\"" + toString(chatbot->id) + "\">";
+				page_out += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete chatbot " + toString(chatbot->id) + "?');\" >";
+				page_out += "</form>";
+
+				page_out += "</div>";
+			}
+		}
+
+		page_out += "<hr/>";
+		page_out += "<div>Total chatbots: " + toString(num_total) + ", shown by filter: " + toString(num_filtered) + "</div>";
+	}
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
 }
@@ -1004,6 +1408,8 @@ void createParcelAuctionPost(ServerAllWorldsState& world_state, const web::Reque
 		{ // Lock scope
 
 			WorldStateLock lock(world_state.mutex);
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
 
 			// Lookup parcel
 			const auto res = world_state.getRootWorldState()->parcels.find(ParcelID((uint32)parcel_id));
@@ -1161,6 +1567,8 @@ void handleSetParcelOwnerPost(ServerAllWorldsState& world_state, const web::Requ
 		{ // Lock scope
 
 			WorldStateLock lock(world_state.mutex);
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
 
 			// Lookup parcel
 			const auto res = world_state.getRootWorldState()->parcels.find(ParcelID((uint32)parcel_id));
@@ -1179,6 +1587,10 @@ void handleSetParcelOwnerPost(ServerAllWorldsState& world_state, const web::Requ
 				world_state.denormaliseData(); // Update denormalised data which includes parcel owner name
 
 				world_state.markAsChanged();
+				world_state.addAdminAuditLogEntry(
+					logged_in_user->id,
+					logged_in_user->name,
+					"Changed owner for parcel " + toString(parcel_id) + " to user " + toString(new_owner_id) + ".");
 
 				web::ResponseUtils::writeRedirectTo(reply_info, "/parcel/" + toString(parcel_id));
 			}
@@ -1691,6 +2103,9 @@ void handleCreateParcelPost(ServerAllWorldsState& world_state, const web::Reques
 	try
 	{
 		ParcelID new_id;
+		std::string created_world_name;
+		std::string owner_username;
+		std::vector<UserID> writer_ids;
 
 		{ // Lock scope
 
@@ -1698,47 +2113,403 @@ void handleCreateParcelPost(ServerAllWorldsState& world_state, const web::Reques
 
 			User* user = LoginHandlers::getLoggedInUser(world_state, request);
 			runtimeCheck(user);
+			const std::string world_name_field = request.getPostField("world_name").str();
+			owner_username = stripHeadAndTailWhitespace(request.getPostField("owner_username").str());
+			const std::string writer_usernames_csv = request.getPostField("writer_usernames").str();
+			const double origin_x = parseDoubleFieldForParcelCreation(request, "origin_x");
+			const double origin_y = parseDoubleFieldForParcelCreation(request, "origin_y");
+			const double size_x   = parseDoubleFieldForParcelCreation(request, "size_x");
+			const double size_y   = parseDoubleFieldForParcelCreation(request, "size_y");
+			const double min_z    = parseDoubleFieldForParcelCreation(request, "min_z");
+			const double max_z    = parseDoubleFieldForParcelCreation(request, "max_z");
 
-			// Find max parcel id, also most recently created parcel.
+			if(size_x <= 0.0 || size_y <= 0.0)
+				throw glare::Exception("Parcel sizes must be > 0.");
+			if(max_z <= min_z)
+				throw glare::Exception("Max Z must be greater than Min Z.");
+
+			created_world_name = normaliseWorldNameField(world_name_field);
+			const auto world_res = world_state.world_states.find(created_world_name);
+			if(world_res == world_state.world_states.end())
+				throw glare::Exception("Could not find world '" + created_world_name + "'.");
+			ServerWorldState* target_world = world_res->second.ptr();
+
+			UserID owner_id = user->id;
+			if(!owner_username.empty())
+			{
+				if(!getUserIDForUsername(world_state, owner_username, owner_id))
+					throw glare::Exception("Could not find owner user '" + owner_username + "'.");
+			}
+			else
+			{
+				owner_username = user->name;
+			}
+
+			std::string writer_parse_error;
+			if(!parseCommaSeparatedUsernamesToIDs(world_state, writer_usernames_csv, writer_ids, writer_parse_error))
+				throw glare::Exception(writer_parse_error);
+
+			if(!ContainerUtils::contains(writer_ids, owner_id))
+				writer_ids.push_back(owner_id);
+
+			// Find max parcel id in target world.
 			uint32 max_id = 0;
-			ParcelRef most_recent_parcel;
-			for(auto it = world_state.getRootWorldState()->parcels.begin(); it != world_state.getRootWorldState()->parcels.end(); ++it)
+			for(auto it = target_world->getParcels(lock).begin(); it != target_world->getParcels(lock).end(); ++it)
 			{
 				if(it->second->id.valid())
-				{
 					max_id = myMax(max_id, it->second->id.value());
-					most_recent_parcel = it->second; // Just approximate most recently-created with parcel with greatest id.
-				}
 			}
 
 			new_id = ParcelID(max_id + 1);
 
 			Parcel* parcel = new Parcel();
 			parcel->id = new_id;
-			parcel->owner_id = user->id;
+			parcel->owner_id = owner_id;
+			parcel->admin_ids = writer_ids;
+			parcel->writer_ids = writer_ids;
 			parcel->created_time = TimeStamp::currentTime();
-			//parcel->admin_ids.push_back(UserID(0));
 
-			parcel->verts[0] = Vec2d(-10000, -10000);
-			parcel->verts[1] = Vec2d(-10000 + 1, -10000);
-			parcel->verts[2] = Vec2d(-10000 + 1, -10000 + 1);
-			parcel->verts[3] = Vec2d(-10000, -10000 + 1);
-			parcel->zbounds = most_recent_parcel ? most_recent_parcel->zbounds : Vec2d(-1.0, 4.0); // Copy zbounds from most_recent_parcel
+			parcel->verts[0] = Vec2d(origin_x, origin_y);
+			parcel->verts[1] = Vec2d(origin_x + size_x, origin_y);
+			parcel->verts[2] = Vec2d(origin_x + size_x, origin_y + size_y);
+			parcel->verts[3] = Vec2d(origin_x, origin_y + size_y);
+			parcel->zbounds = Vec2d(min_z, max_z);
 			parcel->build();
 
-			world_state.getRootWorldState()->parcels[new_id] = parcel;
-			world_state.getRootWorldState()->addParcelAsDBDirty(parcel, lock);
+			target_world->getParcels(lock)[new_id] = parcel;
+			target_world->addParcelAsDBDirty(parcel, lock);
 			world_state.markAsChanged();
+			const std::string world_display_name = created_world_name.empty() ? std::string("[root world]") : created_world_name;
+			world_state.addAdminAuditLogEntry(
+				user->id,
+				user->name,
+				"Created parcel " + new_id.toString() + " in world '" + world_display_name + "', owner='" + owner_username + "', editors_count=" + toString(writer_ids.size()) + ".");
 
-			world_state.setUserWebMessage(user->id, "Parcel created.");
+			world_state.setUserWebMessage(user->id, "Parcel " + new_id.toString() + " created in world '" + world_display_name + "' and assigned to '" + owner_username + "'.");
 		} // End lock scope
 
-		web::ResponseUtils::writeRedirectTo(reply_info, "/parcel/" + toString(new_id.value()));
+		if(created_world_name.empty())
+			web::ResponseUtils::writeRedirectTo(reply_info, "/parcel/" + toString(new_id.value()));
+		else
+			web::ResponseUtils::writeRedirectTo(reply_info, "/world/" + WorldHandlers::URLEscapeWorldName(created_world_name));
 	}
 	catch(glare::Exception& e)
 	{
 		if(!request.fuzzing)
 			conPrint("handleCreateParcelPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleDeleteParcelPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const ParcelID parcel_id = ParcelID(request.getPostIntField("parcel_id"));
+		if(!parcel_id.valid())
+			throw glare::Exception("Invalid parcel_id.");
+
+		{ // Lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			User* user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(user);
+
+			Reference<ServerWorldState> root_world = world_state.getRootWorldState();
+
+			const auto parcel_res = root_world->parcels.find(parcel_id);
+			if(parcel_res == root_world->parcels.end())
+				throw glare::Exception("Parcel not found.");
+
+			ParcelRef parcel = parcel_res->second;
+			if(!parcel->parcel_auction_ids.empty())
+				throw glare::Exception("Parcel has auction records, delete/terminate auctions first.");
+
+			// Remove from dirty set first so it won't be re-written to DB after delete.
+			root_world->getDBDirtyParcels(lock).erase(parcel);
+
+			if(parcel->database_key.valid())
+				world_state.db_records_to_delete.insert(parcel->database_key);
+
+			root_world->parcels.erase(parcel_res);
+
+			world_state.markAsChanged();
+			world_state.setUserWebMessage(user->id, "Parcel deleted.");
+			world_state.addAdminAuditLogEntry(user->id, user->name, "Deleted parcel " + parcel_id.toString() + ".");
+		} // End lock scope
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_parcels");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleDeleteParcelPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+static bool deleteChatBotByID(ServerAllWorldsState& world_state, const uint64 chatbot_id, const std::string& reason, WorldStateLock& lock)
+{
+	for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+	{
+		ServerWorldState* world = world_it->second.ptr();
+		auto chatbot_it = world->getChatBots(lock).find(chatbot_id);
+		if(chatbot_it != world->getChatBots(lock).end())
+		{
+			ChatBotRef chatbot = chatbot_it->second;
+			if(chatbot->avatar)
+			{
+				chatbot->avatar->state = Avatar::State_Dead;
+				chatbot->avatar->other_dirty = true;
+			}
+
+			world->getDBDirtyChatBots(lock).erase(chatbot);
+			if(chatbot->database_key.valid())
+				world_state.db_records_to_delete.insert(chatbot->database_key);
+
+			world->getChatBots(lock).erase(chatbot_it);
+			world_state.markAsChanged();
+			(void)reason;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+void handleSetChatBotDisabledPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		const uint64 chatbot_id = (uint64)request.getPostIntField("chatbot_id");
+		const bool disable_chatbot = request.getPostIntField("new_value") != 0;
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+
+			bool found = false;
+			for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+			{
+				ServerWorldState* world = world_it->second.ptr();
+				auto chatbot_it = world->getChatBots(lock).find(chatbot_id);
+				if(chatbot_it != world->getChatBots(lock).end())
+				{
+					ChatBot* chatbot = chatbot_it->second.ptr();
+					BitUtils::setOrZeroBit(chatbot->flags, ChatBot::DISABLED_FLAG, disable_chatbot);
+					world->addChatBotAsDBDirty(chatbot, lock);
+					world_state.markAsChanged();
+					world_state.setUserWebMessage(logged_in_user->id, std::string(disable_chatbot ? "Disabled" : "Enabled") + " chatbot " + toString(chatbot_id) + ".");
+					world_state.addAdminAuditLogEntry(logged_in_user->id, logged_in_user->name, std::string(disable_chatbot ? "Disabled" : "Enabled") + " chatbot " + toString(chatbot_id) + ".");
+					found = true;
+					break;
+				}
+			}
+
+			if(!found)
+				world_state.setUserWebMessage(logged_in_user->id, "Chatbot not found.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_chatbots");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleSetChatBotDisabledPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleSetChatBotsDisabledPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		const std::string world_name_filter = stripHeadAndTailWhitespace(request.getPostField("world_name").str());
+		const std::string username_filter = stripHeadAndTailWhitespace(request.getPostField("username").str());
+		const bool disable_chatbots = request.getPostIntField("new_value") != 0;
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+
+			int num_updated = 0;
+			for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+			{
+				ServerWorldState* world = world_it->second.ptr();
+
+				for(auto chatbot_it = world->getChatBots(lock).begin(); chatbot_it != world->getChatBots(lock).end(); ++chatbot_it)
+				{
+					ChatBot* chatbot = chatbot_it->second.ptr();
+					const std::string owner_name = getUserNameForID(world_state, chatbot->owner_id);
+
+					if(!chatbotMatchesFilters(world_name_filter, username_filter, world_it->first, owner_name))
+						continue;
+
+					BitUtils::setOrZeroBit(chatbot->flags, ChatBot::DISABLED_FLAG, disable_chatbots);
+					world->addChatBotAsDBDirty(chatbot, lock);
+					num_updated++;
+				}
+			}
+
+			world_state.markAsChanged();
+			world_state.setUserWebMessage(logged_in_user->id, std::string(disable_chatbots ? "Disabled " : "Enabled ") + toString(num_updated) + " chatbot(s).");
+			world_state.addAdminAuditLogEntry(
+				logged_in_user->id,
+				logged_in_user->name,
+				std::string(disable_chatbots ? "Disabled " : "Enabled ") + toString(num_updated) + " chatbot(s), world_filter='" + world_name_filter + "', username_filter='" + username_filter + "'.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_chatbots?world_name=" + web::Escaping::URLEscape(world_name_filter) + "&username=" + web::Escaping::URLEscape(username_filter));
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleSetChatBotsDisabledPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleDeleteChatBotPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const uint64 chatbot_id = (uint64)request.getPostIntField("chatbot_id");
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+
+			if(deleteChatBotByID(world_state, chatbot_id, "admin_delete", lock))
+			{
+				world_state.setUserWebMessage(logged_in_user->id, "Deleted chatbot.");
+				world_state.addAdminAuditLogEntry(logged_in_user->id, logged_in_user->name, "Deleted chatbot " + toString(chatbot_id) + ".");
+			}
+			else
+			{
+				world_state.setUserWebMessage(logged_in_user->id, "Chatbot not found.");
+			}
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_chatbots");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleDeleteChatBotPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleDeleteChatBotsPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const std::string world_name_filter = stripHeadAndTailWhitespace(request.getPostField("world_name").str());
+		const std::string username_filter = stripHeadAndTailWhitespace(request.getPostField("username").str());
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+
+			int num_deleted = 0;
+			for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+			{
+				ServerWorldState* world = world_it->second.ptr();
+				ServerWorldState::ChatBotMapType& chatbots = world->getChatBots(lock);
+
+				for(auto chatbot_it = chatbots.begin(); chatbot_it != chatbots.end(); )
+				{
+					ChatBotRef chatbot = chatbot_it->second;
+					const std::string owner_name = getUserNameForID(world_state, chatbot->owner_id);
+
+					if(!chatbotMatchesFilters(world_name_filter, username_filter, world_it->first, owner_name))
+					{
+						++chatbot_it;
+						continue;
+					}
+
+					if(chatbot->avatar)
+					{
+						chatbot->avatar->state = Avatar::State_Dead;
+						chatbot->avatar->other_dirty = true;
+					}
+
+					world->getDBDirtyChatBots(lock).erase(chatbot);
+					if(chatbot->database_key.valid())
+						world_state.db_records_to_delete.insert(chatbot->database_key);
+
+					chatbot_it = chatbots.erase(chatbot_it);
+					num_deleted++;
+				}
+			}
+
+			world_state.markAsChanged();
+			world_state.setUserWebMessage(logged_in_user->id, "Deleted " + toString(num_deleted) + " chatbot(s).");
+			world_state.addAdminAuditLogEntry(
+				logged_in_user->id,
+				logged_in_user->name,
+				"Deleted " + toString(num_deleted) + " chatbot(s), world_filter='" + world_name_filter + "', username_filter='" + username_filter + "'.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_chatbots?world_name=" + web::Escaping::URLEscape(world_name_filter) + "&username=" + web::Escaping::URLEscape(username_filter));
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleDeleteChatBotsPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }
@@ -2225,6 +2996,9 @@ void handleSetFeatureFlagPost(ServerAllWorldsState& world_state, const web::Requ
 
 			Lock lock(world_state.mutex);
 
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+
 			const int flag_bit_index = request.getPostIntField("flag_bit_index");
 			const int new_value  = request.getPostIntField("new_value");
 
@@ -2232,6 +3006,10 @@ void handleSetFeatureFlagPost(ServerAllWorldsState& world_state, const web::Requ
 			{
 				const uint64 bitflag = 1ull << flag_bit_index;
 				BitUtils::setOrZeroBit(world_state.feature_flag_info.feature_flags, bitflag, /*should set=*/new_value != 0);
+				world_state.addAdminAuditLogEntry(
+					logged_in_user->id,
+					logged_in_user->name,
+					"Set feature flag " + featureFlagNameForBit(bitflag) + " (" + toString(bitflag) + ") to " + toString(new_value != 0 ? 1 : 0) + ".");
 			}
 
 			world_state.feature_flag_info.db_dirty = true;
@@ -2245,6 +3023,46 @@ void handleSetFeatureFlagPost(ServerAllWorldsState& world_state, const web::Requ
 	{
 		if(!request.fuzzing)
 			conPrint("handleSetFeatureFlagPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleReloadWebDataPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		UserID user_id;
+		std::string username;
+		{
+			Lock lock(world_state.mutex);
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+			user_id = logged_in_user->id;
+			username = logged_in_user->name;
+		}
+
+		if(world_state.web_data_store)
+			world_state.web_data_store->loadAndCompressFiles();
+
+		{
+			Lock lock(world_state.mutex);
+			world_state.setUserWebMessage(user_id, "Reloaded web data from disk.");
+			world_state.addAdminAuditLogEntry(user_id, username, "Reloaded web data from disk.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin");
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleReloadWebDataPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }
@@ -2351,6 +3169,70 @@ void handleSetUserAllowDynTexUpdatePost(ServerAllWorldsState& world_state, const
 	{
 		if(!request.fuzzing)
 			conPrint("handleSetUserAllowDynTexUpdatePost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleResetUserPasswordPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, password changes are currently disabled.");
+
+		const int user_id = request.getPostIntField("user_id");
+		const bool generate_password = (request.getPostField("generate") == "1");
+		std::string new_password = stripHeadAndTailWhitespace(request.getPostField("new_password").str());
+
+		{ // Lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+
+			const auto user_res = world_state.user_id_to_users.find(UserID(user_id));
+			if(user_res == world_state.user_id_to_users.end())
+				throw glare::Exception("Could not find user.");
+
+			User* target_user = user_res->second.ptr();
+
+			if(new_password.empty())
+			{
+				if(!generate_password)
+					throw glare::Exception("Manual password is empty and generation is disabled.");
+
+				new_password = generateReadablePassword();
+			}
+
+			if(new_password.size() < 6)
+				throw glare::Exception("New password is too short, must have at least 6 characters.");
+
+			target_user->setNewPasswordAndSalt(new_password);
+			target_user->password_resets.clear();
+			world_state.addUserAsDBDirty(target_user);
+			world_state.markAsChanged();
+
+			world_state.addAdminAuditLogEntry(
+				logged_in_user->id,
+				logged_in_user->name,
+				"Reset password for user " + toString(user_id) + " (" + target_user->name + ").");
+
+			world_state.setUserWebMessage(logged_in_user->id, "New password for user '" + target_user->name + "': " + new_password);
+		} // End lock scope
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_user/" + toString(user_id));
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleResetUserPasswordPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }

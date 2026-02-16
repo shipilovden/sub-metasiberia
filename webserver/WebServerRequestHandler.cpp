@@ -74,7 +74,7 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 	// This must work without redirecting to https, because the TLS certificate may not exist yet.
 	if(::hasPrefix(request.path, "/.well-known/acme-challenge/"))
 	{
-		const std::string webroot = world_state->server_config.letsencrypt_webroot_dir;
+		const std::string webroot; // ACME challenge directory is not configured in this server config.
 		if(webroot.empty())
 		{
 			web::ResponseUtils::writeHTTPNotFoundHeaderAndData(reply_info, "ACME challenge handling is not configured.");
@@ -128,7 +128,7 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 
 	const std::string host_header = request.getHostHeader();
 	const std::string host_no_port = stripPort(host_header);
-	const std::string canonical_host = world_state->server_config.canonical_web_hostname;
+	const std::string canonical_host; // Canonical hostname redirect is not configured in this server config.
 
 	// If configured, redirect to the canonical hostname (preserving path + query).
 	// Leave localhost and empty Host header untouched (dev/testing).
@@ -241,6 +241,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			AdminHandlers::handleCreateParcelPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/admin_delete_parcel")
+		{
+			AdminHandlers::handleDeleteParcelPost(*this->world_state, request, reply_info);
+		}
 		else if(request.path == "/admin_terminate_parcel_auction")
 		{
 			AdminHandlers::handleTerminateParcelAuction(*this->world_state, request, reply_info);
@@ -297,6 +301,26 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			AdminHandlers::handleSetFeatureFlagPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/admin_reload_web_data_post")
+		{
+			AdminHandlers::handleReloadWebDataPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_set_chatbot_disabled_post")
+		{
+			AdminHandlers::handleSetChatBotDisabledPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_set_chatbots_disabled_post")
+		{
+			AdminHandlers::handleSetChatBotsDisabledPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_delete_chatbot_post")
+		{
+			AdminHandlers::handleDeleteChatBotPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_delete_chatbots_post")
+		{
+			AdminHandlers::handleDeleteChatBotsPost(*this->world_state, request, reply_info);
+		}
 		else if(request.path == "/admin_force_dyn_tex_update_post")
 		{
 			AdminHandlers::handleForceDynTexUpdatePost(*this->world_state, request, reply_info);
@@ -324,6 +348,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		else if(request.path == "/admin_set_user_allow_dyn_tex_update_post")
 		{
 			AdminHandlers::handleSetUserAllowDynTexUpdatePost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_reset_user_password_post")
+		{
+			AdminHandlers::handleResetUserPasswordPost(*this->world_state, request, reply_info);
 		}
 		else if(request.path == "/admin_new_news_post")
 		{
@@ -408,6 +436,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		else if(request.path == "/edit_world_post")
 		{
 			WorldHandlers::handleEditWorldPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/create_world_parcel_post")
+		{
+			WorldHandlers::handleCreateWorldParcelPost(*this->world_state, request, reply_info);
 		}
 		else if(request.path == "/edit_photo_parcel_post")
 		{
@@ -583,6 +615,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		else if(request.path == "/admin_worlds")
 		{
 			AdminHandlers::renderAdminWorldsPage(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_chatbots")
+		{
+			AdminHandlers::renderAdminChatBotsPage(*this->world_state, request, reply_info);
 		}
 		else if(::hasPrefix(request.path, "/admin_sub_eth_transaction/"))
 		{

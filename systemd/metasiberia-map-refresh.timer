@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Metasiberia daily map refresh trigger at low-load time
+
+[Timer]
+OnCalendar=*-*-* 04:20:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=metasiberia-map-refresh.service
+
+[Install]
+WantedBy=timers.target
+

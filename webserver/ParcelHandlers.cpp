@@ -60,6 +60,8 @@ void renderParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 
 			User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
 			const bool logged_in_user_is_parcel_owner = logged_in_user && (parcel->owner_id == logged_in_user->id); // If the user is logged in and owns this parcel:
+			const bool logged_in_user_is_superadmin = logged_in_user && isGodUser(logged_in_user->id);
+			const bool logged_in_user_can_manage_parcel = logged_in_user_is_parcel_owner || logged_in_user_is_superadmin;
 
 			const std::string use_parcel_title = parcel->getUseTitle();
 
@@ -130,7 +132,7 @@ void renderParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 			page += WebServerResponseUtils::standardHeader(world_state, request, /*page title=*/use_parcel_title, extra_header_tags);
 			page += "<div class=\"main\">   \n";
 
-			if(logged_in_user_is_parcel_owner)
+			if(logged_in_user_can_manage_parcel)
 				page += "<p><a href=\"/edit_parcel_title?parcel_id=" + parcel->id.toString() + "\">Edit title</a></p>";
 
 
@@ -182,21 +184,21 @@ void renderParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 
 				page += web::Escaping::HTMLEscape(writer_username);
 
-				if(logged_in_user_is_parcel_owner)
+				if(logged_in_user_can_manage_parcel)
 					page += " <small><a href=\"/remove_parcel_writer?parcel_id=" + parcel->id.toString() + "&writer_id=" + parcel->writer_ids[z].toString() + "\">[Remove]</a></small>";
 
 				if(z + 1 < parcel->writer_ids.size())
 					page += ", ";
 			}
 			page += "</p>   \n";
-			if(logged_in_user_is_parcel_owner)
+			if(logged_in_user_can_manage_parcel)
 				page += "<a href=\"/add_parcel_writer?parcel_id=" + parcel->id.toString() + "\">Add writer</a>";
 
 
 
 			page += "<p>Description: " + web::Escaping::HTMLEscape(parcel->description) + "</p>   \n";
 			//page += "<p>Created: " + parcel->created_time.timeAgoDescription() + "</p>   \n";
-			if(logged_in_user_is_parcel_owner)
+			if(logged_in_user_can_manage_parcel)
 				page += "<a href=\"/edit_parcel_description?parcel_id=" + parcel->id.toString() + "\">Edit description</a>";
 
 			const Vec3d span = parcel->aabb_max - parcel->aabb_min;
@@ -463,7 +465,7 @@ void renderAddParcelWriterPage(ServerAllWorldsState& world_state, const web::Req
 	std::string page = WebServerResponseUtils::standardHeader(world_state, request, "Add writer to parcel");
 	page += "<div class=\"main\">   \n";
 
-	page += "Add a user that will have write permissions for the parcel.  They will be able to create, edit and delete objects in the parcel.";
+	page += "Add a user that will have write permissions for the parcel.  They will be able to create, edit and delete objects in the parcel. Parcel owner or superadmin can manage this list.";
 
 	{ // Lock scope
 
@@ -648,7 +650,7 @@ void handleRegenerateParcelScreenshots(ServerAllWorldsState& world_state, const 
 				Parcel* parcel = res->second.ptr();
 
 				User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
-				if(logged_in_user && parcel->owner_id == logged_in_user->id) // If the user is logged in and owns this parcel:
+				if(logged_in_user && (parcel->owner_id == logged_in_user->id || isGodUser(logged_in_user->id)))
 				{
 					for(size_t z=0; z<parcel->screenshot_ids.size(); ++z)
 					{
@@ -713,7 +715,7 @@ void handleEditParcelDescriptionPost(ServerAllWorldsState& world_state, const we
 				Parcel* parcel = res->second.ptr();
 
 				User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
-				if(logged_in_user && parcel->owner_id == logged_in_user->id) // If the user is logged in and owns this parcel:
+				if(logged_in_user && (parcel->owner_id == logged_in_user->id || isGodUser(logged_in_user->id)))
 				{
 					parcel->description = new_descrip.str();
 					if(parcel->description.size() > Parcel::MAX_DESCRIPTION_SIZE)
@@ -763,7 +765,7 @@ void handleEditParcelTitlePost(ServerAllWorldsState& world_state, const web::Req
 				Parcel* parcel = res->second.ptr();
 
 				User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
-				if(logged_in_user && parcel->owner_id == logged_in_user->id) // If the user is logged in and owns this parcel:
+				if(logged_in_user && (parcel->owner_id == logged_in_user->id || isGodUser(logged_in_user->id)))
 				{
 					parcel->title = new_title.str();
 					if(parcel->title.size() > Parcel::MAX_TITLE_SIZE)
@@ -816,7 +818,7 @@ void handleAddParcelWriterPost(ServerAllWorldsState& world_state, const web::Req
 				Parcel* parcel = res->second.ptr();
 
 				User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
-				if(logged_in_user && parcel->owner_id == logged_in_user->id) // If the user is logged in and owns this parcel:
+				if(logged_in_user && (parcel->owner_id == logged_in_user->id || isGodUser(logged_in_user->id)))
 				{
 					// Try and find user for writer_name
 					User* new_writer_user = NULL;
@@ -888,7 +890,7 @@ void handleRemoveParcelWriterPost(ServerAllWorldsState& world_state, const web::
 				Parcel* parcel = res->second.ptr();
 
 				User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
-				if(logged_in_user && parcel->owner_id == logged_in_user->id) // If the user is logged in and owns this parcel:
+				if(logged_in_user && (parcel->owner_id == logged_in_user->id || isGodUser(logged_in_user->id)))
 				{
 					const bool removed = ContainerUtils::removeFirst(parcel->writer_ids, writer_id);
 

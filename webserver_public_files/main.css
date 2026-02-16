@@ -1,3 +1,14 @@
+:root {
+	--msb-bg: #f5f7fa;
+	--msb-surface: #ffffff;
+	--msb-border: #d9e1ea;
+	--msb-text: #1f2a37;
+	--msb-link: #0f5e8a;
+	--msb-link-hover: #0b4a6c;
+	--msb-accent: #0ea5a4;
+	--msb-danger: #b42318;
+}
+
 body {
 	margin-top: 0;
 	margin-bottom: 40px;
@@ -6,10 +17,11 @@ body {
 	max-width: 1000px;
 	line-height: 1.6;
 	font-size: 18px;
-	color: #222;
+	color: var(--msb-text);
 	/*padding: 0 10px;*/
 	padding: 0;
-	font-family: Helvetica;
+	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	background: linear-gradient(180deg, #f7fafc 0%, #edf3f9 100%);
 }
 
 /* Metasiberia root page (synced from Figma stub layer "metasiberia"). */
@@ -84,7 +96,13 @@ td
 }
 a
 {
-	color: #25617e;
+	color: var(--msb-link);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+}
+a:hover
+{
+	color: var(--msb-link-hover);
 }
 .main
 {
@@ -116,7 +134,11 @@ a
 }
 
 .msg {
-	background-color: yellow;
+	background-color: #fff7b3;
+	border: 1px solid #f0d453;
+	border-radius: 8px;
+	padding: 10px 12px;
+	margin: 10px 0;
 }
 .info-notify
 {
@@ -570,9 +592,12 @@ a
 }
 
 .grouped-region {
-	background: #f4f4f4;
+	background: var(--msb-surface);
+	border: 1px solid var(--msb-border);
+	border-radius: 10px;
 	padding: 1em;
 	margin-bottom: 1em;
+	box-shadow: 0 1px 3px rgba(20, 36, 58, 0.08);
 }
 
 .field-description {
@@ -581,8 +606,138 @@ a
 }
 
 .danger-zone {
-	background: #e97e7e;
+	background: #fde7e7;
+	border: 1px solid #f5b1b1;
+	color: var(--msb-danger);
+	border-radius: 10px;
 	width: 96%;
 	text-align: right;
 	padding: 0.5em;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="password"],
+textarea,
+select {
+	width: min(720px, 96%);
+	max-width: 100%;
+	box-sizing: border-box;
+	border: 1px solid var(--msb-border);
+	border-radius: 8px;
+	padding: 9px 11px;
+	background: #fff;
+	color: var(--msb-text);
+}
+
+input[type="submit"],
+input[type="button"],
+button {
+	border: 1px solid #0f6b8f;
+	background: #0f6b8f;
+	color: #fff;
+	border-radius: 8px;
+	padding: 7px 12px;
+	cursor: pointer;
+	transition: background-color .15s ease, border-color .15s ease;
+}
+
+input[type="submit"]:hover,
+input[type="button"]:hover,
+button:hover {
+	background: #0b5470;
+	border-color: #0b5470;
+}
+
+table {
+	border-collapse: collapse;
+	background: var(--msb-surface);
+	border: 1px solid var(--msb-border);
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+th, td {
+	padding: 10px;
+	border-bottom: 1px solid #edf1f5;
+}
+
+th {
+	background: #f3f8fc;
+	font-weight: 600;
+}
+
+.msb-table-wrap {
+	width: 100%;
+	overflow-x: auto;
+	border-radius: 10px;
+}
+
+.msb-table {
+	width: 100%;
+	min-width: 680px;
+}
+
+.msb-table tbody tr:nth-child(even) {
+	background: #f8fbff;
+}
+
+.msb-lang-toggle-button {
+	position: fixed;
+	right: 14px;
+	top: 14px;
+	z-index: 1000;
+	min-width: 52px;
+	border-radius: 999px;
+	background: #0f6b8f;
+	border: 1px solid #0f6b8f;
+	color: #fff;
+	font-weight: 600;
+}
+
+.msb-card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 16px;
+}
+
+.msb-card {
+	background: #fff;
+	border: 1px solid var(--msb-border);
+	border-radius: 12px;
+	padding: 14px;
+	box-shadow: 0 1px 3px rgba(20, 36, 58, 0.08);
+}
+
+.msb-avatar {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: linear-gradient(140deg, #0ea5a4, #0f6b8f);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 28px;
+	font-weight: 700;
+}
+
+.msb-accordion-panel {
+	display: none;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed #d7e1ea;
+}
+
+.msb-accordion-panel.is-open {
+	display: block;
+}
+
+.msb-accordion-toggle {
+	margin-top: 8px;
+}
+
+.msb-slider {
+	width: min(420px, 95%);
+	accent-color: var(--msb-accent);
 }

@@ -21,6 +21,8 @@ Copyright Glare Technologies Limited 2025 -
 #include <PlatformUtils.h>
 #include <Parser.h>
 #include <TestUtils.h>
+#include <ContainerUtils.h>
+#include <algorithm>
 
 
 namespace WorldHandlers
@@ -75,6 +77,42 @@ std::string URLEscapeWorldName(const std::string& world_name)
 	}
 }
 
+
+static bool getUserIDByName(ServerAllWorldsState& world_state, const std::string& username, UserID& user_id_out)
+{
+	const auto res = world_state.name_to_users.find(username);
+	if(res == world_state.name_to_users.end())
+		return false;
+
+	user_id_out = res->second->id;
+	return true;
+}
+
+
+static bool parseCommaSeparatedUsernamesToIDs(ServerAllWorldsState& world_state, const std::string& usernames_csv, std::vector<UserID>& user_ids_out, std::string& error_out)
+{
+	const std::vector<std::string> username_fields = ::split(usernames_csv, ',');
+	for(size_t i=0; i<username_fields.size(); ++i)
+	{
+		const std::string username = stripHeadAndTailWhitespace(username_fields[i]);
+		if(username.empty())
+			continue;
+
+		UserID user_id;
+		if(!getUserIDByName(world_state, username, user_id))
+		{
+			error_out = "Could not find user '" + username + "'.";
+			return false;
+		}
+
+		if(!ContainerUtils::contains(user_ids_out, user_id))
+			user_ids_out.push_back(user_id);
+	}
+
+	return true;
+}
+
+
 void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info) // Shows a single world
 {
 	try
@@ -89,7 +127,7 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 		std::string page;
 
 		{ // lock scope
-			Lock lock(world_state.mutex);
+			WorldStateLock lock(world_state.mutex);
 
 			auto res = world_state.world_states.find(world_name);
 			if(res == world_state.world_states.end())
@@ -99,6 +137,7 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 
 			User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
 			const bool logged_in_user_is_world_owner = logged_in_user && (world->details.owner_id == logged_in_user->id); // If the user is logged in and created this world:
+			const bool logged_in_user_is_superadmin = logged_in_user && isGodUser(logged_in_user->id);
 
 			page = WebServerResponseUtils::standardHeader(world_state, request, /*page title=*/world->details.name, "");
 			page += "<div class=\"main\">   \n";
@@ -131,9 +170,37 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			const std::string native_URL = "sub://" + hostname + "/" + world_name;
 			page += "<p>Visit in native app: <a href=\"" + native_URL + "\">" + web::Escaping::HTMLEscape(native_URL) + "</a></p>";
 
-			if(logged_in_user_is_world_owner) // Show edit link If the user is logged in and owns this world
+			if(logged_in_user_is_world_owner || logged_in_user_is_superadmin) // Show edit link if the user owns this world or is superadmin.
+			{
 				page += "<br/><br/><div><a href=\"/edit_world/" + URLEscapeWorldName(world_name) + "\">Edit world</a></div>";
-			
+			}
+
+			if(logged_in_user_is_superadmin)
+			{
+				page += "<br/><div class=\"grouped-region\">";
+				page += "<form action=\"/create_world_parcel_post\" method=\"post\">";
+				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+				page += "<label for=\"new-world-parcel-owner\">Owner username</label><br/>";
+				page += "<input id=\"new-world-parcel-owner\" type=\"text\" name=\"owner_username\" value=\"" + web::Escaping::HTMLEscape(owner_username) + "\" title=\"Username that will own the new parcel\"><br/>";
+				page += "<label for=\"new-world-parcel-editors\">Editors usernames (comma-separated)</label><br/>";
+				page += "<input id=\"new-world-parcel-editors\" type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated list of usernames that can edit objects in the parcel\"><br/>";
+				page += "<input type=\"submit\" value=\"Create parcel in this world\" title=\"Create a new parcel in this world and assign owner/editors\" onclick=\"return confirm('Create a new parcel in this world?');\" >";
+				page += "</form>";
+				page += "</div>";
+			}
+			else if(logged_in_user && logged_in_user_is_world_owner)
+			{
+				page += "<br/><div class=\"grouped-region\">Only superadmin can create parcels in worlds.</div>";
+			}
+			else if(logged_in_user)
+			{
+				page += "<br/><div class=\"grouped-region\">Only superadmin can create parcels in worlds.</div>";
+			}
+			else
+			{
+				page += "<br/><div class=\"grouped-region\">Log in as superadmin to create parcels in this world.</div>";
+			}
+
 		} // end lock scope
 
 		page += "</div>   \n"; // end main div
@@ -257,6 +324,133 @@ void renderEditWorldPage(ServerAllWorldsState& world_state, const web::RequestIn
 	}
 	catch(glare::Exception& e)
 	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleCreateWorldParcelPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const std::string world_name = request.getPostField("world_name").str();
+
+		bool redirect_to_login = false;
+		bool redirect_back_to_world = false;
+
+		{ // Lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			if(!logged_in_user)
+			{
+				redirect_to_login = true;
+			}
+			else
+			{
+				auto world_res = world_state.world_states.find(world_name);
+				if(world_res == world_state.world_states.end())
+					throw glare::Exception("Couldn't find world");
+
+				ServerWorldState* world = world_res->second.ptr();
+
+				if(!isGodUser(logged_in_user->id))
+				{
+					world_state.setUserWebMessage(logged_in_user->id, "Only superadmin can create parcels in worlds.");
+					redirect_back_to_world = true;
+				}
+
+				if(!redirect_back_to_world)
+				{
+					const std::string owner_username_field = stripHeadAndTailWhitespace(request.getPostField("owner_username").str());
+					const std::string writer_usernames_csv = request.getPostField("writer_usernames").str();
+
+					UserID owner_id = world->details.owner_id;
+					if(!owner_username_field.empty())
+					{
+						if(!getUserIDByName(world_state, owner_username_field, owner_id))
+						{
+							world_state.setUserWebMessage(logged_in_user->id, "Could not find owner user '" + owner_username_field + "'.");
+							redirect_back_to_world = true;
+						}
+					}
+
+					std::vector<UserID> writer_ids;
+					std::string parse_error;
+					if(!parseCommaSeparatedUsernamesToIDs(world_state, writer_usernames_csv, writer_ids, parse_error))
+					{
+						world_state.setUserWebMessage(logged_in_user->id, parse_error);
+						redirect_back_to_world = true;
+					}
+
+					if(!redirect_back_to_world && !ContainerUtils::contains(writer_ids, owner_id))
+						writer_ids.push_back(owner_id);
+
+					if(!redirect_back_to_world)
+					{
+						uint32 max_id = 0;
+						ParcelRef most_recent_parcel;
+						for(auto it = world->getParcels(lock).begin(); it != world->getParcels(lock).end(); ++it)
+						{
+							if(it->second->id.valid())
+							{
+								max_id = std::max(max_id, it->second->id.value());
+								most_recent_parcel = it->second; // Approximate 'most recent' as highest parcel id.
+							}
+						}
+
+						const ParcelID new_id(max_id + 1);
+
+						ParcelRef parcel = new Parcel();
+						parcel->id = new_id;
+						parcel->owner_id = owner_id;
+						parcel->admin_ids = writer_ids;
+						parcel->writer_ids = writer_ids;
+						parcel->created_time = TimeStamp::currentTime();
+						parcel->zbounds = most_recent_parcel ? most_recent_parcel->zbounds : Vec2d(-1.0, 4.0);
+
+						if(most_recent_parcel)
+						{
+							for(int i=0; i<4; ++i)
+								parcel->verts[i] = most_recent_parcel->verts[i] + Vec2d(32.0, 0.0);
+						}
+						else
+						{
+							parcel->verts[0] = Vec2d(0.0, 0.0);
+							parcel->verts[1] = Vec2d(16.0, 0.0);
+							parcel->verts[2] = Vec2d(16.0, 16.0);
+							parcel->verts[3] = Vec2d(0.0, 16.0);
+						}
+
+						parcel->build();
+
+						world->getParcels(lock)[new_id] = parcel;
+						world->addParcelAsDBDirty(parcel, lock);
+						world_state.markAsChanged();
+						const auto owner_res = world_state.user_id_to_users.find(owner_id);
+						const std::string owner_name = (owner_res != world_state.user_id_to_users.end()) ? owner_res->second->name : std::string("[unknown]");
+						world_state.setUserWebMessage(logged_in_user->id, "Parcel " + new_id.toString() + " created in world '" + world_name + "' for owner '" + owner_name + "'.");
+						world_state.addAdminAuditLogEntry(
+							logged_in_user->id,
+							logged_in_user->name,
+							"Created parcel " + new_id.toString() + " in world '" + world_name + "', owner='" + owner_name + "', editors_count=" + toString(writer_ids.size()) + ".");
+					}
+				}
+			}
+		} // End lock scope
+
+		if(redirect_to_login)
+			web::ResponseUtils::writeRedirectTo(reply_info, "/login");
+		else
+			web::ResponseUtils::writeRedirectTo(reply_info, "/world/" + URLEscapeWorldName(world_name));
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleCreateWorldParcelPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }

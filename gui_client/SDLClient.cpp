@@ -320,6 +320,7 @@ int main(int argc, char** argv)
 
 
 		// Set GL attributes, needs to be done before window creation.
+		const bool screenshot_slave_mode = parsed_args.isArgPresent("--screenshotslave");
 #if EMSCRIPTEN
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
@@ -332,8 +333,17 @@ int main(int argc, char** argv)
 		setGLAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
 		setGLAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 #else
-		setGLAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4); // We need to request a specific version for a core profile.
-		setGLAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+		// Headless Linux setups (xvfb/llvmpipe) may fail on very high requested GL versions.
+		if(screenshot_slave_mode)
+		{
+			setGLAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+			setGLAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+		}
+		else
+		{
+			setGLAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4); // We need to request a specific version for a core profile.
+			setGLAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+		}
 		setGLAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 #endif
 
@@ -351,7 +361,7 @@ int main(int argc, char** argv)
 		// However MSAA causes iPad to give context lost errors, so just disable if device_pixel_ratio != 1.
 		const bool use_MSAA = !low_memory_mode;
 #else
-		const bool use_MSAA = settings_store->getBoolValue("setting/MSAA", /*default value=*/true);
+		const bool use_MSAA = !screenshot_slave_mode && settings_store->getBoolValue("setting/MSAA", /*default value=*/true);
 #endif
 		conPrint("Using MSAA: " + boolToString(use_MSAA));
 		if(use_MSAA)
@@ -861,7 +871,7 @@ static MouseButton convertSDLMouseButton(uint8 sdl_button)
 	else if(sdl_button == 3)
 		return MouseButton::Middle;
 	else
-		return MouseButton::None;
+		return (MouseButton)0;
 }
 
 
@@ -1444,7 +1454,9 @@ void processAvatarModelFile(unsigned char* data, int length, const char* filenam
 #endif
 			// Do retargetting on a copy as we don't want to send the animation data with all animations from extracted_avatar_anim.bin to the server when uploading the mesh.
 			AnimationData animation_data_copy = results.batched_mesh->animation_data;
-			animation_data_copy.loadAndRetargetAnim(file);
+			AnimationData extracted_anim_data;
+			extracted_anim_data.readFromStream(file);
+			animation_data_copy.loadAndRetargetAnim(extracted_anim_data);
 
 			Vec4f new_toe_pos = animation_data_copy.getNodePositionModelSpace("LeftToe_End", /*use_retarget_adjustment=*/true);
 			conPrint("new_toe_pos: " + new_toe_pos.toStringNSigFigs(4));

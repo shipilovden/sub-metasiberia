@@ -19,6 +19,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <SocketBufferOutStream.h>
 #include <InStream.h>
 #include <DatabaseKey.h>
+#include <BitUtils.h>
 #include <map>
 
 
@@ -115,6 +116,9 @@ public:
 	std::string custom_prompt_part;
 
 	std::map<std::string, Reference<ChatBotToolFunction>> info_tool_functions; // Map from function name to ChatBotToolFunction ref.  Tool functions that the LLM can call.
+
+	static const uint32 DISABLED_FLAG = 1; // If set, chatbot logic is disabled.
+	bool isDisabled() const { return BitUtils::isBitSet(flags, DISABLED_FLAG); }
 
 	DatabaseKey database_key;
 

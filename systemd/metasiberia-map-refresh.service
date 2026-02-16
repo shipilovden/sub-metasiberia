@@ -1,0 +1,10 @@
+[Unit]
+Description=Metasiberia low-cost daily map refresh trigger
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/metasiberia_map_maintenance.py regen
+User=root
+

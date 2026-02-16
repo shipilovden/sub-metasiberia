@@ -115,6 +115,7 @@ public:
 	// Credential manager
 	virtual std::string getUsernameForDomain(const std::string& domain) override; // Returns empty string if no stored username for domain
 	virtual std::string getDecryptedPasswordForDomain(const std::string& domain) override; // Returns empty string if no stored password for domain
+	virtual std::string showOpenFileDialog(const std::string& caption, const std::vector<FileTypeFilter>& file_type_filters, const std::string& settings_key) override;
 
 	virtual bool inScreenshotTakingMode() override;
 	virtual void takeScreenshot() override;

@@ -29,6 +29,31 @@ Copyright Glare Technologies Limited 2026 -
 namespace ChatBotHandlers
 {
 
+static std::string parseWorldNameFromSubURL(const std::string& sub_url)
+{
+	if(!hasPrefix(sub_url, "sub://"))
+		return sub_url;
+
+	const size_t host_start = 6; // after "sub://"
+	const size_t slash_pos = sub_url.find('/', host_start);
+	if(slash_pos == std::string::npos)
+		return ""; // URL points to main world.
+
+	const size_t world_start = slash_pos + 1;
+	const size_t query_pos = sub_url.find('?', world_start);
+	const std::string world_part = (query_pos == std::string::npos) ? sub_url.substr(world_start) : sub_url.substr(world_start, query_pos - world_start);
+	return web::Escaping::URLUnescape(world_part);
+}
+
+
+static std::string normaliseWorldNameField(const std::string& world_field)
+{
+	const std::string trimmed = stripHeadAndTailWhitespace(world_field);
+	if(hasPrefix(trimmed, "sub://"))
+		return parseWorldNameFromSubURL(trimmed);
+	return trimmed;
+}
+
 
 void renderEditChatBotPage(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
 {
@@ -204,7 +229,7 @@ void renderNewChatBotPage(ServerAllWorldsState& world_state, const web::RequestI
 		std::string page = WebServerResponseUtils::standardHeader(world_state, request, "New ChatBot");
 		page += "<div class=\"main\">   \n";
 
-		web::UnsafeString world = request.getURLParam("world");
+		const std::string world_name_for_form = normaliseWorldNameField(request.getURLParam("world").str());
 
 		Vec3d pos = Vec3d(0.0, 0.0, 1.67);
 		if(request.isURLParamPresent("pos_x"))
@@ -234,7 +259,7 @@ void renderNewChatBotPage(ServerAllWorldsState& world_state, const web::RequestI
 
 			page += "<div class=\"form-field\">";
 			page += "<label for=\"world\">World:  (leave empty to create in main world)</label><br/>";
-			page += "<input type=\"text\" id=\"world\" name=\"world\" value=\"" + web::Escaping::HTMLEscape(world.str()) + "\">";
+			page += "<input type=\"text\" id=\"world\" name=\"world\" value=\"" + web::Escaping::HTMLEscape(world_name_for_form) + "\">";
 			page += "</div>";
 
 			page += std::string("<div>Position:<br/> ") + 
@@ -289,7 +314,7 @@ void handleNewChatBotPost(ServerAllWorldsState& world_state, const web::RequestI
 		if(world_state.isInReadOnlyMode())
 			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
 
-		const web::UnsafeString world_name = request.getPostField("world");
+		const std::string world_name = normaliseWorldNameField(request.getPostField("world").str());
 
 		Vec3d pos;
 		pos.x = request.getPostDoubleField("pos_x");
@@ -309,10 +334,10 @@ void handleNewChatBotPost(ServerAllWorldsState& world_state, const web::RequestI
 				throw glare::Exception("You must be logged in to view this page.");
 
 			// Look up the world
-			auto res = world_state.world_states.find(world_name.str());
+			auto res = world_state.world_states.find(world_name);
 			if(res == world_state.world_states.end())
 			{
-				world_state.setUserWebMessage(logged_in_user->id, "Could not find the world '" + world_name.str() + "'");
+				world_state.setUserWebMessage(logged_in_user->id, "Could not find the world '" + world_name + "'");
 			}
 			else
 			{
@@ -361,7 +386,7 @@ void handleNewChatBotPost(ServerAllWorldsState& world_state, const web::RequestI
 		if(successfully_created)
 			web::ResponseUtils::writeRedirectTo(reply_info, "/edit_chatbot?chatbot_id=" + toString(chatbot_id)); // redirect to edit page.
 		else
-			web::ResponseUtils::writeRedirectTo(reply_info, "/new_chatbot?world=" + web::Escaping::URLEscape(world_name.str()) + 
+			web::ResponseUtils::writeRedirectTo(reply_info, "/new_chatbot?world=" + web::Escaping::URLEscape(world_name) + 
 				"&pos_x=" + toString(pos.x) + "&pos_y=" + toString(pos.y) + "&pos_z=" + toString(pos.z));  // redirect back to new chatbot page.
 	}
 	catch(glare::Exception& e)
