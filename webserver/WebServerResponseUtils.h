@@ -29,5 +29,5 @@ namespace WebServerResponseUtils
 	const std::string standardFooter(const web::RequestInfo& request_info, bool include_email_link);
 
 	const std::string getMapHeaderTags();
-	const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID highlighted_parcel_id);
+	const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID highlighted_parcel_id, const std::string& world_name);
 }

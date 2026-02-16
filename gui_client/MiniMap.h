@@ -85,8 +85,10 @@ private:
 
 	bool expanded;
 	bool visible;
+	bool fullscreen;
 	GLUIButtonRef collapse_button;
 	GLUIButtonRef expand_button;
+	GLUIButtonRef fullscreen_button;
 
 	Array2D<MapTile> tiles;
 	int last_centre_x, last_centre_y;

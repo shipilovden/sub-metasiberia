@@ -120,7 +120,7 @@ const std::string getMapHeaderTags()
 }
 
 
-const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID highlighted_parcel_id)
+const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID highlighted_parcel_id, const std::string& world_name)
 {
 	std::string page;
 	/*page += 
@@ -148,7 +148,14 @@ const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID hi
 	{ // lock scope
 		Lock lock(world_state.mutex);
 
-		ServerWorldState* root_world = world_state.getRootWorldState().ptr();
+		ServerWorldState* world = nullptr;
+		{
+			auto it = world_state.world_states.find(world_name);
+			if(it != world_state.world_states.end())
+				world = it->second.ptr();
+			else
+				world = world_state.getRootWorldState().ptr();
+		}
 
 
 		poly_verts.reserve(44 * 4);
@@ -156,12 +163,12 @@ const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID hi
 		poly_parcel_names.reserve(44);
 		poly_parcel_state.reserve(44);
 
-		rect_bounds.reserve(root_world->parcels.size());
-		rect_parcel_ids.reserve(root_world->parcels.size());
-		rect_parcel_names.reserve(root_world->parcels.size());
-		rect_parcel_state.reserve(root_world->parcels.size());
+		rect_bounds.reserve(world->parcels.size());
+		rect_parcel_ids.reserve(world->parcels.size());
+		rect_parcel_names.reserve(world->parcels.size());
+		rect_parcel_state.reserve(world->parcels.size());
 
-		for(auto it = root_world->parcels.begin(); it != root_world->parcels.end(); ++it)
+		for(auto it = world->parcels.begin(); it != world->parcels.end(); ++it)
 		{
 			const Parcel* parcel = it->second.ptr();
 

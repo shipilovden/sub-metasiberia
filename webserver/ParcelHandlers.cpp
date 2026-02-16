@@ -220,7 +220,7 @@ void renderParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 				doubleToStringMaxNDecimalPlaces(parcel->aabb_min.z, 1) + " m above ground level</p>  \n";
 
 
-			page += WebServerResponseUtils::getMapEmbedCode(world_state, /*highlighted_parcel_id=*/parcel->id);
+			page += WebServerResponseUtils::getMapEmbedCode(world_state, /*highlighted_parcel_id=*/parcel->id, /*world_name=*/"");
 
 			// Show NFT status
 			page += "<h2>NFT status</h2>         \n";

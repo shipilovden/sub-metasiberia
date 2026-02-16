@@ -28,6 +28,32 @@ namespace MainPageHandlers
 {
 
 
+static std::string parseWorldNameFromSubURL(const std::string& sub_url)
+{
+	if(!hasPrefix(sub_url, "sub://"))
+		return sub_url;
+
+	const size_t host_start = 6; // after "sub://"
+	const size_t slash_pos = sub_url.find('/', host_start);
+	if(slash_pos == std::string::npos)
+		return ""; // URL points to main world.
+
+	const size_t world_start = slash_pos + 1;
+	const size_t query_pos = sub_url.find('?', world_start);
+	const std::string world_part = (query_pos == std::string::npos) ? sub_url.substr(world_start) : sub_url.substr(world_start, query_pos - world_start);
+	return web::Escaping::URLUnescape(world_part);
+}
+
+
+static std::string normaliseWorldNameField(const std::string& world_field)
+{
+	const std::string trimmed = stripHeadAndTailWhitespace(world_field);
+	if(hasPrefix(trimmed, "sub://"))
+		return parseWorldNameFromSubURL(trimmed);
+	return trimmed;
+}
+
+
 struct AuctionIDLessThan
 {
 	bool operator() (const ParcelAuction* a, const ParcelAuction* b)
@@ -846,7 +872,20 @@ void renderMapPage(ServerAllWorldsState& world_state, const web::RequestInfo& re
 	const std::string extra_header_tags = WebServerResponseUtils::getMapHeaderTags();
 	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Map", extra_header_tags);
 
-	page += WebServerResponseUtils::getMapEmbedCode(world_state, /*highlighted_parcel_id=*/ParcelID::invalidParcelID());
+	std::string world_name = normaliseWorldNameField(request_info.getURLParam("world").str());
+	std::string actual_world_name = world_name;
+
+	if(!world_name.empty())
+	{
+		Lock lock(world_state.mutex);
+		if(world_state.world_states.find(world_name) == world_state.world_states.end())
+		{
+			page += "<div class=\"msg\">Could not find the world '" + web::Escaping::HTMLEscape(world_name) + "'.</div>\n";
+			actual_world_name = "";
+		}
+	}
+
+	page += WebServerResponseUtils::getMapEmbedCode(world_state, /*highlighted_parcel_id=*/ParcelID::invalidParcelID(), actual_world_name);
 
 	page += WebServerResponseUtils::standardFooter(request_info, true);
 
