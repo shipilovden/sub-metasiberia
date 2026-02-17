@@ -58,6 +58,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
+#include <QtWidgets/QInputDialog>
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
 #include "../qt/QtUtils.h"
@@ -2787,6 +2788,45 @@ void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 	parse_results.worldname = "cryptovoxels";
 
 	gui_client.connectToServer(parse_results);
+}
+
+
+void MainWindow::on_actionGo_to_Substrata_Server_triggered()
+{
+	visitSubURL("sub://substrata.info");
+}
+
+
+void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
+{
+	visitSubURL("sub://vr.metasiberia.com");
+}
+
+
+void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
+{
+	// This server URL is project-specific. Make it configurable so the button always works even if the server moves.
+	const QString key = "metasiberia/shki_nvkz_server_url";
+	const QString existing = settings ? settings->value(key, "").toString() : "";
+
+	QString URL = existing.trimmed();
+	if(URL.isEmpty())
+	{
+		bool ok = false;
+		URL = QInputDialog::getText(this,
+			tr("Go to Server"),
+			tr("Enter server URL (example: sub://host or sub://host/world):"),
+			QLineEdit::Normal,
+			"sub://",
+			&ok).trimmed();
+		if(!ok || URL.isEmpty())
+			return;
+	}
+
+	if(settings)
+		settings->setValue(key, URL);
+
+	visitSubURL(QtUtils::toStdString(URL));
 }
 
 
