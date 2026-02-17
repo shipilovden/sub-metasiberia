@@ -15,6 +15,7 @@ Dock-friendly Avatar settings UI (Qt).
 #include "../qt/SignalBlocker.h"
 #include "../utils/ConPrint.h"
 #include "graphics/SRGBUtils.h"
+#include "../utils/FileUtils.h"
 
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QPushButton>
@@ -166,9 +167,30 @@ void AvatarSettingsWidget::onTick()
 	// Once the OpenGL widget has initialised, we can add the model.
 	if(avatarPreviewGLWidget->opengl_engine.nonNull() && avatarPreviewGLWidget->opengl_engine->initSucceeded() && !done_initial_load)
 	{
-		const QString path = settings->value("avatarPath").toString();
-		this->result_path = QtUtils::toStdString(path);
-		loadModelIntoPreview(QtUtils::toStdString(path), /*show_error_dialogs=*/false);
+		// Prefer showing the currently active avatar model (from server state), fall back to last selected local file,
+		// and finally fall back to the default xbot model.
+		std::string path_for_preview = QtUtils::toStdString(settings->value("avatarPath").toString());
+
+		const bool local_file_ok = !path_for_preview.empty() && FileUtils::fileExists(path_for_preview);
+		if(!local_file_ok && gui_client && gui_client->resource_manager.nonNull())
+		{
+			const URLString cur_url = gui_client->logged_in_avatar_settings.model_url;
+			if(!cur_url.empty())
+			{
+				try
+				{
+					const std::string local_model_path = gui_client->resource_manager->pathForURL(cur_url);
+					if(FileUtils::fileExists(local_model_path))
+						path_for_preview = local_model_path;
+				}
+				catch(glare::Exception&)
+				{
+				}
+			}
+		}
+
+		this->result_path = path_for_preview;
+		loadModelIntoPreview(path_for_preview, /*show_error_dialogs=*/false);
 		done_initial_load = true;
 	}
 }
