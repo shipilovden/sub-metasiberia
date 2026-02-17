@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <utils/ComObHandle.h>
 #include <utils/SocketBufferOutStream.h>
 #include <QtWidgets/QMainWindow>
+#include <QtWidgets/QDockWidget>
 #include <string>
 namespace Ui { class MainWindow; }
 namespace glare { class TaskManager; }
@@ -31,6 +32,7 @@ class RenderStatsWidget;
 class MiniDmpSender;
 class UpdateManager;
 class WebcamWindow;
+class AvatarSettingsWidget;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -387,4 +389,7 @@ public:
 
 	MiniDmpSender* minidump_sender;
 	WebcamWindow* webcam_window;
+
+	QDockWidget* avatar_dock_widget;
+	AvatarSettingsWidget* avatar_settings_widget;
 };
