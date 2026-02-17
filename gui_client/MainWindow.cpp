@@ -20,6 +20,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "LogWindow.h"
 #include "UserDetailsWidget.h"
 #include "AvatarSettingsDialog.h"
+#include "AvatarSettingsWidget.h"
 #include "AddObjectDialog.h"
 #include "AddVideoDialog.h"
 #include "MainOptionsDialog.h"
@@ -150,6 +151,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	minidump_sender(NULL),
 	update_manager(NULL),
 	webcam_window(NULL)
+	,avatar_dock_widget(NULL)
+	,avatar_settings_widget(NULL)
 	//game_controller(NULL)
 {
 	ZoneScoped; // Tracy profiler
@@ -276,9 +279,29 @@ void MainWindow::initialiseUI()
 	update_ob_editor_transform_timer->setSingleShot(true);
 	connect(update_ob_editor_transform_timer, SIGNAL(timeout()), this, SLOT(updateObjectEditorObTransformSlot()));
 
+	// Avatar settings dock (replaces the old modal dialog).
+	avatar_dock_widget = new QDockWidget(tr("Avatar Settings"), this);
+	avatar_dock_widget->setObjectName("avatarDockWidget");
+	avatar_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+	avatar_settings_widget = new AvatarSettingsWidget(
+		avatar_dock_widget,
+		this->base_dir_path,
+		this->settings,
+		gui_client.resource_manager,
+		&gui_client.animation_manager,
+		&gui_client,
+		[this]() { ui->glWidget->makeCurrent(); }
+	);
+	avatar_dock_widget->setWidget(avatar_settings_widget);
+	addDockWidget(Qt::LeftDockWidgetArea, avatar_dock_widget);
+	avatar_dock_widget->hide();
+	connect(avatar_settings_widget, SIGNAL(requestClose()), avatar_dock_widget, SLOT(hide()));
+
 	// Add dock widgets to Window menu
 	ui->menuWindow->addSeparator();
 	ui->menuWindow->addAction(ui->editorDockWidget->toggleViewAction());
+	ui->menuWindow->addAction(avatar_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(ui->materialBrowserDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->environmentDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->worldSettingsDockWidget->toggleViewAction());
@@ -1624,25 +1647,18 @@ static void enqueueMessageToSend(ClientThread& client_thread, SocketBufferOutStr
 
 void MainWindow::on_actionAvatarSettings_triggered()
 {
-	AvatarSettingsDialog dialog(this->base_dir_path, this->settings, gui_client.resource_manager, &gui_client.animation_manager);
-	const int res = dialog.exec();
-	ui->glWidget->makeCurrent();// Change back from the dialog GL context to the mainwindow GL context.
-
-	if((res == QDialog::Accepted) && dialog.loaded_mesh.nonNull()) //  loaded_object.nonNull()) // If the dialog was accepted, and we loaded something:
+	if(avatar_dock_widget)
 	{
-		try
-		{
-			gui_client.updateOurAvatarModel(dialog.loaded_mesh, dialog.result_path, dialog.pre_ob_to_world_matrix, dialog.loaded_materials);
-		}
-		catch(glare::Exception& e)
-		{
-			// Show error
-			print(e.what());
-			QErrorMessage m;
-			m.showMessage(QtUtils::toQString(e.what()));
-			m.exec();
-		}
+		avatar_dock_widget->show();
+		avatar_dock_widget->raise();
+		avatar_dock_widget->activateWindow();
+		return;
 	}
+
+	// Fallback (should not happen): keep legacy modal dialog if dock creation failed.
+	AvatarSettingsDialog dialog(this->base_dir_path, this->settings, gui_client.resource_manager, &gui_client.animation_manager);
+	(void)dialog.exec();
+	ui->glWidget->makeCurrent();
 }
 
 

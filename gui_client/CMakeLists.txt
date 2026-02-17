@@ -65,6 +65,7 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client GuiClientApplication)
 	addMocFileRule(gui_client GlWidget)
 	addMocFileRule(gui_client AvatarSettingsDialog)
+	addMocFileRule(gui_client AvatarSettingsWidget)
 	addMocFileRule(gui_client AvatarPreviewWidget)
 	addMocFileRule(gui_client AddObjectDialog)
 	addMocFileRule(gui_client AddVideoDialog)
@@ -112,6 +113,7 @@ if(NOT USE_SDL)
 	addUIFileRule(gui_client AddObjectDialog)
 	addUIFileRule(gui_client AddVideoDialog)
 	addUIFileRule(gui_client AvatarSettingsDialog)
+	addUIFileRule(gui_client AvatarSettingsWidget)
 	addUIFileRule(gui_client MainWindow)
 	addUIFileRule(gui_client ObjectEditor)
 	addUIFileRule(gui_client EnvironmentOptionsWidget)
@@ -313,6 +315,9 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.ui
+		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsWidget.ui
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.ui
@@ -415,6 +420,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_GuiClientApplication.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_GlWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarSettingsDialog.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarSettingsWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarPreviewWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AddObjectDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AddVideoDialog.cpp
@@ -455,6 +461,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AddObjectDialog.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AvatarSettingsDialog.h
+	${CMAKE_SOURCE_DIR}/gui_client/ui_AvatarSettingsWidget.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_ObjectEditor.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_EnvironmentOptionsWidget.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_ParcelEditor.h
