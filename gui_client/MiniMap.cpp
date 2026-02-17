@@ -342,10 +342,10 @@ void MiniMap::think()
 	const float heading = (float)gui_client->cam_controller.getAngles().x;
 
 	const float arrow_width = gl_ui->getUIWidthForDevIndepPixelWidth(arrow_width_px);
-	const float minimap_width = computeMiniMapWidth();
-	const float y_margin = computeMiniMapTopMargin();
-	arrow_image->setTransform(Vec2f(1 - x_margin - minimap_width/2 - arrow_width/2, gl_ui->getViewportMinMaxY() - y_margin - minimap_width/2 - arrow_width/2), 
-		/*dims=*/Vec2f(arrow_width), 
+	const Rect2f map_rect = minimap_image->rect;
+	const Vec2f map_centre_ui = (map_rect.getMin() + map_rect.getMax()) * 0.5f;
+	arrow_image->setTransform(map_centre_ui - Vec2f(arrow_width * 0.5f),
+		/*dims=*/Vec2f(arrow_width),
 		/*rotation=*/heading,
 		/*z=*/ARROW_IMAGE_Z);
 }
@@ -731,23 +731,9 @@ void MiniMap::handleMouseMoved(MouseEvent& mouse_event)
 	if(gl_ui.isNull())
 		return;
 
-	const Vec2f coords = gl_ui->UICoordsForOpenGLCoords(mouse_event.gl_coords);
-
-	// Show collapse button if mouse is over the (visible) minimap
-	if(expanded)
-	{
-		const float extra_mouse_over_px = 10;
-		// Make the hover region wide enough for both collapse + fullscreen buttons.
-		const float to_button_left_w = gl_ui->getUIWidthForDevIndepPixelWidth((button_spacing_px + button_w_px) * 2 + extra_mouse_over_px);
-
-		const Vec2f last_minimap_bot_left_pos = minimap_image->rect.getMin();
-		const bool mouse_over = 
-			coords.x > (last_minimap_bot_left_pos.x - to_button_left_w) && 
-			coords.y > (last_minimap_bot_left_pos.y - gl_ui->getUIWidthForDevIndepPixelWidth(extra_mouse_over_px));
-
-		collapse_button->setVisible(mouse_over && visible);
-		fullscreen_button->setVisible(mouse_over && visible);
-	}
+	// We keep the minimap controls visible (per UX request).
+	// Hover-based hiding makes it look like the fullscreen button "doesn't exist".
+	(void)mouse_event;
 }
 
 
@@ -761,7 +747,9 @@ void MiniMap::updateWidgetPositions()
 			const float y_margin = computeMiniMapTopMargin();
 
 			const Vec2f minimap_botleft = fullscreen ?
-				Vec2f(x_margin, gl_ui->getViewportMinMaxY() - minimap_width - x_margin) :
+				// Center the map on screen when fullscreen.
+				Vec2f(-minimap_width * 0.5f, -minimap_width * 0.5f) :
+				// Top-right corner in normal mode.
 				Vec2f(1 - minimap_width - x_margin, gl_ui->getViewportMinMaxY() - minimap_width - y_margin);
 
 			minimap_image->setPosAndDims(minimap_botleft, Vec2f(minimap_width));
@@ -821,9 +809,10 @@ Vec2f MiniMap::mapUICoordsForWorldSpacePos(const Vec3d& pos)
 
 	const Vec2f cam_to_pos_xy_ws((float)cam_to_pos_ws.x, (float)cam_to_pos_ws.y);
 
-	const float minimap_width = computeMiniMapWidth();
-	const Vec2f map_centre_ui(1 - x_margin - minimap_width/2,  gl_ui->getViewportMinMaxY() - computeMiniMapTopMargin() - minimap_width/2);
-
+	// Use the actual minimap rect so fullscreen/normal modes behave consistently.
+	const Rect2f map_rect = minimap_image->rect;
+	const float minimap_width = map_rect.getWidths().x; // square
+	const Vec2f map_centre_ui = (map_rect.getMin() + map_rect.getMax()) * 0.5f;
 	return map_centre_ui + minimap_width * cam_to_pos_xy_ws / map_width_ws;
 }
 
@@ -832,12 +821,14 @@ float MiniMap::computeMiniMapWidth()
 {
 	if(fullscreen)
 	{
-		const float max_w = 1.f - 2 * x_margin;
-		const float max_h = gl_ui->getViewportMinMaxY() - 2 * x_margin;
-		return myClamp(myMin(max_w, max_h), 0.f, 1.f);
+		// UI coords are in [-1, 1] for X and [-viewportMaxY, viewportMaxY] for Y.
+		// So the full available size is 2 in X and 2*viewportMaxY in Y.
+		const float max_w = 2.f - 2 * x_margin;
+		const float max_h = 2.f * gl_ui->getViewportMinMaxY() - 2 * x_margin;
+		return myClamp(myMin(max_w, max_h), 0.f, 2.f);
 	}
 
-	return myClamp(gl_ui->getUIWidthForDevIndepPixelWidth(250), 0.f, 1.f);
+	return myClamp(gl_ui->getUIWidthForDevIndepPixelWidth(250), 0.f, 2.f);
 }
 
 
@@ -866,11 +857,11 @@ void MiniMap::updateMarkerForAvatar(Avatar* avatar, const Vec3d& avatar_pos)
 
 	// Clamp marker to screen.
 	const float in_map_margin_w = 0.02f;
-	const float minimap_width = computeMiniMapWidth();
-	const float map_min_x = 1 - x_margin - minimap_width + in_map_margin_w;
-	const float map_max_x = 1 - x_margin - in_map_margin_w;
-	const float map_min_y = gl_ui->getViewportMinMaxY() - computeMiniMapTopMargin() - minimap_width + in_map_margin_w;
-	const float map_max_y = gl_ui->getViewportMinMaxY() - computeMiniMapTopMargin() - in_map_margin_w;
+	const Rect2f map_rect = minimap_image->rect;
+	const float map_min_x = map_rect.getMin().x + in_map_margin_w;
+	const float map_max_x = map_rect.getMax().x - in_map_margin_w;
+	const float map_min_y = map_rect.getMin().y + in_map_margin_w;
+	const float map_max_y = map_rect.getMax().y - in_map_margin_w;
 
 	Vec2f clamped_ui_coords;
 	clamped_ui_coords.x = myClamp(ui_coords.x, map_min_x, map_max_x);
