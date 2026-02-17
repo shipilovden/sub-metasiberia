@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2021 -
 
 
 #include "AnimationManager.h"
+#include "PhysicsWorld.h"
 #include "opengl/OpenGLEngine.h"
 #include "opengl/MeshPrimitiveBuilding.h"
 #include "opengl/OpenGLMeshRenderData.h"
@@ -17,10 +18,15 @@ Copyright Glare Technologies Limited 2021 -
 #include <utils/FileInStream.h>
 #include <utils/FileOutStream.h>
 #include <utils/FileUtils.h>
+#if USE_JOLT
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#endif
 
 
-AvatarGraphics::AvatarGraphics()
-:	loaded_lod_level(-1)
+AvatarGraphics::AvatarGraphics(Avatar* avatar_)
+:	loaded_lod_level(-1),
+	avatar(avatar_),
+	our_avatar(false)
 {
 	last_pos.set(0, 0, 0);
 	last_selected_ob_target_pos.set(0, 0, 0);
@@ -46,6 +52,13 @@ AvatarGraphics::AvatarGraphics()
 
 	turn_anim_end_time = -1;
 	turning = false;
+
+	current_gesture_animate_head = false;
+	current_gesture_loop_anim = false;
+	current_gesture_start_global_time = 0;
+	pending_gesture_animate_head = false;
+	pending_gesture_loop_anim = false;
+	pending_gesture_start_global_time = 0;
 }
 
 
@@ -98,7 +111,13 @@ inline static void clearProceduralRotation(js::Vector<GLObjectAnimNodeData, 16>&
 }
 
 
-void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, const Vec3d& pos, const Vec3f& cam_rotation, 
+// Matches player capsule dimensions for reliable mouse-picking of remote avatars.
+static const float AVATAR_CAPSULE_RAD = 0.3f;
+static const float AVATAR_CAPSULE_CYLINDER_HEIGHT = 1.3f;
+static const float AVATAR_EYE_HEIGHT = 1.67f;
+
+
+void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& physics_world, const Vec3d& pos, const Vec3f& cam_rotation, 
 	bool use_xyplane_speed_rel_ground_override, float xyplane_speed_rel_ground_override, 
 	const Matrix4f& pre_ob_to_world_matrix, uint32 anim_state, double cur_time, double dt, const PoseConstraint& pose_constraint, AnimEvents& anim_events_out)
 {
@@ -119,6 +138,30 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, const Vec3d& pos,
 
 	if(skinned_gl_ob && skinned_gl_ob->mesh_data)
 	{
+		// Add a non-collidable physics capsule for remote avatars so use-action raycasts can hit them.
+		if(!our_avatar)
+		{
+#if USE_JOLT
+			if(!physics_ob)
+			{
+				JPH::Ref<JPH::Shape> standing_shape = new JPH::CapsuleShape(/*inHalfHeightOfCylinder=*/0.5f * AVATAR_CAPSULE_CYLINDER_HEIGHT, /*inRadius=*/AVATAR_CAPSULE_RAD);
+
+				PhysicsShape shape;
+				shape.jolt_shape = standing_shape;
+				physics_ob = new PhysicsObject(/*collidable=*/false, shape, /*userdata=*/(void*)avatar, /*userdata_type=*/3);
+				physics_ob->pos = pos.toVec4fPoint();
+				physics_ob->rot = Quatf::identity();
+				physics_ob->scale = Vec3f(1.f);
+
+				physics_world.addObject(physics_ob);
+			}
+
+			// Reposition capsule to animated head position so picking stays aligned with root-motion animations.
+			const Vec4f last_eye_pos = getLastHeadPosition();
+			physics_world.setNewObToWorldTransform(*physics_ob, last_eye_pos - Vec4f(0, 0, AVATAR_EYE_HEIGHT * 0.5f, 0), Quatf::xAxisRot(Maths::pi_2<float>()), Vec4f(1.f));
+#endif
+		}
+
 		const AnimationData& anim_data = skinned_gl_ob->mesh_data->animation_data;
 		js::Vector<GLObjectAnimNodeData, 16>& anim_node_data = skinned_gl_ob->anim_node_data;
 
@@ -1216,8 +1259,10 @@ static int findAnimation(GLObject& ob, const std::string& name)
 }
 
 
-void AvatarGraphics::build()
+void AvatarGraphics::build(bool our_avatar_)
 {
+	our_avatar = our_avatar_;
+
 	idle_anim_i = findAnimation(*skinned_gl_ob, "Idle");
 	walking_anim_i = findAnimation(*skinned_gl_ob, "Walking");
 	walking_backwards_anim_i = findAnimation(*skinned_gl_ob, "Walking Backward");
@@ -1331,12 +1376,13 @@ void AvatarGraphics::build()
 }
 
 
-void AvatarGraphics::destroy(OpenGLEngine& engine)
+void AvatarGraphics::destroy(OpenGLEngine& engine, PhysicsWorld& physics_world)
 {
 	checkRemoveObAndSetRefToNull(engine, skinned_gl_ob);
 	checkRemoveObAndSetRefToNull(engine, selected_ob_beam);
 
 	checkRemoveObAndSetRefToNull(engine, debug_avatar_basis_ob);
+	checkRemoveObAndSetRefToNull(physics_world, physics_ob);
 }
 
 
@@ -1379,43 +1425,28 @@ void AvatarGraphics::hideSelectedObBeam(OpenGLEngine& engine)
 
 Vec4f AvatarGraphics::getLastHeadPosition() const
 {
-	if(skinned_gl_ob)
-	{
-		if(head_node_i >= 0 && head_node_i < (int)skinned_gl_ob->anim_node_data.size())
-			return skinned_gl_ob->ob_to_world_matrix * skinned_gl_ob->anim_node_data[head_node_i].node_hierarchical_to_object * Vec4f(0,0,0,1) + Vec4f(0,0,0.076f,0); // eyes are roughly 7.6 cm above head node in RPM models.
-		else
-			return skinned_gl_ob->ob_to_world_matrix * Vec4f(0,0,0,1);
-	}
+	if(skinned_gl_ob && (head_node_i >= 0) && (head_node_i < (int)skinned_gl_ob->anim_node_data.size()))
+		return skinned_gl_ob->ob_to_world_matrix * skinned_gl_ob->anim_node_data[head_node_i].node_hierarchical_to_object * Vec4f(0,0,0,1) + Vec4f(0,0,0.076f,0); // eyes are roughly 7.6 cm above head node in RPM models.
 	else
-		return Vec4f(0,0,0,1);
+		return last_pos.toVec4fPoint();
 }
 
 
 Vec4f AvatarGraphics::getLastLeftEyePosition() const
 {
-	if(skinned_gl_ob)
-	{
-		if(left_eye_node_i >= 0 && left_eye_node_i < (int)skinned_gl_ob->anim_node_data.size())
-			return skinned_gl_ob->ob_to_world_matrix * skinned_gl_ob->anim_node_data[left_eye_node_i].node_hierarchical_to_object * Vec4f(0,0,0,1);
-		else
-			return skinned_gl_ob->ob_to_world_matrix * Vec4f(0,0,0,1);
-	}
+	if(skinned_gl_ob && (left_eye_node_i >= 0) && (left_eye_node_i < (int)skinned_gl_ob->anim_node_data.size()))
+		return skinned_gl_ob->ob_to_world_matrix * skinned_gl_ob->anim_node_data[left_eye_node_i].node_hierarchical_to_object * Vec4f(0,0,0,1);
 	else
-		return Vec4f(0,0,0,1);
+		return last_pos.toVec4fPoint();
 }
 
 
 Vec4f AvatarGraphics::getLastRightEyePosition() const
 {
-	if(skinned_gl_ob)
-	{
-		if(right_eye_node_i >= 0 && right_eye_node_i < (int)skinned_gl_ob->anim_node_data.size())
-			return skinned_gl_ob->ob_to_world_matrix * skinned_gl_ob->anim_node_data[right_eye_node_i].node_hierarchical_to_object * Vec4f(0,0,0,1);
-		else
-			return skinned_gl_ob->ob_to_world_matrix * Vec4f(0,0,0,1);
-	}
+	if(skinned_gl_ob && (right_eye_node_i >= 0) && (right_eye_node_i < (int)skinned_gl_ob->anim_node_data.size()))
+		return skinned_gl_ob->ob_to_world_matrix * skinned_gl_ob->anim_node_data[right_eye_node_i].node_hierarchical_to_object * Vec4f(0,0,0,1);
 	else
-		return Vec4f(0,0,0,1);
+		return last_pos.toVec4fPoint();
 }
 
 
@@ -1433,8 +1464,14 @@ static float getAnimLength(const AnimationData& animation_data, int anim_i)
 }
 
 
-void AvatarGraphics::performGesture(double cur_time, const std::string& gesture_name, const URLString& gesture_URL, bool animate_head, bool loop_anim, AnimationManager& animation_manager, ResourceManager& resource_manager)
+void AvatarGraphics::performGesture(double cur_time, const std::string& gesture_name, const URLString& gesture_anim_URL, bool animate_head, bool loop_anim, double start_global_time, double time_offset, AnimationManager& animation_manager, ResourceManager& resource_manager)
 {
+	current_gesture_name = gesture_name;
+	current_gesture_URL = gesture_anim_URL;
+	current_gesture_animate_head = animate_head;
+	current_gesture_loop_anim = loop_anim;
+	current_gesture_start_global_time = start_global_time;
+
 	try
 	{
 		// conPrint("AvatarGraphics::performGesture: " + gesture_name + ", animate_head: " + boolToString(animate_head));
@@ -1443,7 +1480,7 @@ void AvatarGraphics::performGesture(double cur_time, const std::string& gesture_
 		{
 			skinned_gl_ob->transition_start_time = cur_time;
 			skinned_gl_ob->transition_end_time = cur_time + 0.3;
-			skinned_gl_ob->use_time_offset = -cur_time; // Set anim time offset so that we are at the beginning of the animation. NOTE: bit of a hack, messes with the blended anim also.
+			skinned_gl_ob->use_time_offset = -cur_time + time_offset; // Set anim time offset so that we are at the beginning of the animation. NOTE: bit of a hack, messes with the blended anim also.
 
 			if(false) // gesture_name == "Sit")
 			{
@@ -1463,7 +1500,7 @@ void AvatarGraphics::performGesture(double cur_time, const std::string& gesture_
 				if(this->gesture_anim.anim_i < 0) // If the avatar animation data does not have the animation yet:
 				{
 					// Get the animation data from the animation manager: (Will load from the resource manager if in resource manager but not animation manager yet)
-					const URLString use_URL = gesture_URL.empty() ? (URLString(gesture_name) + ".subanim") : gesture_URL;
+					const URLString use_URL = gesture_anim_URL.empty() ? (URLString(gesture_name) + ".subanim") : gesture_anim_URL;
 					Reference<AnimationData> anim = animation_manager.getAnimationIfPresent(use_URL, resource_manager);
 
 					if(anim)
@@ -1497,6 +1534,9 @@ void AvatarGraphics::performGesture(double cur_time, const std::string& gesture_
 
 void AvatarGraphics::stopGesture(double cur_time/*, const std::string& gesture_name*/)
 {
+	current_gesture_name.clear();
+	current_gesture_URL.clear();
+
 	const double tentative_end_time = cur_time + 0.3;
 	if(this->gesture_anim.play_end_time > tentative_end_time)
 	{
@@ -1512,18 +1552,26 @@ void AvatarGraphics::stopGesture(double cur_time/*, const std::string& gesture_n
 }
 
 
-void AvatarGraphics::setPendingGesture(const std::string& gesture_name, const URLString& gesture_URL, bool animate_head, bool loop_anim)
+void AvatarGraphics::setPendingGesture(const std::string& gesture_name, const URLString& gesture_anim_URL, bool animate_head, bool loop_anim, double start_global_time)
 {
 	this->pending_gesture_name = gesture_name;
-	this->pending_gesture_URL = gesture_URL;
+	this->pending_gesture_URL = gesture_anim_URL;
 	this->pending_gesture_animate_head = animate_head;
 	this->pending_gesture_loop_anim = loop_anim;
+	this->pending_gesture_start_global_time = start_global_time;
+}
+
+
+void AvatarGraphics::clearPendingGesture()
+{
+	this->pending_gesture_name.clear();
+	this->pending_gesture_URL.clear();
 }
 
 
 void AvatarGraphics::performPendingGesture(double cur_time, AnimationManager& animation_manager, ResourceManager& resource_manager)
 {
-	this->performGesture(cur_time, pending_gesture_name, pending_gesture_URL, pending_gesture_animate_head, pending_gesture_loop_anim, animation_manager, resource_manager);
+	this->performGesture(cur_time, pending_gesture_name, pending_gesture_URL, pending_gesture_animate_head, pending_gesture_loop_anim, pending_gesture_start_global_time, /*time_offset=*/0, animation_manager, resource_manager);
 
 	this->pending_gesture_name.clear();
 	this->pending_gesture_URL.clear();
