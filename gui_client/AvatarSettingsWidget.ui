@@ -10,66 +10,120 @@
     <height>720</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="QWidget" name="topWidget" native="true">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <layout class="QFormLayout" name="formLayout">
-      <item row="0" column="0">
-       <widget class="QLabel" name="label_model">
-        <property name="text">
-         <string>Model:</string>
+ <layout class="QVBoxLayout" name="verticalLayout">
+  <item>
+   <widget class="QTabWidget" name="tabWidget">
+    <property name="currentIndex">
+     <number>0</number>
+    </property>
+    <widget class="QWidget" name="avatarTab">
+     <attribute name="title">
+      <string>Avatar</string>
+     </attribute>
+     <layout class="QVBoxLayout" name="avatarTabLayout">
+      <item>
+       <widget class="QWidget" name="topWidget" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <layout class="QFormLayout" name="formLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_model">
+           <property name="text">
+            <string>Model:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="FileSelectWidget" name="avatarSelectWidget"/>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_anim">
+           <property name="text">
+            <string>Preview animation</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="animationComboBox"/>
+         </item>
+         <item row="2" column="0">
+          <widget class="QWidget" name="spacerWidget" native="true"/>
+         </item>
+         <item row="3" column="0" colspan="2">
+          <widget class="QLabel" name="createReadyPlayerMeLabel">
+           <property name="text">
+            <string>Create ReadyPlayerme avatars at XXX</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="AvatarPreviewWidget" name="avatarPreviewGLWidget" native="true"/>
+      </item>
+      <item>
+       <widget class="QDialogButtonBox" name="buttonBox">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="standardButtons">
+         <set>QDialogButtonBox::Apply|QDialogButtonBox::Close</set>
         </property>
        </widget>
       </item>
-      <item row="0" column="1">
-       <widget class="FileSelectWidget" name="avatarSelectWidget"/>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="label_anim">
+     </layout>
+    </widget>
+    <widget class="QWidget" name="vroidTab">
+     <attribute name="title">
+      <string>VRoid</string>
+     </attribute>
+     <layout class="QVBoxLayout" name="vroidTabLayout">
+      <item>
+       <widget class="QLabel" name="vroidInfoLabel">
         <property name="text">
-         <string>Preview animation</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QComboBox" name="animationComboBox"/>
-      </item>
-      <item row="2" column="0">
-       <widget class="QWidget" name="spacerWidget" native="true"/>
-      </item>
-      <item row="3" column="0" colspan="2">
-       <widget class="QLabel" name="createReadyPlayerMeLabel">
-        <property name="text">
-         <string>Create ReadyPlayerme avatars at XXX</string>
+         <string>VRoid workflow: create an avatar in VRoid Hub, download it (VRM/GLB), then select the file on the Avatar tab.</string>
         </property>
         <property name="wordWrap">
          <bool>true</bool>
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QLabel" name="vroidLinksLabel">
+        <property name="text">
+         <string>&lt;a href=&quot;https://hub.vroid.com/&quot;&gt;Open VRoid Hub&lt;/a&gt;</string>
+        </property>
+        <property name="openExternalLinks">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="vroidSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
      </layout>
     </widget>
-   </item>
-   <item>
-    <widget class="AvatarPreviewWidget" name="avatarPreviewGLWidget" native="true"/>
-   </item>
-   <item>
-    <widget class="QDialogButtonBox" name="buttonBox">
-     <property name="orientation">
-      <enum>Qt::Horizontal</enum>
-     </property>
-     <property name="standardButtons">
-      <set>QDialogButtonBox::Apply|QDialogButtonBox::Close</set>
-     </property>
-    </widget>
-   </item>
-  </layout>
+   </widget>
+  </item>
+ </layout>
  </widget>
  <customwidgets>
   <customwidget>
@@ -87,4 +141,3 @@
  <resources/>
  <connections/>
 </ui>
-
