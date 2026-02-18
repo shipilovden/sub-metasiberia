@@ -104,6 +104,10 @@ private:
 	GLUIImageRef upload_image_widget;
 	GLUITextViewRef caption_label;
 	GLUILineEditRef caption_line_edit;
+	GLUITextViewRef telegram_bot_token_label;
+	GLUILineEditRef telegram_bot_token_line_edit;
+	GLUITextViewRef telegram_chat_id_label;
+	GLUILineEditRef telegram_chat_id_line_edit;
 	GLUITextButtonRef ok_button;
 	GLUITextButtonRef cancel_button;
 
