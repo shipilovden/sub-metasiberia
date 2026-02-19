@@ -180,7 +180,7 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Upload photo to Telegram (requires telegram settings)";
+		args.tooltip = "Upload photo (server handles Telegram posting when configured)";
 		upload_photo_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Upload photo", Vec2f(0), args);
 		upload_photo_button->handler = this;
 		gl_ui->addWidget(upload_photo_button);
@@ -254,10 +254,6 @@ void PhotoModeUI::destroy()
 	checkRemoveAndDeleteWidget(gl_ui, upload_image_widget);
 	checkRemoveAndDeleteWidget(gl_ui, caption_label);
 	checkRemoveAndDeleteWidget(gl_ui, caption_line_edit);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_bot_token_label);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_bot_token_line_edit);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_chat_id_label);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_chat_id_line_edit);
 	checkRemoveAndDeleteWidget(gl_ui, ok_button);
 	checkRemoveAndDeleteWidget(gl_ui, cancel_button);
 
@@ -455,23 +451,6 @@ void PhotoModeUI::updateWidgetPositions()
 			upload_image_widget->setPosAndDims(Vec2f(-1.f + (2.f - upload_im_w) / 2.f, upload_dialog_y), Vec2f(upload_im_w, upload_im_h)); // Centre-align horizontally
 
 			const float dialog_text_y_off = gl_ui->getUIWidthForDevIndepPixelWidth(10);
-			const float dialog_right_edge = upload_dialog_x + dialog_content_w;
-
-			if(telegram_bot_token_line_edit)
-			{
-				upload_dialog_y -= telegram_bot_token_line_edit->rect.getWidths().y + margin;
-				telegram_bot_token_label->setPos(Vec2f(upload_dialog_x, upload_dialog_y + dialog_text_y_off));
-				telegram_bot_token_line_edit->setPos(Vec2f(telegram_bot_token_label->rect.getMax().x + margin, upload_dialog_y));
-				telegram_bot_token_line_edit->setWidth(dialog_right_edge - (telegram_bot_token_label->rect.getMax().x + margin));
-			}
-
-			if(telegram_chat_id_line_edit)
-			{
-				upload_dialog_y -= telegram_chat_id_line_edit->rect.getWidths().y + margin;
-				telegram_chat_id_label->setPos(Vec2f(upload_dialog_x, upload_dialog_y + dialog_text_y_off));
-				telegram_chat_id_line_edit->setPos(Vec2f(telegram_chat_id_label->rect.getMax().x + margin, upload_dialog_y));
-				telegram_chat_id_line_edit->setWidth(dialog_right_edge - (telegram_chat_id_label->rect.getMax().x + margin));
-			}
 
 			upload_dialog_y -= caption_line_edit->rect.getWidths().y + margin;
 			caption_label->setPos(Vec2f(upload_dialog_x, upload_dialog_y + dialog_text_y_off));
@@ -658,41 +637,6 @@ void PhotoModeUI::eventOccurred(GLUICallbackEvent& event)
 		{
 			this->last_caption = caption_line_edit->getText();
 
-			// If Telegram is enabled but not configured on this machine, allow the user to enter the bot token/chat id
-			// in the upload dialog and persist them before attempting the upload.
-			const bool telegram_enabled = settings->getBoolValue("telegram/upload_photo_enabled", /*default=*/true);
-			if(telegram_enabled)
-			{
-				if(telegram_bot_token_line_edit)
-				{
-					const std::string bot_token = stripHeadAndTailWhitespace(telegram_bot_token_line_edit->getText());
-					if(!bot_token.empty())
-						settings->setStringValue("telegram/bot_token", bot_token);
-				}
-
-				if(telegram_chat_id_line_edit)
-				{
-					const std::string chat_id = stripHeadAndTailWhitespace(telegram_chat_id_line_edit->getText());
-					if(!chat_id.empty())
-						settings->setStringValue("telegram/photo_upload_chat_id", chat_id);
-				}
-
-				std::string bot_token = settings->getStringValue("telegram/bot_token", "");
-				if(bot_token.empty())
-					bot_token = getOptionalEnvVar("METASIBERIA_TELEGRAM_BOT_TOKEN");
-
-				std::string chat_id = settings->getStringValue("telegram/photo_upload_chat_id", "");
-				if(chat_id.empty())
-					chat_id = getOptionalEnvVar("METASIBERIA_TELEGRAM_PHOTO_CHAT_ID");
-
-				if(bot_token.empty() || chat_id.empty())
-				{
-					gui_client->showErrorNotification("Telegram upload is not configured.  Please set Telegram bot token and chat id.");
-					event.accepted = true;
-					return;
-				}
-			}
-
 			hideUploadPhotoWidget();
 
 			uploadPhoto();
@@ -827,10 +771,6 @@ void PhotoModeUI::showUploadPhotoWidget()
 	checkRemoveAndDeleteWidget(gl_ui, upload_image_widget);
 	checkRemoveAndDeleteWidget(gl_ui, caption_label);
 	checkRemoveAndDeleteWidget(gl_ui, caption_line_edit);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_bot_token_label);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_bot_token_line_edit);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_chat_id_label);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_chat_id_line_edit);
 	checkRemoveAndDeleteWidget(gl_ui, ok_button);
 	checkRemoveAndDeleteWidget(gl_ui, cancel_button);
 	/*if(upload_background_overlay_ob)
@@ -901,60 +841,6 @@ void PhotoModeUI::showUploadPhotoWidget()
 	}
 
 	{
-		const bool telegram_enabled = settings->getBoolValue("telegram/upload_photo_enabled", /*default=*/true);
-
-		std::string bot_token = settings->getStringValue("telegram/bot_token", "");
-		if(bot_token.empty())
-			bot_token = getOptionalEnvVar("METASIBERIA_TELEGRAM_BOT_TOKEN");
-
-		std::string chat_id = settings->getStringValue("telegram/photo_upload_chat_id", "");
-		if(chat_id.empty())
-			chat_id = getOptionalEnvVar("METASIBERIA_TELEGRAM_PHOTO_CHAT_ID");
-
-		if(telegram_enabled && bot_token.empty())
-		{
-			GLUITextView::CreateArgs args;
-			args.background_alpha = 0;
-			args.text_colour = toLinearSRGB(Colour3f(0.1f));
-			args.tooltip = "Telegram bot token (from @BotFather).  Saved on this computer.";
-			args.z = -0.5f;
-			telegram_bot_token_label = new GLUITextView(*gl_ui, opengl_engine, "Telegram bot token:", Vec2f(0.f), args);
-			gl_ui->addWidget(telegram_bot_token_label);
-
-			GLUILineEdit::CreateArgs le_args;
-			le_args.width = 1.4f;
-			le_args.z = -0.5f;
-			le_args.text_colour = toLinearSRGB(Colour3f(0.1f));
-			le_args.background_colour = Colour3f(0.7f);
-			le_args.mouseover_background_colour = Colour3f(0.8f);
-			le_args.tooltip = "Telegram bot token (from @BotFather).";
-			telegram_bot_token_line_edit = new GLUILineEdit(*gl_ui, opengl_engine, Vec2f(0.f), le_args);
-			gl_ui->addWidget(telegram_bot_token_line_edit);
-		}
-
-		if(telegram_enabled && chat_id.empty())
-		{
-			GLUITextView::CreateArgs args;
-			args.background_alpha = 0;
-			args.text_colour = toLinearSRGB(Colour3f(0.1f));
-			args.tooltip = "Telegram chat id (e.g. @channelname).  Saved on this computer.";
-			args.z = -0.5f;
-			telegram_chat_id_label = new GLUITextView(*gl_ui, opengl_engine, "Telegram chat id:", Vec2f(0.f), args);
-			gl_ui->addWidget(telegram_chat_id_label);
-
-			GLUILineEdit::CreateArgs le_args;
-			le_args.width = 1.4f;
-			le_args.z = -0.5f;
-			le_args.text_colour = toLinearSRGB(Colour3f(0.1f));
-			le_args.background_colour = Colour3f(0.7f);
-			le_args.mouseover_background_colour = Colour3f(0.8f);
-			le_args.tooltip = "Telegram chat id (e.g. @channelname).";
-			telegram_chat_id_line_edit = new GLUILineEdit(*gl_ui, opengl_engine, Vec2f(0.f), le_args);
-			gl_ui->addWidget(telegram_chat_id_line_edit);
-		}
-	}
-
-	{
 		GLUITextButton::CreateArgs args;
 		args.z = -0.5f;
 		ok_button = new GLUITextButton(*gl_ui, opengl_engine, "Upload", Vec2f(0), args);
@@ -1000,10 +886,6 @@ void PhotoModeUI::hideUploadPhotoWidget()
 	checkRemoveAndDeleteWidget(gl_ui, upload_image_widget);
 	checkRemoveAndDeleteWidget(gl_ui, caption_label);
 	checkRemoveAndDeleteWidget(gl_ui, caption_line_edit);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_bot_token_label);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_bot_token_line_edit);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_chat_id_label);
-	checkRemoveAndDeleteWidget(gl_ui, telegram_chat_id_line_edit);
 	checkRemoveAndDeleteWidget(gl_ui, ok_button);
 	checkRemoveAndDeleteWidget(gl_ui, cancel_button);
 
@@ -1353,14 +1235,10 @@ void PhotoModeUI::uploadPhoto()
 	if(chat_id.empty())
 		chat_id = getOptionalEnvVar("METASIBERIA_TELEGRAM_PHOTO_CHAT_ID");
 
-	if(telegram_enabled)
+	// If local Telegram creds are configured, post directly from client.
+	// Otherwise, fall back to server-side upload flow where Telegram can be posted by server credentials.
+	if(telegram_enabled && !bot_token.empty() && !chat_id.empty())
 	{
-		if(bot_token.empty() || chat_id.empty())
-		{
-			gui_client->showErrorNotification("Telegram upload is not configured.  Set settings keys telegram/bot_token and telegram/photo_upload_chat_id (or env vars METASIBERIA_TELEGRAM_BOT_TOKEN and METASIBERIA_TELEGRAM_PHOTO_CHAT_ID).");
-			return;
-		}
-
 		Reference<UploadPhotoToTelegramThread> thread = new UploadPhotoToTelegramThread();
 		thread->caption = buildTelegramCaption(*gui_client, settings, last_caption, username_for_server, in_parcel_id);
 		thread->upload_image_jpeg_path = upload_image_jpeg_path;
@@ -1372,7 +1250,7 @@ void PhotoModeUI::uploadPhoto()
 		return;
 	}
 
-	// Legacy upload-to-website path (Substrata protocol).  Kept for compatibility/tests.
+	// Upload to server (used by default for end users). Server can publish to Telegram using server-side credentials.
 	const std::string username = gui_client->ui_interface->getUsernameForDomain(gui_client->server_hostname);
 	const std::string password = gui_client->ui_interface->getDecryptedPasswordForDomain(gui_client->server_hostname);
 

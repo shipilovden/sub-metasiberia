@@ -97,6 +97,7 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client TerrainSpecSectionWidget)
 	addMocFileRule(gui_client WorldSettingsWidget)
 	addMocFileRule(gui_client CreateObjectsDialog)
+	addMocFileRule(gui_client VRoidAuthFlow)
 
 	# Webcam Qt UI (Qt Multimedia).  Not built for SDL configurations.
 	addMocFileRule(gui_client/webcam WebcamWindow)
@@ -261,6 +262,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLParser.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/URLParser.h
+${CMAKE_SOURCE_DIR}/gui_client/VRoidAuthFlow.cpp
+${CMAKE_SOURCE_DIR}/gui_client/VRoidAuthFlow.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.h
 ${CMAKE_SOURCE_DIR}/gui_client/VehiclePhysics.h
@@ -451,6 +454,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_TerrainSpecSectionWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_WorldSettingsWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_CreateObjectsDialog.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_VRoidAuthFlow.cpp
 
 	# Webcam Qt UI (Qt Multimedia)
 	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
@@ -1328,6 +1332,7 @@ elseif(WIN32)
 			optimized Qt5Widgets
 			optimized Qt5Multimedia
 			optimized Qt5MultimediaWidgets
+			optimized Qt5Network
 			optimized Qt5Gamepad
 			debug qtmaind
 			debug Qt5Guid
@@ -1336,6 +1341,7 @@ elseif(WIN32)
 			debug Qt5Widgetsd
 			debug Qt5Multimediad
 			debug Qt5MultimediaWidgetsd
+			debug Qt5Networkd
 			debug Qt5Gamepadd
 		)
 	endif()

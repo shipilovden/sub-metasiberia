@@ -617,17 +617,17 @@
   </action>
   <action name="actionGo_to_Substrata_Server">
    <property name="text">
-    <string>Go to Substrata Server</string>
+    <string>Go to Substrata</string>
    </property>
   </action>
   <action name="actionGo_to_Metasiberia_Server">
    <property name="text">
-    <string>Go to Metasiberia Server</string>
+    <string>Go to Metasiberia</string>
    </property>
   </action>
   <action name="actionGo_to_Shki_nvkz_Server">
    <property name="text">
-    <string>Go to Shki-nvkz Server</string>
+    <string>Go to Shki-Nvkz</string>
    </property>
   </action>
   <action name="actionExport_view_to_Indigo">

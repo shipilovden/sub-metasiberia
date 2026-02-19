@@ -441,6 +441,14 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			WorldHandlers::handleCreateWorldParcelPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/set_world_parcel_owner_post")
+		{
+			WorldHandlers::handleSetWorldParcelOwnerPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/set_world_parcel_writers_post")
+		{
+			WorldHandlers::handleSetWorldParcelWritersPost(*this->world_state, request, reply_info);
+		}
 		else if(request.path == "/edit_photo_parcel_post")
 		{
 			PhotoHandlers::handleEditPhotoParcelPost(*this->world_state, request, reply_info);

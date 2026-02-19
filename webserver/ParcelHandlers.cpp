@@ -23,10 +23,39 @@ Copyright Glare Technologies Limited 2021 -
 #include <PlatformUtils.h>
 #include <Parser.h>
 #include <ContainerUtils.h>
+#include <cctype>
 
 
 namespace ParcelHandlers
 {
+
+static bool isAllDigitsString(const std::string& s)
+{
+	if(s.empty())
+		return false;
+	for(size_t i=0; i<s.size(); ++i)
+		if(!::isdigit((unsigned char)s[i]))
+			return false;
+	return true;
+}
+
+
+static User* findUserByRef(ServerAllWorldsState& world_state, const std::string& user_ref)
+{
+	const std::string trimmed = stripHeadAndTailWhitespace(user_ref);
+	if(trimmed.empty())
+		return NULL;
+
+	if(isAllDigitsString(trimmed))
+	{
+		const UserID user_id((uint32)stringToUInt64(trimmed));
+		auto user_it = world_state.user_id_to_users.find(user_id);
+		return (user_it != world_state.user_id_to_users.end()) ? user_it->second.ptr() : NULL;
+	}
+
+	auto name_it = world_state.name_to_users.find(trimmed);
+	return (name_it != world_state.name_to_users.end()) ? name_it->second.ptr() : NULL;
+}
 
 
 void renderParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info) // Shows order details
@@ -485,7 +514,7 @@ void renderAddParcelWriterPage(ServerAllWorldsState& world_state, const web::Req
 		{
 			page += "<form action=\"/add_parcel_writer_post\" method=\"post\" id=\"usrform\">";
 			page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + toString(parcel_id) + "\"><br>";
-			page += "Writer username: <input type=\"text\" name=\"writer_name\" value=\"\"><br>";
+			page += "Writer (id or username): <input type=\"text\" name=\"writer_ref\" value=\"\"><br>";
 			page += "<input type=\"submit\" value=\"Add as writer\">";
 			page += "</form>";
 		}
@@ -802,7 +831,9 @@ void handleAddParcelWriterPost(ServerAllWorldsState& world_state, const web::Req
 			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
 
 		const ParcelID parcel_id = ParcelID(request.getPostIntField("parcel_id"));
-		const web::UnsafeString writer_name = request.getPostField("writer_name");
+		const std::string writer_ref = stripHeadAndTailWhitespace(request.getPostField("writer_ref").str());
+		const std::string legacy_writer_name = stripHeadAndTailWhitespace(request.getPostField("writer_name").str());
+		const std::string writer_user_ref = writer_ref.empty() ? legacy_writer_name : writer_ref;
 
 		bool added_writer = false;
 		std::string message;
@@ -820,11 +851,8 @@ void handleAddParcelWriterPost(ServerAllWorldsState& world_state, const web::Req
 				User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
 				if(logged_in_user && (parcel->owner_id == logged_in_user->id || isGodUser(logged_in_user->id)))
 				{
-					// Try and find user for writer_name
-					User* new_writer_user = NULL;
-					for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
-						if(it->second->name == writer_name.str())
-							new_writer_user = it->second.ptr();
+					// Resolve user by id or username
+					User* new_writer_user = findUserByRef(world_state, writer_user_ref);
 
 					if(new_writer_user)
 					{
@@ -842,7 +870,7 @@ void handleAddParcelWriterPost(ServerAllWorldsState& world_state, const web::Req
 					}
 					else
 					{
-						message = "Could not find a user with that name.";
+						message = "Could not find user '" + writer_user_ref + "'. Use user id or exact username.";
 					}
 
 					if(added_writer)

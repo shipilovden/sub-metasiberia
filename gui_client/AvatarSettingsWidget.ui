@@ -87,9 +87,57 @@
      </attribute>
      <layout class="QVBoxLayout" name="vroidTabLayout">
       <item>
+       <widget class="QLabel" name="vroidStatusLabel">
+        <property name="text">
+         <string>VRoid: not logged in</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="vroidButtonsLayout">
+        <item>
+         <widget class="QPushButton" name="vroidLoginButton">
+          <property name="text">
+           <string>Login</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="vroidFetchModelsButton">
+          <property name="text">
+           <string>Fetch models</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="vroidLogoutButton">
+          <property name="text">
+           <string>Logout</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="vroidHorizontalSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QListWidget" name="vroidModelsListWidget"/>
+      </item>
+      <item>
        <widget class="QLabel" name="vroidInfoLabel">
         <property name="text">
-         <string>VRoid workflow: create an avatar in VRoid Hub, download it (VRM/GLB), then select the file on the Avatar tab.</string>
+         <string>VRoid workflow: log in, fetch models, then download VRM/GLB in browser and select it on the Avatar tab.</string>
         </property>
         <property name="wordWrap">
          <bool>true</bool>

@@ -57,9 +57,10 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 	expanded = gui_client_->getSettingsStore()->getBoolValue("setting/show_minimap", /*default_value=*/default_minimap_expanded);
 	
 	// Create minimap (background) image.  Will be mostly covered by tiles, but keep for the sizing logic and mouse handler.
+	const Vec2f minimap_dims = computeMiniMapDims();
 	const float y_margin = computeMiniMapTopMargin();
-	const float minimap_width = computeMiniMapWidth();
-	minimap_image = new GLUIImage(*gl_ui, opengl_engine, "", Vec2f(1 - x_margin - minimap_width, gl_ui->getViewportMinMaxY() - y_margin - minimap_width), Vec2f(minimap_width), /*tooltip=*/"", BACKGROUND_IMAGE_Z);
+	const Vec2f minimap_botleft(1 - x_margin - minimap_dims.x, gl_ui->getViewportMinMaxY() - y_margin - minimap_dims.y);
+	minimap_image = new GLUIImage(*gl_ui, opengl_engine, "", minimap_botleft, minimap_dims, /*tooltip=*/"", BACKGROUND_IMAGE_Z);
 	minimap_image->setColour(Colour3f(0.1f));
 	minimap_image->setAlpha(0.8f);
 	minimap_image->setMouseOverColour(Colour3f(0.1f));
@@ -67,7 +68,7 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 	gl_ui->addWidget(minimap_image);
 
 	// Create facing arrow image
-	arrow_image = new GLUIImage(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/facing_arrow.png", Vec2f(1 - x_margin - minimap_width/2, gl_ui->getViewportMinMaxY() - y_margin - minimap_width/2), Vec2f(0.005f), 
+	arrow_image = new GLUIImage(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/facing_arrow.png", minimap_botleft + minimap_dims * 0.5f, Vec2f(0.005f), 
 		/*tooltip=*/"You", ARROW_IMAGE_Z);
 	arrow_image->overlay_ob->material.tex_matrix = Matrix2f::identity(); // Since we are using a texture rendered in OpenGL we don't need to flip it.
 	arrow_image->handler = this;
@@ -87,7 +88,7 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Fullscreen map";
-		fullscreen_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/expand_chat_icon.png", /*botleft=*/Vec2f(10.f), /*dims=*/Vec2f(0.1f), args);
+		fullscreen_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/right_tab.png", /*botleft=*/Vec2f(10.f), /*dims=*/Vec2f(0.1f), args);
 		fullscreen_button->handler = this;
 		gl_ui->addWidget(fullscreen_button);
 	}
@@ -743,16 +744,15 @@ void MiniMap::updateWidgetPositions()
 	{
 		if(minimap_image)
 		{
-			const float minimap_width = computeMiniMapWidth();
+			const Vec2f minimap_dims = computeMiniMapDims();
 			const float y_margin = computeMiniMapTopMargin();
 
 			const Vec2f minimap_botleft = fullscreen ?
-				// Center the map on screen when fullscreen.
-				Vec2f(-minimap_width * 0.5f, -minimap_width * 0.5f) :
+				Vec2f(-1.f + x_margin, -gl_ui->getViewportMinMaxY() + x_margin) :
 				// Top-right corner in normal mode.
-				Vec2f(1 - minimap_width - x_margin, gl_ui->getViewportMinMaxY() - minimap_width - y_margin);
+				Vec2f(1 - minimap_dims.x - x_margin, gl_ui->getViewportMinMaxY() - minimap_dims.y - y_margin);
 
-			minimap_image->setPosAndDims(minimap_botleft, Vec2f(minimap_width));
+			minimap_image->setPosAndDims(minimap_botleft, minimap_dims);
 			minimap_image->setZ(BACKGROUND_IMAGE_Z);
 
 			//last_minimap_bot_left_pos = minimap_image->rect.getMin();
@@ -767,7 +767,7 @@ void MiniMap::updateWidgetPositions()
 			{
 				// Place buttons on top of the fullscreen map (top-right corner).
 				collapse_button->setPosAndDims(
-					Vec2f(minimap_botleft.x + minimap_width - button_w - button_spacing, minimap_botleft.y + minimap_width - button_h - button_spacing),
+					Vec2f(minimap_botleft.x + minimap_dims.x - button_w - button_spacing, minimap_botleft.y + minimap_dims.y - button_h - button_spacing),
 					Vec2f(button_w, button_h)
 				);
 			}
@@ -811,9 +811,26 @@ Vec2f MiniMap::mapUICoordsForWorldSpacePos(const Vec3d& pos)
 
 	// Use the actual minimap rect so fullscreen/normal modes behave consistently.
 	const Rect2f map_rect = minimap_image->rect;
-	const float minimap_width = map_rect.getWidths().x; // square
+	const Vec2f map_dims_ui = map_rect.getWidths();
 	const Vec2f map_centre_ui = (map_rect.getMin() + map_rect.getMax()) * 0.5f;
-	return map_centre_ui + minimap_width * cam_to_pos_xy_ws / map_width_ws;
+	return map_centre_ui + Vec2f(
+		map_dims_ui.x * cam_to_pos_xy_ws.x / map_width_ws,
+		map_dims_ui.y * cam_to_pos_xy_ws.y / map_width_ws
+	);
+}
+
+
+Vec2f MiniMap::computeMiniMapDims() const
+{
+	if(fullscreen)
+	{
+		const float max_w = myClamp(2.f - 2 * x_margin, 0.f, 2.f);
+		const float max_h = myClamp(2.f * gl_ui->getViewportMinMaxY() - 2 * x_margin, 0.f, 2.f * gl_ui->getViewportMinMaxY());
+		return Vec2f(max_w, max_h);
+	}
+
+	const float minimap_width = myClamp(gl_ui->getUIWidthForDevIndepPixelWidth(250), 0.f, 2.f);
+	return Vec2f(minimap_width);
 }
 
 

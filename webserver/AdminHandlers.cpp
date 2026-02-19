@@ -27,6 +27,7 @@ Copyright Glare Technologies Limited 2021 -
 #include <CryptoRNG.h>
 #include <ContainerUtils.h>
 #include <algorithm>
+#include <cctype>
 
 
 namespace AdminHandlers
@@ -66,6 +67,50 @@ static bool getUserIDForUsername(ServerAllWorldsState& world_state, const std::s
 		return false;
 
 	user_id_out = user_res->second->id;
+	return true;
+}
+
+
+static bool isAllDigitsString(const std::string& s)
+{
+	if(s.empty())
+		return false;
+	for(size_t i=0; i<s.size(); ++i)
+		if(!::isdigit((unsigned char)s[i]))
+			return false;
+	return true;
+}
+
+
+static bool resolveUserIDFromRef(ServerAllWorldsState& world_state, const std::string& user_ref, UserID& user_id_out, std::string& error_out)
+{
+	const std::string trimmed = stripHeadAndTailWhitespace(user_ref);
+	if(trimmed.empty())
+	{
+		error_out = "User reference is empty.";
+		return false;
+	}
+
+	if(isAllDigitsString(trimmed))
+	{
+		const uint64 user_id_u64 = stringToUInt64(trimmed);
+		const UserID candidate((uint32)user_id_u64);
+		const auto user_res = world_state.user_id_to_users.find(candidate);
+		if(user_res == world_state.user_id_to_users.end())
+		{
+			error_out = "Could not find user with id '" + trimmed + "'.";
+			return false;
+		}
+		user_id_out = candidate;
+		return true;
+	}
+
+	if(!getUserIDForUsername(world_state, trimmed, user_id_out))
+	{
+		error_out = "Could not find user '" + trimmed + "'.";
+		return false;
+	}
+
 	return true;
 }
 
@@ -194,13 +239,29 @@ static std::string featureFlagNameForBit(const uint64 bitflag)
 }
 
 
+static std::string toLowerASCII(std::string s)
+{
+	for(size_t i=0; i<s.size(); ++i)
+		s[i] = (char)std::tolower((unsigned char)s[i]);
+	return s;
+}
+
+
+static bool containsCaseInsensitive(const std::string& haystack, const std::string& needle)
+{
+	if(needle.empty())
+		return true;
+	return toLowerASCII(haystack).find(toLowerASCII(needle)) != std::string::npos;
+}
+
+
 std::string sharedAdminHeader(ServerAllWorldsState& world_state, const web::RequestInfo& request_info)
 {
 	std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Admin");
 
-	page_out += "<p><a href=\"/admin\">Main admin page</a> | <a href=\"/admin_users\">Users</a> | <a href=\"/admin_parcels\">Parcels</a> | ";
-	page_out += "<a href=\"/admin_parcel_auctions\">Parcel Auctions</a> | <a href=\"/admin_orders\">Orders</a> | <a href=\"/admin_sub_eth_transactions\">Eth Transactions</a> | <a href=\"/admin_map\">Map</a> | ";
-	page_out += "<a href=\"/admin_news_posts\">News Posts</a> | <a href=\"/admin_lod_chunks\">LOD Chunks</a> | <a href=\"/admin_worlds\">Worlds</a> | <a href=\"/admin_chatbots\">ChatBots</a> </p>";
+	page_out += "<p class=\"msb-admin-nav\"><a href=\"/admin\">Main admin page</a><a href=\"/admin_users\">Users</a><a href=\"/admin_parcels\">Parcels</a>";
+	page_out += "<a href=\"/admin_parcel_auctions\">Parcel Auctions</a><a href=\"/admin_orders\">Orders</a><a href=\"/admin_sub_eth_transactions\">Eth Transactions</a><a href=\"/admin_map\">Map</a>";
+	page_out += "<a href=\"/admin_news_posts\">News Posts</a><a href=\"/admin_lod_chunks\">LOD Chunks</a><a href=\"/admin_worlds\">Worlds</a><a href=\"/admin_chatbots\">ChatBots</a></p>";
 
 	return page_out;
 }
@@ -216,41 +277,88 @@ void renderMainAdminPage(ServerAllWorldsState& world_state, const web::RequestIn
 
 	std::string page_out = sharedAdminHeader(world_state, request_info);
 
-	page_out += "<p>Welcome!</p><br/><br/>";
+	page_out += "<p>Welcome!</p>";
+	{
+		WorldStateLock lock(world_state.mutex);
+		Reference<ServerWorldState> root_world = world_state.getRootWorldState();
+		const int users_count = (int)world_state.user_id_to_users.size();
+		const int worlds_count = (int)world_state.world_states.size();
+		const int parcels_count = (int)root_world->parcels.size();
+		const int auctions_count = (int)world_state.parcel_auctions.size();
+
+		int chatbots_count = 0;
+		int for_sale_auctions = 0;
+		const TimeStamp now = TimeStamp::currentTime();
+
+		for(auto it = world_state.parcel_auctions.begin(); it != world_state.parcel_auctions.end(); ++it)
+		{
+			const ParcelAuction* auction = it->second.ptr();
+			if(auction->currentlyForSale(now))
+				for_sale_auctions++;
+		}
+
+		for(auto it = world_state.world_states.begin(); it != world_state.world_states.end(); ++it)
+			chatbots_count += (int)it->second->getChatBots(lock).size();
+
+		page_out += "<div class=\"msb-kpi-grid\">";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Users</div><div class=\"msb-kpi-value\">" + toString(users_count) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Worlds</div><div class=\"msb-kpi-value\">" + toString(worlds_count) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Parcels</div><div class=\"msb-kpi-value\">" + toString(parcels_count) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Auctions for sale</div><div class=\"msb-kpi-value\">" + toString(for_sale_auctions) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">All auctions</div><div class=\"msb-kpi-value\">" + toString(auctions_count) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">ChatBots</div><div class=\"msb-kpi-value\">" + toString(chatbots_count) + "</div></div>";
+		page_out += "</div>";
+	}
+
 	page_out += "<h2>Superadmin parcel tools</h2>";
+	page_out += "<div class=\"grouped-region\">";
 	page_out += "<p><a href=\"/admin_parcels\">Open parcels admin page</a></p>";
 
-	page_out += "<form action=\"/admin_create_parcel\" method=\"post\">";
+	page_out += "<form action=\"/admin_create_parcel\" method=\"post\" class=\"msb-create-parcel-form\" data-admin-create-parcel-form=\"1\">";
 	page_out += "<label for=\"admin-create-root-owner\">Owner username</label><br/>";
 	page_out += "<input id=\"admin-create-root-owner\" type=\"text\" name=\"owner_username\" value=\"\" title=\"Username that will own the new root-world parcel\"><br/>";
 	page_out += "<label for=\"admin-create-root-editors\">Editors usernames (comma-separated)</label><br/>";
 	page_out += "<input id=\"admin-create-root-editors\" type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated usernames with edit rights\"><br/>";
 	page_out += "<label for=\"admin-create-root-world\">World (name or link, empty=root)</label><br/>";
 	page_out += "<input id=\"admin-create-root-world\" type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sub://... link\"><br/>";
-	page_out += "<label for=\"admin-create-origin-x\">Origin X</label><br/>";
-	page_out += "<input id=\"admin-create-origin-x\" type=\"text\" name=\"origin_x\" value=\"0\"><br/>";
-	page_out += "<label for=\"admin-create-origin-y\">Origin Y</label><br/>";
-	page_out += "<input id=\"admin-create-origin-y\" type=\"text\" name=\"origin_y\" value=\"0\"><br/>";
-	page_out += "<label for=\"admin-create-size-x\">Size X</label><br/>";
-	page_out += "<input id=\"admin-create-size-x\" type=\"text\" name=\"size_x\" value=\"16\"><br/>";
-	page_out += "<label for=\"admin-create-size-y\">Size Y</label><br/>";
-	page_out += "<input id=\"admin-create-size-y\" type=\"text\" name=\"size_y\" value=\"16\"><br/>";
-	page_out += "<label for=\"admin-create-min-z\">Min Z</label><br/>";
-	page_out += "<input id=\"admin-create-min-z\" type=\"text\" name=\"min_z\" value=\"-1\"><br/>";
-	page_out += "<label for=\"admin-create-max-z\">Max Z</label><br/>";
-	page_out += "<input id=\"admin-create-max-z\" type=\"text\" name=\"max_z\" value=\"4\"><br/>";
+	page_out += "<div class=\"msb-inline-fields\">";
+	page_out += "<label for=\"admin-create-origin-x\">Origin X</label>";
+	page_out += "<input id=\"admin-create-origin-x\" type=\"text\" name=\"origin_x\" value=\"0\">";
+	page_out += "<label for=\"admin-create-origin-y\">Origin Y</label>";
+	page_out += "<input id=\"admin-create-origin-y\" type=\"text\" name=\"origin_y\" value=\"0\">";
+	page_out += "</div>";
+	page_out += "<div class=\"msb-inline-fields\">";
+	page_out += "<label for=\"admin-create-size-x\">Size X</label>";
+	page_out += "<input id=\"admin-create-size-x\" type=\"text\" name=\"size_x\" value=\"16\">";
+	page_out += "<label for=\"admin-create-size-y\">Size Y</label>";
+	page_out += "<input id=\"admin-create-size-y\" type=\"text\" name=\"size_y\" value=\"16\">";
+	page_out += "</div>";
+	page_out += "<div class=\"msb-inline-fields\">";
+	page_out += "<label for=\"admin-create-min-z\">Min Z</label>";
+	page_out += "<input id=\"admin-create-min-z\" type=\"text\" name=\"min_z\" value=\"-1\">";
+	page_out += "<label for=\"admin-create-max-z\">Max Z</label>";
+	page_out += "<input id=\"admin-create-max-z\" type=\"text\" name=\"max_z\" value=\"4\">";
+	page_out += "</div>";
+	page_out += "<div class=\"msb-live-preview\" data-parcel-live-preview=\"1\">";
+	page_out += "<div class=\"msb-live-item\">Area: <b data-preview-area>256.0</b> m<sup>2</sup></div>";
+	page_out += "<div class=\"msb-live-item\">Height: <b data-preview-height>5.0</b> m</div>";
+	page_out += "<div class=\"msb-live-item\">Build volume: <b data-preview-volume>1280.0</b> m<sup>3</sup></div>";
+	page_out += "</div>";
 	page_out += "<input type=\"submit\" value=\"Create new parcel\" title=\"Create a parcel using configured world and coordinates\" onclick=\"return confirm('Create parcel with these settings?');\" >";
 	page_out += "</form>";
 
+	page_out += "<div class=\"msb-inline-actions\">";
 	page_out += "<form onsubmit=\"window.location='/parcel/' + document.getElementById('admin-open-parcel-id').value; return false;\">";
-	page_out += "parcel id: <input type=\"number\" id=\"admin-open-parcel-id\" value=\"1\" min=\"1\"> ";
+	page_out += "<label for=\"admin-open-parcel-id\">parcel id</label> <input type=\"number\" id=\"admin-open-parcel-id\" value=\"1\" min=\"1\"> ";
 	page_out += "<input type=\"submit\" value=\"Open parcel page (edit tools)\">";
 	page_out += "</form>";
 
 	page_out += "<form onsubmit=\"window.location='/admin_set_parcel_owner/' + document.getElementById('admin-set-owner-parcel-id').value; return false;\">";
-	page_out += "parcel id: <input type=\"number\" id=\"admin-set-owner-parcel-id\" value=\"1\" min=\"1\"> ";
+	page_out += "<label for=\"admin-set-owner-parcel-id\">parcel id</label> <input type=\"number\" id=\"admin-set-owner-parcel-id\" value=\"1\" min=\"1\"> ";
 	page_out += "<input type=\"submit\" value=\"Open set owner form\">";
 	page_out += "</form>";
+	page_out += "</div>";
+	page_out += "</div>";
 	page_out += "<hr/>";
 
 	{ // Lock scope
@@ -548,6 +656,12 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		return;
 	}
 
+	const std::string query_filter = stripHeadAndTailWhitespace(request.getURLParam("q").str());
+	const std::string owner_filter = stripHeadAndTailWhitespace(request.getURLParam("owner").str());
+	std::string auction_filter = stripHeadAndTailWhitespace(request.getURLParam("auction").str());
+	if(auction_filter.empty())
+		auction_filter = "all";
+
 	std::string page_out = sharedAdminHeader(world_state, request);
 
 	{ // Lock scope
@@ -555,85 +669,223 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 
 		page_out += "<h2>Root world Parcels</h2>\n";
 
-		//-----------------------
-		page_out += "<hr/>";
-		page_out += "<form action=\"/admin_regenerate_multiple_parcel_screenshots\" method=\"post\">";
-		page_out += "start parcel id: <input type=\"number\" name=\"start_parcel_id\" value=\"" + toString(0) + "\"><br/>";
-		page_out += "end parcel id: <input type=\"number\" name=\"end_parcel_id\" value=\"" + toString(10) + "\"><br/>";
-		page_out += "<input type=\"submit\" value=\"Regenerate/recreate parcel screenshots\" onclick=\"return confirm('Are you sure you want to recreate parcel screenshots?');\" >";
-		page_out += "</form>";
-		page_out += "<hr/>";
-		//-----------------------
-
-		//-----------------------
-		page_out += "<hr/>";
-		page_out += "<form action=\"/admin_create_parcel\" method=\"post\">";
-		page_out += "<div class=\"field-description\">Configure where and how the parcel should be created.</div>";
-		page_out += "World (name or link): <input type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sub://... link. Leave empty for root world\"><br/>";
-		page_out += "Owner username: <input type=\"text\" name=\"owner_username\" value=\"\" title=\"Username that will own the new parcel\"><br/>";
-		page_out += "Editors usernames: <input type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated usernames with edit rights\"><br/>";
-		page_out += "Origin X: <input type=\"text\" name=\"origin_x\" value=\"0\" title=\"Parcel bottom-left X coordinate\"> ";
-		page_out += "Origin Y: <input type=\"text\" name=\"origin_y\" value=\"0\" title=\"Parcel bottom-left Y coordinate\"><br/>";
-		page_out += "Size X: <input type=\"text\" name=\"size_x\" value=\"16\" title=\"Parcel width on X axis\"> ";
-		page_out += "Size Y: <input type=\"text\" name=\"size_y\" value=\"16\" title=\"Parcel width on Y axis\"><br/>";
-		page_out += "Min Z: <input type=\"text\" name=\"min_z\" value=\"-1\" title=\"Minimum parcel build height\"> ";
-		page_out += "Max Z: <input type=\"text\" name=\"max_z\" value=\"4\" title=\"Maximum parcel build height\"><br/>";
-		page_out += "<input type=\"submit\" value=\"Create new parcel\" title=\"Create a parcel in selected world using these coordinates\" onclick=\"return confirm('Create parcel with these settings?');\" >";
-		page_out += "</form>";
-		page_out += "<hr/>";
-		//-----------------------
-
-
-
 		Reference<ServerWorldState> root_world = world_state.getRootWorldState();
+		const TimeStamp now = TimeStamp::currentTime();
+
+		struct ParcelRow
+		{
+			const Parcel* parcel = NULL;
+			std::string owner_username;
+			double size_x = 0;
+			double size_y = 0;
+			double area = 0;
+			bool has_for_sale_auction = false;
+			bool has_sold_auction = false;
+			bool has_any_auction = false;
+		};
+
+		std::vector<ParcelRow> rows;
+		rows.reserve(root_world->parcels.size());
+
+		int total_parcels = 0;
+		int for_sale_count = 0;
+		int sold_count = 0;
+		int no_auction_count = 0;
+		int with_screenshots_count = 0;
+		double total_area = 0.0;
 
 		for(auto it = root_world->parcels.begin(); it != root_world->parcels.end(); ++it)
 		{
 			const Parcel* parcel = it->second.ptr();
+			total_parcels++;
 
-			// Look up owner
-			std::string owner_username;
+			ParcelRow row;
+			row.parcel = parcel;
+
 			auto user_res = world_state.user_id_to_users.find(parcel->owner_id);
-			if(user_res == world_state.user_id_to_users.end())
-				owner_username = "[No user found]";
-			else
-				owner_username = user_res->second->name;
+			row.owner_username = (user_res == world_state.user_id_to_users.end()) ? std::string("[No user found]") : user_res->second->name;
 
-			page_out += "<p>\n";
-			page_out += "<a href=\"/parcel/" + parcel->id.toString() + "\">Parcel " + parcel->id.toString() + "</a><br/>" +
-				"owner: " + web::Escaping::HTMLEscape(owner_username) + "<br/>" +
-				"description: " + web::Escaping::HTMLEscape(parcel->description) + "<br/>" +
-				"created " + parcel->created_time.timeAgoDescription();
+			const Vec3d span = parcel->aabb_max - parcel->aabb_min;
+			row.size_x = span.x;
+			row.size_y = span.y;
+			row.area = std::max(0.0, row.size_x * row.size_y);
+			total_area += row.area;
 
-			// Get any auctions for parcel
-			page_out += "<div>    \n";
+			if(!parcel->screenshot_ids.empty())
+				with_screenshots_count++;
+
 			for(size_t i=0; i<parcel->parcel_auction_ids.size(); ++i)
 			{
 				const uint32 auction_id = parcel->parcel_auction_ids[i];
 				auto auction_res = world_state.parcel_auctions.find(auction_id);
-				if(auction_res != world_state.parcel_auctions.end())
-				{
-					const ParcelAuction* auction = auction_res->second.ptr();
-					if(auction->auction_state == ParcelAuction::AuctionState_ForSale)
-						page_out += " <a href=\"/parcel_auction/" + toString(auction->id) + "\">Auction " + toString(auction->id) + ": For sale</a><br/>";
-					else if(auction->auction_state == ParcelAuction::AuctionState_Sold)
-						page_out += " <a href=\"/parcel_auction/" + toString(auction->id) + "\">Auction " + toString(auction->id) + ": Parcel sold.</a><br/>";
-				}
+				if(auction_res == world_state.parcel_auctions.end())
+					continue;
+
+				row.has_any_auction = true;
+				const ParcelAuction* auction = auction_res->second.ptr();
+				if(auction->currentlyForSale(now))
+					row.has_for_sale_auction = true;
+				if(auction->auction_state == ParcelAuction::AuctionState_Sold)
+					row.has_sold_auction = true;
 			}
-			page_out += "</div>    \n";
 
-			page_out += " <a href=\"/admin_create_parcel_auction/" + parcel->id.toString() + "\">Create auction</a>";
-			page_out += " | <a href=\"/parcel/" + parcel->id.toString() + "\">Edit parcel</a>";
-			page_out += " | <a href=\"/admin_set_parcel_owner/" + parcel->id.toString() + "\">Set owner</a>";
-			page_out += " | <a href=\"/add_parcel_writer?parcel_id=" + parcel->id.toString() + "\">Manage editors</a>";
-			page_out += " | <form action=\"/admin_delete_parcel\" method=\"post\" style=\"display: inline;\">";
-			page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
-			page_out += "<input type=\"submit\" value=\"Delete parcel\" onclick=\"return confirm('Are you sure you want to delete parcel " + parcel->id.toString() + "?');\" >";
-			page_out += "</form>";
+			if(row.has_for_sale_auction) for_sale_count++;
+			if(row.has_sold_auction) sold_count++;
+			if(!row.has_any_auction) no_auction_count++;
 
-			page_out += "</p>\n";
-			page_out += "<br/>  \n";
+			bool include = true;
+			if(!query_filter.empty())
+			{
+				const std::string searchable = "parcel " + row.parcel->id.toString() + " " + row.owner_username + " " + row.parcel->description + " " + row.parcel->title;
+				include = containsCaseInsensitive(searchable, query_filter);
+			}
+			if(include && !owner_filter.empty())
+				include = containsCaseInsensitive(row.owner_username, owner_filter);
+
+			if(include)
+			{
+				if(auction_filter == "for_sale")
+					include = row.has_for_sale_auction;
+				else if(auction_filter == "sold")
+					include = row.has_sold_auction;
+				else if(auction_filter == "without_auction")
+					include = !row.has_any_auction;
+			}
+
+			if(include)
+				rows.push_back(row);
 		}
+
+		const double average_area = (total_parcels > 0) ? (total_area / (double)total_parcels) : 0.0;
+
+		page_out += "<div class=\"msb-kpi-grid\">";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Parcels total</div><div class=\"msb-kpi-value\">" + toString(total_parcels) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Filtered</div><div class=\"msb-kpi-value\" id=\"admin-parcel-filtered-count\">" + toString((int)rows.size()) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">For sale</div><div class=\"msb-kpi-value\">" + toString(for_sale_count) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Sold</div><div class=\"msb-kpi-value\">" + toString(sold_count) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Without auctions</div><div class=\"msb-kpi-value\">" + toString(no_auction_count) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">With screenshots</div><div class=\"msb-kpi-value\">" + toString(with_screenshots_count) + "</div></div>";
+		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Average area</div><div class=\"msb-kpi-value\">" + doubleToStringMaxNDecimalPlaces(average_area, 1) + " m^2</div></div>";
+		page_out += "</div>";
+
+		page_out += "<section class=\"grouped-region\">";
+		page_out += "<h3>Filters</h3>";
+		page_out += "<form action=\"/admin_parcels\" method=\"get\" class=\"msb-inline-form\">";
+		page_out += "<label for=\"admin-parcel-q\">Search</label>";
+		page_out += "<input id=\"admin-parcel-q\" type=\"text\" name=\"q\" value=\"" + web::Escaping::HTMLEscape(query_filter) + "\" placeholder=\"Parcel id / owner / title / description\">";
+		page_out += "<label for=\"admin-parcel-owner\">Owner</label>";
+		page_out += "<input id=\"admin-parcel-owner\" type=\"text\" name=\"owner\" value=\"" + web::Escaping::HTMLEscape(owner_filter) + "\" placeholder=\"username\">";
+		page_out += "<label for=\"admin-parcel-auction\">Auction</label>";
+		page_out += "<select id=\"admin-parcel-auction\" name=\"auction\">";
+		page_out += "<option value=\"all\"" + std::string(auction_filter == "all" ? " selected=\"selected\"" : "") + ">All</option>";
+		page_out += "<option value=\"for_sale\"" + std::string(auction_filter == "for_sale" ? " selected=\"selected\"" : "") + ">For sale</option>";
+		page_out += "<option value=\"sold\"" + std::string(auction_filter == "sold" ? " selected=\"selected\"" : "") + ">Sold</option>";
+		page_out += "<option value=\"without_auction\"" + std::string(auction_filter == "without_auction" ? " selected=\"selected\"" : "") + ">Without auction</option>";
+		page_out += "</select>";
+		page_out += "<input type=\"submit\" value=\"Apply\">";
+		page_out += "<a class=\"msb-quiet-link\" href=\"/admin_parcels\">Reset</a>";
+		page_out += "</form>";
+		page_out += "<div class=\"field-description\">Quick local filter (without reload):</div>";
+		page_out += "<input id=\"admin-parcel-local-filter\" type=\"text\" placeholder=\"Type to instantly filter current table\">";
+		page_out += "</section>";
+
+		page_out += "<section class=\"grouped-region\">";
+		page_out += "<h3>Bulk screenshot regenerate</h3>";
+		page_out += "<form action=\"/admin_regenerate_multiple_parcel_screenshots\" method=\"post\" class=\"msb-inline-form\">";
+		page_out += "<label for=\"admin-regen-start-id\">start parcel id</label>";
+		page_out += "<input id=\"admin-regen-start-id\" type=\"number\" name=\"start_parcel_id\" value=\"" + toString(0) + "\">";
+		page_out += "<label for=\"admin-regen-end-id\">end parcel id</label>";
+		page_out += "<input id=\"admin-regen-end-id\" type=\"number\" name=\"end_parcel_id\" value=\"" + toString(10) + "\">";
+		page_out += "<input type=\"submit\" value=\"Regenerate/recreate parcel screenshots\" onclick=\"return confirm('Are you sure you want to recreate parcel screenshots?');\" >";
+		page_out += "</form>";
+		page_out += "</section>";
+
+		page_out += "<section class=\"grouped-region\">";
+		page_out += "<h3>Create parcel</h3>";
+		page_out += "<form action=\"/admin_create_parcel\" method=\"post\" class=\"msb-create-parcel-form\" data-admin-create-parcel-form=\"1\">";
+		page_out += "<div class=\"field-description\">Configure where and how the parcel should be created.</div>";
+		page_out += "<label for=\"admin-create-world-name\">World (name or link)</label>";
+		page_out += "<input id=\"admin-create-world-name\" type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sub://... link. Leave empty for root world\">";
+		page_out += "<label for=\"admin-create-owner-username\">Owner username</label>";
+		page_out += "<input id=\"admin-create-owner-username\" type=\"text\" name=\"owner_username\" value=\"\" title=\"Username that will own the new parcel\">";
+		page_out += "<label for=\"admin-create-writer-usernames\">Editors usernames</label>";
+		page_out += "<input id=\"admin-create-writer-usernames\" type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated usernames with edit rights\">";
+		page_out += "<div class=\"msb-inline-fields\">";
+		page_out += "<label for=\"admin-create-origin-x\">Origin X</label>";
+		page_out += "<input id=\"admin-create-origin-x\" type=\"text\" name=\"origin_x\" value=\"0\" title=\"Parcel bottom-left X coordinate\">";
+		page_out += "<label for=\"admin-create-origin-y\">Origin Y</label>";
+		page_out += "<input id=\"admin-create-origin-y\" type=\"text\" name=\"origin_y\" value=\"0\" title=\"Parcel bottom-left Y coordinate\">";
+		page_out += "</div>";
+		page_out += "<div class=\"msb-inline-fields\">";
+		page_out += "<label for=\"admin-create-size-x\">Size X</label>";
+		page_out += "<input id=\"admin-create-size-x\" type=\"text\" name=\"size_x\" value=\"16\" title=\"Parcel width on X axis\">";
+		page_out += "<label for=\"admin-create-size-y\">Size Y</label>";
+		page_out += "<input id=\"admin-create-size-y\" type=\"text\" name=\"size_y\" value=\"16\" title=\"Parcel width on Y axis\">";
+		page_out += "</div>";
+		page_out += "<div class=\"msb-inline-fields\">";
+		page_out += "<label for=\"admin-create-min-z\">Min Z</label>";
+		page_out += "<input id=\"admin-create-min-z\" type=\"text\" name=\"min_z\" value=\"-1\" title=\"Minimum parcel build height\">";
+		page_out += "<label for=\"admin-create-max-z\">Max Z</label>";
+		page_out += "<input id=\"admin-create-max-z\" type=\"text\" name=\"max_z\" value=\"4\" title=\"Maximum parcel build height\">";
+		page_out += "</div>";
+		page_out += "<div class=\"msb-live-preview\" data-parcel-live-preview=\"1\">";
+		page_out += "<div class=\"msb-live-item\">Area: <b data-preview-area>256.0</b> m<sup>2</sup></div>";
+		page_out += "<div class=\"msb-live-item\">Height: <b data-preview-height>5.0</b> m</div>";
+		page_out += "<div class=\"msb-live-item\">Build volume: <b data-preview-volume>1280.0</b> m<sup>3</sup></div>";
+		page_out += "</div>";
+		page_out += "<input type=\"submit\" value=\"Create new parcel\" title=\"Create a parcel in selected world using these coordinates\" onclick=\"return confirm('Create parcel with these settings?');\" >";
+		page_out += "</form>";
+		page_out += "</section>";
+
+		page_out += "<section class=\"grouped-region\">";
+		page_out += "<h3>Parcels list</h3>";
+		page_out += "<div class=\"msb-table-wrap\">";
+		page_out += "<table class=\"msb-table msb-parcels-table\" aria-label=\"Root world Parcels table\">";
+		page_out += "<thead><tr><th>ID</th><th>Owner</th><th>Description</th><th>Size</th><th>Z-bounds</th><th>Area</th><th>Screens</th><th>Auction</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
+
+		for(size_t i=0; i<rows.size(); ++i)
+		{
+			const ParcelRow& row = rows[i];
+			const Parcel* parcel = row.parcel;
+
+			std::string auction_state;
+			if(row.has_for_sale_auction)
+				auction_state = "<span class=\"feature-enabled\">for sale</span>";
+			else if(row.has_sold_auction)
+				auction_state = "<span class=\"feature-disabled\">sold</span>";
+			else if(row.has_any_auction)
+				auction_state = "history";
+			else
+				auction_state = "none";
+
+			const std::string searchable = toLowerASCII(parcel->id.toString() + " " + row.owner_username + " " + parcel->description + " " + parcel->title);
+
+			page_out += "<tr data-row-search=\"" + web::Escaping::HTMLEscape(searchable) + "\">";
+			page_out += "<td><a href=\"/parcel/" + parcel->id.toString() + "\">" + parcel->id.toString() + "</a></td>";
+			page_out += "<td>" + web::Escaping::HTMLEscape(row.owner_username) + "</td>";
+			page_out += "<td>" + web::Escaping::HTMLEscape(parcel->description.empty() ? std::string("-") : parcel->description.substr(0, 140)) + "</td>";
+			page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " × " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
+			page_out += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
+			page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.area, 1) + " m²</td>";
+			page_out += "<td>" + toString((int)parcel->screenshot_ids.size()) + "</td>";
+			page_out += "<td>" + auction_state + "</td>";
+			page_out += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
+			page_out += "<td><div class=\"msb-row-actions\">";
+			page_out += "<a href=\"/admin_create_parcel_auction/" + parcel->id.toString() + "\">Create auction</a>";
+			page_out += "<a href=\"/parcel/" + parcel->id.toString() + "\">Edit parcel</a>";
+			page_out += "<a href=\"/admin_set_parcel_owner/" + parcel->id.toString() + "\">Set owner</a>";
+			page_out += "<a href=\"/add_parcel_writer?parcel_id=" + parcel->id.toString() + "\">Manage editors</a>";
+			page_out += "<form action=\"/admin_delete_parcel\" method=\"post\" style=\"display: inline;\">";
+			page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+			page_out += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Are you sure you want to delete parcel " + parcel->id.toString() + "?');\" >";
+			page_out += "</form>";
+			page_out += "</div></td>";
+			page_out += "</tr>\n";
+		}
+
+		page_out += "</tbody></table></div>";
+		page_out += "<div id=\"admin-parcels-visible-count\" class=\"field-description\">Showing " + toString((int)rows.size()) + " parcel(s) after server-side filters.</div>";
+		page_out += "</section>";
 	} // End Lock scope
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
@@ -1548,7 +1800,8 @@ void renderSetParcelOwnerPage(ServerAllWorldsState& world_state, const web::Requ
 
 			page_out += "<form action=\"/admin_set_parcel_owner_post\" method=\"post\">";
 			page_out += "parcel id: <input type=\"number\" name=\"parcel_id\" value=\"" + parcel_id.toString() + "\"><br>";
-			page_out += "new owner id: <input type=\"number\" name=\"new_owner_id\" value=\"" + parcel->owner_id.toString() + "\"><br>";
+			page_out += "new owner (id or username): <input type=\"text\" name=\"new_owner_ref\" value=\"" + parcel->owner_id.toString() + "\"><br>";
+			page_out += "<small>Examples: 42 or Mr.Admin</small><br/>";
 			page_out += "<input type=\"submit\" value=\"Change owner\">";
 			page_out += "</form>";
 		}
@@ -1569,7 +1822,7 @@ void handleSetParcelOwnerPost(ServerAllWorldsState& world_state, const web::Requ
 	try
 	{
 		const int parcel_id    = request.getPostIntField("parcel_id");
-		const int new_owner_id = request.getPostIntField("new_owner_id");
+		const std::string new_owner_ref = stripHeadAndTailWhitespace(request.getPostField("new_owner_ref").str());
 
 		{ // Lock scope
 
@@ -1584,20 +1837,26 @@ void handleSetParcelOwnerPost(ServerAllWorldsState& world_state, const web::Requ
 				// Found user for username
 				Parcel* parcel = res->second.ptr();
 
-				parcel->owner_id = UserID(new_owner_id);
+				std::string resolve_error;
+				UserID new_owner_id;
+				if(!resolveUserIDFromRef(world_state, new_owner_ref, new_owner_id, resolve_error))
+					throw glare::Exception(resolve_error);
+
+				parcel->owner_id = new_owner_id;
 
 				// Set parcel admins and writers to the new user as well.
-				parcel->admin_ids  = std::vector<UserID>(1, UserID(new_owner_id));
-				parcel->writer_ids = std::vector<UserID>(1, UserID(new_owner_id));
+				parcel->admin_ids  = std::vector<UserID>(1, new_owner_id);
+				parcel->writer_ids = std::vector<UserID>(1, new_owner_id);
 				world_state.getRootWorldState()->addParcelAsDBDirty(parcel, lock);
 
 				world_state.denormaliseData(); // Update denormalised data which includes parcel owner name
 
 				world_state.markAsChanged();
+				const std::string owner_name = getUserNameForID(world_state, new_owner_id);
 				world_state.addAdminAuditLogEntry(
 					logged_in_user->id,
 					logged_in_user->name,
-					"Changed owner for parcel " + toString(parcel_id) + " to user " + toString(new_owner_id) + ".");
+					"Changed owner for parcel " + toString(parcel_id) + " to user " + new_owner_id.toString() + " (" + owner_name + ").");
 
 				web::ResponseUtils::writeRedirectTo(reply_info, "/parcel/" + toString(parcel_id));
 			}

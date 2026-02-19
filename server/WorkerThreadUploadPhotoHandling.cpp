@@ -207,6 +207,92 @@ void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* serv
 		socket->writeUInt32(Protocol::PhotoUploadSucceeded);
 		socket->flush();
 
+		// Post photo to Telegram channel, if configured in server credentials.
+		// This allows all client installs to upload without storing Telegram bot secrets locally.
+		{
+			auto getOptionalCred = [&](const char* key, std::string& out)
+			{
+				if(server->world_state->credentialExists(key))
+				{
+					out = server->world_state->getCredential(key);
+					return true;
+				}
+				return false;
+			};
+
+			std::string bot_token;
+			std::string chat_id;
+			// Support both "telegram/..." (matches client settings key names) and "telegram_..." (no slash) variants.
+			getOptionalCred("telegram/bot_token", bot_token) || getOptionalCred("telegram_bot_token", bot_token);
+			getOptionalCred("telegram/photo_upload_chat_id", chat_id) || getOptionalCred("telegram_photo_upload_chat_id", chat_id);
+
+			if(!bot_token.empty() && !chat_id.empty())
+			{
+				try
+				{
+					// Telegram photo caption limit is 1024 characters. (We keep it simple and clamp bytes.)
+					std::string telegram_caption = caption;
+					if(telegram_caption.size() > 1024)
+						telegram_caption.resize(1024);
+
+					const std::string boundary = "------------------------metasiberia_" + random_path_hex_str;
+
+					std::string body;
+					body.reserve(1024 + telegram_caption.size() + data.size());
+
+					auto appendField = [&](const char* name, const std::string& value)
+					{
+						body += "--" + boundary + "\r\n";
+						body += "Content-Disposition: form-data; name=\"";
+						body += name;
+						body += "\"\r\n\r\n";
+						body += value;
+						body += "\r\n";
+					};
+
+					appendField("chat_id", chat_id);
+					if(!telegram_caption.empty())
+						appendField("caption", telegram_caption);
+
+					// Photo part
+					body += "--" + boundary + "\r\n";
+					body += "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n";
+					body += "Content-Type: image/jpeg\r\n\r\n";
+					body.append((const char*)data.data(), data.size());
+					body += "\r\n--" + boundary + "--\r\n";
+
+					HTTPClientRef client = new HTTPClient();
+					client->additional_headers.push_back("User-Agent: Metasiberia server");
+
+					const std::string url = "https://api.telegram.org/bot" + bot_token + "/sendPhoto";
+
+					std::string response_body;
+					HTTPClient::ResponseInfo response = client->sendPost(
+						url,
+						body,
+						"multipart/form-data; boundary=" + boundary,
+						response_body
+					);
+
+					if(response.response_code != 200 || (response_body.find("\"ok\":true") == std::string::npos))
+					{
+						std::string snippet = response_body;
+						if(snippet.size() > 4000)
+							snippet = snippet.substr(0, 4000);
+						throw glare::Exception("Telegram API returned HTTP " + toString(response.response_code) + ". Response: " + snippet);
+					}
+
+					conPrint("Posted photo to Telegram.");
+				}
+				catch(glare::Exception& e)
+				{
+					conPrint("handlePhotoUploadConnection: Error while doing Telegram photo post: " + e.what());
+				}
+			}
+			else
+				conPrint("Skipping posting photo to telegram channel as telegram credentials not set.");
+		}
+
 
 		// Post the photo URL on the photo discord channel
 		if(server->world_state->credentialExists("discord_photo_webhook_URL"))

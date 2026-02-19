@@ -164,7 +164,9 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 
 	this->customCacheDirFileSelectWidget->setEnabled(use_custom_cache_dir);
 
-	this->startLocationURLLineEdit->setText(						settings->value(startLocationURLKey()).toString());
+	QString start_location_url = settings->value(startLocationURLKey()).toString();
+	start_location_url.replace("sub://89.104.70.23", "sub://vr.metasiberia.com");
+	this->startLocationURLLineEdit->setText(start_location_url);
 
 
 	const auto dev_names = getAudioInputDeviceNames();
@@ -200,7 +202,9 @@ void MainOptionsDialog::accepted()
 
 	settings->setValue(customCacheDirKey(),							this->customCacheDirFileSelectWidget->filename());
 
-	settings->setValue(startLocationURLKey(),						this->startLocationURLLineEdit->text());
+	QString start_location_url = this->startLocationURLLineEdit->text();
+	start_location_url.replace("sub://89.104.70.23", "sub://vr.metasiberia.com");
+	settings->setValue(startLocationURLKey(), start_location_url);
 
 	settings->setValue(inputDeviceNameKey(),						this->inputDeviceComboBox->currentText());
 	settings->setValue(inputScaleFactorNameKey(),					this->inputVolumeScaleHorizontalSlider->value());

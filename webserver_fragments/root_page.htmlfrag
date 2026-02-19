@@ -1,5 +1,7 @@
 <div class="msb-root-hero">
+	<div class="msb-root-hero-pretitle">This is the admin site.</div>
 	<div class="msb-root-hero-title">metasiberia</div>
+	<div class="msb-root-hero-subtitle">Metaverse from Siberia</div>
 </div>
 
 <div class="msb-root-hero-links">
