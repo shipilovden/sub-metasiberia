@@ -73,6 +73,7 @@ private:
 	void updateWidgetPositions();
 	void setTileOverlayObjectTransforms();
 	Vec2f mapUICoordsForWorldSpacePos(const Vec3d& pos);
+	Vec2f computeMiniMapDims() const;
 	float computeMiniMapWidth();
 	float computeMiniMapTopMargin();
 

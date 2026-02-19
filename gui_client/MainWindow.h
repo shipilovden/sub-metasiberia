@@ -63,6 +63,7 @@ private slots:;
 	void on_actionAdd_Voxels_triggered();
 	void on_actionAdd_Spotlight_triggered();
 	void on_actionAdd_Portal_triggered();
+	void on_actionAdd_to_Favorites_triggered();
 	void on_actionAdd_Web_View_triggered();
 	void on_actionAdd_Video_triggered();
 	void on_actionAdd_Audio_Source_triggered();
@@ -156,6 +157,7 @@ private slots:;
 	void handleURL(const QUrl& url);
 	void openServerScriptLogSlot();
 	void on_webcamEnableCheckBox_toggled(bool checked);
+	void updateFavoritesMenu();
 public:
 	bool connectedToUsersWorldOrGodUser();
 	void webViewMouseDoubleClicked(QMouseEvent* e);
@@ -168,6 +170,7 @@ private:
 	virtual void closeEvent(QCloseEvent* event) override;
 	virtual void timerEvent(QTimerEvent* event) override;
 	virtual void changeEvent(QEvent *event) override;
+	virtual bool eventFilter(QObject* obj, QEvent* event) override;
 	void startMainTimer();
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);

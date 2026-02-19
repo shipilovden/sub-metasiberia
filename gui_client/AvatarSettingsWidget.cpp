@@ -9,6 +9,7 @@ Dock-friendly Avatar settings UI (Qt).
 #include "AnimationManager.h"
 #include "GUIClient.h"
 #include "ModelLoading.h"
+#include "VRoidAuthFlow.h"
 #include "../shared/ResourceManager.h"
 #include "../indigo/TextureServer.h"
 #include "../qt/QtUtils.h"
@@ -18,6 +19,7 @@ Dock-friendly Avatar settings UI (Qt).
 #include "../utils/FileUtils.h"
 
 #include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 
 
@@ -51,7 +53,8 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 	gui_client(gui_client_),
 	make_main_gl_context_current(std::move(make_main_gl_context_current_)),
 	done_initial_load(false),
-	pre_ob_to_world_matrix(Matrix4f::identity())
+	pre_ob_to_world_matrix(Matrix4f::identity()),
+	vroid_auth_flow(nullptr)
 {
 	setupUi(this);
 
@@ -64,6 +67,10 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 	this->createReadyPlayerMeLabel->setOpenExternalLinks(true);
 
 	this->avatarPreviewGLWidget->init(base_dir_path, settings_, texture_server);
+	// Restore main GL context after preview widget init.
+	this->avatarPreviewGLWidget->doneCurrent();
+	if(make_main_gl_context_current)
+		make_main_gl_context_current();
 
 	{
 		SignalBlocker b(this->avatarSelectWidget);
@@ -79,6 +86,72 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 
 	if(QPushButton* close_btn = this->buttonBox->button(QDialogButtonBox::Close))
 		connect(close_btn, SIGNAL(clicked()), this, SLOT(onCloseClicked()));
+
+	// VRoid tab.
+	vroid_auth_flow = new VRoidAuthFlow(settings, this);
+	this->vroidFetchModelsButton->setEnabled(false);
+	this->vroidLogoutButton->setEnabled(false);
+
+	connect(this->vroidLoginButton, &QPushButton::clicked, this, [this]()
+	{
+		if(vroid_auth_flow)
+			vroid_auth_flow->startLogin();
+	});
+
+	connect(this->vroidLogoutButton, &QPushButton::clicked, this, [this]()
+	{
+		if(vroid_auth_flow)
+			vroid_auth_flow->logout();
+		this->vroidModelsListWidget->clear();
+		this->vroidFetchModelsButton->setEnabled(false);
+		this->vroidLogoutButton->setEnabled(false);
+		this->vroidStatusLabel->setText("VRoid: not logged in");
+	});
+
+	connect(this->vroidFetchModelsButton, &QPushButton::clicked, this, [this]()
+	{
+		if(vroid_auth_flow)
+			vroid_auth_flow->fetchMyCharacterModels();
+	});
+
+	connect(vroid_auth_flow, &VRoidAuthFlow::statusChanged, this, [this](const QString& s)
+	{
+		this->vroidStatusLabel->setText(s);
+	});
+
+	connect(vroid_auth_flow, &VRoidAuthFlow::loginSucceeded, this, [this]()
+	{
+		this->vroidFetchModelsButton->setEnabled(true);
+		this->vroidLogoutButton->setEnabled(true);
+	});
+
+	connect(vroid_auth_flow, &VRoidAuthFlow::loginFailed, this, [this](const QString& err)
+	{
+		this->vroidStatusLabel->setText("VRoid: login failed");
+		QMessageBox::warning(this, "VRoid", err);
+	});
+
+	connect(vroid_auth_flow, &VRoidAuthFlow::modelsUpdated, this, [this](const QStringList& items)
+	{
+		this->vroidModelsListWidget->clear();
+		this->vroidModelsListWidget->addItems(items);
+	});
+
+	connect(vroid_auth_flow, &VRoidAuthFlow::modelsFailed, this, [this](const QString& err)
+	{
+		QMessageBox::warning(this, "VRoid", err);
+	});
+
+	if(vroid_auth_flow->hasAccessToken())
+	{
+		this->vroidStatusLabel->setText("VRoid: logged in.");
+		this->vroidFetchModelsButton->setEnabled(true);
+		this->vroidLogoutButton->setEnabled(true);
+	}
+	else
+	{
+		this->vroidStatusLabel->setText("VRoid: not logged in");
+	}
 
 	// Drive preview redraw and initial load.
 	connect(&tick_timer, SIGNAL(timeout()), this, SLOT(onTick()));
@@ -96,12 +169,20 @@ void AvatarSettingsWidget::shutdownGL()
 {
 	// Make sure we have set the widget gl context to current as we destroy OpenGL stuff.
 	if(this->avatarPreviewGLWidget)
+	{
 		this->avatarPreviewGLWidget->makeCurrent();
+	}
 
 	preview_gl_ob = NULL;
 
 	if(this->avatarPreviewGLWidget)
+	{
 		this->avatarPreviewGLWidget->shutdown();
+		this->avatarPreviewGLWidget->doneCurrent();
+	}
+
+	if(make_main_gl_context_current)
+		make_main_gl_context_current();
 }
 
 
@@ -156,13 +237,20 @@ void AvatarSettingsWidget::onCloseClicked()
 
 void AvatarSettingsWidget::onTick()
 {
-	avatarPreviewGLWidget->makeCurrent();
+	if(!avatarPreviewGLWidget)
+		return;
 
+	avatarPreviewGLWidget->makeCurrent();
+	{
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-	avatarPreviewGLWidget->update();
+		avatarPreviewGLWidget->update();
 #else
-	avatarPreviewGLWidget->updateGL();
+		avatarPreviewGLWidget->updateGL();
 #endif
+	}
+	avatarPreviewGLWidget->doneCurrent();
+	if(make_main_gl_context_current)
+		make_main_gl_context_current();
 
 	// Once the OpenGL widget has initialised, we can add the model.
 	if(avatarPreviewGLWidget->opengl_engine.nonNull() && avatarPreviewGLWidget->opengl_engine->initSucceeded() && !done_initial_load)
@@ -203,6 +291,18 @@ void AvatarSettingsWidget::loadModelIntoPreview(const std::string& local_path, b
 		local_path;
 
 	this->avatarPreviewGLWidget->makeCurrent();
+	struct ContextRestore
+	{
+		AvatarSettingsWidget* self;
+		~ContextRestore()
+		{
+			if(self->avatarPreviewGLWidget)
+				self->avatarPreviewGLWidget->doneCurrent();
+			if(self->make_main_gl_context_current)
+				self->make_main_gl_context_current();
+		}
+	} context_restore{ this };
+
 	this->pre_ob_to_world_matrix = Matrix4f::identity();
 
 	try

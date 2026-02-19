@@ -298,40 +298,21 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 void renderTermsOfUse(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
-	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Substrata");
+	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Условия использования");
 
-	page += "<h1>Terms of Service</h1>";
+	page += "<h1>Metasiberia</h1>";
+	page += "<h2>Условия обслуживания</h2>";
+	page += "<p>Эти условия обслуживания применяются к веб-сайту metasiberia (по адресу vr.metasiberia.com) и виртуальному миру Metasiberia, который размещен на серверах Reg.ru и доступен через клиентское программное обеспечение.</p>";
+	page += "<p>Они вместе составляют «Сервис».</p>";
 
-	
-
-	page += "<h2>Overview</h2>";
-
-	page += "These terms of service apply to the Substrata website (at substrata.info) and the Substrata virtual world, which is hosted on the Substrata servers and accessed via the Substrata client software.  "
-		"These together constitute the \"Service\"";
-
-	page += "<h2>General conditions</h2>";
-
-	page += "<p>By accessing or using the Service you agree to be bound by these Terms. If you disagree with any part of the terms then you may not access the Service.</p>";
-
-	page += "<p>We reserve the right to refuse service to any one at any time, for any reason.</p>";
-
-	page += "<h2>Changes to terms of service</h2>";
-
-	page += "We reserve the right to change the terms of service.";
-
-	page += "<h2>Parcel ownership</h2>";
-
-	page += "<p>'Not-safe-for-work' parcel content is not currently allowed.  This includes sexual content and violence.</p>";
-
-	page += "<p>Content that is illegal in Germany, New Zealand, or the USA is not allowed</p>";
-
-	page += "<p>Parcel content must not severely and adversely affect the performance or functioning of the Substrata server(s) or client.  (For example, do not upload models with excessive polygon counts or texture resolution)</p>";
-
-	page += "<p>Do not deliberately attempt to crash or degrade the functioning of the server or other users' clients.</p>";
-
-	page += "<h2>Governing law</h2>";
-
-	page += "These Terms of Service shall be governed by and construed in accordance with the laws of New Zealand.";
+	page += "<h2>Общие условия</h2>";
+	page += "<p>Получая доступ или используя «Сервис», вы соглашаетесь соблюдать эти Условия.</p>";
+	page += "<p>Если вы не согласны с какой-либо частью условий, вы не можете получить доступ к Сервису.</p>";
+	page += "<p>Не допускается порнография и насилие.</p>";
+	page += "<p>Содержимое парселя не должно серьезно и неблагоприятно влиять на производительность или функционирование сервера(ов) Metasiberia или клиента. (Например, не загружайте модели с чрезмерным количеством полигонов или разрешением текстур)</p>";
+	page += "<p>Не пытайтесь намеренно вывести из строя или ухудшить работу сервера или клиентов других пользователей.</p>";
+	page += "<p>Мы оставляем за собой право отказать в обслуживании любому человеку в любое время и по любой причине.</p>";
+	page += "<p>Мы оставляем за собой право изменять условия обслуживания.</p>";
 
 
 	page += WebServerResponseUtils::standardFooter(request_info, true);
@@ -393,346 +374,79 @@ void renderAboutParcelSales(ServerAllWorldsState& world_state, const web::Reques
 
 void renderFAQ(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
-	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"General questions about Substrata");
+	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Основные вопросы о Metasiberia");
 
-	page += 
-		
-"	<p><b>What is																										"
-"	Substrata? Where can I find more information about this project?</b></p>											"
-"	<p>Substrata is a free, online 3D																					"
-"	metaverse, where users can explore, chat, play and build. 															"
-"	</p>																												"
-"	<p>																													"
-"	You can find more information at this page on our website:															"
-"	<a href=\"https://substrata.info/about_substrata\">about Substrata</a>							"
-"	</p>																												"
-"	<p><br/>																											"
-"																														"
-"	</p>																												"
-"	<p><b>Is there a																									"
-"	roadmap?</b></p>																									"
-"																												"
-"	<p>																													"
-"	There is not a formal roadmap, but you can read about some of the													"
-"	goals for the project on this page:																					"
-"	<a href=\"https://substrata.info/about_substrata\">about Substrata</a>							"
-"	</p>																												"
-"	<p><br/>																											"
-"																														"
-"	</p>																												"
-"	<p><b>Who is behind																									"
-"	Substrata?</b></p>																									"
-"																												"
-"	<p><span>The																										"
-"	company behind Substrata is <a href=\"https://www.glaretechnologies.com/\">Glare										"
-"	Technologies Limited</a>. We are also the developers of </span>														"
-"	<a href=\"https://www.indigorenderer.com/\">Indigo Renderer</a> and													"
-"	<a href=\"https://www.chaoticafractals.com/\">Chaotica Fractals</a>. 													"
-"	</p>																												"
-"	<p><br/>																											"
-"																														"
-"	</p>																												"
-"	<p>																													"
-"	<b>You say Substrata is a &lsquo;metaverse&rsquo;.</b> <b>What does													"
-"	that mean?</b></p>																									"
-"	<p>																													"
-"	We are aiming for Substrata to become one of the most important, and												"
-"	maybe the dominant 3D metaverse on the internet &ndash; just like the												"
-"	Web is the dominant '2D metaverse' today. 																			"
-"	</p>																												"
-"	<p><span>The																										"
-"	main</span> world on substrata.info is where new users will join the												"
-"	world. The centre of this world will be like a town square or forum. 												"
-"	</p>																												"
-"	<p>Each user also has their own personal world, which anyone can													"
-"	visit, at sub://substrata.info/username in the Substrata client														"
-"	software. Users can upload and build whatever they want in there													"
-"	(with some disk usage limits etc..)</p>																				"
-"	<p>In future you will																								"
-"	be able to run some server software on your own server, to serve data												"
-"	for your substrata.info parcel. 																					"
-"	</p>																												"
-"	<p><span>Therefore																									"
-"	the &lsquo;metaverse&rsquo; label refers to this </span><span>future												"
-"	roadmap to have a series of interlinked worlds contained within														"
-"	Substrata, with users having the option of running their own														"
-"	Substrata servers.</span></p>																						"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
-"	<p><b>What is the link																								"
-"	between Substrata and CryptoVoxels?</b></p>																			"
-"	<p>We are currently embedding a snapshot																			"
-"	of the <a href=\"https://www.cryptovoxels.com/\">CryptoVoxels</a> world												"
-"	in Substrata, for testing and fun purposes!<b> </b>																	"
-"	</p>																												"
-"	<p>To explore the CryptoVoxels world, just install and run Substrata,												"
-"	and then select from the menu bar: <span>Go																			"
-"	&gt; Go to CryptoVoxels World</span> 																				"
-"	</p>																												"
-"	<p>																													"
-"	Note, this is a snapshot of the CryptoVoxels world and is likely to													"
-"	be out of date.</p>																									"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
+	page += "<h1>Основные вопросы о Metasiberia</h1>";
 
-"	<h1>Buying, selling and sharing ownership of														"
-"	Substrata parcels</h1>																								"
-"	<p><b>How can I buy a																								"
-"	Substrata parcel?</b></p>																							"
-																											
-"	<p>																													"
-"	Parcels will be regularly available for sale on the Substrata website												"
-"	and on OpenSea. The best way to learn about upcoming sales is to													"
-"	follow Substrata on Twitter and the parcel sale announcement channel												"
-"	on Discord.</p>																										"
-																											
-"	<p>																													"
-"	If there are no auctions running at the moment, you could also try													"
-"	and purchase a parcel in the secondary market on OpenSea.</p>														"
-"	<p><br/>																											"
-"																														"
-"	</p>																												"
-"	<p><b>Is Substrata																									"
-"	built on the blockchain?</b></p>																					"
-																											
-"	<p>																													"
-"	By default, parcels in Substrata are not NFTs. However, once you own												"
-"	a parcel you can request that your parcel be minted as an Ethereum													"
-"	NFT.</p>																											"
-																											
-"	<p>																													"
-"	In addition, we sometimes mint the parcels as NFTs from the beginning												"
-"	and then auction them on OpenSea.</p>																				"
-																											
-"	<p>																													"
-"	Therefore, parcels for sale on the Substrata website will not be NFTs												"
-"	(but can be made into NFTs on request), whereas parcels for sale on													"
-"	OpenSea will already be NFTs.</p>																					"
-"	<p><br/>																											"
-"																														"
-"	</p>																												"
-"	<p><b>How to mint a																									"
-"	parcel you own as an NFT</b></p>																					"
-																											
-"	<p>																													"
-"	1) Log into your existing account at the Substrata website:															"
-"	<a href=\"https://substrata.info/account\">account</a></p>										"
-"	<p>																													"
-"	2) In the parcels section you should see the parcels you own listed.</p>											"
-"	<p>																													"
-"	3) With Metamask installed in your web browser, link your Substrata													"
-"	account to your eth address. You do this by signing a message with													"
-"	Metamask.</p>																										"
-"																										"
-"	<p>																													"
-"	4) Navigate to the parcel you want to create as an NFT in the account												"
-"	section. Click that you want to mint the parcel as an NFT. You do not												"
-"	need to pay the eth gas fee for minting the NFT &ndash; that will be												"
-"	covered by Substrata.</p>																							"
-"																												"
-"	<p>																													"
-"	5) The request to mint the NFT will be added to the Substrata queue.												"
-"	You&rsquo;ll need to wait for the NFT to be minted by Nick. Note,													"
-"	this is still a semi-manual process so there may be a delay.</p>													"
-"																												"
-"	<p>																													"
-"	6) Once the minting process is complete, the eth address linked to													"
-"	your substrata account will be assigned as the owner of the Substrata												"
-"	parcel. The parcel should appear on the OpenSea account for your eth												"
-"	address.</p>																										"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
-"	<p><b>How do I claim																								"
-"	ownership of an NFT I bought in Substata itself? </b>																"
-"	</p>																												"
-"																												"
-"	<p>																													"
-"	1) Log in to your account (or create one) at the Substrata website:													"
-"	<a href=\"https://substrata.info/account\">account</a></p>										"
-"	<p>																													"
-"	2) If you haven&rsquo;t already, link your Substrata account to the													"
-"	eth address you control which owns the Substrata NFT. To do this													"
-"	you&rsquo;ll need Metamask installed in your web browser, and to then												"
-"	sign a message to prove you own the eth address.</p>																"
-"	<p>																													"
-"	3) Go to <a href=\"https://substrata.info/prove_parcel_owner_by_nft\">prove parcel owner by nft</a>					"
-"	The website should display your linked eth address if you have														"
-"	successfully linked your Substrata account to your eth address.</p>													"
-"	<p>												"
-"	4) Type in the parcel number you own as an NFT (e.g. 151) and click													"
-"	the claim parcel button. Wait a few seconds for the process to work.												"
-"	Once the process is complete, the parcel should be listed on the													"
-"	account page.</p>																									"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
+	page += "<h2>Что такое Metasiberia?</h2>";
+	page += "<p>Metasiberia — это метавселеная. Здесь пользователи могут исследовать бескрайние просторы, общаться, играть и создавать свои уникальные территории в метавселенной.</p>";
 
-"	<p><b>How do I update																								"
-"	the screenshots for my parcel on the Substrata website/Opensea?</b></p>												"
-"	<p>																													"
-"	1) Log into your existing account at the Substrata website:															"
-"	<a href=\"https://substrata.info/account\">account</a></p>										"
-"	<p>																													"
-"	2) In the parcels section you should see the parcels you own listed.												"
-"	Click on the parcel for which you want the screenshot to be updated.</p>											"
-"	<p>																													"
-"	3) Near the bottom of the page you will see &lsquo;Parcel owner														"
-"	tools&rsquo;. Click &lsquo;regenerate screenshots&rsquo;.</p>														"
-"	<p>																													"
-"	4) Wait a few minutes. The images should then update on both the													"
-"	Substrata website and OpenSea.</p>																					"
-"	<p>																													"
-"	Note: the screenshotting process is done by the Screenshot bot. If													"
-"	the process isn&rsquo;t working you can check the status of the bot:												"
-"	<a href=\"https://substrata.info/bot_status\">bot status</a>									"
-"	</p>																												"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
-"	<p><b>How do I update																								"
-"	the description of my parcel on the Substrata website?</b></p>														"
-"	<p>																													"
-"	1) Log into your existing account at the Substrata website:															"
-"	<a href=\"https://substrata.info/account\">account</a></p>										"
-"	<p>												"
-"	2) In the parcels section you should see the parcels you own listed.												"
-"	Click on the parcel for which you want the description to be updated.</p>											"
-"	<p>																													"
-"	3) Click &lsquo;Edit description&rsquo; and input your changes.</p>													"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
-"	<p><b>Is it possible to																								"
-"	share ownership of parcels in Substrata?</b></p>																	"
-"	<p><span>Yes,																										"
-"	it is possible to add other users as &lsquo;writers&rsquo; of your													"
-"	parcel. </span><span>This means the user																			"
-"	</span>will be able to create, edit and delete objects in your														"
-"	parcel. 																											"
-"	</p>																												"
-"	<p>																													"
-"	1) Log into your existing account at the Substrata website:															"
-"	<a href=\"https://substrata.info/account\">account</a></p>										"
-"	<p>																													"
-"	2) On your user page, navigate to the parcel you want to share.</p>													"
-"	<p>																													"
-"	3) Click &lsquo;add writer&rsquo; and input the Substrata username of												"
-"	the user you want to add as a writer for your parcel.</p>															"
-"	<p>																													"
-"	Another option is you can make your parcel temporarily or permanently												"
-"	&lsquo;All Writeable&rsquo; so that any user can add, edit and delete												"
-"	objects in your parcel. To do this, select your parcel in world and													"
-"	in the object editor check the &lsquo;All Writeable&rsquo; box.</p>													"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
-"	<h1>Building and creating in Substrata</h1>															"
-"	<p><b>How do I create																								"
-"	objects in Substrata?</b></p>																						"
-"	<p>																													"
-"	To create an object in the main world you need to either be in a													"
-"	parcel you own or the sandbox (parcel #20). Alternatively you could													"
-"	create objects in your personal world where there are no															"
-"	restrictions.</p>																									"
-"	<p>																													"
-"	There are two ways to create models. In the client you can either													"
-"	select &lsquo;Add Model / Image / Video&rsquo; and follow the														"
-"	dialogue prompts. Or you can create a model inside Substrata using													"
-"	voxels by selecting &lsquo;Add Voxels&rsquo; (see the following														"
-"	question for more information).</p>																					"
-"	<p>																													"
-"	<span>Supported model formats are:													"
-"	OBJ, GLTF, GLB, VOX, STL and IGMESH</span></p>																		"
-"	<p>																													"
-"	<span>Supported image formats are:													"
-"	JPG, PNG, GIF, TIF, EXR, KTX, KTX2</span></p>																"
-"	<p>																													"
-"	<span>Supported video formats are:													"
-"	MP4</span></p>																										"
-"	<p>																													"
-"	<span>Note: please do not add models												"
-"	with a very large number of polygons, or with large file sizes (including												"
-"	textures), as it may cause performance issues for other users.</span></p>											"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
-"	<p><b>How do voxels																									"
-"	work in Substrata?</b></p>																							"
-"	<p>																													"
-"	<span>You can either add a voxel													"
-"	created outside Substrata (i.e. add a 3d model in one of the														"
-"	supported formats), or create a voxel inside Substrata itself.</span></p>											"
-"	<p>																													"
-"	<span>To create a voxel in Subsrata													"
-"	move to a parcel where you have edit privileges and click &lsquo;Add												"
-"	Voxels&rsquo; &ndash; this creates the first block (a grey cube). A													"
-"	help box should pop up with extra information on how to edit voxels.</span></p>										"
-"	<p>																													"
-"	<span>The main thing to know is that												"
-"	once you&rsquo;ve selected the voxel you can &lsquo;Ctrl +															"
-"	left-click&rsquo; to add a voxel on the surface of the cube you click												"
-"	on. When you hold down Ctrl and hover over a voxel you will see a													"
-"	preview of where the new voxel will appear when you click.</span></p>												"
-"	<p>																													"
-"	<span>Note voxels do not have to													"
-"	remain a perfect cube. You can amend the dimensions of the voxel by													"
-"	tweaking the &lsquo;Scale&rsquo; of the object in the Editor box.</span></p>										"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
-"	<p><b>How do I animate																								"
-"	objects in Substrata?</b></p>																						"
-"	<p><span>Scripting in the Substrata																					"
-"	metaverse is currently done with the <a href=\"https://github.com/glaretechnologies/winter\">Winter					"
-"	programming language</a>. You can read more on the Substrata website												"
-"	<a href=\"/about_scripting\">about scripting</a>							"
-"	</span>																												"
-"	</p>																												"
-"	<p><span>In																											"
-"	short, t</span>o make a script for an object, you edit code in the													"
-"	'Script' text edit box in the object editor in the Substrata client,												"
-"	after selecting an object. You can only edit scripts on objects that												"
-"	you own (e.g. that you created).</p>																				"
-"	<p>																													"
-"	<br/>																												"
-"																														"
-"	</p>																												"
-"	<p><b>Does Substrata																								"
-"	have any policies on what stuff I can put in my parcel?</b></p>														"
-"	<p>Yes. For example																									"
-"	'Not-safe-for-work' parcel content is not currently allowed. This													"
-"	includes sexual content and violence. 																				"
-"	</p>																												"
-"	<p>For more																											"
-"	information, please read the Terms of Service on our website:														"
-"	<a href=\"/terms\">terms</a>												"
-"	</p>																												"
-"	<p><br/>																											"
-"																														"
-"	</p>																												"
-"	<h1>Troubleshooting</h1>																			"
-"	<p><b>I'm having																								"
-"	problems with Substrata &ndash; where can I get help?</b></p>														"
-"	<p>																													"
-"																														"
-"																														"
-"																														"
-"	The best place to get support is on the Substrata discord channel:													"
-"	<a href=\"https://discord.com/invite/R6tfYn3\">https://discord.com/invite/R6tfYn3</a>									"
-"	</p>																													"
-;
+	page += "<h2>Как войти в Метасибирь?</h2>";
+	page += "<p>Адрес в клиенте: <a href=\"sub://vr.metasiberia.com\">sub://vr.metasiberia.com</a></p>";
+	page += "<p>Веб-режим: <a href=\"https://vr.metasiberia.com/webclient\">https://vr.metasiberia.com/webclient</a></p>";
+	page += "<p>Зарегистрируйтесь: <a href=\"https://vr.metasiberia.com/signup\">https://vr.metasiberia.com/signup</a></p>";
+	page += "<ol>";
+	page += "<li>Скачайте и установите клиент виртуальных миров Substrata: Тут.</li>";
+	page += "<li>В адресной строке введите <code>sub://vr.metasiberia.com</code> и нажмите Enter.</li>";
+	page += "<li>В клиенте нажмите Log in (правый верхний угол) и введите логин/пароль.</li>";
+	page += "<li>Назначьте Metasiberia стартовой локацией: в меню Go выберите Set current location as start location.</li>";
+	page += "<li>Теперь ваш аватар всегда будет появляться в центре Metasiberia.</li>";
+	page += "</ol>";
+
+	page += "<h2>На чём основана Metasiberia?</h2>";
+	page += "<p>Metasiberia — это проект, основанный на технологиях Substrata, разработанных Glare Technologies Limited. Эта же команда известна своими продуктами Indigo Renderer и Chaotica Fractals.</p>";
+
+	page += "<h2>Почему Metasiberia — это метавселенная?</h2>";
+	page += "<p>Metasiberia классифицируется как метавселенная, поскольку представляет собой интегрированную цифровую среду, объединяющую множество виртуальных пространств с высоким уровнем интерактивности и пользовательской автономии. С научной точки зрения, метавселенная — это устойчивая, коллективно используемая виртуальная реальность, которая функционирует как параллельная система, поддерживающая социальные, творческие и экономические взаимодействия. В Metasiberia это достигается через центральный мир, выступающий хабом для новых пользователей, и персональные территории (доступные по адресу sub://vr.metasiberia.com/имя_пользователя), где каждый может формировать собственное пространство.</p>";
+
+	page += "<h2>Как приобрести участок в Metasiberia?</h2>";
+	page += "<p>На данный момент покупка участков доступна только по индивидуальному запросу.</p>";
+	page += "<p>В ближайшее время мы запустим магазин, где участки можно будет приобрести напрямую. Следите за обновлениями на нашем сайте и в социальных сетях.</p>";
+
+	page += "<h2>Можно ли делиться правами на участок в Metasiberia?</h2>";
+	page += "<p>Да, вы можете добавить других пользователей как «соавторов» вашего участка. Они смогут создавать, редактировать и удалять объекты на вашей территории.</p>";
+	page += "<ol>";
+	page += "<li>Войдите в аккаунт на сайте Metasiberia / admin panel / log in.</li>";
+	page += "<li>Перейдите к вашему участку на своей странице.</li>";
+	page += "<li>Нажмите Add writer и укажите имя пользователя в Metasiberia.</li>";
+	page += "<li>Также можно временно или постоянно открыть участок для общего редактирования, выбрав в редакторе объектов опцию All writeable.</li>";
+	page += "</ol>";
+
+	page += "<h1>Создание и строительство в Metasiberia</h1>";
+	page += "<h2>Как создавать объекты в Metasiberia?</h2>";
+	page += "<p>Создавать объекты в центральном мире можно на участке, который вам принадлежит, или в песочнице (участок №31). В своей личной территории ограничений нет.</p>";
+	page += "<p>Есть два способа:</p>";
+	page += "<ol>";
+	page += "<li>В клиенте выберите «Добавить модель / изображение / видео» и следуйте инструкциям.</li>";
+	page += "<li>Создайте объект из вокселей внутри Metasiberia, выбрав «Добавить воксели».</li>";
+	page += "</ol>";
+	page += "<p>Поддерживаемые форматы:</p>";
+	page += "<p>Модели: OBJ, GLTF, GLB, VOX, STL, IGMESH</p>";
+	page += "<p>Изображения: JPG, PNG, GIF, TIF, EXR, KTX, KTX2</p>";
+	page += "<p>Видео: MP4</p>";
+	page += "<p>Пожалуйста, избегайте загрузки моделей с большим количеством полигонов или объёмных файлов, чтобы не ухудшить производительность для других пользователей.</p>";
+
+	page += "<h2>Как работают воксели в Metasiberia?</h2>";
+	page += "<p>Вы можете загрузить готовый воксель в поддерживаемом формате или создать его внутри Metasiberia.</p>";
+	page += "<p>Для создания:</p>";
+	page += "<ol>";
+	page += "<li>Перейдите на участок, где у вас есть права редактирования, и выберите «Добавить воксели». Появится первый блок (серый куб).</li>";
+	page += "<li>Всплывёт подсказка с инструкциями. Основное: Ctrl + левый клик добавляет новый воксель на поверхность выбранного куба. При наведении с зажатым Ctrl вы увидите, где появится новый блок.</li>";
+	page += "<li>Воксели можно масштабировать в редакторе, меняя их размеры через параметр Scale.</li>";
+	page += "</ol>";
+
+	page += "<h2>Как анимировать объекты в Metasiberia?</h2>";
+	page += "<p>Анимация и скрипты в Metasiberia создаются с помощью языка программирования Lua. Подробности доступны на странице: <a href=\"/about_scripting\">о скриптах</a>.</p>";
+	page += "<p>Для настройки скрипта выберите объект в клиенте, откройте редактор и в разделе Script введите код. Редактировать можно только свои объекты.</p>";
+
+	page += "<h2>Есть ли ограничения на контент в Metasiberia?</h2>";
+	page += "<p>Да, контент «не для всех» (например, с сексуальным или насильственным подтекстом) запрещён. Подробности — в <a href=\"/terms\">правилах использования</a>.</p>";
+
+	page += "<h1>Решение проблем</h1>";
+	page += "<h2>У меня сложности с Metasiberia — где я могу получить помощь?</h2>";
+	page += "<p>Лучше всего обратиться за помощью в наш <a href=\"https://vk.com/metasiberia_official\">VK</a> или <a href=\"https://t.me/metasiberia_channel\">Telegram</a>.</p>";
+
+	page += "<p><b>Metasiberia состоит из Substrata.</b></p>";
 
 	page += WebServerResponseUtils::standardFooter(request_info, true);
 

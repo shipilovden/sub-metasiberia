@@ -15,6 +15,7 @@ class GUIClient;
 class AnimationManager;
 class ResourceManager;
 class TextureServer;
+class VRoidAuthFlow;
 namespace Indigo { class Mesh; }
 struct GLObject;
 
@@ -61,6 +62,7 @@ private:
 
 	Reference<TextureServer> texture_server;
 	Reference<GLObject> preview_gl_ob;
+	VRoidAuthFlow* vroid_auth_flow;
 
 	bool done_initial_load;
 	QTimer tick_timer;
