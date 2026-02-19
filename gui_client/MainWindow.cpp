@@ -51,11 +51,14 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QSettings>
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QTimer>
+#include <QtGui/QContextMenuEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPixmap>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QInputDialog>
@@ -79,6 +82,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/FileChecksum.h"
 #include "../utils/FileOutStream.h"
 #include "../utils/BufferOutStream.h"
+#include <algorithm>
 #include "../utils/IndigoXMLDoc.h"
 #include "../utils/LimitedAllocator.h"
 #include <Escaping.h>
@@ -203,6 +207,43 @@ static std::string computeWindowTitle()
 }
 
 
+static std::string canonicalHostForMetasiberia(const std::string& host)
+{
+	if(host == "89.104.70.23")
+		return "vr.metasiberia.com";
+
+	return host;
+}
+
+
+static std::string canonicaliseMetasiberiaSubURLHost(const std::string& url)
+{
+	if(!hasPrefix(url, "sub://"))
+		return url;
+
+	const size_t host_start = 6; // After "sub://"
+	const size_t host_end = url.find_first_of("/?", host_start);
+	const std::string host_port = (host_end == std::string::npos) ? url.substr(host_start) : url.substr(host_start, host_end - host_start);
+
+	std::string host = host_port;
+	std::string port_suffix;
+
+	const size_t colon_pos = host_port.find(':');
+	if(colon_pos != std::string::npos)
+	{
+		host = host_port.substr(0, colon_pos);
+		port_suffix = host_port.substr(colon_pos);
+	}
+
+	const std::string canonical_host = canonicalHostForMetasiberia(host);
+	if(canonical_host == host)
+		return url;
+
+	const std::string tail = (host_end == std::string::npos) ? std::string() : url.substr(host_end);
+	return std::string("sub://") + canonical_host + port_suffix + tail;
+}
+
+
 static const char* default_help_info_message = "Use the W/A/S/D keys and arrow keys to move and look around.\n"
 	"Click and drag the mouse on the 3D view to look around.\n"
 	"Space key: jump\n"
@@ -242,6 +283,13 @@ void MainWindow::initialiseUI()
 		ZoneScopedN("setupUi"); // Tracy profiler
 		ui = new Ui::MainWindow();
 		ui->setupUi(this);
+	}
+
+	// Keep favorites menu up to date (actions are rebuilt on-demand when the menu opens).
+	if(ui->menuGo_to_Favorites)
+	{
+		connect(ui->menuGo_to_Favorites, &QMenu::aboutToShow, this, &MainWindow::updateFavoritesMenu);
+		ui->menuGo_to_Favorites->installEventFilter(this); // For right-click context menu (rename/delete).
 	}
 
 	// Replace webcam dock content with full WebcamWindow (camera list, settings, etc.) before restoreState.
@@ -410,6 +458,13 @@ void MainWindow::initialiseUI()
 	ui->environmentOptionsWidget->init(settings);
 	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
 
+	// Apply initial Northern Lights checkbox state to the active Qt scene.
+	if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene())
+	{
+		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+		ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+	}
+
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->chatMessageLineEdit, SIGNAL(returnPressed()), this, SLOT(sendChatMessageSlot()));
 	connect(ui->glWidget, SIGNAL(mousePressed(QMouseEvent*)), this, SLOT(glWidgetMousePressed(QMouseEvent*)));
@@ -576,6 +631,15 @@ public:
 void MainWindow::afterGLInitInitialise()
 {
 	ZoneScoped; // Tracy profiler
+
+	// Ensure main GL context is current while creating GL resources (UI textures, etc).
+	// If resources are created against the wrong Qt GL context, rendering can corrupt into black quads.
+	ui->glWidget->makeCurrent();
+	struct DoneCurrent
+	{
+		GlWidget* w;
+		~DoneCurrent() { if(w) w->doneCurrent(); }
+	} done_current{ ui->glWidget };
 
 	
 	if(settings->value("mainwindow/flyMode", QVariant(false)).toBool())
@@ -1922,6 +1986,202 @@ void MainWindow::on_actionAdd_Portal_triggered()
 }
 
 
+static const char* favoritesSettingsKey()
+{
+	return "mainwindow/favorites";
+}
+
+
+struct FavoriteLocation
+{
+	QString name;
+	QString url;
+};
+
+
+static std::vector<FavoriteLocation> loadFavoriteLocations(QSettings& settings)
+{
+	std::vector<FavoriteLocation> out;
+	const QStringList rows = settings.value(favoritesSettingsKey()).toStringList();
+	out.reserve((size_t)rows.size());
+
+	for(const QString& row : rows)
+	{
+		const int tab_i = row.indexOf('\t');
+		if(tab_i <= 0)
+			continue;
+
+		FavoriteLocation fav;
+		fav.name = row.left(tab_i).trimmed();
+		fav.url  = row.mid(tab_i + 1).trimmed();
+		if(!fav.name.isEmpty() && !fav.url.isEmpty())
+			out.push_back(fav);
+	}
+
+	return out;
+}
+
+
+static void saveFavoriteLocations(QSettings& settings, const std::vector<FavoriteLocation>& favs)
+{
+	QStringList rows;
+	rows.reserve((int)favs.size());
+	for(const FavoriteLocation& fav : favs)
+		rows.push_back(fav.name + "\t" + fav.url);
+	settings.setValue(favoritesSettingsKey(), rows);
+}
+
+
+void MainWindow::on_actionAdd_to_Favorites_triggered()
+{
+	const QString url = url_widget ? QtUtils::toQString(url_widget->getURL()).trimmed() : QString();
+	if(url.isEmpty())
+	{
+		showErrorNotification("No current location URL to add to favorites.");
+		return;
+	}
+
+	if(!settings)
+	{
+		showErrorNotification("Internal error: settings not available.");
+		return;
+	}
+
+	std::vector<FavoriteLocation> favs = loadFavoriteLocations(*settings);
+	for(const FavoriteLocation& fav : favs)
+	{
+		if(fav.url == url)
+		{
+			showInfoNotification("Location already in favorites.");
+			return;
+		}
+	}
+
+	FavoriteLocation fav;
+	fav.name = "Favorite " + QString::number((int)favs.size() + 1);
+	fav.url = url;
+	favs.push_back(fav);
+	saveFavoriteLocations(*settings, favs);
+
+	updateFavoritesMenu();
+	showInfoNotification("Added to favorites.");
+}
+
+
+void MainWindow::updateFavoritesMenu()
+{
+	if(!ui || !ui->menuGo_to_Favorites || !settings)
+		return;
+
+	ui->menuGo_to_Favorites->clear();
+
+	const std::vector<FavoriteLocation> favs = loadFavoriteLocations(*settings);
+	if(favs.empty())
+	{
+		QAction* a = ui->menuGo_to_Favorites->addAction(tr("(No favorites)"));
+		a->setEnabled(false);
+		return;
+	}
+
+	for(const FavoriteLocation& fav : favs)
+	{
+		QAction* a = ui->menuGo_to_Favorites->addAction(fav.name);
+		a->setData(fav.url);
+		connect(a, &QAction::triggered, this, [this, fav]() {
+			visitSubURL(QtUtils::toStdString(fav.url));
+		});
+	}
+}
+
+
+bool MainWindow::eventFilter(QObject* obj, QEvent* event)
+{
+	// Right-click on a favorite location in the "Go to Favorites" menu to rename or delete it.
+	if(ui && ui->menuGo_to_Favorites && settings && (obj == ui->menuGo_to_Favorites))
+	{
+		QPoint menu_pos;
+		QPoint global_pos;
+
+		if(event->type() == QEvent::ContextMenu)
+		{
+			QContextMenuEvent* ce = static_cast<QContextMenuEvent*>(event);
+			menu_pos   = ce->pos();
+			global_pos = ce->globalPos();
+		}
+		else if(event->type() == QEvent::MouseButtonPress)
+		{
+			QMouseEvent* me = static_cast<QMouseEvent*>(event);
+			if(me->button() != Qt::RightButton)
+				return QMainWindow::eventFilter(obj, event);
+
+			menu_pos   = me->pos();
+			global_pos = me->globalPos();
+		}
+		else
+		{
+			return QMainWindow::eventFilter(obj, event);
+		}
+
+		QAction* a = ui->menuGo_to_Favorites->actionAt(menu_pos);
+		if(!a)
+			return QMainWindow::eventFilter(obj, event);
+
+		const QString url = a->data().toString().trimmed();
+		if(url.isEmpty())
+			return QMainWindow::eventFilter(obj, event);
+
+		QMenu context_menu;
+		QAction* rename_action = context_menu.addAction(tr("Rename"));
+		QAction* delete_action = context_menu.addAction(tr("Delete"));
+
+		QAction* chosen_action = context_menu.exec(global_pos);
+		if(chosen_action == rename_action)
+		{
+			bool ok = false;
+			const QString new_name = QInputDialog::getText(this, tr("Rename favorite"), tr("New name:"), QLineEdit::Normal, a->text(), &ok).trimmed();
+			if(ok && !new_name.isEmpty())
+			{
+				std::vector<FavoriteLocation> favs = loadFavoriteLocations(*settings);
+				for(FavoriteLocation& fav : favs)
+				{
+					if(fav.url == url)
+					{
+						fav.name = new_name;
+						saveFavoriteLocations(*settings, favs);
+						updateFavoritesMenu();
+						showInfoNotification("Favorite renamed.");
+						break;
+					}
+				}
+			}
+			return true; // Eat the event so the menu doesn't trigger navigation.
+		}
+		else if(chosen_action == delete_action)
+		{
+			const QMessageBox::StandardButton res = QMessageBox::question(this, tr("Delete favorite"), tr("Delete this favorite?"), QMessageBox::Yes | QMessageBox::No);
+			if(res == QMessageBox::Yes)
+			{
+				std::vector<FavoriteLocation> favs = loadFavoriteLocations(*settings);
+				const size_t old_size = favs.size();
+				favs.erase(std::remove_if(favs.begin(), favs.end(), [&](const FavoriteLocation& fav) { return fav.url == url; }), favs.end());
+				if(favs.size() != old_size)
+				{
+					saveFavoriteLocations(*settings, favs);
+					updateFavoritesMenu();
+					showInfoNotification("Favorite deleted.");
+				}
+			}
+			return true; // Eat the event so we don't navigate on right click.
+		}
+
+		// No action chosen, still eat the event so we don't navigate on right click.
+		return true;
+	}
+
+	return QMainWindow::eventFilter(obj, event);
+}
+
+
 void MainWindow::on_actionAdd_Web_View_triggered()
 {
 	const float quad_w = 0.4f;
@@ -2755,7 +3015,9 @@ void MainWindow::on_actionThird_Person_Camera_triggered()
 void MainWindow::on_actionGoToMainWorld_triggered()
 {
 	URLParseResults parse_results;
-	parse_results.hostname = gui_client.server_hostname;
+	std::string hostname = gui_client.server_hostname.empty() ? std::string("vr.metasiberia.com") : gui_client.server_hostname;
+	hostname = canonicalHostForMetasiberia(hostname);
+	parse_results.hostname = hostname;
 
 	gui_client.connectToServer(parse_results);
 }
@@ -2766,7 +3028,7 @@ void MainWindow::on_actionGoToPersonalWorld_triggered()
 	if(gui_client.logged_in_user_name != "")
 	{
 		URLParseResults parse_results;
-		parse_results.hostname = gui_client.server_hostname;
+		parse_results.hostname = canonicalHostForMetasiberia(gui_client.server_hostname);
 		parse_results.worldname = gui_client.logged_in_user_name;
 
 		gui_client.connectToServer(parse_results);
@@ -2784,7 +3046,7 @@ void MainWindow::on_actionGoToPersonalWorld_triggered()
 void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 {
 	URLParseResults parse_results;
-	parse_results.hostname = gui_client.server_hostname;
+	parse_results.hostname = canonicalHostForMetasiberia(gui_client.server_hostname);
 	parse_results.worldname = "cryptovoxels";
 
 	gui_client.connectToServer(parse_results);
@@ -2793,40 +3055,19 @@ void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 
 void MainWindow::on_actionGo_to_Substrata_Server_triggered()
 {
-	visitSubURL("sub://substrata.info");
+	visitSubURL("sub://substrata.info/");
 }
 
 
 void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
 {
-	visitSubURL("sub://vr.metasiberia.com");
+	visitSubURL("sub://vr.metasiberia.com/");
 }
 
 
 void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
 {
-	// This server URL is project-specific. Make it configurable so the button always works even if the server moves.
-	const QString key = "metasiberia/shki_nvkz_server_url";
-	const QString existing = settings ? settings->value(key, "").toString() : "";
-
-	QString URL = existing.trimmed();
-	if(URL.isEmpty())
-	{
-		bool ok = false;
-		URL = QInputDialog::getText(this,
-			tr("Go to Server"),
-			tr("Enter server URL (example: sub://host or sub://host/world):"),
-			QLineEdit::Normal,
-			"sub://",
-			&ok).trimmed();
-		if(!ok || URL.isEmpty())
-			return;
-	}
-
-	if(settings)
-		settings->setValue(key, URL);
-
-	visitSubURL(QtUtils::toStdString(URL));
+	visitSubURL("sub://176.197.223.42/");
 }
 
 
@@ -2895,15 +3136,19 @@ void MainWindow::on_actionGo_to_Position_triggered()
 
 void MainWindow::on_actionSet_Start_Location_triggered()
 {
-	settings->setValue(MainOptionsDialog::startLocationURLKey(), QtUtils::toQString(this->url_widget->getURL()));
+	const std::string canonical_url = canonicaliseMetasiberiaSubURLHost(this->url_widget->getURL());
+	settings->setValue(MainOptionsDialog::startLocationURLKey(), QtUtils::toQString(canonical_url));
 }
 
 
 void MainWindow::on_actionGo_To_Start_Location_triggered()
 {
 	const std::string start_URL = QtUtils::toStdString(settings->value(MainOptionsDialog::startLocationURLKey()).toString());
+	const std::string canonical_start_URL = canonicaliseMetasiberiaSubURLHost(start_URL);
+	if(canonical_start_URL != start_URL)
+		settings->setValue(MainOptionsDialog::startLocationURLKey(), QtUtils::toQString(canonical_start_URL));
 
-	if(start_URL.empty())
+	if(canonical_start_URL.empty())
 	{
 		QMessageBox msgBox;
 		msgBox.setWindowTitle("Invalid start location URL");
@@ -2911,7 +3156,7 @@ void MainWindow::on_actionGo_To_Start_Location_triggered()
 		msgBox.exec();
 	}
 	else
-		visitSubURL(start_URL);
+		visitSubURL(canonical_start_URL);
 }
 
 
@@ -3667,7 +3912,14 @@ void MainWindow::environmentSettingChangedSlot()
 		const float phi   = ::degreeToRad((float)ui->environmentOptionsWidget->sunPhiRealControl->value());
 		const Vec4f sundir = GeometrySampling::dirForSphericalCoords(phi, theta);
 
-		opengl_engine->setSunDir(sundir);
+		ui->glWidget->opengl_engine->setSunDir(sundir);
+
+		// Keep aurora rendering state in sync with the checkbox.
+		if(ui->glWidget->opengl_engine->getCurrentScene())
+		{
+			const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+		}
 	}
 }
 
@@ -3763,7 +4015,7 @@ void MainWindow::visitSubURL(const std::string& URL) // Visit a substrata 'sub:/
 {
 	try
 	{
-		gui_client.visitSubURL(URL);
+		gui_client.visitSubURL(canonicaliseMetasiberiaSubURLHost(URL));
 	}
 	catch(glare::Exception& e) // Handle URL parse failure
 	{
@@ -4915,8 +5167,16 @@ int main(int argc, char *argv[])
 			{
 				const std::string start_loc_URL_setting = QtUtils::toStdString(mw.settings->value(MainOptionsDialog::startLocationURLKey()).toString());
 				if(!start_loc_URL_setting.empty())
-					server_URL = start_loc_URL_setting;
+				{
+					const std::string canonical_start_loc_URL = canonicaliseMetasiberiaSubURLHost(start_loc_URL_setting);
+					if(canonical_start_loc_URL != start_loc_URL_setting)
+						mw.settings->setValue(MainOptionsDialog::startLocationURLKey(), QtUtils::toQString(canonical_start_loc_URL));
+
+					server_URL = canonical_start_loc_URL;
+				}
 			}
+
+			server_URL = canonicaliseMetasiberiaSubURLHost(server_URL);
 
 			try
 			{
