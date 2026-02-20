@@ -39,6 +39,22 @@ def computeHashForFile(path)
 	return sha256.hexdigest[0, 16]
 end
 
+def computeHashForDir(path)
+	sha256 = Digest::SHA256.new
+
+	files = Dir.glob(path + "/**/*", File::FNM_DOTMATCH).select do |f|
+		File.file?(f) && File.basename(f) != "." && File.basename(f) != ".."
+	end.sort
+
+	files.each do |f|
+		rel = f[(path.length + 1)..-1]
+		sha256.update(rel)
+		sha256.update(Digest::SHA256.file(f).hexdigest)
+	end
+
+	return sha256.hexdigest[0, 16]
+end
+
 def checkAndReplaceString(content, src_str, dest_str)
 	if content.index(src_str).nil?
 		raise "Could not find string '" + src_str + "' in file."
@@ -49,7 +65,7 @@ def checkAndReplaceString(content, src_str, dest_str)
 end
 
 # Replaces some target strings ("GUI_CLIENT_DATA_HASH") etc. in a string with the actual hash value of the file, as computed from the file on disk.
-def doReplacementsForGeneratedFilesInDir(webclient_html_contents, output_dir)
+def doReplacementsForGeneratedFilesInDir(webclient_html_contents, output_dir, buttons_hash)
 	gui_client_data_hash = computeHashForFile(output_dir + "/gui_client.data")
 	webclient_html_contents = checkAndReplaceString(webclient_html_contents, "GUI_CLIENT_DATA_HASH", gui_client_data_hash)
 
@@ -59,15 +75,19 @@ def doReplacementsForGeneratedFilesInDir(webclient_html_contents, output_dir)
 	gui_client_js_hash = computeHashForFile(output_dir + "/gui_client.js")
 	webclient_html_contents = checkAndReplaceString(webclient_html_contents, "GUI_CLIENT_JS_HASH", gui_client_js_hash)
 
+	webclient_html_contents = checkAndReplaceString(webclient_html_contents, "WEBCLIENT_BUTTONS_HASH", buttons_hash)
+
 	return webclient_html_contents
 end
+
+buttons_hash = computeHashForDir(substrata_dir + "/resources/buttons")
 
 #-------------------- Update webclient.html in output dir (not test_builds) with hashes of the various files, for cache-busting ----------------------
 puts "Updating webclient.html with hashes..."
 if(File.exist?(cyberspace_output + "/gui_client.data"))
 	webclient_html_contents = File.read(substrata_dir + "/webclient/webclient.html")
 
-	webclient_html_contents = doReplacementsForGeneratedFilesInDir(webclient_html_contents, cyberspace_output)
+	webclient_html_contents = doReplacementsForGeneratedFilesInDir(webclient_html_contents, cyberspace_output, buttons_hash)
 
 	# Write updated webclient.html contents back to disk in the output directory.
 	puts "Writing to " + cyberspace_output + "/webclient.html..."
@@ -82,7 +102,7 @@ if(File.exist?(cyberspace_output + "/test_builds/gui_client.data"))
 
 	webclient_html_contents = File.read(substrata_dir + "/webclient/webclient.html")
 
-	webclient_html_contents = doReplacementsForGeneratedFilesInDir(webclient_html_contents, cyberspace_output + "/test_builds")
+	webclient_html_contents = doReplacementsForGeneratedFilesInDir(webclient_html_contents, cyberspace_output + "/test_builds", buttons_hash)
 
 	# Write updated webclient.html contents back to disk in the output directory.
 	puts "Writing to " + cyberspace_output + "/test_builds/webclient.html..."

@@ -38,6 +38,19 @@ namespace WorkerThreadUploadPhotoHandling
 static const int MAX_STRING_LEN = 10000;
 
 
+static std::string getOptionalEnvVar(const char* name)
+{
+	try
+	{
+		if(PlatformUtils::isEnvironmentVariableDefined(name))
+			return PlatformUtils::getEnvironmentVariable(name);
+	}
+	catch(...) {}
+
+	return std::string();
+}
+
+
 void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* server, const web::RequestInfo& websocket_request_info, bool fuzzing)
 {
 	conPrint("handlePhotoUploadConnection()");
@@ -219,12 +232,36 @@ void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* serv
 				}
 				return false;
 			};
+			auto getOptionalCredOrEnv = [&](const char* cred_key, const char* env_key, std::string& out)
+			{
+				if(getOptionalCred(cred_key, out))
+					return true;
+
+				const std::string env_val = getOptionalEnvVar(env_key);
+				if(!env_val.empty())
+				{
+					out = env_val;
+					return true;
+				}
+
+				return false;
+			};
 
 			std::string bot_token;
 			std::string chat_id;
-			// Support both "telegram/..." (matches client settings key names) and "telegram_..." (no slash) variants.
-			getOptionalCred("telegram/bot_token", bot_token) || getOptionalCred("telegram_bot_token", bot_token);
-			getOptionalCred("telegram/photo_upload_chat_id", chat_id) || getOptionalCred("telegram_photo_upload_chat_id", chat_id);
+			// Support both credential-file keys and env vars.
+			// Credential keys:
+			// - telegram/bot_token
+			// - telegram/photo_upload_chat_id
+			// - telegram_bot_token
+			// - telegram_photo_upload_chat_id
+			// Env vars:
+			// - METASIBERIA_TELEGRAM_BOT_TOKEN
+			// - METASIBERIA_TELEGRAM_PHOTO_CHAT_ID
+			getOptionalCredOrEnv("telegram/bot_token", "METASIBERIA_TELEGRAM_BOT_TOKEN", bot_token) ||
+				getOptionalCredOrEnv("telegram_bot_token", "METASIBERIA_TELEGRAM_BOT_TOKEN", bot_token);
+			getOptionalCredOrEnv("telegram/photo_upload_chat_id", "METASIBERIA_TELEGRAM_PHOTO_CHAT_ID", chat_id) ||
+				getOptionalCredOrEnv("telegram_photo_upload_chat_id", "METASIBERIA_TELEGRAM_PHOTO_CHAT_ID", chat_id);
 
 			if(!bot_token.empty() && !chat_id.empty())
 			{
