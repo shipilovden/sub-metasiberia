@@ -73,3 +73,46 @@
 
 - На Linux inotify watcher не всегда ловит изменения в глубине поддиректорий.
 - После деплоя webclient-поддиректорий нужно сделать "ping" в корне webclient dir (скрипт деплоя это делает), чтобы сервер перезагрузил web-данные.
+
+## 8. 2026-02-20 Emergency Fix (Gesture Manager and Webcam Icon)
+
+Problem seen in production:
+- Webclient loaded, but no `+` button, no gesture manager panel, and no webcam button.
+- Root cause was old `gui_client.wasm` on server, not only stale browser cache.
+
+How to prove wasm is correct:
+- Check strings inside wasm:
+  - `Manage gestures`
+  - `Close gesture manager`
+  - `Enable webcam`
+  - `Add gesture button`
+
+If these strings are missing, rebuild and redeploy Emscripten artifacts.
+
+Build + deploy flow used:
+1. Build webclient wasm/js/data in Emscripten build tree.
+2. Run hash replacement:
+   - `$env:CYBERSPACE_OUTPUT='C:\programming\substrata_output_emscripten'`
+   - `ruby scripts/update_webclient_cache_busting_hashes.rb C:\programming\substrata`
+3. Deploy to Metasiberia v2:
+   - copy `gui_client.js`, `gui_client.wasm`, `gui_client.data`, `webclient.html` to:
+     - `/root/cyberspace_server_state/webclient/`
+4. Verify hashes on server with `sha256sum`.
+5. Verify live HTML has new hashes via:
+   - `curl https://vr.metasiberia.com/webclient`
+
+Important source fixes for Emscripten build:
+- `gui_client/PhotoModeUI.cpp`
+  - direct Telegram upload thread is compiled only for non-Emscripten;
+  - webclient keeps server-side photo upload path.
+- `gui_client/SDLUIInterface.cpp`
+  - AES include guarded out for Emscripten;
+  - password fallback supports plain-text `credentials/.../password`.
+- `gui_client/CMakeLists.txt`
+  - `VRoidAuthFlow.cpp` is now only in non-SDL/Qt build path.
+- `scripts/make_emscripten_preload_data.rb`
+  - Ruby 3.4 compatibility fix: `File.exists?` -> `File.exist?`.
+
+Browser-side note:
+- After deploy, use `Ctrl+F5`.
+- If still stale, clear site data for `vr.metasiberia.com` and reload.
