@@ -15,6 +15,7 @@ Copyright Glare Technologies Limited 2024 -
 #endif
 #include "TestSuite.h"
 #include "URLParser.h"
+#include "GestureManagerUI.h"
 #include "ModelLoading.h"
 #include "CEF.h"
 #include <maths/GeometrySampling.h>
@@ -1485,6 +1486,42 @@ void processAvatarModelFile(unsigned char* data, int length, const char* filenam
 	{
 		conPrint("Excep: " + e.what());
 
+		gui_client->showErrorNotification(e.what());
+	}
+}
+
+
+// processGestureAnimationFile is called from JS code in webclient file picker.
+extern "C"
+#if EMSCRIPTEN
+EMSCRIPTEN_KEEPALIVE
+#endif
+void processGestureAnimationFile(unsigned char* data, int length, const char* filename_)
+{
+	if(!gui_client)
+		return;
+
+	try
+	{
+		const std::string filename = filename_ ? std::string(filename_) : std::string();
+		if(filename.empty())
+			throw glare::Exception("No file selected.");
+
+		if(!(hasExtension(filename, "subanim") || hasExtension(filename, "glb")))
+			throw glare::Exception("Invalid animation extension. Expected .subanim or .glb");
+
+		const std::string local_path = "/tmp/" + sanitiseString(removeDotAndExtension(filename)) + "_gesture." + getExtension(filename);
+		FileUtils::writeEntireFile(local_path, (const char*)data, length);
+
+		GestureManagerUI* gesture_manager = GestureManagerUI::getActiveInstance();
+		if(!gesture_manager)
+			throw glare::Exception("Open gesture manager and press + to add animation.");
+
+		gesture_manager->addGestureFromSelectedPath(local_path);
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("processGestureAnimationFile error: " + e.what());
 		gui_client->showErrorNotification(e.what());
 	}
 }

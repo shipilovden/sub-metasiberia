@@ -74,6 +74,55 @@ EM_JS(void, downloadFile, (const char* dataUrl_cstr, const char* fileName_cstr),
 	document.body.removeChild(link);
 });
 
+EM_JS(void, openGestureAnimationFileDialog, (), {
+	try {
+		if (typeof document === "undefined")
+			return;
+
+		let input = document.getElementById("metasiberia-gesture-upload-input");
+		if (!input) {
+			input = document.createElement("input");
+			input.id = "metasiberia-gesture-upload-input";
+			input.type = "file";
+			input.accept = ".subanim,.glb";
+			input.style.display = "none";
+			document.body.appendChild(input);
+		}
+
+		input.onchange = async function () {
+			try {
+				if (!input.files || input.files.length === 0)
+					return;
+
+				const file = input.files[0];
+				const buffer = await file.arrayBuffer();
+				const bytes = new Uint8Array(buffer);
+				const ptr = _malloc(bytes.length);
+				HEAPU8.set(bytes, ptr);
+
+				if (Module && Module.ccall) {
+					Module.ccall(
+						"processGestureAnimationFile",
+						null,
+						["number", "number", "string"],
+						[ptr, bytes.length, file.name]
+					);
+				}
+
+				_free(ptr);
+			} catch (err) {
+				console.warn("Gesture upload picker failed:", err);
+			} finally {
+				input.value = "";
+			}
+		};
+
+		input.click();
+	} catch (err) {
+		console.warn("Failed to open gesture upload picker:", err);
+	}
+});
+
 #endif
 
 
@@ -653,7 +702,15 @@ std::string SDLUIInterface::showOpenFileDialog(const std::string& caption, const
 {
 	(void)caption;
 	(void)file_type_filters;
+
+#if EMSCRIPTEN
+	// Browser file picker is async. JS callback will call processGestureAnimationFile().
+	if(settings_key == "GestureManager/add_anim")
+		openGestureAnimationFileDialog();
+#else
 	(void)settings_key;
+#endif
+
 	return std::string();
 }
 

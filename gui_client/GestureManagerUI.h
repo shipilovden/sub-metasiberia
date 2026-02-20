@@ -30,6 +30,10 @@ public:
 	GestureManagerUI(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_, GLUIRef gl_ui_, const GestureSettings& gesture_settings);
 	~GestureManagerUI();
 
+	// Used by webclient file-picker callback path.
+	void addGestureFromSelectedPath(const std::string& selected_path);
+	static GestureManagerUI* getActiveInstance();
+
 	void think();
 
 	void viewportResized(int w, int h);
@@ -65,4 +69,6 @@ private:
 	GestureSettings gesture_settings;
 
 	bool need_rebuild_grid;
+
+	static GestureManagerUI* s_active_instance;
 };
