@@ -273,6 +273,10 @@ int main(int argc, char** argv)
 #elif defined(__APPLE__)
 		const std::string font_path       = "/System/Library/Fonts/SFNS.ttf";
 		const std::string emoji_font_path = "/System/Library/Fonts/SFNS.ttf";
+#elif defined(EMSCRIPTEN)
+		// Use a font with Cyrillic glyph coverage for webclient UI strings.
+		const std::string font_path       = base_dir + "/data/resources/Roboto-Regular.ttf";
+		const std::string emoji_font_path = base_dir + "/data/resources/Roboto-Regular.ttf";
 #else
 		// Linux:
 		const std::string font_path       = base_dir + "/data/resources/TruenoLight-E2pg.otf";
