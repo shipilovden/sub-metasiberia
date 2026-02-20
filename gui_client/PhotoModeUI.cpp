@@ -12,7 +12,9 @@ Copyright Glare Technologies Limited 2025 -
 #include "../shared/ImageDecoding.h"
 #include <graphics/jpegdecoder.h>
 #include <graphics/SRGBUtils.h>
+#if !EMSCRIPTEN
 #include "HTTPClient.h"
+#endif
 #include <networking/TLSSocket.h>
 #include <algorithm>
 #include <utils/Clock.h>
@@ -1037,6 +1039,7 @@ static std::string getOptionalEnvVar(const char* name)
 }
 
 
+#if !EMSCRIPTEN
 class UploadPhotoToTelegramThread : public MessageableThread
 {
 public:
@@ -1113,6 +1116,7 @@ public:
 	std::string chat_id;
 	ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue = nullptr;
 };
+#endif
 
 
 static std::string trimAndCollapseWhitespace(const std::string& s, size_t max_len)
@@ -1227,6 +1231,7 @@ void PhotoModeUI::uploadPhoto()
 			in_parcel_id = cam_parcel->id;
 	}
 
+#if !EMSCRIPTEN
 	std::string bot_token = settings->getStringValue("telegram/bot_token", "");
 	if(bot_token.empty())
 		bot_token = getOptionalEnvVar("METASIBERIA_TELEGRAM_BOT_TOKEN");
@@ -1249,6 +1254,9 @@ void PhotoModeUI::uploadPhoto()
 		upload_thread_manager.addThread(thread);
 		return;
 	}
+#else
+	(void)telegram_enabled;
+#endif
 
 	// Upload to server (used by default for end users). Server can publish to Telegram using server-side credentials.
 	const std::string username = gui_client->ui_interface->getUsernameForDomain(gui_client->server_hostname);

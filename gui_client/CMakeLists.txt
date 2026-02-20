@@ -262,8 +262,6 @@ ${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLParser.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/URLParser.h
-${CMAKE_SOURCE_DIR}/gui_client/VRoidAuthFlow.cpp
-${CMAKE_SOURCE_DIR}/gui_client/VRoidAuthFlow.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.h
 ${CMAKE_SOURCE_DIR}/gui_client/VehiclePhysics.h
@@ -419,6 +417,9 @@ endif()
 
 	if(NOT USE_SDL)
 	SET(gui_client ${gui_client}
+	${CMAKE_SOURCE_DIR}/gui_client/VRoidAuthFlow.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/VRoidAuthFlow.h
+
 	${CMAKE_SOURCE_DIR}/gui_client/moc_MainWindow.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_GuiClientApplication.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_GlWidget.cpp

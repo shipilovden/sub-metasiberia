@@ -27,7 +27,9 @@ Copyright Glare Technologies Limited 2022 -
 #include <opengl/ui/GLUIInertWidget.h>
 #include <graphics/SRGBUtils.h>
 #include <maths/mathstypes.h>
+#if !EMSCRIPTEN
 #include <AESEncryption.h>
+#endif
 #include <utils/StringUtils.h>
 #include <utils/Exception.h>
 #include <cstring>
@@ -568,6 +570,27 @@ std::string SDLUIInterface::getDecryptedPasswordForDomain(const std::string& dom
 {
 	if(!settings_store.nonNull())
 		return std::string();
+
+	// Try plain-text password key first (used by some webclient builds).
+	std::string password = settings_store->getStringValue("credentials/" + domain + "/password", "");
+	if(!password.empty())
+		return password;
+
+	// Try array format plain-text password key.
+	for(int i = 0; i < 100; ++i)
+	{
+		std::string cred_domain = settings_store->getStringValue("credentials/" + std::to_string(i) + "/domain", "");
+		if(cred_domain.empty())
+			break;
+
+		if(cred_domain == domain)
+		{
+			password = settings_store->getStringValue("credentials/" + std::to_string(i) + "/password", "");
+			if(!password.empty())
+				return password;
+			break;
+		}
+	}
 	
 	// Try to find encrypted password for this domain
 	std::string encrypted_password;
@@ -595,6 +618,11 @@ std::string SDLUIInterface::getDecryptedPasswordForDomain(const std::string& dom
 	if(encrypted_password.empty())
 		return std::string();
 	
+#if EMSCRIPTEN
+	// Emscripten builds do not link AESEncryption/OpenSSL. Fall back to returning the stored value.
+	// If this value is encrypted, auth may fail until the user logs in again and stores a plain-text password key.
+	return encrypted_password;
+#else
 	// Decrypt the password using the same logic as CredentialManager
 	try
 	{
@@ -618,6 +646,7 @@ std::string SDLUIInterface::getDecryptedPasswordForDomain(const std::string& dom
 	{
 		return "";
 	}
+#endif
 }
 
 std::string SDLUIInterface::showOpenFileDialog(const std::string& caption, const std::vector<FileTypeFilter>& file_type_filters, const std::string& settings_key)
