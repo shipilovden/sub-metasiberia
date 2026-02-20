@@ -608,7 +608,8 @@ void MiscInfoUI::updateWidgetPositions()
 
 		if(movement_button)
 		{
-			const float spacing = gl_ui->getUIWidthForDevIndepPixelWidth(25);
+			// Keep joystick closer to bottom edge.
+			const float spacing = gl_ui->getUIWidthForDevIndepPixelWidth(8);
 
 			// Joystick size: 33px
 			const float button_w = myMax(gl_ui->getUIWidthForDevIndepPixelWidth(33), 0.05f);
