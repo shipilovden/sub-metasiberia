@@ -158,6 +158,137 @@
 			}
 		}
 
+		function installCriticalWebclientButtonSeeds(moduleRef) {
+			if(!Array.isArray(moduleRef.preRun))
+				moduleRef.preRun = moduleRef.preRun ? [moduleRef.preRun] : [];
+
+			moduleRef.preRun.push(function metasiberiaSeedCriticalIcons() {
+				try
+				{
+					if(typeof moduleRef.FS_createPath !== "function" ||
+						typeof moduleRef.FS_createDataFile !== "function" ||
+						typeof moduleRef.FS_unlink !== "function" ||
+						typeof document === "undefined" ||
+						typeof atob !== "function")
+						return;
+
+					moduleRef.FS_createPath("/", "data", true, true);
+					moduleRef.FS_createPath("/data", "resources", true, true);
+					moduleRef.FS_createPath("/data/resources", "buttons", true, true);
+
+					const makePngBytesFromCanvas = (drawFn) => {
+						const size = 256;
+						const canvas = document.createElement("canvas");
+						canvas.width = size;
+						canvas.height = size;
+						const ctx = canvas.getContext("2d");
+						if(!ctx)
+							return null;
+
+						drawFn(ctx, size);
+
+						const dataURL = canvas.toDataURL("image/png");
+						const commaPos = dataURL.indexOf(",");
+						if(commaPos < 0)
+							return null;
+
+						const base64 = dataURL.slice(commaPos + 1);
+						const binary = atob(base64);
+						const bytes = new Uint8Array(binary.length);
+						for(let i = 0; i < binary.length; ++i)
+							bytes[i] = binary.charCodeAt(i);
+						return bytes;
+					};
+
+					const drawCircleButton = (ctx, size, innerDrawFn) => {
+						const cx = size * 0.5;
+						const cy = size * 0.5;
+						const outerR = size * 0.485;
+						const innerR = size * 0.44;
+
+						ctx.clearRect(0, 0, size, size);
+
+						ctx.fillStyle = "#eef2f7";
+						ctx.beginPath();
+						ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+						ctx.fill();
+
+						ctx.fillStyle = "#273149";
+						ctx.beginPath();
+						ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+						ctx.fill();
+
+						innerDrawFn(ctx, size);
+					};
+
+					const plusBytes = makePngBytesFromCanvas((ctx, size) => {
+						drawCircleButton(ctx, size, (iconCtx, iconSize) => {
+							iconCtx.strokeStyle = "#f6f8fb";
+							iconCtx.lineCap = "round";
+							iconCtx.lineWidth = iconSize * 0.11;
+
+							const min = iconSize * 0.31;
+							const max = iconSize * 0.69;
+							const mid = iconSize * 0.5;
+
+							iconCtx.beginPath();
+							iconCtx.moveTo(min, mid);
+							iconCtx.lineTo(max, mid);
+							iconCtx.moveTo(mid, min);
+							iconCtx.lineTo(mid, max);
+							iconCtx.stroke();
+						});
+					});
+
+					const webcamBytes = makePngBytesFromCanvas((ctx, size) => {
+						drawCircleButton(ctx, size, (iconCtx, iconSize) => {
+							iconCtx.fillStyle = "#f6f8fb";
+							const bodyW = iconSize * 0.44;
+							const bodyH = iconSize * 0.28;
+							const bodyX = iconSize * 0.25;
+							const bodyY = iconSize * 0.36;
+							const radius = iconSize * 0.04;
+
+							iconCtx.beginPath();
+							iconCtx.moveTo(bodyX + radius, bodyY);
+							iconCtx.lineTo(bodyX + bodyW - radius, bodyY);
+							iconCtx.quadraticCurveTo(bodyX + bodyW, bodyY, bodyX + bodyW, bodyY + radius);
+							iconCtx.lineTo(bodyX + bodyW, bodyY + bodyH - radius);
+							iconCtx.quadraticCurveTo(bodyX + bodyW, bodyY + bodyH, bodyX + bodyW - radius, bodyY + bodyH);
+							iconCtx.lineTo(bodyX + radius, bodyY + bodyH);
+							iconCtx.quadraticCurveTo(bodyX, bodyY + bodyH, bodyX, bodyY + bodyH - radius);
+							iconCtx.lineTo(bodyX, bodyY + radius);
+							iconCtx.quadraticCurveTo(bodyX, bodyY, bodyX + radius, bodyY);
+							iconCtx.fill();
+
+							iconCtx.beginPath();
+							iconCtx.moveTo(iconSize * 0.68, iconSize * 0.44);
+							iconCtx.lineTo(iconSize * 0.84, iconSize * 0.36);
+							iconCtx.lineTo(iconSize * 0.84, iconSize * 0.64);
+							iconCtx.lineTo(iconSize * 0.68, iconSize * 0.56);
+							iconCtx.closePath();
+							iconCtx.fill();
+						});
+					});
+
+					const writeIcon = (name, bytes) => {
+						if(!bytes || bytes.length === 0)
+							return;
+						const targetPath = "/data/resources/buttons/" + name;
+						try { moduleRef.FS_unlink(targetPath); } catch(e) {}
+						moduleRef.FS_createDataFile("/data/resources/buttons", name, bytes, true, true, true);
+					};
+
+					writeIcon("plus.png", plusBytes);
+					writeIcon("webcam.png", webcamBytes);
+				}
+				catch(err)
+				{
+					console.warn("Failed to seed critical webclient button icons:", err);
+				}
+			});
+		}
+
 		function installMetasiberiaButtonOverrides(moduleRef) {
 			const buttonIcons = [
 				"about.png",
@@ -178,7 +309,6 @@
 				"microphone.png",
 				"minimap_icon.png",
 				"parcels.png",
-				"plus.png",
 				"Quick Informal Bow.png",
 				"ReadyPlayerMe.png",
 				"Rejected.png",
@@ -197,10 +327,6 @@
 				"white_x.png",
 				"Yawn.png"
 			];
-			const iconSourceOverrides = {
-				"plus.png": "Waving 1.png"
-			};
-
 			function processButtonIconBytes(iconName, bytes) {
 				// For webclient only, shrink the visual size of the movement D-pad icon by 2x.
 				if(iconName !== "dir_pad.png")
@@ -221,7 +347,7 @@
 						const scaledW = Math.max(1, Math.floor(bitmap.width * 0.5));
 						const scaledH = Math.max(1, Math.floor(bitmap.height * 0.5));
 						const dstX = Math.floor((bitmap.width - scaledW) * 0.5);
-						const dstY = Math.floor((bitmap.height - scaledH) * 0.5);
+						const dstY = Math.floor((bitmap.height - scaledH) * 0.95); // Push visual cross lower on screen.
 
 						ctx.clearRect(0, 0, canvas.width, canvas.height);
 						ctx.drawImage(bitmap, dstX, dstY, scaledW, scaledH);
@@ -271,8 +397,7 @@
 							const depId = "ms_btn_override_" + iconName.replace(/[^a-zA-Z0-9_]/g, "_");
 							moduleRef.addRunDependency(depId);
 
-							const sourceIconName = iconSourceOverrides[iconName] || iconName;
-							const encodedIconName = sourceIconName.split('/').map(encodeURIComponent).join('/');
+							const encodedIconName = iconName.split('/').map(encodeURIComponent).join('/');
 							const sourceURL = "/webclient/data/resources/buttons/" + encodedIconName + "?hash=" + buttonsHash;
 
 							fetch(sourceURL, { cache: "no-store" })
@@ -372,6 +497,7 @@
 			}
 		};
 
+		installCriticalWebclientButtonSeeds(Module);
 		installMetasiberiaButtonOverrides(Module);
 
 		Module.setStatus('Downloading...');
