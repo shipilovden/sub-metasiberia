@@ -362,7 +362,7 @@ void renderMainAdminPage(ServerAllWorldsState& world_state, const web::RequestIn
 	page_out += "<hr/>";
 
 	{ // Lock scope
-		Lock lock(world_state.mutex);
+		WorldStateLock lock(world_state.mutex);
 		if(world_state.server_admin_message.empty())
 		{
 			page_out += "<p>No server admin message set.</p>";
@@ -533,23 +533,83 @@ void renderUsersPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 	std::string page_out = sharedAdminHeader(world_state, request);
 
 	{ // Lock scope
-		Lock lock(world_state.mutex);
+		WorldStateLock lock(world_state.mutex);
 
 		page_out += "<h2>Users</h2>\n";
 		page_out += "<div class=\"msb-table-wrap\">";
 		page_out += "<table class=\"msb-table\" aria-label=\"Users table\">";
-		page_out += "<thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Joined</th><th>ETH address</th></tr></thead>";
+		page_out += "<thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Joined</th><th>ETH address</th><th>Personal worlds</th><th>Root parcels</th><th>World parcels</th><th>Actions</th></tr></thead>";
 		page_out += "<tbody>";
+
+		struct UserParcelWorldStats
+		{
+			int personal_worlds_count = 0;
+			int root_world_parcels_owned = 0;
+			int personal_world_parcels_owned = 0;
+			std::vector<std::string> personal_world_names;
+		};
+
+		std::map<UserID, UserParcelWorldStats> stats_for_user;
+
+		const Reference<ServerWorldState> root_world = world_state.getRootWorldState();
+		for(auto it = root_world->getParcels(lock).begin(); it != root_world->getParcels(lock).end(); ++it)
+			stats_for_user[it->second->owner_id].root_world_parcels_owned++;
+
+		for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+		{
+			ServerWorldState* world = world_it->second.ptr();
+			if(world == root_world.ptr())
+				continue;
+
+			UserParcelWorldStats& owner_stats = stats_for_user[world->details.owner_id];
+			owner_stats.personal_worlds_count++;
+			owner_stats.personal_world_names.push_back(world_it->first);
+
+			for(auto parcel_it = world->getParcels(lock).begin(); parcel_it != world->getParcels(lock).end(); ++parcel_it)
+				stats_for_user[parcel_it->second->owner_id].personal_world_parcels_owned++;
+		}
 
 		for(auto it = world_state.user_id_to_users.begin(); it != world_state.user_id_to_users.end(); ++it)
 		{
 			const User* user = it->second.ptr();
+			const UserParcelWorldStats* stats = NULL;
+			const auto stats_it = stats_for_user.find(user->id);
+			if(stats_it != stats_for_user.end())
+				stats = &stats_it->second;
+
+			const int personal_worlds_count = stats ? stats->personal_worlds_count : 0;
+			const int root_parcels_count = stats ? stats->root_world_parcels_owned : 0;
+			const int world_parcels_count = stats ? stats->personal_world_parcels_owned : 0;
+
 			page_out += "<tr>";
 			page_out += "<td><a href=\"/admin_user/" + user->id.toString() + "\">" + user->id.toString() + "</a></td>";
 			page_out += "<td>" + web::Escaping::HTMLEscape(user->name) + "</td>";
 			page_out += "<td>" + web::Escaping::HTMLEscape(user->email_address) + "</td>";
 			page_out += "<td>" + web::Escaping::HTMLEscape(user->created_time.timeAgoDescription()) + "</td>";
 			page_out += "<td><span class=\"eth-address\">" + web::Escaping::HTMLEscape(user->controlled_eth_address) + "</span></td>";
+
+			std::string personal_worlds_html = toString(personal_worlds_count);
+			if(stats)
+			{
+				const int max_world_links = 3;
+				for(int i=0; i<(int)stats->personal_world_names.size() && i < max_world_links; ++i)
+				{
+					const std::string& world_name = stats->personal_world_names[i];
+					personal_worlds_html += "<br/><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world_name) + "\">" + web::Escaping::HTMLEscape(world_name) + "</a>";
+				}
+				if((int)stats->personal_world_names.size() > max_world_links)
+					personal_worlds_html += "<br/><span class=\"field-description\">+" + toString((int)stats->personal_world_names.size() - max_world_links) + " more</span>";
+			}
+
+			page_out += "<td>" + personal_worlds_html + "</td>";
+			page_out += "<td>" + toString(root_parcels_count) + "</td>";
+			page_out += "<td>" + toString(world_parcels_count) + "</td>";
+
+			page_out += "<td><div class=\"msb-row-actions\">";
+			page_out += "<a href=\"/admin_user/" + user->id.toString() + "\">Open user</a>";
+			page_out += "<a href=\"/admin_parcels?scope=root&owner=" + web::Escaping::URLEscape(user->name) + "\">Root parcels</a>";
+			page_out += "<a href=\"/admin_parcels?scope=worlds&owner=" + web::Escaping::URLEscape(user->name) + "\">World parcels</a>";
+			page_out += "</div></td>";
 			page_out += "</tr>\n";
 		}
 		page_out += "</tbody></table></div>";
@@ -580,7 +640,7 @@ void renderAdminUserPage(ServerAllWorldsState& world_state, const web::RequestIn
 	std::string page_out = sharedAdminHeader(world_state, request);
 
 	{ // Lock scope
-		Lock lock(world_state.mutex);
+		WorldStateLock lock(world_state.mutex);
 		const User* logged_in_admin = LoginHandlers::getLoggedInUser(world_state, request);
 		if(logged_in_admin)
 		{
@@ -641,6 +701,122 @@ void renderAdminUserPage(ServerAllWorldsState& world_state, const web::RequestIn
 			page_out += "<label><input type=\"checkbox\" name=\"generate\" value=\"1\" checked=\"checked\"> Auto-generate secure password if empty</label><br/>";
 			page_out += "<input type=\"submit\" value=\"Reset password now\" title=\"Reset this user's password\" onclick=\"return confirm('Reset password for this user now?');\" >";
 			page_out += "</form>";
+
+			const Reference<ServerWorldState> root_world = world_state.getRootWorldState();
+			int personal_worlds_count = 0;
+			std::vector<std::string> personal_world_names;
+			for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+			{
+				const ServerWorldState* world = world_it->second.ptr();
+				if(world == root_world.ptr())
+					continue;
+				if(world->details.owner_id == user->id)
+				{
+					personal_worlds_count++;
+					personal_world_names.push_back(world_it->first);
+				}
+			}
+
+			page_out += "<hr/>";
+			page_out += "<h3>Personal worlds</h3>";
+			page_out += "<div>Total personal worlds owned: <b>" + toString(personal_worlds_count) + "</b></div>";
+			if(personal_world_names.empty())
+			{
+				page_out += "<div class=\"field-description\">No personal worlds owned by this user.</div>";
+			}
+			else
+			{
+				page_out += "<div class=\"msb-row-actions\">";
+				for(size_t i=0; i<personal_world_names.size(); ++i)
+				{
+					const std::string& world_name = personal_world_names[i];
+					page_out += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(world_name) + "\">" + web::Escaping::HTMLEscape(world_name) + "</a>";
+				}
+				page_out += "</div>";
+			}
+
+			struct UserWorldParcelRow
+			{
+				std::string world_name;
+				ParcelRef parcel;
+				double size_x = 0;
+				double size_y = 0;
+			};
+
+			std::vector<UserWorldParcelRow> world_parcel_rows;
+			for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+			{
+				ServerWorldState* world = world_it->second.ptr();
+				if(world == root_world.ptr())
+					continue;
+
+				for(auto parcel_it = world->getParcels(lock).begin(); parcel_it != world->getParcels(lock).end(); ++parcel_it)
+				{
+					ParcelRef parcel = parcel_it->second;
+					if(parcel->owner_id != user->id)
+						continue;
+
+					UserWorldParcelRow row;
+					row.world_name = world_it->first;
+					row.parcel = parcel;
+					const Vec3d span = parcel->aabb_max - parcel->aabb_min;
+					row.size_x = span.x;
+					row.size_y = span.y;
+					world_parcel_rows.push_back(row);
+				}
+			}
+
+			page_out += "<hr/>";
+			page_out += "<h3>Parcels in personal worlds</h3>";
+			page_out += "<div>Total parcels owned in non-root worlds: <b>" + toString((int)world_parcel_rows.size()) + "</b></div>";
+			page_out += "<div class=\"field-description\">These parcels can be managed directly from here (owner/editors/delete) or from <a href=\"/admin_parcels?scope=worlds&owner=" + web::Escaping::URLEscape(user->name) + "\">Parcels admin (world scope)</a>.</div>";
+
+			if(world_parcel_rows.empty())
+			{
+				page_out += "<div class=\"field-description\">No world parcels owned by this user.</div>";
+			}
+			else
+			{
+				page_out += "<div class=\"msb-table-wrap\">";
+				page_out += "<table class=\"msb-table\" aria-label=\"User world parcels table\">";
+				page_out += "<thead><tr><th>World</th><th>Parcel ID</th><th>Size</th><th>Z-bounds</th><th>Editors</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
+				for(size_t i=0; i<world_parcel_rows.size(); ++i)
+				{
+					const UserWorldParcelRow& row = world_parcel_rows[i];
+					const Parcel* parcel = row.parcel.ptr();
+					page_out += "<tr>";
+					page_out += "<td><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">" + web::Escaping::HTMLEscape(row.world_name) + "</a></td>";
+					page_out += "<td>" + parcel->id.toString() + "</td>";
+					page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " x " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
+					page_out += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
+					page_out += "<td>" + toString((int)parcel->writer_ids.size()) + "</td>";
+					page_out += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
+					page_out += "<td>";
+					page_out += "<div class=\"msb-row-actions\">";
+					page_out += "<a href=\"/admin_parcels?scope=worlds&world=" + web::Escaping::URLEscape(row.world_name) + "&owner=" + web::Escaping::URLEscape(user->name) + "\">Open in parcels admin</a>";
+					page_out += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
+					page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+					page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+					page_out += "<input type=\"text\" name=\"new_owner_ref\" value=\"" + web::Escaping::HTMLEscape(user->name) + "\" placeholder=\"new owner id/name\">";
+					page_out += "<input type=\"submit\" value=\"Set owner\" onclick=\"return confirm('Set owner for world parcel " + parcel->id.toString() + "?');\" >";
+					page_out += "</form>";
+					page_out += "<form action=\"/set_world_parcel_writers_post\" method=\"post\" class=\"msb-inline-form\">";
+					page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+					page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+					page_out += "<input type=\"text\" name=\"writer_refs\" value=\"\" placeholder=\"editors ids/names\">";
+					page_out += "<input type=\"submit\" value=\"Set editors\" onclick=\"return confirm('Set editors for world parcel " + parcel->id.toString() + "?');\" >";
+					page_out += "</form>";
+					page_out += "<form action=\"/admin_delete_parcel\" method=\"post\" class=\"msb-inline-form\">";
+					page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+					page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+					page_out += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete world parcel " + parcel->id.toString() + " in " + web::Escaping::HTMLEscape(row.world_name) + "?');\" >";
+					page_out += "</form>";
+					page_out += "</div>";
+					page_out += "</td>";
+					page_out += "</tr>";
+				}
+				page_out += "</tbody></table></div>";
+			}
 		}
 	} // End Lock scope
 
@@ -658,16 +834,26 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 
 	const std::string query_filter = stripHeadAndTailWhitespace(request.getURLParam("q").str());
 	const std::string owner_filter = stripHeadAndTailWhitespace(request.getURLParam("owner").str());
+	const std::string world_filter = stripHeadAndTailWhitespace(request.getURLParam("world").str());
 	std::string auction_filter = stripHeadAndTailWhitespace(request.getURLParam("auction").str());
+	std::string scope_filter = stripHeadAndTailWhitespace(request.getURLParam("scope").str());
 	if(auction_filter.empty())
 		auction_filter = "all";
+	if(scope_filter.empty())
+		scope_filter = "all";
+	if(scope_filter != "all" && scope_filter != "root" && scope_filter != "worlds")
+		scope_filter = "all";
 
 	std::string page_out = sharedAdminHeader(world_state, request);
 
 	{ // Lock scope
-		Lock lock(world_state.mutex);
+		WorldStateLock lock(world_state.mutex);
 
-		page_out += "<h2>Root world Parcels</h2>\n";
+		const bool show_root_section = (scope_filter != "worlds");
+		const bool show_world_section = (scope_filter != "root");
+
+		if(show_root_section)
+			page_out += "<h2>Root world Parcels</h2>\n";
 
 		Reference<ServerWorldState> root_world = world_state.getRootWorldState();
 		const TimeStamp now = TimeStamp::currentTime();
@@ -734,7 +920,11 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			if(!row.has_any_auction) no_auction_count++;
 
 			bool include = true;
-			if(!query_filter.empty())
+			if(scope_filter == "worlds")
+				include = false;
+			if(include && !world_filter.empty())
+				include = false; // Root world has no explicit world name.
+			if(include && !query_filter.empty())
 			{
 				const std::string searchable = "parcel " + row.parcel->id.toString() + " " + row.owner_username + " " + row.parcel->description + " " + row.parcel->title;
 				include = containsCaseInsensitive(searchable, query_filter);
@@ -758,15 +948,18 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 
 		const double average_area = (total_parcels > 0) ? (total_area / (double)total_parcels) : 0.0;
 
-		page_out += "<div class=\"msb-kpi-grid\">";
-		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Parcels total</div><div class=\"msb-kpi-value\">" + toString(total_parcels) + "</div></div>";
-		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Filtered</div><div class=\"msb-kpi-value\" id=\"admin-parcel-filtered-count\">" + toString((int)rows.size()) + "</div></div>";
-		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">For sale</div><div class=\"msb-kpi-value\">" + toString(for_sale_count) + "</div></div>";
-		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Sold</div><div class=\"msb-kpi-value\">" + toString(sold_count) + "</div></div>";
-		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Without auctions</div><div class=\"msb-kpi-value\">" + toString(no_auction_count) + "</div></div>";
-		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">With screenshots</div><div class=\"msb-kpi-value\">" + toString(with_screenshots_count) + "</div></div>";
-		page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Average area</div><div class=\"msb-kpi-value\">" + doubleToStringMaxNDecimalPlaces(average_area, 1) + " m^2</div></div>";
-		page_out += "</div>";
+		if(show_root_section)
+		{
+			page_out += "<div class=\"msb-kpi-grid\">";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Parcels total</div><div class=\"msb-kpi-value\">" + toString(total_parcels) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Filtered</div><div class=\"msb-kpi-value\" id=\"admin-parcel-filtered-count\">" + toString((int)rows.size()) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">For sale</div><div class=\"msb-kpi-value\">" + toString(for_sale_count) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Sold</div><div class=\"msb-kpi-value\">" + toString(sold_count) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Without auctions</div><div class=\"msb-kpi-value\">" + toString(no_auction_count) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">With screenshots</div><div class=\"msb-kpi-value\">" + toString(with_screenshots_count) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Average area</div><div class=\"msb-kpi-value\">" + doubleToStringMaxNDecimalPlaces(average_area, 1) + " m^2</div></div>";
+			page_out += "</div>";
+		}
 
 		page_out += "<section class=\"grouped-region\">";
 		page_out += "<h3>Filters</h3>";
@@ -775,6 +968,8 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		page_out += "<input id=\"admin-parcel-q\" type=\"text\" name=\"q\" value=\"" + web::Escaping::HTMLEscape(query_filter) + "\" placeholder=\"Parcel id / owner / title / description\">";
 		page_out += "<label for=\"admin-parcel-owner\">Owner</label>";
 		page_out += "<input id=\"admin-parcel-owner\" type=\"text\" name=\"owner\" value=\"" + web::Escaping::HTMLEscape(owner_filter) + "\" placeholder=\"username\">";
+		page_out += "<label for=\"admin-parcel-world\">World</label>";
+		page_out += "<input id=\"admin-parcel-world\" type=\"text\" name=\"world\" value=\"" + web::Escaping::HTMLEscape(world_filter) + "\" placeholder=\"world name (for world parcels)\">";
 		page_out += "<label for=\"admin-parcel-auction\">Auction</label>";
 		page_out += "<select id=\"admin-parcel-auction\" name=\"auction\">";
 		page_out += "<option value=\"all\"" + std::string(auction_filter == "all" ? " selected=\"selected\"" : "") + ">All</option>";
@@ -782,23 +977,35 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		page_out += "<option value=\"sold\"" + std::string(auction_filter == "sold" ? " selected=\"selected\"" : "") + ">Sold</option>";
 		page_out += "<option value=\"without_auction\"" + std::string(auction_filter == "without_auction" ? " selected=\"selected\"" : "") + ">Without auction</option>";
 		page_out += "</select>";
+		page_out += "<label for=\"admin-parcel-scope\">Scope</label>";
+		page_out += "<select id=\"admin-parcel-scope\" name=\"scope\">";
+		page_out += "<option value=\"all\"" + std::string(scope_filter == "all" ? " selected=\"selected\"" : "") + ">All parcels</option>";
+		page_out += "<option value=\"root\"" + std::string(scope_filter == "root" ? " selected=\"selected\"" : "") + ">Root world only</option>";
+		page_out += "<option value=\"worlds\"" + std::string(scope_filter == "worlds" ? " selected=\"selected\"" : "") + ">Personal worlds only</option>";
+		page_out += "</select>";
 		page_out += "<input type=\"submit\" value=\"Apply\">";
 		page_out += "<a class=\"msb-quiet-link\" href=\"/admin_parcels\">Reset</a>";
 		page_out += "</form>";
-		page_out += "<div class=\"field-description\">Quick local filter (without reload):</div>";
-		page_out += "<input id=\"admin-parcel-local-filter\" type=\"text\" placeholder=\"Type to instantly filter current table\">";
+		if(show_root_section)
+		{
+			page_out += "<div class=\"field-description\">Quick local filter (without reload, root table):</div>";
+			page_out += "<input id=\"admin-parcel-local-filter\" type=\"text\" placeholder=\"Type to instantly filter current root table\">";
+		}
 		page_out += "</section>";
 
-		page_out += "<section class=\"grouped-region\">";
-		page_out += "<h3>Bulk screenshot regenerate</h3>";
-		page_out += "<form action=\"/admin_regenerate_multiple_parcel_screenshots\" method=\"post\" class=\"msb-inline-form\">";
-		page_out += "<label for=\"admin-regen-start-id\">start parcel id</label>";
-		page_out += "<input id=\"admin-regen-start-id\" type=\"number\" name=\"start_parcel_id\" value=\"" + toString(0) + "\">";
-		page_out += "<label for=\"admin-regen-end-id\">end parcel id</label>";
-		page_out += "<input id=\"admin-regen-end-id\" type=\"number\" name=\"end_parcel_id\" value=\"" + toString(10) + "\">";
-		page_out += "<input type=\"submit\" value=\"Regenerate/recreate parcel screenshots\" onclick=\"return confirm('Are you sure you want to recreate parcel screenshots?');\" >";
-		page_out += "</form>";
-		page_out += "</section>";
+		if(show_root_section)
+		{
+			page_out += "<section class=\"grouped-region\">";
+			page_out += "<h3>Bulk screenshot regenerate</h3>";
+			page_out += "<form action=\"/admin_regenerate_multiple_parcel_screenshots\" method=\"post\" class=\"msb-inline-form\">";
+			page_out += "<label for=\"admin-regen-start-id\">start parcel id</label>";
+			page_out += "<input id=\"admin-regen-start-id\" type=\"number\" name=\"start_parcel_id\" value=\"" + toString(0) + "\">";
+			page_out += "<label for=\"admin-regen-end-id\">end parcel id</label>";
+			page_out += "<input id=\"admin-regen-end-id\" type=\"number\" name=\"end_parcel_id\" value=\"" + toString(10) + "\">";
+			page_out += "<input type=\"submit\" value=\"Regenerate/recreate parcel screenshots\" onclick=\"return confirm('Are you sure you want to recreate parcel screenshots?');\" >";
+			page_out += "</form>";
+			page_out += "</section>";
+		}
 
 		page_out += "<section class=\"grouped-region\">";
 		page_out += "<h3>Create parcel</h3>";
@@ -837,16 +1044,18 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		page_out += "</form>";
 		page_out += "</section>";
 
-		page_out += "<section class=\"grouped-region\">";
-		page_out += "<h3>Parcels list</h3>";
-		page_out += "<div class=\"msb-table-wrap\">";
-		page_out += "<table class=\"msb-table msb-parcels-table\" aria-label=\"Root world Parcels table\">";
-		page_out += "<thead><tr><th>ID</th><th>Owner</th><th>Description</th><th>Size</th><th>Z-bounds</th><th>Area</th><th>Screens</th><th>Auction</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
-
-		for(size_t i=0; i<rows.size(); ++i)
+		if(show_root_section)
 		{
-			const ParcelRow& row = rows[i];
-			const Parcel* parcel = row.parcel;
+			page_out += "<section class=\"grouped-region\">";
+			page_out += "<h3>Parcels list</h3>";
+			page_out += "<div class=\"msb-table-wrap\">";
+			page_out += "<table class=\"msb-table msb-parcels-table\" aria-label=\"Root world Parcels table\">";
+			page_out += "<thead><tr><th>ID</th><th>Owner</th><th>Description</th><th>Size</th><th>Z-bounds</th><th>Area</th><th>Screens</th><th>Auction</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
+
+			for(size_t i=0; i<rows.size(); ++i)
+			{
+				const ParcelRow& row = rows[i];
+				const Parcel* parcel = row.parcel;
 
 			std::string auction_state;
 			if(row.has_for_sale_auction)
@@ -880,12 +1089,193 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			page_out += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Are you sure you want to delete parcel " + parcel->id.toString() + "?');\" >";
 			page_out += "</form>";
 			page_out += "</div></td>";
-			page_out += "</tr>\n";
+				page_out += "</tr>\n";
+			}
+
+			page_out += "</tbody></table></div>";
+			page_out += "<div id=\"admin-parcels-visible-count\" class=\"field-description\">Showing " + toString((int)rows.size()) + " parcel(s) after server-side filters.</div>";
+			page_out += "</section>";
 		}
 
-		page_out += "</tbody></table></div>";
-		page_out += "<div id=\"admin-parcels-visible-count\" class=\"field-description\">Showing " + toString((int)rows.size()) + " parcel(s) after server-side filters.</div>";
-		page_out += "</section>";
+		if(show_world_section)
+		{
+			struct WorldParcelRow
+			{
+				std::string world_name;
+				ParcelRef parcel;
+				std::string owner_username;
+				double size_x = 0;
+				double size_y = 0;
+				double area = 0;
+				bool has_for_sale_auction = false;
+				bool has_sold_auction = false;
+				bool has_any_auction = false;
+			};
+
+			std::vector<WorldParcelRow> world_rows;
+			int world_total_parcels = 0;
+			int world_for_sale_count = 0;
+			int world_sold_count = 0;
+			int world_no_auction_count = 0;
+			int world_with_screenshots_count = 0;
+			double world_total_area = 0.0;
+
+			for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+			{
+				ServerWorldState* world = world_it->second.ptr();
+				if(world == root_world.ptr())
+					continue;
+
+				for(auto parcel_it = world->getParcels(lock).begin(); parcel_it != world->getParcels(lock).end(); ++parcel_it)
+				{
+					ParcelRef parcel = parcel_it->second;
+					world_total_parcels++;
+
+					WorldParcelRow row;
+					row.world_name = world_it->first;
+					row.parcel = parcel;
+
+					const auto user_res = world_state.user_id_to_users.find(parcel->owner_id);
+					row.owner_username = (user_res == world_state.user_id_to_users.end()) ? std::string("[No user found]") : user_res->second->name;
+
+					const Vec3d span = parcel->aabb_max - parcel->aabb_min;
+					row.size_x = span.x;
+					row.size_y = span.y;
+					row.area = std::max(0.0, row.size_x * row.size_y);
+					world_total_area += row.area;
+
+					if(!parcel->screenshot_ids.empty())
+						world_with_screenshots_count++;
+
+					for(size_t i=0; i<parcel->parcel_auction_ids.size(); ++i)
+					{
+						const uint32 auction_id = parcel->parcel_auction_ids[i];
+						auto auction_res = world_state.parcel_auctions.find(auction_id);
+						if(auction_res == world_state.parcel_auctions.end())
+							continue;
+
+						row.has_any_auction = true;
+						const ParcelAuction* auction = auction_res->second.ptr();
+						if(auction->currentlyForSale(now))
+							row.has_for_sale_auction = true;
+						if(auction->auction_state == ParcelAuction::AuctionState_Sold)
+							row.has_sold_auction = true;
+					}
+
+					if(row.has_for_sale_auction) world_for_sale_count++;
+					if(row.has_sold_auction) world_sold_count++;
+					if(!row.has_any_auction) world_no_auction_count++;
+
+					bool include = true;
+					if(!query_filter.empty())
+					{
+						const std::string searchable = "parcel " + row.parcel->id.toString() + " " + row.owner_username + " " + row.parcel->description + " " + row.parcel->title + " " + row.world_name;
+						include = containsCaseInsensitive(searchable, query_filter);
+					}
+					if(include && !owner_filter.empty())
+						include = containsCaseInsensitive(row.owner_username, owner_filter);
+					if(include && !world_filter.empty())
+						include = containsCaseInsensitive(row.world_name, world_filter);
+
+					if(include)
+					{
+						if(auction_filter == "for_sale")
+							include = row.has_for_sale_auction;
+						else if(auction_filter == "sold")
+							include = row.has_sold_auction;
+						else if(auction_filter == "without_auction")
+							include = !row.has_any_auction;
+					}
+
+					if(include)
+						world_rows.push_back(row);
+				}
+			}
+
+			const double world_average_area = (world_total_parcels > 0) ? (world_total_area / (double)world_total_parcels) : 0.0;
+
+			page_out += "<section class=\"grouped-region\">";
+			page_out += "<h3>Parcels in personal worlds</h3>";
+			page_out += "<div class=\"msb-kpi-grid\">";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">World parcels total</div><div class=\"msb-kpi-value\">" + toString(world_total_parcels) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Filtered</div><div class=\"msb-kpi-value\">" + toString((int)world_rows.size()) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">For sale</div><div class=\"msb-kpi-value\">" + toString(world_for_sale_count) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Sold</div><div class=\"msb-kpi-value\">" + toString(world_sold_count) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Without auctions</div><div class=\"msb-kpi-value\">" + toString(world_no_auction_count) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">With screenshots</div><div class=\"msb-kpi-value\">" + toString(world_with_screenshots_count) + "</div></div>";
+			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Average area</div><div class=\"msb-kpi-value\">" + doubleToStringMaxNDecimalPlaces(world_average_area, 1) + " m^2</div></div>";
+			page_out += "</div>";
+
+			page_out += "<div class=\"field-description\">Use actions to manage owner/editors/delete for parcels created in personal worlds.</div>";
+			page_out += "<div class=\"msb-table-wrap\">";
+			page_out += "<table class=\"msb-table\" aria-label=\"Personal worlds parcels table\">";
+			page_out += "<thead><tr><th>World</th><th>ID</th><th>Owner</th><th>Description</th><th>Size</th><th>Z-bounds</th><th>Area</th><th>Screens</th><th>Auction</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
+
+			for(size_t i=0; i<world_rows.size(); ++i)
+			{
+				const WorldParcelRow& row = world_rows[i];
+				const Parcel* parcel = row.parcel.ptr();
+
+				std::string auction_state;
+				if(row.has_for_sale_auction)
+					auction_state = "<span class=\"feature-enabled\">for sale</span>";
+				else if(row.has_sold_auction)
+					auction_state = "<span class=\"feature-disabled\">sold</span>";
+				else if(row.has_any_auction)
+					auction_state = "history";
+				else
+					auction_state = "none";
+
+				std::string writer_refs_initial;
+				for(size_t z=0; z<parcel->writer_ids.size(); ++z)
+				{
+					const auto writer_res = world_state.user_id_to_users.find(parcel->writer_ids[z]);
+					if(z > 0)
+						writer_refs_initial += ", ";
+					if(writer_res != world_state.user_id_to_users.end())
+						writer_refs_initial += writer_res->second->name;
+					else
+						writer_refs_initial += parcel->writer_ids[z].toString();
+				}
+
+				page_out += "<tr>";
+				page_out += "<td><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">" + web::Escaping::HTMLEscape(row.world_name) + "</a></td>";
+				page_out += "<td>" + parcel->id.toString() + "</td>";
+				page_out += "<td>" + web::Escaping::HTMLEscape(row.owner_username) + "</td>";
+				page_out += "<td>" + web::Escaping::HTMLEscape(parcel->description.empty() ? std::string("-") : parcel->description.substr(0, 140)) + "</td>";
+				page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " x " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
+				page_out += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
+				page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.area, 1) + " m^2</td>";
+				page_out += "<td>" + toString((int)parcel->screenshot_ids.size()) + "</td>";
+				page_out += "<td>" + auction_state + "</td>";
+				page_out += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
+				page_out += "<td><div class=\"msb-row-actions\">";
+				page_out += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">Open world</a>";
+				page_out += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
+				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+				page_out += "<input type=\"text\" name=\"new_owner_ref\" value=\"" + web::Escaping::HTMLEscape(row.owner_username) + "\" placeholder=\"owner id/name\">";
+				page_out += "<input type=\"submit\" value=\"Set owner\" onclick=\"return confirm('Set owner for parcel " + parcel->id.toString() + "?');\" >";
+				page_out += "</form>";
+				page_out += "<form action=\"/set_world_parcel_writers_post\" method=\"post\" class=\"msb-inline-form\">";
+				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+				page_out += "<input type=\"text\" name=\"writer_refs\" value=\"" + web::Escaping::HTMLEscape(writer_refs_initial) + "\" placeholder=\"editors ids/names\">";
+				page_out += "<input type=\"submit\" value=\"Set editors\" onclick=\"return confirm('Set editors for parcel " + parcel->id.toString() + "?');\" >";
+				page_out += "</form>";
+				page_out += "<form action=\"/admin_delete_parcel\" method=\"post\" class=\"msb-inline-form\">";
+				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+				page_out += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + " from this world?');\" >";
+				page_out += "</form>";
+				page_out += "</div></td>";
+				page_out += "</tr>\n";
+			}
+
+			page_out += "</tbody></table></div>";
+			page_out += "<div class=\"field-description\">Showing " + toString((int)world_rows.size()) + " personal-world parcel(s) after server-side filters.</div>";
+			page_out += "</section>";
+		}
 	} // End Lock scope
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
@@ -2484,6 +2874,7 @@ void handleDeleteParcelPost(ServerAllWorldsState& world_state, const web::Reques
 		const ParcelID parcel_id = ParcelID(request.getPostIntField("parcel_id"));
 		if(!parcel_id.valid())
 			throw glare::Exception("Invalid parcel_id.");
+		const std::string world_name = normaliseWorldNameField(request.getPostField("world_name").str());
 
 		{ // Lock scope
 			WorldStateLock lock(world_state.mutex);
@@ -2491,30 +2882,45 @@ void handleDeleteParcelPost(ServerAllWorldsState& world_state, const web::Reques
 			User* user = LoginHandlers::getLoggedInUser(world_state, request);
 			runtimeCheck(user);
 
-			Reference<ServerWorldState> root_world = world_state.getRootWorldState();
+			ServerWorldState* target_world = NULL;
+			if(world_name.empty())
+			{
+				target_world = world_state.getRootWorldState().ptr();
+			}
+			else
+			{
+				const auto world_res = world_state.world_states.find(world_name);
+				if(world_res == world_state.world_states.end())
+					throw glare::Exception("World '" + world_name + "' not found.");
+				target_world = world_res->second.ptr();
+			}
 
-			const auto parcel_res = root_world->parcels.find(parcel_id);
-			if(parcel_res == root_world->parcels.end())
-				throw glare::Exception("Parcel not found.");
+			auto parcel_res = target_world->getParcels(lock).find(parcel_id);
+			if(parcel_res == target_world->getParcels(lock).end())
+				throw glare::Exception("Parcel not found in world '" + (world_name.empty() ? std::string("[root world]") : world_name) + "'.");
 
 			ParcelRef parcel = parcel_res->second;
 			if(!parcel->parcel_auction_ids.empty())
 				throw glare::Exception("Parcel has auction records, delete/terminate auctions first.");
 
 			// Remove from dirty set first so it won't be re-written to DB after delete.
-			root_world->getDBDirtyParcels(lock).erase(parcel);
+			target_world->getDBDirtyParcels(lock).erase(parcel);
 
 			if(parcel->database_key.valid())
 				world_state.db_records_to_delete.insert(parcel->database_key);
 
-			root_world->parcels.erase(parcel_res);
+			target_world->getParcels(lock).erase(parcel_res);
 
 			world_state.markAsChanged();
-			world_state.setUserWebMessage(user->id, "Parcel deleted.");
-			world_state.addAdminAuditLogEntry(user->id, user->name, "Deleted parcel " + parcel_id.toString() + ".");
+			const std::string world_display_name = world_name.empty() ? std::string("[root world]") : world_name;
+			world_state.setUserWebMessage(user->id, "Parcel " + parcel_id.toString() + " deleted from world '" + world_display_name + "'.");
+			world_state.addAdminAuditLogEntry(user->id, user->name, "Deleted parcel " + parcel_id.toString() + " from world '" + world_display_name + "'.");
 		} // End lock scope
 
-		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_parcels");
+		if(world_name.empty())
+			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_parcels");
+		else
+			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_parcels?scope=worlds&world=" + web::Escaping::URLEscape(world_name));
 	}
 	catch(glare::Exception& e)
 	{
