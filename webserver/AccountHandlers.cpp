@@ -108,6 +108,64 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 		if(worlds_html.empty())
 			worlds_html = "<div class=\"msb-card\">You don't have personal worlds yet.</div>";
 
+		struct AccountWorldParcelRow
+		{
+			std::string world_name;
+			ParcelRef parcel;
+			std::string owner_username;
+			double size_x = 0.0;
+			double size_y = 0.0;
+			bool logged_user_is_owner = false;
+			bool logged_user_is_editor = false;
+		};
+
+		std::vector<AccountWorldParcelRow> owned_world_parcel_rows;
+		std::vector<AccountWorldParcelRow> editable_world_parcel_rows;
+		for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+		{
+			ServerWorldState* world = world_it->second.ptr();
+			if(world == root_world.ptr())
+				continue;
+
+			for(auto parcel_it = world->getParcels(lock).begin(); parcel_it != world->getParcels(lock).end(); ++parcel_it)
+			{
+				ParcelRef parcel = parcel_it->second;
+				const bool is_owner = (parcel->owner_id == logged_in_user->id);
+				bool is_editor = false;
+				for(size_t i=0; i<parcel->writer_ids.size(); ++i)
+				{
+					if(parcel->writer_ids[i] == logged_in_user->id)
+					{
+						is_editor = true;
+						break;
+					}
+				}
+
+				if(!is_owner && !is_editor)
+					continue;
+
+				AccountWorldParcelRow row;
+				row.world_name = world_it->first;
+				row.parcel = parcel;
+				row.logged_user_is_owner = is_owner;
+				row.logged_user_is_editor = is_editor;
+
+				const auto owner_res = world_state.user_id_to_users.find(parcel->owner_id);
+				row.owner_username = (owner_res == world_state.user_id_to_users.end()) ? std::string("[No user found]") : owner_res->second->name;
+
+				const Vec3d span = parcel->aabb_max - parcel->aabb_min;
+				row.size_x = span.x;
+				row.size_y = span.y;
+
+				if(is_owner)
+					owned_world_parcel_rows.push_back(row);
+				else
+					editable_world_parcel_rows.push_back(row);
+			}
+		}
+		const int owned_world_parcel_count = (int)owned_world_parcel_rows.size();
+		const int editable_world_parcel_count = (int)editable_world_parcel_rows.size();
+
 		std::string events_html;
 		int created_event_count = 0;
 		for(auto it = world_state.events.begin(); it != world_state.events.end(); ++it)
@@ -167,6 +225,8 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 		page += "<h2>Stats</h2>";
 		page += "<div>Parcels: " + toString(owned_parcel_count) + "</div>";
 		page += "<div>Worlds: " + toString(owned_world_count) + "</div>";
+		page += "<div>World parcels (owner): " + toString(owned_world_parcel_count) + "</div>";
+		page += "<div>World parcels (editor): " + toString(editable_world_parcel_count) + "</div>";
 		page += "<div>Events: " + toString(created_event_count) + "</div>";
 		page += "<div>ChatBots: " + toString(chatbot_count) + "</div>";
 		page += "</section>";
@@ -174,6 +234,97 @@ void renderUserAccountPage(ServerAllWorldsState& world_state, const web::Request
 
 		page += "<h2>Parcels</h2><div class=\"msb-card-grid\">" + parcels_html + "</div>";
 		page += "<h2>Worlds</h2><div class=\"msb-card-grid\">" + worlds_html + "</div>";
+		page += "<h2>Parcels in personal worlds (owner)</h2>";
+		if(owned_world_parcel_rows.empty())
+		{
+			page += "<div class=\"msb-card\">You do not own parcels in personal worlds yet.</div>";
+		}
+		else
+		{
+			page += "<div class=\"msb-table-wrap\">";
+			page += "<table class=\"msb-table\" aria-label=\"Owned world parcels table\">";
+			page += "<thead><tr><th>World</th><th>ID</th><th>Owner</th><th>Size</th><th>Z-bounds</th><th>Editors</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
+			for(size_t i=0; i<owned_world_parcel_rows.size(); ++i)
+			{
+				const AccountWorldParcelRow& row = owned_world_parcel_rows[i];
+				const Parcel* parcel = row.parcel.ptr();
+
+				std::string writer_refs_initial;
+				for(size_t z=0; z<parcel->writer_ids.size(); ++z)
+				{
+					const auto writer_res = world_state.user_id_to_users.find(parcel->writer_ids[z]);
+					if(z > 0)
+						writer_refs_initial += ", ";
+					if(writer_res != world_state.user_id_to_users.end())
+						writer_refs_initial += writer_res->second->name;
+					else
+						writer_refs_initial += parcel->writer_ids[z].toString();
+				}
+
+				page += "<tr>";
+				page += "<td><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">" + web::Escaping::HTMLEscape(row.world_name) + "</a></td>";
+				page += "<td>" + parcel->id.toString() + "</td>";
+				page += "<td>" + web::Escaping::HTMLEscape(row.owner_username) + "</td>";
+				page += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " x " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
+				page += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
+				page += "<td>" + toString((int)parcel->writer_ids.size()) + "</td>";
+				page += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
+				page += "<td><div class=\"msb-row-actions\">";
+				page += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">Open world</a>";
+				page += "<form action=\"/set_world_parcel_writers_post\" method=\"post\" class=\"msb-inline-form\">";
+				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+				page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+				page += "<input type=\"text\" name=\"writer_refs\" value=\"" + web::Escaping::HTMLEscape(writer_refs_initial) + "\" placeholder=\"editors ids/names\">";
+				page += "<input type=\"submit\" value=\"Set editors\" onclick=\"return confirm('Set editors for world parcel " + parcel->id.toString() + "?');\" >";
+				page += "</form>";
+				if(isGodUser(logged_in_user->id))
+				{
+					page += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
+					page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+					page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+					page += "<input type=\"text\" name=\"new_owner_ref\" value=\"" + web::Escaping::HTMLEscape(row.owner_username) + "\" placeholder=\"owner id/name\">";
+					page += "<input type=\"submit\" value=\"Set owner\" onclick=\"return confirm('Set owner for world parcel " + parcel->id.toString() + "?');\" >";
+					page += "</form>";
+					page += "<form action=\"/admin_delete_parcel\" method=\"post\" class=\"msb-inline-form\">";
+					page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+					page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+					page += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete world parcel " + parcel->id.toString() + "?');\" >";
+					page += "</form>";
+				}
+				page += "</div></td>";
+				page += "</tr>";
+			}
+			page += "</tbody></table></div>";
+		}
+
+		page += "<h2>Parcels in personal worlds (editor access)</h2>";
+		if(editable_world_parcel_rows.empty())
+		{
+			page += "<div class=\"msb-card\">No additional parcels where you are editor.</div>";
+		}
+		else
+		{
+			page += "<div class=\"msb-table-wrap\">";
+			page += "<table class=\"msb-table\" aria-label=\"Editable world parcels table\">";
+			page += "<thead><tr><th>World</th><th>ID</th><th>Owner</th><th>Size</th><th>Z-bounds</th><th>Editors</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
+			for(size_t i=0; i<editable_world_parcel_rows.size(); ++i)
+			{
+				const AccountWorldParcelRow& row = editable_world_parcel_rows[i];
+				const Parcel* parcel = row.parcel.ptr();
+				page += "<tr>";
+				page += "<td><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">" + web::Escaping::HTMLEscape(row.world_name) + "</a></td>";
+				page += "<td>" + parcel->id.toString() + "</td>";
+				page += "<td>" + web::Escaping::HTMLEscape(row.owner_username) + "</td>";
+				page += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " x " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
+				page += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
+				page += "<td>" + toString((int)parcel->writer_ids.size()) + "</td>";
+				page += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
+				page += "<td><div class=\"msb-row-actions\"><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">Open world</a></div></td>";
+				page += "</tr>";
+			}
+			page += "</tbody></table></div>";
+		}
+
 		page += "<h2>Events</h2><div class=\"msb-card-grid\">" + events_html + "</div>";
 		page += "<h2>ChatBots</h2><div class=\"msb-card-grid\">" + chatbots_html + "</div>";
 		page += "<p><a href=\"/new_chatbot\">Create a new ChatBot</a></p>";
