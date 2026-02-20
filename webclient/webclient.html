@@ -146,6 +146,18 @@
 
 		var statusElement = document.getElementById('status');
 
+		function forceWebclientGesturePanelVisible() {
+			try
+			{
+				if(window.localStorage)
+					window.localStorage.setItem("GestureUI/gestures_visible", "true");
+			}
+			catch(err)
+			{
+				console.warn("Failed to set default gesture panel visibility:", err);
+			}
+		}
+
 		function installMetasiberiaButtonOverrides(moduleRef) {
 			const buttonIcons = [
 				"about.png",
@@ -185,6 +197,50 @@
 				"white_x.png",
 				"Yawn.png"
 			];
+			const iconSourceOverrides = {
+				"plus.png": "Waving 1.png"
+			};
+
+			function processButtonIconBytes(iconName, bytes) {
+				// For webclient only, shrink the visual size of the movement D-pad icon by 2x.
+				if(iconName !== "dir_pad.png")
+					return Promise.resolve(bytes);
+
+				if(typeof createImageBitmap !== "function" || typeof document === "undefined")
+					return Promise.resolve(bytes);
+
+				return createImageBitmap(new Blob([bytes], { type: "image/png" }))
+					.then(bitmap => {
+						const canvas = document.createElement("canvas");
+						canvas.width = bitmap.width;
+						canvas.height = bitmap.height;
+						const ctx = canvas.getContext("2d");
+						if(!ctx)
+							return bytes;
+
+						const scaledW = Math.max(1, Math.floor(bitmap.width * 0.5));
+						const scaledH = Math.max(1, Math.floor(bitmap.height * 0.5));
+						const dstX = Math.floor((bitmap.width - scaledW) * 0.5);
+						const dstY = Math.floor((bitmap.height - scaledH) * 0.5);
+
+						ctx.clearRect(0, 0, canvas.width, canvas.height);
+						ctx.drawImage(bitmap, dstX, dstY, scaledW, scaledH);
+
+						return new Promise(resolve => {
+							canvas.toBlob(blob => {
+								if(!blob)
+								{
+									resolve(bytes);
+									return;
+								}
+								blob.arrayBuffer()
+									.then(buffer => resolve(new Uint8Array(buffer)))
+									.catch(() => resolve(bytes));
+							}, "image/png");
+						});
+					})
+					.catch(() => bytes);
+			}
 
 			const buttonsHash = "WEBCLIENT_BUTTONS_HASH";
 
@@ -215,7 +271,8 @@
 							const depId = "ms_btn_override_" + iconName.replace(/[^a-zA-Z0-9_]/g, "_");
 							moduleRef.addRunDependency(depId);
 
-							const encodedIconName = iconName.split('/').map(encodeURIComponent).join('/');
+							const sourceIconName = iconSourceOverrides[iconName] || iconName;
+							const encodedIconName = sourceIconName.split('/').map(encodeURIComponent).join('/');
 							const sourceURL = "/webclient/data/resources/buttons/" + encodedIconName + "?hash=" + buttonsHash;
 
 							fetch(sourceURL, { cache: "no-store" })
@@ -224,8 +281,9 @@
 										throw new Error("HTTP " + response.status + " for " + sourceURL);
 									return response.arrayBuffer();
 								})
-								.then(buf => {
-									const bytes = new Uint8Array(buf);
+								.then(buf => new Uint8Array(buf))
+								.then(bytes => processButtonIconBytes(iconName, bytes))
+								.then(bytes => {
 									const targetPath = "/data/resources/buttons/" + iconName;
 
 									try { moduleRef.FS_unlink(targetPath); } catch(e) {}
@@ -268,6 +326,8 @@
 				}
 			}
 		}
+
+		forceWebclientGesturePanelVisible();
 
 		var Module = {
 			print: (function() {})(),

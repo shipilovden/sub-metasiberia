@@ -35,7 +35,12 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	gui_client = gui_client_;
 	gl_ui = gl_ui_;
 
-	gestures_visible        = gui_client->getSettingsStore()->getBoolValue("GestureUI/gestures_visible",        /*default val=*/false);
+#if EMSCRIPTEN
+	const bool default_gestures_visible = true;
+#else
+	const bool default_gestures_visible = false;
+#endif
+	gestures_visible        = gui_client->getSettingsStore()->getBoolValue("GestureUI/gestures_visible",        default_gestures_visible);
 	vehicle_buttons_visible = false;
 
 	// Start with the default gestures.  These can be overridden with the user's custom settings when they log in.
@@ -46,7 +51,8 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Manage gestures";
-		edit_gestures_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/plus.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		// Use a filled circular icon so the manager button stays visible on bright sky backgrounds in webclient.
+		edit_gestures_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Waving 1.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
 		edit_gestures_button->handler = this;
 		gl_ui->addWidget(edit_gestures_button);
 	}
@@ -330,7 +336,10 @@ void GestureUI::updateWidgetPositions()
 			max_gesture_buttons_y = myMax(max_gesture_buttons_y, gesture_buttons[i]->getRect().getMax().y);
 		}
 
-		edit_gestures_button->setPosAndDims(Vec2f(GESTURES_LEFT_X, max_gesture_buttons_y + SPACING), Vec2f(gl_ui->getUIWidthForDevIndepPixelWidth(40)));
+		const float edit_button_w = gl_ui->getUIWidthForDevIndepPixelWidth(40);
+		const float edit_button_x = gestures_visible ? GESTURES_LEFT_X : (1 - edit_button_w - SPACING);
+		const float edit_button_y = gestures_visible ? (max_gesture_buttons_y + SPACING) : (-min_max_y + SPACING + edit_button_w + SPACING);
+		edit_gestures_button->setPosAndDims(Vec2f(edit_button_x, edit_button_y), Vec2f(edit_button_w));
 
 		if(collapse_button)
 		{
