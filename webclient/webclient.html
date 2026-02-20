@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8">
 		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-		<title>Substrata Web Client</title>
+		<title>Metasiberia Web Client</title>
 		
 		<style>
 		#canvas {
@@ -291,41 +291,9 @@
 
 		function installMetasiberiaButtonOverrides(moduleRef) {
 			const buttonIcons = [
-				"about.png",
-				"anchor.png",
-				"avatar.png",
-				"avaturnme.png",
-				"bike.png",
-				"Clapping.png",
-				"Dancing 2.png",
-				"Dancing.png",
-				"dir_pad.png",
-				"down_tab.png",
-				"Excited.png",
-				"expand_chat_icon.png",
-				"home.png",
-				"left_tab.png",
-				"Looking.png",
-				"microphone.png",
-				"minimap_icon.png",
-				"parcels.png",
-				"Quick Informal Bow.png",
-				"ReadyPlayerMe.png",
-				"Rejected.png",
-				"right_tab.png",
-				"Selfie.png",
-				"Sit.png",
-				"Sitting On Ground.png",
-				"Sitting Talking.png",
-				"Sleeping Idle.png",
-				"Standing React Death Forward.png",
-				"transit_icon.png",
-				"vol_icon.png",
-				"Waving 1.png",
-				"Waving 2.png",
-				"webcam.png",
-				"white_x.png",
-				"Yawn.png"
+				// Keep override minimal and robust: files with spaces may 404 on current server URL decoding.
+				// We only override D-pad to control size/placement in webclient.
+				"dir_pad.png"
 			];
 			function processButtonIconBytes(iconName, bytes) {
 				// For webclient only, shrink the visual size of the movement D-pad icon by 2x.
@@ -497,7 +465,8 @@
 			}
 		};
 
-		installCriticalWebclientButtonSeeds(Module);
+		// NOTE: Don't pre-seed icons here. They are now packaged in gui_client.data,
+		// and pre-creating the same files causes Emscripten preload ErrnoError (EEXIST).
 		installMetasiberiaButtonOverrides(Module);
 
 		Module.setStatus('Downloading...');
