@@ -116,3 +116,8 @@ Important source fixes for Emscripten build:
 Browser-side note:
 - After deploy, use `Ctrl+F5`.
 - If still stale, clear site data for `vr.metasiberia.com` and reload.
+
+## 9. 2026-02-20 Gesture Manager Icon
+
+- `Manage gestures` button icon in webclient is set to `plus.png` (same visual icon as add gesture action).
+- Source: `gui_client/GestureUI.cpp` (`edit_gestures_button`).
