@@ -610,8 +610,8 @@ void MiscInfoUI::updateWidgetPositions()
 		{
 			const float spacing = gl_ui->getUIWidthForDevIndepPixelWidth(25);
 
-			// Joystick size: 66px (doubled from 33px)
-			const float button_w = myMax(gl_ui->getUIWidthForDevIndepPixelWidth(66), 0.05f);
+			// Joystick size: 33px
+			const float button_w = myMax(gl_ui->getUIWidthForDevIndepPixelWidth(33), 0.05f);
 			const float button_h = button_w;
 			// Shift joystick right to avoid overlap with enlarged chat button (chat is now 60px instead of 40px)
 			// Original position was -1.f + 0.4f, shift it further right
