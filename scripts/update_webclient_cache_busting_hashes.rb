@@ -40,6 +40,9 @@ def computeHashForFile(path)
 end
 
 def computeHashForDir(path)
+	# Normalize Windows paths for Dir.glob; backslashes can break glob matching.
+	path = path.gsub("\\", "/")
+
 	sha256 = Digest::SHA256.new
 
 	files = Dir.glob(path + "/**/*", File::FNM_DOTMATCH).select do |f|
