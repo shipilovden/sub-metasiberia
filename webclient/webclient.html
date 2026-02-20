@@ -296,7 +296,7 @@
 				"dir_pad.png"
 			];
 			function processButtonIconBytes(iconName, bytes) {
-				// For webclient only, shrink the visual size of the movement D-pad icon by 2x.
+				// For webclient only, keep D-pad position adjustment while restoring size.
 				if(iconName !== "dir_pad.png")
 					return Promise.resolve(bytes);
 
@@ -312,8 +312,9 @@
 						if(!ctx)
 							return bytes;
 
-						const scaledW = Math.max(1, Math.floor(bitmap.width * 0.5));
-						const scaledH = Math.max(1, Math.floor(bitmap.height * 0.5));
+						const scale = 1.0; // 2x larger than previous 0.5 setting.
+						const scaledW = Math.max(1, Math.floor(bitmap.width * scale));
+						const scaledH = Math.max(1, Math.floor(bitmap.height * scale));
 						const dstX = Math.floor((bitmap.width - scaledW) * 0.5);
 						const dstY = Math.floor((bitmap.height - scaledH) * 0.95); // Push visual cross lower on screen.
 
