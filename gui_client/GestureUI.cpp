@@ -51,8 +51,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Manage gestures";
-		// Use a filled circular icon so the manager button stays visible on bright sky backgrounds in webclient.
-		edit_gestures_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Waving 1.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		edit_gestures_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/plus.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
 		edit_gestures_button->handler = this;
 		gl_ui->addWidget(edit_gestures_button);
 	}
