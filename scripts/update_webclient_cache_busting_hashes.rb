@@ -55,9 +55,14 @@ def computeHashForDir(path)
 	return sha256.hexdigest[0, 16]
 end
 
-def checkAndReplaceString(content, src_str, dest_str)
+def checkAndReplaceString(content, src_str, dest_str, required=true)
 	if content.index(src_str).nil?
-		raise "Could not find string '" + src_str + "' in file."
+		if required
+			raise "Could not find string '" + src_str + "' in file."
+		else
+			puts "Skipping optional replacement for missing '" + src_str + "' in webclient.html..."
+			return content
+		end
 	end
 
 	puts "Updating '" + src_str + "' with '" + dest_str + "' in webclient.html..."
@@ -75,7 +80,7 @@ def doReplacementsForGeneratedFilesInDir(webclient_html_contents, output_dir, bu
 	gui_client_js_hash = computeHashForFile(output_dir + "/gui_client.js")
 	webclient_html_contents = checkAndReplaceString(webclient_html_contents, "GUI_CLIENT_JS_HASH", gui_client_js_hash)
 
-	webclient_html_contents = checkAndReplaceString(webclient_html_contents, "WEBCLIENT_BUTTONS_HASH", buttons_hash)
+	webclient_html_contents = checkAndReplaceString(webclient_html_contents, "WEBCLIENT_BUTTONS_HASH", buttons_hash, false)
 
 	return webclient_html_contents
 end
