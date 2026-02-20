@@ -146,6 +146,129 @@
 
 		var statusElement = document.getElementById('status');
 
+		function installMetasiberiaButtonOverrides(moduleRef) {
+			const buttonIcons = [
+				"about.png",
+				"anchor.png",
+				"avatar.png",
+				"avaturnme.png",
+				"bike.png",
+				"Clapping.png",
+				"Dancing 2.png",
+				"Dancing.png",
+				"dir_pad.png",
+				"down_tab.png",
+				"Excited.png",
+				"expand_chat_icon.png",
+				"home.png",
+				"left_tab.png",
+				"Looking.png",
+				"microphone.png",
+				"minimap_icon.png",
+				"parcels.png",
+				"plus.png",
+				"Quick Informal Bow.png",
+				"ReadyPlayerMe.png",
+				"Rejected.png",
+				"right_tab.png",
+				"Selfie.png",
+				"Sit.png",
+				"Sitting On Ground.png",
+				"Sitting Talking.png",
+				"Sleeping Idle.png",
+				"Standing React Death Forward.png",
+				"transit_icon.png",
+				"vol_icon.png",
+				"Waving 1.png",
+				"Waving 2.png",
+				"webcam.png",
+				"white_x.png",
+				"Yawn.png"
+			];
+
+			const buttonsHash = "WEBCLIENT_BUTTONS_HASH";
+
+			if(!Array.isArray(moduleRef.preRun))
+				moduleRef.preRun = moduleRef.preRun ? [moduleRef.preRun] : [];
+
+			const preRunArray = moduleRef.preRun;
+			const originalPush = preRunArray.push.bind(preRunArray);
+			let overridePreRunAdded = false;
+
+			const addOverridePreRun = () => {
+				if(overridePreRunAdded)
+					return;
+				overridePreRunAdded = true;
+
+				originalPush(function metasiberiaButtonOverrides() {
+					try
+					{
+						if(typeof moduleRef.addRunDependency !== "function" ||
+							typeof moduleRef.removeRunDependency !== "function" ||
+							typeof moduleRef.FS_createDataFile !== "function" ||
+							typeof moduleRef.FS_unlink !== "function" ||
+							typeof fetch !== "function")
+							return;
+
+						for(const iconName of buttonIcons)
+						{
+							const depId = "ms_btn_override_" + iconName.replace(/[^a-zA-Z0-9_]/g, "_");
+							moduleRef.addRunDependency(depId);
+
+							const encodedIconName = iconName.split('/').map(encodeURIComponent).join('/');
+							const sourceURL = "/webclient/data/resources/buttons/" + encodedIconName + "?hash=" + buttonsHash;
+
+							fetch(sourceURL, { cache: "no-store" })
+								.then(response => {
+									if(!response.ok)
+										throw new Error("HTTP " + response.status + " for " + sourceURL);
+									return response.arrayBuffer();
+								})
+								.then(buf => {
+									const bytes = new Uint8Array(buf);
+									const targetPath = "/data/resources/buttons/" + iconName;
+
+									try { moduleRef.FS_unlink(targetPath); } catch(e) {}
+
+									moduleRef.FS_createDataFile("/data/resources/buttons", iconName, bytes, true, true, true);
+								})
+								.catch(err => {
+									console.warn("Metasiberia icon override failed for", iconName, err);
+								})
+								.finally(() => {
+									moduleRef.removeRunDependency(depId);
+								});
+						}
+					}
+					catch(err)
+					{
+						console.warn("Metasiberia icon override init failed:", err);
+					}
+				});
+			};
+
+			preRunArray.push = function(...args) {
+				const result = originalPush(...args);
+
+				for(const fn of args)
+				{
+					if(fn && fn.name === "runWithFS")
+						addOverridePreRun();
+				}
+
+				return result;
+			};
+
+			for(const fn of preRunArray)
+			{
+				if(fn && fn.name === "runWithFS")
+				{
+					addOverridePreRun();
+					break;
+				}
+			}
+		}
+
 		var Module = {
 			print: (function() {})(),
 			canvas: (() => {
@@ -188,6 +311,8 @@
 				return prefix + path + suffix;
 			}
 		};
+
+		installMetasiberiaButtonOverrides(Module);
 
 		Module.setStatus('Downloading...');
 
