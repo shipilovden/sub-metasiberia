@@ -173,7 +173,7 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			if(res == world_state.world_states.end())
 				throw glare::Exception("Couldn't find world");
 
-			const ServerWorldState* world = res->second.ptr();
+			ServerWorldState* world = res->second.ptr();
 
 			User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
 			const bool logged_in_user_is_world_owner = logged_in_user && (world->details.owner_id == logged_in_user->id); // If the user is logged in and created this world:
@@ -215,59 +215,166 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 				page += "<br/><br/><div><a href=\"/edit_world/" + URLEscapeWorldName(world_name) + "\">Edit world</a></div>";
 			}
 
+			struct WorldParcelRow
+			{
+				ParcelRef parcel;
+				std::string owner_username;
+				double size_x = 0.0;
+				double size_y = 0.0;
+				bool logged_user_is_owner = false;
+				bool logged_user_is_editor = false;
+			};
+
+			std::vector<WorldParcelRow> parcel_rows;
+			parcel_rows.reserve(world->getParcels(lock).size());
+			int logged_user_owned_parcel_count = 0;
+			int logged_user_editable_parcel_count = 0;
+
+			for(auto parcel_it = world->getParcels(lock).begin(); parcel_it != world->getParcels(lock).end(); ++parcel_it)
+			{
+				ParcelRef parcel = parcel_it->second;
+				WorldParcelRow row;
+				row.parcel = parcel;
+
+				const auto owner_res = world_state.user_id_to_users.find(parcel->owner_id);
+				row.owner_username = (owner_res == world_state.user_id_to_users.end()) ? std::string("[No user found]") : owner_res->second->name;
+
+				const Vec3d span = parcel->aabb_max - parcel->aabb_min;
+				row.size_x = span.x;
+				row.size_y = span.y;
+
+				if(logged_in_user)
+				{
+					row.logged_user_is_owner = (parcel->owner_id == logged_in_user->id);
+					for(size_t i=0; i<parcel->writer_ids.size(); ++i)
+					{
+						if(parcel->writer_ids[i] == logged_in_user->id)
+						{
+							row.logged_user_is_editor = true;
+							break;
+						}
+					}
+
+					if(row.logged_user_is_owner)
+						logged_user_owned_parcel_count++;
+					else if(row.logged_user_is_editor)
+						logged_user_editable_parcel_count++;
+				}
+
+				parcel_rows.push_back(row);
+			}
+
+			page += "<br/><section class=\"grouped-region\">";
+			page += "<h3>Parcels in this world</h3>";
+			page += "<div class=\"msb-kpi-grid\">";
+			page += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Parcels total</div><div class=\"msb-kpi-value\">" + toString((int)parcel_rows.size()) + "</div></div>";
+			if(logged_in_user)
+			{
+				page += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Your parcels (owner)</div><div class=\"msb-kpi-value\">" + toString(logged_user_owned_parcel_count) + "</div></div>";
+				page += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Your parcels (editor)</div><div class=\"msb-kpi-value\">" + toString(logged_user_editable_parcel_count) + "</div></div>";
+			}
+			page += "</div>";
+
 			if(logged_in_user_is_superadmin)
 			{
-				page += "<br/><div class=\"grouped-region\">";
-				page += "<form action=\"/create_world_parcel_post\" method=\"post\">";
+				page += "<div class=\"field-description\">Superadmin mode: you can create parcels, assign owner/editors, and delete parcels in this world.</div>";
+				page += "<form action=\"/create_world_parcel_post\" method=\"post\" class=\"msb-inline-form\">";
 				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
-				page += "<label for=\"new-world-parcel-owner\">Owner (id or username)</label><br/>";
-				page += "<input id=\"new-world-parcel-owner\" type=\"text\" name=\"owner_username\" value=\"" + web::Escaping::HTMLEscape(owner_username) + "\" title=\"User id or username that will own the new parcel\"><br/>";
-				page += "<label for=\"new-world-parcel-editors\">Editors (ids or usernames, comma-separated)</label><br/>";
-				page += "<input id=\"new-world-parcel-editors\" type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated list of user ids or usernames that can edit objects in the parcel\"><br/>";
+				page += "<label for=\"new-world-parcel-owner\">Owner (id or username)</label>";
+				page += "<input id=\"new-world-parcel-owner\" type=\"text\" name=\"owner_username\" value=\"" + web::Escaping::HTMLEscape(owner_username) + "\" title=\"User id or username that will own the new parcel\">";
+				page += "<label for=\"new-world-parcel-editors\">Editors (ids or usernames, comma-separated)</label>";
+				page += "<input id=\"new-world-parcel-editors\" type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated list of user ids or usernames that can edit objects in the parcel\">";
 				page += "<input type=\"submit\" value=\"Create parcel in this world\" title=\"Create a new parcel in this world and assign owner/editors\" onclick=\"return confirm('Create a new parcel in this world?');\" >";
 				page += "</form>";
-				page += "</div>";
-
-				page += "<br/><div class=\"grouped-region\">";
-				page += "<h3>World parcel ownership (superadmin)</h3>";
-				page += "<form action=\"/set_world_parcel_owner_post\" method=\"post\">";
-				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
-				page += "<label for=\"world-owner-parcel-id\">Parcel id</label><br/>";
-				page += "<input id=\"world-owner-parcel-id\" type=\"number\" name=\"parcel_id\" value=\"\"><br/>";
-				page += "<label for=\"world-owner-new-owner\">New owner (id or username)</label><br/>";
-				page += "<input id=\"world-owner-new-owner\" type=\"text\" name=\"new_owner_ref\" value=\"\"><br/>";
-				page += "<input type=\"submit\" value=\"Set parcel owner\" onclick=\"return confirm('Set owner for this world parcel?');\" >";
-				page += "</form>";
-				page += "</div>";
 			}
-
-			if(logged_in_user && (logged_in_user_is_world_owner || logged_in_user_is_superadmin))
+			else if(logged_in_user)
 			{
-				page += "<br/><div class=\"grouped-region\">";
-				page += "<h3>World parcel editors</h3>";
-				page += "<form action=\"/set_world_parcel_writers_post\" method=\"post\">";
-				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
-				page += "<label for=\"world-editors-parcel-id\">Parcel id</label><br/>";
-				page += "<input id=\"world-editors-parcel-id\" type=\"number\" name=\"parcel_id\" value=\"\"><br/>";
-				page += "<label for=\"world-editors-list\">Editors (ids or usernames, comma-separated)</label><br/>";
-				page += "<input id=\"world-editors-list\" type=\"text\" name=\"writer_refs\" value=\"\" title=\"Owner will always remain in editors list\"><br/>";
-				page += "<input type=\"submit\" value=\"Set editors\" onclick=\"return confirm('Set editors for this world parcel?');\" >";
-				page += "</form>";
-				page += "</div>";
-			}
-
-			if(logged_in_user && logged_in_user_is_world_owner && !logged_in_user_is_superadmin)
-			{
-				page += "<br/><div class=\"grouped-region\">Only superadmin can create parcels in worlds. As parcel owner, you can still manage editors by parcel id.</div>";
-			}
-			else if(logged_in_user && !logged_in_user_is_superadmin)
-			{
-				page += "<br/><div class=\"grouped-region\">Only superadmin can create parcels in worlds.</div>";
+				page += "<div class=\"field-description\">Only superadmin can create parcels in worlds. Parcel owners can manage editors of their parcels below.</div>";
 			}
 			else
 			{
-				page += "<br/><div class=\"grouped-region\">Log in as superadmin to create parcels in this world.</div>";
+				page += "<div class=\"field-description\">Log in to view your parcel role. Only superadmin can create parcels in worlds.</div>";
 			}
+
+			if(parcel_rows.empty())
+			{
+				page += "<div class=\"field-description\">No parcels created in this world yet.</div>";
+			}
+			else
+			{
+				page += "<div class=\"msb-table-wrap\">";
+				page += "<table class=\"msb-table\" aria-label=\"World parcels table\">";
+				page += "<thead><tr><th>ID</th><th>Owner</th><th>Size</th><th>Z-bounds</th><th>Editors</th><th>Created</th><th>Your role</th><th>Actions</th></tr></thead><tbody>";
+				for(size_t i=0; i<parcel_rows.size(); ++i)
+				{
+					const WorldParcelRow& row = parcel_rows[i];
+					const Parcel* parcel = row.parcel.ptr();
+
+					std::string writer_refs_initial;
+					for(size_t z=0; z<parcel->writer_ids.size(); ++z)
+					{
+						const auto writer_res = world_state.user_id_to_users.find(parcel->writer_ids[z]);
+						if(z > 0)
+							writer_refs_initial += ", ";
+						if(writer_res != world_state.user_id_to_users.end())
+							writer_refs_initial += writer_res->second->name;
+						else
+							writer_refs_initial += parcel->writer_ids[z].toString();
+					}
+
+					std::string role_desc = "-";
+					if(row.logged_user_is_owner)
+						role_desc = "owner";
+					else if(row.logged_user_is_editor)
+						role_desc = "editor";
+
+					page += "<tr>";
+					page += "<td>" + parcel->id.toString() + "</td>";
+					page += "<td>" + web::Escaping::HTMLEscape(row.owner_username) + "</td>";
+					page += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " x " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
+					page += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
+					page += "<td>" + toString((int)parcel->writer_ids.size()) + "</td>";
+					page += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
+					page += "<td>" + role_desc + "</td>";
+					page += "<td><div class=\"msb-row-actions\">";
+					if(logged_in_user_is_superadmin)
+					{
+						page += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
+						page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+						page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+						page += "<input type=\"text\" name=\"new_owner_ref\" value=\"" + web::Escaping::HTMLEscape(row.owner_username) + "\" placeholder=\"owner id/name\">";
+						page += "<input type=\"submit\" value=\"Set owner\" onclick=\"return confirm('Set owner for world parcel " + parcel->id.toString() + "?');\" >";
+						page += "</form>";
+					}
+
+					if(logged_in_user && (logged_in_user_is_superadmin || row.logged_user_is_owner))
+					{
+						page += "<form action=\"/set_world_parcel_writers_post\" method=\"post\" class=\"msb-inline-form\">";
+						page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+						page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+						page += "<input type=\"text\" name=\"writer_refs\" value=\"" + web::Escaping::HTMLEscape(writer_refs_initial) + "\" placeholder=\"editors ids/names\">";
+						page += "<input type=\"submit\" value=\"Set editors\" onclick=\"return confirm('Set editors for world parcel " + parcel->id.toString() + "?');\" >";
+						page += "</form>";
+					}
+
+					if(logged_in_user_is_superadmin)
+					{
+						page += "<form action=\"/admin_delete_parcel\" method=\"post\" class=\"msb-inline-form\">";
+						page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+						page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+						page += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete world parcel " + parcel->id.toString() + "?');\" >";
+						page += "</form>";
+					}
+
+					if(!logged_in_user || (!logged_in_user_is_superadmin && !row.logged_user_is_owner))
+						page += "<span class=\"field-description\">-</span>";
+
+					page += "</div></td>";
+					page += "</tr>";
+				}
+				page += "</tbody></table></div>";
+			}
+			page += "</section>";
 
 		} // end lock scope
 
