@@ -87,6 +87,10 @@ FileUtils.cp_r(substrata_dir + "/webclient/webclient.html",            cyberspac
 FileUtils.cp_r(substrata_dir + "/webclient/webclient.html",            cyberspace_output + "/test_builds",                                  :verbose=>true)
 FileUtils.cp_r(substrata_dir + "/resources/sprites",                   cyb_output_resources_dir,                                            :verbose=>true)
 FileUtils.cp_r(substrata_dir + "/resources/sprites",                   cyb_output_test_builds_resources_dir,                                :verbose=>true)
+FileUtils.mkdir_p(cyb_output_resources_dir + "/buttons", :verbose => true)
+FileUtils.mkdir_p(cyb_output_test_builds_resources_dir + "/buttons", :verbose => true)
+FileUtils.cp_r(substrata_dir + "/resources/buttons/.",                 cyb_output_resources_dir             + "/buttons",                   :verbose=>true)
+FileUtils.cp_r(substrata_dir + "/resources/buttons/.",                 cyb_output_test_builds_resources_dir + "/buttons",                   :verbose=>true)
 FileUtils.cp_r(substrata_dir + "/resources/foam_windowed.basis",       cyb_output_resources_dir             + "/foam_windowed.basis",       :verbose=>true)
 FileUtils.cp_r(substrata_dir + "/resources/foam_windowed.basis",       cyb_output_test_builds_resources_dir + "/foam_windowed.basis",       :verbose=>true)
 
