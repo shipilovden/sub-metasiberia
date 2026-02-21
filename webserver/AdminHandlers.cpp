@@ -1219,7 +1219,7 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Average area</div><div class=\"msb-kpi-value\">" + doubleToStringMaxNDecimalPlaces(world_average_area, 1) + " m^2</div></div>";
 			page_out += "</div>";
 
-			page_out += "<div class=\"field-description\">Use actions to manage owner/editors/delete for parcels created in personal worlds.</div>";
+			page_out += "<div class=\"field-description\">Use actions to manage geometry (origin/size/z-bounds), owner, editors, and delete for parcels created in personal worlds.</div>";
 			page_out += "<div class=\"msb-table-wrap\">";
 			page_out += "<table class=\"msb-table\" aria-label=\"Personal worlds parcels table\">";
 			page_out += "<thead><tr><th>World</th><th>ID</th><th>Owner</th><th>Description</th><th>Size</th><th>Z-bounds</th><th>Area</th><th>Screens</th><th>Auction</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
@@ -1228,6 +1228,8 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			{
 				const WorldParcelRow& row = world_rows[i];
 				const Parcel* parcel = row.parcel.ptr();
+				const double origin_x = parcel->aabb_min.x;
+				const double origin_y = parcel->aabb_min.y;
 
 				std::string auction_state;
 				if(row.has_for_sale_auction)
@@ -1264,6 +1266,33 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 				page_out += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
 				page_out += "<td><div class=\"msb-row-actions\">";
 				page_out += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">Open world</a>";
+				page_out += "<form action=\"/set_world_parcel_geometry_post\" method=\"post\" class=\"msb-create-parcel-form msb-inline-form\" data-admin-create-parcel-form=\"1\">";
+				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
+				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+				page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"/admin_world_parcels?world=" + web::Escaping::URLEscape(row.world_name) + "\">";
+				page_out += "<div class=\"msb-inline-fields\">";
+				page_out += "<label>Origin X</label>";
+				page_out += "<input type=\"text\" name=\"origin_x\" value=\"" + doubleToStringMaxNDecimalPlaces(origin_x, 2) + "\" title=\"Parcel bottom-left X coordinate\">";
+				page_out += "<label>Origin Y</label>";
+				page_out += "<input type=\"text\" name=\"origin_y\" value=\"" + doubleToStringMaxNDecimalPlaces(origin_y, 2) + "\" title=\"Parcel bottom-left Y coordinate\">";
+				page_out += "<label>Size X</label>";
+				page_out += "<input type=\"text\" name=\"size_x\" value=\"" + doubleToStringMaxNDecimalPlaces(row.size_x, 2) + "\" title=\"Parcel width on X axis\">";
+				page_out += "<label>Size Y</label>";
+				page_out += "<input type=\"text\" name=\"size_y\" value=\"" + doubleToStringMaxNDecimalPlaces(row.size_y, 2) + "\" title=\"Parcel width on Y axis\">";
+				page_out += "</div>";
+				page_out += "<div class=\"msb-inline-fields\">";
+				page_out += "<label>Min Z</label>";
+				page_out += "<input type=\"text\" name=\"min_z\" value=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 2) + "\" title=\"Minimum parcel build height\">";
+				page_out += "<label>Max Z</label>";
+				page_out += "<input type=\"text\" name=\"max_z\" value=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 2) + "\" title=\"Maximum parcel build height\">";
+				page_out += "</div>";
+				page_out += "<div class=\"msb-live-preview\" data-parcel-live-preview=\"1\">";
+				page_out += "<div class=\"msb-live-item\">Area: <b data-preview-area>0.0</b> m<sup>2</sup></div>";
+				page_out += "<div class=\"msb-live-item\">Height: <b data-preview-height>0.0</b> m</div>";
+				page_out += "<div class=\"msb-live-item\">Build volume: <b data-preview-volume>0.0</b> m<sup>3</sup></div>";
+				page_out += "</div>";
+				page_out += "<input type=\"submit\" value=\"Save geometry\" onclick=\"return confirm('Update geometry for parcel " + parcel->id.toString() + " in this world?');\" >";
+				page_out += "</form>";
 				page_out += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
 				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
 				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";

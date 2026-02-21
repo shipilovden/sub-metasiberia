@@ -153,6 +153,16 @@ static bool parseCommaSeparatedUserRefsToIDs(ServerAllWorldsState& world_state, 
 }
 
 
+static double parseDoubleFieldForParcelCreation(const web::RequestInfo& request, const std::string& field_name)
+{
+	std::string s = stripHeadAndTailWhitespace(request.getPostField(field_name).str());
+	if(s.empty())
+		throw glare::Exception("Missing field '" + field_name + "'.");
+	std::replace(s.begin(), s.end(), ',', '.');
+	return stringToDouble(s);
+}
+
+
 void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info) // Shows a single world
 {
 	try
@@ -229,6 +239,8 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			parcel_rows.reserve(world->getParcels(lock).size());
 			int logged_user_owned_parcel_count = 0;
 			int logged_user_editable_parcel_count = 0;
+			ParcelRef most_recent_parcel;
+			uint32 max_parcel_id = 0;
 
 			for(auto parcel_it = world->getParcels(lock).begin(); parcel_it != world->getParcels(lock).end(); ++parcel_it)
 			{
@@ -261,7 +273,30 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 						logged_user_editable_parcel_count++;
 				}
 
+				if(parcel->id.valid() && (parcel->id.value() >= max_parcel_id))
+				{
+					max_parcel_id = parcel->id.value();
+					most_recent_parcel = parcel;
+				}
+
 				parcel_rows.push_back(row);
+			}
+
+			double suggested_origin_x = 0.0;
+			double suggested_origin_y = 0.0;
+			double suggested_size_x = 16.0;
+			double suggested_size_y = 16.0;
+			double suggested_min_z = -1.0;
+			double suggested_max_z = 4.0;
+			if(most_recent_parcel)
+			{
+				const Vec3d most_recent_span = most_recent_parcel->aabb_max - most_recent_parcel->aabb_min;
+				suggested_origin_x = most_recent_parcel->aabb_min.x + 32.0;
+				suggested_origin_y = most_recent_parcel->aabb_min.y;
+				suggested_size_x = std::max(1.0, most_recent_span.x);
+				suggested_size_y = std::max(1.0, most_recent_span.y);
+				suggested_min_z = most_recent_parcel->zbounds.x;
+				suggested_max_z = most_recent_parcel->zbounds.y;
 			}
 
 			page += "<br/><section class=\"grouped-region\">";
@@ -278,13 +313,34 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			if(logged_in_user_is_superadmin)
 			{
 				page += "<div class=\"field-description\">Superadmin mode: you can create parcels, assign owner/editors, and delete parcels in this world.</div>";
-				page += "<form action=\"/create_world_parcel_post\" method=\"post\" class=\"msb-inline-form\">";
+				page += "<form action=\"/create_world_parcel_post\" method=\"post\" class=\"msb-create-parcel-form\" data-admin-create-parcel-form=\"1\">";
 				page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
 				page += "<label for=\"new-world-parcel-owner\">Owner (id or username)</label>";
 				page += "<input id=\"new-world-parcel-owner\" type=\"text\" name=\"owner_username\" value=\"" + web::Escaping::HTMLEscape(owner_username) + "\" title=\"User id or username that will own the new parcel\">";
 				page += "<label for=\"new-world-parcel-editors\">Editors (ids or usernames, comma-separated)</label>";
 				page += "<input id=\"new-world-parcel-editors\" type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated list of user ids or usernames that can edit objects in the parcel\">";
-				page += "<input type=\"submit\" value=\"Create parcel in this world\" title=\"Create a new parcel in this world and assign owner/editors\" onclick=\"return confirm('Create a new parcel in this world?');\" >";
+				page += "<div class=\"msb-inline-fields\">";
+				page += "<label for=\"new-world-origin-x\">Origin X</label>";
+				page += "<input id=\"new-world-origin-x\" type=\"text\" name=\"origin_x\" value=\"" + doubleToStringMaxNDecimalPlaces(suggested_origin_x, 2) + "\" title=\"Parcel bottom-left X coordinate\">";
+				page += "<label for=\"new-world-origin-y\">Origin Y</label>";
+				page += "<input id=\"new-world-origin-y\" type=\"text\" name=\"origin_y\" value=\"" + doubleToStringMaxNDecimalPlaces(suggested_origin_y, 2) + "\" title=\"Parcel bottom-left Y coordinate\">";
+				page += "<label for=\"new-world-size-x\">Size X</label>";
+				page += "<input id=\"new-world-size-x\" type=\"text\" name=\"size_x\" value=\"" + doubleToStringMaxNDecimalPlaces(suggested_size_x, 2) + "\" title=\"Parcel width on X axis\">";
+				page += "<label for=\"new-world-size-y\">Size Y</label>";
+				page += "<input id=\"new-world-size-y\" type=\"text\" name=\"size_y\" value=\"" + doubleToStringMaxNDecimalPlaces(suggested_size_y, 2) + "\" title=\"Parcel width on Y axis\">";
+				page += "</div>";
+				page += "<div class=\"msb-inline-fields\">";
+				page += "<label for=\"new-world-min-z\">Min Z</label>";
+				page += "<input id=\"new-world-min-z\" type=\"text\" name=\"min_z\" value=\"" + doubleToStringMaxNDecimalPlaces(suggested_min_z, 2) + "\" title=\"Minimum parcel build height\">";
+				page += "<label for=\"new-world-max-z\">Max Z</label>";
+				page += "<input id=\"new-world-max-z\" type=\"text\" name=\"max_z\" value=\"" + doubleToStringMaxNDecimalPlaces(suggested_max_z, 2) + "\" title=\"Maximum parcel build height\">";
+				page += "</div>";
+				page += "<div class=\"msb-live-preview\" data-parcel-live-preview=\"1\">";
+				page += "<div class=\"msb-live-item\">Area: <b data-preview-area>256.0</b> m<sup>2</sup></div>";
+				page += "<div class=\"msb-live-item\">Height: <b data-preview-height>5.0</b> m</div>";
+				page += "<div class=\"msb-live-item\">Build volume: <b data-preview-volume>1280.0</b> m<sup>3</sup></div>";
+				page += "</div>";
+				page += "<input type=\"submit\" value=\"Create parcel in this world\" title=\"Create a new parcel in this world and assign owner/editors\" onclick=\"return confirm('Create parcel with these settings in this world?');\" >";
 				page += "</form>";
 			}
 			else if(logged_in_user)
@@ -327,6 +383,8 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 						role_desc = "owner";
 					else if(row.logged_user_is_editor)
 						role_desc = "editor";
+					const double origin_x = parcel->aabb_min.x;
+					const double origin_y = parcel->aabb_min.y;
 
 					page += "<tr>";
 					page += "<td>" + parcel->id.toString() + "</td>";
@@ -339,6 +397,33 @@ void renderWorldPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 					page += "<td><div class=\"msb-row-actions\">";
 					if(logged_in_user_is_superadmin)
 					{
+						page += "<form action=\"/set_world_parcel_geometry_post\" method=\"post\" class=\"msb-create-parcel-form msb-inline-form\" data-admin-create-parcel-form=\"1\">";
+						page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+						page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+						page += "<div class=\"msb-inline-fields\">";
+						page += "<label>Origin X</label>";
+						page += "<input type=\"text\" name=\"origin_x\" value=\"" + doubleToStringMaxNDecimalPlaces(origin_x, 2) + "\" title=\"Parcel bottom-left X coordinate\">";
+						page += "<label>Origin Y</label>";
+						page += "<input type=\"text\" name=\"origin_y\" value=\"" + doubleToStringMaxNDecimalPlaces(origin_y, 2) + "\" title=\"Parcel bottom-left Y coordinate\">";
+						page += "<label>Size X</label>";
+						page += "<input type=\"text\" name=\"size_x\" value=\"" + doubleToStringMaxNDecimalPlaces(row.size_x, 2) + "\" title=\"Parcel width on X axis\">";
+						page += "<label>Size Y</label>";
+						page += "<input type=\"text\" name=\"size_y\" value=\"" + doubleToStringMaxNDecimalPlaces(row.size_y, 2) + "\" title=\"Parcel width on Y axis\">";
+						page += "</div>";
+						page += "<div class=\"msb-inline-fields\">";
+						page += "<label>Min Z</label>";
+						page += "<input type=\"text\" name=\"min_z\" value=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 2) + "\" title=\"Minimum parcel build height\">";
+						page += "<label>Max Z</label>";
+						page += "<input type=\"text\" name=\"max_z\" value=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 2) + "\" title=\"Maximum parcel build height\">";
+						page += "</div>";
+						page += "<div class=\"msb-live-preview\" data-parcel-live-preview=\"1\">";
+						page += "<div class=\"msb-live-item\">Area: <b data-preview-area>0.0</b> m<sup>2</sup></div>";
+						page += "<div class=\"msb-live-item\">Height: <b data-preview-height>0.0</b> m</div>";
+						page += "<div class=\"msb-live-item\">Build volume: <b data-preview-volume>0.0</b> m<sup>3</sup></div>";
+						page += "</div>";
+						page += "<input type=\"submit\" value=\"Save geometry\" onclick=\"return confirm('Update geometry for world parcel " + parcel->id.toString() + "?');\" >";
+						page += "</form>";
+
 						page += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
 						page += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
 						page += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
@@ -542,6 +627,32 @@ void handleCreateWorldParcelPost(ServerAllWorldsState& world_state, const web::R
 				{
 					const std::string owner_ref_field = stripHeadAndTailWhitespace(request.getPostField("owner_username").str());
 					const std::string writer_refs_csv = request.getPostField("writer_usernames").str();
+					double origin_x = 0.0;
+					double origin_y = 0.0;
+					double size_x   = 0.0;
+					double size_y   = 0.0;
+					double min_z    = 0.0;
+					double max_z    = 0.0;
+
+					try
+					{
+						origin_x = parseDoubleFieldForParcelCreation(request, "origin_x");
+						origin_y = parseDoubleFieldForParcelCreation(request, "origin_y");
+						size_x   = parseDoubleFieldForParcelCreation(request, "size_x");
+						size_y   = parseDoubleFieldForParcelCreation(request, "size_y");
+						min_z    = parseDoubleFieldForParcelCreation(request, "min_z");
+						max_z    = parseDoubleFieldForParcelCreation(request, "max_z");
+
+						if(size_x <= 0.0 || size_y <= 0.0)
+							throw glare::Exception("Parcel sizes must be > 0.");
+						if(max_z <= min_z)
+							throw glare::Exception("Max Z must be greater than Min Z.");
+					}
+					catch(glare::Exception& e)
+					{
+						world_state.setUserWebMessage(logged_in_user->id, e.what());
+						redirect_back_to_world = true;
+					}
 
 					UserID owner_id = world->details.owner_id;
 					if(!owner_ref_field.empty())
@@ -568,14 +679,10 @@ void handleCreateWorldParcelPost(ServerAllWorldsState& world_state, const web::R
 					if(!redirect_back_to_world)
 					{
 						uint32 max_id = 0;
-						ParcelRef most_recent_parcel;
 						for(auto it = world->getParcels(lock).begin(); it != world->getParcels(lock).end(); ++it)
 						{
 							if(it->second->id.valid())
-							{
 								max_id = std::max(max_id, it->second->id.value());
-								most_recent_parcel = it->second; // Approximate 'most recent' as highest parcel id.
-							}
 						}
 
 						const ParcelID new_id(max_id + 1);
@@ -586,20 +693,11 @@ void handleCreateWorldParcelPost(ServerAllWorldsState& world_state, const web::R
 						parcel->admin_ids = writer_ids;
 						parcel->writer_ids = writer_ids;
 						parcel->created_time = TimeStamp::currentTime();
-						parcel->zbounds = most_recent_parcel ? most_recent_parcel->zbounds : Vec2d(-1.0, 4.0);
-
-						if(most_recent_parcel)
-						{
-							for(int i=0; i<4; ++i)
-								parcel->verts[i] = most_recent_parcel->verts[i] + Vec2d(32.0, 0.0);
-						}
-						else
-						{
-							parcel->verts[0] = Vec2d(0.0, 0.0);
-							parcel->verts[1] = Vec2d(16.0, 0.0);
-							parcel->verts[2] = Vec2d(16.0, 16.0);
-							parcel->verts[3] = Vec2d(0.0, 16.0);
-						}
+						parcel->verts[0] = Vec2d(origin_x, origin_y);
+						parcel->verts[1] = Vec2d(origin_x + size_x, origin_y);
+						parcel->verts[2] = Vec2d(origin_x + size_x, origin_y + size_y);
+						parcel->verts[3] = Vec2d(origin_x, origin_y + size_y);
+						parcel->zbounds = Vec2d(min_z, max_z);
 
 						parcel->build();
 
@@ -612,7 +710,10 @@ void handleCreateWorldParcelPost(ServerAllWorldsState& world_state, const web::R
 						world_state.addAdminAuditLogEntry(
 							logged_in_user->id,
 							logged_in_user->name,
-							"Created parcel " + new_id.toString() + " in world '" + world_name + "', owner='" + owner_name + "', editors_count=" + toString(writer_ids.size()) + ".");
+							"Created parcel " + new_id.toString() + " in world '" + world_name + "', owner='" + owner_name + "', editors_count=" + toString(writer_ids.size()) +
+							", origin=(" + doubleToStringMaxNDecimalPlaces(origin_x, 2) + ", " + doubleToStringMaxNDecimalPlaces(origin_y, 2) + "), size=(" +
+							doubleToStringMaxNDecimalPlaces(size_x, 2) + ", " + doubleToStringMaxNDecimalPlaces(size_y, 2) + "), z=(" +
+							doubleToStringMaxNDecimalPlaces(min_z, 2) + ", " + doubleToStringMaxNDecimalPlaces(max_z, 2) + ").");
 					}
 				}
 			}
@@ -627,6 +728,100 @@ void handleCreateWorldParcelPost(ServerAllWorldsState& world_state, const web::R
 	{
 		if(!request.fuzzing)
 			conPrint("handleCreateWorldParcelPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleSetWorldParcelGeometryPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const std::string world_name = request.getPostField("world_name").str();
+		const ParcelID parcel_id = ParcelID(request.getPostIntField("parcel_id"));
+		const std::string redirect_path = stripHeadAndTailWhitespace(request.getPostField("redirect_path").str());
+
+		bool redirect_to_login = false;
+
+		{ // Lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			if(!logged_in_user)
+			{
+				redirect_to_login = true;
+			}
+			else
+			{
+				auto world_res = world_state.world_states.find(world_name);
+				if(world_res == world_state.world_states.end())
+					throw glare::Exception("Couldn't find world");
+
+				ServerWorldState* world = world_res->second.ptr();
+				if(!isGodUser(logged_in_user->id))
+				{
+					world_state.setUserWebMessage(logged_in_user->id, "Only superadmin can edit world parcel geometry.");
+				}
+				else
+				{
+					auto parcel_res = world->getParcels(lock).find(parcel_id);
+					if(parcel_res == world->getParcels(lock).end())
+					{
+						world_state.setUserWebMessage(logged_in_user->id, "Parcel " + parcel_id.toString() + " not found in world '" + world_name + "'.");
+					}
+					else
+					{
+						const double origin_x = parseDoubleFieldForParcelCreation(request, "origin_x");
+						const double origin_y = parseDoubleFieldForParcelCreation(request, "origin_y");
+						const double size_x   = parseDoubleFieldForParcelCreation(request, "size_x");
+						const double size_y   = parseDoubleFieldForParcelCreation(request, "size_y");
+						const double min_z    = parseDoubleFieldForParcelCreation(request, "min_z");
+						const double max_z    = parseDoubleFieldForParcelCreation(request, "max_z");
+						if(size_x <= 0.0 || size_y <= 0.0)
+							throw glare::Exception("Parcel sizes must be > 0.");
+						if(max_z <= min_z)
+							throw glare::Exception("Max Z must be greater than Min Z.");
+
+						ParcelRef parcel = parcel_res->second;
+						parcel->verts[0] = Vec2d(origin_x, origin_y);
+						parcel->verts[1] = Vec2d(origin_x + size_x, origin_y);
+						parcel->verts[2] = Vec2d(origin_x + size_x, origin_y + size_y);
+						parcel->verts[3] = Vec2d(origin_x, origin_y + size_y);
+						parcel->zbounds = Vec2d(min_z, max_z);
+						parcel->build();
+
+						world->addParcelAsDBDirty(parcel, lock);
+						world_state.markAsChanged();
+
+						world_state.setUserWebMessage(
+							logged_in_user->id,
+							"Updated parcel " + parcel_id.toString() + " in world '" + world_name + "'.");
+						world_state.addAdminAuditLogEntry(
+							logged_in_user->id,
+							logged_in_user->name,
+							"Updated world parcel geometry: world='" + world_name + "', parcel=" + parcel_id.toString() +
+							", origin=(" + doubleToStringMaxNDecimalPlaces(origin_x, 2) + ", " + doubleToStringMaxNDecimalPlaces(origin_y, 2) + "), size=(" +
+							doubleToStringMaxNDecimalPlaces(size_x, 2) + ", " + doubleToStringMaxNDecimalPlaces(size_y, 2) + "), z=(" +
+							doubleToStringMaxNDecimalPlaces(min_z, 2) + ", " + doubleToStringMaxNDecimalPlaces(max_z, 2) + ").");
+					}
+				}
+			}
+		} // End lock scope
+
+		if(redirect_to_login)
+			web::ResponseUtils::writeRedirectTo(reply_info, "/login");
+		else if(!redirect_path.empty() && hasPrefix(redirect_path, "/") && !hasPrefix(redirect_path, "//"))
+			web::ResponseUtils::writeRedirectTo(reply_info, redirect_path);
+		else
+			web::ResponseUtils::writeRedirectTo(reply_info, "/world/" + URLEscapeWorldName(world_name));
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleSetWorldParcelGeometryPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }
