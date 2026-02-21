@@ -9,9 +9,9 @@ param(
     [ValidateSet("patch", "minor", "major", "none")]
     [string]$Bump = "patch",
     [ValidateSet("Release", "RelWithDebInfo")]
-    [string]$Config = "Release",
+    [string]$Config = "RelWithDebInfo",
     [switch]$Prerelease = $true,
-    [string]$Repo = "shipilovden/substrata-metasiberia",
+    [string]$Repo = "shipilovden/sub-metasiberia",
     [string]$Remote = "myorigin",
     [string]$AppName = "Metasiberia Beta",
     [string]$Notes = "Installer update.",

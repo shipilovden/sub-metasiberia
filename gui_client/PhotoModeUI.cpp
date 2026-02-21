@@ -1119,59 +1119,21 @@ public:
 #endif
 
 
-static std::string trimAndCollapseWhitespace(const std::string& s, size_t max_len)
-{
-	std::string out;
-	out.reserve(std::min(max_len, s.size()));
-
-	bool last_was_space = false;
-	for(size_t i=0; i<s.size() && out.size() < max_len; ++i)
-	{
-		const unsigned char c = (unsigned char)s[i];
-		const bool is_space = (c == ' ' || c == '\t' || c == '\n' || c == '\r');
-		if(is_space)
-		{
-			if(!out.empty() && !last_was_space)
-				out.push_back(' ');
-			last_was_space = true;
-		}
-		else
-		{
-			out.push_back((char)c);
-			last_was_space = false;
-		}
-	}
-
-	// Trim trailing space
-	while(!out.empty() && out.back() == ' ')
-		out.pop_back();
-
-	return out;
-}
-
-
 static std::string getDefaultTelegramHashtags()
 {
-	return "#metasiberia #metasiberiabeta #screenshot #metaversefromsiberia";
+	return "#metasiberia #metaversefromsiberia";
 }
 
 
 static std::string buildTelegramCaption(
 	const GUIClient& gui_client,
-	const Reference<SettingsStore>& settings,
-	const std::string& user_caption,
-	const std::string& username,
-	const ParcelID& in_parcel_id)
+	const std::string& username)
 {
 	// Telegram photo caption limit is 1024 chars.
 	const size_t MAX_CAPTION_LEN = 1024;
 
-	const std::string title = settings->getStringValue("telegram/photo_caption_title", "Metasiberia Beta");
-	std::string hashtags = settings->getStringValue("telegram/photo_hashtags", "");
-	if(hashtags.empty())
-		hashtags = getDefaultTelegramHashtags();
-
-	const std::string safe_user_caption = trimAndCollapseWhitespace(user_caption, /*max_len=*/400);
+	const std::string title = "Metasiberia Beta";
+	const std::string hashtags = getDefaultTelegramHashtags();
 
 	const std::string sub_url = gui_client.getCurrentURL();
 
@@ -1183,18 +1145,7 @@ static std::string buildTelegramCaption(
 	caption.reserve(512);
 
 	caption += title + "\n";
-
-	if(!safe_user_caption.empty())
-		caption += safe_user_caption + "\n";
-
-	if(!username.empty())
-		caption += "By: " + username + "\n";
-
-	if(!gui_client.server_worldname.empty())
-		caption += "World: " + gui_client.server_worldname + "\n";
-
-	if(in_parcel_id.valid())
-		caption += "Parcel: " + in_parcel_id.toString() + "\n";
+	caption += "By: " + (username.empty() ? std::string("Unknown") : username) + "\n";
 
 	caption += "Location (client): " + sub_url + "\n";
 	caption += "Location (web): " + web_url + "\n\n";
@@ -1231,6 +1182,8 @@ void PhotoModeUI::uploadPhoto()
 			in_parcel_id = cam_parcel->id;
 	}
 
+	const std::string telegram_caption = buildTelegramCaption(*gui_client, username_for_server);
+
 #if !EMSCRIPTEN
 	std::string bot_token = settings->getStringValue("telegram/bot_token", "");
 	if(bot_token.empty())
@@ -1245,7 +1198,7 @@ void PhotoModeUI::uploadPhoto()
 	if(telegram_enabled && !bot_token.empty() && !chat_id.empty())
 	{
 		Reference<UploadPhotoToTelegramThread> thread = new UploadPhotoToTelegramThread();
-		thread->caption = buildTelegramCaption(*gui_client, settings, last_caption, username_for_server, in_parcel_id);
+		thread->caption = telegram_caption;
 		thread->upload_image_jpeg_path = upload_image_jpeg_path;
 		thread->bot_token = bot_token;
 		thread->chat_id = chat_id;
@@ -1263,7 +1216,7 @@ void PhotoModeUI::uploadPhoto()
 	const std::string password = gui_client->ui_interface->getDecryptedPasswordForDomain(gui_client->server_hostname);
 
 	Reference<UploadPhotoThread> thread = new UploadPhotoThread();
-	thread->caption = last_caption.substr(0, 10000);
+	thread->caption = telegram_enabled ? telegram_caption : last_caption.substr(0, 10000);
 	thread->world_name = gui_client->server_worldname;
 	thread->parcel_id = in_parcel_id;
 	thread->cam_pos = gui_client->cam_controller.getPosition();

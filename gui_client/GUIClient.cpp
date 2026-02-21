@@ -8781,7 +8781,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			ui_interface->showHTMLMessageBox("Client too old",
 				"<p>Sorry, your Metasiberia client is too old.</p>"
 				"<p>Please use <b>Help -> Update</b> or download and install the latest version from "
-				"<a href=\"https://github.com/shipilovden/substrata-metasiberia/releases\">GitHub Releases</a>.</p>");
+				"<a href=\"https://github.com/shipilovden/sub-metasiberia/releases\">GitHub Releases</a>.</p>");
 		}
 		break;
 		case Msg_ClientDisconnectedFromServerMessage:

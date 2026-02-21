@@ -8,7 +8,7 @@ param(
     [string]$AppName = "Metasiberia Beta",
     [string]$Version = "",
     [ValidateSet("Release", "RelWithDebInfo")]
-    [string]$Config = "Release"
+    [string]$Config = "RelWithDebInfo"
 )
 
 Set-StrictMode -Version Latest

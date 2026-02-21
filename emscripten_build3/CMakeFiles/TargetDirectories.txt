@@ -1,0 +1,16 @@
+C:/programming/substrata/emscripten_build3/CMakeFiles/edit_cache.dir
+C:/programming/substrata/emscripten_build3/CMakeFiles/rebuild_cache.dir
+C:/programming/substrata/emscripten_build3/libs/CMakeFiles/libs.dir
+C:/programming/substrata/emscripten_build3/libs/CMakeFiles/edit_cache.dir
+C:/programming/substrata/emscripten_build3/libs/CMakeFiles/rebuild_cache.dir
+C:/programming/substrata/emscripten_build3/gui_client/CMakeFiles/Jolt.dir
+C:/programming/substrata/emscripten_build3/gui_client/CMakeFiles/Opus.dir
+C:/programming/substrata/emscripten_build3/gui_client/CMakeFiles/gui_client.dir
+C:/programming/substrata/emscripten_build3/gui_client/CMakeFiles/edit_cache.dir
+C:/programming/substrata/emscripten_build3/gui_client/CMakeFiles/rebuild_cache.dir
+C:/programming/substrata/emscripten_build3/server/CMakeFiles/server.dir
+C:/programming/substrata/emscripten_build3/server/CMakeFiles/edit_cache.dir
+C:/programming/substrata/emscripten_build3/server/CMakeFiles/rebuild_cache.dir
+C:/programming/substrata/emscripten_build3/screenshot_bot/CMakeFiles/screenshot_bot.dir
+C:/programming/substrata/emscripten_build3/screenshot_bot/CMakeFiles/edit_cache.dir
+C:/programming/substrata/emscripten_build3/screenshot_bot/CMakeFiles/rebuild_cache.dir
