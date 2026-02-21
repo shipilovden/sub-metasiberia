@@ -596,6 +596,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			AdminHandlers::renderParcelsPage(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/admin_world_parcels")
+		{
+			AdminHandlers::renderParcelsPage(*this->world_state, request, reply_info);
+		}
 		else if(request.path == "/admin_parcel_auctions")
 		{
 			AdminHandlers::renderParcelAuctionsPage(*this->world_state, request, reply_info);

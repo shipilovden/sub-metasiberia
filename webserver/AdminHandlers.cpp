@@ -259,7 +259,7 @@ std::string sharedAdminHeader(ServerAllWorldsState& world_state, const web::Requ
 {
 	std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Admin");
 
-	page_out += "<p class=\"msb-admin-nav\"><a href=\"/admin\">Main admin page</a><a href=\"/admin_users\">Users</a><a href=\"/admin_parcels\">Parcels</a>";
+	page_out += "<p class=\"msb-admin-nav\"><a href=\"/admin\">Main admin page</a><a href=\"/admin_users\">Users</a><a href=\"/admin_parcels\">Parcels</a><a href=\"/admin_world_parcels\">World Parcels</a>";
 	page_out += "<a href=\"/admin_parcel_auctions\">Parcel Auctions</a><a href=\"/admin_orders\">Orders</a><a href=\"/admin_sub_eth_transactions\">Eth Transactions</a><a href=\"/admin_map\">Map</a>";
 	page_out += "<a href=\"/admin_news_posts\">News Posts</a><a href=\"/admin_lod_chunks\">LOD Chunks</a><a href=\"/admin_worlds\">Worlds</a><a href=\"/admin_chatbots\">ChatBots</a></p>";
 
@@ -608,7 +608,7 @@ void renderUsersPage(ServerAllWorldsState& world_state, const web::RequestInfo& 
 			page_out += "<td><div class=\"msb-row-actions\">";
 			page_out += "<a href=\"/admin_user/" + user->id.toString() + "\">Open user</a>";
 			page_out += "<a href=\"/admin_parcels?scope=root&owner=" + web::Escaping::URLEscape(user->name) + "\">Root parcels</a>";
-			page_out += "<a href=\"/admin_parcels?scope=worlds&owner=" + web::Escaping::URLEscape(user->name) + "\">World parcels</a>";
+			page_out += "<a href=\"/admin_world_parcels?owner=" + web::Escaping::URLEscape(user->name) + "\">World parcels</a>";
 			page_out += "</div></td>";
 			page_out += "</tr>\n";
 		}
@@ -769,7 +769,7 @@ void renderAdminUserPage(ServerAllWorldsState& world_state, const web::RequestIn
 			page_out += "<hr/>";
 			page_out += "<h3>Parcels in personal worlds</h3>";
 			page_out += "<div>Total parcels owned in non-root worlds: <b>" + toString((int)world_parcel_rows.size()) + "</b></div>";
-			page_out += "<div class=\"field-description\">These parcels can be managed directly from here (owner/editors/delete) or from <a href=\"/admin_parcels?scope=worlds&owner=" + web::Escaping::URLEscape(user->name) + "\">Parcels admin (world scope)</a>.</div>";
+			page_out += "<div class=\"field-description\">These parcels can be managed directly from here (owner/editors/delete) or from <a href=\"/admin_world_parcels?owner=" + web::Escaping::URLEscape(user->name) + "\">Parcels admin (world scope)</a>.</div>";
 
 			if(world_parcel_rows.empty())
 			{
@@ -793,7 +793,7 @@ void renderAdminUserPage(ServerAllWorldsState& world_state, const web::RequestIn
 					page_out += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
 					page_out += "<td>";
 					page_out += "<div class=\"msb-row-actions\">";
-					page_out += "<a href=\"/admin_parcels?scope=worlds&world=" + web::Escaping::URLEscape(row.world_name) + "&owner=" + web::Escaping::URLEscape(user->name) + "\">Open in parcels admin</a>";
+					page_out += "<a href=\"/admin_world_parcels?world=" + web::Escaping::URLEscape(row.world_name) + "&owner=" + web::Escaping::URLEscape(user->name) + "\">Open in parcels admin</a>";
 					page_out += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
 					page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
 					page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
@@ -837,14 +837,20 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 	const std::string world_filter = stripHeadAndTailWhitespace(request.getURLParam("world").str());
 	std::string auction_filter = stripHeadAndTailWhitespace(request.getURLParam("auction").str());
 	std::string scope_filter = stripHeadAndTailWhitespace(request.getURLParam("scope").str());
+	const bool world_parcels_tab = (request.path == "/admin_world_parcels");
+	const std::string parcels_page_path = world_parcels_tab ? std::string("/admin_world_parcels") : std::string("/admin_parcels");
 	if(auction_filter.empty())
 		auction_filter = "all";
 	if(scope_filter.empty())
-		scope_filter = "all";
+		scope_filter = world_parcels_tab ? "worlds" : "all";
 	if(scope_filter != "all" && scope_filter != "root" && scope_filter != "worlds")
-		scope_filter = "all";
+		scope_filter = world_parcels_tab ? "worlds" : "all";
+	if(world_parcels_tab)
+		scope_filter = "worlds";
 
 	std::string page_out = sharedAdminHeader(world_state, request);
+	if(world_parcels_tab)
+		page_out += "<h2>Parcels in personal worlds</h2>\n";
 
 	{ // Lock scope
 		WorldStateLock lock(world_state.mutex);
@@ -963,7 +969,7 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 
 		page_out += "<section class=\"grouped-region\">";
 		page_out += "<h3>Filters</h3>";
-		page_out += "<form action=\"/admin_parcels\" method=\"get\" class=\"msb-inline-form\">";
+		page_out += "<form action=\"" + parcels_page_path + "\" method=\"get\" class=\"msb-inline-form\">";
 		page_out += "<label for=\"admin-parcel-q\">Search</label>";
 		page_out += "<input id=\"admin-parcel-q\" type=\"text\" name=\"q\" value=\"" + web::Escaping::HTMLEscape(query_filter) + "\" placeholder=\"Parcel id / owner / title / description\">";
 		page_out += "<label for=\"admin-parcel-owner\">Owner</label>";
@@ -977,14 +983,21 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		page_out += "<option value=\"sold\"" + std::string(auction_filter == "sold" ? " selected=\"selected\"" : "") + ">Sold</option>";
 		page_out += "<option value=\"without_auction\"" + std::string(auction_filter == "without_auction" ? " selected=\"selected\"" : "") + ">Without auction</option>";
 		page_out += "</select>";
-		page_out += "<label for=\"admin-parcel-scope\">Scope</label>";
-		page_out += "<select id=\"admin-parcel-scope\" name=\"scope\">";
-		page_out += "<option value=\"all\"" + std::string(scope_filter == "all" ? " selected=\"selected\"" : "") + ">All parcels</option>";
-		page_out += "<option value=\"root\"" + std::string(scope_filter == "root" ? " selected=\"selected\"" : "") + ">Root world only</option>";
-		page_out += "<option value=\"worlds\"" + std::string(scope_filter == "worlds" ? " selected=\"selected\"" : "") + ">Personal worlds only</option>";
-		page_out += "</select>";
+		if(!world_parcels_tab)
+		{
+			page_out += "<label for=\"admin-parcel-scope\">Scope</label>";
+			page_out += "<select id=\"admin-parcel-scope\" name=\"scope\">";
+			page_out += "<option value=\"all\"" + std::string(scope_filter == "all" ? " selected=\"selected\"" : "") + ">All parcels</option>";
+			page_out += "<option value=\"root\"" + std::string(scope_filter == "root" ? " selected=\"selected\"" : "") + ">Root world only</option>";
+			page_out += "<option value=\"worlds\"" + std::string(scope_filter == "worlds" ? " selected=\"selected\"" : "") + ">Personal worlds only</option>";
+			page_out += "</select>";
+		}
+		else
+		{
+			page_out += "<input type=\"hidden\" name=\"scope\" value=\"worlds\">";
+		}
 		page_out += "<input type=\"submit\" value=\"Apply\">";
-		page_out += "<a class=\"msb-quiet-link\" href=\"/admin_parcels\">Reset</a>";
+		page_out += "<a class=\"msb-quiet-link\" href=\"" + parcels_page_path + "\">Reset</a>";
 		page_out += "</form>";
 		if(show_root_section)
 		{
@@ -2920,7 +2933,7 @@ void handleDeleteParcelPost(ServerAllWorldsState& world_state, const web::Reques
 		if(world_name.empty())
 			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_parcels");
 		else
-			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_parcels?scope=worlds&world=" + web::Escaping::URLEscape(world_name));
+			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_world_parcels?world=" + web::Escaping::URLEscape(world_name));
 	}
 	catch(glare::Exception& e)
 	{
