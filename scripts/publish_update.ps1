@@ -159,7 +159,13 @@ $env:INDIGO_QT_VERSION = "5.15.16-vs2022-64"
 $env:CYBERSPACE_OUTPUT = "c:/programming/substrata_output_qt"
 
 ExecNative "cmake" @("--build", "C:\\programming\\substrata_build_qt", "--config", "Debug", "--target", "gui_client", "-j", "8")
-ExecNative "ruby" @((Join-Path $repoRoot "scripts\\copy_files_to_output.rb"), "--no_bugsplat", "--config", "Debug")
+Push-Location (Join-Path $repoRoot "scripts")
+try {
+    ExecNative "ruby" @("copy_files_to_output.rb", "--no_bugsplat", "--config", "Debug")
+}
+finally {
+    Pop-Location
+}
 
 $sourceDir = "C:\\programming\\substrata_output_qt\\vs2022\\cyberspace_x64\\$Config"
 Require-Path (Join-Path $sourceDir "gui_client.exe") -AllowMissingOnDryRun $true
