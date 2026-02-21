@@ -1125,15 +1125,25 @@ static std::string getDefaultTelegramHashtags()
 }
 
 
+static std::string sanitiseUserCaptionForTelegram(const std::string& raw_caption)
+{
+	std::string caption = replaceAll(raw_caption, "\r\n", "\n");
+	caption = replaceAll(caption, "\r", "\n");
+	return stripHeadAndTailWhitespace(caption);
+}
+
+
 static std::string buildTelegramCaption(
 	const GUIClient& gui_client,
-	const std::string& username)
+	const std::string& username,
+	const std::string& user_caption_raw)
 {
 	// Telegram photo caption limit is 1024 chars.
 	const size_t MAX_CAPTION_LEN = 1024;
 
 	const std::string title = "Metasiberia Beta";
 	const std::string hashtags = getDefaultTelegramHashtags();
+	const std::string user_caption = sanitiseUserCaptionForTelegram(user_caption_raw);
 
 	const std::string sub_url = gui_client.getCurrentURL();
 
@@ -1141,16 +1151,38 @@ static std::string buildTelegramCaption(
 	const bool use_http = (hostname == "localhost") || (hostname == "127.0.0.1");
 	const std::string web_url = (use_http ? "http://" : "https://") + hostname + gui_client.getCurrentWebClientURLPath();
 
+	const std::string footer =
+		"By: " + (username.empty() ? std::string("Unknown") : username) + "\n" +
+		"Location (client): " + sub_url + "\n" +
+		"Location (web): " + web_url + "\n\n" +
+		hashtags;
+
 	std::string caption;
 	caption.reserve(512);
 
 	caption += title + "\n";
-	caption += "By: " + (username.empty() ? std::string("Unknown") : username) + "\n";
 
-	caption += "Location (client): " + sub_url + "\n";
-	caption += "Location (web): " + web_url + "\n\n";
+	if(!user_caption.empty())
+	{
+		size_t user_limit = 0;
+		const size_t min_len_without_user = caption.size() + footer.size();
+		if(MAX_CAPTION_LEN > min_len_without_user + 2)
+			user_limit = MAX_CAPTION_LEN - min_len_without_user - 2; // account for "\n\n" after user text
 
-	caption += hashtags;
+		std::string user_caption_clamped = user_caption;
+		if(user_caption_clamped.size() > user_limit)
+		{
+			if(user_limit > 3)
+				user_caption_clamped = user_caption_clamped.substr(0, user_limit - 3) + "...";
+			else
+				user_caption_clamped.clear();
+		}
+
+		if(!user_caption_clamped.empty())
+			caption += user_caption_clamped + "\n\n";
+	}
+
+	caption += footer;
 
 	if(caption.size() > MAX_CAPTION_LEN)
 	{
@@ -1182,7 +1214,7 @@ void PhotoModeUI::uploadPhoto()
 			in_parcel_id = cam_parcel->id;
 	}
 
-	const std::string telegram_caption = buildTelegramCaption(*gui_client, username_for_server);
+	const std::string telegram_caption = buildTelegramCaption(*gui_client, username_for_server, last_caption);
 
 #if !EMSCRIPTEN
 	std::string bot_token = settings->getStringValue("telegram/bot_token", "");
