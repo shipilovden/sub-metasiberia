@@ -22,7 +22,7 @@ Checks for a new Windows installer published on GitHub Releases.
 
 
 static const char* const GITHUB_RELEASES_URL =
-	"https://api.github.com/repos/shipilovden/substrata-metasiberia/releases?per_page=10";
+	"https://api.github.com/repos/shipilovden/sub-metasiberia/releases?per_page=10";
 
 
 UpdateManager::UpdateManager(QObject* parent)
