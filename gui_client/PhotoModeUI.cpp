@@ -1127,8 +1127,8 @@ static std::string getDefaultTelegramHashtags()
 
 static std::string sanitiseUserCaptionForTelegram(const std::string& raw_caption)
 {
-	std::string caption = replaceAll(raw_caption, "\r\n", "\n");
-	caption = replaceAll(caption, "\r", "\n");
+	std::string caption = StringUtils::replaceAll(raw_caption, "\r\n", "\n");
+	caption = StringUtils::replaceAll(caption, "\r", "\n");
 	return stripHeadAndTailWhitespace(caption);
 }
 
