@@ -9,7 +9,7 @@ param(
     [ValidateSet("patch", "minor", "major", "none")]
     [string]$Bump = "patch",
     [ValidateSet("Release", "RelWithDebInfo")]
-    [string]$Config = "RelWithDebInfo",
+    [string]$Config = "Release",
     [switch]$Prerelease = $true,
     [string]$Repo = "shipilovden/sub-metasiberia",
     [string]$Remote = "myorigin",
@@ -149,6 +149,17 @@ ExecNative "git" @("push", $Remote, $tag)
 
 # Build Qt output (writes to substrata_output_qt)
 ExecNative "powershell" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\programming\\qt_build.ps1")
+
+# Always build Qt Debug as well (policy: keep Debug and Release artifacts in sync before publishing).
+$env:GLARE_CORE_LIBS = "c:/programming"
+$env:WINTER_DIR = "c:/programming/winter"
+$env:GLARE_CORE_TRUNK_DIR = "c:/programming/glare-core"
+$env:CEF_BINARY_DISTRIB_DIR = "C:\cef\chromium\src\cef\binary_distrib\cef_binary_139.0.40+g465474a+chromium-139.0.7258.139_windows64"
+$env:INDIGO_QT_VERSION = "5.15.16-vs2022-64"
+$env:CYBERSPACE_OUTPUT = "c:/programming/substrata_output_qt"
+
+ExecNative "cmake" @("--build", "C:\\programming\\substrata_build_qt", "--config", "Debug", "--target", "gui_client", "-j", "8")
+ExecNative "ruby" @((Join-Path $repoRoot "scripts\\copy_files_to_output.rb"), "--no_bugsplat", "--config", "Debug")
 
 $sourceDir = "C:\\programming\\substrata_output_qt\\vs2022\\cyberspace_x64\\$Config"
 Require-Path (Join-Path $sourceDir "gui_client.exe") -AllowMissingOnDryRun $true
