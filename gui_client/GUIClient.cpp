@@ -156,6 +156,9 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	voxel_edit_marker_in_engine(false),
 	voxel_edit_face_marker_in_engine(false),
 	selected_ob_picked_up(false),
+	have_selected_ob_transform_rollback(false),
+	selected_ob_transform_rollback_uid(UID::invalidUID()),
+	selected_ob_transform_rollback_angle(0.f),
 	process_model_loaded_next(true),
 	load_distance(0),
 	load_distance2(0),
@@ -4073,6 +4076,16 @@ void GUIClient::doMoveAndRotateObject(WorldObjectRef ob, const Vec3d& new_ob_pos
 {
 	GLObjectRef opengl_ob = ob->opengl_engine_ob;
 
+	if(this->selected_ob.nonNull() && (ob->uid == this->selected_ob->uid) && !have_selected_ob_transform_rollback)
+	{
+		have_selected_ob_transform_rollback = true;
+		selected_ob_transform_rollback_uid = ob->uid;
+		selected_ob_transform_rollback_pos = ob->pos;
+		selected_ob_transform_rollback_axis = ob->axis;
+		selected_ob_transform_rollback_angle = ob->angle;
+		selected_ob_transform_rollback_scale = ob->scale;
+	}
+
 	// Set world object pos
 	ob->setTransformAndHistory(new_ob_pos, new_axis, new_angle);
 
@@ -4152,6 +4165,54 @@ void GUIClient::doMoveAndRotateObject(WorldObjectRef ob, const Vec3d& new_ob_pos
 			opengl_engine->setLightPos(light, new_ob_pos.toVec4fPoint());
 		}
 	}
+}
+
+
+bool GUIClient::rollbackSelectedObjectTransformAfterServerRejection()
+{
+	if(!have_selected_ob_transform_rollback)
+		return false;
+
+	if(this->selected_ob.isNull() || (this->selected_ob->uid != selected_ob_transform_rollback_uid))
+		return false;
+
+	WorldObjectRef ob = this->selected_ob;
+	ob->setTransformAndHistory(selected_ob_transform_rollback_pos, selected_ob_transform_rollback_axis, selected_ob_transform_rollback_angle);
+	ob->scale = selected_ob_transform_rollback_scale;
+	ob->transformChanged();
+
+	if(ob->opengl_engine_ob.nonNull())
+	{
+		ob->opengl_engine_ob->ob_to_world_matrix = obToWorldMatrix(*ob);
+		opengl_engine->updateObjectTransformData(*ob->opengl_engine_ob);
+	}
+
+	if(ob->physics_object)
+	{
+		physics_world->setNewObToWorldTransform(*ob->physics_object, ob->pos.toVec4fVector(), Quatf::fromAxisAndAngle(normalise(ob->axis.toVec4fVector()), ob->angle),
+			useScaleForWorldOb(ob->scale).toVec4fVector());
+		physics_world->setLinearAndAngularVelToZero(*ob->physics_object);
+	}
+
+	if(this->grabbed_axis != -1)
+	{
+		this->grabbed_axis = -1;
+		undo_buffer.finishWorldObjectEdit(*ob);
+		ui_interface->setCamRotationOnMouseDragEnabled(true);
+	}
+
+	if(this->selected_ob_picked_up)
+	{
+		this->selected_ob_picked_up = false;
+		ui_interface->objectEditorObjectDropped();
+		opengl_engine->setSelectionOutlineColour(DEFAULT_OUTLINE_COLOUR);
+	}
+
+	have_selected_ob_transform_rollback = false;
+	selected_ob_transform_rollback_uid = UID::invalidUID();
+
+	ui_interface->startObEditorTimerIfNotActive();
+	return true;
 }
 
 
@@ -8980,6 +9041,11 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		case Msg_ErrorMessage:
 		{
 			const ErrorMessage* m = checkedDowncastPtr<const ErrorMessage>(msg);
+			if(m->msg == "You can only place objects inside parcels you can edit in this world." ||
+				m->msg == "Object is not dynamic, physics transform updates are not allowed.")
+			{
+				rollbackSelectedObjectTransformAfterServerRejection();
+			}
 			showErrorNotification(m->msg);
 		}
 		break;
@@ -10317,6 +10383,29 @@ bool GUIClient::clampObjectPositionToParcelForNewTransform(const WorldObject& ob
 
 		const Vec4f newpos = tentative_to_world_matrix.getColumn(3) + dpos;
 		new_ob_pos_out = Vec3d(newpos[0], newpos[1], newpos[2]); // New object position
+
+		// Keep client-side placement checks in sync with server checks.
+		// If object origin is outside all writable parcels, reject move immediately.
+		if(!isGodUser(this->logged_in_user_id) && (this->connected_world_details.owner_id != this->logged_in_user_id))
+		{
+			bool in_writable_parcel = false;
+			{
+				Lock lock(world_state->mutex);
+				for(auto& it : world_state->parcels)
+				{
+					const Parcel* parcel = it.second.ptr();
+					if(parcel->pointInParcel(new_ob_pos_out) && parcel->userHasWritePerms(this->logged_in_user_id))
+					{
+						in_writable_parcel = true;
+						break;
+					}
+				}
+			}
+
+			if(!in_writable_parcel)
+				return false;
+		}
+
 		return true;
 	}
 	else
@@ -11676,6 +11765,11 @@ void GUIClient::objectTransformEdited()
 {
 	if(this->selected_ob.nonNull())
 	{
+		const Vec3d old_pos = this->selected_ob->pos;
+		const Vec3f old_axis = this->selected_ob->axis;
+		const float old_angle = this->selected_ob->angle;
+		const Vec3f old_scale = this->selected_ob->scale;
+
 		// Multiple edits using the object editor, in a short timespan, will be merged together,
 		// unless force_new_undo_edit is true (is set when undo or redo is issued).
 		const bool start_new_edit = force_new_undo_edit || (time_since_object_edited.elapsed() > 5.0);
@@ -11757,6 +11851,22 @@ void GUIClient::objectTransformEdited()
 			}
 			else // Else if new transform is not valid
 			{
+				// Restore previous transform if editor values attempted to move object outside permitted placement.
+				selected_ob->setTransformAndHistory(old_pos, old_axis, old_angle);
+				selected_ob->scale = old_scale;
+				selected_ob->transformChanged();
+
+				if(opengl_ob.nonNull())
+				{
+					opengl_ob->ob_to_world_matrix = obToWorldMatrix(*selected_ob);
+					opengl_engine->updateObjectTransformData(*opengl_ob);
+				}
+
+				if(selected_ob->physics_object)
+					physics_world->setNewObToWorldTransform(*selected_ob->physics_object, selected_ob->pos.toVec4fVector(), Quatf::fromAxisAndAngle(normalise(selected_ob->axis.toVec4fVector()), selected_ob->angle),
+						useScaleForWorldOb(selected_ob->scale).toVec4fVector());
+
+				ui_interface->startObEditorTimerIfNotActive();
 				showErrorNotification("New object transform is not valid - Object must be entirely in a parcel that you have write permissions for.");
 			}
 		}
@@ -11780,6 +11890,11 @@ void GUIClient::objectEdited()
 	// Update object material(s) with values from editor.
 	if(this->selected_ob.nonNull())
 	{
+		const Vec3d old_pos = this->selected_ob->pos;
+		const Vec3f old_axis = this->selected_ob->axis;
+		const float old_angle = this->selected_ob->angle;
+		const Vec3f old_scale = this->selected_ob->scale;
+
 		// Multiple edits using the object editor, in a short timespan, will be merged together,
 		// unless force_new_undo_edit is true (is set when undo or redo is issued).
 		const bool start_new_edit = force_new_undo_edit || (time_since_object_edited.elapsed() > 5.0);
@@ -12152,6 +12267,18 @@ void GUIClient::objectEdited()
 				}
 				else // Else if new transform is not valid
 				{
+					selected_ob->setTransformAndHistory(old_pos, old_axis, old_angle);
+					selected_ob->scale = old_scale;
+					selected_ob->transformChanged();
+
+					opengl_ob->ob_to_world_matrix = obToWorldMatrix(*selected_ob);
+					opengl_engine->updateObjectTransformData(*opengl_ob);
+
+					if(selected_ob->physics_object)
+						physics_world->setNewObToWorldTransform(*selected_ob->physics_object, selected_ob->pos.toVec4fVector(), Quatf::fromAxisAndAngle(normalise(selected_ob->axis.toVec4fVector()), selected_ob->angle),
+							useScaleForWorldOb(selected_ob->scale).toVec4fVector());
+
+					ui_interface->startObEditorTimerIfNotActive();
 					showErrorNotification("New object transform is not valid - Object must be entirely in a parcel that you have write permissions for.");
 				}
 			}
@@ -13519,6 +13646,12 @@ void GUIClient::mousePressed(MouseEvent& e)
 			if(grabbed_axis >= 0) // If we grabbed an arrow or rotation arc:
 			{
 				this->ob_origin_at_grab = this->selected_ob->pos.toVec4fPoint();
+				have_selected_ob_transform_rollback = true;
+				selected_ob_transform_rollback_uid = this->selected_ob->uid;
+				selected_ob_transform_rollback_pos = this->selected_ob->pos;
+				selected_ob_transform_rollback_axis = this->selected_ob->axis;
+				selected_ob_transform_rollback_angle = this->selected_ob->angle;
+				selected_ob_transform_rollback_scale = this->selected_ob->scale;
 
 				// Usually when the mouse button is held down, moving the mouse rotates the camera.
 				// But when we have grabbed an arrow or rotation arc, it moves the object instead.  So don't rotate the camera.
@@ -13675,6 +13808,8 @@ void GUIClient::mouseReleased(MouseEvent& e)
 	{
 		undo_buffer.finishWorldObjectEdit(*selected_ob);
 		grabbed_axis = -1;
+		have_selected_ob_transform_rollback = false;
+		selected_ob_transform_rollback_uid = UID::invalidUID();
 	}
 
 	// Trace through scene to see if we are clicking on a web-view.  Send mouseReleased events to the web view if so.
@@ -13857,6 +13992,12 @@ void GUIClient::pickUpSelectedObject()
 			ui_interface->objectEditorObjectPickedUp();
 
 			selected_ob_picked_up = true;
+			have_selected_ob_transform_rollback = true;
+			selected_ob_transform_rollback_uid = selected_ob->uid;
+			selected_ob_transform_rollback_pos = selected_ob->pos;
+			selected_ob_transform_rollback_axis = selected_ob->axis;
+			selected_ob_transform_rollback_angle = selected_ob->angle;
+			selected_ob_transform_rollback_scale = selected_ob->scale;
 
 			undo_buffer.startWorldObjectEdit(*selected_ob);
 
@@ -13886,6 +14027,8 @@ void GUIClient::dropSelectedObject()
 		ui_interface->objectEditorObjectDropped();
 
 		selected_ob_picked_up = false;
+		have_selected_ob_transform_rollback = false;
+		selected_ob_transform_rollback_uid = UID::invalidUID();
 
 		undo_buffer.finishWorldObjectEdit(*selected_ob);
 
@@ -14692,6 +14835,8 @@ void GUIClient::deselectObject()
 		ui_interface->setObjectEditorEnabled(false);
 
 		this->selected_ob = NULL;
+		have_selected_ob_transform_rollback = false;
+		selected_ob_transform_rollback_uid = UID::invalidUID();
 
 		grabbed_axis = -1;
 
