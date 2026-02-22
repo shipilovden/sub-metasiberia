@@ -40,9 +40,17 @@ else()
 endif()
 
 
-target_link_libraries(${CURRENT_TARGET}
-PRIVATE
-	libs
-	${INDIGO_WIN32_LIBS}
-	${LINUX_LIBS}
-)
+if(WIN32)
+	target_link_libraries(${CURRENT_TARGET}
+		libs
+		${INDIGO_WIN32_LIBS}
+		${LINUX_LIBS}
+	)
+else()
+	target_link_libraries(${CURRENT_TARGET}
+	PRIVATE
+		libs
+		${INDIGO_WIN32_LIBS}
+		${LINUX_LIBS}
+	)
+endif()

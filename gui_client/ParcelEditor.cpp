@@ -10,6 +10,7 @@
 #include <ContainerUtils.h>
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
@@ -144,12 +145,17 @@ ParcelEditor::ParcelEditor(QWidget *parent)
 		this->gridLayout->addWidget(scale_label, 16, 0, 1, 1);
 
 		QWidget* scale_widget = new QWidget(this->groupBox);
-		QHBoxLayout* h = new QHBoxLayout(scale_widget);
+		QVBoxLayout* v = new QVBoxLayout(scale_widget);
+		v->setContentsMargins(0, 0, 0, 0);
+		v->setSpacing(2);
+
+		QWidget* scale_spin_widget = new QWidget(scale_widget);
+		QHBoxLayout* h = new QHBoxLayout(scale_spin_widget);
 		h->setContentsMargins(0, 0, 0, 0);
 
-		scaleXDoubleSpinBox = new IndigoDoubleSpinBox(scale_widget);
-		scaleYDoubleSpinBox = new IndigoDoubleSpinBox(scale_widget);
-		scaleZDoubleSpinBox = new IndigoDoubleSpinBox(scale_widget);
+		scaleXDoubleSpinBox = new IndigoDoubleSpinBox(scale_spin_widget);
+		scaleYDoubleSpinBox = new IndigoDoubleSpinBox(scale_spin_widget);
+		scaleZDoubleSpinBox = new IndigoDoubleSpinBox(scale_spin_widget);
 
 		const double min_scale = 0.001;
 		const double max_scale = 1000000000.0;
@@ -170,13 +176,13 @@ ParcelEditor::ParcelEditor(QWidget *parent)
 		h->addWidget(scaleYDoubleSpinBox);
 		h->addWidget(scaleZDoubleSpinBox);
 
-		this->gridLayout->addWidget(scale_widget, 16, 1, 1, 1);
-	}
+		v->addWidget(scale_spin_widget);
 
-	{
-		linkScaleCheckBox = new QCheckBox("Link x/y/z scale", this->groupBox);
+		linkScaleCheckBox = new QCheckBox("Link x/y/z scale", scale_widget);
 		linkScaleCheckBox->setChecked(true);
-		this->gridLayout->addWidget(linkScaleCheckBox, 17, 1, 1, 1);
+		v->addWidget(linkScaleCheckBox, 0, Qt::AlignLeft);
+
+		this->gridLayout->addWidget(scale_widget, 16, 1, 1, 1);
 	}
 
 	connect(this->titleLineEdit,                SIGNAL(textChanged(const QString&)), this, SIGNAL(parcelChanged()));
