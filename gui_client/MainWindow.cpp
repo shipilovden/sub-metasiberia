@@ -4203,6 +4203,12 @@ void MainWindow::setParcelEditorEnabled(bool b)
 }
 
 
+void MainWindow::setParcelEditorPermissions(bool can_edit_basic_fields, bool can_edit_owner_and_geometry, bool can_edit_member_lists)
+{
+	ui->parcelEditor->setEditingPermissions(can_edit_basic_fields, can_edit_owner_and_geometry, can_edit_member_lists);
+}
+
+
 void MainWindow::enableThirdPersonCamera()
 {
 	ui->actionThird_Person_Camera->setChecked(true);

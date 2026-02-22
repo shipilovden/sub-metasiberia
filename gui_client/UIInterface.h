@@ -71,6 +71,10 @@ public:
 	virtual void showParcelEditor() = 0; // Show parcel editor and hide object editor.
 	virtual void setParcelEditorForParcel(const Parcel& parcel) = 0;
 	virtual void setParcelEditorEnabled(bool enabled) = 0;
+	// can_edit_basic_fields: title/description/flags/spawn-point
+	// can_edit_owner_and_geometry: owner and parcel bounds (position/scale)
+	// can_edit_member_lists: admins and writers
+	virtual void setParcelEditorPermissions(bool can_edit_basic_fields, bool can_edit_owner_and_geometry, bool can_edit_member_lists) = 0;
 	// Object editor
 	virtual void showObjectEditor() = 0; // Show object editor and hide parcel editor.
 	virtual void setObjectEditorControlsEditable(bool editable) = 0;
