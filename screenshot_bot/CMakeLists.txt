@@ -41,7 +41,8 @@ endif()
 
 
 target_link_libraries(${CURRENT_TARGET}
-libs
-${INDIGO_WIN32_LIBS}
-${LINUX_LIBS}
+PRIVATE
+	libs
+	${INDIGO_WIN32_LIBS}
+	${LINUX_LIBS}
 )
