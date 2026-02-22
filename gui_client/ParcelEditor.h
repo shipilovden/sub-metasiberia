@@ -8,6 +8,7 @@
 
 class IndigoDoubleSpinBox;
 class QLineEdit;
+class QCheckBox;
 
 
 class ParcelEditor : public QWidget, public Ui::ParcelEditor
@@ -30,9 +31,14 @@ signals:;
 
 private slots:
 	void on_showOnWebLabel_linkActivated(const QString& link);
+	void xScaleChanged(double new_x);
+	void yScaleChanged(double new_y);
+	void zScaleChanged(double new_z);
+	void linkScaleCheckBoxToggled(bool val);
 
 protected:
 	void applyEditingPermissions();
+	void updateScaleRatiosFromCurrentValues();
 	void rebuildKnownUserRefMaps(const Parcel& parcel);
 	std::string formatUserRef(const UserID& user_id, const std::string& user_name) const;
 	bool tryParseUserRef(const std::string& ref, UserID& user_id_out) const;
@@ -55,6 +61,11 @@ protected:
 	IndigoDoubleSpinBox* scaleXDoubleSpinBox;
 	IndigoDoubleSpinBox* scaleYDoubleSpinBox;
 	IndigoDoubleSpinBox* scaleZDoubleSpinBox;
+	QCheckBox* linkScaleCheckBox;
+
+	double last_x_scale_over_y_scale;
+	double last_x_scale_over_z_scale;
+	double last_y_scale_over_z_scale;
 
 	std::unordered_map<std::string, UserID> known_user_ref_to_id;
 	std::unordered_map<uint32, std::string> known_user_id_to_name;

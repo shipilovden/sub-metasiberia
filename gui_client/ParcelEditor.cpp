@@ -12,6 +12,7 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QCheckBox>
 #include <set>
 #include <algorithm>
 #include <cctype>
@@ -90,7 +91,11 @@ ParcelEditor::ParcelEditor(QWidget *parent)
 	positionZDoubleSpinBox(NULL),
 	scaleXDoubleSpinBox(NULL),
 	scaleYDoubleSpinBox(NULL),
-	scaleZDoubleSpinBox(NULL)
+	scaleZDoubleSpinBox(NULL),
+	linkScaleCheckBox(NULL),
+	last_x_scale_over_y_scale(1.0),
+	last_x_scale_over_z_scale(1.0),
+	last_y_scale_over_z_scale(1.0)
 {
 	setupUi(this);
 
@@ -168,6 +173,12 @@ ParcelEditor::ParcelEditor(QWidget *parent)
 		this->gridLayout->addWidget(scale_widget, 16, 1, 1, 1);
 	}
 
+	{
+		linkScaleCheckBox = new QCheckBox("Link x/y/z scale", this->groupBox);
+		linkScaleCheckBox->setChecked(true);
+		this->gridLayout->addWidget(linkScaleCheckBox, 17, 1, 1, 1);
+	}
+
 	connect(this->titleLineEdit,                SIGNAL(textChanged(const QString&)), this, SIGNAL(parcelChanged()));
 	connect(this->descriptionTextEdit,          SIGNAL(textChanged()),               this, SIGNAL(parcelChanged()));
 	connect(this->allWriteableCheckBox,         SIGNAL(toggled(bool)),               this, SIGNAL(parcelChanged()));
@@ -181,9 +192,10 @@ ParcelEditor::ParcelEditor(QWidget *parent)
 	connect(this->positionXDoubleSpinBox,       SIGNAL(valueChanged(double)),        this, SIGNAL(parcelChanged()));
 	connect(this->positionYDoubleSpinBox,       SIGNAL(valueChanged(double)),        this, SIGNAL(parcelChanged()));
 	connect(this->positionZDoubleSpinBox,       SIGNAL(valueChanged(double)),        this, SIGNAL(parcelChanged()));
-	connect(this->scaleXDoubleSpinBox,          SIGNAL(valueChanged(double)),        this, SIGNAL(parcelChanged()));
-	connect(this->scaleYDoubleSpinBox,          SIGNAL(valueChanged(double)),        this, SIGNAL(parcelChanged()));
-	connect(this->scaleZDoubleSpinBox,          SIGNAL(valueChanged(double)),        this, SIGNAL(parcelChanged()));
+	connect(this->scaleXDoubleSpinBox,          SIGNAL(valueChanged(double)),        this, SLOT(xScaleChanged(double)));
+	connect(this->scaleYDoubleSpinBox,          SIGNAL(valueChanged(double)),        this, SLOT(yScaleChanged(double)));
+	connect(this->scaleZDoubleSpinBox,          SIGNAL(valueChanged(double)),        this, SLOT(zScaleChanged(double)));
+	connect(this->linkScaleCheckBox,            SIGNAL(toggled(bool)),               this, SLOT(linkScaleCheckBoxToggled(bool)));
 
 	setEditingPermissions(false, false, false);
 }
@@ -246,6 +258,7 @@ void ParcelEditor::setFromParcel(const Parcel& parcel)
 	SignalBlocker::setValue(this->scaleXDoubleSpinBox, std::max(size.x, 0.001));
 	SignalBlocker::setValue(this->scaleYDoubleSpinBox, std::max(size.y, 0.001));
 	SignalBlocker::setValue(this->scaleZDoubleSpinBox, std::max(size.z, 0.001));
+	updateScaleRatiosFromCurrentValues();
 }
 
 
@@ -275,9 +288,92 @@ void ParcelEditor::applyEditingPermissions()
 	this->scaleXDoubleSpinBox->setEnabled(can_edit_owner_and_geometry);
 	this->scaleYDoubleSpinBox->setEnabled(can_edit_owner_and_geometry);
 	this->scaleZDoubleSpinBox->setEnabled(can_edit_owner_and_geometry);
+	this->linkScaleCheckBox->setEnabled(can_edit_owner_and_geometry);
 
 	this->adminsTextEdit->setReadOnly(!can_edit_member_lists);
 	this->writersTextEdit->setReadOnly(!can_edit_member_lists);
+}
+
+
+void ParcelEditor::updateScaleRatiosFromCurrentValues()
+{
+	const double sx = std::max(this->scaleXDoubleSpinBox->value(), 1.0e-9);
+	const double sy = std::max(this->scaleYDoubleSpinBox->value(), 1.0e-9);
+	const double sz = std::max(this->scaleZDoubleSpinBox->value(), 1.0e-9);
+
+	this->last_x_scale_over_y_scale = sx / sy;
+	this->last_x_scale_over_z_scale = sx / sz;
+	this->last_y_scale_over_z_scale = sy / sz;
+}
+
+
+void ParcelEditor::xScaleChanged(double new_x)
+{
+	if(this->linkScaleCheckBox->isChecked())
+	{
+		const double safe_xy = std::max(this->last_x_scale_over_y_scale, 1.0e-9);
+		const double safe_xz = std::max(this->last_x_scale_over_z_scale, 1.0e-9);
+		const double new_y = new_x / safe_xy;
+		const double new_z = new_x / safe_xz;
+
+		SignalBlocker::setValue(scaleYDoubleSpinBox, new_y);
+		SignalBlocker::setValue(scaleZDoubleSpinBox, new_z);
+	}
+	else
+	{
+		updateScaleRatiosFromCurrentValues();
+	}
+
+	emit parcelChanged();
+}
+
+
+void ParcelEditor::yScaleChanged(double new_y)
+{
+	if(this->linkScaleCheckBox->isChecked())
+	{
+		const double safe_xy = std::max(this->last_x_scale_over_y_scale, 1.0e-9);
+		const double safe_yz = std::max(this->last_y_scale_over_z_scale, 1.0e-9);
+		const double new_x = safe_xy * new_y;
+		const double new_z = new_y / safe_yz;
+
+		SignalBlocker::setValue(scaleXDoubleSpinBox, new_x);
+		SignalBlocker::setValue(scaleZDoubleSpinBox, new_z);
+	}
+	else
+	{
+		updateScaleRatiosFromCurrentValues();
+	}
+
+	emit parcelChanged();
+}
+
+
+void ParcelEditor::zScaleChanged(double new_z)
+{
+	if(this->linkScaleCheckBox->isChecked())
+	{
+		const double safe_xz = std::max(this->last_x_scale_over_z_scale, 1.0e-9);
+		const double safe_yz = std::max(this->last_y_scale_over_z_scale, 1.0e-9);
+		const double new_x = safe_xz * new_z;
+		const double new_y = safe_yz * new_z;
+
+		SignalBlocker::setValue(scaleXDoubleSpinBox, new_x);
+		SignalBlocker::setValue(scaleYDoubleSpinBox, new_y);
+	}
+	else
+	{
+		updateScaleRatiosFromCurrentValues();
+	}
+
+	emit parcelChanged();
+}
+
+
+void ParcelEditor::linkScaleCheckBoxToggled(bool val)
+{
+	assertOrDeclareUsed(val);
+	updateScaleRatiosFromCurrentValues();
 }
 
 
