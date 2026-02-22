@@ -183,7 +183,7 @@ void renderParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 			
 			page += "<p><a href=\"" + webclient_URL + "\">Visit in web browser</a><br/></p>   \n";
 			//page += "<p>For the best experience, enter this URL into the location bar in the Substrata client: " + sub_URL + "</p>";
-			page += "<p>Visit in Substrata: <a href=\"" + sub_URL + "\">" + sub_URL + "</a><br/>(Click or enter URL into location bar in Substrata client)</p>   \n";
+			page += "<p>Visit in Metasiberia: <a href=\"" + sub_URL + "\">" + sub_URL + "</a><br/>(Click or enter URL into location bar in Metasiberia client)</p>   \n";
 
 
 			// Look up owner

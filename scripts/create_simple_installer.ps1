@@ -142,8 +142,15 @@ Section "Core files (required)" SEC_CORE
   SectionIn RO
   SetOutPath "`$INSTDIR"
   File /r "$escapedSource\\*"
+  CopyFiles /SILENT "`$INSTDIR\\gui_client.exe" "`$INSTDIR\\Metasiberia.exe"
 
   WriteRegStr HKLM "Software\$Name" "Install_Dir" "`$INSTDIR"
+  WriteRegStr HKLM "Software\Classes\sub" "" "URL:Metasiberia Protocol"
+  WriteRegStr HKLM "Software\Classes\sub" "URL Protocol" ""
+  WriteRegStr HKLM "Software\Classes\sub\DefaultIcon" "" "`$INSTDIR\\Metasiberia.exe,0"
+  WriteRegStr HKLM "Software\Classes\sub\shell\open\command" "" '"`$INSTDIR\\Metasiberia.exe" -linku "%1"'
+  WriteRegStr HKLM "Software\Classes\Applications\Metasiberia.exe" "FriendlyAppName" "Metasiberia"
+  WriteRegStr HKLM "Software\Classes\Applications\Metasiberia.exe\shell\open\command" "" '"`$INSTDIR\\Metasiberia.exe" -linku "%1"'
   WriteUninstaller "`$INSTDIR\\Uninstall.exe"
 SectionEnd
 
@@ -160,6 +167,8 @@ Section "Uninstall"
   Delete "`$DESKTOP\$Name.lnk"
 
   RMDir /r "`$INSTDIR"
+  DeleteRegKey HKLM "Software\Classes\Applications\Metasiberia.exe"
+  DeleteRegKey HKLM "Software\Classes\sub"
   DeleteRegKey HKLM "Software\$Name"
 SectionEnd
 "@
@@ -185,11 +194,18 @@ function New-IexpressInstaller {
 
     Copy-Item -Path (Join-Path $Source "*") -Destination $workDir -Recurse -Force
 
-    $installBat = @"
+$installBat = @"
 @echo off
 set INSTALL_DIR=%ProgramFiles%\$Name
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 xcopy /E /I /Y "%~dp0*.*" "%INSTALL_DIR%\" >nul
+copy /Y "%INSTALL_DIR%\\gui_client.exe" "%INSTALL_DIR%\\Metasiberia.exe" >nul
+reg add "HKCU\\Software\\Classes\\sub" /ve /d "URL:Metasiberia Protocol" /f >nul
+reg add "HKCU\\Software\\Classes\\sub" /v "URL Protocol" /d "" /f >nul
+reg add "HKCU\\Software\\Classes\\sub\\DefaultIcon" /ve /d "\"%INSTALL_DIR%\\Metasiberia.exe\",0" /f >nul
+reg add "HKCU\\Software\\Classes\\sub\\shell\\open\\command" /ve /d "\"%INSTALL_DIR%\\Metasiberia.exe\" -linku \"%%1\"" /f >nul
+reg add "HKCU\\Software\\Classes\\Applications\\Metasiberia.exe" /v "FriendlyAppName" /d "Metasiberia" /f >nul
+reg add "HKCU\\Software\\Classes\\Applications\\Metasiberia.exe\\shell\\open\\command" /ve /d "\"%INSTALL_DIR%\\Metasiberia.exe\" -linku \"%%1\"" /f >nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command "`$w = New-Object -ComObject WScript.Shell; `$s = `$w.CreateShortcut('%USERPROFILE%\Desktop\$Name.lnk'); `$s.TargetPath = '%INSTALL_DIR%\gui_client.exe'; `$s.WorkingDirectory = '%INSTALL_DIR%'; `$s.Save()"
 echo Installation complete.
 pause
