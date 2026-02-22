@@ -14,11 +14,14 @@ Metasiberia is a virtual world project created using the open-source Substrata s
 
 ## Community and Support
 
+- **VK**: [https://vk.com/metasiberia_official](https://vk.com/metasiberia_official)
+- **Telegram**: [https://t.me/metasiberia_channel](https://t.me/metasiberia_channel)
+
 ## Credits
 
 **Metasiberia** is inspired and based on **Substrata**
 
-- **Original Substrata**: [https://substrata.info/](https://substrata.info/)
+- **Original Substrata**: [https://github.com/glaretechnologies/substrata](https://github.com/glaretechnologies/substrata)
 - **Substrata Creator**: [https://x.com/NickChapmn](https://x.com/NickChapmn)
 - **Metasiberia Author**: [https://x.com/denshipilovart](https://x.com/denshipilovart)
 
