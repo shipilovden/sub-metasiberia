@@ -67,7 +67,33 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 	//std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Substrata");
 	//const bool logged_in = LoginHandlers::isLoggedInAsNick(data_store, request_info);
 
-	std::string page_out = WebServerResponseUtils::standardHTMLHeader(data_store, request_info, /*page title=*/"Metasiberia");
+	const std::string root_page_title = "Metasiberia";
+	const std::string root_page_description = "Metaverse from Siberia. Craft virtually - Inspire reality.";
+	const std::string root_page_url = "https://vr.metasiberia.com/";
+	const std::string root_page_image_url = "https://vr.metasiberia.com/files/main.jpg";
+
+	const std::string root_page_meta_tags =
+		"\t\t<link rel=\"canonical\" href=\"" + root_page_url + "\" />\n"
+		"\t\t<meta name=\"description\" content=\"" + web::Escaping::HTMLEscape(root_page_description) + "\" />\n"
+		"\t\t<meta name=\"robots\" content=\"index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1\" />\n"
+		"\t\t<meta property=\"og:site_name\" content=\"Metasiberia\" />\n"
+		"\t\t<meta property=\"og:type\" content=\"website\" />\n"
+		"\t\t<meta property=\"og:title\" content=\"" + web::Escaping::HTMLEscape(root_page_title) + "\" />\n"
+		"\t\t<meta property=\"og:description\" content=\"" + web::Escaping::HTMLEscape(root_page_description) + "\" />\n"
+		"\t\t<meta property=\"og:url\" content=\"" + root_page_url + "\" />\n"
+		"\t\t<meta property=\"og:image\" content=\"" + root_page_image_url + "\" />\n"
+		"\t\t<meta property=\"og:image:secure_url\" content=\"" + root_page_image_url + "\" />\n"
+		"\t\t<meta property=\"og:image:type\" content=\"image/jpeg\" />\n"
+		"\t\t<meta property=\"og:image:width\" content=\"543\" />\n"
+		"\t\t<meta property=\"og:image:height\" content=\"608\" />\n"
+		"\t\t<meta property=\"og:image:alt\" content=\"Metasiberia - Metaverse from Siberia\" />\n"
+		"\t\t<meta name=\"twitter:card\" content=\"summary_large_image\" />\n"
+		"\t\t<meta name=\"twitter:title\" content=\"" + web::Escaping::HTMLEscape(root_page_title) + "\" />\n"
+		"\t\t<meta name=\"twitter:description\" content=\"" + web::Escaping::HTMLEscape(root_page_description) + "\" />\n"
+		"\t\t<meta name=\"twitter:image\" content=\"" + root_page_image_url + "\" />\n"
+		"\t\t<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"WebSite\",\"name\":\"Metasiberia\",\"url\":\"https://vr.metasiberia.com/\",\"description\":\"Metaverse from Siberia. Craft virtually - Inspire reality.\",\"image\":\"https://vr.metasiberia.com/files/main.jpg\"}</script>\n";
+
+	std::string page_out = WebServerResponseUtils::standardHTMLHeader(data_store, request_info, /*page title=*/root_page_title, /*extra header tags=*/root_page_meta_tags);
 	page_out +=
 		"	<body class=\"root-body\">\n"
 		"	<div id=\"login\">\n"; // Start login div
