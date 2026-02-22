@@ -2558,6 +2558,23 @@ void MainWindow::on_actionCopy_Object_triggered()
 		mime_data->setData(/*mime-type:*/"x-substrata-object-binary", QByteArray((const char*)temp_buf.buf.data(), (int)temp_buf.buf.size()));
 		clipboard->setMimeData(mime_data);
 	}
+	else if(gui_client.selected_parcel.nonNull())
+	{
+		if(!gui_client.logged_in_user_id.valid() || !isGodUser(gui_client.logged_in_user_id))
+		{
+			showErrorNotification("Only superadmin can copy parcels.");
+			return;
+		}
+
+		QClipboard* clipboard = QGuiApplication::clipboard();
+		QMimeData* mime_data = new QMimeData();
+
+		BufferOutStream temp_buf;
+		writeParcelToNetworkStream(*gui_client.selected_parcel, temp_buf, /*peer_protocol_version=*/Protocol::CyberspaceProtocolVersion);
+
+		mime_data->setData(/*mime-type:*/"x-substrata-parcel-binary", QByteArray((const char*)temp_buf.buf.data(), (int)temp_buf.buf.size()));
+		clipboard->setMimeData(mime_data);
+	}
 }
 
 
@@ -2694,6 +2711,59 @@ void MainWindow::handlePasteOrDropMimeData(const QMimeData* mime_data)
 				catch(glare::Exception& e)
 				{
 					conPrint("Error while reading object from clipboard: " + e.what());
+				}
+			}
+			else if(mime_data->hasFormat("x-substrata-parcel-binary")) // Binary encoded parcel, from a user copying a parcel.
+			{
+				if(!gui_client.logged_in_user_id.valid() || !isGodUser(gui_client.logged_in_user_id))
+				{
+					showErrorNotification("Only superadmin can paste parcels.");
+					return;
+				}
+
+				const QByteArray parcel_data = mime_data->data("x-substrata-parcel-binary");
+
+				// Copy QByteArray to BufferInStream
+				BufferInStream in_stream_buf;
+				in_stream_buf.buf.resize(parcel_data.size());
+				if(parcel_data.size() > 0)
+					std::memcpy(in_stream_buf.buf.data(), parcel_data.data(), parcel_data.size());
+
+				try
+				{
+					Parcel pasted_parcel;
+					(void)readParcelIDFromStream(in_stream_buf); // Read and ignore source parcel id.
+					readParcelFromNetworkStreamGivenID(in_stream_buf, pasted_parcel, Protocol::CyberspaceProtocolVersion);
+
+					// Offset parcel in XY so pasted parcel is not exactly on top of source.
+					const Vec3d cam_right = gui_client.cam_controller.getRightVec();
+					const double size_x = std::fabs(pasted_parcel.verts[1].x - pasted_parcel.verts[0].x);
+					const double size_y = std::fabs(pasted_parcel.verts[3].y - pasted_parcel.verts[0].y);
+					const double pad = 1.0;
+					Vec2d offset(0.0);
+					if(std::fabs(cam_right.x) > std::fabs(cam_right.y))
+						offset = Vec2d((cam_right.x >= 0.0 ? 1.0 : -1.0) * std::max(size_x, 1.0) + (cam_right.x >= 0.0 ? pad : -pad), 0.0);
+					else
+						offset = Vec2d(0.0, (cam_right.y >= 0.0 ? 1.0 : -1.0) * std::max(size_y, 1.0) + (cam_right.y >= 0.0 ? pad : -pad));
+
+					for(int i=0; i<4; ++i)
+						pasted_parcel.verts[i] += offset;
+
+					pasted_parcel.id = ParcelID::invalidParcelID(); // Signal "create new parcel" to server.
+					pasted_parcel.created_time = TimeStamp::currentTime();
+					pasted_parcel.build();
+
+					// Create parcel by sending ParcelFullUpdate with invalid parcel id; server will assign a fresh id.
+					MessageUtils::initPacket(scratch_packet, Protocol::ParcelFullUpdate);
+					writeParcelToNetworkStream(pasted_parcel, scratch_packet, /*peer_protocol_version=*/Protocol::CyberspaceProtocolVersion);
+					enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+
+					showInfoNotification("Parcel pasted. Server will assign a new parcel ID.");
+				}
+				catch(glare::Exception& e)
+				{
+					conPrint("Error while reading parcel from clipboard: " + e.what());
+					showErrorNotification("Failed to paste parcel: " + e.what());
 				}
 			}
 			else if(mime_data->hasImage()) // Image data (for example from snip screen)

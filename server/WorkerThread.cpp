@@ -2689,82 +2689,143 @@ void WorkerThread::doRun()
 								SocketBufferOutStream parcel_update_packet(SocketBufferOutStream::DontUseNetworkByteOrder);
 								{
 									WorldStateLock lock(world_state->mutex);
-									auto res = cur_world_state->getParcels(lock).find(parcel_id);
-									if(res != cur_world_state->getParcels(lock).end())
-									{
-										Parcel* parcel = res->second.getPointer();
-										const bool is_superuser = isGodUser(client_user_id);
-										const bool is_owner = (client_user_id == parcel->owner_id);
+									const bool is_superuser = isGodUser(client_user_id);
 
-										// See if the user has permissions to alter this parcel.
-										if(!is_superuser && !is_owner)
+									auto ensure_user_id_in_list = [&](std::vector<UserID>& ids, const UserID& user_id)
+									{
+										if(!user_id.valid())
+											return;
+										if(std::find(ids.begin(), ids.end(), user_id) == ids.end())
+											ids.push_back(user_id);
+									};
+
+									auto refresh_denormalised_user_names = [&](Parcel& parcel)
+									{
 										{
-											error_msg = "You must be the owner of this parcel (or have write permissions) to modify it";
+											auto owner_res = world_state->user_id_to_users.find(parcel.owner_id);
+											parcel.owner_name = (owner_res != world_state->user_id_to_users.end()) ? owner_res->second->name : ("user id: " + parcel.owner_id.toString());
+										}
+
+										parcel.admin_names.resize(parcel.admin_ids.size());
+										for(size_t i=0; i<parcel.admin_ids.size(); ++i)
+										{
+											auto admin_res = world_state->user_id_to_users.find(parcel.admin_ids[i]);
+											parcel.admin_names[i] = (admin_res != world_state->user_id_to_users.end()) ? admin_res->second->name : ("user id: " + parcel.admin_ids[i].toString());
+										}
+
+										parcel.writer_names.resize(parcel.writer_ids.size());
+										for(size_t i=0; i<parcel.writer_ids.size(); ++i)
+										{
+											auto writer_res = world_state->user_id_to_users.find(parcel.writer_ids[i]);
+											parcel.writer_names[i] = (writer_res != world_state->user_id_to_users.end()) ? writer_res->second->name : ("user id: " + parcel.writer_ids[i].toString());
+										}
+									};
+
+									if(!parcel_id.valid()) // Create new parcel request (used by parcel copy/paste).
+									{
+										if(!is_superuser)
+										{
+											error_msg = "Only superadmin can create parcels from the client.";
 										}
 										else
 										{
-											// Basic fields owner and super-admin can change.
-											parcel->title = temp_parcel.title;
-											parcel->description = temp_parcel.description;
-											parcel->all_writeable = temp_parcel.all_writeable;
-											parcel->flags = temp_parcel.flags;
-											parcel->spawn_point = temp_parcel.spawn_point;
-
-											// Owner and super-admin can manage editors/admins.
-											parcel->admin_ids = temp_parcel.admin_ids;
-											parcel->writer_ids = temp_parcel.writer_ids;
-
-											// Only super-admin may change owner and parcel geometry.
-											if(is_superuser)
+											uint32 max_id = 0;
+											for(auto it = cur_world_state->getParcels(lock).begin(); it != cur_world_state->getParcels(lock).end(); ++it)
 											{
-												parcel->owner_id = temp_parcel.owner_id;
-												for(int i=0; i<4; ++i)
-													parcel->verts[i] = temp_parcel.verts[i];
-												parcel->zbounds = temp_parcel.zbounds;
+												if(it->second->id.valid())
+													max_id = myMax(max_id, it->second->id.value());
 											}
 
-											// Ensure owner always has admin/writer permissions.
-											auto ensure_user_id_in_list = [&](std::vector<UserID>& ids, const UserID& user_id)
-											{
-												if(!user_id.valid())
-													return;
-												if(std::find(ids.begin(), ids.end(), user_id) == ids.end())
-													ids.push_back(user_id);
-											};
+											const ParcelID new_id(max_id + 1);
 
-											ensure_user_id_in_list(parcel->admin_ids, parcel->owner_id);
-											ensure_user_id_in_list(parcel->writer_ids, parcel->owner_id);
+											ParcelRef new_parcel = new Parcel();
+											new_parcel->copyNetworkStateFrom(temp_parcel, /*restrict_changes=*/false);
+											new_parcel->id = new_id;
+											new_parcel->created_time = TimeStamp::currentTime();
+											if(!new_parcel->owner_id.valid())
+												new_parcel->owner_id = client_user_id;
 
-											// Refresh denormalised owner/admin/writer names for this parcel.
+											ensure_user_id_in_list(new_parcel->admin_ids, new_parcel->owner_id);
+											ensure_user_id_in_list(new_parcel->writer_ids, new_parcel->owner_id);
+
+											new_parcel->build();
+
+											const Vec3d extents = new_parcel->aabb_max - new_parcel->aabb_min;
+											if(extents.x <= 0.0 || extents.y <= 0.0 || extents.z <= 0.0)
 											{
-												auto owner_res = world_state->user_id_to_users.find(parcel->owner_id);
-												parcel->owner_name = (owner_res != world_state->user_id_to_users.end()) ? owner_res->second->name : ("user id: " + parcel->owner_id.toString());
+												error_msg = "Invalid parcel geometry for create request.";
 											}
-
-											parcel->admin_names.resize(parcel->admin_ids.size());
-											for(size_t i=0; i<parcel->admin_ids.size(); ++i)
+											else
 											{
-												auto admin_res = world_state->user_id_to_users.find(parcel->admin_ids[i]);
-												parcel->admin_names[i] = (admin_res != world_state->user_id_to_users.end()) ? admin_res->second->name : ("user id: " + parcel->admin_ids[i].toString());
-											}
+												refresh_denormalised_user_names(*new_parcel);
 
-											parcel->writer_names.resize(parcel->writer_ids.size());
-											for(size_t i=0; i<parcel->writer_ids.size(); ++i)
+												cur_world_state->getParcels(lock)[new_id] = new_parcel;
+												cur_world_state->addParcelAsDBDirty(new_parcel, lock);
+												world_state->markAsChanged();
+
+												// Broadcast creation with authoritative id and data.
+												MessageUtils::initPacket(parcel_update_packet, Protocol::ParcelCreated);
+												writeParcelToNetworkStream(*new_parcel, parcel_update_packet, client_protocol_version);
+												MessageUtils::updatePacketLengthField(parcel_update_packet);
+												send_updated_parcel_msg = true;
+											}
+										}
+									}
+									else
+									{
+										auto res = cur_world_state->getParcels(lock).find(parcel_id);
+										if(res == cur_world_state->getParcels(lock).end())
+										{
+											error_msg = "Parcel " + parcel_id.toString() + " was not found in this world.";
+										}
+										else
+										{
+											Parcel* parcel = res->second.getPointer();
+											const bool is_owner = (client_user_id == parcel->owner_id);
+
+											// See if the user has permissions to alter this parcel.
+											if(!is_superuser && !is_owner)
 											{
-												auto writer_res = world_state->user_id_to_users.find(parcel->writer_ids[i]);
-												parcel->writer_names[i] = (writer_res != world_state->user_id_to_users.end()) ? writer_res->second->name : ("user id: " + parcel->writer_ids[i].toString());
+												error_msg = "You must be the owner of this parcel (or have write permissions) to modify it";
 											}
+											else
+											{
+												// Basic fields owner and super-admin can change.
+												parcel->title = temp_parcel.title;
+												parcel->description = temp_parcel.description;
+												parcel->all_writeable = temp_parcel.all_writeable;
+												parcel->flags = temp_parcel.flags;
+												parcel->spawn_point = temp_parcel.spawn_point;
 
-											parcel->build();
+												// Owner and super-admin can manage editors/admins.
+												parcel->admin_ids = temp_parcel.admin_ids;
+												parcel->writer_ids = temp_parcel.writer_ids;
 
-											cur_world_state->addParcelAsDBDirty(parcel, lock);
-											world_state->markAsChanged();
+												// Only super-admin may change owner and parcel geometry.
+												if(is_superuser)
+												{
+													parcel->owner_id = temp_parcel.owner_id;
+													for(int i=0; i<4; ++i)
+														parcel->verts[i] = temp_parcel.verts[i];
+													parcel->zbounds = temp_parcel.zbounds;
+												}
 
-											// Broadcast authoritative parcel state to all clients in this world.
-											MessageUtils::initPacket(parcel_update_packet, Protocol::ParcelFullUpdate);
-											writeParcelToNetworkStream(*parcel, parcel_update_packet, client_protocol_version);
-											MessageUtils::updatePacketLengthField(parcel_update_packet);
-											send_updated_parcel_msg = true;
+												ensure_user_id_in_list(parcel->admin_ids, parcel->owner_id);
+												ensure_user_id_in_list(parcel->writer_ids, parcel->owner_id);
+
+												refresh_denormalised_user_names(*parcel);
+
+												parcel->build();
+
+												cur_world_state->addParcelAsDBDirty(parcel, lock);
+												world_state->markAsChanged();
+
+												// Broadcast authoritative parcel state to all clients in this world.
+												MessageUtils::initPacket(parcel_update_packet, Protocol::ParcelFullUpdate);
+												writeParcelToNetworkStream(*parcel, parcel_update_packet, client_protocol_version);
+												MessageUtils::updatePacketLengthField(parcel_update_packet);
+												send_updated_parcel_msg = true;
+											}
 										}
 									}
 								} // End lock scope
