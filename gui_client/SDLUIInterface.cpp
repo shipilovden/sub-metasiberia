@@ -271,6 +271,10 @@ void SDLUIInterface::setParcelEditorEnabled(bool enabled)
 {
 }
 
+void SDLUIInterface::setParcelEditorPermissions(bool can_edit_basic_fields, bool can_edit_owner_and_geometry, bool can_edit_member_lists)
+{
+}
+
 void SDLUIInterface::showObjectEditor()
 {
 }

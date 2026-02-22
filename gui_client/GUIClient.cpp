@@ -3841,6 +3841,35 @@ void GUIClient::updateSelectedObjectPlacementBeamAndGizmos()
 			}
 		}
 	}
+	else if(selected_parcel.nonNull() && this->logged_in_user_id.valid() && isGodUser(this->logged_in_user_id) && axis_and_rot_obs_enabled)
+	{
+		const Vec4f parcel_centre(
+			(float)((selected_parcel->aabb_min.x + selected_parcel->aabb_max.x) * 0.5),
+			(float)((selected_parcel->aabb_min.y + selected_parcel->aabb_max.y) * 0.5),
+			(float)((selected_parcel->aabb_min.z + selected_parcel->aabb_max.z) * 0.5),
+			1.f
+		);
+
+		const Vec4f cam_to_parcel = parcel_centre - cam_controller.getPosition().toVec4fPoint();
+		const float control_scale = myMax(cam_to_parcel.length() * 0.2f, 0.1f);
+
+		const Vec4f arrow_origin = parcel_centre;
+		const float arrow_len = control_scale;
+
+		axis_arrow_segments[0] = LineSegment4f(arrow_origin, arrow_origin + Vec4f(cam_to_parcel[0] > 0 ? -arrow_len : arrow_len, 0, 0, 0));
+		axis_arrow_segments[1] = LineSegment4f(arrow_origin, arrow_origin + Vec4f(0, cam_to_parcel[1] > 0 ? -arrow_len : arrow_len, 0, 0));
+		axis_arrow_segments[2] = LineSegment4f(arrow_origin, arrow_origin + Vec4f(0, 0, cam_to_parcel[2] > 0 ? -arrow_len : arrow_len, 0));
+
+		for(int i=0; i<NUM_AXIS_ARROWS; ++i)
+		{
+			axis_arrow_objects[i]->ob_to_world_matrix = OpenGLEngine::arrowObjectTransform(axis_arrow_segments[i].a, axis_arrow_segments[i].b, arrow_len);
+			if(opengl_engine->isObjectAdded(axis_arrow_objects[i]))
+				opengl_engine->updateObjectTransformData(*axis_arrow_objects[i]);
+		}
+
+		for(int i=0; i<3; ++i)
+			rot_handle_lines[i].clear();
+	}
 
 	if(selected_ob && selected_ob->edit_aabb)
 	{
@@ -7368,43 +7397,29 @@ void GUIClient::updateParcelGraphics()
 				}
 				else
 				{
-					const Vec4f aabb_min((float)parcel->aabb_min.x, (float)parcel->aabb_min.y, (float)parcel->aabb_min.z, 1.0f);
-					const Vec4f aabb_max((float)parcel->aabb_max.x, (float)parcel->aabb_max.y, (float)parcel->aabb_max.z, 1.0f);
-
 					if(ui_interface->isShowParcelsEnabled())
 					{
-						if(parcel->opengl_engine_ob.isNull())
+						// Recreate parcel GL/physics objects for reliable sync when geometry/ownership changes.
+						checkRemoveObAndSetRefToNull(opengl_engine, parcel->opengl_engine_ob);
+						checkRemoveObAndSetRefToNull(physics_world, parcel->physics_object);
+
+						const bool write_perms = parcel->userHasWritePerms(this->logged_in_user_id);
+						bool use_write_perms = write_perms;
+						if(ui_interface->inScreenshotTakingMode()) // If we are in screenshot-taking mode, don't highlight writable parcels.
+							use_write_perms = false;
+
+						parcel->opengl_engine_ob = parcel->makeOpenGLObject(opengl_engine, use_write_perms);
+						parcel->opengl_engine_ob->materials[0].shader_prog = this->parcel_shader_prog;
+						parcel->opengl_engine_ob->materials[0].auto_assign_shader = false;
+						opengl_engine->addObject(parcel->opengl_engine_ob);
+
+						parcel->physics_object = parcel->makePhysicsObject(this->unit_cube_shape);
+						physics_world->addObject(parcel->physics_object);
+
+						if(this->selected_parcel.ptr() == parcel)
 						{
-							// Make OpenGL model for parcel:
-							const bool write_perms = parcel->userHasWritePerms(this->logged_in_user_id);
-
-							bool use_write_perms = write_perms;
-							if(ui_interface->inScreenshotTakingMode()) // If we are in screenshot-taking mode, don't highlight writable parcels.
-								use_write_perms = false;
-
-							parcel->opengl_engine_ob = parcel->makeOpenGLObject(opengl_engine, use_write_perms);
-							parcel->opengl_engine_ob->materials[0].shader_prog = this->parcel_shader_prog;
-							parcel->opengl_engine_ob->materials[0].auto_assign_shader = false;
-							opengl_engine->addObject(parcel->opengl_engine_ob);
-
-							// Make physics object for parcel:
-							assert(parcel->physics_object.isNull());
-							parcel->physics_object = parcel->makePhysicsObject(this->unit_cube_shape);
-							physics_world->addObject(parcel->physics_object);
-						}
-						else // else if opengl ob is not null:
-						{
-							// Update transform for object in OpenGL engine.  See OpenGLEngine::makeAABBObject() for transform details.
-							//const Vec4f span = aabb_max - aabb_min;
-							//parcel->opengl_engine_ob->ob_to_world_matrix.setColumn(0, Vec4f(span[0], 0, 0, 0));
-							//parcel->opengl_engine_ob->ob_to_world_matrix.setColumn(1, Vec4f(0, span[1], 0, 0));
-							//parcel->opengl_engine_ob->ob_to_world_matrix.setColumn(2, Vec4f(0, 0, span[2], 0));
-							//parcel->opengl_engine_ob->ob_to_world_matrix.setColumn(3, aabb_min); // set origin
-							//opengl_engine->updateObjectTransformData(*parcel->opengl_engine_ob);
-							//
-							//// Update in physics engine
-							//parcel->physics_object->ob_to_world = parcel->opengl_engine_ob->ob_to_world_matrix;
-							//physics_world->updateObjectTransformData(*parcel->physics_object);
+							opengl_engine->selectObject(parcel->opengl_engine_ob);
+							opengl_engine->setSelectionOutlineColour(PARCEL_OUTLINE_COLOUR);
 						}
 					}
 
@@ -7416,6 +7431,16 @@ void GUIClient::updateParcelGraphics()
 						this->url_parcel_uid = -1;
 
 						showInfoNotification("Jumped to parcel " + parcel->id.toString());
+					}
+
+					if(this->selected_parcel.ptr() == parcel)
+					{
+						const bool can_edit_basic_fields = this->logged_in_user_id.valid() &&
+							((this->logged_in_user_id == parcel->owner_id) || isGodUser(this->logged_in_user_id));
+						const bool can_edit_owner_and_geometry = this->logged_in_user_id.valid() && isGodUser(this->logged_in_user_id);
+						const bool can_edit_member_lists = can_edit_basic_fields;
+						ui_interface->setParcelEditorForParcel(*parcel);
+						ui_interface->setParcelEditorPermissions(can_edit_basic_fields, can_edit_owner_and_geometry, can_edit_member_lists);
 					}
 
 
@@ -12492,6 +12517,19 @@ void GUIClient::posAndRot3DControlsToggled(bool enabled)
 				axis_and_rot_obs_enabled = true;
 			}
 		}
+		else if(selected_parcel.nonNull() && this->logged_in_user_id.valid() && isGodUser(this->logged_in_user_id))
+		{
+			for(int i = 0; i < NUM_AXIS_ARROWS; ++i)
+				opengl_engine->addObject(axis_arrow_objects[i]);
+
+			for(int i = 0; i < 3; ++i)
+			{
+				opengl_engine->removeObject(rot_handle_arc_objects[i]);
+				rot_handle_lines[i].clear();
+			}
+
+			axis_and_rot_obs_enabled = true;
+		}
 	}
 	else
 	{
@@ -13689,6 +13727,26 @@ void GUIClient::mousePressed(MouseEvent& e)
 			}
 		}
 	}
+	else if(this->selected_parcel.nonNull() && this->logged_in_user_id.valid() && isGodUser(this->logged_in_user_id))
+	{
+		grabbed_axis = mouseOverAxisArrowOrRotArc(Vec2f((float)e.cursor_pos.x, (float)e.cursor_pos.y), /*closest_seg_point_ws_out=*/this->grabbed_point_ws);
+
+		if(grabbed_axis >= NUM_AXIS_ARROWS)
+			grabbed_axis = -1; // Parcel gizmo supports translation only.
+
+		if(grabbed_axis >= 0)
+		{
+			this->ob_origin_at_grab = Vec4f(
+				(float)((selected_parcel->aabb_min.x + selected_parcel->aabb_max.x) * 0.5),
+				(float)((selected_parcel->aabb_min.y + selected_parcel->aabb_max.y) * 0.5),
+				(float)((selected_parcel->aabb_min.z + selected_parcel->aabb_max.z) * 0.5),
+				1.f
+			);
+
+			// When dragging parcel gizmo, don't rotate camera on mouse drag.
+			ui_interface->setCamRotationOnMouseDragEnabled(false);
+		}
+	}
 
 	if(selectedObjectIsVoxelOb())
 	{
@@ -13810,6 +13868,11 @@ void GUIClient::mouseReleased(MouseEvent& e)
 		grabbed_axis = -1;
 		have_selected_ob_transform_rollback = false;
 		selected_ob_transform_rollback_uid = UID::invalidUID();
+	}
+	else if(grabbed_axis != -1 && selected_parcel.nonNull())
+	{
+		grabbed_axis = -1;
+		ui_interface->setParcelEditorForParcel(*selected_parcel);
 	}
 
 	// Trace through scene to see if we are clicking on a web-view.  Send mouseReleased events to the web view if so.
@@ -14074,11 +14137,44 @@ void GUIClient::doObjectSelectionTraceForMouseEvent(MouseEvent& e)
 			opengl_engine->selectObject(selected_parcel->opengl_engine_ob);
 			opengl_engine->setSelectionOutlineColour(PARCEL_OUTLINE_COLOUR);
 
+			const bool can_edit_basic_fields = this->logged_in_user_id.valid() &&
+				((this->logged_in_user_id == selected_parcel->owner_id) || isGodUser(this->logged_in_user_id));
+			const bool can_edit_owner_and_geometry = this->logged_in_user_id.valid() && isGodUser(this->logged_in_user_id);
+			const bool can_edit_member_lists = can_edit_basic_fields;
+
 			// Show parcel editor, hide object editor.
 			ui_interface->setParcelEditorForParcel(*selected_parcel);
+			ui_interface->setParcelEditorPermissions(can_edit_basic_fields, can_edit_owner_and_geometry, can_edit_member_lists);
 			ui_interface->setParcelEditorEnabled(true);
 			ui_interface->showParcelEditor();
 			ui_interface->showEditorDockWidget(); // Show the object editor dock widget if it is hidden.
+
+			if(can_edit_owner_and_geometry && ui_interface->posAndRot3DControlsEnabled())
+			{
+				for(int i=0; i<NUM_AXIS_ARROWS; ++i)
+					opengl_engine->addObject(axis_arrow_objects[i]);
+
+				for(int i=0; i<3; ++i)
+					opengl_engine->removeObject(rot_handle_arc_objects[i]);
+
+				for(int i=0; i<3; ++i)
+					rot_handle_lines[i].clear();
+
+				axis_and_rot_obs_enabled = true;
+			}
+			else
+			{
+				for(int i=0; i<NUM_AXIS_ARROWS; ++i)
+					opengl_engine->removeObject(axis_arrow_objects[i]);
+
+				for(int i=0; i<3; ++i)
+					opengl_engine->removeObject(rot_handle_arc_objects[i]);
+
+				for(int i=0; i<3; ++i)
+					rot_handle_lines[i].clear();
+
+				axis_and_rot_obs_enabled = false;
+			}
 		}
 		else if(results.hit_object->userdata && results.hit_object->userdata_type == 2) // If we hit an instance:
 		{
@@ -14349,6 +14445,76 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 				const Vec4f selection_vec_ws = selection_point_ws - origin;
 				this->selection_vec_cs = cam_controller.vectorToCamSpace(selection_vec_ws);
 			}
+		}
+	}
+	else if(selected_parcel.nonNull() && this->logged_in_user_id.valid() && isGodUser(this->logged_in_user_id) && grabbed_axis >= 0 && grabbed_axis < NUM_AXIS_ARROWS)
+	{
+		const Vec4f origin = cam_controller.getPosition().toVec4fPoint();
+
+		Vec2f start_pixelpos, end_pixelpos;
+
+		const float MAX_MOVE_DIST = 100;
+		const Vec4f line_dir = normalise(axis_arrow_segments[grabbed_axis].b - axis_arrow_segments[grabbed_axis].a);
+		Vec4f use_line_start = axis_arrow_segments[grabbed_axis].a - line_dir * MAX_MOVE_DIST;
+		Vec4f use_line_end   = axis_arrow_segments[grabbed_axis].a + line_dir * MAX_MOVE_DIST;
+
+		const Vec4f camforw_ws = cam_controller.getForwardsVec().toVec4fVector();
+		Planef plane(origin + camforw_ws * 0.1f, -camforw_ws);
+		const bool visible = clipLineToPlaneBackHalfSpace(plane, use_line_start, use_line_end);
+		assertOrDeclareUsed(visible);
+
+		bool start_visible = getPixelForPoint(use_line_start, start_pixelpos);
+		bool end_visible   = getPixelForPoint(use_line_end,   end_pixelpos);
+
+		assert(start_visible && end_visible);
+		if(start_visible && end_visible)
+		{
+			const Vec2f mousepos((float)mouse_event.cursor_pos.x, (float)mouse_event.cursor_pos.y);
+			const Vec2f closest_pixel = closestPointOnLineSegment(mousepos, start_pixelpos, end_pixelpos);
+
+			Vec4f new_p = pointOnLineWorldSpace(axis_arrow_segments[grabbed_axis].a, axis_arrow_segments[grabbed_axis].b, closest_pixel);
+			Vec4f delta_p = new_p - grabbed_point_ws;
+
+			assert(new_p.isFinite());
+
+			Vec4f tentative_new_centre = ob_origin_at_grab + delta_p;
+			if(tentative_new_centre.getDist(ob_origin_at_grab) > MAX_MOVE_DIST)
+				tentative_new_centre = ob_origin_at_grab + (tentative_new_centre - ob_origin_at_grab) * MAX_MOVE_DIST / (tentative_new_centre - ob_origin_at_grab).length();
+
+			assert(tentative_new_centre.isFinite());
+
+			if(ui_interface->snapToGridCheckBoxChecked())
+			{
+				const double grid_spacing = ui_interface->gridSpacing();
+				if(grid_spacing > 1.0e-5)
+					tentative_new_centre[grabbed_axis] = (float)Maths::roundToMultipleFloating((double)tentative_new_centre[grabbed_axis], grid_spacing);
+			}
+
+			const Vec4f old_centre(
+				(float)((selected_parcel->aabb_min.x + selected_parcel->aabb_max.x) * 0.5),
+				(float)((selected_parcel->aabb_min.y + selected_parcel->aabb_max.y) * 0.5),
+				(float)((selected_parcel->aabb_min.z + selected_parcel->aabb_max.z) * 0.5),
+				1.f
+			);
+			const Vec4f move_delta = tentative_new_centre - old_centre;
+
+			for(int i=0; i<4; ++i)
+			{
+				selected_parcel->verts[i].x += move_delta.x[0];
+				selected_parcel->verts[i].y += move_delta.x[1];
+			}
+			selected_parcel->zbounds.x += move_delta.x[2];
+			selected_parcel->zbounds.y += move_delta.x[2];
+			selected_parcel->build();
+
+			{
+				Lock lock(world_state->mutex);
+				selected_parcel->from_remote_dirty = true; // Rebuild/update parcel visualisation locally on next parcel-graphics pass.
+				world_state->dirty_from_remote_parcels.insert(selected_parcel);
+				world_state->dirty_from_local_parcels.insert(selected_parcel);
+			}
+
+			ui_interface->setParcelEditorForParcel(*selected_parcel);
 		}
 	}
 	else if(selected_ob.nonNull() && grabbed_axis >= NUM_AXIS_ARROWS && grabbed_axis < (NUM_AXIS_ARROWS + 3)) // If we have grabbed a rotation arc and are moving it:
@@ -14855,6 +15021,16 @@ void GUIClient::deselectParcel()
 	{
 		// Deselect any currently selected object
 		opengl_engine->deselectObject(this->selected_parcel->opengl_engine_ob);
+
+		for(int i=0; i<NUM_AXIS_ARROWS; ++i)
+			opengl_engine->removeObject(this->axis_arrow_objects[i]);
+		for(int i=0; i<3; ++i)
+		{
+			opengl_engine->removeObject(this->rot_handle_arc_objects[i]);
+			rot_handle_lines[i].clear();
+		}
+		axis_and_rot_obs_enabled = false;
+		grabbed_axis = -1;
 
 		ui_interface->setParcelEditorEnabled(false);
 

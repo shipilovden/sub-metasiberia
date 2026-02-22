@@ -2685,33 +2685,94 @@ void WorkerThread::doRun()
 							{
 								// Look up existing parcel in world state
 								std::string error_msg;
+								bool send_updated_parcel_msg = false;
+								SocketBufferOutStream parcel_update_packet(SocketBufferOutStream::DontUseNetworkByteOrder);
 								{
 									WorldStateLock lock(world_state->mutex);
 									auto res = cur_world_state->getParcels(lock).find(parcel_id);
 									if(res != cur_world_state->getParcels(lock).end())
 									{
 										Parcel* parcel = res->second.getPointer();
+										const bool is_superuser = isGodUser(client_user_id);
+										const bool is_owner = (client_user_id == parcel->owner_id);
 
-										// See if the user has permissions to alter this object:
-										if(!userHasParcelWritePermissions(*parcel, client_user_id, *cur_world_state))
+										// See if the user has permissions to alter this parcel.
+										if(!is_superuser && !is_owner)
 										{
 											error_msg = "You must be the owner of this parcel (or have write permissions) to modify it";
 										}
 										else
 										{
-											parcel->copyNetworkStateFrom(temp_parcel, /*restrict_changes=*/true); // restrict changes to stuff clients are allowed to change
+											// Basic fields owner and super-admin can change.
+											parcel->title = temp_parcel.title;
+											parcel->description = temp_parcel.description;
+											parcel->all_writeable = temp_parcel.all_writeable;
+											parcel->flags = temp_parcel.flags;
+											parcel->spawn_point = temp_parcel.spawn_point;
 
-											//parcel->from_remote_other_dirty = true;
+											// Owner and super-admin can manage editors/admins.
+											parcel->admin_ids = temp_parcel.admin_ids;
+											parcel->writer_ids = temp_parcel.writer_ids;
+
+											// Only super-admin may change owner and parcel geometry.
+											if(is_superuser)
+											{
+												parcel->owner_id = temp_parcel.owner_id;
+												for(int i=0; i<4; ++i)
+													parcel->verts[i] = temp_parcel.verts[i];
+												parcel->zbounds = temp_parcel.zbounds;
+											}
+
+											// Ensure owner always has admin/writer permissions.
+											auto ensure_user_id_in_list = [&](std::vector<UserID>& ids, const UserID& user_id)
+											{
+												if(!user_id.valid())
+													return;
+												if(std::find(ids.begin(), ids.end(), user_id) == ids.end())
+													ids.push_back(user_id);
+											};
+
+											ensure_user_id_in_list(parcel->admin_ids, parcel->owner_id);
+											ensure_user_id_in_list(parcel->writer_ids, parcel->owner_id);
+
+											// Refresh denormalised owner/admin/writer names for this parcel.
+											{
+												auto owner_res = world_state->user_id_to_users.find(parcel->owner_id);
+												parcel->owner_name = (owner_res != world_state->user_id_to_users.end()) ? owner_res->second->name : ("user id: " + parcel->owner_id.toString());
+											}
+
+											parcel->admin_names.resize(parcel->admin_ids.size());
+											for(size_t i=0; i<parcel->admin_ids.size(); ++i)
+											{
+												auto admin_res = world_state->user_id_to_users.find(parcel->admin_ids[i]);
+												parcel->admin_names[i] = (admin_res != world_state->user_id_to_users.end()) ? admin_res->second->name : ("user id: " + parcel->admin_ids[i].toString());
+											}
+
+											parcel->writer_names.resize(parcel->writer_ids.size());
+											for(size_t i=0; i<parcel->writer_ids.size(); ++i)
+											{
+												auto writer_res = world_state->user_id_to_users.find(parcel->writer_ids[i]);
+												parcel->writer_names[i] = (writer_res != world_state->user_id_to_users.end()) ? writer_res->second->name : ("user id: " + parcel->writer_ids[i].toString());
+											}
+
+											parcel->build();
+
 											cur_world_state->addParcelAsDBDirty(parcel, lock);
-											//cur_world_state->dirty_from_remote_parcels.insert(ob);
-
 											world_state->markAsChanged();
+
+											// Broadcast authoritative parcel state to all clients in this world.
+											MessageUtils::initPacket(parcel_update_packet, Protocol::ParcelFullUpdate);
+											writeParcelToNetworkStream(*parcel, parcel_update_packet, client_protocol_version);
+											MessageUtils::updatePacketLengthField(parcel_update_packet);
+											send_updated_parcel_msg = true;
 										}
 									}
 								} // End lock scope
 
 								if(!error_msg.empty())
 									writeErrorMessageToClient(socket, error_msg);
+								else if(send_updated_parcel_msg)
+									enqueuePacketToBroadcast(parcel_update_packet);
 							}
 							break;
 						}

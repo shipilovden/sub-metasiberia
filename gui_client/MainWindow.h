@@ -235,6 +235,7 @@ public:
 	virtual void showParcelEditor() override;
 	virtual void setParcelEditorForParcel(const Parcel& parcel) override;
 	virtual void setParcelEditorEnabled(bool enabled) override;
+	virtual void setParcelEditorPermissions(bool can_edit_basic_fields, bool can_edit_owner_and_geometry, bool can_edit_member_lists) override;
 
 	// Object editor
 	virtual void showObjectEditor() override;
