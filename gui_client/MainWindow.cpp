@@ -2735,16 +2735,27 @@ void MainWindow::handlePasteOrDropMimeData(const QMimeData* mime_data)
 					(void)readParcelIDFromStream(in_stream_buf); // Read and ignore source parcel id.
 					readParcelFromNetworkStreamGivenID(in_stream_buf, pasted_parcel, Protocol::CyberspaceProtocolVersion);
 
-					// Offset parcel in XY so pasted parcel is not exactly on top of source.
-					const Vec3d cam_right = gui_client.cam_controller.getRightVec();
-					const double size_x = std::fabs(pasted_parcel.verts[1].x - pasted_parcel.verts[0].x);
-					const double size_y = std::fabs(pasted_parcel.verts[3].y - pasted_parcel.verts[0].y);
-					const double pad = 1.0;
-					Vec2d offset(0.0);
-					if(std::fabs(cam_right.x) > std::fabs(cam_right.y))
-						offset = Vec2d((cam_right.x >= 0.0 ? 1.0 : -1.0) * std::max(size_x, 1.0) + (cam_right.x >= 0.0 ? pad : -pad), 0.0);
+					// Offset parcel in XY using camera right+forward, so the pasted parcel is clearly visible nearby.
+					const double size_x = std::fabs(pasted_parcel.aabb_max.x - pasted_parcel.aabb_min.x);
+					const double size_y = std::fabs(pasted_parcel.aabb_max.y - pasted_parcel.aabb_min.y);
+					const double side_dist = std::max(std::max(size_x, size_y), 1.0) + 3.0;
+					const double forward_dist = std::max(std::min(size_x, size_y), 1.0) + 2.0;
+
+					Vec2d right_2d(gui_client.cam_controller.getRightVec().x, gui_client.cam_controller.getRightVec().y);
+					double right_len = std::sqrt(right_2d.x * right_2d.x + right_2d.y * right_2d.y);
+					if(right_len > 1.0e-6)
+						right_2d /= right_len;
 					else
-						offset = Vec2d(0.0, (cam_right.y >= 0.0 ? 1.0 : -1.0) * std::max(size_y, 1.0) + (cam_right.y >= 0.0 ? pad : -pad));
+						right_2d = Vec2d(1.0, 0.0);
+
+					Vec2d forw_2d(gui_client.cam_controller.getForwardsVec().x, gui_client.cam_controller.getForwardsVec().y);
+					double forw_len = std::sqrt(forw_2d.x * forw_2d.x + forw_2d.y * forw_2d.y);
+					if(forw_len > 1.0e-6)
+						forw_2d /= forw_len;
+					else
+						forw_2d = Vec2d(0.0, 1.0);
+
+					const Vec2d offset = right_2d * side_dist + forw_2d * forward_dist;
 
 					for(int i=0; i<4; ++i)
 						pasted_parcel.verts[i] += offset;
@@ -2756,6 +2767,10 @@ void MainWindow::handlePasteOrDropMimeData(const QMimeData* mime_data)
 					// Create parcel by sending ParcelFullUpdate with invalid parcel id; server will assign a fresh id.
 					MessageUtils::initPacket(scratch_packet, Protocol::ParcelFullUpdate);
 					writeParcelToNetworkStream(pasted_parcel, scratch_packet, /*peer_protocol_version=*/Protocol::CyberspaceProtocolVersion);
+					enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+
+					// Force parcel list refresh (helps if server-side broadcast is delayed).
+					MessageUtils::initPacket(scratch_packet, Protocol::QueryParcels);
 					enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 
 					showInfoNotification("Parcel pasted. Server will assign a new parcel ID.");
