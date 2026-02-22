@@ -824,11 +824,11 @@ void WorkerThread::handleEthBotConnection()
 }
 
 
-static bool objectIsInParcelForWhichLoggedInUserHasWritePerms(const WorldObject& ob, const UserID& user_id, ServerWorldState& world_state, WorldStateLock& lock)
+static bool positionIsInParcelForWhichUserHasWritePerms(const Vec3d& pos, const UserID& user_id, ServerWorldState& world_state, WorldStateLock& lock)
 {
 	assert(user_id.valid());
 
-	const Vec4f ob_pos = ob.pos.toVec4fPoint();
+	const Vec4f ob_pos = pos.toVec4fPoint();
 
 	ServerWorldState::ParcelMapType& parcels = world_state.getParcels(lock);
 	for(ServerWorldState::ParcelMapType::iterator it = parcels.begin(); it != parcels.end(); ++it)
@@ -842,12 +842,84 @@ static bool objectIsInParcelForWhichLoggedInUserHasWritePerms(const WorldObject&
 }
 
 
+static bool objectIsInParcelForWhichLoggedInUserHasWritePerms(const WorldObject& ob, const UserID& user_id, ServerWorldState& world_state, WorldStateLock& lock)
+{
+	return positionIsInParcelForWhichUserHasWritePerms(ob.pos, user_id, world_state, lock);
+}
+
+
 // Is the client connected to a world that the user is the owner of?
 static bool connectedToUsersWorld(const UserID& user_id, ServerWorldState& connected_world)
 {
 	assert(user_id.valid());
 
 	return connected_world.details.owner_id == user_id;
+}
+
+
+// For non-owner/non-god users, object placement is allowed only if:
+// 1) the object position is in a writable parcel for the user, and
+// 2) the object AABB is fully inside the bounds of that parcel plus any writable adjacent parcels, and
+// 3) the AABB does not intersect a non-writable parcel.
+static bool userHasObjectPlacementPermissionsForAABB(const js::AABBox& aabb_ws, const Vec3d& ob_pos, const UserID& user_id, ServerWorldState& world_state, WorldStateLock& lock)
+{
+	if(!user_id.valid())
+		return false;
+
+	if(isGodUser(user_id) || connectedToUsersWorld(user_id, world_state))
+		return true;
+
+	ServerWorldState::ParcelMapType& parcels = world_state.getParcels(lock);
+
+	// Find writable parcel containing object position.
+	const Parcel* base_parcel = NULL;
+	for(ServerWorldState::ParcelMapType::iterator it = parcels.begin(); it != parcels.end(); ++it)
+	{
+		const Parcel* parcel = it->second.ptr();
+		if(parcel->pointInParcel(ob_pos) && parcel->userHasWritePerms(user_id))
+		{
+			base_parcel = parcel;
+			break;
+		}
+	}
+	if(base_parcel == NULL)
+		return false;
+
+	// Build editable bounds from base parcel and writable adjacent parcels.
+	Vec3d editable_bounds_min = base_parcel->aabb_min;
+	Vec3d editable_bounds_max = base_parcel->aabb_max;
+	for(ServerWorldState::ParcelMapType::iterator it = parcels.begin(); it != parcels.end(); ++it)
+	{
+		const Parcel* parcel = it->second.ptr();
+		if((parcel != base_parcel) && parcel->userHasWritePerms(user_id) && parcel->isAdjacentTo(*base_parcel))
+		{
+			editable_bounds_min.x = myMin(editable_bounds_min.x, parcel->aabb_min.x);
+			editable_bounds_min.y = myMin(editable_bounds_min.y, parcel->aabb_min.y);
+			editable_bounds_min.z = myMin(editable_bounds_min.z, parcel->aabb_min.z);
+			editable_bounds_max.x = myMax(editable_bounds_max.x, parcel->aabb_max.x);
+			editable_bounds_max.y = myMax(editable_bounds_max.y, parcel->aabb_max.y);
+			editable_bounds_max.z = myMax(editable_bounds_max.z, parcel->aabb_max.z);
+		}
+	}
+
+	if(!Parcel::AABBInParcelBounds(aabb_ws, editable_bounds_min, editable_bounds_max))
+		return false;
+
+	// Prevent crossing into any non-writable parcel.
+	for(ServerWorldState::ParcelMapType::iterator it = parcels.begin(); it != parcels.end(); ++it)
+	{
+		const Parcel* parcel = it->second.ptr();
+		if(parcel->AABBIntersectsParcel(aabb_ws) && !parcel->userHasWritePerms(user_id))
+			return false;
+	}
+
+	return true;
+}
+
+
+static bool userHasObjectPlacementPermissionsForObject(const WorldObject& ob, const UserID& user_id, ServerWorldState& world_state, WorldStateLock& lock)
+{
+	return userHasObjectPlacementPermissionsForAABB(ob.getAABBWS(), ob.pos, user_id, world_state, lock);
 }
 
 
@@ -903,7 +975,7 @@ static bool userHasObjectCreationPermissions(const WorldObject& ob, const UserID
 	{
 		return isGodUser(user_id) || // if the user is the god user
 			connectedToUsersWorld(user_id, world_state) || // or if this is the user's world
-			objectIsInParcelForWhichLoggedInUserHasWritePerms(ob, user_id, world_state, lock) || // Or this object is in a parcel we have write permissions for.
+			userHasObjectPlacementPermissionsForObject(ob, user_id, world_state, lock) || // Or this object fits in parcels we can edit.
 			userCanCreateSummonedObject(ob, user_id);
 	}
 	else
@@ -1768,10 +1840,17 @@ void WorkerThread::doRun()
 									if(res != cur_world_state->getObjects(lock).end())
 									{
 										WorldObject* ob = res->second.getPointer();
+										WorldObject temp_ob(*ob);
+										temp_ob.pos = pos;
+										temp_ob.axis = axis;
+										temp_ob.angle = angle;
+										temp_ob.scale = scale;
 
 										// See if the user has permissions to alter this object:
 										if(!userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock))
 											err_msg_to_client = "You must be the owner of this object to change it.";
+										else if(!userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
+											err_msg_to_client = "You can only place objects inside parcels you can edit in this world.";
 										else
 										{
 											ob->pos = pos;
@@ -1884,12 +1963,11 @@ void WorkerThread::doRun()
 							const double client_cur_time = msg_buffer.readDouble();
 
 							// If client is not logged in, refuse object modification.
-							/*if(!client_user_id.valid())
+							if(!client_user_id.valid())
 							{
 								writeErrorMessageToClient(socket, "You must be logged in to modify an object.");
 							}
-							*/
-							if(world_state->isInReadOnlyMode())
+							else if(world_state->isInReadOnlyMode())
 							{
 								writeErrorMessageToClient(socket, "Server is in read-only mode, you can't modify an object right now.");
 							}
@@ -1903,33 +1981,44 @@ void WorkerThread::doRun()
 									if(res != cur_world_state->getObjects(lock).end())
 									{
 										WorldObject* ob = res->second.getPointer();
+										WorldObject temp_ob(*ob);
 
-										// See if the user has permissions to alter this object:
-										//if(!userHasObjectWritePermissions(*ob, client_user_id, client_user_name, this->connected_world_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms))
-										//	err_msg_to_client = "You must be the owner of this object to change it.";
-										if(ob->isDynamic()) // We will only allow clients to apply PhysicsTransformUpdates to objects it the object is a dynamic object.
+										// See if the user has permissions to alter this object.
+										if(!userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock))
+											err_msg_to_client = "You must be the owner of this object to change it.";
+										else if(ob->isDynamic()) // We will only allow clients to apply PhysicsTransformUpdates to dynamic objects.
 										{
-											ob->pos = pos;
 											Vec4f axis;
 											float angle;
 											rot.toAxisAndAngle(axis, angle);
-											ob->axis = Vec3f(axis);
-											ob->angle = angle;
+											temp_ob.pos = pos;
+											temp_ob.axis = Vec3f(axis);
+											temp_ob.angle = angle;
+											if(!userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
+												err_msg_to_client = "You can only place objects inside parcels you can edit in this world.";
+											else
+											{
+												ob->pos = pos;
+												ob->axis = Vec3f(axis);
+												ob->angle = angle;
 
-											ob->linear_vel = linear_vel;
-											ob->angular_vel = angular_vel;
+												ob->linear_vel = linear_vel;
+												ob->angular_vel = angular_vel;
 
-											ob->last_transform_update_avatar_uid = (uint32)client_avatar_uid.value();
-											ob->last_transform_client_time = client_cur_time;
+												ob->last_transform_update_avatar_uid = (uint32)client_avatar_uid.value();
+												ob->last_transform_client_time = client_cur_time;
 
-											ob->last_modified_time = TimeStamp::currentTime();
+												ob->last_modified_time = TimeStamp::currentTime();
 
-											ob->from_remote_physics_transform_dirty = true;
-											cur_world_state->addWorldObjectAsDBDirty(ob, lock);
-											cur_world_state->getDirtyFromRemoteObjects(lock).insert(ob);
+												ob->from_remote_physics_transform_dirty = true;
+												cur_world_state->addWorldObjectAsDBDirty(ob, lock);
+												cur_world_state->getDirtyFromRemoteObjects(lock).insert(ob);
 
-											world_state->markAsChanged();
+												world_state->markAsChanged();
+											}
 										}
+										else
+											err_msg_to_client = "Object is not dynamic, physics transform updates are not allowed.";
 									}
 								} // End lock scope
 
@@ -1960,6 +2049,7 @@ void WorkerThread::doRun()
 							{
 								// Look up existing object in world state
 								bool send_must_be_owner_msg = false;
+								bool send_invalid_placement_msg = false;
 								{
 									WorldStateLock lock(world_state->mutex);
 									auto res = cur_world_state->getObjects(lock).find(object_uid);
@@ -1971,6 +2061,10 @@ void WorkerThread::doRun()
 										if(!userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock))
 										{
 											send_must_be_owner_msg = true;
+										}
+										else if(!userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
+										{
+											send_invalid_placement_msg = true;
 										}
 										else
 										{
@@ -2042,6 +2136,8 @@ void WorkerThread::doRun()
 
 								if(send_must_be_owner_msg)
 									writeErrorMessageToClient(socket, "You must be the owner of this object to change it.");
+								else if(send_invalid_placement_msg)
+									writeErrorMessageToClient(socket, "You can only place objects inside parcels you can edit in this world.");
 							}
 							break;
 						}

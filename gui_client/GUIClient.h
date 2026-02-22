@@ -361,6 +361,7 @@ public:
 	void tryToMoveObject(WorldObjectRef ob, /*const Matrix4f& tentative_new_to_world*/const Vec4f& desired_new_ob_pos);
 	void doMoveObject(WorldObjectRef ob, const Vec3d& new_ob_pos, const js::AABBox& aabb_os) REQUIRES(world_state->mutex);
 	void doMoveAndRotateObject(WorldObjectRef ob, const Vec3d& new_ob_pos, const Vec3f& new_axis, float new_angle, const js::AABBox& aabb_os, bool summoning_object) REQUIRES(world_state->mutex);
+	bool rollbackSelectedObjectTransformAfterServerRejection();
 
 	void updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob);
 
@@ -506,6 +507,12 @@ public:
 	Vec4f selection_vec_cs; // Vector from camera to selected point on object, in camera space
 	Vec4f selection_point_os; // Point on selected object where selection ray hit, in object space.
 	bool selected_ob_picked_up; // Is selected object 'picked up' e.g. being moved?
+	bool have_selected_ob_transform_rollback;
+	UID selected_ob_transform_rollback_uid;
+	Vec3d selected_ob_transform_rollback_pos;
+	Vec3f selected_ob_transform_rollback_axis;
+	float selected_ob_transform_rollback_angle;
+	Vec3f selected_ob_transform_rollback_scale;
 
 	ParcelRef selected_parcel;
 
