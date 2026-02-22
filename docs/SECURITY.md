@@ -2,6 +2,6 @@
 
 ## Reporting a Vulnerability
 
-To report a vulnerability, please email a description of it to contact@glaretechnologies.com
+To report a vulnerability, please email a description of it to mail@metasiberia.com
 
-Please include 'substrata security' in the subject line.
+Please include 'metasiberia security' in the subject line.
