@@ -16,11 +16,14 @@ Copyright Glare Technologies Limited 2025 -
 #include "HTTPClient.h"
 #endif
 #include <networking/TLSSocket.h>
+#include <webserver/Escaping.h>
 #include <algorithm>
+#include <vector>
 #include <utils/Clock.h>
 #include <utils/StringUtils.h>
 #include <utils/PlatformUtils.h>
 #include <utils/FileChecksum.h>
+#include <utils/JSONParser.h>
 #include <utils/MemMappedFile.h>
 #include <utils/MessageableThread.h>
 #if EMSCRIPTEN
@@ -1027,6 +1030,119 @@ public:
 };
 
 
+static std::string safeSnippet(const std::string& s, size_t max_len)
+{
+	if(s.size() <= max_len)
+		return s;
+	return s.substr(0, max_len);
+}
+
+
+static void throwVKErrorIfPresent(const JSONParser& parser, const JSONNode& root)
+{
+	if(!root.hasChild("error"))
+		return;
+
+	const JSONNode& err_obj = root.getChildObject(parser, "error");
+	const std::string msg = err_obj.getChildStringValueWithDefaultVal(parser, "error_msg", "VK API error");
+	const int code = err_obj.getChildIntValueWithDefaultVal(parser, "error_code", -1);
+
+	// VK error 27 happens when using a community token where a user token is required.
+	if(code == 27)
+		throw glare::Exception("VK API error 27: " + msg + "  Usually this means a group token is used. For wall photo posting use a USER access token with scopes photos, wall, groups.");
+
+	throw glare::Exception("VK API error " + toString(code) + ": " + msg);
+}
+
+
+static std::string makeVKMethodURL(const std::string& api_host, const char* method_name)
+{
+	if(api_host.empty())
+		return std::string("https://api.vk.ru/method/") + method_name;
+
+	const bool has_scheme = (api_host.find("://") != std::string::npos);
+	const std::string base = has_scheme ? api_host : ("https://" + api_host);
+	return base + "/method/" + method_name;
+}
+
+
+static std::string makeFormBody(const std::vector<std::pair<std::string, std::string>>& params)
+{
+	std::string body;
+	body.reserve(params.size() * 32);
+
+	for(size_t i=0; i<params.size(); ++i)
+	{
+		if(i > 0)
+			body += "&";
+		body += web::Escaping::URLEscape(params[i].first);
+		body += "=";
+		body += web::Escaping::URLEscape(params[i].second);
+	}
+
+	return body;
+}
+
+
+static std::string vkCallPOST(HTTPClient& client, const std::string& api_host, const char* method_name, const std::vector<std::pair<std::string, std::string>>& params)
+{
+	const std::string url = makeVKMethodURL(api_host, method_name);
+	const std::string body = makeFormBody(params);
+
+	std::string response_body;
+	HTTPClient::ResponseInfo resp = client.sendPost(url, body, "application/x-www-form-urlencoded", response_body);
+	if(resp.response_code != 200)
+		throw glare::Exception(std::string("VK API ") + method_name + " returned HTTP " + toString(resp.response_code) + ". Response: " + safeSnippet(response_body, 2000));
+
+	return response_body;
+}
+
+
+static uint64 parseVKGroupIdFromScreenName(HTTPClient& client, const std::string& api_host, const std::string& api_version, const std::string& screen_name)
+{
+	const std::string response_body = vkCallPOST(
+		client,
+		api_host,
+		"groups.getById",
+		{
+			{"group_id", screen_name},
+			{"v", api_version},
+		}
+	);
+
+	JSONParser parser;
+	parser.parseBuffer(response_body.c_str(), response_body.size());
+	const JSONNode& root = parser.nodes[0];
+	throwVKErrorIfPresent(parser, root);
+
+	// VK can return either:
+	// - {"response":[{...}]}
+	// - {"response":{"groups":[{...}], ...}}
+	const JSONNode& resp_node = root.getChildNode(parser, "response");
+	if(resp_node.type == JSONNode::Type_Array)
+	{
+		if(resp_node.child_indices.empty())
+			throw glare::Exception("VK API groups.getById returned empty response array.");
+
+		const JSONNode& group_obj = parser.nodes[resp_node.child_indices[0]];
+		return (uint64)group_obj.getChildUIntValue(parser, "id");
+	}
+	else if(resp_node.type == JSONNode::Type_Object)
+	{
+		const JSONNode& groups_arr = resp_node.getChildArray(parser, "groups");
+		if(groups_arr.child_indices.empty())
+			throw glare::Exception("VK API groups.getById returned empty response.groups array.");
+
+		const JSONNode& group_obj = parser.nodes[groups_arr.child_indices[0]];
+		return (uint64)group_obj.getChildUIntValue(parser, "id");
+	}
+	else
+	{
+		throw glare::Exception("Unexpected VK API groups.getById response type: " + JSONNode::typeString(resp_node.type));
+	}
+}
+
+
 static std::string getOptionalEnvVar(const char* name)
 {
 	try
@@ -1116,6 +1232,170 @@ public:
 	std::string chat_id;
 	ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue = nullptr;
 };
+
+
+class UploadPhotoToVKThread : public MessageableThread
+{
+public:
+	void doRun() override
+	{
+		try
+		{
+			if(access_token.empty())
+				throw glare::Exception("VK upload is not configured.");
+
+			const std::string use_api_host = api_host.empty() ? "api.vk.ru" : api_host;
+			const std::string use_api_version = api_version.empty() ? "5.199" : api_version;
+
+			HTTPClientRef client = new HTTPClient();
+			client->additional_headers.push_back("User-Agent: Metasiberia client");
+			client->additional_headers.push_back("Authorization: Bearer " + access_token);
+
+			uint64 use_group_id = group_id;
+			if(use_group_id == 0 && !group_screen_name.empty())
+				use_group_id = parseVKGroupIdFromScreenName(*client, use_api_host, use_api_version, group_screen_name);
+			if(use_group_id == 0)
+				throw glare::Exception("VK upload is not configured (missing vk/group_id or vk/group_screen_name).");
+
+			// 1) Get upload server
+			std::string upload_url;
+			{
+				const std::string response_body = vkCallPOST(
+					*client,
+					use_api_host,
+					"photos.getWallUploadServer",
+					{
+						{"group_id", toString(use_group_id)},
+						{"v", use_api_version},
+					}
+				);
+
+				JSONParser parser;
+				parser.parseBuffer(response_body.c_str(), response_body.size());
+				const JSONNode& root = parser.nodes[0];
+				throwVKErrorIfPresent(parser, root);
+				const JSONNode& resp_obj = root.getChildObject(parser, "response");
+				upload_url = resp_obj.getChildStringValue(parser, "upload_url");
+			}
+
+			// 2) Upload image binary to VK upload URL
+			MemMappedFile file(upload_image_jpeg_path);
+
+			int server = -1;
+			std::string photo;
+			std::string hash;
+			{
+				const std::string boundary =
+					"------------------------metasiberia_vk_" + toString((uint64)Clock::getSecsSince1970()) + "_" + toString((uint64)(uintptr_t)this);
+
+				std::string body;
+				body.reserve(512 + (size_t)file.fileSize());
+				body += "--" + boundary + "\r\n";
+				body += "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n";
+				body += "Content-Type: image/jpeg\r\n\r\n";
+				body.append((const char*)file.fileData(), (size_t)file.fileSize());
+				body += "\r\n--" + boundary + "--\r\n";
+
+				std::string response_body;
+				HTTPClient::ResponseInfo resp = client->sendPost(
+					upload_url,
+					body,
+					"multipart/form-data; boundary=" + boundary,
+					response_body
+				);
+
+				if(resp.response_code != 200)
+					throw glare::Exception("VK upload server returned HTTP " + toString(resp.response_code) + ". Response: " + safeSnippet(response_body, 2000));
+
+				JSONParser parser;
+				parser.parseBuffer(response_body.c_str(), response_body.size());
+				const JSONNode& root = parser.nodes[0];
+				if(root.hasChild("error"))
+				{
+					const std::string msg = root.getChildStringValueWithDefaultVal(parser, "error", "VK upload error");
+					throw glare::Exception("VK upload error: " + msg);
+				}
+
+				server = root.getChildIntValue(parser, "server");
+				photo = root.getChildStringValue(parser, "photo");
+				hash = root.getChildStringValue(parser, "hash");
+			}
+
+			// 3) Save uploaded wall photo
+			std::string attachment;
+			{
+				const std::string response_body = vkCallPOST(
+					*client,
+					use_api_host,
+					"photos.saveWallPhoto",
+					{
+						{"group_id", toString(use_group_id)},
+						{"server", toString(server)},
+						{"photo", photo},
+						{"hash", hash},
+						{"v", use_api_version},
+					}
+				);
+
+				JSONParser parser;
+				parser.parseBuffer(response_body.c_str(), response_body.size());
+				const JSONNode& root = parser.nodes[0];
+				throwVKErrorIfPresent(parser, root);
+
+				const JSONNode& arr = root.getChildArray(parser, "response");
+				if(arr.child_indices.empty())
+					throw glare::Exception("VK API photos.saveWallPhoto returned empty response array.");
+
+				const JSONNode& photo_obj = parser.nodes[arr.child_indices[0]];
+				const int owner_id = photo_obj.getChildIntValue(parser, "owner_id");
+				const int id = photo_obj.getChildIntValue(parser, "id");
+				const std::string access_key = photo_obj.getChildStringValueWithDefaultVal(parser, "access_key", "");
+
+				attachment = "photo" + toString(owner_id) + "_" + toString(id);
+				if(!access_key.empty())
+					attachment += "_" + access_key;
+			}
+
+			// 4) Publish post to group wall
+			{
+				const int owner_id = -(int)use_group_id;
+				const std::string response_body = vkCallPOST(
+					*client,
+					use_api_host,
+					"wall.post",
+					{
+						{"owner_id", toString(owner_id)},
+						{"from_group", "1"},
+						{"message", message},
+						{"attachments", attachment},
+						{"v", use_api_version},
+					}
+				);
+
+				JSONParser parser;
+				parser.parseBuffer(response_body.c_str(), response_body.size());
+				const JSONNode& root = parser.nodes[0];
+				throwVKErrorIfPresent(parser, root);
+			}
+
+			out_msg_queue->enqueue(new InfoMessage("Photo posted to VK"));
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("UploadPhotoToVKThread glare::Exception: " + e.what());
+			out_msg_queue->enqueue(new ErrorMessage("VK upload failed: " + e.what()));
+		}
+	}
+
+	std::string upload_image_jpeg_path;
+	std::string message;
+	std::string access_token;
+	uint64 group_id = 0;
+	std::string group_screen_name;
+	std::string api_host;
+	std::string api_version;
+	ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue = nullptr;
+};
 #endif
 
 
@@ -1198,9 +1478,56 @@ static std::string buildTelegramCaption(
 }
 
 
+static std::string buildVKMessage(
+	const GUIClient& gui_client,
+	const std::string& username,
+	const std::string& user_caption_raw)
+{
+	// VK post text limits are much larger than Telegram captions.
+	const size_t MAX_MSG_LEN = 3800;
+
+	const std::string title = "Metasiberia Beta";
+	const std::string hashtags = getDefaultTelegramHashtags();
+	const std::string user_caption = sanitiseUserCaptionForTelegram(user_caption_raw);
+
+	const std::string sub_url = gui_client.getCurrentURL();
+
+	const std::string hostname = gui_client.server_hostname.empty() ? std::string("vr.metasiberia.com") : gui_client.server_hostname;
+	const bool use_http = (hostname == "localhost") || (hostname == "127.0.0.1");
+	const std::string web_url = (use_http ? "http://" : "https://") + hostname + gui_client.getCurrentWebClientURLPath();
+
+	const std::string footer =
+		"By: " + (username.empty() ? std::string("Unknown") : username) + "\n" +
+		"Location (client): " + sub_url + "\n" +
+		"Location (web): " + web_url + "\n\n" +
+		hashtags;
+
+	std::string msg;
+	msg.reserve(768);
+	msg += title + "\n";
+
+	if(!user_caption.empty())
+		msg += user_caption + "\n\n";
+
+	msg += footer;
+
+	if(msg.size() > MAX_MSG_LEN)
+	{
+		const std::string suffix = "\n\n" + hashtags;
+		const size_t keep_prefix_len = (MAX_MSG_LEN > suffix.size() + 3) ? (MAX_MSG_LEN - suffix.size() - 3) : 0;
+		msg = msg.substr(0, keep_prefix_len) + "..." + suffix;
+		if(msg.size() > MAX_MSG_LEN)
+			msg.resize(MAX_MSG_LEN);
+	}
+
+	return msg;
+}
+
+
 void PhotoModeUI::uploadPhoto()
 {
 	const bool telegram_enabled = settings->getBoolValue("telegram/upload_photo_enabled", /*default=*/true);
+	const bool vk_enabled = settings->getBoolValue("vk/upload_photo_enabled", /*default=*/true);
 
 	const std::string username_for_server = gui_client->ui_interface->getUsernameForDomain(gui_client->server_hostname);
 
@@ -1217,6 +1544,10 @@ void PhotoModeUI::uploadPhoto()
 	const std::string telegram_caption = buildTelegramCaption(*gui_client, username_for_server, last_caption);
 
 #if !EMSCRIPTEN
+	bool started_any_external_upload = false;
+	bool telegram_missing_config = false;
+	bool vk_missing_config = false;
+
 	std::string bot_token = settings->getStringValue("telegram/bot_token", "");
 	if(bot_token.empty())
 		bot_token = getOptionalEnvVar("METASIBERIA_TELEGRAM_BOT_TOKEN");
@@ -1225,8 +1556,7 @@ void PhotoModeUI::uploadPhoto()
 	if(chat_id.empty())
 		chat_id = getOptionalEnvVar("METASIBERIA_TELEGRAM_PHOTO_CHAT_ID");
 
-	// If local Telegram creds are configured, post directly from client.
-	// Otherwise, fall back to server-side upload flow where Telegram can be posted by server credentials.
+	const bool telegram_has_any_config = !bot_token.empty() || !chat_id.empty();
 	if(telegram_enabled && !bot_token.empty() && !chat_id.empty())
 	{
 		Reference<UploadPhotoToTelegramThread> thread = new UploadPhotoToTelegramThread();
@@ -1237,10 +1567,78 @@ void PhotoModeUI::uploadPhoto()
 		thread->out_msg_queue = &gui_client->msg_queue;
 
 		upload_thread_manager.addThread(thread);
-		return;
+		started_any_external_upload = true;
 	}
+	else if(telegram_enabled && telegram_has_any_config)
+	{
+		telegram_missing_config = true;
+	}
+
+	std::string vk_token = settings->getStringValue("vk/access_token", "");
+	if(vk_token.empty())
+		vk_token = getOptionalEnvVar("METASIBERIA_VK_ACCESS_TOKEN");
+
+	uint64 vk_group_id = (uint64)settings->getIntValue("vk/group_id", 0);
+	if(vk_group_id == 0)
+	{
+		const std::string env_group_id = getOptionalEnvVar("METASIBERIA_VK_GROUP_ID");
+		if(!env_group_id.empty())
+		{
+			try { vk_group_id = stringToUInt64(env_group_id); }
+			catch(...) {}
+		}
+	}
+
+	std::string vk_group_screen_name = settings->getStringValue("vk/group_screen_name", "");
+	if(vk_group_screen_name.empty())
+		vk_group_screen_name = getOptionalEnvVar("METASIBERIA_VK_GROUP_SCREEN_NAME");
+
+	const bool vk_has_any_config = !vk_token.empty() || (vk_group_id != 0) || !vk_group_screen_name.empty();
+	if(vk_group_screen_name.empty())
+		vk_group_screen_name = "metasiberia_official";
+
+	std::string vk_api_host = settings->getStringValue("vk/api_host", "api.vk.ru");
+	if(vk_api_host.empty())
+		vk_api_host = getOptionalEnvVar("METASIBERIA_VK_API_HOST");
+	if(vk_api_host.empty())
+		vk_api_host = "api.vk.ru";
+
+	std::string vk_api_version = settings->getStringValue("vk/api_version", "5.199");
+	if(vk_api_version.empty())
+		vk_api_version = getOptionalEnvVar("METASIBERIA_VK_API_VERSION");
+	if(vk_api_version.empty())
+		vk_api_version = "5.199";
+
+	if(vk_enabled && !vk_token.empty())
+	{
+		Reference<UploadPhotoToVKThread> thread = new UploadPhotoToVKThread();
+		thread->message = buildVKMessage(*gui_client, username_for_server, last_caption);
+		thread->upload_image_jpeg_path = upload_image_jpeg_path;
+		thread->access_token = vk_token;
+		thread->group_id = vk_group_id;
+		thread->group_screen_name = vk_group_screen_name;
+		thread->api_host = vk_api_host;
+		thread->api_version = vk_api_version;
+		thread->out_msg_queue = &gui_client->msg_queue;
+
+		upload_thread_manager.addThread(thread);
+		started_any_external_upload = true;
+	}
+	else if(vk_enabled && vk_has_any_config)
+	{
+		vk_missing_config = true;
+	}
+
+	if(started_any_external_upload)
+		return;
+
+	if(telegram_missing_config)
+		gui_client->showErrorNotification("Telegram upload is partially configured. Set both telegram/bot_token and telegram/photo_upload_chat_id (or METASIBERIA_TELEGRAM_BOT_TOKEN + METASIBERIA_TELEGRAM_PHOTO_CHAT_ID).");
+	if(vk_missing_config)
+		gui_client->showErrorNotification("VK upload is partially configured. Set vk/access_token (or METASIBERIA_VK_ACCESS_TOKEN). Optional: vk/group_id or vk/group_screen_name.");
 #else
 	(void)telegram_enabled;
+	(void)vk_enabled;
 #endif
 
 	// Upload to server (used by default for end users). Server can publish to Telegram using server-side credentials.
