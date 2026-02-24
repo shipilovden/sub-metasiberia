@@ -103,7 +103,7 @@ const std::string standardFooter(const web::RequestInfo& request_info, bool incl
 	std::string page_out;
 	page_out +=
 		"	<hr/>																						\n"
-		"	<div class=\"footer\">Community: <a href=\"https://t.me/metasiberia_channel\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\">VK</a></div>	\n"
+		"	<div class=\"footer\"><a href=\"https://t.me/metasiberia_channel\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\">VK</a> | <a href=\"https://github.com/shipilovden/sub-metasiberia\">Github</a></div>	\n"
 		"	<div class=\"footer\"><a href=\"/faq\">F.A.Q.</a> | <a href=\"/terms\">Terms of use</a> | <a href=\"/map\">Map</a></div>				\n"
 		"	</body>																						\n"
 		"</html>																						\n";
