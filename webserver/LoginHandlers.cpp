@@ -266,8 +266,8 @@ void renderSignUpPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 
 	const web::UnsafeString msg = request_info.getURLParam("msg");
 
-	page_out += "<body>";
-	page_out += "</head><h1>Sign Up</h1><body>";
+	page_out += "<body class=\"standard-body\">";
+	page_out += "<h1>Sign Up</h1>";
 
 	if(world_state.isInReadOnlyMode())
 	{
@@ -278,7 +278,7 @@ void renderSignUpPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 		if(!msg.empty())
 			page_out += "<div class=\"msg\">" + msg.HTMLEscaped() + "</div>  \n";
 
-		page_out += "<form action=\"signup_post\" method=\"post\">";
+		page_out += "<form action=\"/signup_post\" method=\"post\">";
 		page_out += "<input type=\"hidden\" name=\"return\" value=\"" + web::Escaping::HTMLEscape(request_info.getURLParam("return").str()) + "\"><br>";
 
 		page_out += "<div class=\"form-field\">";
@@ -294,6 +294,11 @@ void renderSignUpPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 		page_out += "<div class=\"form-field\">";
 		page_out += "<label for=\"new-password\">password</label><br/>";
 		page_out += "<input id=\"new-password\"	autocomplete=\"new-password\"	required=\"required\"	type=\"password\"	name=\"password\">"; // See https://web.dev/sign-in-form-best-practices/#new-password
+		page_out += "</div>";
+
+		page_out += "<div class=\"msb-signup-terms-row\">";
+		page_out += "<input type=\"checkbox\" id=\"msb-signup-terms-accepted\" class=\"msb-signup-terms-checkbox\" name=\"terms_accepted\" value=\"1\" required=\"required\">";
+		page_out += "<label class=\"msb-signup-terms-label\" for=\"msb-signup-terms-accepted\">I have read and accept the <a href=\"https://vr.metasiberia.com/terms\" target=\"_blank\" rel=\"noopener\">Terms of use</a>.</label>";
 		page_out += "</div>";
 
 		page_out += "<input type=\"submit\" value=\"Sign Up\">";
@@ -315,6 +320,13 @@ public:
 };
 
 
+static bool termsAccepted(const web::UnsafeString& s)
+{
+	const std::string v = toLowerCase(stripHeadAndTailWhitespace(s.str()));
+	return v == "1" || v == "true" || v == "on" || v == "checked" || v == "yes";
+}
+
+
 void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
 	try
@@ -327,6 +339,7 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 		const web::UnsafeString username		= request_info.getPostField("username");
 		const web::UnsafeString email			= request_info.getPostField("email");
 		const web::UnsafeString password		= request_info.getPostField("password");
+		const web::UnsafeString terms_accepted	= request_info.getPostField("terms_accepted");
 		const web::UnsafeString raw_return_URL	= request_info.getPostField("return");
 
 		/*conPrint("username:   '" + username.str() + "'");
@@ -338,6 +351,8 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 			throw InvalidCredentialsExcep("Username is too short, must have at least 3 characters");
 		if(password.str().size() < 6)
 			throw InvalidCredentialsExcep("Password is too short, must have at least 6 characters");
+		if(!termsAccepted(terms_accepted))
+			throw InvalidCredentialsExcep("You must confirm that you have read and accepted the Terms of use.");
 
 		std::string return_URL = raw_return_URL.str();
 		if(return_URL.empty())

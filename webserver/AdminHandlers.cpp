@@ -257,7 +257,12 @@ static bool containsCaseInsensitive(const std::string& haystack, const std::stri
 
 std::string sharedAdminHeader(ServerAllWorldsState& world_state, const web::RequestInfo& request_info)
 {
-	std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Admin");
+	std::string page_out = WebServerResponseUtils::standardHeader(
+		world_state,
+		request_info,
+		/*page title=*/"Metasiberia Admin Site",
+		/*extra_header_tags=*/"",
+		/*heading_title=*/"Admin");
 
 	page_out += "<p class=\"msb-admin-nav\"><a href=\"/admin\">Main admin page</a><a href=\"/admin_users\">Users</a><a href=\"/admin_parcels\">Parcels</a><a href=\"/admin_world_parcels\">World Parcels</a>";
 	page_out += "<a href=\"/admin_parcel_auctions\">Parcel Auctions</a><a href=\"/admin_orders\">Orders</a><a href=\"/admin_sub_eth_transactions\">Eth Transactions</a><a href=\"/admin_map\">Map</a>";
