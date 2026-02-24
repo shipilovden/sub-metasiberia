@@ -1055,11 +1055,20 @@ body.msb-control hr {
 	margin: 16px 0;
 }
 
+p.msb-admin-nav a {
+	display: block;
+	margin: 0 0 6px 0;
+}
+
+p.msb-admin-nav a:last-child {
+	margin-bottom: 0;
+}
+
 body.msb-admin .msb-admin-nav {
 	display: flex;
-	flex-wrap: wrap;
+	flex-direction: column;
 	gap: 8px;
-	align-items: center;
+	align-items: flex-start;
 	padding: 10px;
 	border: 1px solid var(--msb-border);
 	border-radius: 12px;
@@ -1067,7 +1076,7 @@ body.msb-admin .msb-admin-nav {
 }
 
 body.msb-admin .msb-admin-nav a {
-	display: inline-block;
+	display: block;
 	padding: 5px 10px;
 	border-radius: 999px;
 	text-decoration: none;
