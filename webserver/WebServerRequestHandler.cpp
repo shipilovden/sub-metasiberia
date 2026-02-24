@@ -245,6 +245,22 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			AdminHandlers::handleDeleteParcelPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/admin_regenerate_world_parcel_screenshots")
+		{
+			AdminHandlers::handleRegenerateWorldParcelScreenshotsPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_bulk_set_world_parcel_owner_post")
+		{
+			AdminHandlers::handleBulkSetWorldParcelOwnerPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_bulk_set_world_parcel_writers_post")
+		{
+			AdminHandlers::handleBulkSetWorldParcelWritersPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_bulk_delete_world_parcels_post")
+		{
+			AdminHandlers::handleBulkDeleteWorldParcelsPost(*this->world_state, request, reply_info);
+		}
 		else if(request.path == "/admin_terminate_parcel_auction")
 		{
 			AdminHandlers::handleTerminateParcelAuction(*this->world_state, request, reply_info);
@@ -312,6 +328,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		else if(request.path == "/admin_set_chatbots_disabled_post")
 		{
 			AdminHandlers::handleSetChatBotsDisabledPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_bulk_update_chatbots_post")
+		{
+			AdminHandlers::handleBulkUpdateChatBotsPost(*this->world_state, request, reply_info);
 		}
 		else if(request.path == "/admin_delete_chatbot_post")
 		{
@@ -469,6 +489,14 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		{
 			ChatBotHandlers::handleCopyUserAvatarSettingsPost(*this->world_state, request, reply_info);
 		}
+		else if(request.path == "/edit_chatbot_avatar_animation_post")
+		{
+			ChatBotHandlers::handleEditChatBotAvatarAnimationPost(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/play_chatbot_animation_post")
+		{
+			ChatBotHandlers::handlePlayChatBotAnimationPost(*this->world_state, request, reply_info);
+		}
 		else if(request.path == "/update_info_tool_function_post")
 		{
 			ChatBotHandlers::handleUpdateInfoToolFunctionPost(*this->world_state, request, reply_info);
@@ -603,6 +631,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		else if(request.path == "/admin_world_parcels")
 		{
 			AdminHandlers::renderParcelsPage(*this->world_state, request, reply_info);
+		}
+		else if(request.path == "/admin_world_parcel")
+		{
+			AdminHandlers::renderAdminWorldParcelPage(*this->world_state, request, reply_info);
 		}
 		else if(request.path == "/admin_parcel_auctions")
 		{

@@ -20,6 +20,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <InStream.h>
 #include <DatabaseKey.h>
 #include <BitUtils.h>
+#include <maths/Matrix4f.h>
 #include <map>
 
 
@@ -91,6 +92,9 @@ public:
 	};
 	ThinkResults think(Server* server, WorldStateLock& world_lock);
 
+	// Queue a test gesture playback request. Executed in think() on the main server loop.
+	void queueManualGesturePlayback(const std::string& gesture_name, const URLString& gesture_URL, uint32 gesture_flags);
+
 	void writeToStream(RandomAccessOutStream& stream);
 
 
@@ -114,6 +118,24 @@ public:
 
 	static const int MAX_CUSTOM_PROMPT_PART_SIZE = 10000;
 	std::string custom_prompt_part;
+
+	// Configurable animation profile for server-driven chatbot gestures.
+	static const int MAX_GESTURE_NAME_SIZE = 200;
+	static const int MAX_GESTURE_URL_SIZE = 10'000;
+	std::string greeting_gesture_name;
+	URLString greeting_gesture_URL;
+	uint32 greeting_gesture_flags;
+	float greeting_gesture_cooldown_s;
+
+	std::string idle_gesture_name;
+	URLString idle_gesture_URL;
+	uint32 idle_gesture_flags;
+	float idle_gesture_interval_s;
+
+	std::string reactive_gesture_name;
+	URLString reactive_gesture_URL;
+	uint32 reactive_gesture_flags;
+	float reactive_gesture_cooldown_s;
 
 	std::map<std::string, Reference<ChatBotToolFunction>> info_tool_functions; // Map from function name to ChatBotToolFunction ref.  Tool functions that the LLM can call.
 
@@ -155,6 +177,19 @@ private:
 	Timer repeating_gesture_timer; // This will be unpaused and reset when a repeating gesture such as waving starts.  When it hits some elapsed time, we will stop the gesture.
 
 	Timer time_since_last_LLM_activity; // Time since we sent a message or received a message rom the LLM server.  After this hits some threshold, kill the LLM thread.
+
+	Timer time_since_last_reactive_gesture;
+	Timer time_since_last_idle_gesture;
+	Timer time_since_last_greeting_gesture;
+
+	bool pending_manual_gesture;
+	std::string pending_manual_gesture_name;
+	URLString pending_manual_gesture_URL;
+	uint32 pending_manual_gesture_flags;
+
+	void playGestureNow(const std::string& gesture_name, const URLString& gesture_URL, uint32 gesture_flags, Server* server);
+	bool canTriggerTimer(const Timer& timer, float min_interval_s) const;
+	void clampAnimationSettings();
 
 	SocketBufferOutStream scratch_packet;
 };

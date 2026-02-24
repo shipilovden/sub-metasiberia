@@ -16,6 +16,7 @@ Copyright Glare Technologies Limited 2021 -
 #include "WorldHandlers.h"
 #include "WebDataStore.h"
 #include "../server/ServerWorldState.h"
+#include "../shared/GestureSettings.h"
 #include <IncludeXXHash.h>
 #include <ConPrint.h>
 #include <Exception.h>
@@ -28,6 +29,7 @@ Copyright Glare Technologies Limited 2021 -
 #include <ContainerUtils.h>
 #include <algorithm>
 #include <cctype>
+#include <limits>
 
 
 namespace AdminHandlers
@@ -139,6 +141,27 @@ static bool parseCommaSeparatedUsernamesToIDs(ServerAllWorldsState& world_state,
 }
 
 
+static bool parseCommaSeparatedUserRefsToIDs(ServerAllWorldsState& world_state, const std::string& user_refs_csv, std::vector<UserID>& user_ids_out, std::string& error_out)
+{
+	const std::vector<std::string> user_ref_fields = ::split(user_refs_csv, ',');
+	for(size_t i=0; i<user_ref_fields.size(); ++i)
+	{
+		const std::string user_ref = stripHeadAndTailWhitespace(user_ref_fields[i]);
+		if(user_ref.empty())
+			continue;
+
+		UserID user_id;
+		if(!resolveUserIDFromRef(world_state, user_ref, user_id, error_out))
+			return false;
+
+		if(!ContainerUtils::contains(user_ids_out, user_id))
+			user_ids_out.push_back(user_id);
+	}
+
+	return true;
+}
+
+
 static std::string generateReadablePassword()
 {
 	const size_t NUM_RANDOM_BYTES = 12;
@@ -228,6 +251,30 @@ static double parseDoubleFieldForParcelCreation(const web::RequestInfo& request,
 }
 
 
+static bool postCheckboxIsChecked(const web::RequestInfo& request, const std::string& field_name)
+{
+	return !request.getPostField(field_name).str().empty();
+}
+
+
+static float parseFloatWithDefault(const web::RequestInfo& request, const std::string& field_name, float default_val)
+{
+	std::string s = stripHeadAndTailWhitespace(request.getPostField(field_name).str());
+	if(s.empty())
+		return default_val;
+	std::replace(s.begin(), s.end(), ',', '.');
+
+	try
+	{
+		return (float)stringToDouble(s);
+	}
+	catch(glare::Exception&)
+	{
+		return default_val;
+	}
+}
+
+
 static std::string featureFlagNameForBit(const uint64 bitflag)
 {
 	if(bitflag == ServerAllWorldsState::SERVER_SCRIPT_EXEC_FEATURE_FLAG) return "SERVER_SCRIPT_EXEC";
@@ -252,6 +299,117 @@ static bool containsCaseInsensitive(const std::string& haystack, const std::stri
 	if(needle.empty())
 		return true;
 	return toLowerASCII(haystack).find(toLowerASCII(needle)) != std::string::npos;
+}
+
+
+static int parseUIntParamWithBounds(const std::string& value, int default_value, int min_value, int max_value)
+{
+	const std::string trimmed = stripHeadAndTailWhitespace(value);
+	if(trimmed.empty() || !isAllDigitsString(trimmed))
+		return default_value;
+
+	const uint64 parsed_u64 = stringToUInt64(trimmed);
+	const uint64 max_u64 = (uint64)std::numeric_limits<int>::max();
+	const int parsed = (int)myMin(parsed_u64, max_u64);
+	return myMin(max_value, myMax(min_value, parsed));
+}
+
+
+static std::string normaliseOrderParam(const std::string& order_value, const std::string& default_order)
+{
+	const std::string trimmed = toLowerASCII(stripHeadAndTailWhitespace(order_value));
+	if(trimmed == "asc" || trimmed == "desc")
+		return trimmed;
+	return default_order;
+}
+
+
+static int auctionStateSortRank(const bool has_for_sale_auction, const bool has_sold_auction, const bool has_any_auction)
+{
+	if(has_for_sale_auction) return 3;
+	if(has_sold_auction) return 2;
+	if(has_any_auction) return 1;
+	return 0;
+}
+
+
+struct WorldParcelFilterFields
+{
+	std::string query_filter;
+	std::string owner_filter;
+	std::string world_filter;
+	std::string auction_filter;
+};
+
+
+static bool worldParcelMatchesFilters(
+	const WorldParcelFilterFields& filter,
+	const std::string& world_name,
+	const Parcel& parcel,
+	const std::string& owner_username,
+	const std::string& editors_summary,
+	const bool has_for_sale_auction,
+	const bool has_sold_auction,
+	const bool has_any_auction)
+{
+	bool include = true;
+	if(!filter.query_filter.empty())
+	{
+		const std::string searchable = "parcel " + parcel.id.toString() + " " + owner_username + " " + parcel.description + " " + parcel.title + " " + world_name + " " + editors_summary;
+		include = containsCaseInsensitive(searchable, filter.query_filter);
+	}
+	if(include && !filter.owner_filter.empty())
+		include = containsCaseInsensitive(owner_username, filter.owner_filter);
+	if(include && !filter.world_filter.empty())
+		include = containsCaseInsensitive(world_name, filter.world_filter);
+	if(include)
+	{
+		if(filter.auction_filter == "for_sale")
+			include = has_for_sale_auction;
+		else if(filter.auction_filter == "sold")
+			include = has_sold_auction;
+		else if(filter.auction_filter == "without_auction")
+			include = !has_any_auction;
+	}
+	return include;
+}
+
+
+static std::string makeAdminWorldParcelURL(const std::string& world_name, const ParcelID& parcel_id)
+{
+	return "/admin_world_parcel?world=" + web::Escaping::URLEscape(world_name) + "&parcel_id=" + parcel_id.toString();
+}
+
+
+static std::string makeUserAdminLinkIfFound(ServerAllWorldsState& world_state, const UserID& user_id, const std::string& fallback_text)
+{
+	const auto user_res = world_state.user_id_to_users.find(user_id);
+	if(user_res == world_state.user_id_to_users.end())
+		return web::Escaping::HTMLEscape(fallback_text);
+
+	return "<a href=\"/admin_user/" + user_id.toString() + "\">" + web::Escaping::HTMLEscape(user_res->second->name) + "</a>";
+}
+
+
+static WorldParcelFilterFields getWorldParcelFiltersFromPost(const web::RequestInfo& request)
+{
+	WorldParcelFilterFields filter;
+	filter.query_filter = stripHeadAndTailWhitespace(request.getPostField("q").str());
+	filter.owner_filter = stripHeadAndTailWhitespace(request.getPostField("owner").str());
+	filter.world_filter = stripHeadAndTailWhitespace(request.getPostField("world").str());
+	filter.auction_filter = stripHeadAndTailWhitespace(request.getPostField("auction").str());
+	if(filter.auction_filter.empty())
+		filter.auction_filter = "all";
+	return filter;
+}
+
+
+static std::string getSafeRedirectPathOrFallback(const web::RequestInfo& request, const std::string& fallback_path)
+{
+	const std::string redirect_path = stripHeadAndTailWhitespace(request.getPostField("redirect_path").str());
+	if(!redirect_path.empty() && hasPrefix(redirect_path, "/") && !hasPrefix(redirect_path, "//"))
+		return redirect_path;
+	return fallback_path;
 }
 
 
@@ -789,31 +947,37 @@ void renderAdminUserPage(ServerAllWorldsState& world_state, const web::RequestIn
 				{
 					const UserWorldParcelRow& row = world_parcel_rows[i];
 					const Parcel* parcel = row.parcel.ptr();
+					const std::string detail_url = makeAdminWorldParcelURL(row.world_name, parcel->id);
+					const std::string user_page_redirect = "/admin_user/" + user->id.toString();
 					page_out += "<tr>";
 					page_out += "<td><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">" + web::Escaping::HTMLEscape(row.world_name) + "</a></td>";
-					page_out += "<td>" + parcel->id.toString() + "</td>";
+					page_out += "<td><a href=\"" + detail_url + "\">" + parcel->id.toString() + "</a></td>";
 					page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " x " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
 					page_out += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
 					page_out += "<td>" + toString((int)parcel->writer_ids.size()) + "</td>";
 					page_out += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
 					page_out += "<td>";
 					page_out += "<div class=\"msb-row-actions\">";
+					page_out += "<a href=\"" + detail_url + "\">Open details</a>";
 					page_out += "<a href=\"/admin_world_parcels?world=" + web::Escaping::URLEscape(row.world_name) + "&owner=" + web::Escaping::URLEscape(user->name) + "\">Open in parcels admin</a>";
 					page_out += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
 					page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
 					page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+					page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(user_page_redirect) + "\">";
 					page_out += "<input type=\"text\" name=\"new_owner_ref\" value=\"" + web::Escaping::HTMLEscape(user->name) + "\" placeholder=\"new owner id/name\">";
 					page_out += "<input type=\"submit\" value=\"Set owner\" onclick=\"return confirm('Set owner for world parcel " + parcel->id.toString() + "?');\" >";
 					page_out += "</form>";
 					page_out += "<form action=\"/set_world_parcel_writers_post\" method=\"post\" class=\"msb-inline-form\">";
 					page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
 					page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+					page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(user_page_redirect) + "\">";
 					page_out += "<input type=\"text\" name=\"writer_refs\" value=\"\" placeholder=\"editors ids/names\">";
 					page_out += "<input type=\"submit\" value=\"Set editors\" onclick=\"return confirm('Set editors for world parcel " + parcel->id.toString() + "?');\" >";
 					page_out += "</form>";
 					page_out += "<form action=\"/admin_delete_parcel\" method=\"post\" class=\"msb-inline-form\">";
 					page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
 					page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+					page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(user_page_redirect) + "\">";
 					page_out += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete world parcel " + parcel->id.toString() + " in " + web::Escaping::HTMLEscape(row.world_name) + "?');\" >";
 					page_out += "</form>";
 					page_out += "</div>";
@@ -842,6 +1006,14 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 	const std::string world_filter = stripHeadAndTailWhitespace(request.getURLParam("world").str());
 	std::string auction_filter = stripHeadAndTailWhitespace(request.getURLParam("auction").str());
 	std::string scope_filter = stripHeadAndTailWhitespace(request.getURLParam("scope").str());
+	std::string root_sort_key = toLowerASCII(stripHeadAndTailWhitespace(request.getURLParam("root_sort").str()));
+	std::string root_sort_order = normaliseOrderParam(request.getURLParam("root_order").str(), "asc");
+	std::string world_sort_key = toLowerASCII(stripHeadAndTailWhitespace(request.getURLParam("world_sort").str()));
+	std::string world_sort_order = normaliseOrderParam(request.getURLParam("world_order").str(), "asc");
+	int root_page = parseUIntParamWithBounds(request.getURLParam("root_page").str(), 1, 1, 1000000);
+	int world_page = parseUIntParamWithBounds(request.getURLParam("world_page").str(), 1, 1, 1000000);
+	int root_per_page = parseUIntParamWithBounds(request.getURLParam("root_per_page").str(), 50, 10, 500);
+	int world_per_page = parseUIntParamWithBounds(request.getURLParam("world_per_page").str(), 50, 10, 500);
 	const bool world_parcels_tab = (request.path == "/admin_world_parcels");
 	const std::string parcels_page_path = world_parcels_tab ? std::string("/admin_world_parcels") : std::string("/admin_parcels");
 	if(auction_filter.empty())
@@ -852,10 +1024,33 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		scope_filter = world_parcels_tab ? "worlds" : "all";
 	if(world_parcels_tab)
 		scope_filter = "worlds";
+	if(root_sort_key.empty() || (root_sort_key != "id" && root_sort_key != "owner" && root_sort_key != "created" && root_sort_key != "area" && root_sort_key != "screens" && root_sort_key != "auction"))
+		root_sort_key = "id";
+	if(world_sort_key.empty() || (world_sort_key != "world" && world_sort_key != "id" && world_sort_key != "owner" && world_sort_key != "editors" && world_sort_key != "created" && world_sort_key != "area" && world_sort_key != "volume" && world_sort_key != "screens" && world_sort_key != "auction"))
+		world_sort_key = "world";
 
 	std::string page_out = sharedAdminHeader(world_state, request);
 	if(world_parcels_tab)
 		page_out += "<h2>Parcels in personal worlds</h2>\n";
+
+	const auto buildParcelsURL = [&](const int root_page_value, const int world_page_value, const std::string& root_sort_value, const std::string& root_order_value, const int root_per_page_value, const std::string& world_sort_value, const std::string& world_order_value, const int world_per_page_value)
+	{
+		std::string url = parcels_page_path + "?";
+		url += "q=" + web::Escaping::URLEscape(query_filter);
+		url += "&owner=" + web::Escaping::URLEscape(owner_filter);
+		url += "&world=" + web::Escaping::URLEscape(world_filter);
+		url += "&auction=" + web::Escaping::URLEscape(auction_filter);
+		url += "&scope=" + web::Escaping::URLEscape(scope_filter);
+		url += "&root_sort=" + web::Escaping::URLEscape(root_sort_value);
+		url += "&root_order=" + web::Escaping::URLEscape(root_order_value);
+		url += "&root_per_page=" + toString(root_per_page_value);
+		url += "&root_page=" + toString(root_page_value);
+		url += "&world_sort=" + web::Escaping::URLEscape(world_sort_value);
+		url += "&world_order=" + web::Escaping::URLEscape(world_order_value);
+		url += "&world_per_page=" + toString(world_per_page_value);
+		url += "&world_page=" + toString(world_page_value);
+		return url;
+	};
 
 	{ // Lock scope
 		WorldStateLock lock(world_state.mutex);
@@ -873,6 +1068,8 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		{
 			const Parcel* parcel = NULL;
 			std::string owner_username;
+			UserID owner_id;
+			bool owner_found = false;
 			double size_x = 0;
 			double size_y = 0;
 			double area = 0;
@@ -898,9 +1095,11 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 
 			ParcelRow row;
 			row.parcel = parcel;
+			row.owner_id = parcel->owner_id;
 
 			auto user_res = world_state.user_id_to_users.find(parcel->owner_id);
-			row.owner_username = (user_res == world_state.user_id_to_users.end()) ? std::string("[No user found]") : user_res->second->name;
+			row.owner_found = (user_res != world_state.user_id_to_users.end());
+			row.owner_username = row.owner_found ? user_res->second->name : std::string("[No user found]");
 
 			const Vec3d span = parcel->aabb_max - parcel->aabb_min;
 			row.size_x = span.x;
@@ -958,6 +1157,39 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		}
 
 		const double average_area = (total_parcels > 0) ? (total_area / (double)total_parcels) : 0.0;
+		const bool root_descending = (root_sort_order == "desc");
+		std::sort(rows.begin(), rows.end(),
+			[&](const ParcelRow& a, const ParcelRow& b)
+			{
+				int cmp = 0;
+				if(root_sort_key == "owner")
+					cmp = toLowerASCII(a.owner_username).compare(toLowerASCII(b.owner_username));
+				else if(root_sort_key == "created")
+					cmp = (a.parcel->created_time.time < b.parcel->created_time.time) ? -1 : ((a.parcel->created_time.time > b.parcel->created_time.time) ? 1 : 0);
+				else if(root_sort_key == "area")
+					cmp = (a.area < b.area) ? -1 : ((a.area > b.area) ? 1 : 0);
+				else if(root_sort_key == "screens")
+					cmp = ((int)a.parcel->screenshot_ids.size() < (int)b.parcel->screenshot_ids.size()) ? -1 : (((int)a.parcel->screenshot_ids.size() > (int)b.parcel->screenshot_ids.size()) ? 1 : 0);
+				else if(root_sort_key == "auction")
+				{
+					const int a_rank = auctionStateSortRank(a.has_for_sale_auction, a.has_sold_auction, a.has_any_auction);
+					const int b_rank = auctionStateSortRank(b.has_for_sale_auction, b.has_sold_auction, b.has_any_auction);
+					cmp = (a_rank < b_rank) ? -1 : ((a_rank > b_rank) ? 1 : 0);
+				}
+				else // "id"
+					cmp = (a.parcel->id.value() < b.parcel->id.value()) ? -1 : ((a.parcel->id.value() > b.parcel->id.value()) ? 1 : 0);
+
+				if(cmp == 0)
+					cmp = (a.parcel->id.value() < b.parcel->id.value()) ? -1 : ((a.parcel->id.value() > b.parcel->id.value()) ? 1 : 0);
+
+				return root_descending ? (cmp > 0) : (cmp < 0);
+			}
+		);
+		const int root_filtered_total = (int)rows.size();
+		const int root_page_count = myMax(1, (root_filtered_total + root_per_page - 1) / root_per_page);
+		root_page = myMin(root_page, root_page_count);
+		const int root_start_i = (root_page - 1) * root_per_page;
+		const int root_end_i = myMin(root_start_i + root_per_page, root_filtered_total);
 
 		if(show_root_section)
 		{
@@ -1001,6 +1233,14 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		{
 			page_out += "<input type=\"hidden\" name=\"scope\" value=\"worlds\">";
 		}
+		page_out += "<input type=\"hidden\" name=\"root_sort\" value=\"" + web::Escaping::HTMLEscape(root_sort_key) + "\">";
+		page_out += "<input type=\"hidden\" name=\"root_order\" value=\"" + web::Escaping::HTMLEscape(root_sort_order) + "\">";
+		page_out += "<input type=\"hidden\" name=\"root_per_page\" value=\"" + toString(root_per_page) + "\">";
+		page_out += "<input type=\"hidden\" name=\"root_page\" value=\"1\">";
+		page_out += "<input type=\"hidden\" name=\"world_sort\" value=\"" + web::Escaping::HTMLEscape(world_sort_key) + "\">";
+		page_out += "<input type=\"hidden\" name=\"world_order\" value=\"" + web::Escaping::HTMLEscape(world_sort_order) + "\">";
+		page_out += "<input type=\"hidden\" name=\"world_per_page\" value=\"" + toString(world_per_page) + "\">";
+		page_out += "<input type=\"hidden\" name=\"world_page\" value=\"1\">";
 		page_out += "<input type=\"submit\" value=\"Apply\">";
 		page_out += "<a class=\"msb-quiet-link\" href=\"" + parcels_page_path + "\">Reset</a>";
 		page_out += "</form>";
@@ -1066,13 +1306,55 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		{
 			page_out += "<section class=\"grouped-region\">";
 			page_out += "<h3>Parcels list</h3>";
+			page_out += "<form action=\"" + parcels_page_path + "\" method=\"get\" class=\"msb-inline-form\">";
+			page_out += "<input type=\"hidden\" name=\"q\" value=\"" + web::Escaping::HTMLEscape(query_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"owner\" value=\"" + web::Escaping::HTMLEscape(owner_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"world\" value=\"" + web::Escaping::HTMLEscape(world_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"auction\" value=\"" + web::Escaping::HTMLEscape(auction_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"scope\" value=\"" + web::Escaping::HTMLEscape(scope_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"world_sort\" value=\"" + web::Escaping::HTMLEscape(world_sort_key) + "\">";
+			page_out += "<input type=\"hidden\" name=\"world_order\" value=\"" + web::Escaping::HTMLEscape(world_sort_order) + "\">";
+			page_out += "<input type=\"hidden\" name=\"world_per_page\" value=\"" + toString(world_per_page) + "\">";
+			page_out += "<input type=\"hidden\" name=\"world_page\" value=\"" + toString(world_page) + "\">";
+			page_out += "<label for=\"admin-root-sort\">Sort</label>";
+			page_out += "<select id=\"admin-root-sort\" name=\"root_sort\">";
+			page_out += "<option value=\"id\"" + std::string(root_sort_key == "id" ? " selected=\"selected\"" : "") + ">ID</option>";
+			page_out += "<option value=\"owner\"" + std::string(root_sort_key == "owner" ? " selected=\"selected\"" : "") + ">Owner</option>";
+			page_out += "<option value=\"created\"" + std::string(root_sort_key == "created" ? " selected=\"selected\"" : "") + ">Created</option>";
+			page_out += "<option value=\"area\"" + std::string(root_sort_key == "area" ? " selected=\"selected\"" : "") + ">Area</option>";
+			page_out += "<option value=\"screens\"" + std::string(root_sort_key == "screens" ? " selected=\"selected\"" : "") + ">Screens</option>";
+			page_out += "<option value=\"auction\"" + std::string(root_sort_key == "auction" ? " selected=\"selected\"" : "") + ">Auction</option>";
+			page_out += "</select>";
+			page_out += "<label for=\"admin-root-order\">Order</label>";
+			page_out += "<select id=\"admin-root-order\" name=\"root_order\">";
+			page_out += "<option value=\"asc\"" + std::string(root_sort_order == "asc" ? " selected=\"selected\"" : "") + ">Asc</option>";
+			page_out += "<option value=\"desc\"" + std::string(root_sort_order == "desc" ? " selected=\"selected\"" : "") + ">Desc</option>";
+			page_out += "</select>";
+			page_out += "<label for=\"admin-root-per-page\">Per page</label>";
+			page_out += "<select id=\"admin-root-per-page\" name=\"root_per_page\">";
+			page_out += "<option value=\"25\"" + std::string(root_per_page == 25 ? " selected=\"selected\"" : "") + ">25</option>";
+			page_out += "<option value=\"50\"" + std::string(root_per_page == 50 ? " selected=\"selected\"" : "") + ">50</option>";
+			page_out += "<option value=\"100\"" + std::string(root_per_page == 100 ? " selected=\"selected\"" : "") + ">100</option>";
+			page_out += "<option value=\"200\"" + std::string(root_per_page == 200 ? " selected=\"selected\"" : "") + ">200</option>";
+			page_out += "<option value=\"500\"" + std::string(root_per_page == 500 ? " selected=\"selected\"" : "") + ">500</option>";
+			page_out += "</select>";
+			page_out += "<input type=\"hidden\" name=\"root_page\" value=\"1\">";
+			page_out += "<input type=\"submit\" value=\"Apply\">";
+			page_out += "</form>";
+			page_out += "<div class=\"msb-row-actions\">";
+			page_out += "<a href=\"" + buildParcelsURL(1, world_page, root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page) + "\">First</a>";
+			page_out += "<a href=\"" + buildParcelsURL(myMax(1, root_page - 1), world_page, root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page) + "\">Prev</a>";
+			page_out += "<span>Page " + toString(root_page) + " / " + toString(root_page_count) + "</span>";
+			page_out += "<a href=\"" + buildParcelsURL(myMin(root_page_count, root_page + 1), world_page, root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page) + "\">Next</a>";
+			page_out += "<a href=\"" + buildParcelsURL(root_page_count, world_page, root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page) + "\">Last</a>";
+			page_out += "</div>";
 			page_out += "<div class=\"msb-table-wrap\">";
 			page_out += "<table class=\"msb-table msb-parcels-table\" aria-label=\"Root world Parcels table\">";
 			page_out += "<thead><tr><th>ID</th><th>Owner</th><th>Description</th><th>Size</th><th>Z-bounds</th><th>Area</th><th>Screens</th><th>Auction</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
 
-			for(size_t i=0; i<rows.size(); ++i)
+			for(int i=root_start_i; i<root_end_i; ++i)
 			{
-				const ParcelRow& row = rows[i];
+				const ParcelRow& row = rows[(size_t)i];
 				const Parcel* parcel = row.parcel;
 
 			std::string auction_state;
@@ -1089,11 +1371,14 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 
 			page_out += "<tr data-row-search=\"" + web::Escaping::HTMLEscape(searchable) + "\">";
 			page_out += "<td><a href=\"/parcel/" + parcel->id.toString() + "\">" + parcel->id.toString() + "</a></td>";
-			page_out += "<td>" + web::Escaping::HTMLEscape(row.owner_username) + "</td>";
+			if(row.owner_found)
+				page_out += "<td><a href=\"/admin_user/" + row.owner_id.toString() + "\">" + web::Escaping::HTMLEscape(row.owner_username) + "</a></td>";
+			else
+				page_out += "<td>" + web::Escaping::HTMLEscape(row.owner_username) + "</td>";
 			page_out += "<td>" + web::Escaping::HTMLEscape(parcel->description.empty() ? std::string("-") : parcel->description.substr(0, 140)) + "</td>";
-			page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " × " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
+			page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " x " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
 			page_out += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
-			page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.area, 1) + " m²</td>";
+			page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.area, 1) + " m^2</td>";
 			page_out += "<td>" + toString((int)parcel->screenshot_ids.size()) + "</td>";
 			page_out += "<td>" + auction_state + "</td>";
 			page_out += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
@@ -1111,7 +1396,8 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			}
 
 			page_out += "</tbody></table></div>";
-			page_out += "<div id=\"admin-parcels-visible-count\" class=\"field-description\">Showing " + toString((int)rows.size()) + " parcel(s) after server-side filters.</div>";
+			const int root_shown_start = (root_filtered_total > 0) ? (root_start_i + 1) : 0;
+			page_out += "<div id=\"admin-parcels-visible-count\" class=\"field-description\">Showing " + toString(root_shown_start) + "-" + toString(root_end_i) + " of " + toString(root_filtered_total) + " root parcel(s) after server-side filters. Total root parcels: " + toString(total_parcels) + ".</div>";
 			page_out += "</section>";
 		}
 
@@ -1122,9 +1408,17 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 				std::string world_name;
 				ParcelRef parcel;
 				std::string owner_username;
+				UserID owner_id;
+				bool owner_found = false;
+				std::string editors_summary;
+				int num_editors = 0;
+				double origin_x = 0;
+				double origin_y = 0;
 				double size_x = 0;
 				double size_y = 0;
 				double area = 0;
+				double height = 0;
+				double build_volume = 0;
 				bool has_for_sale_auction = false;
 				bool has_sold_auction = false;
 				bool has_any_auction = false;
@@ -1152,15 +1446,35 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 					WorldParcelRow row;
 					row.world_name = world_it->first;
 					row.parcel = parcel;
+					row.owner_id = parcel->owner_id;
 
 					const auto user_res = world_state.user_id_to_users.find(parcel->owner_id);
-					row.owner_username = (user_res == world_state.user_id_to_users.end()) ? std::string("[No user found]") : user_res->second->name;
+					row.owner_found = (user_res != world_state.user_id_to_users.end());
+					row.owner_username = row.owner_found ? user_res->second->name : std::string("[No user found]");
 
 					const Vec3d span = parcel->aabb_max - parcel->aabb_min;
+					row.origin_x = parcel->aabb_min.x;
+					row.origin_y = parcel->aabb_min.y;
 					row.size_x = span.x;
 					row.size_y = span.y;
 					row.area = std::max(0.0, row.size_x * row.size_y);
+					row.height = parcel->zbounds.y - parcel->zbounds.x;
+					row.build_volume = std::max(0.0, row.area * row.height);
 					world_total_area += row.area;
+
+					row.num_editors = (int)parcel->writer_ids.size();
+					for(size_t z=0; z<parcel->writer_ids.size(); ++z)
+					{
+						const UserID writer_id = parcel->writer_ids[z];
+						if(!row.editors_summary.empty())
+							row.editors_summary += ", ";
+
+						const auto writer_res = world_state.user_id_to_users.find(writer_id);
+						if(writer_res != world_state.user_id_to_users.end())
+							row.editors_summary += writer_res->second->name;
+						else
+							row.editors_summary += writer_id.toString();
+					}
 
 					if(!parcel->screenshot_ids.empty())
 						world_with_screenshots_count++;
@@ -1187,7 +1501,7 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 					bool include = true;
 					if(!query_filter.empty())
 					{
-						const std::string searchable = "parcel " + row.parcel->id.toString() + " " + row.owner_username + " " + row.parcel->description + " " + row.parcel->title + " " + row.world_name;
+						const std::string searchable = "parcel " + row.parcel->id.toString() + " " + row.owner_username + " " + row.parcel->description + " " + row.parcel->title + " " + row.world_name + " " + row.editors_summary;
 						include = containsCaseInsensitive(searchable, query_filter);
 					}
 					if(include && !owner_filter.empty())
@@ -1211,6 +1525,52 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			}
 
 			const double world_average_area = (world_total_parcels > 0) ? (world_total_area / (double)world_total_parcels) : 0.0;
+			const bool world_descending = (world_sort_order == "desc");
+			std::sort(world_rows.begin(), world_rows.end(),
+				[&](const WorldParcelRow& a, const WorldParcelRow& b)
+				{
+					int cmp = 0;
+					if(world_sort_key == "world")
+						cmp = toLowerASCII(a.world_name).compare(toLowerASCII(b.world_name));
+					else if(world_sort_key == "owner")
+						cmp = toLowerASCII(a.owner_username).compare(toLowerASCII(b.owner_username));
+					else if(world_sort_key == "editors")
+						cmp = (a.num_editors < b.num_editors) ? -1 : ((a.num_editors > b.num_editors) ? 1 : 0);
+					else if(world_sort_key == "created")
+						cmp = (a.parcel->created_time.time < b.parcel->created_time.time) ? -1 : ((a.parcel->created_time.time > b.parcel->created_time.time) ? 1 : 0);
+					else if(world_sort_key == "area")
+						cmp = (a.area < b.area) ? -1 : ((a.area > b.area) ? 1 : 0);
+					else if(world_sort_key == "volume")
+						cmp = (a.build_volume < b.build_volume) ? -1 : ((a.build_volume > b.build_volume) ? 1 : 0);
+					else if(world_sort_key == "screens")
+						cmp = ((int)a.parcel->screenshot_ids.size() < (int)b.parcel->screenshot_ids.size()) ? -1 : (((int)a.parcel->screenshot_ids.size() > (int)b.parcel->screenshot_ids.size()) ? 1 : 0);
+					else if(world_sort_key == "auction")
+					{
+						const int a_rank = auctionStateSortRank(a.has_for_sale_auction, a.has_sold_auction, a.has_any_auction);
+						const int b_rank = auctionStateSortRank(b.has_for_sale_auction, b.has_sold_auction, b.has_any_auction);
+						cmp = (a_rank < b_rank) ? -1 : ((a_rank > b_rank) ? 1 : 0);
+					}
+					else // "id"
+						cmp = (a.parcel->id.value() < b.parcel->id.value()) ? -1 : ((a.parcel->id.value() > b.parcel->id.value()) ? 1 : 0);
+
+					if(cmp == 0)
+					{
+						cmp = toLowerASCII(a.world_name).compare(toLowerASCII(b.world_name));
+						if(cmp == 0)
+							cmp = (a.parcel->id.value() < b.parcel->id.value()) ? -1 : ((a.parcel->id.value() > b.parcel->id.value()) ? 1 : 0);
+					}
+
+					return world_descending ? (cmp > 0) : (cmp < 0);
+				}
+			);
+			const int world_filtered_total = (int)world_rows.size();
+			const int world_page_count = myMax(1, (world_filtered_total + world_per_page - 1) / world_per_page);
+			world_page = myMin(world_page, world_page_count);
+			const int world_start_i = (world_page - 1) * world_per_page;
+			const int world_end_i = myMin(world_start_i + world_per_page, world_filtered_total);
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			const bool superadmin = logged_in_user && isGodUser(logged_in_user->id);
+			const std::string current_view_url = buildParcelsURL(root_page, world_page, root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page);
 
 			page_out += "<section class=\"grouped-region\">";
 			page_out += "<h3>Parcels in personal worlds</h3>";
@@ -1223,18 +1583,61 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">With screenshots</div><div class=\"msb-kpi-value\">" + toString(world_with_screenshots_count) + "</div></div>";
 			page_out += "<div class=\"msb-kpi\"><div class=\"msb-kpi-label\">Average area</div><div class=\"msb-kpi-value\">" + doubleToStringMaxNDecimalPlaces(world_average_area, 1) + " m^2</div></div>";
 			page_out += "</div>";
+			page_out += "<form action=\"" + parcels_page_path + "\" method=\"get\" class=\"msb-inline-form\">";
+			page_out += "<input type=\"hidden\" name=\"q\" value=\"" + web::Escaping::HTMLEscape(query_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"owner\" value=\"" + web::Escaping::HTMLEscape(owner_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"world\" value=\"" + web::Escaping::HTMLEscape(world_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"auction\" value=\"" + web::Escaping::HTMLEscape(auction_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"scope\" value=\"" + web::Escaping::HTMLEscape(scope_filter) + "\">";
+			page_out += "<input type=\"hidden\" name=\"root_sort\" value=\"" + web::Escaping::HTMLEscape(root_sort_key) + "\">";
+			page_out += "<input type=\"hidden\" name=\"root_order\" value=\"" + web::Escaping::HTMLEscape(root_sort_order) + "\">";
+			page_out += "<input type=\"hidden\" name=\"root_per_page\" value=\"" + toString(root_per_page) + "\">";
+			page_out += "<input type=\"hidden\" name=\"root_page\" value=\"" + toString(root_page) + "\">";
+			page_out += "<label for=\"admin-world-sort\">Sort</label>";
+			page_out += "<select id=\"admin-world-sort\" name=\"world_sort\">";
+			page_out += "<option value=\"world\"" + std::string(world_sort_key == "world" ? " selected=\"selected\"" : "") + ">World</option>";
+			page_out += "<option value=\"id\"" + std::string(world_sort_key == "id" ? " selected=\"selected\"" : "") + ">ID</option>";
+			page_out += "<option value=\"owner\"" + std::string(world_sort_key == "owner" ? " selected=\"selected\"" : "") + ">Owner</option>";
+			page_out += "<option value=\"editors\"" + std::string(world_sort_key == "editors" ? " selected=\"selected\"" : "") + ">Editors</option>";
+			page_out += "<option value=\"created\"" + std::string(world_sort_key == "created" ? " selected=\"selected\"" : "") + ">Created</option>";
+			page_out += "<option value=\"area\"" + std::string(world_sort_key == "area" ? " selected=\"selected\"" : "") + ">Area</option>";
+			page_out += "<option value=\"volume\"" + std::string(world_sort_key == "volume" ? " selected=\"selected\"" : "") + ">Volume</option>";
+			page_out += "<option value=\"screens\"" + std::string(world_sort_key == "screens" ? " selected=\"selected\"" : "") + ">Screens</option>";
+			page_out += "<option value=\"auction\"" + std::string(world_sort_key == "auction" ? " selected=\"selected\"" : "") + ">Auction</option>";
+			page_out += "</select>";
+			page_out += "<label for=\"admin-world-order\">Order</label>";
+			page_out += "<select id=\"admin-world-order\" name=\"world_order\">";
+			page_out += "<option value=\"asc\"" + std::string(world_sort_order == "asc" ? " selected=\"selected\"" : "") + ">Asc</option>";
+			page_out += "<option value=\"desc\"" + std::string(world_sort_order == "desc" ? " selected=\"selected\"" : "") + ">Desc</option>";
+			page_out += "</select>";
+			page_out += "<label for=\"admin-world-per-page\">Per page</label>";
+			page_out += "<select id=\"admin-world-per-page\" name=\"world_per_page\">";
+			page_out += "<option value=\"25\"" + std::string(world_per_page == 25 ? " selected=\"selected\"" : "") + ">25</option>";
+			page_out += "<option value=\"50\"" + std::string(world_per_page == 50 ? " selected=\"selected\"" : "") + ">50</option>";
+			page_out += "<option value=\"100\"" + std::string(world_per_page == 100 ? " selected=\"selected\"" : "") + ">100</option>";
+			page_out += "<option value=\"200\"" + std::string(world_per_page == 200 ? " selected=\"selected\"" : "") + ">200</option>";
+			page_out += "<option value=\"500\"" + std::string(world_per_page == 500 ? " selected=\"selected\"" : "") + ">500</option>";
+			page_out += "</select>";
+			page_out += "<input type=\"hidden\" name=\"world_page\" value=\"1\">";
+			page_out += "<input type=\"submit\" value=\"Apply\">";
+			page_out += "</form>";
+			page_out += "<div class=\"msb-row-actions\">";
+			page_out += "<a href=\"" + buildParcelsURL(root_page, 1, root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page) + "\">First</a>";
+			page_out += "<a href=\"" + buildParcelsURL(root_page, myMax(1, world_page - 1), root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page) + "\">Prev</a>";
+			page_out += "<span>Page " + toString(world_page) + " / " + toString(world_page_count) + "</span>";
+			page_out += "<a href=\"" + buildParcelsURL(root_page, myMin(world_page_count, world_page + 1), root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page) + "\">Next</a>";
+			page_out += "<a href=\"" + buildParcelsURL(root_page, world_page_count, root_sort_key, root_sort_order, root_per_page, world_sort_key, world_sort_order, world_per_page) + "\">Last</a>";
+			page_out += "</div>";
 
-			page_out += "<div class=\"field-description\">Use actions to manage geometry (origin/size/z-bounds), owner, editors, and delete for parcels created in personal worlds.</div>";
+			page_out += "<div class=\"field-description\">Click world, parcel ID, and usernames to open details. Full geometry/owner/editors/delete controls are available on each parcel detail page.</div>";
 			page_out += "<div class=\"msb-table-wrap\">";
 			page_out += "<table class=\"msb-table\" aria-label=\"Personal worlds parcels table\">";
-			page_out += "<thead><tr><th>World</th><th>ID</th><th>Owner</th><th>Description</th><th>Size</th><th>Z-bounds</th><th>Area</th><th>Screens</th><th>Auction</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
+			page_out += "<thead><tr><th>World</th><th>ID</th><th>Owner</th><th>Editors</th><th>Description</th><th>Origin</th><th>Size</th><th>Z-bounds</th><th>Area</th><th>Volume</th><th>Screens</th><th>Auction</th><th>Created</th><th>Actions</th></tr></thead><tbody>";
 
-			for(size_t i=0; i<world_rows.size(); ++i)
+			for(int i=world_start_i; i<world_end_i; ++i)
 			{
-				const WorldParcelRow& row = world_rows[i];
+				const WorldParcelRow& row = world_rows[(size_t)i];
 				const Parcel* parcel = row.parcel.ptr();
-				const double origin_x = parcel->aabb_min.x;
-				const double origin_y = parcel->aabb_min.y;
 
 				std::string auction_state;
 				if(row.has_for_sale_auction)
@@ -1246,86 +1649,346 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 				else
 					auction_state = "none";
 
-				std::string writer_refs_initial;
-				for(size_t z=0; z<parcel->writer_ids.size(); ++z)
-				{
-					const auto writer_res = world_state.user_id_to_users.find(parcel->writer_ids[z]);
-					if(z > 0)
-						writer_refs_initial += ", ";
-					if(writer_res != world_state.user_id_to_users.end())
-						writer_refs_initial += writer_res->second->name;
-					else
-						writer_refs_initial += parcel->writer_ids[z].toString();
-				}
+				const std::string detail_url = makeAdminWorldParcelURL(row.world_name, parcel->id);
+				const std::string world_url = "/world/" + WorldHandlers::URLEscapeWorldName(row.world_name);
+				const std::string owner_html = row.owner_found ?
+					("<a href=\"/admin_user/" + row.owner_id.toString() + "\">" + web::Escaping::HTMLEscape(row.owner_username) + "</a>") :
+					web::Escaping::HTMLEscape(row.owner_username);
 
 				page_out += "<tr>";
-				page_out += "<td><a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">" + web::Escaping::HTMLEscape(row.world_name) + "</a></td>";
-				page_out += "<td>" + parcel->id.toString() + "</td>";
-				page_out += "<td>" + web::Escaping::HTMLEscape(row.owner_username) + "</td>";
+				page_out += "<td><a href=\"" + world_url + "\">" + web::Escaping::HTMLEscape(row.world_name) + "</a></td>";
+				page_out += "<td><a href=\"" + detail_url + "\">" + parcel->id.toString() + "</a></td>";
+				page_out += "<td>" + owner_html + "</td>";
+				page_out += "<td title=\"" + web::Escaping::HTMLEscape(row.editors_summary) + "\">" + toString(row.num_editors) + "</td>";
 				page_out += "<td>" + web::Escaping::HTMLEscape(parcel->description.empty() ? std::string("-") : parcel->description.substr(0, 140)) + "</td>";
+				page_out += "<td>x=" + doubleToStringMaxNDecimalPlaces(row.origin_x, 1) + ", y=" + doubleToStringMaxNDecimalPlaces(row.origin_y, 1) + "</td>";
 				page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.size_x, 1) + " x " + doubleToStringMaxNDecimalPlaces(row.size_y, 1) + " m</td>";
 				page_out += "<td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 1) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 1) + " m</td>";
 				page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.area, 1) + " m^2</td>";
+				page_out += "<td>" + doubleToStringMaxNDecimalPlaces(row.build_volume, 1) + " m^3</td>";
 				page_out += "<td>" + toString((int)parcel->screenshot_ids.size()) + "</td>";
 				page_out += "<td>" + auction_state + "</td>";
 				page_out += "<td>" + parcel->created_time.timeAgoDescription() + "</td>";
 				page_out += "<td><div class=\"msb-row-actions\">";
-				page_out += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(row.world_name) + "\">Open world</a>";
-				page_out += "<form action=\"/set_world_parcel_geometry_post\" method=\"post\" class=\"msb-create-parcel-form msb-inline-form\" data-admin-create-parcel-form=\"1\">";
-				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
-				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
-				page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"/admin_world_parcels?world=" + web::Escaping::URLEscape(row.world_name) + "\">";
-				page_out += "<div class=\"msb-inline-fields\">";
-				page_out += "<label>Origin X</label>";
-				page_out += "<input type=\"text\" name=\"origin_x\" value=\"" + doubleToStringMaxNDecimalPlaces(origin_x, 2) + "\" title=\"Parcel bottom-left X coordinate\">";
-				page_out += "<label>Origin Y</label>";
-				page_out += "<input type=\"text\" name=\"origin_y\" value=\"" + doubleToStringMaxNDecimalPlaces(origin_y, 2) + "\" title=\"Parcel bottom-left Y coordinate\">";
-				page_out += "<label>Size X</label>";
-				page_out += "<input type=\"text\" name=\"size_x\" value=\"" + doubleToStringMaxNDecimalPlaces(row.size_x, 2) + "\" title=\"Parcel width on X axis\">";
-				page_out += "<label>Size Y</label>";
-				page_out += "<input type=\"text\" name=\"size_y\" value=\"" + doubleToStringMaxNDecimalPlaces(row.size_y, 2) + "\" title=\"Parcel width on Y axis\">";
-				page_out += "</div>";
-				page_out += "<div class=\"msb-inline-fields\">";
-				page_out += "<label>Min Z</label>";
-				page_out += "<input type=\"text\" name=\"min_z\" value=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 2) + "\" title=\"Minimum parcel build height\">";
-				page_out += "<label>Max Z</label>";
-				page_out += "<input type=\"text\" name=\"max_z\" value=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 2) + "\" title=\"Maximum parcel build height\">";
-				page_out += "</div>";
-				page_out += "<div class=\"msb-live-preview\" data-parcel-live-preview=\"1\">";
-				page_out += "<div class=\"msb-live-item\">Area: <b data-preview-area>0.0</b> m<sup>2</sup></div>";
-				page_out += "<div class=\"msb-live-item\">Height: <b data-preview-height>0.0</b> m</div>";
-				page_out += "<div class=\"msb-live-item\">Build volume: <b data-preview-volume>0.0</b> m<sup>3</sup></div>";
-				page_out += "</div>";
-				page_out += "<input type=\"submit\" value=\"Save geometry\" onclick=\"return confirm('Update geometry for parcel " + parcel->id.toString() + " in this world?');\" >";
-				page_out += "</form>";
-				page_out += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
-				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
-				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
-				page_out += "<input type=\"text\" name=\"new_owner_ref\" value=\"" + web::Escaping::HTMLEscape(row.owner_username) + "\" placeholder=\"owner id/name\">";
-				page_out += "<input type=\"submit\" value=\"Set owner\" onclick=\"return confirm('Set owner for parcel " + parcel->id.toString() + "?');\" >";
-				page_out += "</form>";
-				page_out += "<form action=\"/set_world_parcel_writers_post\" method=\"post\" class=\"msb-inline-form\">";
-				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
-				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
-				page_out += "<input type=\"text\" name=\"writer_refs\" value=\"" + web::Escaping::HTMLEscape(writer_refs_initial) + "\" placeholder=\"editors ids/names\">";
-				page_out += "<input type=\"submit\" value=\"Set editors\" onclick=\"return confirm('Set editors for parcel " + parcel->id.toString() + "?');\" >";
-				page_out += "</form>";
-				page_out += "<form action=\"/admin_delete_parcel\" method=\"post\" class=\"msb-inline-form\">";
-				page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(row.world_name) + "\">";
-				page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
-				page_out += "<input type=\"submit\" value=\"Delete\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + " from this world?');\" >";
-				page_out += "</form>";
+				page_out += "<a href=\"" + world_url + "\">Open world</a>";
+				page_out += "<a href=\"" + detail_url + "\">Open parcel details</a>";
+				page_out += "<a href=\"" + detail_url + "#quick-actions\">Quick actions</a>";
+				page_out += "<a href=\"" + detail_url + "#geometry\">Geometry</a>";
+				page_out += "<a href=\"" + detail_url + "#owner\">Owner</a>";
+				page_out += "<a href=\"" + detail_url + "#editors\">Editors</a>";
+				page_out += "<a href=\"" + detail_url + "#danger\">Delete</a>";
 				page_out += "</div></td>";
 				page_out += "</tr>\n";
 			}
 
 			page_out += "</tbody></table></div>";
-			page_out += "<div class=\"field-description\">Showing " + toString((int)world_rows.size()) + " personal-world parcel(s) after server-side filters.</div>";
+			const int shown_start = (world_filtered_total > 0) ? (world_start_i + 1) : 0;
+			page_out += "<div class=\"field-description\">Showing " + toString(shown_start) + "-" + toString(world_end_i) + " of " + toString(world_filtered_total) + " personal-world parcel(s) after server-side filters. Total personal-world parcels: " + toString(world_total_parcels) + ".</div>";
+
+			page_out += "<h3>Bulk actions (superadmin)</h3>";
+			if(superadmin)
+			{
+				page_out += "<div class=\"field-description\">Bulk actions apply to the current filtered dataset (q/owner/world/auction). Review filters before applying.</div>";
+
+				page_out += "<form action=\"/admin_bulk_set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
+				page_out += "<input type=\"hidden\" name=\"q\" value=\"" + web::Escaping::HTMLEscape(query_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"owner\" value=\"" + web::Escaping::HTMLEscape(owner_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"world\" value=\"" + web::Escaping::HTMLEscape(world_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"auction\" value=\"" + web::Escaping::HTMLEscape(auction_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(current_view_url) + "\">";
+				page_out += "<label for=\"bulk-world-owner\">Set owner for filtered parcels</label>";
+				page_out += "<input id=\"bulk-world-owner\" type=\"text\" name=\"new_owner_ref\" placeholder=\"owner id/name\">";
+				page_out += "<input type=\"submit\" value=\"Bulk set owner\" onclick=\"return confirm('Set owner for all filtered personal-world parcels?');\" >";
+				page_out += "</form>";
+
+				page_out += "<form action=\"/admin_bulk_set_world_parcel_writers_post\" method=\"post\" class=\"msb-inline-form\">";
+				page_out += "<input type=\"hidden\" name=\"q\" value=\"" + web::Escaping::HTMLEscape(query_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"owner\" value=\"" + web::Escaping::HTMLEscape(owner_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"world\" value=\"" + web::Escaping::HTMLEscape(world_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"auction\" value=\"" + web::Escaping::HTMLEscape(auction_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(current_view_url) + "\">";
+				page_out += "<label for=\"bulk-world-editors\">Set editors for filtered parcels</label>";
+				page_out += "<input id=\"bulk-world-editors\" type=\"text\" name=\"writer_refs\" placeholder=\"editors ids/names\">";
+				page_out += "<input type=\"submit\" value=\"Bulk set editors\" onclick=\"return confirm('Set editors for all filtered personal-world parcels?');\" >";
+				page_out += "</form>";
+
+				page_out += "<form action=\"/admin_bulk_delete_world_parcels_post\" method=\"post\" class=\"msb-inline-form\">";
+				page_out += "<input type=\"hidden\" name=\"q\" value=\"" + web::Escaping::HTMLEscape(query_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"owner\" value=\"" + web::Escaping::HTMLEscape(owner_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"world\" value=\"" + web::Escaping::HTMLEscape(world_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"auction\" value=\"" + web::Escaping::HTMLEscape(auction_filter) + "\">";
+				page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(current_view_url) + "\">";
+				page_out += "<label><input type=\"checkbox\" name=\"allow_all\" value=\"1\"> allow delete when filters are empty</label>";
+				page_out += "<input type=\"submit\" value=\"Bulk delete filtered\" onclick=\"return confirm('Delete all filtered personal-world parcels? Parcels with auctions will be skipped.');\" >";
+				page_out += "</form>";
+			}
+			else
+			{
+				page_out += "<div class=\"field-description\">Bulk actions are available to superadmin only.</div>";
+			}
 			page_out += "</section>";
 		}
 	} // End Lock scope
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
+}
+
+
+void renderAdminWorldParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		const std::string world_name = normaliseWorldNameField(request.getURLParam("world").str());
+		const std::string parcel_id_str = stripHeadAndTailWhitespace(request.getURLParam("parcel_id").str());
+		if(world_name.empty())
+			throw glare::Exception("Missing world name in URL parameter 'world'.");
+		if(parcel_id_str.empty() || !isAllDigitsString(parcel_id_str))
+			throw glare::Exception("Invalid or missing 'parcel_id'.");
+
+		const ParcelID parcel_id((uint32)stringToUInt64(parcel_id_str));
+		if(!parcel_id.valid())
+			throw glare::Exception("Invalid parcel id.");
+
+		std::string page_out = sharedAdminHeader(world_state, request);
+		page_out += "<h2>Personal-world parcel details</h2>";
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			auto world_res = world_state.world_states.find(world_name);
+			if(world_res == world_state.world_states.end())
+				throw glare::Exception("World '" + world_name + "' not found.");
+
+			ServerWorldState* world = world_res->second.ptr();
+			auto parcel_res = world->getParcels(lock).find(parcel_id);
+			if(parcel_res == world->getParcels(lock).end())
+				throw glare::Exception("Parcel " + parcel_id.toString() + " not found in world '" + world_name + "'.");
+
+			const Parcel* parcel = parcel_res->second.ptr();
+			const Vec3d span = parcel->aabb_max - parcel->aabb_min;
+			const double origin_x = parcel->aabb_min.x;
+			const double origin_y = parcel->aabb_min.y;
+			const double size_x = span.x;
+			const double size_y = span.y;
+			const double area = std::max(0.0, size_x * size_y);
+			const double height = parcel->zbounds.y - parcel->zbounds.x;
+			const double build_volume = std::max(0.0, area * height);
+			const TimeStamp now = TimeStamp::currentTime();
+
+			const std::string owner_link_html = makeUserAdminLinkIfFound(world_state, parcel->owner_id, parcel->owner_id.toString());
+			std::string owner_name = parcel->owner_id.toString();
+			{
+				const auto owner_res = world_state.user_id_to_users.find(parcel->owner_id);
+				if(owner_res != world_state.user_id_to_users.end())
+					owner_name = owner_res->second->name;
+			}
+
+			std::string writers_csv;
+			std::string writers_html;
+			for(size_t i=0; i<parcel->writer_ids.size(); ++i)
+			{
+				const UserID writer_id = parcel->writer_ids[i];
+				std::string writer_ref = writer_id.toString();
+				std::string writer_link_html = web::Escaping::HTMLEscape(writer_ref);
+
+				const auto writer_res = world_state.user_id_to_users.find(writer_id);
+				if(writer_res != world_state.user_id_to_users.end())
+				{
+					writer_ref = writer_res->second->name;
+					writer_link_html = "<a href=\"/admin_user/" + writer_id.toString() + "\">" + web::Escaping::HTMLEscape(writer_res->second->name) + "</a>";
+				}
+
+				if(!writers_csv.empty())
+					writers_csv += ", ";
+				writers_csv += writer_ref;
+
+				if(!writers_html.empty())
+					writers_html += ", ";
+				writers_html += writer_link_html;
+			}
+			if(writers_html.empty())
+				writers_html = "-";
+
+			bool has_for_sale_auction = false;
+			bool has_sold_auction = false;
+			bool has_any_auction = false;
+			for(size_t i=0; i<parcel->parcel_auction_ids.size(); ++i)
+			{
+				const uint32 auction_id = parcel->parcel_auction_ids[i];
+				auto auction_res = world_state.parcel_auctions.find(auction_id);
+				if(auction_res == world_state.parcel_auctions.end())
+					continue;
+
+				has_any_auction = true;
+				const ParcelAuction* auction = auction_res->second.ptr();
+				if(auction->currentlyForSale(now))
+					has_for_sale_auction = true;
+				if(auction->auction_state == ParcelAuction::AuctionState_Sold)
+					has_sold_auction = true;
+			}
+
+			std::string auction_state;
+			if(has_for_sale_auction)
+				auction_state = "<span class=\"feature-enabled\">for sale</span>";
+			else if(has_sold_auction)
+				auction_state = "<span class=\"feature-disabled\">sold</span>";
+			else if(has_any_auction)
+				auction_state = "history";
+			else
+				auction_state = "none";
+
+			const std::string world_url = "/world/" + WorldHandlers::URLEscapeWorldName(world_name);
+			const std::string detail_url = makeAdminWorldParcelURL(world_name, parcel->id);
+			const std::string list_url = "/admin_world_parcels?world=" + web::Escaping::URLEscape(world_name);
+
+			page_out += "<section class=\"grouped-region\">";
+			page_out += "<div class=\"msb-row-actions\">";
+			page_out += "<a href=\"" + list_url + "\">Back to personal-world parcels</a>";
+			page_out += "<a href=\"" + world_url + "\">Open world</a>";
+			page_out += "<a href=\"" + list_url + "&q=" + web::Escaping::URLEscape(parcel->id.toString()) + "\">Find this parcel in table</a>";
+			page_out += "</div>";
+			page_out += "<table class=\"msb-table\" aria-label=\"Personal world parcel details\">";
+			page_out += "<tbody>";
+			page_out += "<tr><th>World</th><td><a href=\"" + world_url + "\">" + web::Escaping::HTMLEscape(world_name) + "</a></td></tr>";
+			page_out += "<tr><th>Parcel ID</th><td>" + parcel->id.toString() + "</td></tr>";
+			page_out += "<tr><th>Owner</th><td>" + owner_link_html + " (id " + parcel->owner_id.toString() + ")</td></tr>";
+			page_out += "<tr><th>Editors</th><td>" + writers_html + "</td></tr>";
+			page_out += "<tr><th>Description</th><td>" + web::Escaping::HTMLEscape(parcel->description.empty() ? std::string("-") : parcel->description) + "</td></tr>";
+			page_out += "<tr><th>Created</th><td>" + parcel->created_time.RFC822FormatedString() + " (" + parcel->created_time.timeAgoDescription() + ")</td></tr>";
+			page_out += "<tr><th>Origin</th><td>x=" + doubleToStringMaxNDecimalPlaces(origin_x, 2) + ", y=" + doubleToStringMaxNDecimalPlaces(origin_y, 2) + "</td></tr>";
+			page_out += "<tr><th>Size</th><td>" + doubleToStringMaxNDecimalPlaces(size_x, 2) + " x " + doubleToStringMaxNDecimalPlaces(size_y, 2) + " m</td></tr>";
+			page_out += "<tr><th>Z-bounds</th><td>" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 2) + " .. " + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 2) + " m</td></tr>";
+			page_out += "<tr><th>Area</th><td>" + doubleToStringMaxNDecimalPlaces(area, 2) + " m^2</td></tr>";
+			page_out += "<tr><th>Height</th><td>" + doubleToStringMaxNDecimalPlaces(height, 2) + " m</td></tr>";
+			page_out += "<tr><th>Build volume</th><td>" + doubleToStringMaxNDecimalPlaces(build_volume, 2) + " m^3</td></tr>";
+			page_out += "<tr><th>Screenshots</th><td>" + toString((int)parcel->screenshot_ids.size()) + "</td></tr>";
+			page_out += "<tr><th>Auction state</th><td>" + auction_state + "</td></tr>";
+			page_out += "</tbody>";
+			page_out += "</table>";
+			page_out += "</section>";
+
+			page_out += "<section id=\"quick-actions\" class=\"grouped-region\">";
+			page_out += "<h3>Quick actions</h3>";
+			page_out += "<div class=\"msb-row-actions\">";
+			page_out += "<a href=\"" + world_url + "\">Open world page</a>";
+			page_out += "<a href=\"/admin_parcel_auctions\">Open parcel auctions list</a>";
+			page_out += "</div>";
+			page_out += "<div><b>Screenshots:</b> " + toString((int)parcel->screenshot_ids.size()) + "</div>";
+			if(parcel->screenshot_ids.empty())
+				page_out += "<div class=\"field-description\">No screenshots linked to this parcel yet. Use the action below to create close and far screenshots.</div>";
+			else
+			{
+				page_out += "<div class=\"msb-row-actions\">";
+				for(size_t i=0; i<parcel->screenshot_ids.size(); ++i)
+					page_out += "<a href=\"/screenshot/" + toString(parcel->screenshot_ids[i]) + "\">Screenshot " + toString(parcel->screenshot_ids[i]) + "</a>";
+				page_out += "</div>";
+			}
+			page_out += "<form action=\"/admin_regenerate_world_parcel_screenshots\" method=\"post\" class=\"msb-inline-form\">";
+			page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+			page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+			page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(detail_url + "#quick-actions") + "\">";
+			page_out += "<input type=\"submit\" value=\"" + std::string(parcel->screenshot_ids.empty() ? "Create parcel screenshots" : "Regenerate parcel screenshots") + "\" onclick=\"return confirm('Create or regenerate screenshots for this parcel?');\" >";
+			page_out += "</form>";
+			page_out += "<div><b>Auctions linked:</b> " + toString((int)parcel->parcel_auction_ids.size()) + "</div>";
+			if(parcel->parcel_auction_ids.empty())
+			{
+				page_out += "<div class=\"field-description\">No auction records linked. Creating new auctions is currently available only for root-world parcels.</div>";
+			}
+			else
+			{
+				page_out += "<div class=\"msb-row-actions\">";
+				for(size_t i=0; i<parcel->parcel_auction_ids.size(); ++i)
+				{
+					const uint32 auction_id = parcel->parcel_auction_ids[i];
+					page_out += "<a href=\"/parcel_auction/" + toString(auction_id) + "\">Auction " + toString(auction_id) + "</a>";
+					page_out += "<a href=\"/admin_parcel_auction/" + toString(auction_id) + "\">Admin auction " + toString(auction_id) + "</a>";
+				}
+				page_out += "</div>";
+			}
+			page_out += "</section>";
+
+			page_out += "<section id=\"geometry\" class=\"grouped-region\">";
+			page_out += "<h3>Geometry</h3>";
+			page_out += "<form action=\"/set_world_parcel_geometry_post\" method=\"post\" class=\"msb-create-parcel-form\" data-admin-create-parcel-form=\"1\">";
+			page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+			page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+			page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(detail_url) + "\">";
+			page_out += "<div class=\"msb-inline-fields\">";
+			page_out += "<label>Origin X</label>";
+			page_out += "<input type=\"text\" name=\"origin_x\" value=\"" + doubleToStringMaxNDecimalPlaces(origin_x, 2) + "\">";
+			page_out += "<label>Origin Y</label>";
+			page_out += "<input type=\"text\" name=\"origin_y\" value=\"" + doubleToStringMaxNDecimalPlaces(origin_y, 2) + "\">";
+			page_out += "</div>";
+			page_out += "<div class=\"msb-inline-fields\">";
+			page_out += "<label>Size X</label>";
+			page_out += "<input type=\"text\" name=\"size_x\" value=\"" + doubleToStringMaxNDecimalPlaces(size_x, 2) + "\">";
+			page_out += "<label>Size Y</label>";
+			page_out += "<input type=\"text\" name=\"size_y\" value=\"" + doubleToStringMaxNDecimalPlaces(size_y, 2) + "\">";
+			page_out += "</div>";
+			page_out += "<div class=\"msb-inline-fields\">";
+			page_out += "<label>Min Z</label>";
+			page_out += "<input type=\"text\" name=\"min_z\" value=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.x, 2) + "\">";
+			page_out += "<label>Max Z</label>";
+			page_out += "<input type=\"text\" name=\"max_z\" value=\"" + doubleToStringMaxNDecimalPlaces(parcel->zbounds.y, 2) + "\">";
+			page_out += "</div>";
+			page_out += "<div class=\"msb-live-preview\" data-parcel-live-preview=\"1\">";
+			page_out += "<div class=\"msb-live-item\">Area: <b data-preview-area>" + doubleToStringMaxNDecimalPlaces(area, 1) + "</b> m<sup>2</sup></div>";
+			page_out += "<div class=\"msb-live-item\">Height: <b data-preview-height>" + doubleToStringMaxNDecimalPlaces(height, 1) + "</b> m</div>";
+			page_out += "<div class=\"msb-live-item\">Build volume: <b data-preview-volume>" + doubleToStringMaxNDecimalPlaces(build_volume, 1) + "</b> m<sup>3</sup></div>";
+			page_out += "</div>";
+			page_out += "<input type=\"submit\" value=\"Save geometry\" onclick=\"return confirm('Update geometry for parcel " + parcel->id.toString() + " in world " + web::Escaping::HTMLEscape(world_name) + "?');\" >";
+			page_out += "</form>";
+			page_out += "</section>";
+
+			page_out += "<section id=\"owner\" class=\"grouped-region\">";
+			page_out += "<h3>Owner</h3>";
+			page_out += "<form action=\"/set_world_parcel_owner_post\" method=\"post\" class=\"msb-inline-form\">";
+			page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+			page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+			page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(detail_url) + "\">";
+			page_out += "<label for=\"admin-world-parcel-owner-ref\">Owner username or id</label>";
+			page_out += "<input id=\"admin-world-parcel-owner-ref\" type=\"text\" name=\"new_owner_ref\" value=\"" + web::Escaping::HTMLEscape(owner_name) + "\" placeholder=\"owner id/name\">";
+			page_out += "<input type=\"submit\" value=\"Set owner\" onclick=\"return confirm('Set owner for parcel " + parcel->id.toString() + "?');\" >";
+			page_out += "</form>";
+			page_out += "</section>";
+
+			page_out += "<section id=\"editors\" class=\"grouped-region\">";
+			page_out += "<h3>Editors</h3>";
+			page_out += "<form action=\"/set_world_parcel_writers_post\" method=\"post\" class=\"msb-inline-form\">";
+			page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+			page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+			page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(detail_url) + "\">";
+			page_out += "<label for=\"admin-world-parcel-writer-refs\">Editors usernames or ids (comma-separated)</label>";
+			page_out += "<input id=\"admin-world-parcel-writer-refs\" type=\"text\" name=\"writer_refs\" value=\"" + web::Escaping::HTMLEscape(writers_csv) + "\" placeholder=\"editors ids/names\">";
+			page_out += "<input type=\"submit\" value=\"Set editors\" onclick=\"return confirm('Set editors for parcel " + parcel->id.toString() + "?');\" >";
+			page_out += "</form>";
+			page_out += "</section>";
+
+			page_out += "<section id=\"danger\" class=\"grouped-region\">";
+			page_out += "<h3>Danger zone</h3>";
+			page_out += "<form action=\"/admin_delete_parcel\" method=\"post\" class=\"msb-inline-form\">";
+			page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name) + "\">";
+			page_out += "<input type=\"hidden\" name=\"parcel_id\" value=\"" + parcel->id.toString() + "\">";
+			page_out += "<input type=\"hidden\" name=\"redirect_path\" value=\"" + web::Escaping::HTMLEscape(list_url) + "\">";
+			page_out += "<input type=\"submit\" value=\"Delete parcel\" onclick=\"return confirm('Delete parcel " + parcel->id.toString() + " from world " + web::Escaping::HTMLEscape(world_name) + "?');\" >";
+			page_out += "</form>";
+			page_out += "</section>";
+		} // End lock scope
+
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("renderAdminWorldParcelPage error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
 }
 
 
@@ -1992,6 +2655,53 @@ void renderAdminChatBotsPage(ServerAllWorldsState& world_state, const web::Reque
 	page_out += "<input type=\"hidden\" name=\"username\" value=\"" + web::Escaping::HTMLEscape(username_filter) + "\">";
 	page_out += "<input type=\"submit\" value=\"Delete matching chatbots\" onclick=\"return confirm('Delete all matching chatbots?');\" >";
 	page_out += "</form>";
+
+	page_out += "<div class=\"grouped-region\">";
+	page_out += "<h3>Bulk profile update (matching filters)</h3>";
+	page_out += "<form action=\"/admin_bulk_update_chatbots_post\" method=\"post\" class=\"full-width\">";
+	page_out += "<input type=\"hidden\" name=\"world_name\" value=\"" + web::Escaping::HTMLEscape(world_name_filter) + "\">";
+	page_out += "<input type=\"hidden\" name=\"username\" value=\"" + web::Escaping::HTMLEscape(username_filter) + "\">";
+
+	page_out += "<div class=\"form-field\">";
+	page_out += "<label><input type=\"checkbox\" name=\"apply_model_url\" value=\"1\"> Set avatar model URL</label><br/>";
+	page_out += "<input type=\"text\" name=\"model_url\" value=\"\">";
+	page_out += "</div>";
+
+	page_out += "<div class=\"form-field\">";
+	page_out += "<label><input type=\"checkbox\" name=\"apply_prompt\" value=\"1\"> Replace chatbot custom prompt</label><br/>";
+	page_out += "<textarea rows=\"6\" class=\"full-width\" name=\"custom_prompt_part\"></textarea>";
+	page_out += "</div>";
+
+	page_out += "<div class=\"form-field\">";
+	page_out += "<label><input type=\"checkbox\" name=\"apply_greeting\" value=\"1\"> Update greeting animation</label><br/>";
+	page_out += "Name: <input type=\"text\" name=\"greeting_name\" value=\"\"> ";
+	page_out += "URL: <input type=\"text\" name=\"greeting_url\" value=\"\"><br/>";
+	page_out += "<label><input type=\"checkbox\" name=\"greeting_animate_head\" value=\"1\"> animate head</label> ";
+	page_out += "<label><input type=\"checkbox\" name=\"greeting_loop\" value=\"1\"> loop</label> ";
+	page_out += "Cooldown (s): <input type=\"number\" step=\"any\" name=\"greeting_cooldown_s\" value=\"8\">";
+	page_out += "</div>";
+
+	page_out += "<div class=\"form-field\">";
+	page_out += "<label><input type=\"checkbox\" name=\"apply_idle\" value=\"1\"> Update idle animation</label><br/>";
+	page_out += "Name: <input type=\"text\" name=\"idle_name\" value=\"\"> ";
+	page_out += "URL: <input type=\"text\" name=\"idle_url\" value=\"\"><br/>";
+	page_out += "<label><input type=\"checkbox\" name=\"idle_animate_head\" value=\"1\"> animate head</label> ";
+	page_out += "<label><input type=\"checkbox\" name=\"idle_loop\" value=\"1\"> loop</label> ";
+	page_out += "Interval (s): <input type=\"number\" step=\"any\" name=\"idle_interval_s\" value=\"30\">";
+	page_out += "</div>";
+
+	page_out += "<div class=\"form-field\">";
+	page_out += "<label><input type=\"checkbox\" name=\"apply_reactive\" value=\"1\"> Update reactive animation</label><br/>";
+	page_out += "Name: <input type=\"text\" name=\"reactive_name\" value=\"\"> ";
+	page_out += "URL: <input type=\"text\" name=\"reactive_url\" value=\"\"><br/>";
+	page_out += "<label><input type=\"checkbox\" name=\"reactive_animate_head\" value=\"1\"> animate head</label> ";
+	page_out += "<label><input type=\"checkbox\" name=\"reactive_loop\" value=\"1\"> loop</label> ";
+	page_out += "Cooldown (s): <input type=\"number\" step=\"any\" name=\"reactive_cooldown_s\" value=\"6\">";
+	page_out += "</div>";
+
+	page_out += "<input type=\"submit\" value=\"Apply bulk chatbot profile\" onclick=\"return confirm('Apply profile update to all matching chatbots?');\" >";
+	page_out += "</form>";
+	page_out += "</div>";
 	page_out += "<hr/>";
 
 	{ // lock scope
@@ -2922,6 +3632,7 @@ void handleDeleteParcelPost(ServerAllWorldsState& world_state, const web::Reques
 		if(!parcel_id.valid())
 			throw glare::Exception("Invalid parcel_id.");
 		const std::string world_name = normaliseWorldNameField(request.getPostField("world_name").str());
+		const std::string redirect_path = stripHeadAndTailWhitespace(request.getPostField("redirect_path").str());
 
 		{ // Lock scope
 			WorldStateLock lock(world_state.mutex);
@@ -2964,7 +3675,9 @@ void handleDeleteParcelPost(ServerAllWorldsState& world_state, const web::Reques
 			world_state.addAdminAuditLogEntry(user->id, user->name, "Deleted parcel " + parcel_id.toString() + " from world '" + world_display_name + "'.");
 		} // End lock scope
 
-		if(world_name.empty())
+		if(!redirect_path.empty() && hasPrefix(redirect_path, "/") && !hasPrefix(redirect_path, "//"))
+			web::ResponseUtils::writeRedirectTo(reply_info, redirect_path);
+		else if(world_name.empty())
 			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_parcels");
 		else
 			web::ResponseUtils::writeRedirectTo(reply_info, "/admin_world_parcels?world=" + web::Escaping::URLEscape(world_name));
@@ -2973,6 +3686,404 @@ void handleDeleteParcelPost(ServerAllWorldsState& world_state, const web::Reques
 	{
 		if(!request.fuzzing)
 			conPrint("handleDeleteParcelPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+struct WorldParcelMatch
+{
+	std::string world_name;
+	ServerWorldState* world = NULL;
+	ParcelRef parcel;
+};
+
+
+static void collectFilteredWorldParcels(ServerAllWorldsState& world_state, const WorldParcelFilterFields& filter, const TimeStamp& now, WorldStateLock& lock, std::vector<WorldParcelMatch>& matches_out)
+{
+	const Reference<ServerWorldState> root_world = world_state.getRootWorldState();
+	for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+	{
+		ServerWorldState* world = world_it->second.ptr();
+		if(world == root_world.ptr())
+			continue;
+
+		for(auto parcel_it = world->getParcels(lock).begin(); parcel_it != world->getParcels(lock).end(); ++parcel_it)
+		{
+			ParcelRef parcel = parcel_it->second;
+
+			std::string owner_username = "[No user found]";
+			const auto user_res = world_state.user_id_to_users.find(parcel->owner_id);
+			if(user_res != world_state.user_id_to_users.end())
+				owner_username = user_res->second->name;
+
+			std::string editors_summary;
+			for(size_t z=0; z<parcel->writer_ids.size(); ++z)
+			{
+				if(!editors_summary.empty())
+					editors_summary += ", ";
+
+				const auto writer_res = world_state.user_id_to_users.find(parcel->writer_ids[z]);
+				if(writer_res != world_state.user_id_to_users.end())
+					editors_summary += writer_res->second->name;
+				else
+					editors_summary += parcel->writer_ids[z].toString();
+			}
+
+			bool has_for_sale_auction = false;
+			bool has_sold_auction = false;
+			bool has_any_auction = false;
+			for(size_t i=0; i<parcel->parcel_auction_ids.size(); ++i)
+			{
+				const uint32 auction_id = parcel->parcel_auction_ids[i];
+				const auto auction_res = world_state.parcel_auctions.find(auction_id);
+				if(auction_res == world_state.parcel_auctions.end())
+					continue;
+
+				has_any_auction = true;
+				const ParcelAuction* auction = auction_res->second.ptr();
+				if(auction->currentlyForSale(now))
+					has_for_sale_auction = true;
+				if(auction->auction_state == ParcelAuction::AuctionState_Sold)
+					has_sold_auction = true;
+			}
+
+			if(worldParcelMatchesFilters(filter, world_it->first, *parcel, owner_username, editors_summary, has_for_sale_auction, has_sold_auction, has_any_auction))
+				matches_out.push_back({world_it->first, world, parcel});
+		}
+	}
+}
+
+
+void handleRegenerateWorldParcelScreenshotsPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		const std::string world_name = normaliseWorldNameField(request.getPostField("world_name").str());
+		const ParcelID parcel_id = ParcelID(request.getPostIntField("parcel_id"));
+		const std::string fallback_redirect = makeAdminWorldParcelURL(world_name, parcel_id);
+		const std::string redirect_path = getSafeRedirectPathOrFallback(request, fallback_redirect);
+
+		{ // Lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+			if(!isGodUser(logged_in_user->id))
+				throw glare::Exception("Only superadmin can regenerate screenshots for personal-world parcels.");
+
+			auto world_res = world_state.world_states.find(world_name);
+			if(world_res == world_state.world_states.end())
+				throw glare::Exception("World '" + world_name + "' not found.");
+
+			ServerWorldState* world = world_res->second.ptr();
+			auto parcel_res = world->getParcels(lock).find(parcel_id);
+			if(parcel_res == world->getParcels(lock).end())
+				throw glare::Exception("Parcel " + parcel_id.toString() + " not found in world '" + world_name + "'.");
+
+			ParcelRef parcel_ref = parcel_res->second;
+			Parcel* parcel = parcel_ref.ptr();
+			int created_count = 0;
+			int updated_count = 0;
+
+			if(parcel->screenshot_ids.empty())
+			{
+				uint64 next_shot_id = world_state.getNextScreenshotUID();
+
+				// Create close-in screenshot
+				{
+					ScreenshotRef shot = new Screenshot();
+					shot->id = next_shot_id++;
+					parcel->getScreenShotPosAndAngles(shot->cam_pos, shot->cam_angles);
+					shot->is_map_tile = false;
+					shot->width_px = 650;
+					shot->highlight_parcel_id = (int)parcel->id.value();
+					shot->created_time = TimeStamp::currentTime();
+					shot->state = Screenshot::ScreenshotState_notdone;
+
+					world_state.screenshots[shot->id] = shot;
+					parcel->screenshot_ids.push_back(shot->id);
+					world_state.addScreenshotAsDBDirty(shot);
+					created_count++;
+				}
+
+				// Create zoomed-out screenshot
+				{
+					ScreenshotRef shot = new Screenshot();
+					shot->id = next_shot_id++;
+					parcel->getFarScreenShotPosAndAngles(shot->cam_pos, shot->cam_angles);
+					shot->is_map_tile = false;
+					shot->width_px = 650;
+					shot->highlight_parcel_id = (int)parcel->id.value();
+					shot->created_time = TimeStamp::currentTime();
+					shot->state = Screenshot::ScreenshotState_notdone;
+
+					world_state.screenshots[shot->id] = shot;
+					parcel->screenshot_ids.push_back(shot->id);
+					world_state.addScreenshotAsDBDirty(shot);
+					created_count++;
+				}
+
+				world->addParcelAsDBDirty(parcel_ref, lock);
+			}
+			else
+			{
+				for(size_t z=0; z<parcel->screenshot_ids.size(); ++z)
+				{
+					const uint64 screenshot_id = parcel->screenshot_ids[z];
+					auto shot_res = world_state.screenshots.find(screenshot_id);
+					if(shot_res == world_state.screenshots.end())
+						continue;
+
+					Screenshot* shot = shot_res->second.ptr();
+					if(z == 0)
+						parcel->getScreenShotPosAndAngles(shot->cam_pos, shot->cam_angles);
+					else
+						parcel->getFarScreenShotPosAndAngles(shot->cam_pos, shot->cam_angles);
+
+					shot->is_map_tile = false;
+					shot->width_px = 650;
+					shot->highlight_parcel_id = (int)parcel->id.value();
+					shot->state = Screenshot::ScreenshotState_notdone;
+					world_state.addScreenshotAsDBDirty(shot);
+					updated_count++;
+				}
+			}
+
+			if((created_count > 0) || (updated_count > 0))
+			{
+				world_state.markAsChanged();
+				if(created_count > 0)
+					world_state.setUserWebMessage(logged_in_user->id, "Created " + toString(created_count) + " screenshot(s) and queued regeneration for parcel " + parcel_id.toString() + " in world '" + world_name + "'.");
+				else
+					world_state.setUserWebMessage(logged_in_user->id, "Marked " + toString(updated_count) + " screenshot(s) for regeneration for parcel " + parcel_id.toString() + " in world '" + world_name + "'.");
+				world_state.addAdminAuditLogEntry(logged_in_user->id, logged_in_user->name, "World parcel screenshots action: world='" + world_name + "', parcel=" + parcel_id.toString() + ", created=" + toString(created_count) + ", regenerated=" + toString(updated_count) + ".");
+			}
+			else
+			{
+				world_state.setUserWebMessage(logged_in_user->id, "No screenshots were updated for this parcel.");
+			}
+		} // End lock scope
+
+		web::ResponseUtils::writeRedirectTo(reply_info, redirect_path);
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleRegenerateWorldParcelScreenshotsPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleBulkSetWorldParcelOwnerPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const std::string new_owner_ref = stripHeadAndTailWhitespace(request.getPostField("new_owner_ref").str());
+		const WorldParcelFilterFields filter = getWorldParcelFiltersFromPost(request);
+		const std::string redirect_path = getSafeRedirectPathOrFallback(request, "/admin_world_parcels");
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+			if(!isGodUser(logged_in_user->id))
+				throw glare::Exception("Only superadmin can execute bulk owner updates.");
+
+			UserID new_owner_id;
+			std::string resolve_error;
+			if(!resolveUserIDFromRef(world_state, new_owner_ref, new_owner_id, resolve_error))
+				throw glare::Exception(resolve_error);
+
+			std::vector<WorldParcelMatch> matches;
+			collectFilteredWorldParcels(world_state, filter, TimeStamp::currentTime(), lock, matches);
+
+			int updated = 0;
+			for(size_t i=0; i<matches.size(); ++i)
+			{
+				Parcel* parcel = matches[i].parcel.ptr();
+				parcel->owner_id = new_owner_id;
+				if(!ContainerUtils::contains(parcel->admin_ids, new_owner_id))
+					parcel->admin_ids.push_back(new_owner_id);
+				if(!ContainerUtils::contains(parcel->writer_ids, new_owner_id))
+					parcel->writer_ids.push_back(new_owner_id);
+				matches[i].world->addParcelAsDBDirty(matches[i].parcel, lock);
+				updated++;
+			}
+
+			if(updated > 0)
+			{
+				world_state.denormaliseData();
+				world_state.markAsChanged();
+			}
+			world_state.setUserWebMessage(logged_in_user->id, "Bulk owner update complete: " + toString(updated) + " parcel(s) updated.");
+			world_state.addAdminAuditLogEntry(
+				logged_in_user->id,
+				logged_in_user->name,
+				"Bulk set world parcel owner: updated=" + toString(updated) + ", owner_ref='" + new_owner_ref + "', q='" + filter.query_filter + "', owner='" + filter.owner_filter + "', world='" + filter.world_filter + "', auction='" + filter.auction_filter + "'.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, redirect_path);
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleBulkSetWorldParcelOwnerPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleBulkSetWorldParcelWritersPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const std::string writer_refs = request.getPostField("writer_refs").str();
+		const WorldParcelFilterFields filter = getWorldParcelFiltersFromPost(request);
+		const std::string redirect_path = getSafeRedirectPathOrFallback(request, "/admin_world_parcels");
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+			if(!isGodUser(logged_in_user->id))
+				throw glare::Exception("Only superadmin can execute bulk editors updates.");
+
+			std::vector<UserID> base_writer_ids;
+			std::string parse_error;
+			if(!parseCommaSeparatedUserRefsToIDs(world_state, writer_refs, base_writer_ids, parse_error))
+				throw glare::Exception(parse_error);
+
+			std::vector<WorldParcelMatch> matches;
+			collectFilteredWorldParcels(world_state, filter, TimeStamp::currentTime(), lock, matches);
+
+			int updated = 0;
+			for(size_t i=0; i<matches.size(); ++i)
+			{
+				Parcel* parcel = matches[i].parcel.ptr();
+				std::vector<UserID> writer_ids = base_writer_ids;
+				if(!ContainerUtils::contains(writer_ids, parcel->owner_id))
+					writer_ids.push_back(parcel->owner_id);
+				parcel->admin_ids = writer_ids;
+				parcel->writer_ids = writer_ids;
+				matches[i].world->addParcelAsDBDirty(matches[i].parcel, lock);
+				updated++;
+			}
+
+			if(updated > 0)
+			{
+				world_state.denormaliseData();
+				world_state.markAsChanged();
+			}
+			world_state.setUserWebMessage(logged_in_user->id, "Bulk editors update complete: " + toString(updated) + " parcel(s) updated.");
+			world_state.addAdminAuditLogEntry(
+				logged_in_user->id,
+				logged_in_user->name,
+				"Bulk set world parcel editors: updated=" + toString(updated) + ", q='" + filter.query_filter + "', owner='" + filter.owner_filter + "', world='" + filter.world_filter + "', auction='" + filter.auction_filter + "'.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, redirect_path);
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleBulkSetWorldParcelWritersPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleBulkDeleteWorldParcelsPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const WorldParcelFilterFields filter = getWorldParcelFiltersFromPost(request);
+		const bool allow_delete_all = (request.getPostField("allow_all") == "1");
+		const std::string redirect_path = getSafeRedirectPathOrFallback(request, "/admin_world_parcels");
+
+		if(!allow_delete_all && filter.query_filter.empty() && filter.owner_filter.empty() && filter.world_filter.empty() && (filter.auction_filter == "all"))
+			throw glare::Exception("Refusing bulk delete without filters. Add filters or enable 'allow delete when filters are empty'.");
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+			if(!isGodUser(logged_in_user->id))
+				throw glare::Exception("Only superadmin can execute bulk delete.");
+
+			std::vector<WorldParcelMatch> matches;
+			collectFilteredWorldParcels(world_state, filter, TimeStamp::currentTime(), lock, matches);
+
+			int deleted = 0;
+			int skipped_with_auctions = 0;
+			for(size_t i=0; i<matches.size(); ++i)
+			{
+				ParcelRef parcel = matches[i].parcel;
+				if(!parcel->parcel_auction_ids.empty())
+				{
+					skipped_with_auctions++;
+					continue;
+				}
+
+				matches[i].world->getDBDirtyParcels(lock).erase(parcel);
+				if(parcel->database_key.valid())
+					world_state.db_records_to_delete.insert(parcel->database_key);
+				matches[i].world->getParcels(lock).erase(parcel->id);
+				deleted++;
+			}
+
+			if(deleted > 0)
+				world_state.markAsChanged();
+			world_state.setUserWebMessage(logged_in_user->id, "Bulk delete complete: deleted=" + toString(deleted) + ", skipped_with_auctions=" + toString(skipped_with_auctions) + ".");
+			world_state.addAdminAuditLogEntry(
+				logged_in_user->id,
+				logged_in_user->name,
+				"Bulk deleted world parcels: deleted=" + toString(deleted) + ", skipped_with_auctions=" + toString(skipped_with_auctions) + ", q='" + filter.query_filter + "', owner='" + filter.owner_filter + "', world='" + filter.world_filter + "', auction='" + filter.auction_filter + "'.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, redirect_path);
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleBulkDeleteWorldParcelsPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }
@@ -3113,6 +4224,169 @@ void handleSetChatBotsDisabledPost(ServerAllWorldsState& world_state, const web:
 	{
 		if(!request.fuzzing)
 			conPrint("handleSetChatBotsDisabledPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleBulkUpdateChatBotsPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const std::string world_name_filter = stripHeadAndTailWhitespace(request.getPostField("world_name").str());
+		const std::string username_filter = stripHeadAndTailWhitespace(request.getPostField("username").str());
+
+		const bool apply_model_url = postCheckboxIsChecked(request, "apply_model_url");
+		const bool apply_prompt = postCheckboxIsChecked(request, "apply_prompt");
+		const bool apply_greeting = postCheckboxIsChecked(request, "apply_greeting");
+		const bool apply_idle = postCheckboxIsChecked(request, "apply_idle");
+		const bool apply_reactive = postCheckboxIsChecked(request, "apply_reactive");
+
+		std::string model_url = stripHeadAndTailWhitespace(request.getPostField("model_url").str());
+		if(model_url.size() > 10000)
+			model_url.resize(10000);
+
+		std::string custom_prompt = request.getPostField("custom_prompt_part").str();
+		if(custom_prompt.size() > ChatBot::MAX_CUSTOM_PROMPT_PART_SIZE)
+			custom_prompt.resize(ChatBot::MAX_CUSTOM_PROMPT_PART_SIZE);
+
+		const auto clamp_anim_time = [](float x) { return std::max(0.f, std::min(x, 3600.f)); };
+
+		std::string greeting_name = stripHeadAndTailWhitespace(request.getPostField("greeting_name").str());
+		std::string idle_name = stripHeadAndTailWhitespace(request.getPostField("idle_name").str());
+		std::string reactive_name = stripHeadAndTailWhitespace(request.getPostField("reactive_name").str());
+		if(greeting_name.size() > ChatBot::MAX_GESTURE_NAME_SIZE) greeting_name.resize(ChatBot::MAX_GESTURE_NAME_SIZE);
+		if(idle_name.size() > ChatBot::MAX_GESTURE_NAME_SIZE) idle_name.resize(ChatBot::MAX_GESTURE_NAME_SIZE);
+		if(reactive_name.size() > ChatBot::MAX_GESTURE_NAME_SIZE) reactive_name.resize(ChatBot::MAX_GESTURE_NAME_SIZE);
+
+		std::string greeting_url = stripHeadAndTailWhitespace(request.getPostField("greeting_url").str());
+		std::string idle_url = stripHeadAndTailWhitespace(request.getPostField("idle_url").str());
+		std::string reactive_url = stripHeadAndTailWhitespace(request.getPostField("reactive_url").str());
+		if(greeting_url.size() > ChatBot::MAX_GESTURE_URL_SIZE) greeting_url.resize(ChatBot::MAX_GESTURE_URL_SIZE);
+		if(idle_url.size() > ChatBot::MAX_GESTURE_URL_SIZE) idle_url.resize(ChatBot::MAX_GESTURE_URL_SIZE);
+		if(reactive_url.size() > ChatBot::MAX_GESTURE_URL_SIZE) reactive_url.resize(ChatBot::MAX_GESTURE_URL_SIZE);
+
+		uint32 greeting_flags = 0;
+		if(postCheckboxIsChecked(request, "greeting_animate_head"))
+			greeting_flags |= SingleGestureSettings::FLAG_ANIMATE_HEAD;
+		if(postCheckboxIsChecked(request, "greeting_loop"))
+			greeting_flags |= SingleGestureSettings::FLAG_LOOP;
+
+		uint32 idle_flags = 0;
+		if(postCheckboxIsChecked(request, "idle_animate_head"))
+			idle_flags |= SingleGestureSettings::FLAG_ANIMATE_HEAD;
+		if(postCheckboxIsChecked(request, "idle_loop"))
+			idle_flags |= SingleGestureSettings::FLAG_LOOP;
+
+		uint32 reactive_flags = 0;
+		if(postCheckboxIsChecked(request, "reactive_animate_head"))
+			reactive_flags |= SingleGestureSettings::FLAG_ANIMATE_HEAD;
+		if(postCheckboxIsChecked(request, "reactive_loop"))
+			reactive_flags |= SingleGestureSettings::FLAG_LOOP;
+
+		const float greeting_cooldown_s = clamp_anim_time(parseFloatWithDefault(request, "greeting_cooldown_s", 8.f));
+		const float idle_interval_s = clamp_anim_time(parseFloatWithDefault(request, "idle_interval_s", 30.f));
+		const float reactive_cooldown_s = clamp_anim_time(parseFloatWithDefault(request, "reactive_cooldown_s", 6.f));
+
+		if(!apply_model_url && !apply_prompt && !apply_greeting && !apply_idle && !apply_reactive)
+			throw glare::Exception("No bulk update options selected.");
+
+		{ // lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			runtimeCheck(logged_in_user);
+
+			int num_updated = 0;
+			for(auto world_it = world_state.world_states.begin(); world_it != world_state.world_states.end(); ++world_it)
+			{
+				ServerWorldState* world = world_it->second.ptr();
+
+				for(auto chatbot_it = world->getChatBots(lock).begin(); chatbot_it != world->getChatBots(lock).end(); ++chatbot_it)
+				{
+					ChatBot* chatbot = chatbot_it->second.ptr();
+					const std::string owner_name = getUserNameForID(world_state, chatbot->owner_id);
+					if(!chatbotMatchesFilters(world_name_filter, username_filter, world_it->first, owner_name))
+						continue;
+
+					bool changed = false;
+
+					if(apply_model_url)
+					{
+						chatbot->avatar_settings.model_url = toURLString(model_url);
+						changed = true;
+					}
+					if(apply_prompt)
+					{
+						chatbot->custom_prompt_part = custom_prompt;
+						changed = true;
+					}
+					if(apply_greeting)
+					{
+						chatbot->greeting_gesture_name = greeting_name;
+						chatbot->greeting_gesture_URL = toURLString(greeting_url);
+						chatbot->greeting_gesture_flags = greeting_flags;
+						chatbot->greeting_gesture_cooldown_s = greeting_cooldown_s;
+						changed = true;
+					}
+					if(apply_idle)
+					{
+						chatbot->idle_gesture_name = idle_name;
+						chatbot->idle_gesture_URL = toURLString(idle_url);
+						chatbot->idle_gesture_flags = idle_flags;
+						chatbot->idle_gesture_interval_s = idle_interval_s;
+						changed = true;
+					}
+					if(apply_reactive)
+					{
+						chatbot->reactive_gesture_name = reactive_name;
+						chatbot->reactive_gesture_URL = toURLString(reactive_url);
+						chatbot->reactive_gesture_flags = reactive_flags;
+						chatbot->reactive_gesture_cooldown_s = reactive_cooldown_s;
+						changed = true;
+					}
+
+					if(changed)
+					{
+						if(chatbot->avatar && apply_model_url)
+						{
+							chatbot->avatar->avatar_settings = chatbot->avatar_settings;
+							chatbot->avatar->other_dirty = true;
+						}
+
+						world->addChatBotAsDBDirty(chatbot, lock);
+						num_updated++;
+					}
+				}
+			}
+
+			if(num_updated > 0)
+				world_state.markAsChanged();
+
+			world_state.setUserWebMessage(logged_in_user->id, "Updated " + toString(num_updated) + " chatbot(s) with bulk profile settings.");
+			world_state.addAdminAuditLogEntry(
+				logged_in_user->id,
+				logged_in_user->name,
+				"Bulk updated " + toString(num_updated) + " chatbot(s), world_filter='" + world_name_filter + "', username_filter='" + username_filter +
+				"', apply_model_url=" + boolToString(apply_model_url) + ", apply_prompt=" + boolToString(apply_prompt) +
+				", apply_greeting=" + boolToString(apply_greeting) + ", apply_idle=" + boolToString(apply_idle) + ", apply_reactive=" + boolToString(apply_reactive) + ".");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/admin_chatbots?world_name=" + web::Escaping::URLEscape(world_name_filter) + "&username=" + web::Escaping::URLEscape(username_filter));
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleBulkUpdateChatBotsPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }

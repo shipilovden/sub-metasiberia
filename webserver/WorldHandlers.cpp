@@ -837,6 +837,7 @@ void handleSetWorldParcelOwnerPost(ServerAllWorldsState& world_state, const web:
 		const std::string world_name = request.getPostField("world_name").str();
 		const ParcelID parcel_id = ParcelID(request.getPostIntField("parcel_id"));
 		const std::string new_owner_ref = stripHeadAndTailWhitespace(request.getPostField("new_owner_ref").str());
+		const std::string redirect_path = stripHeadAndTailWhitespace(request.getPostField("redirect_path").str());
 
 		bool redirect_to_login = false;
 
@@ -904,6 +905,8 @@ void handleSetWorldParcelOwnerPost(ServerAllWorldsState& world_state, const web:
 
 		if(redirect_to_login)
 			web::ResponseUtils::writeRedirectTo(reply_info, "/login");
+		else if(!redirect_path.empty() && hasPrefix(redirect_path, "/") && !hasPrefix(redirect_path, "//"))
+			web::ResponseUtils::writeRedirectTo(reply_info, redirect_path);
 		else
 			web::ResponseUtils::writeRedirectTo(reply_info, "/world/" + URLEscapeWorldName(world_name));
 	}
@@ -926,6 +929,7 @@ void handleSetWorldParcelWritersPost(ServerAllWorldsState& world_state, const we
 		const std::string world_name = request.getPostField("world_name").str();
 		const ParcelID parcel_id = ParcelID(request.getPostIntField("parcel_id"));
 		const std::string writer_refs_csv = request.getPostField("writer_refs").str();
+		const std::string redirect_path = stripHeadAndTailWhitespace(request.getPostField("redirect_path").str());
 
 		bool redirect_to_login = false;
 
@@ -994,6 +998,8 @@ void handleSetWorldParcelWritersPost(ServerAllWorldsState& world_state, const we
 
 		if(redirect_to_login)
 			web::ResponseUtils::writeRedirectTo(reply_info, "/login");
+		else if(!redirect_path.empty() && hasPrefix(redirect_path, "/") && !hasPrefix(redirect_path, "//"))
+			web::ResponseUtils::writeRedirectTo(reply_info, redirect_path);
 		else
 			web::ResponseUtils::writeRedirectTo(reply_info, "/world/" + URLEscapeWorldName(world_name));
 	}

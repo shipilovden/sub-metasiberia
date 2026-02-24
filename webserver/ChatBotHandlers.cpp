@@ -16,6 +16,7 @@ Copyright Glare Technologies Limited 2026 -
 #include "WebServerResponseUtils.h"
 #include "LoginHandlers.h"
 #include "../server/ServerWorldState.h"
+#include "../shared/GestureSettings.h"
 #include <ConPrint.h>
 #include <Exception.h>
 #include <Lock.h>
@@ -24,6 +25,8 @@ Copyright Glare Technologies Limited 2026 -
 #include <Parser.h>
 #include <MemMappedFile.h>
 #include <functional>
+#include <sstream>
+#include <algorithm>
 
 
 namespace ChatBotHandlers
@@ -52,6 +55,98 @@ static std::string normaliseWorldNameField(const std::string& world_field)
 	if(hasPrefix(trimmed, "sub://"))
 		return parseWorldNameFromSubURL(trimmed);
 	return trimmed;
+}
+
+
+static bool postCheckboxIsChecked(const web::RequestInfo& request, const std::string& field_name)
+{
+	return !request.getPostField(field_name).str().empty();
+}
+
+
+static float parseFloatWithDefault(const web::RequestInfo& request, const std::string& field_name, float default_val)
+{
+	const std::string s = stripHeadAndTailWhitespace(request.getPostField(field_name).str());
+	if(s.empty())
+		return default_val;
+
+	try
+	{
+		return (float)stringToDouble(s);
+	}
+	catch(glare::Exception&)
+	{
+		return default_val;
+	}
+}
+
+
+static int parseIntWithDefault(const web::RequestInfo& request, const std::string& field_name, int default_val)
+{
+	const std::string s = stripHeadAndTailWhitespace(request.getPostField(field_name).str());
+	if(s.empty())
+		return default_val;
+
+	try
+	{
+		return stringToInt(s);
+	}
+	catch(glare::Exception&)
+	{
+		return default_val;
+	}
+}
+
+
+static std::string matrixToEditableText(const Matrix4f& m)
+{
+	std::string s;
+	for(int row=0; row<4; ++row)
+	{
+		for(int col=0; col<4; ++col)
+		{
+			if(col > 0)
+				s += " ";
+			s += toString(m.elem(row, col));
+		}
+		if(row < 3)
+			s += "\n";
+	}
+	return s;
+}
+
+
+static bool parseMatrixFromEditableText(const std::string& s, Matrix4f& matrix_out)
+{
+	std::string cleaned = s;
+	for(size_t i=0; i<cleaned.size(); ++i)
+	{
+		const char c = cleaned[i];
+		if((c == ',') || (c == ';') || (c == '\t') || (c == '\r') || (c == '\n'))
+			cleaned[i] = ' ';
+	}
+
+	std::vector<float> values;
+	values.reserve(16);
+
+	std::stringstream ss(cleaned);
+	float v = 0.f;
+	while(ss >> v)
+		values.push_back(v);
+
+	if(values.size() != 16)
+		return false;
+
+	for(int i=0; i<16; ++i)
+		matrix_out.e[i] = values[i];
+
+	return true;
+}
+
+
+static float clampFloat(const float v, const float lo, const float hi)
+{
+	return std::max(lo, std::min(v, hi));
 }
 
 
@@ -175,15 +270,128 @@ void renderEditChatBotPage(ServerAllWorldsState& world_state, const web::Request
 						page += "</form>";
 
 
-						page += "<h3>Avatar Settings</h3>";
+						page += "<h3>Avatar + Animation</h3>";
+
+						WorldMaterial default_mat;
+						const WorldMaterial* mat0 = &default_mat;
+						if(!chatbot->avatar_settings.materials.empty() && chatbot->avatar_settings.materials[0].nonNull())
+							mat0 = chatbot->avatar_settings.materials[0].ptr();
 
 						page += "<div class=\"grouped-region\">";
-						page += "<div>Avatar settings model URL: " + web::Escaping::HTMLEscape(toString(chatbot->avatar_settings.model_url)) + "</div>";
+						page += "<div>Avatar model URL (current): <code>" + web::Escaping::HTMLEscape(toString(chatbot->avatar_settings.model_url)) + "</code></div>";
 
 						page += "<form action=\"/copy_user_avatar_settings_post\" method=\"post\">";
 						page += "<input type=\"hidden\" name=\"chatbot_id\" value=\"" + toString(chatbot_id) + "\">";
 						page += "<input type=\"submit\" value=\"Copy user's current avatar settings for ChatBot\">";
 						page += "</form>";
+
+						page += "<hr/>";
+						page += "<form action=\"/edit_chatbot_avatar_animation_post\" method=\"post\" class=\"full-width\">";
+						page += "<input type=\"hidden\" name=\"chatbot_id\" value=\"" + toString(chatbot_id) + "\">";
+
+						page += "<div class=\"form-field\">";
+						page += "<label>Avatar model URL</label><br/>";
+						page += "<input type=\"text\" name=\"avatar_model_url\" value=\"" + web::Escaping::HTMLEscape(toString(chatbot->avatar_settings.model_url)) + "\">";
+						page += "<div class=\"field-description\">URL to avatar model (.glb/.bmesh/.vox etc).</div>";
+						page += "</div>";
+
+						page += "<div class=\"form-field\">";
+						page += "<label>Avatar pre-transform matrix (16 floats)</label><br/>";
+						page += "<textarea rows=\"5\" class=\"full-width\" name=\"avatar_pre_transform\">" + web::Escaping::HTMLEscape(matrixToEditableText(chatbot->avatar_settings.pre_ob_to_world_matrix)) + "</textarea>";
+						page += "<div class=\"field-description\">Used for avatar pivot/orientation fix. Keep identity for default behavior.</div>";
+						page += "</div>";
+
+						page += "<div class=\"form-field\">";
+						page += "<label>Materials edit mode</label><br/>";
+						page += "<select name=\"material_mode\">";
+						page += "<option value=\"keep_existing\" selected>Keep existing materials</option>";
+						page += "<option value=\"single_material\">Replace with single material (slot 0)</option>";
+						page += "<option value=\"clear_all\">Clear all materials</option>";
+						page += "</select>";
+						page += "</div>";
+
+						page += "<div class=\"form-field\">";
+						page += "<label>Material 0 fields (used for single-material mode)</label><br/>";
+						page += "Colour RGB: ";
+						page += "<input type=\"number\" step=\"any\" name=\"mat0_colour_r\" value=\"" + toString(mat0->colour_rgb.r) + "\"> ";
+						page += "<input type=\"number\" step=\"any\" name=\"mat0_colour_g\" value=\"" + toString(mat0->colour_rgb.g) + "\"> ";
+						page += "<input type=\"number\" step=\"any\" name=\"mat0_colour_b\" value=\"" + toString(mat0->colour_rgb.b) + "\"><br/>";
+						page += "Colour texture URL: <input type=\"text\" name=\"mat0_colour_texture_url\" value=\"" + web::Escaping::HTMLEscape(toString(mat0->colour_texture_url)) + "\"><br/>";
+						page += "Normal map URL: <input type=\"text\" name=\"mat0_normal_map_url\" value=\"" + web::Escaping::HTMLEscape(toString(mat0->normal_map_url)) + "\"><br/>";
+						page += "Emission texture URL: <input type=\"text\" name=\"mat0_emission_texture_url\" value=\"" + web::Escaping::HTMLEscape(toString(mat0->emission_texture_url)) + "\"><br/>";
+						page += "Roughness: <input type=\"number\" step=\"any\" name=\"mat0_roughness\" value=\"" + toString(mat0->roughness.val) + "\"> ";
+						page += "Metallic: <input type=\"number\" step=\"any\" name=\"mat0_metallic\" value=\"" + toString(mat0->metallic_fraction.val) + "\"> ";
+						page += "Opacity: <input type=\"number\" step=\"any\" name=\"mat0_opacity\" value=\"" + toString(mat0->opacity.val) + "\"><br/>";
+						page += "Emission luminance/flux: <input type=\"number\" step=\"any\" name=\"mat0_emission_lum\" value=\"" + toString(mat0->emission_lum_flux_or_lum) + "\"> ";
+						page += "Flags: <input type=\"number\" name=\"mat0_flags\" value=\"" + toString((int)mat0->flags) + "\">";
+						page += "</div>";
+
+						const bool greeting_animate_head = BitUtils::isBitSet(chatbot->greeting_gesture_flags, SingleGestureSettings::FLAG_ANIMATE_HEAD);
+						const bool greeting_loop = BitUtils::isBitSet(chatbot->greeting_gesture_flags, SingleGestureSettings::FLAG_LOOP);
+						const bool idle_animate_head = BitUtils::isBitSet(chatbot->idle_gesture_flags, SingleGestureSettings::FLAG_ANIMATE_HEAD);
+						const bool idle_loop = BitUtils::isBitSet(chatbot->idle_gesture_flags, SingleGestureSettings::FLAG_LOOP);
+						const bool reactive_animate_head = BitUtils::isBitSet(chatbot->reactive_gesture_flags, SingleGestureSettings::FLAG_ANIMATE_HEAD);
+						const bool reactive_loop = BitUtils::isBitSet(chatbot->reactive_gesture_flags, SingleGestureSettings::FLAG_LOOP);
+
+						page += "<h4>Animation profile</h4>";
+						page += "<div class=\"form-field\">";
+						page += "<b>Greeting animation</b><br/>";
+						page += "Name: <input type=\"text\" name=\"greeting_name\" value=\"" + web::Escaping::HTMLEscape(chatbot->greeting_gesture_name) + "\"> ";
+						page += "URL: <input type=\"text\" name=\"greeting_url\" value=\"" + web::Escaping::HTMLEscape(toString(chatbot->greeting_gesture_URL)) + "\"><br/>";
+						page += "<label><input type=\"checkbox\" name=\"greeting_animate_head\" value=\"1\"" + std::string(greeting_animate_head ? " checked" : "") + "> animate head</label> ";
+						page += "<label><input type=\"checkbox\" name=\"greeting_loop\" value=\"1\"" + std::string(greeting_loop ? " checked" : "") + "> loop</label> ";
+						page += "Cooldown (s): <input type=\"number\" step=\"any\" name=\"greeting_cooldown_s\" value=\"" + toString(chatbot->greeting_gesture_cooldown_s) + "\">";
+						page += "</div>";
+
+						page += "<div class=\"form-field\">";
+						page += "<b>Idle animation</b><br/>";
+						page += "Name: <input type=\"text\" name=\"idle_name\" value=\"" + web::Escaping::HTMLEscape(chatbot->idle_gesture_name) + "\"> ";
+						page += "URL: <input type=\"text\" name=\"idle_url\" value=\"" + web::Escaping::HTMLEscape(toString(chatbot->idle_gesture_URL)) + "\"><br/>";
+						page += "<label><input type=\"checkbox\" name=\"idle_animate_head\" value=\"1\"" + std::string(idle_animate_head ? " checked" : "") + "> animate head</label> ";
+						page += "<label><input type=\"checkbox\" name=\"idle_loop\" value=\"1\"" + std::string(idle_loop ? " checked" : "") + "> loop</label> ";
+						page += "Interval (s): <input type=\"number\" step=\"any\" name=\"idle_interval_s\" value=\"" + toString(chatbot->idle_gesture_interval_s) + "\">";
+						page += "</div>";
+
+						page += "<div class=\"form-field\">";
+						page += "<b>Reactive animation</b><br/>";
+						page += "Name: <input type=\"text\" name=\"reactive_name\" value=\"" + web::Escaping::HTMLEscape(chatbot->reactive_gesture_name) + "\"> ";
+						page += "URL: <input type=\"text\" name=\"reactive_url\" value=\"" + web::Escaping::HTMLEscape(toString(chatbot->reactive_gesture_URL)) + "\"><br/>";
+						page += "<label><input type=\"checkbox\" name=\"reactive_animate_head\" value=\"1\"" + std::string(reactive_animate_head ? " checked" : "") + "> animate head</label> ";
+						page += "<label><input type=\"checkbox\" name=\"reactive_loop\" value=\"1\"" + std::string(reactive_loop ? " checked" : "") + "> loop</label> ";
+						page += "Cooldown (s): <input type=\"number\" step=\"any\" name=\"reactive_cooldown_s\" value=\"" + toString(chatbot->reactive_gesture_cooldown_s) + "\">";
+						page += "</div>";
+
+						page += "<input type=\"submit\" value=\"Save avatar + animation settings\">";
+						page += "</form>";
+
+						page += "<hr/>";
+						page += "<h4>Test animation playback</h4>";
+						page += "<form action=\"/play_chatbot_animation_post\" method=\"post\">";
+						page += "<input type=\"hidden\" name=\"chatbot_id\" value=\"" + toString(chatbot_id) + "\">";
+						page += "<input type=\"hidden\" name=\"gesture_slot\" value=\"greeting\">";
+						page += "<input type=\"submit\" value=\"Play greeting animation\">";
+						page += "</form>";
+						page += "<form action=\"/play_chatbot_animation_post\" method=\"post\">";
+						page += "<input type=\"hidden\" name=\"chatbot_id\" value=\"" + toString(chatbot_id) + "\">";
+						page += "<input type=\"hidden\" name=\"gesture_slot\" value=\"idle\">";
+						page += "<input type=\"submit\" value=\"Play idle animation\">";
+						page += "</form>";
+						page += "<form action=\"/play_chatbot_animation_post\" method=\"post\">";
+						page += "<input type=\"hidden\" name=\"chatbot_id\" value=\"" + toString(chatbot_id) + "\">";
+						page += "<input type=\"hidden\" name=\"gesture_slot\" value=\"reactive\">";
+						page += "<input type=\"submit\" value=\"Play reactive animation\">";
+						page += "</form>";
+
+						page += "<form action=\"/play_chatbot_animation_post\" method=\"post\" class=\"full-width\">";
+						page += "<input type=\"hidden\" name=\"chatbot_id\" value=\"" + toString(chatbot_id) + "\">";
+						page += "<input type=\"hidden\" name=\"gesture_slot\" value=\"custom\">";
+						page += "Custom name: <input type=\"text\" name=\"custom_name\" value=\"\"> ";
+						page += "Custom URL: <input type=\"text\" name=\"custom_url\" value=\"\"><br/>";
+						page += "<label><input type=\"checkbox\" name=\"custom_animate_head\" value=\"1\"> animate head</label> ";
+						page += "<label><input type=\"checkbox\" name=\"custom_loop\" value=\"1\"> loop</label> ";
+						page += "<input type=\"submit\" value=\"Play custom animation\">";
+						page += "</form>";
+
 						page += "</div>"; // End grouped-region div
 
 
@@ -616,6 +824,249 @@ void handleCopyUserAvatarSettingsPost(ServerAllWorldsState& world_state, const w
 	{
 		if(!request.fuzzing)
 			conPrint("handleCopyUserAvatarSettingsPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handleEditChatBotAvatarAnimationPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	try
+	{
+		if(world_state.isInReadOnlyMode())
+			throw glare::Exception("Server is in read-only mode, editing disabled currently.");
+
+		const int chatbot_id = request.getPostIntField("chatbot_id");
+		const std::string avatar_model_url = stripHeadAndTailWhitespace(request.getPostField("avatar_model_url").str());
+		const std::string avatar_pre_transform = request.getPostField("avatar_pre_transform").str();
+		const std::string material_mode = stripHeadAndTailWhitespace(request.getPostField("material_mode").str());
+
+		{ // Lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			if(!logged_in_user)
+				throw glare::Exception("You must be logged in to view this page.");
+
+			bool found = false;
+
+			for(auto it = world_state.world_states.begin(); it != world_state.world_states.end(); ++it)
+			{
+				ServerWorldState* world = it->second.ptr();
+				const auto res = world->getChatBots(lock).find((uint64)chatbot_id);
+				if(res == world->getChatBots(lock).end())
+					continue;
+
+				found = true;
+				ChatBot* chatbot = res->second.ptr();
+				if((chatbot->owner_id != logged_in_user->id) && !isGodUser(logged_in_user->id))
+					throw glare::Exception("You must be the owner of this chatbot to edit it.");
+
+				{
+					std::string model_url = avatar_model_url;
+					if(model_url.size() > 10000)
+						model_url.resize(10000);
+					chatbot->avatar_settings.model_url = toURLString(model_url);
+				}
+
+				const std::string matrix_text = stripHeadAndTailWhitespace(avatar_pre_transform);
+				if(!matrix_text.empty())
+				{
+					Matrix4f parsed_matrix;
+					if(parseMatrixFromEditableText(matrix_text, parsed_matrix))
+					{
+						chatbot->avatar_settings.pre_ob_to_world_matrix = parsed_matrix;
+					}
+					else
+					{
+						world_state.setUserWebMessage(logged_in_user->id, "Avatar transform not updated: expected exactly 16 float values.");
+					}
+				}
+
+				if(material_mode == "clear_all")
+				{
+					chatbot->avatar_settings.materials.clear();
+				}
+				else if(material_mode == "single_material")
+				{
+					WorldMaterialRef mat = new WorldMaterial();
+					mat->colour_rgb.r = clampFloat(parseFloatWithDefault(request, "mat0_colour_r", mat->colour_rgb.r), 0.f, 4.f);
+					mat->colour_rgb.g = clampFloat(parseFloatWithDefault(request, "mat0_colour_g", mat->colour_rgb.g), 0.f, 4.f);
+					mat->colour_rgb.b = clampFloat(parseFloatWithDefault(request, "mat0_colour_b", mat->colour_rgb.b), 0.f, 4.f);
+					mat->colour_texture_url = toURLString(stripHeadAndTailWhitespace(request.getPostField("mat0_colour_texture_url").str()));
+					mat->normal_map_url = toURLString(stripHeadAndTailWhitespace(request.getPostField("mat0_normal_map_url").str()));
+					mat->emission_texture_url = toURLString(stripHeadAndTailWhitespace(request.getPostField("mat0_emission_texture_url").str()));
+					mat->roughness.val = clampFloat(parseFloatWithDefault(request, "mat0_roughness", mat->roughness.val), 0.f, 1.f);
+					mat->metallic_fraction.val = clampFloat(parseFloatWithDefault(request, "mat0_metallic", mat->metallic_fraction.val), 0.f, 1.f);
+					mat->opacity.val = clampFloat(parseFloatWithDefault(request, "mat0_opacity", mat->opacity.val), 0.f, 1.f);
+					mat->emission_lum_flux_or_lum = clampFloat(parseFloatWithDefault(request, "mat0_emission_lum", mat->emission_lum_flux_or_lum), 0.f, 1.0e7f);
+					mat->flags = (uint32)std::max(0, parseIntWithDefault(request, "mat0_flags", (int)mat->flags));
+
+					chatbot->avatar_settings.materials.resize(1);
+					chatbot->avatar_settings.materials[0] = mat;
+				}
+
+				chatbot->greeting_gesture_name = stripHeadAndTailWhitespace(request.getPostField("greeting_name").str());
+				chatbot->idle_gesture_name = stripHeadAndTailWhitespace(request.getPostField("idle_name").str());
+				chatbot->reactive_gesture_name = stripHeadAndTailWhitespace(request.getPostField("reactive_name").str());
+
+				if(chatbot->greeting_gesture_name.size() > ChatBot::MAX_GESTURE_NAME_SIZE)
+					chatbot->greeting_gesture_name.resize(ChatBot::MAX_GESTURE_NAME_SIZE);
+				if(chatbot->idle_gesture_name.size() > ChatBot::MAX_GESTURE_NAME_SIZE)
+					chatbot->idle_gesture_name.resize(ChatBot::MAX_GESTURE_NAME_SIZE);
+				if(chatbot->reactive_gesture_name.size() > ChatBot::MAX_GESTURE_NAME_SIZE)
+					chatbot->reactive_gesture_name.resize(ChatBot::MAX_GESTURE_NAME_SIZE);
+
+				std::string greeting_url = stripHeadAndTailWhitespace(request.getPostField("greeting_url").str());
+				std::string idle_url = stripHeadAndTailWhitespace(request.getPostField("idle_url").str());
+				std::string reactive_url = stripHeadAndTailWhitespace(request.getPostField("reactive_url").str());
+
+				if(greeting_url.size() > ChatBot::MAX_GESTURE_URL_SIZE)
+					greeting_url.resize(ChatBot::MAX_GESTURE_URL_SIZE);
+				if(idle_url.size() > ChatBot::MAX_GESTURE_URL_SIZE)
+					idle_url.resize(ChatBot::MAX_GESTURE_URL_SIZE);
+				if(reactive_url.size() > ChatBot::MAX_GESTURE_URL_SIZE)
+					reactive_url.resize(ChatBot::MAX_GESTURE_URL_SIZE);
+
+				chatbot->greeting_gesture_URL = toURLString(greeting_url);
+				chatbot->idle_gesture_URL = toURLString(idle_url);
+				chatbot->reactive_gesture_URL = toURLString(reactive_url);
+
+				chatbot->greeting_gesture_flags = 0;
+				if(postCheckboxIsChecked(request, "greeting_animate_head"))
+					chatbot->greeting_gesture_flags |= SingleGestureSettings::FLAG_ANIMATE_HEAD;
+				if(postCheckboxIsChecked(request, "greeting_loop"))
+					chatbot->greeting_gesture_flags |= SingleGestureSettings::FLAG_LOOP;
+
+				chatbot->idle_gesture_flags = 0;
+				if(postCheckboxIsChecked(request, "idle_animate_head"))
+					chatbot->idle_gesture_flags |= SingleGestureSettings::FLAG_ANIMATE_HEAD;
+				if(postCheckboxIsChecked(request, "idle_loop"))
+					chatbot->idle_gesture_flags |= SingleGestureSettings::FLAG_LOOP;
+
+				chatbot->reactive_gesture_flags = 0;
+				if(postCheckboxIsChecked(request, "reactive_animate_head"))
+					chatbot->reactive_gesture_flags |= SingleGestureSettings::FLAG_ANIMATE_HEAD;
+				if(postCheckboxIsChecked(request, "reactive_loop"))
+					chatbot->reactive_gesture_flags |= SingleGestureSettings::FLAG_LOOP;
+
+				chatbot->greeting_gesture_cooldown_s = clampFloat(parseFloatWithDefault(request, "greeting_cooldown_s", chatbot->greeting_gesture_cooldown_s), 0.f, 3600.f);
+				chatbot->idle_gesture_interval_s = clampFloat(parseFloatWithDefault(request, "idle_interval_s", chatbot->idle_gesture_interval_s), 0.f, 3600.f);
+				chatbot->reactive_gesture_cooldown_s = clampFloat(parseFloatWithDefault(request, "reactive_cooldown_s", chatbot->reactive_gesture_cooldown_s), 0.f, 3600.f);
+
+				// Update avatar state immediately for connected clients.
+				if(chatbot->avatar)
+				{
+					chatbot->avatar->avatar_settings = chatbot->avatar_settings;
+					chatbot->avatar->other_dirty = true;
+				}
+
+				world->addChatBotAsDBDirty(chatbot, lock);
+				world_state.markAsChanged();
+				world_state.setUserWebMessage(logged_in_user->id, "Updated chatbot avatar + animation settings.");
+				break;
+			}
+
+			if(!found)
+				world_state.setUserWebMessage(logged_in_user->id, "ChatBot not found.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/edit_chatbot?chatbot_id=" + toString(chatbot_id));
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleEditChatBotAvatarAnimationPost error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
+
+
+void handlePlayChatBotAnimationPost(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	try
+	{
+		const int chatbot_id = request.getPostIntField("chatbot_id");
+		const std::string gesture_slot = stripHeadAndTailWhitespace(request.getPostField("gesture_slot").str());
+
+		{ // Lock scope
+			WorldStateLock lock(world_state.mutex);
+
+			const User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
+			if(!logged_in_user)
+				throw glare::Exception("You must be logged in to view this page.");
+
+			bool found = false;
+			for(auto it = world_state.world_states.begin(); it != world_state.world_states.end(); ++it)
+			{
+				ServerWorldState* world = it->second.ptr();
+				const auto res = world->getChatBots(lock).find((uint64)chatbot_id);
+				if(res == world->getChatBots(lock).end())
+					continue;
+
+				found = true;
+				ChatBot* chatbot = res->second.ptr();
+				if((chatbot->owner_id != logged_in_user->id) && !isGodUser(logged_in_user->id))
+					throw glare::Exception("You must be the owner of this chatbot to edit it.");
+
+				std::string gesture_name;
+				URLString gesture_url;
+				uint32 gesture_flags = 0;
+
+				if(gesture_slot == "greeting")
+				{
+					gesture_name = chatbot->greeting_gesture_name;
+					gesture_url = chatbot->greeting_gesture_URL;
+					gesture_flags = chatbot->greeting_gesture_flags;
+				}
+				else if(gesture_slot == "idle")
+				{
+					gesture_name = chatbot->idle_gesture_name;
+					gesture_url = chatbot->idle_gesture_URL;
+					gesture_flags = chatbot->idle_gesture_flags;
+				}
+				else if(gesture_slot == "reactive")
+				{
+					gesture_name = chatbot->reactive_gesture_name;
+					gesture_url = chatbot->reactive_gesture_URL;
+					gesture_flags = chatbot->reactive_gesture_flags;
+				}
+				else // custom
+				{
+					gesture_name = stripHeadAndTailWhitespace(request.getPostField("custom_name").str());
+					std::string custom_url = stripHeadAndTailWhitespace(request.getPostField("custom_url").str());
+					if(custom_url.size() > ChatBot::MAX_GESTURE_URL_SIZE)
+						custom_url.resize(ChatBot::MAX_GESTURE_URL_SIZE);
+					gesture_url = toURLString(custom_url);
+
+					if(postCheckboxIsChecked(request, "custom_animate_head"))
+						gesture_flags |= SingleGestureSettings::FLAG_ANIMATE_HEAD;
+					if(postCheckboxIsChecked(request, "custom_loop"))
+						gesture_flags |= SingleGestureSettings::FLAG_LOOP;
+				}
+
+				if(gesture_name.empty() && gesture_url.empty())
+				{
+					world_state.setUserWebMessage(logged_in_user->id, "Animation is empty: set name or URL first.");
+				}
+				else
+				{
+					chatbot->queueManualGesturePlayback(gesture_name, gesture_url, gesture_flags);
+					world_state.setUserWebMessage(logged_in_user->id, "Queued chatbot animation playback.");
+				}
+				break;
+			}
+
+			if(!found)
+				world_state.setUserWebMessage(logged_in_user->id, "ChatBot not found.");
+		}
+
+		web::ResponseUtils::writeRedirectTo(reply_info, "/edit_chatbot?chatbot_id=" + toString(chatbot_id));
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handlePlayChatBotAnimationPost error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }
