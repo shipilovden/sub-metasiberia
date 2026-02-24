@@ -1057,25 +1057,33 @@ body.msb-control hr {
 
 p.msb-admin-nav {
 	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	align-items: flex-start;
-	padding: 10px;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	gap: 4px;
+	align-items: center;
+	padding: 8px;
 	border: 1px solid var(--msb-border);
 	border-radius: 12px;
 	background: rgba(250, 251, 253, 0.98);
+	overflow-x: auto;
+	overflow-y: hidden;
+	white-space: nowrap;
 }
 
 p.msb-admin-nav a {
-	display: block;
-	padding: 6px 12px;
+	display: inline-flex;
+	align-items: center;
+	padding: 3px 6px;
 	border-radius: 8px;
 	text-decoration: none;
 	border: 1px solid #a5acb7;
 	background: linear-gradient(180deg, #fbfcfd 0%, #e5e9ef 100%);
 	color: #29313d;
 	font-weight: 600;
+	font-size: 10px;
+	line-height: 1.2;
 	margin: 0;
+	flex: 0 0 auto;
 }
 
 p.msb-admin-nav a:hover {
@@ -1279,8 +1287,8 @@ body.msb-control .msb-lang-toggle-button {
 	}
 
 	p.msb-admin-nav a {
-		font-size: 13px;
-		padding: 4px 8px;
+		font-size: 10px;
+		padding: 3px 6px;
 	}
 
 	.msb-inline-fields {
