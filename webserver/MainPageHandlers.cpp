@@ -67,7 +67,7 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 	//std::string page_out = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Substrata");
 	//const bool logged_in = LoginHandlers::isLoggedInAsNick(data_store, request_info);
 
-	const std::string root_page_title = "Metasiberia";
+	const std::string root_page_title = "Metasiberia Web Client";
 	const std::string root_page_description = "Metaverse from Siberia. Craft virtually - Inspire reality.";
 	const std::string root_page_url = "https://vr.metasiberia.com/";
 	const std::string root_page_image_url = "https://vr.metasiberia.com/files/main.jpg";
