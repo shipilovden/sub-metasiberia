@@ -1146,6 +1146,9 @@
     checkbox.type = "checkbox";
     checkbox.id = "msb-signup-terms-accepted";
     checkbox.className = "msb-signup-terms-checkbox";
+    checkbox.name = "terms_accepted";
+    checkbox.value = "1";
+    checkbox.required = true;
 
     var label = document.createElement("label");
     label.className = "msb-signup-terms-label";
@@ -1153,10 +1156,10 @@
     label.appendChild(document.createTextNode("I agree to the "));
 
     var termsLink = document.createElement("a");
-    termsLink.href = "/terms";
+    termsLink.href = "https://vr.metasiberia.com/terms";
     termsLink.target = "_blank";
     termsLink.rel = "noopener";
-    termsLink.textContent = "Terms";
+    termsLink.textContent = "Terms of use";
     label.appendChild(termsLink);
 
     var toggleSubmit = function () {

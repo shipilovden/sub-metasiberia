@@ -58,9 +58,10 @@ const std::string standardHTMLHeader(WebDataStore& data_store, const web::Reques
 }
 
 
-const std::string standardHeader(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, const std::string& page_title, const std::string& extra_header_tags)
+const std::string standardHeader(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, const std::string& page_title, const std::string& extra_header_tags, const std::string& heading_title)
 {
 	std::string page_out = standardHTMLHeader(*world_state.web_data_store, request_info, page_title, extra_header_tags);
+	const std::string effective_heading_title = heading_title.empty() ? page_title : heading_title;
 	page_out +=
 		"	<body class=\"standard-body\">\n"
 		"	<div id=\"login\">\n"; // Start login div
@@ -90,7 +91,7 @@ const std::string standardHeader(ServerAllWorldsState& world_state, const web::R
 	"	<a href=\"/\"><img src=\"/files/logo_small.png\" alt=\"metasiberia logo\" class=\"substrata-logo-top-small\"/></a>											\n"
 	
 	"	<header>																								\n"
-	"		<h1>" + web::Escaping::HTMLEscape(page_title) + "</h1>												\n"
+	"		<h1>" + web::Escaping::HTMLEscape(effective_heading_title) + "</h1>												\n"
 	"	</header>																								\n";
 		
 	return page_out;
