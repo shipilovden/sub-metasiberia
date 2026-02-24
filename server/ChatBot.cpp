@@ -11,6 +11,7 @@ Copyright Glare Technologies Limited 2026 -
 #include "LLMThread.h"
 #include "../shared/MessageUtils.h"
 #include "../shared/Protocol.h"
+#include "../shared/GestureSettings.h"
 #include <webserver/Escaping.h>
 #include <Exception.h>
 #include <StringUtils.h>
@@ -19,6 +20,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <KillThreadMessage.h>
 #include <RuntimeCheck.h>
 #include <RandomAccessOutStream.h>
+#include <algorithm>
 
 
 static const double GREETING_COOLDOWN_PERIOD = 60.0; // Don't send greeting messages more often than this.
@@ -30,13 +32,29 @@ ChatBot::ChatBot()
 	world(nullptr),
 	pos(Vec3d(0.0)),
 	heading(0),
+	greeting_gesture_flags(0),
+	greeting_gesture_cooldown_s(8.f),
+	idle_gesture_flags(0),
+	idle_gesture_interval_s(30.f),
+	reactive_gesture_flags(0),
+	reactive_gesture_cooldown_s(6.f),
+	pending_manual_gesture(false),
+	pending_manual_gesture_flags(0),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder)
 {
+	greeting_gesture_name = "Waving 1";
+	reactive_gesture_name = "Quick Informal Bow";
+
 	next_sentence_search_pos = 0;
 	next_sentence_start_index = 0;
 	sentences_received_timer.pause();
 
 	repeating_gesture_timer.pause();
+	time_since_last_reactive_gesture.pause();
+	time_since_last_idle_gesture.pause();
+	time_since_last_greeting_gesture.pause();
+
+	clampAnimationSettings();
 }
 
 
@@ -180,10 +198,103 @@ ChatBot::EventHandlerResults ChatBot::processHeardChatMessage(const std::string&
 			time_since_last_LLM_activity.reset();
 
 			this->look_target_avatar = sender_avatar; // Look at the avatar that sent the chat message
+
+			if((!reactive_gesture_name.empty() || !reactive_gesture_URL.empty()) && canTriggerTimer(time_since_last_reactive_gesture, reactive_gesture_cooldown_s))
+			{
+				playGestureNow(reactive_gesture_name, reactive_gesture_URL, reactive_gesture_flags, server);
+				time_since_last_reactive_gesture.resetAndUnpause();
+			}
 		}
 	}
 
 	return res;
+}
+
+
+void ChatBot::queueManualGesturePlayback(const std::string& gesture_name, const URLString& gesture_URL, uint32 gesture_flags)
+{
+	pending_manual_gesture = true;
+
+	pending_manual_gesture_name = gesture_name;
+	if(pending_manual_gesture_name.size() > MAX_GESTURE_NAME_SIZE)
+		pending_manual_gesture_name.resize(MAX_GESTURE_NAME_SIZE);
+
+	std::string gesture_url_std = toStdString(gesture_URL);
+	if(gesture_url_std.size() > MAX_GESTURE_URL_SIZE)
+		gesture_url_std.resize(MAX_GESTURE_URL_SIZE);
+	pending_manual_gesture_URL = toURLString(gesture_url_std);
+	pending_manual_gesture_flags = gesture_flags;
+}
+
+
+bool ChatBot::canTriggerTimer(const Timer& timer, float min_interval_s) const
+{
+	if(min_interval_s <= 0.f)
+		return true;
+
+	return timer.isPaused() || (timer.elapsed() >= min_interval_s);
+}
+
+
+void ChatBot::clampAnimationSettings()
+{
+	if(greeting_gesture_name.size() > MAX_GESTURE_NAME_SIZE)
+		greeting_gesture_name.resize(MAX_GESTURE_NAME_SIZE);
+	if(idle_gesture_name.size() > MAX_GESTURE_NAME_SIZE)
+		idle_gesture_name.resize(MAX_GESTURE_NAME_SIZE);
+	if(reactive_gesture_name.size() > MAX_GESTURE_NAME_SIZE)
+		reactive_gesture_name.resize(MAX_GESTURE_NAME_SIZE);
+
+	std::string greeting_url = toStdString(greeting_gesture_URL);
+	if(greeting_url.size() > MAX_GESTURE_URL_SIZE)
+		greeting_url.resize(MAX_GESTURE_URL_SIZE);
+	greeting_gesture_URL = toURLString(greeting_url);
+
+	std::string idle_url = toStdString(idle_gesture_URL);
+	if(idle_url.size() > MAX_GESTURE_URL_SIZE)
+		idle_url.resize(MAX_GESTURE_URL_SIZE);
+	idle_gesture_URL = toURLString(idle_url);
+
+	std::string reactive_url = toStdString(reactive_gesture_URL);
+	if(reactive_url.size() > MAX_GESTURE_URL_SIZE)
+		reactive_url.resize(MAX_GESTURE_URL_SIZE);
+	reactive_gesture_URL = toURLString(reactive_url);
+
+	if(!std::isfinite(greeting_gesture_cooldown_s))
+		greeting_gesture_cooldown_s = 8.f;
+	if(!std::isfinite(idle_gesture_interval_s))
+		idle_gesture_interval_s = 30.f;
+	if(!std::isfinite(reactive_gesture_cooldown_s))
+		reactive_gesture_cooldown_s = 6.f;
+
+	greeting_gesture_cooldown_s = myClamp(greeting_gesture_cooldown_s, 0.f, 3600.f);
+	idle_gesture_interval_s = myClamp(idle_gesture_interval_s, 0.f, 3600.f);
+	reactive_gesture_cooldown_s = myClamp(reactive_gesture_cooldown_s, 0.f, 3600.f);
+}
+
+
+void ChatBot::playGestureNow(const std::string& gesture_name, const URLString& gesture_URL, uint32 gesture_flags, Server* server)
+{
+	if(gesture_name.empty() && gesture_URL.empty())
+		return;
+
+	const double start_global_time = server->getCurrentGlobalTime();
+
+	// Enqueue AvatarPerformGesture messages to worker threads to send.
+	MessageUtils::initPacket(scratch_packet, Protocol::AvatarPerformGesture);
+	::writeToStream(avatar_uid, scratch_packet);
+
+	if(gesture_name.empty())
+		scratch_packet.writeStringLengthFirst("Custom Gesture");
+	else
+		scratch_packet.writeStringLengthFirst(gesture_name);
+
+	scratch_packet.writeStringLengthFirst(gesture_URL);
+	scratch_packet.writeUInt32(gesture_flags);
+	scratch_packet.writeDouble(start_global_time);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+
+	server->enqueuePacketToBroadcastForWorld(scratch_packet, world);
 }
 
 
@@ -264,13 +375,7 @@ void ChatBot::handleLLMToolFunctionCall(const std::vector<Reference<ToolFunction
 
 			if(call->function_name == "perform_wave_gesture")
 			{
-				// Enqueue AvatarPerformGesture messages to worker threads to send
-				MessageUtils::initPacket(scratch_packet, Protocol::AvatarPerformGesture);
-				::writeToStream(avatar_uid, scratch_packet);
-				scratch_packet.writeStringLengthFirst("Waving 1"); // See GestureUI.cpp
-				MessageUtils::updatePacketLengthField(scratch_packet);
-
-				server->enqueuePacketToBroadcastForWorld(scratch_packet, world);
+				playGestureNow("Waving 1", /*gesture_URL=*/URLString(), /*gesture_flags=*/0, server);
 
 
 				// Send response to LLM thread to send to LLM cloud server.
@@ -285,13 +390,7 @@ void ChatBot::handleLLMToolFunctionCall(const std::vector<Reference<ToolFunction
 			}
 			else if(call->function_name == "perform_bow_gesture")
 			{
-				// Enqueue AvatarPerformGesture messages to worker threads to send
-				MessageUtils::initPacket(scratch_packet, Protocol::AvatarPerformGesture);
-				::writeToStream(avatar_uid, scratch_packet);
-				scratch_packet.writeStringLengthFirst("Quick Informal Bow"); // See GestureUI.cpp
-				MessageUtils::updatePacketLengthField(scratch_packet);
-
-				server->enqueuePacketToBroadcastForWorld(scratch_packet, world);
+				playGestureNow("Quick Informal Bow", /*gesture_URL=*/URLString(), /*gesture_flags=*/0, server);
 
 
 				// Send response to LLM thread to send to LLM cloud server.
@@ -397,6 +496,15 @@ ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 		return think_results;
 	}
 
+	clampAnimationSettings();
+
+	if(pending_manual_gesture)
+	{
+		playGestureNow(pending_manual_gesture_name, pending_manual_gesture_URL, pending_manual_gesture_flags, server);
+		time_since_last_idle_gesture.resetAndUnpause();
+		pending_manual_gesture = false;
+	}
+
 	if(sentences_received_timer.isRunning() && (sentences_received_timer.elapsed() > 0.3))
 	{
 		// Send all complete sentences as a chat message
@@ -429,6 +537,7 @@ ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 
 	// TODO: find some nice way of removing refs to avatars that are not present in world any more (but never went through dead state for some reason).
 
+	bool any_conversing = false;
 	for(auto it = other_avatar_info.begin(); it != other_avatar_info.end();)
 	{
 		const Avatar* other_avatar = it->first.ptr();
@@ -445,6 +554,7 @@ ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 		else
 		{
 			OtherAvatarInfo& other_av_info = it->second;
+			any_conversing = any_conversing || other_av_info.conversing;
 			if(isOtherAvatarAttendingToOurAvatar(other_avatar, this->pos))
 			{
 				if(other_av_info.attention_timer.isPaused())
@@ -490,14 +600,28 @@ ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 					other_av_info.time_since_last_greeted_other_av.resetAndUnpause();
 				}
 
+				if((!greeting_gesture_name.empty() || !greeting_gesture_URL.empty()) && canTriggerTimer(time_since_last_greeting_gesture, greeting_gesture_cooldown_s))
+				{
+					playGestureNow(greeting_gesture_name, greeting_gesture_URL, greeting_gesture_flags, server);
+					time_since_last_greeting_gesture.resetAndUnpause();
+				}
+
 
 				this->look_target_avatar = other_avatar;
 
 				other_av_info.conversing = true;
+				any_conversing = true;
 			}
 
 			it++;
 		}
+	}
+
+	// Play idle animation occasionally when not talking to users.
+	if(!any_conversing && (!idle_gesture_name.empty() || !idle_gesture_URL.empty()) && canTriggerTimer(time_since_last_idle_gesture, idle_gesture_interval_s))
+	{
+		playGestureNow(idle_gesture_name, idle_gesture_URL, idle_gesture_flags, server);
+		time_since_last_idle_gesture.resetAndUnpause();
 	}
 
 
@@ -640,6 +764,21 @@ void ChatBot::writeToStream(RandomAccessOutStream& stream)
 		it->second->writeToStream(stream);
 	}
 
+	stream.writeStringLengthFirst(greeting_gesture_name);
+	stream.writeStringLengthFirst(greeting_gesture_URL);
+	stream.writeUInt32(greeting_gesture_flags);
+	stream.writeFloat(greeting_gesture_cooldown_s);
+
+	stream.writeStringLengthFirst(idle_gesture_name);
+	stream.writeStringLengthFirst(idle_gesture_URL);
+	stream.writeUInt32(idle_gesture_flags);
+	stream.writeFloat(idle_gesture_interval_s);
+
+	stream.writeStringLengthFirst(reactive_gesture_name);
+	stream.writeStringLengthFirst(reactive_gesture_URL);
+	stream.writeUInt32(reactive_gesture_flags);
+	stream.writeFloat(reactive_gesture_cooldown_s);
+
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)(stream.getWriteIndex() - initial_write_index);
@@ -683,6 +822,29 @@ void readChatBotFromStream(RandomAccessInStream& stream, ChatBot& chatbot)
 		Reference<ChatBotToolFunction> func = new ChatBotToolFunction();
 		readChatBotToolFunctionFromStream(stream, *func);
 		chatbot.info_tool_functions[func->function_name] = func;
+	}
+
+	const size_t max_read_index = initial_read_index + buffer_size;
+	if(stream.getReadIndex() < max_read_index)
+	{
+		chatbot.greeting_gesture_name = stream.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+		chatbot.greeting_gesture_URL = toURLString(stream.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+		chatbot.greeting_gesture_flags = stream.readUInt32();
+		chatbot.greeting_gesture_cooldown_s = stream.readFloat();
+	}
+	if(stream.getReadIndex() < max_read_index)
+	{
+		chatbot.idle_gesture_name = stream.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+		chatbot.idle_gesture_URL = toURLString(stream.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+		chatbot.idle_gesture_flags = stream.readUInt32();
+		chatbot.idle_gesture_interval_s = stream.readFloat();
+	}
+	if(stream.getReadIndex() < max_read_index)
+	{
+		chatbot.reactive_gesture_name = stream.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+		chatbot.reactive_gesture_URL = toURLString(stream.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+		chatbot.reactive_gesture_flags = stream.readUInt32();
+		chatbot.reactive_gesture_cooldown_s = stream.readFloat();
 	}
 
 
