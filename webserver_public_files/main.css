@@ -1055,16 +1055,7 @@ body.msb-control hr {
 	margin: 16px 0;
 }
 
-p.msb-admin-nav a {
-	display: block;
-	margin: 0 0 6px 0;
-}
-
-p.msb-admin-nav a:last-child {
-	margin-bottom: 0;
-}
-
-body.msb-admin .msb-admin-nav {
+p.msb-admin-nav {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
@@ -1075,23 +1066,25 @@ body.msb-admin .msb-admin-nav {
 	background: rgba(250, 251, 253, 0.98);
 }
 
-body.msb-admin .msb-admin-nav a {
+p.msb-admin-nav a {
 	display: block;
-	padding: 5px 10px;
-	border-radius: 999px;
+	padding: 6px 12px;
+	border-radius: 8px;
 	text-decoration: none;
-	border: 1px solid #b1b9c6;
-	background: #eef1f5;
-	color: #2d3441;
+	border: 1px solid #a5acb7;
+	background: linear-gradient(180deg, #fbfcfd 0%, #e5e9ef 100%);
+	color: #29313d;
+	font-weight: 600;
+	margin: 0;
 }
 
-body.msb-admin .msb-admin-nav a:hover {
-	background: #e5e9f0;
-	border-color: #9ba6b8;
-	color: #1f2530;
+p.msb-admin-nav a:hover {
+	background: linear-gradient(180deg, #ffffff 0%, #dde2e9 100%);
+	border-color: #8f99a9;
+	color: #29313d;
 }
 
-body.msb-admin .msb-admin-nav a + a::before {
+p.msb-admin-nav a + a::before {
 	content: none;
 }
 
@@ -1285,7 +1278,7 @@ body.msb-control .msb-lang-toggle-button {
 		width: 98vw;
 	}
 
-	body.msb-admin .msb-admin-nav a {
+	p.msb-admin-nav a {
 		font-size: 13px;
 		padding: 4px 8px;
 	}
