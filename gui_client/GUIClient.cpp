@@ -4256,7 +4256,7 @@ static inline bool shouldDisplayLODChunk(const Vec3i& chunk_coords, const Vec4f&
 {
 	const Vec4f chunk_centre = Vec4f((chunk_coords.x + 0.5f) * chunk_w, (chunk_coords.y + 0.5f) * chunk_w, 0, 1);
 	
-	const float CHUNK_DIST_THRESHOLD = 150.f;
+	const float CHUNK_DIST_THRESHOLD = 200.f;
 	
 	const float dist_to_chunk2 = xyDist2(campos, chunk_centre);
 
@@ -4794,8 +4794,14 @@ void GUIClient::setOnlyLoadMostImportantObs(bool only_load_most_important_obs_)
 
 bool GUIClient::shouldDisableLODForCurrentServer() const
 {
-	// Keep large worlds fully visible for these specific servers.
-	return (server_hostname == "176.197.223.42") || (server_hostname == "89.104.70.23");
+	// Keep large worlds fully visible for these specific Metasiberia hosts.
+	const std::string host = toLowerCase(server_hostname);
+	return
+		(host == "176.197.223.42") ||
+		(host == "89.104.70.23") ||
+		(host == "vr.metasiberia.com") ||
+		(host == "metasiberia.com") ||
+		(host == "www.metasiberia.com");
 }
 
 

@@ -190,7 +190,7 @@ static Reference<ImageMapUInt8> convertUInt16ToUInt8ImageMap(const ImageMap<uint
 
 void generateLODTexture(const std::string& base_tex_path, int lod_level, const std::string& LOD_tex_path, glare::TaskManager& task_manager)
 {
-	const int new_max_w_h = (lod_level == 0) ? 1024 : ((lod_level == 1) ? 256 : 64);
+	const int new_max_w_h = (lod_level == 0) ? 1024 : ((lod_level == 1) ? 256 : 128);
 	const int min_w_h = 1;
 
 	Reference<Map2D> map;
@@ -271,7 +271,7 @@ void generateBasisTexture(const std::string& src_tex_path, int base_lod_level, i
 	if(lod_level == base_lod_level)
 		new_max_w_h = 4096; // Basis compression can get pretty slow for large textures, so limit the texture size.
 	else
-		new_max_w_h = (lod_level == 0) ? 1024 : ((lod_level == 1) ? 256 : 64);
+		new_max_w_h = (lod_level == 0) ? 1024 : ((lod_level == 1) ? 256 : 128);
 
 	const int min_w_h = 1;
 
