@@ -49,6 +49,7 @@ body {
 }
 .msb-root-hero-title-light {
 	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-size: 0.9em;
 	font-weight: 300;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
