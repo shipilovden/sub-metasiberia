@@ -98,6 +98,14 @@ body {
 	text-decoration: underline;
 	color: var(--msb-link-hover);
 }
+.msb-root-hero-links a.msb-root-beta-download {
+	font-size: 15px;
+	font-weight: 500;
+	color: var(--msb-accent);
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+}
 
 .root-body {
 	/*margin-top: 46px;*/
