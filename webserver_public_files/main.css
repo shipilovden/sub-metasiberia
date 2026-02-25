@@ -614,6 +614,154 @@ a:hover
 	max-width: 100%;
 }
 
+.msb-photo-detail {
+	max-width: 980px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.msb-photo-image-wrap {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background: #f1f4f8;
+	border: 1px solid #cfd7e2;
+	border-radius: 12px;
+	padding: 10px;
+}
+
+.msb-photo-midsize-img {
+	width: 100%;
+	height: auto;
+	max-width: 960px;
+	display: block;
+	border-radius: 8px;
+}
+
+.msb-photo-info-card {
+	background: var(--msb-surface);
+	border: 1px solid var(--msb-border);
+	border-radius: 12px;
+	padding: 14px 16px;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.msb-photo-caption-title {
+	margin: 0 0 8px;
+	font-size: clamp(24px, 4vw, 34px);
+	line-height: 1.15;
+}
+
+.msb-photo-caption-text {
+	margin: 0;
+	line-height: 1.55;
+	color: #2e3746;
+}
+
+.msb-photo-inline-label {
+	font-weight: 700;
+	color: #253247;
+}
+
+.msb-photo-hashtags {
+	margin: 10px 0 0;
+	color: #5f6d82;
+	font-size: 14px;
+}
+
+.msb-photo-message {
+	margin: 0;
+}
+
+.msb-photo-meta-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 10px;
+}
+
+.msb-photo-meta-item {
+	background: #f7f9fc;
+	border: 1px solid #dce4ef;
+	border-radius: 10px;
+	padding: 10px 12px;
+	min-width: 0;
+}
+
+.msb-photo-meta-label {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #5f6d82;
+}
+
+.msb-photo-meta-value {
+	margin-top: 4px;
+	font-size: 16px;
+	color: #202c3c;
+	overflow-wrap: anywhere;
+}
+
+.msb-photo-meta-value a {
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.msb-photo-section-title {
+	margin: 0 0 10px;
+	font-size: 18px;
+}
+
+.msb-share-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0;
+}
+
+.msb-share-link {
+	display: inline-block;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: #2b3a52;
+	font-size: 14px;
+	font-weight: 500;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	margin-right: 8px;
+}
+
+.msb-share-link:hover {
+	color: #15213a;
+}
+
+.msb-share-link:not(:last-child)::after {
+	content: " |";
+	color: #7b8798;
+	text-decoration: none;
+	margin-left: 8px;
+}
+
+.msb-photo-owner-tools p {
+	margin: 0;
+}
+
+.msb-photo-delete-form {
+	margin: 0;
+}
+
+@media (max-width: 900px) {
+	.msb-photo-info-card {
+		padding: 12px;
+	}
+
+	.msb-photo-meta-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
 
 /* Used on parcel page for both screenshots and photos */
 .generic-image-container {
