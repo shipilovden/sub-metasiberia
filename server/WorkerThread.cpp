@@ -947,9 +947,7 @@ static bool userConnectedToTheirWorldOrGodUser(const UserID& user_id, ServerWorl
 }
 
 
-// Does the user have permission to create a summoned object (e.g. summoned vehicle)?
-// For now just check the SUMMONED_FLAG and check the model URL is one of the vehicle model URLs from GUIClient.cpp.
-static bool userCanCreateSummonedObject(const WorldObject& ob, const UserID& user_id)
+static bool isSummonedVehicleObject(const WorldObject& ob)
 {
 	if(BitUtils::isBitSet(ob.flags, WorldObject::SUMMONED_FLAG))
 	{
@@ -964,6 +962,30 @@ static bool userCanCreateSummonedObject(const WorldObject& ob, const UserID& use
 	}
 	else
 		return false;
+}
+
+
+// Does the user have permission to create a summoned object (e.g. summoned vehicle)?
+// For now just check the SUMMONED_FLAG and check the model URL is one of the vehicle model URLs from GUIClient.cpp.
+static bool userCanCreateSummonedObject(const WorldObject& ob, const UserID& /*user_id*/)
+{
+	return isSummonedVehicleObject(ob);
+}
+
+
+// Allow controlling a summoned vehicle if this connected avatar is currently inside it.
+// This is used to avoid owner-only restrictions while driving.
+static bool clientCanControlVehicleObject(const WorldObject& ob, const UID& client_avatar_uid, ServerWorldState& world_state, WorldStateLock& lock)
+{
+	if(!ob.isDynamic() || !isSummonedVehicleObject(ob))
+		return false;
+
+	const auto av_res = world_state.getAvatars(lock).find(client_avatar_uid);
+	if(av_res == world_state.getAvatars(lock).end())
+		return false;
+
+	const Avatar* avatar = av_res->second.ptr();
+	return avatar && (avatar->vehicle_inside_uid == ob.uid);
 }
 
 
@@ -1971,12 +1993,7 @@ void WorkerThread::doRun()
 
 							const double client_cur_time = msg_buffer.readDouble();
 
-							// If client is not logged in, refuse object modification.
-							if(!client_user_id.valid())
-							{
-								writeErrorMessageToClient(socket, "You must be logged in to modify an object.");
-							}
-							else if(world_state->isInReadOnlyMode())
+							if(world_state->isInReadOnlyMode())
 							{
 								writeErrorMessageToClient(socket, "Server is in read-only mode, you can't modify an object right now.");
 							}
@@ -1991,10 +2008,17 @@ void WorkerThread::doRun()
 									{
 										WorldObject* ob = res->second.getPointer();
 										WorldObject temp_ob(*ob);
+										const bool has_write_perms = userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock);
+										const bool can_control_vehicle = clientCanControlVehicleObject(*ob, client_avatar_uid, *cur_world_state, lock);
 
-										// See if the user has permissions to alter this object.
-										if(!userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock))
-											err_msg_to_client = "You must be the owner of this object to change it.";
+										// Allow normal object edits for users with write perms, and allow driving of summoned vehicles for avatars inside them.
+										if(!has_write_perms && !can_control_vehicle)
+										{
+											if(!client_user_id.valid())
+												err_msg_to_client = "You must be logged in to modify an object.";
+											else
+												err_msg_to_client = "You must be the owner of this object to change it.";
+										}
 										else if(ob->isDynamic()) // We will only allow clients to apply PhysicsTransformUpdates to dynamic objects.
 										{
 											Vec4f axis;
@@ -2003,7 +2027,8 @@ void WorkerThread::doRun()
 											temp_ob.pos = pos;
 											temp_ob.axis = Vec3f(axis);
 											temp_ob.angle = angle;
-											if(!userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
+											// Vehicle driving should work for all riders (including anonymous) regardless of parcel ownership.
+											if(!can_control_vehicle && !userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
 												err_msg_to_client = "You can only place objects inside parcels you can edit in this world.";
 											else
 											{
