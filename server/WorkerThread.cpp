@@ -2010,9 +2010,13 @@ void WorkerThread::doRun()
 										WorldObject temp_ob(*ob);
 										const bool has_write_perms = userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock);
 										const bool can_control_vehicle = clientCanControlVehicleObject(*ob, client_avatar_uid, *cur_world_state, lock);
+										const bool can_update_owned_vehicle_after_exit =
+											ob->isDynamic() &&
+											isSummonedVehicleObject(*ob) &&
+											(ob->physics_owner_id == (uint32)client_avatar_uid.value());
 
 										// Allow normal object edits for users with write perms, and allow driving of summoned vehicles for avatars inside them.
-										if(!has_write_perms && !can_control_vehicle)
+										if(!has_write_perms && !can_control_vehicle && !can_update_owned_vehicle_after_exit)
 										{
 											if(!client_user_id.valid())
 												err_msg_to_client = "You must be logged in to modify an object.";
@@ -2028,7 +2032,7 @@ void WorkerThread::doRun()
 											temp_ob.axis = Vec3f(axis);
 											temp_ob.angle = angle;
 											// Vehicle driving should work for all riders (including anonymous) regardless of parcel ownership.
-											if(!can_control_vehicle && !userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
+											if(!can_control_vehicle && !can_update_owned_vehicle_after_exit && !userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
 												err_msg_to_client = "You can only place objects inside parcels you can edit in this world.";
 											else
 											{
