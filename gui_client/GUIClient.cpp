@@ -2253,7 +2253,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 	if(!ob->in_proximity)
 		return;
 
-	const int ob_lod_level = ob->getLODLevel(campos);
+	const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 	
 	// If we have a model loaded, that is not the placeholder model, and it has the correct LOD level, we don't need to do anything.
 	//if(ob->opengl_engine_ob.nonNull() && !ob->using_placeholder_model && (ob->loaded_model_lod_level == ob_model_lod_level) && (ob->/*loaded_lod_level*/loading_lod_level == ob_lod_level))
@@ -4279,6 +4279,7 @@ void GUIClient::checkForLODChanges(Timer& timer_event_timer)
 		if(!this->world_state->lod_chunks.empty() && LOD_CHUNK_SUPPORT)
 			this->server_using_lod_chunks = true;
 		const bool use_server_using_lod_chunks = this->server_using_lod_chunks;
+		const bool lod_disabled                = shouldDisableLODForCurrentServer();
 
 
 		const Vec4f cam_pos = cam_controller.getPosition().toVec4fPoint();
@@ -4317,7 +4318,7 @@ void GUIClient::checkForLODChanges(Timer& timer_event_timer)
 
 			// If this object is in a chunk region, and we are displaying the chunk, then don't show the object.
 			const Vec3i chunk_coords(Maths::floorToInt(centroid[0] / chunk_w), Maths::floorToInt(centroid[1] / chunk_w), 0);
-			if(use_server_using_lod_chunks && shouldDisplayLODChunk(chunk_coords, cam_pos) && !ob->exclude_from_lod_chunk_mesh)
+			if(use_server_using_lod_chunks && !lod_disabled && shouldDisplayLODChunk(chunk_coords, cam_pos) && !ob->exclude_from_lod_chunk_mesh)
 				in_proximity = false;
 
 			assert(ob->exclude_from_lod_chunk_mesh == BitUtils::isBitSet(ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH));
@@ -4334,7 +4335,7 @@ void GUIClient::checkForLODChanges(Timer& timer_event_timer)
 			}
 			else // Else if object is within load distance:
 			{
-				const int lod_level = ob->getLODLevel(cam_to_ob_d2);
+				const int lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 
 				if((lod_level != ob->current_lod_level)/* || ob->opengl_engine_ob.isNull()*/)
 				{
@@ -4491,7 +4492,7 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 
 				if(ob->in_proximity)
 				{
-					const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+					const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 					const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
 								
 					// Check the object wants this particular LOD level model right now:
@@ -4788,6 +4789,22 @@ void GUIClient::setObjectLoadDistance(float new_dist)
 void GUIClient::setOnlyLoadMostImportantObs(bool only_load_most_important_obs_)
 {
 	only_load_most_important_obs = only_load_most_important_obs_;
+}
+
+
+bool GUIClient::shouldDisableLODForCurrentServer() const
+{
+	// Keep large worlds fully visible for these specific servers.
+	return (server_hostname == "176.197.223.42") || (server_hostname == "89.104.70.23");
+}
+
+
+int GUIClient::getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const
+{
+	if(shouldDisableLODForCurrentServer())
+		return -1; // Highest quality LOD at any distance.
+
+	return ob->getLODLevel(campos);
 }
 
 
@@ -6807,6 +6824,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 			// Make sure server_using_lod_chunks is set before we start calling shouldDisplayLODChunk() below
 			if(!this->world_state->lod_chunks.empty() && LOD_CHUNK_SUPPORT)
 				this->server_using_lod_chunks = true;
+			const bool lod_disabled = shouldDisableLODForCurrentServer();
 
 			for(auto it = this->world_state->dirty_from_remote_objects.begin(); it != this->world_state->dirty_from_remote_objects.end(); ++it)
 			{
@@ -6869,11 +6887,11 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 							enableMaterialisationEffectOnOb(*ob); // Enable materialisation effect before we call loadModelForObject() below.
 
 						// Make sure lod level is set before calling loadModelForObject(), which will start downloads based on the lod level.
-						ob->current_lod_level = ob->getLODLevel(cam_controller.getPosition());
+						ob->current_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 
 						ob->in_proximity = ob->getCentroidWS().getDist2(campos) < this->load_distance2;
 						const Vec3i chunk_coords(Maths::floorToInt(ob->getCentroidWS()[0] / chunk_w), Maths::floorToInt(ob->getCentroidWS()[1] / chunk_w), 0);
-						if(this->server_using_lod_chunks && shouldDisplayLODChunk(chunk_coords, first_or_third_person_campos) && !ob->exclude_from_lod_chunk_mesh)
+						if(this->server_using_lod_chunks && !lod_disabled && shouldDisplayLODChunk(chunk_coords, first_or_third_person_campos) && !ob->exclude_from_lod_chunk_mesh)
 							ob->in_proximity = false;
 						assert(ob->exclude_from_lod_chunk_mesh == BitUtils::isBitSet(ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH));
 
@@ -6901,7 +6919,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 								// Update materials in opengl engine.
 								glare::ArenaFrame frame(arena_allocator);
-								const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+								const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 								for(size_t i=0; i<ob->materials.size(); ++i)
 									if(i < opengl_ob->materials.size())
 										ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
@@ -6983,7 +7001,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 				else if(ob->from_remote_lightmap_url_dirty)
 				{
 					// Try and download any resources we don't have for this object
-					const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+					const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 					startDownloadingResourcesForObject(ob, ob_lod_level);
 
 					// Update materials in opengl engine, so it picks up the new lightmap URL
@@ -9347,7 +9365,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						{
 							WorldObject* ob = it.getValue().ptr();
 
-							const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+							const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 
 							//if(ob->using_placeholder_model)
 							{
@@ -10979,7 +10997,7 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 						opengl_ob->ob_to_world_matrix = obToWorldMatrix(*in_world_ob);
 						opengl_engine->updateObjectTransformData(*opengl_ob);
 
-						const int ob_lod_level = in_world_ob->getLODLevel(cam_controller.getPosition());
+						const int ob_lod_level = getEffectiveLODLevel(in_world_ob.ptr(), cam_controller.getPosition());
 
 						// Update materials in opengl engine.
 						glare::ArenaFrame frame(arena_allocator);
@@ -12145,7 +12163,7 @@ void GUIClient::objectEdited()
 		// Note that server will also generate LOD textures, however the client may want to display a particular LOD texture immediately, so generate on the client as well.
 		//TEMP LODGeneration::generateLODTexturesForMaterialsIfNotPresent(selected_ob->materials, *resource_manager, *task_manager);
 
-		const int ob_lod_level = this->selected_ob->getLODLevel(cam_controller.getPosition());
+		const int ob_lod_level = getEffectiveLODLevel(this->selected_ob.ptr(), cam_controller.getPosition());
 		const float max_dist_for_ob_lod_level = selected_ob->getMaxDistForLODLevel(ob_lod_level);
 
 		startLoadingTexturesForObject(*this->selected_ob, ob_lod_level, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level/*TEMP*/);
@@ -13005,6 +13023,14 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 	//-------------------------------- Do disconnect process --------------------------------
 	disconnectFromServerAndClearAllObjects();
 	//-------------------------------- End disconnect process --------------------------------
+
+	if(shouldDisableLODForCurrentServer())
+	{
+		const float increased_load_distance = 5000.f;
+		proximity_loader.setLoadDistance(increased_load_distance);
+		this->load_distance = increased_load_distance;
+		this->load_distance2 = increased_load_distance * increased_load_distance;
+	}
 
 
 	//-------------------------------- Do connect process --------------------------------
@@ -13961,7 +13987,7 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 	{
 		const Matrix4f ob_to_world = obToWorldMatrix(*ob);
 
-		const int ob_lod_level = ob->getLODLevel(cam_controller.getPosition());
+		const int ob_lod_level = getEffectiveLODLevel(ob.ptr(), cam_controller.getPosition());
 
 		js::Vector<bool, 16> mat_transparent(ob->materials.size());
 		for(size_t i=0; i<ob->materials.size(); ++i)

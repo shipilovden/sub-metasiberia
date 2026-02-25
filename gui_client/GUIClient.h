@@ -432,6 +432,9 @@ public:
 
 	void setOnlyLoadMostImportantObs(bool only_load_most_important_obs);
 
+	bool shouldDisableLODForCurrentServer() const;
+	int getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const;
+
 	//----------------------- LuaScriptOutputHandler interface -----------------------
 	virtual void printFromLuaScript(LuaScript* script, const char* s, size_t len) override;
 	virtual void errorOccurredFromLuaScript(LuaScript* script, const std::string& msg) override;
