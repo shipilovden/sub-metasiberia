@@ -33,13 +33,39 @@ body {
 	padding: clamp(24px, 8vw, 120px) clamp(24px, 8vw, 120px) 12px;
 	text-align: center;
 }
+.msb-root-hero-emblem {
+	display: block;
+	margin: 0 auto 16px;
+	width: clamp(88px, 9vw, 132px);
+	height: auto;
+}
 .msb-root-hero-title {
-	font-family: Inter, Helvetica, Arial, sans-serif;
-	font-weight: 700;
-	font-style: normal;
-	line-height: normal;
-	font-size: 64px;
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0;
+	font-size: clamp(40px, 8vw, 74px);
+	line-height: 1;
 	color: #000;
+}
+.msb-root-hero-title-light {
+	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-weight: 300;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.msb-root-hero-title-bold {
+	font-family: "Consolas", "Courier New", monospace;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+.msb-root-hero-title-mark {
+	font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-size: 0.72em;
+	font-weight: 300;
+	line-height: 1;
+	margin-left: 0.03em;
+	transform: translateY(-0.48em);
 }
 .msb-root-hero-pretitle {
 	margin-bottom: 8px;
