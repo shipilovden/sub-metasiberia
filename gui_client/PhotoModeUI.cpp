@@ -1544,7 +1544,6 @@ void PhotoModeUI::uploadPhoto()
 	const std::string telegram_caption = buildTelegramCaption(*gui_client, username_for_server, last_caption);
 
 #if !EMSCRIPTEN
-	bool started_any_external_upload = false;
 	bool telegram_missing_config = false;
 	bool vk_missing_config = false;
 
@@ -1567,7 +1566,6 @@ void PhotoModeUI::uploadPhoto()
 		thread->out_msg_queue = &gui_client->msg_queue;
 
 		upload_thread_manager.addThread(thread);
-		started_any_external_upload = true;
 	}
 	else if(telegram_enabled && telegram_has_any_config)
 	{
@@ -1622,15 +1620,14 @@ void PhotoModeUI::uploadPhoto()
 		thread->out_msg_queue = &gui_client->msg_queue;
 
 		upload_thread_manager.addThread(thread);
-		started_any_external_upload = true;
 	}
 	else if(vk_enabled && vk_has_any_config)
 	{
 		vk_missing_config = true;
 	}
 
-	if(started_any_external_upload)
-		return;
+	// Always continue and upload to the Metasiberia server as well, so the photo appears on the website gallery.
+	// External uploads (Telegram/VK) run in parallel threads above.
 
 	if(telegram_missing_config)
 		gui_client->showErrorNotification("Telegram upload is partially configured. Set both telegram/bot_token and telegram/photo_upload_chat_id (or METASIBERIA_TELEGRAM_BOT_TOKEN + METASIBERIA_TELEGRAM_PHOTO_CHAT_ID).");

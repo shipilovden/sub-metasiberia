@@ -274,28 +274,33 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 		events_html += "</div>\n";
 
 
-		//------------------------------- Build photos grid view HTML --------------------------
-		photos_html.reserve(4096);
-		photos_html += "<div class=\"photo-container\">\n";		const int max_num_photos_to_display = 20;
+		//------------------------------- Build root-page photo filmstrip HTML --------------------------
+		photos_html.reserve(8192);
+		const int max_num_photos_to_display = 36;
 		int num_photos_displayed = 0;
 		for(auto it = world_state.photos.rbegin(); (it != world_state.photos.rend()) && (num_photos_displayed < max_num_photos_to_display); ++it)
 		{
 			const Photo* photo = it->second.ptr();
 			if(photo->state == Photo::State_published)
 			{
-				photos_html += "<a href=\"/photo/";
+				if(num_photos_displayed == 0)
+					photos_html += "<div class=\"msb-root-photo-filmstrip-wrap\"><div class=\"msb-root-photo-filmstrip\" aria-label=\"Metasiberia photo gallery\">";
+
+				const std::string escaped_caption = web::Escaping::HTMLEscape(photo->caption);
+				photos_html += "<a class=\"msb-root-photo-filmstrip-item\" href=\"/photo/";
 				photos_html += toString(photo->id);
+				photos_html += "\" title=\"";
+				photos_html += escaped_caption;
 				photos_html += "\"><img src=\"/photo_thumb_image/";
 				photos_html += toString(photo->id);
-				photos_html += "\" class=\"root-photo-img\" title=\"";
-				photos_html += web::Escaping::HTMLEscape(photo->caption);
-				photos_html += "\"/></a>";
+				photos_html += "\" class=\"msb-root-photo-filmstrip-img\" alt=\"Metasiberia photo\" loading=\"lazy\"/></a>";
 
 				num_photos_displayed++;
 			}
 		}
 
-		photos_html += "</div>\n";
+		if(num_photos_displayed > 0)
+			photos_html += "</div></div>\n";
 
 	} // end lock scope
 
@@ -312,11 +317,9 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 	StringUtils::replaceFirstInPlace(page_out, "EVENTS_HTML", events_html);
 
-	StringUtils::replaceFirstInPlace(page_out, "PHOTOS_HTML", photos_html);
-
 	page_out += "<script src=\"/files/root-page.js\"></script>";
 	
-	page_out += WebServerResponseUtils::standardFooter(request_info, true);
+	page_out += WebServerResponseUtils::standardFooter(request_info, true, photos_html);
 
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
 }
