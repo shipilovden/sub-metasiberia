@@ -1852,12 +1852,7 @@ void WorkerThread::doRun()
 							const float angle = msg_buffer.readFloat();
 							const Vec3f scale = readVec3FromStream<float>(msg_buffer);
 
-							// If client is not logged in, refuse object modification.
-							if(!client_user_id.valid())
-							{
-								writeErrorMessageToClient(socket, "You must be logged in to modify an object.");
-							}
-							else if(world_state->isInReadOnlyMode())
+							if(world_state->isInReadOnlyMode())
 							{
 								writeErrorMessageToClient(socket, "Server is in read-only mode, you can't modify an object right now.");
 							}
@@ -1876,11 +1871,22 @@ void WorkerThread::doRun()
 										temp_ob.axis = axis;
 										temp_ob.angle = angle;
 										temp_ob.scale = scale;
+										const bool has_write_perms = userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock);
+										const bool can_control_vehicle = clientCanControlVehicleObject(*ob, client_avatar_uid, *cur_world_state, lock);
+										const bool can_update_owned_vehicle_after_exit =
+											ob->isDynamic() &&
+											isSummonedVehicleObject(*ob) &&
+											(ob->physics_owner_id == (uint32)client_avatar_uid.value());
 
-										// See if the user has permissions to alter this object:
-										if(!userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock))
-											err_msg_to_client = "You must be the owner of this object to change it.";
-										else if(!userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
+										// Allow normal object edits for users with write perms, and allow transform sync for summoned vehicles for riders/recent physics owners.
+										if(!has_write_perms && !can_control_vehicle && !can_update_owned_vehicle_after_exit)
+										{
+											if(!client_user_id.valid())
+												err_msg_to_client = "You must be logged in to modify an object.";
+											else
+												err_msg_to_client = "You must be the owner of this object to change it.";
+										}
+										else if(!can_control_vehicle && !can_update_owned_vehicle_after_exit && !userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
 											err_msg_to_client = "You can only place objects inside parcels you can edit in this world.";
 										else
 										{
@@ -2074,18 +2080,14 @@ void WorkerThread::doRun()
 							WorldObject temp_ob;
 							readWorldObjectFromNetworkStreamGivenUID(msg_buffer, temp_ob); // Read rest of ObjectFullUpdate message.
 
-							// If client is not logged in, refuse object modification.
-							if(!client_user_id.valid())
-							{
-								writeErrorMessageToClient(socket, "You must be logged in to modify an object.");
-							}
-							else if(world_state->isInReadOnlyMode())
+							if(world_state->isInReadOnlyMode())
 							{
 								writeErrorMessageToClient(socket, "Server is in read-only mode, you can't modify an object right now.");
 							}
 							else
 							{
 								// Look up existing object in world state
+								bool send_login_required_msg = false;
 								bool send_must_be_owner_msg = false;
 								bool send_invalid_placement_msg = false;
 								{
@@ -2094,11 +2096,24 @@ void WorkerThread::doRun()
 									if(res != cur_world_state->getObjects(lock).end())
 									{
 										WorldObject* ob = res->second.getPointer();
+										const bool has_write_perms = userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock);
+										const bool can_control_vehicle = clientCanControlVehicleObject(*ob, client_avatar_uid, *cur_world_state, lock);
+										const bool can_update_owned_vehicle_after_exit =
+											ob->isDynamic() &&
+											isSummonedVehicleObject(*ob) &&
+											(ob->physics_owner_id == (uint32)client_avatar_uid.value());
 
 										// See if the user has permissions to alter this object:
-										if(!userHasObjectWritePermissions(*ob, client_user_id, client_user_name, *cur_world_state, server->config.allow_light_mapper_bot_full_perms, lock))
+										if(!has_write_perms)
 										{
-											send_must_be_owner_msg = true;
+											if(can_control_vehicle || can_update_owned_vehicle_after_exit)
+											{
+												// Ignore full-state updates from riders/recent drivers. Driving sync uses transform/physics packets; this avoids false owner popups on vehicle exit.
+											}
+											else if(!client_user_id.valid())
+												send_login_required_msg = true;
+											else
+												send_must_be_owner_msg = true;
 										}
 										else if(!userHasObjectPlacementPermissionsForObject(temp_ob, client_user_id, *cur_world_state, lock))
 										{
@@ -2172,7 +2187,9 @@ void WorkerThread::doRun()
 									}
 								} // End lock scope
 
-								if(send_must_be_owner_msg)
+								if(send_login_required_msg)
+									writeErrorMessageToClient(socket, "You must be logged in to modify an object.");
+								else if(send_must_be_owner_msg)
 									writeErrorMessageToClient(socket, "You must be the owner of this object to change it.");
 								else if(send_invalid_placement_msg)
 									writeErrorMessageToClient(socket, "You can only place objects inside parcels you can edit in this world.");
