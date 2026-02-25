@@ -103,8 +103,8 @@ const std::string standardFooter(const web::RequestInfo& request_info, bool incl
 	std::string page_out;
 	page_out +=
 		"	<hr/>																						\n"
-		"	<div class=\"footer\"><a href=\"https://t.me/metasiberia_channel\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\">VK</a> | <a href=\"https://github.com/shipilovden/sub-metasiberia\">Github</a></div>	\n"
-		"	<div class=\"footer\"><a href=\"/faq\">F.A.Q.</a> | <a href=\"/terms\">Terms of use</a> | <a href=\"/map\">Map</a></div>				\n"
+		"	<div class=\"footer\"><a href=\"https://t.me/metasiberia_channel\" target=\"_blank\" rel=\"noopener noreferrer\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\" target=\"_blank\" rel=\"noopener noreferrer\">VK</a> | <a href=\"https://github.com/shipilovden/sub-metasiberia\" target=\"_blank\" rel=\"noopener noreferrer\">Github</a></div>	\n"
+		"	<div class=\"footer\"><a href=\"/faq\" target=\"_blank\" rel=\"noopener noreferrer\">F.A.Q.</a> | <a href=\"/terms\" target=\"_blank\" rel=\"noopener noreferrer\">Terms of use</a> | <a href=\"/map\" target=\"_blank\" rel=\"noopener noreferrer\">Map</a></div>				\n"
 		"	</body>																						\n"
 		"</html>																						\n";
 
