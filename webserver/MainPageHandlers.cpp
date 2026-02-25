@@ -104,7 +104,7 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 
 	if(logged_in)
 	{
-		page_out += "You are logged in as <a href=\"/account\">" + logged_in_username.HTMLEscaped() + "</a>";
+		page_out += "You are logged in as <a href=\"/account\" target=\"_blank\" rel=\"noopener noreferrer\">" + logged_in_username.HTMLEscaped() + "</a>";
 
 		// Add logout button
 		page_out += "<form action=\"/logout_post\" method=\"post\">\n";
@@ -113,7 +113,7 @@ void renderRootPage(ServerAllWorldsState& world_state, WebDataStore& data_store,
 	}
 	else
 	{
-		page_out += "<a href=\"/login\">log in</a> <br/>\n";
+		page_out += "<a href=\"/login\" target=\"_blank\" rel=\"noopener noreferrer\">log in</a> <br/>\n";
 	}
 	page_out += 
 		"	</div>																									\n"; // End login div

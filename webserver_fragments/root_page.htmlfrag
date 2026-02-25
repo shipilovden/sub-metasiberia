@@ -8,8 +8,8 @@
 </div>
 
 <div class="msb-root-hero-links">
-	<a href="/webclient">Webclient</a> |
-	<a href="/signup">Sign up</a> |
-	<a href="/login">Log in</a> |
-	<a href="/map">Map</a>
+	<a href="/webclient" target="_blank" rel="noopener noreferrer">Webclient</a> |
+	<a href="/signup" target="_blank" rel="noopener noreferrer">Sign up</a> |
+	<a href="/login" target="_blank" rel="noopener noreferrer">Log in</a> |
+	<a href="/map" target="_blank" rel="noopener noreferrer">Map</a>
 </div>
