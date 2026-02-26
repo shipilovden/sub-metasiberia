@@ -1115,6 +1115,17 @@ void WorkerThread::sendPerWorldInitialDataToClient(ServerAllWorldsState* world_s
 				MessageUtils::updatePacketLengthField(scratch_packet);
 
 				packet.writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+
+				// If the avatar is sitting on a seat, send AvatarSatOnSeat so a newly joined user sees seated avatars correctly.
+				if(avatar->sitting_on_seat_uid.valid())
+				{
+					MessageUtils::initPacket(scratch_packet, Protocol::AvatarSatOnSeat);
+					writeToStream(avatar->uid, scratch_packet);
+					writeToStream(avatar->sitting_on_seat_uid, scratch_packet);
+					MessageUtils::updatePacketLengthField(scratch_packet);
+
+					packet.writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+				}
 			}
 		} // End lock scope
 
@@ -1800,6 +1811,60 @@ void WorkerThread::doRun()
 							writeToStream(vehicle_ob_uid, scratch_packet);
 							scratch_packet.writeUInt32(seat_index);
 							scratch_packet.writeUInt32(flags);
+							MessageUtils::updatePacketLengthField(scratch_packet);
+							enqueuePacketToBroadcast(scratch_packet);
+
+							break;
+						}
+					case Protocol::AvatarSatOnSeat:
+						{
+							conPrintIfNotFuzzing("AvatarSatOnSeat");
+
+							const UID avatar_uid = readUIDFromStream(msg_buffer);
+							const UID seat_ob_uid = readUIDFromStream(msg_buffer);
+
+							// Mark avatar as on seat
+							{
+								WorldStateLock lock(world_state->mutex);
+								const ServerWorldState::AvatarMapType& avatars = cur_world_state->getAvatars(lock);
+								auto res = avatars.find(avatar_uid);
+								if(res != avatars.end())
+								{
+									Avatar* avatar = res->second.getPointer();
+									avatar->sitting_on_seat_uid = seat_ob_uid;
+								}
+							}
+
+							// Enqueue AvatarSatOnSeat messages to worker threads to send
+							MessageUtils::initPacket(scratch_packet, Protocol::AvatarSatOnSeat);
+							writeToStream(avatar_uid, scratch_packet);
+							writeToStream(seat_ob_uid, scratch_packet);
+							MessageUtils::updatePacketLengthField(scratch_packet);
+							enqueuePacketToBroadcast(scratch_packet);
+
+							break;
+						}
+					case Protocol::AvatarGotUpFromSeat:
+						{
+							conPrintIfNotFuzzing("AvatarGotUpFromSeat");
+
+							const UID avatar_uid = readUIDFromStream(msg_buffer);
+
+							// Mark avatar as not sitting on seat
+							{
+								WorldStateLock lock(world_state->mutex);
+								const ServerWorldState::AvatarMapType& avatars = cur_world_state->getAvatars(lock);
+								auto res = avatars.find(avatar_uid);
+								if(res != avatars.end())
+								{
+									Avatar* avatar = res->second.getPointer();
+									avatar->sitting_on_seat_uid = UID::invalidUID();
+								}
+							}
+
+							// Enqueue AvatarGotUpFromSeat messages to worker threads to send
+							MessageUtils::initPacket(scratch_packet, Protocol::AvatarGotUpFromSeat);
+							writeToStream(avatar_uid, scratch_packet);
 							MessageUtils::updatePacketLengthField(scratch_packet);
 							enqueuePacketToBroadcast(scratch_packet);
 
