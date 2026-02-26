@@ -52,7 +52,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Manage gestures";
-		edit_gestures_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/plus.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		edit_gestures_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/plus.png", args);
 		edit_gestures_button->handler = this;
 		gl_ui->addWidget(edit_gestures_button);
 	}
@@ -60,7 +60,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Close gesture manager";
-		close_gesture_manager_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/white_x.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		close_gesture_manager_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/white_x.png", args);
 		close_gesture_manager_button->handler = this;
 		gl_ui->addWidget(close_gesture_manager_button);
 		close_gesture_manager_button->setVisible(false);
@@ -70,7 +70,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "View gestures";
-		expand_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Waving 1.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		expand_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Waving 1.png", args);
 		expand_button->handler = this;
 		gl_ui->addWidget(expand_button);
 	}
@@ -78,7 +78,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Hide gestures";
-		collapse_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/right_tab.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		collapse_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/right_tab.png", args);
 		collapse_button->handler = this;
 		gl_ui->addWidget(collapse_button);
 	}
@@ -87,7 +87,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		{
 			GLUIButton::CreateArgs args;
 			args.tooltip = "Summon vehicle";
-			vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/bike.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
+			vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/bike.png", args);
 			vehicle_button->handler = this;
 			gl_ui->addWidget(vehicle_button);
 		}
@@ -136,7 +136,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		{
 			GLUIButton::CreateArgs args;
 			args.tooltip = "Hide vehicles";
-			collapse_vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/down_tab.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+			collapse_vehicle_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/down_tab.png", args);
 			collapse_vehicle_button->handler = this;
 			collapse_vehicle_button->setVisible(vehicle_buttons_visible);
 			gl_ui->addWidget(collapse_vehicle_button);
@@ -147,7 +147,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Photo mode";
-		photo_mode_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Selfie.png", Vec2f(0), Vec2f(0.1f, 0.1f),args);
+		photo_mode_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/Selfie.png", args);
 		photo_mode_button->toggleable = true;
 		photo_mode_button->handler = this;
 		gl_ui->addWidget(photo_mode_button);
@@ -156,7 +156,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	{	
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Enable microphone for voice chat";
-		microphone_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/microphone.png", Vec2f(0), Vec2f(0.1f, 0.1f), args);
+		microphone_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/microphone.png", args);
 		microphone_button->toggleable = true;
 		microphone_button->handler = this;
 		gl_ui->addWidget(microphone_button);
@@ -172,7 +172,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 #else
 			args.tooltip = "Open webcam window";
 #endif
-			webcam_button = new GLUIButton(*gl_ui, opengl_engine, webcam_tex_path, Vec2f(0), Vec2f(0.1f, 0.1f), args);
+			webcam_button = new GLUIButton(*gl_ui, opengl_engine, webcam_tex_path, args);
 			webcam_button->toggleable = true;
 			webcam_button->handler = this;
 			gl_ui->addWidget(webcam_button);
@@ -184,7 +184,7 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 	}
 
 	{	
-		mic_level_image = new GLUIImage(*gl_ui, opengl_engine, ""/*gui_client->base_dir_path + "/resources/buttons/mic_level.png"*/, Vec2f(0), Vec2f(0.1f, 0.1f), "Microphone input indicator");
+		mic_level_image = new GLUIImage(*gl_ui, opengl_engine, ""/*gui_client->base_dir_path + "/resources/buttons/mic_level.png"*/, "Microphone input indicator");
 		gl_ui->addWidget(mic_level_image);
 	}
 
@@ -229,8 +229,6 @@ void GestureUI::rebuildGestureWidgets()
 
 
 	// Add gesture buttons
-	const float min_max_y = gl_ui->getViewportMinMaxY();
-
 	for(size_t i=0; i<gesture_settings.gesture_settings.size(); ++i)
 	{
 		const SingleGestureSettings& setting = gesture_settings.gesture_settings[i];
@@ -241,7 +239,7 @@ void GestureUI::rebuildGestureWidgets()
 
 		GLUIButton::CreateArgs args;
 		args.tooltip = gesture_name;
-		GLUIButtonRef button = new GLUIButton(*gl_ui, opengl_engine,  gui_client->resources_dir_path + "/buttons/" + tex_name + ".png", Vec2f(0.1f + i * 0.15f, -min_max_y + 0.06f), Vec2f(0.1f, 0.1f), args);
+		GLUIButtonRef button = new GLUIButton(*gl_ui, opengl_engine,  gui_client->resources_dir_path + "/buttons/" + tex_name + ".png", args);
 		button->toggleable = true;
 		button->client_data = gesture_name;
 		button->handler = this;
