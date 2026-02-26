@@ -62,6 +62,7 @@ private slots:;
 	void on_actionAdd_Text_triggered();
 	void on_actionAdd_Voxels_triggered();
 	void on_actionAdd_Spotlight_triggered();
+	void on_actionAdd_Seat_triggered();
 	void on_actionAdd_Portal_triggered();
 	void on_actionAdd_to_Favorites_triggered();
 	void on_actionAdd_Web_View_triggered();
