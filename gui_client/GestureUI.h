@@ -71,7 +71,6 @@ private:
 
 	GLUIButtonRef edit_gestures_button;
 	Reference<GestureManagerUI> gesture_manager;
-	GLUIButtonRef close_gesture_manager_button;
 
 	GestureSettings gesture_settings;
 
@@ -99,7 +98,6 @@ private:
 	GLUITextButtonRef summon_hovercar_button;
 
 	GLUIRef gl_ui;
-
 	Reference<OpenGLEngine> opengl_engine;
 
 	Timer timer;

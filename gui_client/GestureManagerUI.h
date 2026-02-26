@@ -13,6 +13,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <opengl/ui/GLUITextView.h>
 #include <opengl/ui/GLUICallbackHandler.h>
 #include <opengl/ui/GLUIGridContainer.h>
+#include <opengl/ui/GLUIWindow.h>
 #include <opengl/ui/GLUICheckBox.h>
 
 
@@ -39,6 +40,7 @@ public:
 	void viewportResized(int w, int h);
 
 	virtual void eventOccurred(GLUICallbackEvent& event) override; // From GLUICallbackHandler
+	virtual void closeWindowEventOccurred(GLUICallbackEvent& event) override; // From GLUICallbackHandler
 
 
 	void updateWidgetPositions();
@@ -62,6 +64,7 @@ private:
 	std::vector<PerGestureUI> gestures;
 	
 public:
+	GLUIWindowRef window;
 	GLUIGridContainerRef grid_container;
 private:
 	GLUIButtonRef add_gesture_button;

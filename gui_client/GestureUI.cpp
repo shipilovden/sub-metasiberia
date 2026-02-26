@@ -57,15 +57,6 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		gl_ui->addWidget(edit_gestures_button);
 	}
 
-	{
-		GLUIButton::CreateArgs args;
-		args.tooltip = "Close gesture manager";
-		close_gesture_manager_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/white_x.png", args);
-		close_gesture_manager_button->handler = this;
-		gl_ui->addWidget(close_gesture_manager_button);
-		close_gesture_manager_button->setVisible(false);
-	}
-
 	// Create left and right tab buttons
 	{
 		GLUIButton::CreateArgs args;
@@ -270,8 +261,6 @@ void GestureUI::think()
 	if(close_gesture_manager_soon)
 	{
 		gesture_manager = nullptr;
-		if(close_gesture_manager_button)
-			close_gesture_manager_button->setVisible(false);
 		close_gesture_manager_soon = false;
 	}
 }
@@ -312,13 +301,7 @@ void GestureUI::updateWidgetPositions()
 	if(gl_ui.nonNull())
 	{
 		if(gesture_manager)
-		{
 			gesture_manager->updateWidgetPositions();
-
-			const Vec2f close_dims = Vec2f(gl_ui->getUIWidthForDevIndepPixelWidth(25));
-			const Vec2f close_margin = Vec2f(gl_ui->getUIWidthForDevIndepPixelWidth(8)); // Extra margin around close button
-			close_gesture_manager_button->setPosAndDims(gesture_manager->grid_container->getRect().getMax() - close_dims - close_margin, close_dims);
-		}
 
 		const float min_max_y = gl_ui->getViewportMinMaxY();
 
@@ -491,12 +474,6 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				updateWidgetPositions();
 				gui_client->getSettingsStore()->setBoolValue("GestureUI/gestures_visible", gestures_visible);
 			}
-			else if(button == close_gesture_manager_button.ptr())
-			{
-				event.accepted = true;
-				gestures_visible = false;
-				closeGestureManagerSoon();
-			}
 			else if(button == vehicle_button.ptr())
 			{
 				event.accepted = true;
@@ -579,8 +556,6 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 			if(!gesture_manager)
 			{
 				gesture_manager = new GestureManagerUI(opengl_engine, gui_client, gl_ui, this->gesture_settings);
-
-				close_gesture_manager_button->setVisible(true);
 
 				updateWidgetPositions();
 			}
