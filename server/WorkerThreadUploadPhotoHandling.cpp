@@ -298,28 +298,48 @@ void handlePhotoUploadConnection(Reference<SocketInterface> socket, Server* serv
 					body.append((const char*)data.data(), data.size());
 					body += "\r\n--" + boundary + "--\r\n";
 
-					HTTPClientRef client = new HTTPClient();
-					client->additional_headers.push_back("User-Agent: Metasiberia server");
-
 					const std::string url = "https://api.telegram.org/bot" + bot_token + "/sendPhoto";
-
-					std::string response_body;
-					HTTPClient::ResponseInfo response = client->sendPost(
-						url,
-						body,
-						"multipart/form-data; boundary=" + boundary,
-						response_body
-					);
-
-					if(response.response_code != 200 || (response_body.find("\"ok\":true") == std::string::npos))
+					const int max_attempts = 3;
+					bool posted_to_telegram = false;
+					std::string last_error;
+					for(int attempt=1; attempt<=max_attempts && !posted_to_telegram; ++attempt)
 					{
-						std::string snippet = response_body;
-						if(snippet.size() > 4000)
-							snippet = snippet.substr(0, 4000);
-						throw glare::Exception("Telegram API returned HTTP " + toString(response.response_code) + ". Response: " + snippet);
+						try
+						{
+							HTTPClientRef client = new HTTPClient();
+							client->additional_headers.push_back("User-Agent: Metasiberia server");
+
+							std::string response_body;
+							HTTPClient::ResponseInfo response = client->sendPost(
+								url,
+								body,
+								"multipart/form-data; boundary=" + boundary,
+								response_body
+							);
+
+							if(response.response_code != 200 || (response_body.find("\"ok\":true") == std::string::npos))
+							{
+								std::string snippet = response_body;
+								if(snippet.size() > 4000)
+									snippet = snippet.substr(0, 4000);
+								throw glare::Exception("Telegram API returned HTTP " + toString(response.response_code) + ". Response: " + snippet);
+							}
+
+							posted_to_telegram = true;
+							conPrint("Posted photo to Telegram.");
+						}
+						catch(glare::Exception& e)
+						{
+							last_error = e.what();
+							conPrint("Telegram post attempt " + toString(attempt) + "/" + toString(max_attempts) + " failed: " + last_error);
+
+							if(attempt < max_attempts)
+								PlatformUtils::Sleep(500);
+						}
 					}
 
-					conPrint("Posted photo to Telegram.");
+					if(!posted_to_telegram)
+						throw glare::Exception("Telegram photo post failed after " + toString(max_attempts) + " attempts. Last error: " + last_error);
 				}
 				catch(glare::Exception& e)
 				{

@@ -34,6 +34,96 @@ const std::string& get_local_filename(const Photo& p)           { return p.local
 const std::string& get_local_thumbnail_filename(const Photo& p) { return p.local_thumbnail_filename; }
 const std::string& get_local_midsize_filename(const Photo& p)   { return p.local_midsize_filename; }
 
+namespace
+{
+	struct ParsedPhotoCaption
+	{
+		std::string title;
+		std::string user_caption;
+		std::string by;
+		std::string location_client;
+		std::string location_web;
+		std::string hashtags;
+	};
+
+	static bool hasPrefixExact(const std::string& s, const std::string& prefix)
+	{
+		return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
+	}
+
+	static std::string escapedWithLineBreaks(const std::string& s)
+	{
+		return StringUtils::replaceAll(web::Escaping::HTMLEscape(s), "\n", "<br>");
+	}
+
+	static ParsedPhotoCaption parsePhotoCaption(
+		const std::string& raw_caption,
+		const std::string& creator_username,
+		const std::string& fallback_sub_url,
+		const std::string& fallback_web_url)
+	{
+		ParsedPhotoCaption parsed;
+
+		const std::string caption_norm = StringUtils::replaceAll(raw_caption, "\r\n", "\n");
+		const std::vector<std::string> lines = StringUtils::splitIntoLines(caption_norm);
+
+		std::vector<std::string> main_lines;
+		for(size_t i=0; i<lines.size(); ++i)
+		{
+			const std::string line = stripHeadAndTailWhitespace(lines[i]);
+			if(line.empty())
+				continue;
+
+			if(hasPrefixExact(line, "By:"))
+			{
+				parsed.by = stripHeadAndTailWhitespace(line.substr(3));
+			}
+			else if(hasPrefixExact(line, "Location (client):"))
+			{
+				parsed.location_client = stripHeadAndTailWhitespace(line.substr(std::string("Location (client):").size()));
+			}
+			else if(hasPrefixExact(line, "Location (web):"))
+			{
+				parsed.location_web = stripHeadAndTailWhitespace(line.substr(std::string("Location (web):").size()));
+			}
+			else if(line[0] == '#')
+			{
+				if(!parsed.hashtags.empty())
+					parsed.hashtags += " ";
+				parsed.hashtags += line;
+			}
+			else
+			{
+				main_lines.push_back(line);
+			}
+		}
+
+		if(!main_lines.empty())
+		{
+			parsed.title = main_lines[0];
+			if(main_lines.size() > 1)
+			{
+				std::vector<std::string> detail_lines(main_lines.begin() + 1, main_lines.end());
+				parsed.user_caption = StringUtils::join(detail_lines, "\n");
+			}
+		}
+
+		if(parsed.title.empty())
+			parsed.title = "Metasiberia Beta";
+
+		if(parsed.by.empty())
+			parsed.by = creator_username.empty() ? std::string("Unknown") : creator_username;
+
+		if(parsed.location_client.empty())
+			parsed.location_client = fallback_sub_url;
+
+		if(parsed.location_web.empty())
+			parsed.location_web = fallback_web_url;
+
+		return parsed;
+	}
+}
+
 
 void doHandlePhotoImageRequest(ServerAllWorldsState& world_state, WebDataStore& datastore, const web::RequestInfo& request, web::ReplyInfo& reply_info, 
 	const std::string& path_prefix, // e.g. "/photo_midsize_image/"
@@ -179,25 +269,24 @@ void handlePhotoPageRequest(ServerAllWorldsState& world_state, WebDataStore& dat
 				page += "<div class=\"main\">   \n";
 
 
-				// Insert image tag
-				
-				page += "<a href=\"" + fullsize_image_URL + "\"><img src=\"" + midsize_image_URL + "\"  class=\"photo-midsize-img\"/></a>"; // width=\"800px\"
+				// See GUIClient::getCurrentWebClientURLPath()
+				const Vec3d pos = photo->cam_pos;
+				const std::string hostname = request.getHostHeader(); // Find the hostname the request was sent to
+				const double heading_deg = Maths::doubleMod(::radToDegree(photo->cam_angles.x), 360.0);
 
-				page += "<figcaption><i>" + web::Escaping::HTMLEscape(photo->caption) + "</i></figcaption>\n";
+				const std::string pos_and_heading_part = "x=" + doubleToStringMaxNDecimalPlaces(pos.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(pos.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(pos.z, 2) +
+					"&heading=" + doubleToStringNDecimalPlaces(heading_deg, 1);
+
+				const std::string sub_URL = "sub://" + hostname + "/" + WorldHandlers::URLEscapeWorldName(photo->world_name) + "?" + pos_and_heading_part;
+
+				const std::string webclient_URL = (request.tls_connection ? std::string("https") : std::string("http")) + "://" + hostname + "/visit?world=" + WorldHandlers::URLEscapeWorldName(photo->world_name) +
+					"&" + pos_and_heading_part;
+
+				const ParsedPhotoCaption parsed_caption = parsePhotoCaption(photo->caption, creator_username, sub_URL, webclient_URL);
 
 				User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
 				const bool logged_in_user_is_photo_owner = logged_in_user && (photo->creator_id == logged_in_user->id); // If the user is logged in and owns this parcel:
 				const bool logged_in_user_is_god_user = logged_in_user && isGodUser(logged_in_user->id);
-
-				if(logged_in_user)
-				{
-					const std::string msg = world_state.getAndRemoveUserWebMessage(logged_in_user->id);
-					if(!msg.empty())
-						page += "<div class=\"msg\">" + web::Escaping::HTMLEscape(msg) + "</div>  \n";
-				}
-
-				page += "<p>Photo by <i>" + web::Escaping::HTMLEscape(creator_username) + "</i></p>   \n";
-
 
 				// Look up parcel it was taken in, if any
 				std::string parcel_title;
@@ -209,55 +298,92 @@ void handlePhotoPageRequest(ServerAllWorldsState& world_state, WebDataStore& dat
 						const Parcel* parcel = parcel_res->second.ptr();
 						parcel_title = parcel->getUseTitle();
 					}
+					if(parcel_title.empty())
+						parcel_title = "Parcel #" + toString(photo->parcel_id.value());
 				}
 
-				page += "<p>Taken " + photo->created_time.dayAndTimeStringUTC() + "</p>   \n";
-
-				page += "<p>Location: ";
+				std::string location_html;
 				if(photo->parcel_id.valid())
-				{
-					page += "<a href=\"/parcel/" + toString(photo->parcel_id.value()) + "\">" + web::Escaping::HTMLEscape(parcel_title) + "</a>";
-				}
+					location_html = "<a href=\"/parcel/" + toString(photo->parcel_id.value()) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + web::Escaping::HTMLEscape(parcel_title) + "</a>";
 				else
-					page += "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(photo->world_name) + "\">" + (photo->world_name.empty() ? "Main world" : web::Escaping::HTMLEscape(photo->world_name)) + "</a>";
+					location_html = "<a href=\"/world/" + WorldHandlers::URLEscapeWorldName(photo->world_name) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + (photo->world_name.empty() ? "Main world" : web::Escaping::HTMLEscape(photo->world_name)) + "</a>";
 
-				page += ", x: " + toString((int)photo->cam_pos.x) + ", y: " + toString((int)photo->cam_pos.y) + "</p>  \n";
+				location_html += ", x: " + toString((int)photo->cam_pos.x) + ", y: " + toString((int)photo->cam_pos.y);
 
-				if(logged_in_user_is_photo_owner || logged_in_user_is_god_user)
+				page += "<div class=\"msb-photo-detail\">\n";
+				page += "<div class=\"msb-photo-image-wrap\">";
+				page += "<a href=\"" + fullsize_image_URL + "\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"" + midsize_image_URL + "\" class=\"photo-midsize-img msb-photo-midsize-img\"/></a>";
+				page += "</div>\n";
+
+				page += "<section class=\"msb-photo-info-card msb-photo-caption-card\">";
+				page += "<h2 class=\"msb-photo-caption-title\">" + web::Escaping::HTMLEscape(parsed_caption.title) + "</h2>";
+				if(!parsed_caption.user_caption.empty())
+					page += "<p class=\"msb-photo-caption-text\"><span class=\"msb-photo-inline-label\">Caption:</span> " + escapedWithLineBreaks(parsed_caption.user_caption) + "</p>";
+				if(!parsed_caption.hashtags.empty())
+					page += "<p class=\"msb-photo-hashtags\">" + web::Escaping::HTMLEscape(parsed_caption.hashtags) + "</p>";
+				page += "</section>\n";
+
+				if(logged_in_user)
 				{
-					page += "<p><a href=\"/edit_photo_parcel?photo_id=" + toString(photo_id) + "\">Edit photo parcel ID</a></p>\n";
+					const std::string msg = world_state.getAndRemoveUserWebMessage(logged_in_user->id);
+					if(!msg.empty())
+						page += "<div class=\"msg msb-photo-message\">" + web::Escaping::HTMLEscape(msg) + "</div>  \n";
 				}
 
-
-				// See GUIClient::getCurrentWebClientURLPath()
-				const Vec3d pos = photo->cam_pos;
-				const std::string hostname = request.getHostHeader(); // Find the hostname the request was sent to
-				const double heading_deg = Maths::doubleMod(::radToDegree(photo->cam_angles.x), 360.0);
-
-				const std::string pos_and_heading_part = "x=" + doubleToStringMaxNDecimalPlaces(pos.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(pos.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(pos.z, 2) + 
-					"&heading=" + doubleToStringNDecimalPlaces(heading_deg, 1);
-
-				const std::string sub_URL = "sub://" + hostname + "/" + WorldHandlers::URLEscapeWorldName(photo->world_name) + "?" + pos_and_heading_part;
-				
-				const std::string webclient_URL = (request.tls_connection ? std::string("https") : std::string("http")) + "://" + hostname + "/visit?world=" + WorldHandlers::URLEscapeWorldName(photo->world_name) + 
-					"&" + pos_and_heading_part;
-
-				page += "<p><a href=\"" + webclient_URL + "\">Visit location in web browser</a></p>";
-				page += "<p><a href=\"" + sub_URL + "\">Visit location in native app</a></p>";
-
-				// Create 'Share on X' link.
-				page += "<p><a href=\"https://twitter.com/intent/tweet?text=" + web::Escaping::URLEscape(photo->caption + "\nPhoto by " + creator_username + " in Substrata") + 
-					"&url=" + web::Escaping::URLEscape(this_page_url) + 
-					"&via=SubstrataVr\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"/files/X-logo-black-small.png\" height=\"20px\"/>Share on X</a></p>";
-				//&hashtags=Substrata
+				page += "<section class=\"msb-photo-info-card\">";
+				page += "<div class=\"msb-photo-meta-grid\">";
+				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Photo by</div><div class=\"msb-photo-meta-value\"><i>" + web::Escaping::HTMLEscape(parsed_caption.by) + "</i></div></div>";
+				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Taken (UTC)</div><div class=\"msb-photo-meta-value\">" + web::Escaping::HTMLEscape(photo->created_time.dayAndTimeStringUTC()) + "</div></div>";
+				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Location</div><div class=\"msb-photo-meta-value\">" + location_html + "</div></div>";
+				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Location (client)</div><div class=\"msb-photo-meta-value\"><a href=\"" + web::Escaping::HTMLEscape(sub_URL) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + web::Escaping::HTMLEscape(sub_URL) + "</a></div></div>";
+				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Location (web)</div><div class=\"msb-photo-meta-value\"><a href=\"" + web::Escaping::HTMLEscape(webclient_URL) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + web::Escaping::HTMLEscape(webclient_URL) + "</a></div></div>";
+				page += "</div>";
+				page += "</section>\n";
 
 				if(logged_in_user_is_photo_owner || logged_in_user_is_god_user)
 				{
-					page += "<form action=\"/delete_photo_post\" method=\"post\" id=\"usrform\">";
+					page += "<section class=\"msb-photo-info-card msb-photo-owner-tools\">";
+					page += "<h3 class=\"msb-photo-section-title\">Owner tools</h3>";
+					page += "<p><a href=\"/edit_photo_parcel?photo_id=" + toString(photo_id) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Edit photo parcel ID</a></p>\n";
+					page += "</section>\n";
+				}
+
+				const std::string share_title = parsed_caption.title;
+				std::string share_text = parsed_caption.title;
+				if(!parsed_caption.user_caption.empty())
+					share_text += "\nCaption: " + parsed_caption.user_caption;
+				share_text += "\nBy: " + parsed_caption.by;
+
+				const std::string escaped_page_url = web::Escaping::URLEscape(this_page_url);
+				const std::string escaped_share_title = web::Escaping::URLEscape(share_title);
+				const std::string escaped_share_text = web::Escaping::URLEscape(share_text);
+				const std::string escaped_share_text_plus_url = web::Escaping::URLEscape(share_text + "\n" + this_page_url);
+
+				page += "<section class=\"msb-photo-info-card\">";
+				page += "<h3 class=\"msb-photo-section-title\">Share</h3>";
+				page += "<div class=\"msb-share-links\">";
+				page += "<a class=\"msb-share-link\" href=\"https://t.me/share/url?url=" + escaped_page_url + "&text=" + escaped_share_text + "\" target=\"_blank\" rel=\"noopener noreferrer\">Telegram</a>";
+				page += "<a class=\"msb-share-link\" href=\"https://vk.com/share.php?url=" + escaped_page_url + "&title=" + escaped_share_title + "&comment=" + escaped_share_text + "\" target=\"_blank\" rel=\"noopener noreferrer\">VK</a>";
+				page += "<a class=\"msb-share-link\" href=\"https://twitter.com/intent/tweet?text=" + escaped_share_text + "&url=" + escaped_page_url + "\" target=\"_blank\" rel=\"noopener noreferrer\">X</a>";
+				page += "<a class=\"msb-share-link\" href=\"https://www.facebook.com/sharer/sharer.php?u=" + escaped_page_url + "\" target=\"_blank\" rel=\"noopener noreferrer\">Facebook</a>";
+				page += "<a class=\"msb-share-link\" href=\"https://www.linkedin.com/sharing/share-offsite/?url=" + escaped_page_url + "\" target=\"_blank\" rel=\"noopener noreferrer\">LinkedIn</a>";
+				page += "<a class=\"msb-share-link\" href=\"https://wa.me/?text=" + escaped_share_text_plus_url + "\" target=\"_blank\" rel=\"noopener noreferrer\">WhatsApp</a>";
+				page += "<a class=\"msb-share-link\" href=\"https://www.reddit.com/submit?url=" + escaped_page_url + "&title=" + escaped_share_title + "\" target=\"_blank\" rel=\"noopener noreferrer\">Reddit</a>";
+				page += "<a class=\"msb-share-link\" href=\"mailto:?subject=" + escaped_share_title + "&body=" + escaped_share_text_plus_url + "\">Email</a>";
+				page += "</div>";
+				page += "</section>\n";
+
+				if(logged_in_user_is_photo_owner || logged_in_user_is_god_user)
+				{
+					page += "<section class=\"msb-photo-info-card msb-photo-owner-tools\">";
+					page += "<form action=\"/delete_photo_post\" method=\"post\" class=\"msb-photo-delete-form\">";
 					page += "<input type=\"hidden\" name=\"photo_id\" value=\"" + toString(photo->id) + "\"><br>";
-					page += "<input type=\"submit\" class=\"delete-photo\" value=\"Delete photo\"\">"; // photo.js adds a confirm dialog to this button.
+					page += "<input type=\"submit\" class=\"delete-photo\" value=\"Delete photo\">"; // photo.js adds a confirm dialog to this button.
 					page += "</form>";
+					page += "</section>\n";
 				}
+
+				page += "</div>\n"; // .msb-photo-detail
 			}
 		} // end lock scope
 

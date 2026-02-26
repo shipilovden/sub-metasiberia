@@ -26,7 +26,7 @@ namespace WebServerResponseUtils
 	const std::string standardHTMLHeader(WebDataStore& data_store, const web::RequestInfo& request_info, const std::string& page_title, const std::string& extra_header_tags = "");
 	const std::string standardHeader(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, const std::string& page_title, const std::string& extra_header_tags = "", const std::string& heading_title = "");
 
-	const std::string standardFooter(const web::RequestInfo& request_info, bool include_email_link);
+	const std::string standardFooter(const web::RequestInfo& request_info, bool include_email_link, const std::string& extra_html = std::string());
 
 	const std::string getMapHeaderTags();
 	const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID highlighted_parcel_id, const std::string& world_name);
