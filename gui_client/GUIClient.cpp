@@ -2571,7 +2571,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 			{
 				assert(ob->physics_object.isNull());
 
-				PhysicsObjectRef physics_ob = new PhysicsObject(/*collidable=*/true);
+				PhysicsObjectRef physics_ob = new PhysicsObject(/*collidable=*/ob->isCollidable());
 				physics_ob->shape = this->seat_shape;
 				physics_ob->is_sensor = ob->isSensor();
 				physics_ob->userdata = ob;
@@ -2580,6 +2580,11 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				physics_ob->pos = ob->pos.toVec4fPoint();
 				physics_ob->rot = Quatf::fromAxisAndAngle(normalise(ob->axis), ob->angle);
 				physics_ob->scale = useScaleForWorldOb(ob->scale);
+				physics_ob->kinematic = !ob->script.empty();
+				physics_ob->dynamic = ob->isDynamic();
+				physics_ob->mass = ob->mass;
+				physics_ob->friction = ob->friction;
+				physics_ob->restitution = ob->restitution;
 
 				GLObjectRef opengl_ob = opengl_engine->allocateObject();
 				opengl_ob->mesh_data = this->seat_opengl_mesh;
@@ -12353,6 +12358,36 @@ void GUIClient::objectEdited()
 
 						opengl_engine->objectMaterialsUpdated(*opengl_ob);
 					}
+					else if(this->selected_ob->object_type == WorldObject::ObjectType_Seat)
+					{
+						if(opengl_ob.nonNull())
+						{
+							glare::ArenaFrame frame(arena_allocator);
+
+							opengl_ob->materials.resize(1); // Seat mesh uses a single material.
+							if(!this->selected_ob->materials.empty())
+							{
+								ModelLoading::setGLMaterialFromWorldMaterial(
+									*this->selected_ob->materials[0],
+									ob_lod_level,
+									/*lightmap URL=*/"",
+									/*use_basis=*/this->server_has_basis_textures,
+									*this->resource_manager,
+									&arena_allocator,
+									opengl_ob->materials[0]
+								);
+							}
+							else
+							{
+								// Keep seat visible with sane defaults even if no material is present.
+								opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.4f, 0.5f, 0.6f));
+								opengl_ob->materials[0].alpha = 0.5f;
+							}
+
+							assignLoadedOpenGLTexturesToMats(selected_ob.ptr());
+							opengl_engine->objectMaterialsUpdated(*opengl_ob);
+						}
+					}
 					else if(this->selected_ob->object_type == WorldObject::ObjectType_Hypercard)
 					{
 						if(BitUtils::isBitSet(selected_ob->changed_flags, WorldObject::CONTENT_CHANGED))
@@ -12422,6 +12457,12 @@ void GUIClient::objectEdited()
 					if(selected_ob->physics_object)
 					{
 						selected_ob->physics_object->collidable = selected_ob->isCollidable();
+						selected_ob->physics_object->is_sensor = selected_ob->isSensor();
+						selected_ob->physics_object->kinematic = !selected_ob->script.empty();
+						selected_ob->physics_object->dynamic = selected_ob->isDynamic();
+						selected_ob->physics_object->mass = selected_ob->mass;
+						selected_ob->physics_object->friction = selected_ob->friction;
+						selected_ob->physics_object->restitution = selected_ob->restitution;
 						physics_world->setNewObToWorldTransform(*selected_ob->physics_object, selected_ob->pos.toVec4fVector(), Quatf::fromAxisAndAngle(normalise(selected_ob->axis.toVec4fVector()), selected_ob->angle),
 							useScaleForWorldOb(selected_ob->scale).toVec4fVector());
 					}
