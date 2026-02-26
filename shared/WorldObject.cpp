@@ -599,18 +599,28 @@ static void writeWorldObjectPerTypeData(RandomAccessOutStream& stream, const Wor
 static void readWorldObjectPerTypeData(RandomAccessInStream& stream, WorldObject& ob)
 {
 	// Read TypeData
-	const uint32 len = stream.readUInt32(); // Length of per-type data that follows this uint32.
+	const uint32 len_u32 = stream.readUInt32(); // Length of per-type data that follows this uint32.
+	const size_t len = (size_t)len_u32;
 	const size_t start_offset = stream.getReadIndex(); // Offset at start of per-type data
+	const size_t end_offset = start_offset + len;
+
+	if((end_offset < start_offset) || (end_offset > stream.size()))
+		throw glare::Exception("Invalid per-type world object data length: " + toString(len_u32));
+
 	switch(ob.object_type)
 	{
 		case WorldObject::ObjectType_Spotlight:
 		{
-			stream.readData(&ob.type_data.spotlight_data, sizeof(WorldObject::SpotLightTypeData));
+			// Be robust to legacy/truncated payloads: keep defaults unless full struct data is present.
+			if(len >= sizeof(WorldObject::SpotLightTypeData))
+				stream.readData(&ob.type_data.spotlight_data, sizeof(WorldObject::SpotLightTypeData));
 			break;
 		}
 		case WorldObject::ObjectType_Seat:
 		{
-			stream.readData(&ob.type_data.seat_data, sizeof(WorldObject::SeatTypeData));
+			// Be robust to legacy/truncated payloads: keep defaults unless full struct data is present.
+			if(len >= sizeof(WorldObject::SeatTypeData))
+				stream.readData(&ob.type_data.seat_data, sizeof(WorldObject::SeatTypeData));
 			break;
 		}
 		default:
@@ -618,8 +628,8 @@ static void readWorldObjectPerTypeData(RandomAccessInStream& stream, WorldObject
 	}
 
 	// Read any remaining type data
-	if(start_offset + len > stream.getReadIndex())
-		stream.advanceReadIndex(start_offset + len - stream.getReadIndex());
+	if(end_offset > stream.getReadIndex())
+		stream.advanceReadIndex(end_offset - stream.getReadIndex());
 }
 
 
@@ -901,7 +911,10 @@ void readWorldObjectFromStream(RandomAccessInStream& stream, WorldObject& ob)
 	}
 
 	if(v >= 22)
+	{
+		setWorldObjectPerTypeDataDefaults(ob);
 		readWorldObjectPerTypeData(stream, ob); // New in v22
+	}
 	else
 		setWorldObjectPerTypeDataDefaults(ob);
 
@@ -1313,7 +1326,10 @@ void readWorldObjectFromNetworkStreamGivenUID(RandomAccessInStream& stream, Worl
 	}
 
 	if(!stream.endOfStream())
+	{
+		setWorldObjectPerTypeDataDefaults(ob);
 		readWorldObjectPerTypeData(stream, ob);
+	}
 	else
 		setWorldObjectPerTypeDataDefaults(ob);
 
