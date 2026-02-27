@@ -1945,6 +1945,105 @@ void MainWindow::on_actionAdd_Spotlight_triggered()
 }
 
 
+void MainWindow::on_actionAdd_Camera_triggered()
+{
+	if(gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
+	{
+		showErrorNotification("Not connected to server.");
+		return;
+	}
+
+	const uint32 camera_feature_protocol_version = 50; // ObjectType_Camera / ObjectType_CameraScreen support.
+	if(gui_client.server_protocol_version < camera_feature_protocol_version)
+	{
+		showErrorNotification("This server does not support cameras yet. Server protocol version is " + toString(gui_client.server_protocol_version) +
+			", required >= " + toString(camera_feature_protocol_version) + ".");
+		return;
+	}
+
+	const Vec3d player_pos = gui_client.cam_controller.getFirstPersonPosition();
+	const Vec3d fwd = gui_client.cam_controller.getForwardsVec();
+	const Vec3d right = gui_client.cam_controller.getRightVec();
+	const Vec3d up = gui_client.cam_controller.getUpVec();
+	const Vec3d cam_ob_pos = player_pos + fwd * 2.0f - Vec3d(0,0,PlayerPhysics::getEyeHeight() * 0.4f);
+	const Vec3d screen_ob_pos = cam_ob_pos + right * 1.2 + up * 0.2;
+
+	// Check permissions for both objects.
+	bool cam_ob_pos_in_parcel;
+	if(!gui_client.haveParcelObjectCreatePermissions(cam_ob_pos, cam_ob_pos_in_parcel))
+	{
+		if(cam_ob_pos_in_parcel)
+			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
+		else
+			showErrorNotification("You can only create cameras in a parcel that you have write permissions for.");
+		return;
+	}
+
+	bool screen_ob_pos_in_parcel;
+	if(!gui_client.haveParcelObjectCreatePermissions(screen_ob_pos, screen_ob_pos_in_parcel))
+	{
+		if(screen_ob_pos_in_parcel)
+			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
+		else
+			showErrorNotification("You can only create camera screens in a parcel that you have write permissions for.");
+		return;
+	}
+
+	const float facing_angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>());
+
+	WorldObjectRef camera_ob = new WorldObject();
+	camera_ob->uid = UID(0); // Will be set by server
+	camera_ob->object_type = WorldObject::ObjectType_Camera;
+	camera_ob->pos = cam_ob_pos;
+	camera_ob->axis = Vec3f(0, 0, 1);
+	camera_ob->angle = facing_angle;
+	camera_ob->scale = Vec3f(0.65f, 0.65f, 0.65f);
+	camera_ob->type_data.camera_data.fov_y_rad = Maths::pi<float>() * 60.f / 180.f;
+	camera_ob->type_data.camera_data.near_dist = 0.1f;
+	camera_ob->type_data.camera_data.far_dist = 1000.f;
+	camera_ob->type_data.camera_data.render_width = 512;
+	camera_ob->type_data.camera_data.render_height = 288;
+	camera_ob->type_data.camera_data.max_fps = 10;
+	camera_ob->type_data.camera_data.enabled = 1;
+	camera_ob->materials.push_back(new WorldMaterial());
+	camera_ob->materials.back()->colour_rgb = Colour3f(0.15f, 0.15f, 0.15f);
+	camera_ob->setAABBOS(gui_client.camera_opengl_mesh->aabb_os);
+
+	WorldObjectRef screen_ob = new WorldObject();
+	screen_ob->uid = UID(0); // Will be set by server
+	screen_ob->object_type = WorldObject::ObjectType_CameraScreen;
+	screen_ob->pos = screen_ob_pos;
+	screen_ob->axis = Vec3f(0, 0, 1);
+	screen_ob->angle = facing_angle;
+	screen_ob->scale = Vec3f(1.4f, 0.06f, 0.8f);
+	screen_ob->type_data.camera_screen_data.source_camera_uid = 0; // Will be linked in a later phase after server-assigned UID is known.
+	screen_ob->type_data.camera_screen_data.material_index = 0;
+	screen_ob->type_data.camera_screen_data.enabled = 1;
+	screen_ob->type_data.camera_screen_data._padding = 0;
+	screen_ob->materials.push_back(new WorldMaterial());
+	screen_ob->materials.back()->colour_rgb = Colour3f(0.05f, 0.05f, 0.05f);
+	screen_ob->setAABBOS(gui_client.camera_screen_opengl_mesh->aabb_os);
+
+	// Send CreateObject message for camera
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+		camera_ob->writeToNetworkStream(scratch_packet);
+		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	}
+
+	// Send CreateObject message for camera screen
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+		screen_ob->writeToNetworkStream(scratch_packet);
+		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	}
+
+	gui_client.queuePendingCameraPairCreate(cam_ob_pos, screen_ob_pos);
+
+	showInfoNotification("Added camera and camera screen.");
+}
+
+
 void MainWindow::on_actionAdd_Seat_triggered()
 {
 	if(gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
