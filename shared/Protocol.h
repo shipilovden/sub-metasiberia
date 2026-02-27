@@ -43,13 +43,14 @@ CyberspaceProtocolVersion
 47: Added UserGestureSettingsChanged message.
 48: Added ping+pong messages.
 49: Added AvatarSatOnSeat, AvatarGotUpFromSeat messages.
+50: Added ObjectType_Camera and ObjectType_CameraScreen.
 */
 namespace Protocol
 {
 
 const uint32 CyberspaceHello = 1357924680;
 
-const uint32 CyberspaceProtocolVersion = 49;
+const uint32 CyberspaceProtocolVersion = 50;
 
 const uint32 ClientProtocolOK		= 10000;
 const uint32 ClientProtocolTooOld	= 10001;

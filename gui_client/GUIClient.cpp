@@ -737,6 +737,20 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 		seat_shape = results.physics_shape;
 	}
 
+	// Make camera mesh
+	{
+		MeshBuilding::MeshBuildingResults results = MeshBuilding::makeCameraMeshes(base_dir_path, *opengl_engine->vert_buf_allocator);
+		camera_opengl_mesh = results.opengl_mesh_data;
+		camera_shape = results.physics_shape;
+	}
+
+	// Make camera screen mesh
+	{
+		MeshBuilding::MeshBuildingResults results = MeshBuilding::makeCameraScreenMesh(*opengl_engine->vert_buf_allocator);
+		camera_screen_opengl_mesh = results.opengl_mesh_data;
+		camera_screen_shape = results.physics_shape;
+	}
+
 	// Make portal meshes
 	{
 		MeshBuilding::MeshBuildingResults results = MeshBuilding::makePortalMeshes(base_dir_path, *opengl_engine->vert_buf_allocator);
@@ -1156,7 +1170,11 @@ void GUIClient::shutdown()
 	image_cube_opengl_mesh = NULL;
 	spotlight_opengl_mesh = NULL;
 	seat_opengl_mesh = NULL;
+	camera_opengl_mesh = NULL;
+	camera_screen_opengl_mesh = NULL;
 	portal_opengl_mesh = NULL;
+	camera_shape = PhysicsShape();
+	camera_screen_shape = PhysicsShape();
 	portal_shape = PhysicsShape();
 	cur_loading_mesh_data = NULL;
 	single_voxel_meshdata = NULL;
@@ -2612,6 +2630,96 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 
 				opengl_engine->addObject(ob->opengl_engine_ob);
 
+				physics_world->addObject(ob->physics_object);
+			}
+		}
+		else if(ob->object_type == WorldObject::ObjectType_Camera)
+		{
+			if(ob->opengl_engine_ob.isNull())
+			{
+				assert(ob->physics_object.isNull());
+
+				PhysicsObjectRef physics_ob = new PhysicsObject(/*collidable=*/ob->isCollidable());
+				physics_ob->shape = this->camera_shape;
+				physics_ob->is_sensor = ob->isSensor();
+				physics_ob->userdata = ob;
+				physics_ob->userdata_type = 0;
+				physics_ob->ob_uid = ob->uid;
+				physics_ob->pos = ob->pos.toVec4fPoint();
+				physics_ob->rot = Quatf::fromAxisAndAngle(normalise(ob->axis), ob->angle);
+				physics_ob->scale = useScaleForWorldOb(ob->scale);
+				physics_ob->kinematic = !ob->script.empty();
+				physics_ob->dynamic = ob->isDynamic();
+				physics_ob->mass = ob->mass;
+				physics_ob->friction = ob->friction;
+				physics_ob->restitution = ob->restitution;
+
+				GLObjectRef opengl_ob = opengl_engine->allocateObject();
+				opengl_ob->mesh_data = this->camera_opengl_mesh;
+
+				glare::ArenaFrame frame(arena_allocator);
+
+				opengl_ob->materials.resize(1);
+				if(ob->materials.size() >= 1)
+					ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
+				else
+					opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.15f, 0.15f, 0.15f));
+
+				opengl_ob->materials[0].materialise_effect = use_materialise_effect;
+				opengl_ob->materials[0].materialise_start_time = ob->materialise_effect_start_time;
+				opengl_ob->ob_to_world_matrix = ob_to_world_matrix;
+
+				ob->opengl_engine_ob = opengl_ob;
+				ob->physics_object = physics_ob;
+
+				opengl_engine->addObject(ob->opengl_engine_ob);
+				physics_world->addObject(ob->physics_object);
+			}
+		}
+		else if(ob->object_type == WorldObject::ObjectType_CameraScreen)
+		{
+			if(ob->opengl_engine_ob.isNull())
+			{
+				assert(ob->physics_object.isNull());
+
+				PhysicsObjectRef physics_ob = new PhysicsObject(/*collidable=*/ob->isCollidable());
+				physics_ob->shape = this->camera_screen_shape;
+				physics_ob->is_sensor = ob->isSensor();
+				physics_ob->userdata = ob;
+				physics_ob->userdata_type = 0;
+				physics_ob->ob_uid = ob->uid;
+				physics_ob->pos = ob->pos.toVec4fPoint();
+				physics_ob->rot = Quatf::fromAxisAndAngle(normalise(ob->axis), ob->angle);
+				physics_ob->scale = useScaleForWorldOb(ob->scale);
+				physics_ob->kinematic = !ob->script.empty();
+				physics_ob->dynamic = ob->isDynamic();
+				physics_ob->mass = ob->mass;
+				physics_ob->friction = ob->friction;
+				physics_ob->restitution = ob->restitution;
+
+				GLObjectRef opengl_ob = opengl_engine->allocateObject();
+				opengl_ob->mesh_data = this->camera_screen_opengl_mesh;
+
+				glare::ArenaFrame frame(arena_allocator);
+
+				opengl_ob->materials.resize(1);
+				if(ob->materials.size() >= 1)
+					ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
+				else
+				{
+					opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.05f, 0.05f, 0.05f));
+					opengl_ob->materials[0].emission_linear_rgb = Colour3f(1.f);
+					opengl_ob->materials[0].emission_scale = 0.0f;
+				}
+
+				opengl_ob->materials[0].materialise_effect = use_materialise_effect;
+				opengl_ob->materials[0].materialise_start_time = ob->materialise_effect_start_time;
+				opengl_ob->ob_to_world_matrix = ob_to_world_matrix;
+
+				ob->opengl_engine_ob = opengl_ob;
+				ob->physics_object = physics_ob;
+
+				opengl_engine->addObject(ob->opengl_engine_ob);
 				physics_world->addObject(ob->physics_object);
 			}
 		}
@@ -7058,6 +7166,10 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 								last_restored_ob_uid_in_edit = UID::invalidUID();
 							}
 
+							// Try to auto-link a just-created CameraScreen to the matching just-created Camera.
+							if(ob->creator_id == this->logged_in_user_id)
+								tryResolvePendingCameraPairCreateForObject(ob, lock);
+
 							// If this object was (just) created by this user, select it.  NOTE: bit of a hack distinguishing newly created objects by checking numSecondsAgo().
 							// Don't select summoned vehicles though, as the intent is probably to ride them, not edit them.
 							if((ob->creator_id == this->logged_in_user_id) && (ob->created_time.numSecondsAgo() < 30) && !BitUtils::isBitSet(ob->flags, WorldObject::SUMMONED_FLAG))
@@ -10396,6 +10508,76 @@ void GUIClient::updateVoxelEditMarkers(const MouseCursorState& mouse_cursor_stat
 }
 
 
+void GUIClient::queuePendingCameraPairCreate(const Vec3d& camera_pos, const Vec3d& screen_pos)
+{
+	PendingCameraPairCreate pending;
+	pending.camera_pos = camera_pos;
+	pending.screen_pos = screen_pos;
+	pending.camera_uid = UID::invalidUID();
+	pending.screen_uid = UID::invalidUID();
+	pending.creation_time = Clock::getTimeSinceInit();
+	pending_camera_pair_creates.push_back(pending);
+}
+
+
+void GUIClient::tryResolvePendingCameraPairCreateForObject(WorldObject* created_ob, WorldStateLock& world_state_lock)
+{
+	(void)world_state_lock;
+
+	if((created_ob->object_type != WorldObject::ObjectType_Camera) && (created_ob->object_type != WorldObject::ObjectType_CameraScreen))
+		return;
+
+	const double now = Clock::getTimeSinceInit();
+	const double max_pending_age_s = 30.0;
+	const double max_match_dist = 2.5;
+
+	for(size_t i = 0; i < pending_camera_pair_creates.size();)
+	{
+		if((now - pending_camera_pair_creates[i].creation_time) > max_pending_age_s)
+			pending_camera_pair_creates.erase(pending_camera_pair_creates.begin() + i);
+		else
+			++i;
+	}
+
+	for(size_t i = 0; i < pending_camera_pair_creates.size(); ++i)
+	{
+		PendingCameraPairCreate& pending = pending_camera_pair_creates[i];
+
+		if(!pending.camera_uid.valid() &&
+			(created_ob->object_type == WorldObject::ObjectType_Camera) &&
+			(created_ob->pos.getDist(pending.camera_pos) <= max_match_dist))
+		{
+			pending.camera_uid = created_ob->uid;
+		}
+		else if(!pending.screen_uid.valid() &&
+			(created_ob->object_type == WorldObject::ObjectType_CameraScreen) &&
+			(created_ob->pos.getDist(pending.screen_pos) <= max_match_dist))
+		{
+			pending.screen_uid = created_ob->uid;
+		}
+
+		if(pending.camera_uid.valid() && pending.screen_uid.valid())
+		{
+			auto screen_res = world_state->objects.find(pending.screen_uid);
+			if(screen_res != world_state->objects.end())
+			{
+				WorldObject* screen_ob = screen_res.getValue().ptr();
+				if((screen_ob->object_type == WorldObject::ObjectType_CameraScreen) &&
+					(screen_ob->type_data.camera_screen_data.source_camera_uid != pending.camera_uid.value()))
+				{
+					screen_ob->type_data.camera_screen_data.source_camera_uid = pending.camera_uid.value();
+					screen_ob->from_local_other_dirty = true;
+					world_state->dirty_from_local_objects.insert(screen_res.getValue());
+				}
+			}
+
+			pending_camera_pair_creates.erase(pending_camera_pair_creates.begin() + i);
+			break;
+		}
+	}
+}
+
+
 // Returns true if this user has permissions to create an object at new_ob_pos
 bool GUIClient::haveParcelObjectCreatePermissions(const Vec3d& new_ob_pos, bool& ob_pos_in_parcel_out)
 {
@@ -12382,13 +12564,13 @@ void GUIClient::objectEdited()
 
 						opengl_engine->objectMaterialsUpdated(*opengl_ob);
 					}
-					else if(this->selected_ob->object_type == WorldObject::ObjectType_Seat)
+					else if(this->selected_ob->object_type == WorldObject::ObjectType_Seat || this->selected_ob->object_type == WorldObject::ObjectType_Camera || this->selected_ob->object_type == WorldObject::ObjectType_CameraScreen)
 					{
 						if(opengl_ob.nonNull())
 						{
 							glare::ArenaFrame frame(arena_allocator);
 
-							opengl_ob->materials.resize(1); // Seat mesh uses a single material.
+							opengl_ob->materials.resize(1); // These meshes use a single material.
 							if(!this->selected_ob->materials.empty())
 							{
 								ModelLoading::setGLMaterialFromWorldMaterial(
@@ -12403,9 +12585,22 @@ void GUIClient::objectEdited()
 							}
 							else
 							{
-								// Keep seat visible with sane defaults even if no material is present.
-								opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.4f, 0.5f, 0.6f));
-								opengl_ob->materials[0].alpha = 0.5f;
+								// Keep object visible with sane defaults even if no material is present.
+								if(this->selected_ob->object_type == WorldObject::ObjectType_Seat)
+								{
+									opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.4f, 0.5f, 0.6f));
+									opengl_ob->materials[0].alpha = 0.5f;
+								}
+								else if(this->selected_ob->object_type == WorldObject::ObjectType_Camera)
+								{
+									opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.15f, 0.15f, 0.15f));
+									opengl_ob->materials[0].alpha = 1.0f;
+								}
+								else
+								{
+									opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.05f, 0.05f, 0.05f));
+									opengl_ob->materials[0].alpha = 1.0f;
+								}
 							}
 
 							assignLoadedOpenGLTexturesToMats(selected_ob.ptr());
@@ -13028,6 +13223,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 
 	this->client_avatar_uid = UID::invalidUID();
 	this->server_protocol_version = 0;
+	this->pending_camera_pair_creates.clear();
 
 
 	this->logged_in_user_id = UserID::invalidUserID();
@@ -13085,6 +13281,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 void GUIClient::clearAllObjects()
 {
 	deselectObject();
+	pending_camera_pair_creates.clear();
 
 	vehicle_controller_inside = NULL;
 	vehicle_controllers.clear();

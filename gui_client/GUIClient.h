@@ -293,6 +293,7 @@ public:
 	void handleMessages(double global_time, double cur_time);
 	bool haveParcelObjectCreatePermissions(const Vec3d& new_ob_pos, bool& in_parcel_out);
 	bool haveObjectWritePermissions(const WorldObject& ob, const js::AABBox& new_aabb_ws, bool& ob_pos_in_parcel_out);
+	void queuePendingCameraPairCreate(const Vec3d& camera_pos, const Vec3d& screen_pos);
 	void addParcelObjects();
 	void removeParcelObjects();
 	void recolourParcelsForLoggedInState();
@@ -435,6 +436,7 @@ public:
 
 	bool shouldDisableLODForCurrentServer() const;
 	int getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const;
+	void tryResolvePendingCameraPairCreateForObject(WorldObject* created_ob, WorldStateLock& world_state_lock);
 
 	//----------------------- LuaScriptOutputHandler interface -----------------------
 	virtual void printFromLuaScript(LuaScript* script, const char* s, size_t len) override;
@@ -561,6 +563,12 @@ public:
 
 	Reference<OpenGLMeshRenderData> seat_opengl_mesh;
 	PhysicsShape seat_shape;
+
+	Reference<OpenGLMeshRenderData> camera_opengl_mesh;
+	PhysicsShape camera_shape;
+
+	Reference<OpenGLMeshRenderData> camera_screen_opengl_mesh;
+	PhysicsShape camera_screen_shape;
 
 	Reference<OpenGLMeshRenderData> portal_opengl_mesh;
 	PhysicsShape portal_shape;
@@ -705,6 +713,16 @@ public:
 	std::map<UID, UID> recreated_ob_uid; // Map from old object UID to recreated object UID when an object deletion is undone.
 
 	UID last_restored_ob_uid_in_edit;
+
+	struct PendingCameraPairCreate
+	{
+		Vec3d camera_pos;
+		Vec3d screen_pos;
+		UID camera_uid;
+		UID screen_uid;
+		double creation_time;
+	};
+	std::vector<PendingCameraPairCreate> pending_camera_pair_creates;
 
 	GLUIRef gl_ui;
 	GestureUI gesture_ui; // Draws gesture buttons, also selfie and enable mic button
