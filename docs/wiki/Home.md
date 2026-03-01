@@ -2,6 +2,8 @@
 
 Welcome to Metasiberia user docs.
 
+![Metasiberia](images/logo_small.png)
+
 ## Install (Windows)
 1. Open releases page:
    - `https://github.com/shipilovden/sub-metasiberia/releases`
