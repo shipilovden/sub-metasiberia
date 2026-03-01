@@ -2,7 +2,7 @@
 
 Welcome to Metasiberia user docs.
 
-![Metasiberia](images/logo_small.png)
+![Metasiberia](images/wiki_main_image.png)
 
 ## Install (Windows)
 1. Open releases page:
