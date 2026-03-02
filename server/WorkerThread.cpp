@@ -973,11 +973,11 @@ static bool userCanCreateSummonedObject(const WorldObject& ob, const UserID& /*u
 }
 
 
-// Allow controlling a summoned vehicle if this connected avatar is currently inside it.
-// This is used to avoid owner-only restrictions while driving.
+// Allow controlling a dynamic vehicle object if this connected avatar is currently inside it.
+// This avoids owner-only restrictions while driving, including for non-summoned vehicles.
 static bool clientCanControlVehicleObject(const WorldObject& ob, const UID& client_avatar_uid, ServerWorldState& world_state, WorldStateLock& lock)
 {
-	if(!ob.isDynamic() || !isSummonedVehicleObject(ob))
+	if(!ob.isDynamic())
 		return false;
 
 	const auto av_res = world_state.getAvatars(lock).find(client_avatar_uid);
@@ -1940,10 +1940,9 @@ void WorkerThread::doRun()
 										const bool can_control_vehicle = clientCanControlVehicleObject(*ob, client_avatar_uid, *cur_world_state, lock);
 										const bool can_update_owned_vehicle_after_exit =
 											ob->isDynamic() &&
-											isSummonedVehicleObject(*ob) &&
 											(ob->physics_owner_id == (uint32)client_avatar_uid.value());
 
-										// Allow normal object edits for users with write perms, and allow transform sync for summoned vehicles for riders/recent physics owners.
+										// Allow normal object edits for users with write perms, and allow transform sync for vehicles for riders/recent physics owners.
 										if(!has_write_perms && !can_control_vehicle && !can_update_owned_vehicle_after_exit)
 										{
 											if(!client_user_id.valid())
@@ -2083,10 +2082,9 @@ void WorkerThread::doRun()
 										const bool can_control_vehicle = clientCanControlVehicleObject(*ob, client_avatar_uid, *cur_world_state, lock);
 										const bool can_update_owned_vehicle_after_exit =
 											ob->isDynamic() &&
-											isSummonedVehicleObject(*ob) &&
 											(ob->physics_owner_id == (uint32)client_avatar_uid.value());
 
-										// Allow normal object edits for users with write perms, and allow driving of summoned vehicles for avatars inside them.
+										// Allow normal object edits for users with write perms, and allow driving for avatars inside vehicles.
 										if(!has_write_perms && !can_control_vehicle && !can_update_owned_vehicle_after_exit)
 										{
 											if(!client_user_id.valid())
@@ -2165,7 +2163,6 @@ void WorkerThread::doRun()
 										const bool can_control_vehicle = clientCanControlVehicleObject(*ob, client_avatar_uid, *cur_world_state, lock);
 										const bool can_update_owned_vehicle_after_exit =
 											ob->isDynamic() &&
-											isSummonedVehicleObject(*ob) &&
 											(ob->physics_owner_id == (uint32)client_avatar_uid.value());
 
 										// See if the user has permissions to alter this object:
