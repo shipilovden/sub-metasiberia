@@ -1,0 +1,91 @@
+name: CMake Configure (Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/cmake-configure-linux.yml"
+      - "CMakeLists.txt"
+      - "functions.cmake"
+      - "cmake/**"
+      - "gui_client/**"
+      - "server/**"
+      - "shared/**"
+      - "scripts/config.rb"
+      - "scripts/config-lib.rb"
+      - "scripts/get_libs.rb"
+  pull_request:
+    paths:
+      - ".github/workflows/cmake-configure-linux.yml"
+      - "CMakeLists.txt"
+      - "functions.cmake"
+      - "cmake/**"
+      - "gui_client/**"
+      - "server/**"
+      - "shared/**"
+      - "scripts/config.rb"
+      - "scripts/config-lib.rb"
+      - "scripts/get_libs.rb"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cmake-configure-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    env:
+      GLARE_CORE_LIBS: ${{ github.workspace }}
+      WINTER_DIR: ${{ github.workspace }}/winter
+      GLARE_CORE_TRUNK_DIR: ${{ github.workspace }}/glare-core
+      CYBERSPACE_OUTPUT: ${{ github.workspace }}/substrata_output
+    steps:
+      - name: Checkout sub-metasiberia
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Checkout glare-core
+        uses: actions/checkout@v4
+        with:
+          repository: glaretechnologies/glare-core
+          path: glare-core
+          fetch-depth: 1
+
+      - name: Checkout winter
+        uses: actions/checkout@v4
+        with:
+          repository: glaretechnologies/winter
+          path: winter
+          fetch-depth: 1
+
+      - name: Install configure dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby cmake git
+
+      - name: Fetch Jolt and Luau sources
+        run: |
+          cd scripts
+          ruby get_libs.rb
+
+      - name: Configure project (RelWithDebInfo, CEF off)
+        run: |
+          cmake -S . -B build \
+            -DCEF_SUPPORT=OFF \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Upload CMake logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmake-configure-linux-logs
+          path: |
+            build/CMakeCache.txt
+            build/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: ignore
