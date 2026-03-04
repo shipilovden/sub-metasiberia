@@ -19,7 +19,8 @@ GestureUI::GestureUI()
 :	gui_client(NULL),
 	gestures_visible(false),
 	vehicle_buttons_visible(false),
-	untoggle_button_time(-1)
+	untoggle_button_time(-1),
+	close_gesture_manager_soon(false)
 {}
 
 
@@ -267,6 +268,14 @@ void GestureUI::think()
 
 	if(gesture_manager)
 		gesture_manager->think();
+
+	if(close_gesture_manager_soon)
+	{
+		gesture_manager = nullptr;
+		if(close_gesture_manager_button)
+			close_gesture_manager_button->setVisible(false);
+		close_gesture_manager_soon = false;
+	}
 }
 
 
@@ -488,8 +497,7 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 			{
 				event.accepted = true;
 				gestures_visible = false;
-				this->gesture_manager = nullptr;
-				close_gesture_manager_button->setVisible(false);
+				closeGestureManagerSoon();
 			}
 			else if(button == vehicle_button.ptr())
 			{
@@ -732,4 +740,17 @@ void GestureUI::setCurrentMicLevel(float linear_level, float display_level)
 
 		mic_level_image->setColour(Maths::lerp(green, red, Maths::smoothStep(0.9f, 0.95f, linear_level)));
 	}
+}
+
+
+void GestureUI::setPhotoModeEnabledUIState(bool enabled)
+{
+	if(photo_mode_button)
+		photo_mode_button->setToggled(enabled);
+}
+
+
+void GestureUI::closeGestureManagerSoon()
+{
+	close_gesture_manager_soon = true;
 }
