@@ -67,17 +67,19 @@ jobs:
       - name: Install configure dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby cmake git
+          sudo apt-get install -y ruby cmake git libsdl2-dev
 
       - name: Fetch Jolt and Luau sources
         run: |
           cd scripts
           ruby get_libs.rb
 
-      - name: Configure project (RelWithDebInfo, CEF off)
+      - name: Configure project (RelWithDebInfo, CEF off, SDL on)
         run: |
           cmake -S . -B build \
             -DCEF_SUPPORT=OFF \
+            -DUSE_SDL=ON \
+            -DSDL_BUILD_DIR=/usr \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
       - name: Upload CMake logs
