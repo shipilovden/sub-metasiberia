@@ -78,6 +78,9 @@ jobs:
             ninja-build \
             tar \
             xz-utils \
+            libjpeg-dev \
+            libssl-dev \
+            libtls-dev \
             libglu1-mesa-dev \
             libx11-dev \
             libxrandr-dev \
@@ -105,6 +108,51 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare expected local dependency layout (jpeg + LibreSSL)
+        run: |
+          set -euo pipefail
+
+          JPEG_DIR="${GITHUB_WORKSPACE}/libjpeg-turbo/libjpeg-turbo-3.0.0-install"
+          mkdir -p "${JPEG_DIR}/include" "${JPEG_DIR}/lib"
+
+          ln -sf /usr/include/jpeglib.h "${JPEG_DIR}/include/jpeglib.h"
+          ln -sf /usr/include/jerror.h "${JPEG_DIR}/include/jerror.h"
+          ln -sf /usr/include/jmorecfg.h "${JPEG_DIR}/include/jmorecfg.h"
+          if [[ -f /usr/include/jconfig.h ]]; then
+            ln -sf /usr/include/jconfig.h "${JPEG_DIR}/include/jconfig.h"
+          elif [[ -f /usr/include/x86_64-linux-gnu/jconfig.h ]]; then
+            ln -sf /usr/include/x86_64-linux-gnu/jconfig.h "${JPEG_DIR}/include/jconfig.h"
+          fi
+
+          if [[ -f /usr/lib/x86_64-linux-gnu/libjpeg.a ]]; then
+            ln -sf /usr/lib/x86_64-linux-gnu/libjpeg.a "${JPEG_DIR}/lib/libjpeg.a"
+          else
+            ln -sf /usr/lib/x86_64-linux-gnu/libjpeg.so "${JPEG_DIR}/lib/libjpeg.a"
+          fi
+
+          LIBRESSL_DIR="${GITHUB_WORKSPACE}/LibreSSL/libressl-3.5.2-install"
+          mkdir -p "${LIBRESSL_DIR}/include" "${LIBRESSL_DIR}/lib"
+
+          ln -sfn /usr/include "${LIBRESSL_DIR}/include"
+
+          if [[ -f /usr/lib/x86_64-linux-gnu/libtls.a ]]; then
+            ln -sf /usr/lib/x86_64-linux-gnu/libtls.a "${LIBRESSL_DIR}/lib/libtls.a"
+          else
+            ln -sf /usr/lib/x86_64-linux-gnu/libtls.so "${LIBRESSL_DIR}/lib/libtls.a"
+          fi
+
+          if [[ -f /usr/lib/x86_64-linux-gnu/libssl.a ]]; then
+            ln -sf /usr/lib/x86_64-linux-gnu/libssl.a "${LIBRESSL_DIR}/lib/libssl.a"
+          else
+            ln -sf /usr/lib/x86_64-linux-gnu/libssl.so "${LIBRESSL_DIR}/lib/libssl.a"
+          fi
+
+          if [[ -f /usr/lib/x86_64-linux-gnu/libcrypto.a ]]; then
+            ln -sf /usr/lib/x86_64-linux-gnu/libcrypto.a "${LIBRESSL_DIR}/lib/libcrypto.a"
+          else
+            ln -sf /usr/lib/x86_64-linux-gnu/libcrypto.so "${LIBRESSL_DIR}/lib/libcrypto.a"
+          fi
+
       - name: Configure Linux build (SDL, CEF off)
         run: |
           cmake -S . -B build_linux \
@@ -113,10 +161,9 @@ jobs:
             -DSDL_BUILD_DIR=/usr \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
-      - name: Build gui_client and server
+      - name: Build gui_client
         run: |
           cmake --build build_linux --target gui_client -j 4
-          cmake --build build_linux --target server -j 4
 
       - name: Create Linux package tarball
         id: pack
