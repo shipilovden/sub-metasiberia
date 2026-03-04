@@ -1,0 +1,183 @@
+name: Release Linux Asset
+
+on:
+  release:
+    types:
+      - published
+      - prereleased
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.0.13)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-linux-asset-${{ github.event.release.tag_name || github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    env:
+      GLARE_CORE_LIBS: ${{ github.workspace }}
+      WINTER_DIR: ${{ github.workspace }}/winter
+      GLARE_CORE_TRUNK_DIR: ${{ github.workspace }}/glare-core
+      CYBERSPACE_OUTPUT: ${{ github.workspace }}/substrata_output_linux
+    steps:
+      - name: Resolve tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          if [[ -z "${TAG}" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          if [[ -z "${TAG}" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          if [[ -z "${TAG}" ]]; then
+            echo "Failed to resolve release tag."
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout sub-metasiberia
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ steps.meta.outputs.tag }}
+
+      - name: Checkout glare-core
+        uses: actions/checkout@v4
+        with:
+          repository: shipilovden/glare-core
+          path: glare-core
+          fetch-depth: 1
+
+      - name: Checkout winter
+        uses: actions/checkout@v4
+        with:
+          repository: glaretechnologies/winter
+          path: winter
+          fetch-depth: 1
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ruby \
+            cmake \
+            git \
+            libsdl2-dev \
+            llvm-15 \
+            llvm-15-dev \
+            ninja-build \
+            tar \
+            xz-utils \
+            libglu1-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libasound2-dev
+
+      - name: Fetch Jolt and Luau sources
+        run: |
+          cd scripts
+          ruby get_libs.rb
+
+      - name: Prepare LLVM path expected by Winter
+        run: |
+          LLVM_EXPECTED_BIN="${GITHUB_WORKSPACE}/llvm/llvm_15_0_7_dylib_install/bin"
+          mkdir -p "${LLVM_EXPECTED_BIN}"
+
+          if command -v llvm-config-15 >/dev/null 2>&1; then
+            ln -sf "$(command -v llvm-config-15)" "${LLVM_EXPECTED_BIN}/llvm-config"
+          elif command -v llvm-config >/dev/null 2>&1; then
+            ln -sf "$(command -v llvm-config)" "${LLVM_EXPECTED_BIN}/llvm-config"
+          else
+            echo "llvm-config not found."
+            exit 1
+          fi
+
+      - name: Configure Linux build (SDL, CEF off)
+        run: |
+          cmake -S . -B build_linux \
+            -DCEF_SUPPORT=OFF \
+            -DUSE_SDL=ON \
+            -DSDL_BUILD_DIR=/usr \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Build gui_client and server
+        run: |
+          cmake --build build_linux --target gui_client -j 4
+          cmake --build build_linux --target server -j 4
+
+      - name: Create Linux package tarball
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.meta.outputs.tag }}"
+          PKG_DIR="${RUNNER_TEMP}/metasiberia-linux-${TAG}"
+          mkdir -p "${PKG_DIR}/data"
+
+          GUI_BIN="${CYBERSPACE_OUTPUT}/test_builds/gui_client"
+          SERVER_BIN="${CYBERSPACE_OUTPUT}/test_builds/server"
+
+          if [[ ! -f "${GUI_BIN}" ]]; then
+            echo "gui_client not found at ${GUI_BIN}"
+            exit 1
+          fi
+
+          cp "${GUI_BIN}" "${PKG_DIR}/gui_client"
+          chmod +x "${PKG_DIR}/gui_client"
+
+          if [[ -f "${SERVER_BIN}" ]]; then
+            cp "${SERVER_BIN}" "${PKG_DIR}/server"
+            chmod +x "${PKG_DIR}/server"
+          fi
+
+          cp -r resources "${PKG_DIR}/data"
+          cp -r shaders "${PKG_DIR}/data"
+          cp -r glare-core/opengl/shaders "${PKG_DIR}/data"
+          cp -r glare-core/opengl/gl_data "${PKG_DIR}/data"
+          cp docs/licence.txt "${PKG_DIR}/licence.txt"
+
+          cat > "${PKG_DIR}/run.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "${HERE}"
+exec ./gui_client "$@"
+EOF
+          chmod +x "${PKG_DIR}/run.sh"
+
+          ASSET_NAME="MetasiberiaBeta-Linux-${TAG}.tar.gz"
+          ASSET_PATH="${RUNNER_TEMP}/${ASSET_NAME}"
+          tar -C "${RUNNER_TEMP}" -czf "${ASSET_PATH}" "metasiberia-linux-${TAG}"
+
+          echo "asset_name=${ASSET_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "asset_path=${ASSET_PATH}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload Linux package to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.meta.outputs.tag }}" "${{ steps.pack.outputs.asset_path }}" \
+            -R "${{ github.repository }}" \
+            --clobber
+
+      - name: Upload Linux package as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.asset_name }}
+          path: ${{ steps.pack.outputs.asset_path }}
+          if-no-files-found: error
