@@ -72,6 +72,7 @@ jobs:
             ruby \
             cmake \
             git \
+            curl \
             libsdl2-dev \
             llvm-15 \
             llvm-15-dev \
@@ -108,27 +109,32 @@ jobs:
             exit 1
           fi
 
-      - name: Prepare expected local dependency layout (jpeg + LibreSSL)
+      - name: Build and prepare libjpeg-turbo 3.0.0
         run: |
           set -euo pipefail
 
           JPEG_DIR="${GITHUB_WORKSPACE}/libjpeg-turbo/libjpeg-turbo-3.0.0-install"
-          mkdir -p "${JPEG_DIR}/include" "${JPEG_DIR}/lib"
+          JPEG_ROOT="${GITHUB_WORKSPACE}/libjpeg-turbo"
+          JPEG_SRC="${JPEG_ROOT}/libjpeg-turbo-3.0.0"
+          JPEG_BUILD="${JPEG_ROOT}/libjpeg-turbo-3.0.0-build"
+          mkdir -p "${JPEG_ROOT}"
 
-          ln -sf /usr/include/jpeglib.h "${JPEG_DIR}/include/jpeglib.h"
-          ln -sf /usr/include/jerror.h "${JPEG_DIR}/include/jerror.h"
-          ln -sf /usr/include/jmorecfg.h "${JPEG_DIR}/include/jmorecfg.h"
-          if [[ -f /usr/include/jconfig.h ]]; then
-            ln -sf /usr/include/jconfig.h "${JPEG_DIR}/include/jconfig.h"
-          elif [[ -f /usr/include/x86_64-linux-gnu/jconfig.h ]]; then
-            ln -sf /usr/include/x86_64-linux-gnu/jconfig.h "${JPEG_DIR}/include/jconfig.h"
+          if [[ ! -d "${JPEG_SRC}" ]]; then
+            curl -L -o /tmp/libjpeg-turbo-3.0.0.tar.gz \
+              https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.0.0.tar.gz
+            tar -xzf /tmp/libjpeg-turbo-3.0.0.tar.gz -C "${JPEG_ROOT}"
           fi
 
-          if [[ -f /usr/lib/x86_64-linux-gnu/libjpeg.a ]]; then
-            ln -sf /usr/lib/x86_64-linux-gnu/libjpeg.a "${JPEG_DIR}/lib/libjpeg.a"
-          else
-            ln -sf /usr/lib/x86_64-linux-gnu/libjpeg.so "${JPEG_DIR}/lib/libjpeg.a"
-          fi
+          cmake -S "${JPEG_SRC}" -B "${JPEG_BUILD}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_SHARED=OFF \
+            -DCMAKE_INSTALL_PREFIX="${JPEG_DIR}"
+          cmake --build "${JPEG_BUILD}" -j 4
+          cmake --install "${JPEG_BUILD}"
+
+      - name: Prepare expected LibreSSL layout
+        run: |
+          set -euo pipefail
 
           LIBRESSL_DIR="${GITHUB_WORKSPACE}/LibreSSL/libressl-3.5.2-install"
           mkdir -p "${LIBRESSL_DIR}/include" "${LIBRESSL_DIR}/lib"
