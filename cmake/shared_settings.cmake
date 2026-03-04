@@ -65,6 +65,8 @@ ${GRAPHICS_DIR}/KTXDecoder.cpp
 ${GRAPHICS_DIR}/KTXDecoder.h
 ${GRAPHICS_DIR}/BasisDecoder.cpp
 ${GRAPHICS_DIR}/BasisDecoder.h
+${GRAPHICS_DIR}/bmpdecoder.cpp
+${GRAPHICS_DIR}/bmpdecoder.h
 ${GRAPHICS_DIR}/Map2D.cpp
 ${GRAPHICS_DIR}/Map2D.h
 ${GRAPHICS_DIR}/MeshSimplification.cpp
@@ -85,6 +87,8 @@ ${GRAPHICS_DIR}/TextureProcessingTests.cpp
 ${GRAPHICS_DIR}/TextureProcessingTests.h
 ${GRAPHICS_DIR}/TextureData.cpp
 ${GRAPHICS_DIR}/TextureData.h
+${GRAPHICS_DIR}/tgadecoder.cpp
+${GRAPHICS_DIR}/tgadecoder.h
 ${GRAPHICS_DIR}/SRGBUtils.cpp
 ${GRAPHICS_DIR}/SRGBUtils.h
 ${GRAPHICS_DIR}/ShelfPack.cpp

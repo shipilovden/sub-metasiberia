@@ -10,12 +10,14 @@ require './config-lib.rb'
 
 $copy_cef = true
 $copy_bugsplat = true
+$strict_copy = false
 
 
 def printUsage()
 	puts "Usage: copy_files_to_output.rb [arguments]"
 	puts ""
 	puts "\t--no_cef, \t\tSkip copying CEF files."
+	puts "\t--strict, \t\tFail with non-zero exit code if file copy fails for any requested config."
 	puts "\t--config CONFIG, \tCopy files only for specified config (Debug, RelWithDebInfo, Release)."
 	puts "\t\t\t\tIf not specified, copies for all configs."
 	puts ""
@@ -30,6 +32,8 @@ arg_parser = ArgumentParser.new(ARGV)
 arg_parser.options.each do |opt|
 	if opt[0] == "--no_cef"
 		$copy_cef = false
+	elsif opt[0] == "--strict"
+		$strict_copy = true
 	elsif opt[0] == "--no_bugsplat"
 		$copy_bugsplat = false
 	elsif opt[0] == "--config"
@@ -53,6 +57,7 @@ def copy_files(vs_version, substrata_repos_dir, glare_core_repos_dir, config = n
 	# If config is specified, only copy files for that config
 	# Otherwise, copy for all configs (backward compatibility)
 	configs_to_copy = config ? [config] : ["Debug", "RelWithDebInfo", "Release"]
+	failures = []
 
 	configs_to_copy.each do |config_name|
 		begin
@@ -67,8 +72,20 @@ def copy_files(vs_version, substrata_repos_dir, glare_core_repos_dir, config = n
 			copyQtRedistWindows(vs_version, output_dir, is_debug)
 			copySDLRedistWindows(vs_version, output_dir, is_debug)
 		rescue => e
-			puts "Warning: Failed to copy files for #{config_name}: #{e.message}"
+			msg = "Failed to copy files for #{config_name}: #{e.message}"
+			if $strict_copy
+				puts "Error: #{msg}"
+			else
+				puts "Warning: #{msg}"
+			end
+			failures << msg
 		end
+	end
+
+	if $strict_copy && !failures.empty?
+		puts "Strict copy mode: copy failed for one or more configurations."
+		failures.each { |f| puts "  - #{f}" }
+		exit 1
 	end
 end
 

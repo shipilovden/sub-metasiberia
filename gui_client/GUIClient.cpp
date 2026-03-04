@@ -89,6 +89,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../graphics/ImageMap.h"
 #include "../graphics/SRGBUtils.h"
 #include "../graphics/BasisDecoder.h"
+#include "../graphics/PNGDecoder.h"
 #include "../dll/include/IndigoMesh.h"
 #include "../indigo/TextureServer.h"
 #include <video/VideoReader.h>
@@ -11400,6 +11401,69 @@ bool GUIClient::clampObjectPositionToParcelForNewTransform(const WorldObject& ob
 
 
 // Set material COLOUR_TEX_HAS_ALPHA_FLAG and MIN_LOD_LEVEL_IS_NEGATIVE_1 as applicable
+static bool shouldNormaliseTextureUploadToPNG(const URLString& path_or_url)
+{
+	// Keep canonical upload formats for broad client/server compatibility.
+	return
+		hasExtension(path_or_url, "webp") ||
+		hasExtension(path_or_url, "bmp")  ||
+		hasExtension(path_or_url, "tga")  ||
+		hasExtension(path_or_url, "tif")  ||
+		hasExtension(path_or_url, "tiff");
+}
+
+
+static URLString getPNGUploadPathForLocalTexture(const std::string& base_dir_path, const URLString& local_tex_path_or_url)
+{
+	if(local_tex_path_or_url.empty())
+		return local_tex_path_or_url;
+
+	if(!FileUtils::fileExists(local_tex_path_or_url)) // URL, not local path.
+		return local_tex_path_or_url;
+
+	if(!shouldNormaliseTextureUploadToPNG(local_tex_path_or_url))
+		return local_tex_path_or_url;
+
+	const std::string src_path = toStdString(local_tex_path_or_url);
+	const uint64 src_hash = FileChecksum::fileChecksum(src_path);
+	const std::string out_path = PlatformUtils::getTempDirPath() + "/upload_" + eatExtension(FileUtils::getFilename(src_path)) + "_" + toString(src_hash) + ".png";
+
+	if(!FileUtils::fileExists(out_path))
+	{
+		Reference<Map2D> map = ImageDecoding::decodeImage(base_dir_path, src_path);
+
+		if(const ImageMapUInt8* map_u8 = dynamic_cast<const ImageMapUInt8*>(map.ptr()))
+			PNGDecoder::write(*map_u8, out_path);
+		else if(const ImageMapUInt16* map_u16 = dynamic_cast<const ImageMapUInt16*>(map.ptr()))
+			PNGDecoder::write(*map_u16, out_path);
+		else
+			throw glare::Exception("Unsupported bit depth for PNG conversion of texture '" + src_path + "'.");
+
+		conPrint("Converted texture to PNG for upload compatibility: '" + src_path + "' -> '" + out_path + "'");
+	}
+
+	return toURLString(out_path);
+}
+
+
+static void normaliseObjectMaterialTexturePathsForUploadToPNG(const std::string& base_dir_path, WorldObject& ob)
+{
+	for(size_t i=0; i<ob.materials.size(); ++i)
+	{
+		WorldMaterial* mat = ob.materials[i].ptr();
+		if(!mat)
+			continue;
+
+		mat->colour_texture_url     = getPNGUploadPathForLocalTexture(base_dir_path, mat->colour_texture_url);
+		mat->emission_texture_url   = getPNGUploadPathForLocalTexture(base_dir_path, mat->emission_texture_url);
+		mat->normal_map_url         = getPNGUploadPathForLocalTexture(base_dir_path, mat->normal_map_url);
+		mat->roughness.texture_url  = getPNGUploadPathForLocalTexture(base_dir_path, mat->roughness.texture_url);
+		mat->metallic_fraction.texture_url = getPNGUploadPathForLocalTexture(base_dir_path, mat->metallic_fraction.texture_url);
+		mat->opacity.texture_url    = getPNGUploadPathForLocalTexture(base_dir_path, mat->opacity.texture_url);
+	}
+}
+
+
 void GUIClient::setMaterialFlagsForObject(WorldObject* ob)
 {
 	for(size_t z=0; z<ob->materials.size(); ++z)
@@ -11499,6 +11563,8 @@ void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded
 	new_world_object->angle = angle;
 	new_world_object->scale = scale;
 	new_world_object->setAABBOS(aabb_os);
+
+	normaliseObjectMaterialTexturePathsForUploadToPNG(base_dir_path, *new_world_object);
 
 	setMaterialFlagsForObject(new_world_object.ptr());
 

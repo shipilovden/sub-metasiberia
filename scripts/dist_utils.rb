@@ -50,11 +50,16 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	
 	FileUtils.mkdir_p(imageformats_target_dir, :verbose => true)
 	
-	image_formats = ["qjpeg"]
-		
+	# Keep extended image support in AddObjectDialog working in packaged builds.
+	image_formats = ["qjpeg", "qgif", "qtga", "qtiff", "qwbmp", "qwebp"]
+
 	image_formats.each do |format|
-		FileUtils.cp("#{imageformats_dir}/#{format}.dll",  imageformats_target_dir, :verbose => true) if !copy_debug
-		FileUtils.cp("#{imageformats_dir}/#{format}d.dll", imageformats_target_dir, :verbose => true) if copy_debug
+		src_path = copy_debug ? "#{imageformats_dir}/#{format}d.dll" : "#{imageformats_dir}/#{format}.dll"
+		if File.exist?(src_path)
+			FileUtils.cp(src_path, imageformats_target_dir, :verbose => true)
+		else
+			STDERR.puts "Warning: Qt imageformat plugin not found: #{src_path}"
+		end
 	end
 	
 	# Seems to work without copying runtime DLLs into these dirs.

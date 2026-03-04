@@ -8,11 +8,11 @@ Copyright Glare Technologies Limited 2022 -
 
 #include <graphics/jpegdecoder.h>
 #include <graphics/PNGDecoder.h>
-#include <graphics/TIFFDecoder.h>
 #include <graphics/EXRDecoder.h>
 #include <graphics/GifDecoder.h>
 #include <graphics/KTXDecoder.h>
 #include <graphics/BasisDecoder.h>
+#include <graphics/imformatdecoder.h>
 #include <graphics/Map2D.h>
 #include <utils/StringUtils.h>
 #include <utils/MemMappedFile.h>
@@ -33,6 +33,17 @@ Reference<Map2D> ImageDecoding::decodeImage(const std::string& indigo_base_dir, 
 	{
 		MemMappedFile file(path);
 		return decodeImageFromBuffer(indigo_base_dir, path, ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize()), mem_allocator, options);
+	}
+	else if(hasExtension(path, "tga") || hasExtension(path, "bmp") ||
+		hasExtension(path, "tif") || hasExtension(path, "tiff")
+#ifdef _WIN32
+		|| hasExtension(path, "webp")
+#endif
+		)
+	{
+		ImFormatDecoder::ImageDecodingOptions im_options;
+		im_options.ETC_support = options.ETC_support;
+		return ImFormatDecoder::decodeImage(indigo_base_dir, path, im_options);
 	}
 	else
 	{
@@ -90,12 +101,21 @@ bool ImageDecoding::isSupportedImageExtension(string_view extension)
 	return
 		StringUtils::equalCaseInsensitive(extension, "jpg") || StringUtils::equalCaseInsensitive(extension, "jpeg") ||
 		StringUtils::equalCaseInsensitive(extension, "png") ||
-		//hasExtension(path, "tif") || hasExtension(path, "tiff") ||
+		StringUtils::equalCaseInsensitive(extension, "bmp") ||
+		StringUtils::equalCaseInsensitive(extension, "tga") ||
 		StringUtils::equalCaseInsensitive(extension, "exr") ||
 		StringUtils::equalCaseInsensitive(extension, "gif") ||
 		StringUtils::equalCaseInsensitive(extension, "ktx") ||
 		StringUtils::equalCaseInsensitive(extension, "ktx2") ||
-		StringUtils::equalCaseInsensitive(extension, "basis");
+		StringUtils::equalCaseInsensitive(extension, "basis")
+#if IS_INDIGO || defined(_WIN32)
+		|| StringUtils::equalCaseInsensitive(extension, "tif")
+		|| StringUtils::equalCaseInsensitive(extension, "tiff")
+#endif
+#ifdef _WIN32
+		|| StringUtils::equalCaseInsensitive(extension, "webp")
+#endif
+		;
 }
 
 
@@ -130,6 +150,32 @@ bool ImageDecoding::areMagicBytesValid(const void* data, size_t data_len, string
 	{
 		const uint8 magic_bytes[] = { 0x89, 0x50, 0x4E, 0x47 };
 		return firstNBytesMatch(data, data_len, magic_bytes, staticArrayNumElems(magic_bytes));
+	}
+	else if(StringUtils::equalCaseInsensitive(extension, "bmp"))
+	{
+		const uint8 magic_bytes[] = { 0x42, 0x4D }; // 'BM'
+		return firstNBytesMatch(data, data_len, magic_bytes, staticArrayNumElems(magic_bytes));
+	}
+	else if(StringUtils::equalCaseInsensitive(extension, "tif") || StringUtils::equalCaseInsensitive(extension, "tiff"))
+	{
+		const uint8 little_endian_tiff_magic[] = { 0x49, 0x49, 0x2A, 0x00 };
+		const uint8 big_endian_tiff_magic[]    = { 0x4D, 0x4D, 0x00, 0x2A };
+		return firstNBytesMatch(data, data_len, little_endian_tiff_magic, staticArrayNumElems(little_endian_tiff_magic)) ||
+			firstNBytesMatch(data, data_len, big_endian_tiff_magic,    staticArrayNumElems(big_endian_tiff_magic));
+	}
+	else if(StringUtils::equalCaseInsensitive(extension, "webp"))
+	{
+		const uint8 riff_magic[] = { 0x52, 0x49, 0x46, 0x46 }; // 'RIFF'
+		const uint8 webp_magic[] = { 0x57, 0x45, 0x42, 0x50 }; // 'WEBP'
+		if(data_len < 12)
+			return false;
+		return firstNBytesMatch(data, data_len, riff_magic, staticArrayNumElems(riff_magic)) &&
+			firstNBytesMatch((const uint8*)data + 8, data_len - 8, webp_magic, staticArrayNumElems(webp_magic));
+	}
+	else if(StringUtils::equalCaseInsensitive(extension, "tga"))
+	{
+		// TGA has no fixed magic bytes at the beginning.
+		return true;
 	}
 	else if(StringUtils::equalCaseInsensitive(extension, "exr"))
 	{
