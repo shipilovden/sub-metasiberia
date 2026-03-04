@@ -406,8 +406,8 @@ void SDLUIInterface::showAvatarSettings() // Show avatar settings dialog.
 	if(avatar_settings_readyplayerme_button.isNull())
 	{
 		GLUIButton::CreateArgs button_args;
-		avatar_settings_readyplayerme_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/ReadyPlayerMe.png", 
-			Vec2f(readyplayerme_x, buttons_y), Vec2f(button_size, button_size), button_args);
+		avatar_settings_readyplayerme_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/ReadyPlayerMe.png", button_args);
+		avatar_settings_readyplayerme_button->setPosAndDims(Vec2f(readyplayerme_x, buttons_y), Vec2f(button_size, button_size));
 		avatar_settings_readyplayerme_button->handler = this;
 		avatar_settings_readyplayerme_button->setZ(-0.5f); // In front of background panel (z = -0.488)
 		gl_ui->addWidget(avatar_settings_readyplayerme_button);
@@ -424,8 +424,8 @@ void SDLUIInterface::showAvatarSettings() // Show avatar settings dialog.
 	if(avatar_settings_avaturnme_button.isNull())
 	{
 		GLUIButton::CreateArgs button_args;
-		avatar_settings_avaturnme_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/avaturnme.png", 
-			Vec2f(avaturnme_x, buttons_y), Vec2f(button_size, button_size), button_args);
+		avatar_settings_avaturnme_button = new GLUIButton(*gl_ui, opengl_engine, gui_client->resources_dir_path + "/buttons/avaturnme.png", button_args);
+		avatar_settings_avaturnme_button->setPosAndDims(Vec2f(avaturnme_x, buttons_y), Vec2f(button_size, button_size));
 		avatar_settings_avaturnme_button->handler = this;
 		avatar_settings_avaturnme_button->setZ(-0.5f); // In front of background panel (z = -0.488)
 		gl_ui->addWidget(avatar_settings_avaturnme_button);
