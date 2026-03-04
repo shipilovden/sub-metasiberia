@@ -150,13 +150,13 @@ jobs:
           cp -r glare-core/opengl/gl_data "${PKG_DIR}/data"
           cp docs/licence.txt "${PKG_DIR}/licence.txt"
 
-          cat > "${PKG_DIR}/run.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
-cd "${HERE}"
-exec ./gui_client "$@"
-EOF
+          {
+            echo '#!/usr/bin/env bash'
+            echo 'set -euo pipefail'
+            echo 'HERE="$(cd "$(dirname "$0")" && pwd)"'
+            echo 'cd "${HERE}"'
+            echo 'exec ./gui_client "$@"'
+          } > "${PKG_DIR}/run.sh"
           chmod +x "${PKG_DIR}/run.sh"
 
           ASSET_NAME="MetasiberiaBeta-Linux-${TAG}.tar.gz"
