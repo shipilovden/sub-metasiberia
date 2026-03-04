@@ -57,6 +57,10 @@ public:
 
 	void setCurrentMicLevel(float linear_level, float display_level);
 
+	void setPhotoModeEnabledUIState(bool enabled);
+
+	void closeGestureManagerSoon(); // Defer close to avoid deleting manager while handling click event.
+
 private:
 	void rebuildGestureWidgets();
 	void updateWidgetPositions();
@@ -100,4 +104,6 @@ private:
 
 	Timer timer;
 	double untoggle_button_time;
+
+	bool close_gesture_manager_soon;
 };
