@@ -97,17 +97,23 @@ jobs:
 
       - name: Prepare LLVM path expected by Winter
         run: |
-          LLVM_EXPECTED_BIN="${GITHUB_WORKSPACE}/llvm/llvm_15_0_7_dylib_install/bin"
+          LLVM_EXPECTED_ROOT="${GITHUB_WORKSPACE}/llvm/llvm_15_0_7_dylib_install"
+          LLVM_EXPECTED_BIN="${LLVM_EXPECTED_ROOT}/bin"
           mkdir -p "${LLVM_EXPECTED_BIN}"
 
           if command -v llvm-config-15 >/dev/null 2>&1; then
-            ln -sf "$(command -v llvm-config-15)" "${LLVM_EXPECTED_BIN}/llvm-config"
+            LLVM_CONFIG_BIN="$(command -v llvm-config-15)"
           elif command -v llvm-config >/dev/null 2>&1; then
-            ln -sf "$(command -v llvm-config)" "${LLVM_EXPECTED_BIN}/llvm-config"
+            LLVM_CONFIG_BIN="$(command -v llvm-config)"
           else
             echo "llvm-config not found."
             exit 1
           fi
+
+          LLVM_PREFIX="$(${LLVM_CONFIG_BIN} --prefix)"
+          ln -sf "${LLVM_CONFIG_BIN}" "${LLVM_EXPECTED_BIN}/llvm-config"
+          ln -sfn "${LLVM_PREFIX}/include" "${LLVM_EXPECTED_ROOT}/include"
+          ln -sfn "${LLVM_PREFIX}/lib" "${LLVM_EXPECTED_ROOT}/lib"
 
       - name: Build and prepare libjpeg-turbo 3.0.0
         run: |
