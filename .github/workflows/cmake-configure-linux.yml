@@ -67,12 +67,26 @@ jobs:
       - name: Install configure dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby cmake git libsdl2-dev
+          sudo apt-get install -y ruby cmake git libsdl2-dev llvm-15 llvm-15-dev
 
       - name: Fetch Jolt and Luau sources
         run: |
           cd scripts
           ruby get_libs.rb
+
+      - name: Prepare LLVM path expected by Winter
+        run: |
+          LLVM_EXPECTED_BIN="${GITHUB_WORKSPACE}/llvm/llvm_15_0_7_dylib_install/bin"
+          mkdir -p "${LLVM_EXPECTED_BIN}"
+
+          if command -v llvm-config-15 >/dev/null 2>&1; then
+            ln -sf "$(command -v llvm-config-15)" "${LLVM_EXPECTED_BIN}/llvm-config"
+          elif command -v llvm-config >/dev/null 2>&1; then
+            ln -sf "$(command -v llvm-config)" "${LLVM_EXPECTED_BIN}/llvm-config"
+          else
+            echo "llvm-config not found after install."
+            exit 1
+          fi
 
       - name: Configure project (RelWithDebInfo, CEF off, SDL on)
         run: |
