@@ -10,13 +10,12 @@ on:
       tag:
         description: "Release tag (e.g. v0.0.13)"
         required: true
-        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-linux-asset-${{ github.event.release.tag_name || github.event.inputs.tag || github.ref_name }}
+  group: release-linux-asset-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
