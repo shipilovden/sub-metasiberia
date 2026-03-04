@@ -161,7 +161,7 @@ jobs:
 
       - name: Configure Linux build (SDL, CEF off)
         run: |
-          cmake -S . -B build_linux \
+          CXXFLAGS="-include pthread.h -pthread" LDFLAGS="-pthread" cmake -S . -B build_linux \
             -DCEF_SUPPORT=OFF \
             -DUSE_SDL=ON \
             -DSDL_BUILD_DIR=/usr \
