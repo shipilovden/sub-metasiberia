@@ -100,6 +100,10 @@ jobs:
             libjpeg-dev \
             libssl-dev \
             libtls-dev \
+            qtbase5-dev \
+            qt5-qmake \
+            libqt5opengl5-dev \
+            qtmultimedia5-dev \
             libglu1-mesa-dev \
             libx11-dev \
             libxrandr-dev \
@@ -107,6 +111,15 @@ jobs:
             libxinerama-dev \
             libxcursor-dev \
             libasound2-dev
+
+          if apt-cache show libqt5gamepad5-dev >/dev/null 2>&1; then
+            sudo apt-get install -y libqt5gamepad5-dev
+          elif apt-cache show qtgamepad5-dev >/dev/null 2>&1; then
+            sudo apt-get install -y qtgamepad5-dev
+          else
+            echo "Qt5 Gamepad dev package not found in apt cache"
+            exit 1
+          fi
 
       - name: Fetch Jolt and Luau sources
         run: |
