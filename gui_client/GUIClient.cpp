@@ -9534,6 +9534,21 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				const float use_water_z = myClamp(this->connected_world_settings.terrain_spec.water_z, -1.0e8f, 1.0e8f); // Avoid NaNs, Infs etc.
 				physics_world->setWaterZ(use_water_z);
 			}
+
+			if(opengl_engine)
+			{
+				const float sun_phi   = this->connected_world_settings.sun_phi;
+				const float sun_theta = this->connected_world_settings.sun_theta;
+				opengl_engine->setEnvMapTransform(Matrix3f::rotationAroundZAxis(sun_phi));
+
+				{
+					OpenGLMaterial env_mat;
+					env_mat.tex_matrix = Matrix2f(-1 / Maths::get2Pi<float>(), 0, 0, 1 / Maths::pi<float>());
+					opengl_engine->setEnvMat(env_mat);
+				}
+
+				opengl_engine->setSunDir(normalise(Vec4f(std::cos(sun_phi) * sin(sun_theta), std::sin(sun_phi) * sin(sun_theta), cos(sun_theta), 0)));
+			}
 		}
 		break;
 		case Msg_WorldDetailsReceivedMessage:
@@ -16433,6 +16448,7 @@ void GUIClient::updateGroundPlane()
 		const float terrain_section_width_m = myClamp(spec.terrain_section_width_m, 8.f, 1000000.f);
 
 		path_spec.terrain_section_width_m = terrain_section_width_m;
+		path_spec.terrain_height_scale = spec.terrain_height_scale;
 		path_spec.default_terrain_z = spec.default_terrain_z;
 		path_spec.water_z = spec.water_z;
 		path_spec.flags = spec.flags;

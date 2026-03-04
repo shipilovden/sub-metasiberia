@@ -35,6 +35,7 @@ struct TerrainSpec
 	URLString detail_height_map_URLs[4];
 
 	float terrain_section_width_m;
+	float terrain_height_scale; // Multiplier applied to raw heightmap values. Default value is 1.
 	float water_z;
 	float default_terrain_z;
 
@@ -66,6 +67,9 @@ public:
 	void copyNetworkStateFrom(const WorldSettings& other);
 
 	TerrainSpec terrain_spec;
+
+	float sun_theta;
+	float sun_phi;
 
 	DatabaseKey database_key;
 	bool db_dirty; // If true, there is a change that has not been saved to the DB.
