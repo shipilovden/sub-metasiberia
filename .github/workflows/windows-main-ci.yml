@@ -1,0 +1,111 @@
+name: Windows Main CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/windows-main-ci.yml"
+      - ".github/workflows/cmake-configure-linux.yml"
+      - "CMakeLists.txt"
+      - "functions.cmake"
+      - "cmake/**"
+      - "gui_client/**"
+      - "server/**"
+      - "shared/**"
+      - "scripts/config.rb"
+      - "scripts/config-lib.rb"
+      - "scripts/get_libs.rb"
+      - "qt_build.ps1"
+  pull_request:
+    paths:
+      - ".github/workflows/windows-main-ci.yml"
+      - ".github/workflows/cmake-configure-linux.yml"
+      - "CMakeLists.txt"
+      - "functions.cmake"
+      - "cmake/**"
+      - "gui_client/**"
+      - "server/**"
+      - "shared/**"
+      - "scripts/config.rb"
+      - "scripts/config-lib.rb"
+      - "scripts/get_libs.rb"
+      - "qt_build.ps1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-main-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  configure:
+    runs-on: windows-2022
+    env:
+      GLARE_CORE_LIBS: ${{ github.workspace }}
+      WINTER_DIR: ${{ github.workspace }}\winter
+      GLARE_CORE_TRUNK_DIR: ${{ github.workspace }}\glare-core
+      CYBERSPACE_OUTPUT: ${{ github.workspace }}\substrata_output
+      CEF_BINARY_DISTRIB_DIR: ""
+    steps:
+      - name: Checkout sub-metasiberia
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Checkout glare-core
+        uses: actions/checkout@v4
+        with:
+          repository: glaretechnologies/glare-core
+          path: glare-core
+          fetch-depth: 1
+
+      - name: Checkout winter
+        uses: actions/checkout@v4
+        with:
+          repository: glaretechnologies/winter
+          path: winter
+          fetch-depth: 1
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Prepare SDL header for configure-time checks
+        shell: pwsh
+        run: |
+          $sdlIncludeDir = Join-Path $env:GLARE_CORE_LIBS "SDL\sdl_build\include\SDL2"
+          New-Item -ItemType Directory -Path $sdlIncludeDir -Force | Out-Null
+          $sdlHeader = Join-Path $sdlIncludeDir "SDL.h"
+          if (-not (Test-Path $sdlHeader)) {
+            Set-Content -Path $sdlHeader -Value "#pragma once`n#define SDL_DUMMY 1`n"
+          }
+
+      - name: Fetch Jolt and Luau sources
+        shell: pwsh
+        run: |
+          Set-Location scripts
+          ruby get_libs.rb
+
+      - name: Configure project (VS2022, SDL mode, CEF off)
+        shell: pwsh
+        run: |
+          cmake -S . -B build_windows `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DUSE_SDL=ON `
+            -DCEF_SUPPORT=OFF `
+            -DSDL_BUILD_DIR="${env:GLARE_CORE_LIBS}\SDL\sdl_build"
+
+      - name: Upload CMake logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmake-configure-windows-logs
+          path: |
+            build_windows/CMakeCache.txt
+            build_windows/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: ignore
