@@ -41,6 +41,17 @@ WorldMaterial::~WorldMaterial()
 
 static inline URLString getLODTextureURLForLevel(const URLString& base_texture_url, int material_min_lod_level, int level, bool has_alpha, bool use_basis, glare::ArenaAllocator* arena_allocator)
 {
+	// Some image formats may not have pre-generated .basis / _lod derivatives on a server.
+	// For these formats, keep using the original texture URL for all LODs to avoid missing-texture fallbacks.
+	const bool keep_original_texture_URL_for_all_lods =
+		::hasExtension(base_texture_url, "webp") ||
+		::hasExtension(base_texture_url, "bmp")  ||
+		::hasExtension(base_texture_url, "tga")  ||
+		::hasExtension(base_texture_url, "tif")  ||
+		::hasExtension(base_texture_url, "tiff");
+	if(keep_original_texture_URL_for_all_lods)
+		return URLString(base_texture_url, glare::STLArenaAllocator<char>(arena_allocator));
+
 	// Don't do LOD on mp4 (video) textures (for now).
 	// Also don't do LOD with http URLs
 	if(::hasExtension(base_texture_url, "mp4") || hasPrefix(base_texture_url, "http:") || hasPrefix(base_texture_url, "https:"))
@@ -103,6 +114,16 @@ static inline URLString getLODTextureURLForLevel(const URLString& base_texture_u
 #if GUI_CLIENT
 static inline OpenGLTextureKey getLODTexturePathForLevel(const OpenGLTextureKey& base_texture_path, int material_min_lod_level, int level, bool has_alpha, bool use_basis, glare::ArenaAllocator* arena_allocator)
 {
+	// See the URL variant above. Avoid requesting derived texture files that may not exist for these formats.
+	const bool keep_original_texture_path_for_all_lods =
+		::hasExtension(base_texture_path, "webp") ||
+		::hasExtension(base_texture_path, "bmp")  ||
+		::hasExtension(base_texture_path, "tga")  ||
+		::hasExtension(base_texture_path, "tif")  ||
+		::hasExtension(base_texture_path, "tiff");
+	if(keep_original_texture_path_for_all_lods)
+		return OpenGLTextureKey(base_texture_path, glare::STLArenaAllocator<char>(arena_allocator));
+
 	// Don't do LOD on mp4 (video) textures (for now).
 	// Also don't do LOD with http URLs
 	if(::hasExtension(base_texture_path, "mp4") || hasPrefix(base_texture_path, "http:") || hasPrefix(base_texture_path, "https:"))
@@ -961,6 +982,44 @@ void WorldMaterial::test()
 			urls.clear();
 			mat.appendDependencyURLs(get_url_options, /*lod level=*/2, urls);
 			testAssert(urls.size() == 1 && urls[0].URL == "sometex_lod2.basis");
+		}
+	}
+
+	{
+		WorldMaterial mat;
+		mat.colour_texture_url = "sometex.webp";
+
+		glare::ArenaAllocator* allocator = nullptr;
+
+		// For formats without guaranteed derivative textures, keep original URL for all LODs.
+		{
+			const WorldMaterial::GetURLOptions get_url_options(false, allocator);
+			DependencyURLVector urls;
+			mat.appendDependencyURLs(get_url_options, /*lod level=*/0, urls);
+			testAssert(urls.size() == 1 && urls[0].URL == "sometex.webp");
+
+			urls.clear();
+			mat.appendDependencyURLs(get_url_options, /*lod level=*/1, urls);
+			testAssert(urls.size() == 1 && urls[0].URL == "sometex.webp");
+
+			urls.clear();
+			mat.appendDependencyURLs(get_url_options, /*lod level=*/2, urls);
+			testAssert(urls.size() == 1 && urls[0].URL == "sometex.webp");
+		}
+
+		{
+			const WorldMaterial::GetURLOptions get_url_options(true, allocator);
+			DependencyURLVector urls;
+			mat.appendDependencyURLs(get_url_options, /*lod level=*/0, urls);
+			testAssert(urls.size() == 1 && urls[0].URL == "sometex.webp");
+
+			urls.clear();
+			mat.appendDependencyURLs(get_url_options, /*lod level=*/1, urls);
+			testAssert(urls.size() == 1 && urls[0].URL == "sometex.webp");
+
+			urls.clear();
+			mat.appendDependencyURLs(get_url_options, /*lod level=*/2, urls);
+			testAssert(urls.size() == 1 && urls[0].URL == "sometex.webp");
 		}
 	}
 

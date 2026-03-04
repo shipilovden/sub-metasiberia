@@ -80,7 +80,11 @@ void LoadTextureTask::run(size_t thread_index)
 				ImageDecoding::ImageDecodingOptions options;
 				options.ETC_support = opengl_engine->texture_compression_ETC_support;
 
-				map = ImageDecoding::decodeImageFromBuffer(/*base dir path (not used)=*/".", std::string(key), texture_data_buffer, worker_allocator.ptr(), options);
+				if(hasExtension(key, "webp") || hasExtension(key, "bmp") || hasExtension(key, "tga") ||
+					hasExtension(key, "tif") || hasExtension(key, "tiff"))
+					map = ImageDecoding::decodeImage(/*base dir path (not used)=*/".", std::string(key), worker_allocator.ptr(), options);
+				else
+					map = ImageDecoding::decodeImageFromBuffer(/*base dir path (not used)=*/".", std::string(key), texture_data_buffer, worker_allocator.ptr(), options);
 			}
 
 #if USE_TEXTURE_VIEWS // NOTE: USE_TEXTURE_VIEWS is defined in opengl/TextureAllocator.h

@@ -1,34 +1,35 @@
 # Metasiberia Wiki
 
-Welcome to Metasiberia user docs.
+Документация по клиенту, созданию контента и администрированию Metasiberia.
 
 ![Metasiberia](images/wiki_main_image.png)
 
-## Install (Windows)
-1. Open releases page:
-   - `https://github.com/shipilovden/sub-metasiberia/releases`
-2. Download latest installer:
-   - `MetasiberiaBeta-Setup-vX.Y.Z.exe`
-3. Run installer and complete setup.
-4. Start `Metasiberia Beta`.
+## Быстрый старт
 
-Quick link:
-[Download latest release](https://github.com/shipilovden/sub-metasiberia/releases)
+1. Скачайте последнюю версию клиента:  
+   [Releases](https://github.com/shipilovden/sub-metasiberia/releases)
+2. Установите `MetasiberiaBeta-Setup-vX.Y.Z.exe`.
+3. Зарегистрируйтесь на сайте:  
+   [https://vr.metasiberia.com/signup](https://vr.metasiberia.com/signup)
+4. Запустите клиент и войдите в аккаунт.
+5. Откройте базовые гайды:
+   - [01 Install Windows](01-Install-Windows)
+   - [02 Registration and Login](02-Registration-and-Login)
 
-## Registration and Login
-1. Open signup page:
-   - `https://vr.metasiberia.com/signup`
-2. Fill username, email, password.
-3. Confirm Terms checkbox.
-4. Submit form.
-5. Open client and log in with created account.
+## Разделы Wiki
 
-## First Launch Checklist
-1. Wait until world loading finishes.
-2. Check movement (`W A S D`) and camera (mouse).
-3. If FPS is low, reduce graphics settings.
-4. If audio/mic does not work, check Windows device permissions.
+- Старт и база
+- Add-операции (модели, видео, webview, аудио, воксели, камера и т.д.)
+- Редакторы и настройки (Object/Material/Parcel/World/Environment)
+- Медиа, миры, веб
+- Админка
+- Lua scripting
 
-## Notes
-- This wiki currently uses one page only.
-- Source of truth in repo: `docs/wiki/`.
+Полная структура страниц и порядок внедрения:
+- [WIKI PAGES PLAN RU](WIKI-PAGES-PLAN-RU)
+
+## Статус документации
+
+- Сейчас Wiki находится в фазе расширения.
+- Источник правок: `C:\programming\substrata\docs\wiki`.
+- Каждая новая страница должна содержать шаги, проверку результата, типичные ошибки и скриншоты.

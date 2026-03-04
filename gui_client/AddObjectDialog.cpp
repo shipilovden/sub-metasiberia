@@ -15,12 +15,9 @@ Copyright Glare Technologies Limited 2022 -
 #include "../dll/include/IndigoException.h"
 #include "../simpleraytracer/raymesh.h"
 #include "../dll/IndigoStringUtils.h"
-#include "../utils/FileUtils.h"
 #include "../utils/Exception.h"
-#include "../utils/PlatformUtils.h"
 #include "../utils/StringUtils.h"
 #include "../utils/ConPrint.h"
-#include "../utils/FileChecksum.h"
 #include "../utils/TaskManager.h"
 #include "../indigo/TextureServer.h"
 #include "../qt/QtUtils.h"
@@ -53,6 +50,7 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	this->tabWidget->setCurrentIndex(settings->value("AddObjectDialog/tabIndex").toInt());
 
 	this->avatarSelectWidget->setType(FileSelectWidget::Type_File);
+	this->avatarSelectWidget->setFilter("Supported files (*.obj *.gltf *.glb *.vox *.stl *.igmesh *.jpg *.jpeg *.png *.gif *.exr *.ktx *.ktx2 *.basis *.tif *.tiff *.bmp *.tga *.webp);;All files (*.*)");
 	//this->avatarSelectWidget->setFilename(settings->value("AddObjectDialogPath").toString());
 
 	connect(this->listWidget, SIGNAL(itemClicked(QListWidgetItem*)), this, SLOT(modelSelected(QListWidgetItem*)));

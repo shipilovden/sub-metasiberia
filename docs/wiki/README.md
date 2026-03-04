@@ -9,6 +9,10 @@ This directory stores Wiki content in the main repository.
 
 ## Current Scope
 - Single-page beginner onboarding (Home).
+- Detailed expansion plan: `WIKI-PAGES-PLAN-RU.md`.
+- Capability audit drafts:
+  - `TEMP-METASIBERIA-CAPABILITIES-PLAN.md`
+  - `TEMP-METASIBERIA-CAPABILITIES-PLAN-RU.md`
 
 ## File Layout
 - `Home.md` - wiki landing page
@@ -19,3 +23,4 @@ This directory stores Wiki content in the main repository.
 - Keep steps short and explicit.
 - Add troubleshooting at the end of each page.
 - For now keep only `Home.md` in sidebar.
+- For planned full wiki structure and mandatory images per page, use `WIKI-PAGES-PLAN-RU.md` as source of truth.
