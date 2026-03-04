@@ -53,7 +53,7 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 	gl_ui->addWidget(signup_button);
 
 
-	movement_button = new GLUIButton(*gl_ui_, opengl_engine_, /*tex path=*/gui_client->resources_dir_path + "/buttons/dir_pad.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), GLUIButton::CreateArgs());
+	movement_button = new GLUIButton(*gl_ui_, opengl_engine_, /*tex path=*/gui_client->resources_dir_path + "/buttons/dir_pad.png", GLUIButton::CreateArgs());
 	movement_button->handler = this;
 	gl_ui->addWidget(movement_button);
 
@@ -61,7 +61,7 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 	{
 		GLUIButton::CreateArgs args;
 		args.tooltip = "Настройки аватара";
-		avatar_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/avatar.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+		avatar_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/avatar.png", args);
 		avatar_button->handler = this;
 		gl_ui->addWidget(avatar_button);
 	}
@@ -71,7 +71,7 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 		{
 			GLUIButton::CreateArgs args;
 			args.tooltip = "Транзит";
-			transit_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/transit_icon.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+			transit_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/transit_icon.png", args);
 			transit_button->handler = this;
 			gl_ui->addWidget(transit_button);
 		}
@@ -87,7 +87,7 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 		{
 			GLUIButton::CreateArgs args;
 			args.tooltip = "Домой";
-			home_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/home.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+			home_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/home.png", args);
 			home_button->handler = this;
 			gl_ui->addWidget(home_button);
 		}
@@ -103,7 +103,7 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 		{
 			GLUIButton::CreateArgs args;
 			args.tooltip = "Показать участки";
-			parcels_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/parcels.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+			parcels_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/parcels.png", args);
 			parcels_button->handler = this;
 			gl_ui->addWidget(parcels_button);
 		}
@@ -119,7 +119,7 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 			{
 				GLUIButton::CreateArgs args;
 				args.tooltip = "Заякориться";
-				anchor_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/anchor.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+				anchor_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/anchor.png", args);
 				anchor_button->handler = this;
 				gl_ui->addWidget(anchor_button);
 			}
@@ -137,7 +137,7 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 		{
 			GLUIButton::CreateArgs args;
 			args.tooltip = "О программе";
-			about_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/about.png", Vec2f(0.f), /*dims=*/Vec2f(0.4f, 0.1f), args);
+			about_button = new GLUIButton(*gl_ui_, opengl_engine_, gui_client->resources_dir_path + "/buttons/about.png", args);
 			about_button->handler = this;
 			gl_ui->addWidget(about_button);
 		}
