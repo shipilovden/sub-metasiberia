@@ -31,3 +31,18 @@ gh workflow run release-linux-asset.yml -R shipilovden/sub-metasiberia -f tag=vX
 ```
 
 После успешного выполнения workflow второй артефакт появится в `Releases` рядом с Windows installer.
+
+## Linux full bundle notes
+
+Manual dispatch example (build current master and upload to an existing tag):
+
+```bash
+gh workflow run release-linux-asset.yml -R shipilovden/sub-metasiberia -f tag=vX.Y.Z -f build_ref=master
+```
+
+Current Linux tarball content:
+- gui_client (and optional server)
+- resources/shaders/gl_data
+- bundled runtime shared libs in lib/ (except core glibc runtime/loader libs)
+- bundled Qt plugins in plugins/
+- run.sh sets LD_LIBRARY_PATH and QT plugin paths

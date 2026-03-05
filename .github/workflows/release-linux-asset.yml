@@ -97,6 +97,7 @@ jobs:
             ninja-build \
             tar \
             xz-utils \
+            binutils \
             libjpeg-dev \
             libssl-dev \
             libtls-dev \
@@ -216,7 +217,7 @@ jobs:
 
           TAG="${{ steps.meta.outputs.tag }}"
           PKG_DIR="${RUNNER_TEMP}/metasiberia-linux-${TAG}"
-          mkdir -p "${PKG_DIR}/data"
+          mkdir -p "${PKG_DIR}/data" "${PKG_DIR}/lib" "${PKG_DIR}/plugins"
 
           GUI_BIN="${CYBERSPACE_OUTPUT}/test_builds/gui_client"
           SERVER_BIN="${CYBERSPACE_OUTPUT}/test_builds/server"
@@ -240,10 +241,103 @@ jobs:
           cp -r glare-core/opengl/gl_data "${PKG_DIR}/data"
           cp docs/licence.txt "${PKG_DIR}/licence.txt"
 
+          is_excluded_runtime_lib() {
+            local lib_path="$1"
+            case "${lib_path}" in
+              /lib*/ld-linux*.so*|/usr/lib*/ld-linux*.so*) return 0 ;;
+              /lib*/libc.so*|/usr/lib*/libc.so*) return 0 ;;
+              /lib*/libm.so*|/usr/lib*/libm.so*) return 0 ;;
+              /lib*/libpthread.so*|/usr/lib*/libpthread.so*) return 0 ;;
+              /lib*/librt.so*|/usr/lib*/librt.so*) return 0 ;;
+              /lib*/libdl.so*|/usr/lib*/libdl.so*) return 0 ;;
+              /lib*/libresolv.so*|/usr/lib*/libresolv.so*) return 0 ;;
+              /lib*/libnss_*.so*|/usr/lib*/libnss_*.so*) return 0 ;;
+              /lib*/libutil.so*|/usr/lib*/libutil.so*) return 0 ;;
+              /lib*/libanl.so*|/usr/lib*/libanl.so*) return 0 ;;
+              /lib*/libcrypt.so*|/usr/lib*/libcrypt.so*) return 0 ;;
+              /lib*/libgcc_s.so*|/usr/lib*/libgcc_s.so*) return 0 ;;
+            esac
+            return 1
+          }
+
+          declare -A SCANNED_FILES
+
+          ensure_soname_link() {
+            local lib_abs="$1"
+            local lib_name
+            lib_name="$(basename "${lib_abs}")"
+            local soname
+            soname="$(objdump -p "${lib_abs}" 2>/dev/null | awk '/SONAME/{print $2; exit}' || true)"
+            if [[ -n "${soname}" && "${soname}" != "${lib_name}" && ! -e "${PKG_DIR}/lib/${soname}" ]]; then
+              ln -s "${lib_name}" "${PKG_DIR}/lib/${soname}"
+            fi
+          }
+
+          copy_runtime_lib() {
+            local lib_abs="$1"
+            local lib_name
+            lib_name="$(basename "${lib_abs}")"
+            local dst="${PKG_DIR}/lib/${lib_name}"
+            if [[ ! -e "${dst}" ]]; then
+              cp -a "${lib_abs}" "${dst}"
+              ensure_soname_link "${lib_abs}"
+            fi
+          }
+
+          scan_and_collect_libs() {
+            local target_abs
+            target_abs="$(readlink -f "$1")"
+            if [[ -z "${target_abs}" || ! -f "${target_abs}" ]]; then
+              return 0
+            fi
+
+            if [[ -n "${SCANNED_FILES[${target_abs}]:-}" ]]; then
+              return 0
+            fi
+            SCANNED_FILES["${target_abs}"]=1
+
+            while IFS= read -r dep_path; do
+              [[ -z "${dep_path}" ]] && continue
+              dep_path="$(readlink -f "${dep_path}")"
+              [[ -f "${dep_path}" ]] || continue
+
+              if is_excluded_runtime_lib "${dep_path}"; then
+                continue
+              fi
+
+              copy_runtime_lib "${dep_path}"
+              scan_and_collect_libs "${PKG_DIR}/lib/$(basename "${dep_path}")"
+            done < <(ldd "${target_abs}" 2>/dev/null | awk '/=> \// {print $3} /^\/.*\.so/ {print $1}' | sort -u)
+          }
+
+          QT_PLUGIN_DIR="$(qtpaths --plugin-dir 2>/dev/null || true)"
+          if [[ -z "${QT_PLUGIN_DIR}" || ! -d "${QT_PLUGIN_DIR}" ]]; then
+            QT_PLUGIN_DIR="$(qmake -query QT_INSTALL_PLUGINS 2>/dev/null || true)"
+          fi
+
+          if [[ -n "${QT_PLUGIN_DIR}" && -d "${QT_PLUGIN_DIR}" ]]; then
+            cp -a "${QT_PLUGIN_DIR}/." "${PKG_DIR}/plugins/"
+          else
+            echo "Qt plugin directory not found."
+            exit 1
+          fi
+
+          scan_and_collect_libs "${PKG_DIR}/gui_client"
+          if [[ -f "${PKG_DIR}/server" ]]; then
+            scan_and_collect_libs "${PKG_DIR}/server"
+          fi
+
+          while IFS= read -r plugin_so; do
+            scan_and_collect_libs "${plugin_so}"
+          done < <(find "${PKG_DIR}/plugins" -type f -name "*.so*" | sort)
+
           {
             echo '#!/usr/bin/env bash'
             echo 'set -euo pipefail'
             echo 'HERE="$(cd "$(dirname "$0")" && pwd)"'
+            echo 'export LD_LIBRARY_PATH="${HERE}/lib:${LD_LIBRARY_PATH:-}"'
+            echo 'export QT_PLUGIN_PATH="${HERE}/plugins"'
+            echo 'export QT_QPA_PLATFORM_PLUGIN_PATH="${HERE}/plugins/platforms"'
             echo 'cd "${HERE}"'
             echo 'exec ./gui_client "$@"'
           } > "${PKG_DIR}/run.sh"
