@@ -26,13 +26,13 @@ Metasiberia is a virtual world project inspired by and based on the open-source 
 
 ## Community and Support
 
-- **VK**: [https://vk.com/metasiberia_official](https://vk.com/metasiberia_official)
-- **Telegram**: [https://t.me/metasiberia_channel](https://t.me/metasiberia_channel)
+[![VK](https://img.shields.io/badge/VK-metasiberia__official-0077FF?logo=vk&logoColor=white)](https://vk.com/metasiberia_official)
+[![Telegram](https://img.shields.io/badge/Telegram-metasiberia__channel-26A5E4?logo=telegram&logoColor=white)](https://t.me/metasiberia_channel)
 
 ## Credits
 
 **Metasiberia** is inspired and based on **Substrata**.
 
-- **Original Substrata**: [https://github.com/glaretechnologies/substrata](https://github.com/glaretechnologies/substrata)
-- **Substrata Creator**: [https://x.com/NickChapmn](https://x.com/NickChapmn)
-- **Metasiberia Author**: [https://x.com/denshipilovart](https://x.com/denshipilovart)
+[![Original Substrata](https://img.shields.io/badge/GitHub-glaretechnologies%2Fsubstrata-181717?logo=github&logoColor=white)](https://github.com/glaretechnologies/substrata)
+[![Substrata Creator](https://img.shields.io/badge/X-%40NickChapmn-000000?logo=x&logoColor=white)](https://x.com/NickChapmn)
+[![Metasiberia Author](https://img.shields.io/badge/X-%40denshipilovart-000000?logo=x&logoColor=white)](https://x.com/denshipilovart)
