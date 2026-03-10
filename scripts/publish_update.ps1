@@ -4,7 +4,6 @@
 # - builds Qt client (qt_build.ps1)
 # - creates Windows installer (create_simple_installer.ps1)
 # - creates GitHub Release + uploads Windows installer asset
-# - triggers Linux release asset workflow (optional)
 
 param(
     [ValidateSet("patch", "minor", "major", "none")]
@@ -16,13 +15,6 @@ param(
     [string]$Remote = "myorigin",
     [string]$AppName = "Metasiberia Beta",
     [string]$Notes = "Installer update.",
-    [switch]$TriggerLinuxAssetWorkflow = $true,
-    [string]$LinuxWorkflowFile = "release-linux-asset.yml",
-    [switch]$WaitForLinuxAsset = $false,
-    [ValidateRange(1, 180)]
-    [int]$LinuxAssetWaitMinutes = 45,
-    [ValidateRange(5, 300)]
-    [int]$LinuxAssetPollSeconds = 20,
     [switch]$DryRun = $false
 )
 
@@ -121,39 +113,6 @@ function Ensure-CleanGit {
     }
 }
 
-function Wait-ForReleaseAsset {
-    param(
-        [string]$RepoName,
-        [string]$Tag,
-        [string]$AssetName,
-        [int]$TimeoutMinutes,
-        [int]$PollSeconds
-    )
-
-    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-    while ((Get-Date) -lt $deadline) {
-        $json = & gh release view $Tag -R $RepoName --json assets
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to query release assets for $Tag."
-        }
-
-        $obj = $json | ConvertFrom-Json
-        $assetNames = @()
-        if ($obj -and $obj.assets) {
-            $assetNames = @($obj.assets | ForEach-Object { $_.name })
-        }
-
-        if ($assetNames -contains $AssetName) {
-            return $true
-        }
-
-        Write-Host "Waiting for Linux asset '$AssetName'..."
-        Start-Sleep -Seconds $PollSeconds
-    }
-
-    return $false
-}
-
 $repoRoot = Get-RepoRoot
 Set-Location $repoRoot
 
@@ -228,21 +187,6 @@ $releaseArgs = @("release", "create", $tag, $installerPath, "-R", $Repo, "--titl
 if($Prerelease) { $releaseArgs += "--prerelease" }
 ExecNative "gh" $releaseArgs
 
-$linuxAssetName = "MetasiberiaBeta-Linux-$tag.tar.gz"
-if($TriggerLinuxAssetWorkflow) {
-    ExecNative "gh" @("workflow", "run", $LinuxWorkflowFile, "-R", $Repo, "-f", "tag=$tag")
-    Write-Host "Triggered Linux asset workflow: $LinuxWorkflowFile"
-
-    if($WaitForLinuxAsset) {
-        $found = Wait-ForReleaseAsset -RepoName $Repo -Tag $tag -AssetName $linuxAssetName -TimeoutMinutes $LinuxAssetWaitMinutes -PollSeconds $LinuxAssetPollSeconds
-        if(-not $found) {
-            throw "Linux asset '$linuxAssetName' was not found on release '$tag' within $LinuxAssetWaitMinutes minutes."
-        }
-        Write-Host "Linux asset is present: $linuxAssetName"
-    }
-}
-
 Write-Host ""
 Write-Host "Published: $tag"
 Write-Host "Windows installer: $installerPath"
-Write-Host "Expected Linux asset: $linuxAssetName"

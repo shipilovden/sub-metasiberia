@@ -2,10 +2,9 @@
 
 ## Цель
 
-Для каждого тега релиза `vX.Y.Z` в GitHub Release должны быть два артефакта:
+Для каждого тега релиза `vX.Y.Z` в GitHub Release должен быть Windows installer:
 
-1. `MetasiberiaBeta-Setup-vX.Y.Z.exe` (Windows installer)
-2. `MetasiberiaBeta-Linux-vX.Y.Z.tar.gz` (Linux package)
+1. `MetasiberiaBeta-Setup-vX.Y.Z.exe`
 
 ## Как это работает
 
@@ -13,36 +12,17 @@
    - поднимает версию,
    - делает commit/tag/push,
    - собирает Windows installer,
-   - публикует GitHub Release с Windows-артефактом,
-   - запускает Linux workflow `release-linux-asset.yml`.
+   - публикует GitHub Release с Windows-артефактом.
 
-2. GitHub Actions workflow `.github/workflows/release-linux-asset.yml`:
-   - триггерится на `release: published/prereleased` (и вручную через `workflow_dispatch`),
-   - собирает Linux `gui_client` (SDL, `CEF_SUPPORT=OFF`),
-   - упаковывает tarball,
-   - загружает его в тот же GitHub Release.
+2. Дополнительная Linux-догрузка в GitHub Release не используется.
 
-## Ручной запуск Linux-артефакта
+## Как это делалось нормально раньше
 
-Если нужно догрузить Linux пакет для уже существующего релиза:
+Схема была и должна оставаться простой:
 
-```bash
-gh workflow run release-linux-asset.yml -R shipilovden/sub-metasiberia -f tag=vX.Y.Z
-```
+1. Поднять версию.
+2. Собрать Qt5-клиент через `C:\programming\qt_build.ps1`.
+3. Собрать `MetasiberiaBeta-Setup-vX.Y.Z.exe`.
+4. Создать `GitHub Release` и прикрепить Windows installer.
 
-После успешного выполнения workflow второй артефакт появится в `Releases` рядом с Windows installer.
-
-## Linux full bundle notes
-
-Manual dispatch example (build current master and upload to an existing tag):
-
-```bash
-gh workflow run release-linux-asset.yml -R shipilovden/sub-metasiberia -f tag=vX.Y.Z -f build_ref=master
-```
-
-Current Linux tarball content:
-- gui_client (and optional server)
-- resources/shaders/gl_data
-- bundled runtime shared libs in lib/ (except core glibc runtime/loader libs)
-- bundled Qt plugins in plugins/
-- run.sh sets LD_LIBRARY_PATH and QT plugin paths
+Без отдельного Linux tarball, без release workflow-догрузки и без второго обязательного артефакта.
