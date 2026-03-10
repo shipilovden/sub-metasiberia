@@ -1,0 +1,11 @@
+Required captures for 01-Install-Windows:
+- hero.png
+- step-release-page.png
+- step-installer.png
+- result-installed.png
+- error-antivirus.png
+
+Capture notes:
+- Use the real GitHub Releases page for Metasiberia.
+- Show the downloaded installer filename clearly.
+- Prefer the installer wizard on the main step, not a hidden background window.

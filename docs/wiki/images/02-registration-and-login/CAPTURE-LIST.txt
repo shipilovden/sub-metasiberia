@@ -1,0 +1,11 @@
+Required captures for 02-Registration-and-Login:
+- hero.png
+- step-signup-form.png
+- step-terms-checkbox.png
+- result-logged-in.png
+- error-invalid-credentials.png
+
+Capture notes:
+- Use the live signup page at https://vr.metasiberia.com/signup.
+- Show the Terms checkbox explicitly on one screenshot.
+- Use a real logged-in client or website state for the success result.

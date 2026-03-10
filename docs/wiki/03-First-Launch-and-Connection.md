@@ -7,8 +7,10 @@
 
 Эта страница объясняет, что происходит при первом запуске клиента, как понять, что подключение к серверу прошло успешно, и какие базовые действия проверить сразу после входа в мир.
 
-> Скриншоты для этой страницы ещё не добавлены. Плановый набор изображений:
-> `hero`, `step-connect`, `step-world-loaded`, `result-ready`, `error-connection`.
+![First launch hero](images/03-first-launch-and-connection/hero.png)
+
+> Для этой страницы уже добавлены `hero`, `step-connect`, `step-world-loaded`, `result-ready`.
+> Кадр `error-connection` ещё остаётся в списке обязательных.
 
 ## Что нужно перед началом
 
@@ -30,10 +32,16 @@
 
 1. Запустите `Metasiberia Beta`.
 2. Дождитесь появления в строке статуса сообщения `Connecting to <server>...`.
+
+![Connecting to server](images/03-first-launch-and-connection/step-connect.png)
+
 3. После успешного соединения убедитесь, что строка статуса изменилась на `Connected to <server>`.
 4. Подождите, пока завершатся загрузка ресурсов и моделей:
    - могут временно показываться сообщения `Downloading resources...`, `Downloading web resources...`, `Loading models and textures...`.
 5. Дождитесь, когда в окне клиента станет виден мир и интерфейс перестанет активно показывать загрузку.
+
+![World loaded](images/03-first-launch-and-connection/step-world-loaded.png)
+
 6. Проверьте базовое управление:
    - мышь меняет направление камеры;
    - движение персонажа работает;
@@ -48,6 +56,8 @@
 - Можно двигаться и осматриваться.
 - Команды `Fly Mode` и `Third Person Camera` переключаются без ошибки.
 - Если вы залогинены, работает переход `Go -> Go to Personal World`.
+
+![Ready world](images/03-first-launch-and-connection/result-ready.png)
 
 ## Типичные проблемы
 
@@ -74,6 +84,10 @@
 
 - Эта команда требует, чтобы пользователь был залогинен.
 - Если вы не входили в аккаунт, сначала выполните шаги из [02 Registration and Login](02-Registration-and-Login).
+
+## Изображения, которые ещё нужно добрать
+
+- `error-connection.png` - пример неуспешного подключения или состояния `Not connected to server.`
 
 ## Полезные ссылки
 

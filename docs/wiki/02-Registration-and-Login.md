@@ -3,15 +3,26 @@
 Статус: draft  
 Актуально для: Metasiberia Beta
 
+> Для этой страницы ещё нужно собрать тематический пакет изображений:
+> `hero`, `step-signup-form`, `step-terms-checkbox`, `result-logged-in`, `error-invalid-credentials`.
+
+![Signup form](images/02-registration-and-login/step-signup-form.png)
+
 ## Регистрация аккаунта
 
 1. Откройте страницу регистрации:  
    [https://vr.metasiberia.com/signup](https://vr.metasiberia.com/signup)
+
+![Signup page](images/02-registration-and-login/step-signup-form.png)
+
 2. Заполните:
    - Username
    - Email
    - Password
 3. Подтвердите чекбокс согласия с `Terms of use`.
+
+![Terms checkbox](images/02-registration-and-login/step-terms-checkbox.png)
+
 4. Нажмите `Sign up`.
 
 ## Вход в клиенте
@@ -47,6 +58,12 @@
 - Проверьте интернет.
 - Перезапустите клиент.
 - Повторите вход после восстановления соединения.
+
+## Изображения, которые ещё нужно добрать
+
+- `hero.png` - тематический кадр страницы регистрации или входа.
+- `result-logged-in.png` - клиент или сайт после успешной авторизации.
+- `error-invalid-credentials.png` - пример ошибки неверного логина или пароля.
 
 ## Полезные ссылки
 
