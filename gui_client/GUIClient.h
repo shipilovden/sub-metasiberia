@@ -259,6 +259,8 @@ public:
 	std::string getCurrentURL() const;
 	void goBack();
 	void gestureSettingsChanged(const GestureSettings& new_gesture_settings);
+	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings);
+	void applyWorldSettingsToOpenGLEngine();
 public:
 	void rotateObject(WorldObjectRef ob, const Vec4f& axis, float angle);
 	void selectObject(const WorldObjectRef& ob, int selected_mat_index);
@@ -841,6 +843,7 @@ public:
 	ServerConnectionState connection_state;
 
 	bool received_world_settings_since_connect_or_world_change; // Have we received a WorldSettingsInitialSendMessage since connecting to the server?
+	bool world_settings_locally_dirty;
 
 	UserID logged_in_user_id;
 	std::string logged_in_user_name;
@@ -939,6 +942,7 @@ public:
 
 	bool use_lightmaps;
 	Timer retry_connection_timer;
+	Timer world_settings_local_change_timer;
 
 
 	ThreadManager opengl_worker_thread_manager;

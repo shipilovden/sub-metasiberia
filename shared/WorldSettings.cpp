@@ -14,6 +14,56 @@ Copyright Glare Technologies Limited 2023 -
 #include <RuntimeCheck.h>
 
 
+static const uint32 FOG_WORLD_SETTINGS_VERSION = 1;
+
+
+FogWorldSettings::FogWorldSettings()
+{
+	layer_0_A = 0;
+	layer_0_scale_height = 1;
+	layer_1_A = 0;
+	layer_1_scale_height = 1;
+}
+
+
+void FogWorldSettings::writeToStream(RandomAccessOutStream& stream) const
+{
+	const size_t initial_write_index = stream.getWriteIndex();
+
+	stream.writeUInt32(FOG_WORLD_SETTINGS_VERSION);
+	stream.writeUInt32(0); // Size of buffer will be written here later
+
+	stream.writeFloat(layer_0_A);
+	stream.writeFloat(layer_0_scale_height);
+	stream.writeFloat(layer_1_A);
+	stream.writeFloat(layer_1_scale_height);
+
+	const uint32 buffer_size = (uint32)(stream.getWriteIndex() - initial_write_index);
+	std::memcpy(stream.getWritePtrAtIndex(initial_write_index + sizeof(uint32)), &buffer_size, sizeof(uint32));
+}
+
+
+void readFogWorldSettingsFromStream(RandomAccessInStream& stream, FogWorldSettings& fog_settings_out)
+{
+	const size_t initial_read_index = stream.getReadIndex();
+
+	/*const uint32 version =*/ stream.readUInt32();
+	const size_t buffer_size = stream.readUInt32();
+
+	checkProperty(buffer_size >= 8ul,        "readFogWorldSettingsFromStream: buffer_size was too small");
+	checkProperty(buffer_size <= 10000000ul, "readFogWorldSettingsFromStream: buffer_size was too large");
+
+	fog_settings_out.layer_0_A            = stream.readFloat();
+	fog_settings_out.layer_0_scale_height = stream.readFloat();
+	fog_settings_out.layer_1_A            = stream.readFloat();
+	fog_settings_out.layer_1_scale_height = stream.readFloat();
+
+	const size_t read_B = stream.getReadIndex() - initial_read_index;
+	if(read_B < buffer_size)
+		stream.advanceReadIndex(buffer_size - read_B);
+}
+
+
 WorldSettings::WorldSettings()
 {
 	terrain_spec.terrain_section_width_m = 8192;
@@ -37,6 +87,8 @@ WorldSettings::~WorldSettings()
 void WorldSettings::clear()
 {
 	terrain_spec = TerrainSpec();
+
+	fog_settings = FogWorldSettings();
 }
 
 
@@ -64,7 +116,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 }
 
 
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 5;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 6;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -109,6 +161,8 @@ void WorldSettings::writeToStream(OutStream& stream) const
 
 	buffer.writeFloat(terrain_spec.terrain_height_scale); // New in v5
 
+	fog_settings.writeToStream(buffer);
+
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
 	std::memcpy(buffer.buf.data() + sizeof(uint32), &buffer_size, sizeof(uint32));
@@ -124,6 +178,8 @@ void WorldSettings::copyNetworkStateFrom(const WorldSettings& other)
 
 	sun_theta = other.sun_theta;
 	sun_phi   = other.sun_phi;
+
+	fog_settings = other.fog_settings;
 }
 
 
@@ -189,5 +245,39 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 	if(version >= 5)
 		settings.terrain_spec.terrain_height_scale = buffer_stream.readFloat();
 
+	if(version >= 6)
+		readFogWorldSettingsFromStream(buffer_stream, settings.fog_settings);
+
 	// We effectively skip any remaining data we have not processed by discarding buffer_stream.
+}
+
+
+bool TerrainSpec::operator==(const TerrainSpec& other) const
+{
+	return
+		section_specs == other.section_specs &&
+		detail_col_map_URLs[0] == other.detail_col_map_URLs[0] &&
+		detail_col_map_URLs[1] == other.detail_col_map_URLs[1] &&
+		detail_col_map_URLs[2] == other.detail_col_map_URLs[2] &&
+		detail_col_map_URLs[3] == other.detail_col_map_URLs[3] &&
+		detail_height_map_URLs[0] == other.detail_height_map_URLs[0] &&
+		detail_height_map_URLs[1] == other.detail_height_map_URLs[1] &&
+		detail_height_map_URLs[2] == other.detail_height_map_URLs[2] &&
+		detail_height_map_URLs[3] == other.detail_height_map_URLs[3] &&
+		terrain_section_width_m == other.terrain_section_width_m &&
+		terrain_height_scale == other.terrain_height_scale &&
+		water_z == other.water_z &&
+		default_terrain_z == other.default_terrain_z &&
+		flags == other.flags;
+}
+
+
+bool TerrainSpecSection::operator==(const TerrainSpecSection& other) const
+{
+	return
+		x == other.x &&
+		y == other.y &&
+		heightmap_URL == other.heightmap_URL &&
+		mask_map_URL == other.mask_map_URL &&
+		tree_mask_map_URL == other.tree_mask_map_URL;
 }
