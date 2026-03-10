@@ -150,6 +150,7 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	parsed_args(args),
 	connection_state(ServerConnectionState_NotConnected),
 	received_world_settings_since_connect_or_world_change(false),
+	world_settings_locally_dirty(false),
 	logged_in_user_id(UserID::invalidUserID()),
 	logged_in_user_flags(0),
 	shown_object_modification_error_msg(false),
@@ -7543,6 +7544,16 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 		time_since_update_packet_sent.reset();
 	}
 
+	// Send WorldSettingsUpdate message to server if we made a local change to the world settings in the UI.
+	if(world_settings_locally_dirty && (world_settings_local_change_timer.elapsed() >= 1.0) && client_thread)
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::WorldSettingsUpdate);
+		connected_world_settings.writeToStream(scratch_packet);
+		enqueueMessageToSend(*client_thread, scratch_packet);
+
+		world_settings_locally_dirty = false;
+	}
+
 	{
 		// Show a decibel level: http://msp.ucsd.edu/techniques/v0.08/book-html/node6.html
 		// cur_level = 0.01 gives log_10(0.01 / 0.01) = 0.
@@ -9516,38 +9527,35 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->connected_world_settings.copyNetworkStateFrom(m->world_settings); // Store world settings to be used later
 			this->received_world_settings_since_connect_or_world_change = true;
 
-			this->ui_interface->updateWorldSettingsUIFromWorldSettings(); // Update UI
+			bool ignore_update = false; // If we generated this world settings update locally, ignore the server echo.
 
 			if(!m->is_initial_send)
-				showInfoNotification("World settings updated");
-
-			// Reload terrain by shutting it down, will be recreated in GUIClient::updateGroundPlane().
-			if(this->terrain_system.nonNull())
 			{
-				terrain_system->shutdown();
-				terrain_system = NULL;
+				ignore_update = m->sender_avatar_UID == this->client_avatar_uid;
+
+				if(!ignore_update)
+					showInfoNotification("World settings updated");
 			}
 
-			if(physics_world.nonNull())
+			if(!ignore_update)
 			{
-				physics_world->setWaterBuoyancyEnabled(BitUtils::isBitSet(this->connected_world_settings.terrain_spec.flags, TerrainSpec::WATER_ENABLED_FLAG));
-				const float use_water_z = myClamp(this->connected_world_settings.terrain_spec.water_z, -1.0e8f, 1.0e8f); // Avoid NaNs, Infs etc.
-				physics_world->setWaterZ(use_water_z);
-			}
+				this->ui_interface->updateWorldSettingsUIFromWorldSettings(); // Update UI
 
-			if(opengl_engine)
-			{
-				const float sun_phi   = this->connected_world_settings.sun_phi;
-				const float sun_theta = this->connected_world_settings.sun_theta;
-				opengl_engine->setEnvMapTransform(Matrix3f::rotationAroundZAxis(sun_phi));
-
+				// Reload terrain by shutting it down, will be recreated in GUIClient::updateGroundPlane().
+				if(this->terrain_system.nonNull())
 				{
-					OpenGLMaterial env_mat;
-					env_mat.tex_matrix = Matrix2f(-1 / Maths::get2Pi<float>(), 0, 0, 1 / Maths::pi<float>());
-					opengl_engine->setEnvMat(env_mat);
+					terrain_system->shutdown();
+					terrain_system = NULL;
 				}
 
-				opengl_engine->setSunDir(normalise(Vec4f(std::cos(sun_phi) * sin(sun_theta), std::sin(sun_phi) * sin(sun_theta), cos(sun_theta), 0)));
+				if(physics_world.nonNull())
+				{
+					physics_world->setWaterBuoyancyEnabled(BitUtils::isBitSet(this->connected_world_settings.terrain_spec.flags, TerrainSpec::WATER_ENABLED_FLAG));
+					const float use_water_z = myClamp(this->connected_world_settings.terrain_spec.water_z, -1.0e8f, 1.0e8f); // Avoid NaNs, Infs etc.
+					physics_world->setWaterZ(use_water_z);
+				}
+
+				applyWorldSettingsToOpenGLEngine();
 			}
 		}
 		break;
@@ -14241,6 +14249,7 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 
 	this->connection_state = ServerConnectionState_Connecting;
 	this->received_world_settings_since_connect_or_world_change = false;
+	this->world_settings_locally_dirty = false;
 }
 
 
@@ -14361,6 +14370,7 @@ void GUIClient::changeToDifferentWorld(const URLParseResults& parse_res)
 	}
 
 	this->received_world_settings_since_connect_or_world_change = false;
+	this->world_settings_locally_dirty = false;
 
 
 	audio_engine.playOneShotSound(resources_dir_path + "/sounds/462089__newagesoup__ethereal-woosh_normalised_mono.mp3", 
@@ -17318,6 +17328,75 @@ void GUIClient::gestureSettingsChanged(const GestureSettings& new_gesture_settin
 
 	// Update gesture UI.
 	gesture_ui.setCurrentGestureSettings(new_gesture_settings);
+}
+
+
+void GUIClient::worldSettingsChangedFromUI(const WorldSettings& new_world_settings)
+{
+	const bool terrain_changed = !(this->connected_world_settings.terrain_spec == new_world_settings.terrain_spec);
+
+	this->connected_world_settings.copyNetworkStateFrom(new_world_settings);
+
+	// Start a timer to send WorldSettingsUpdate message to server.
+	this->world_settings_locally_dirty = true;
+	this->world_settings_local_change_timer.reset();
+
+	// Reload terrain by shutting it down, will be recreated in GUIClient::updateGroundPlane().
+	if(terrain_changed)
+	{
+		if(this->terrain_system.nonNull())
+		{
+			terrain_system->shutdown();
+			terrain_system = NULL;
+		}
+
+		if(physics_world.nonNull())
+		{
+			physics_world->setWaterBuoyancyEnabled(BitUtils::isBitSet(this->connected_world_settings.terrain_spec.flags, TerrainSpec::WATER_ENABLED_FLAG));
+			const float use_water_z = myClamp(this->connected_world_settings.terrain_spec.water_z, -1.0e8f, 1.0e8f);
+			physics_world->setWaterZ(use_water_z);
+		}
+	}
+
+	applyWorldSettingsToOpenGLEngine();
+}
+
+
+void GUIClient::applyWorldSettingsToOpenGLEngine()
+{
+	if(opengl_engine.isNull())
+		return;
+
+	const float sun_phi   = this->connected_world_settings.sun_phi;
+	const float sun_theta = this->connected_world_settings.sun_theta;
+	const Vec4f sun_dir = Vec4f(std::cos(sun_phi) * sin(sun_theta), std::sin(sun_phi) * sin(sun_theta), cos(sun_theta), 0);
+	assert(sun_dir.isUnitLength());
+
+	opengl_engine->setEnvMapTransform(Matrix3f::rotationAroundZAxis(sun_phi));
+
+	if(opengl_engine->getSunDir() != sun_dir)
+	{
+		OpenGLMaterial env_mat;
+		env_mat.tex_matrix = Matrix2f(-1 / Maths::get2Pi<float>(), 0, 0, 1 / Maths::pi<float>());
+		opengl_engine->setEnvMat(env_mat);
+		opengl_engine->setSunDir(sun_dir);
+	}
+
+	auto sanitiseA = [](float value) -> float {
+		return (!isFinite(value)) ? 0.f : myMax(0.f, value);
+	};
+	auto sanitiseScaleHeight = [](float value) -> float {
+		return (!isFinite(value)) ? 1.f : myMax(0.01f, value);
+	};
+
+	OpenGLScene* const scene = opengl_engine->getCurrentScene();
+	if(scene)
+	{
+		scene->fog_settings.layer_0_A = sanitiseA(this->connected_world_settings.fog_settings.layer_0_A);
+		scene->fog_settings.layer_0_B = 1.f / sanitiseScaleHeight(this->connected_world_settings.fog_settings.layer_0_scale_height);
+		scene->fog_settings.layer_1_A = sanitiseA(this->connected_world_settings.fog_settings.layer_1_A);
+		scene->fog_settings.layer_1_B = 1.f / sanitiseScaleHeight(this->connected_world_settings.fog_settings.layer_1_scale_height);
+	}
 }
 
 

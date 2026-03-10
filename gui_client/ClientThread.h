@@ -206,9 +206,10 @@ public:
 class WorldSettingsReceivedMessage : public ThreadMessage
 {
 public:
-	WorldSettingsReceivedMessage(bool is_initial_send_) : ThreadMessage(Msg_WorldSettingsReceivedMessage), is_initial_send(is_initial_send_) {}
+	WorldSettingsReceivedMessage(bool is_initial_send_) : ThreadMessage(Msg_WorldSettingsReceivedMessage), is_initial_send(is_initial_send_), sender_avatar_UID(UID::invalidUID()) {}
 	WorldSettings world_settings;
 	bool is_initial_send;
+	UID sender_avatar_UID;
 };
 
 
