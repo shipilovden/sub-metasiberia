@@ -1,38 +1,38 @@
-# Metasiberia Wiki (Docs-as-Code)
+# Wiki Metasiberia (документация как код)
 
-This directory stores Wiki content in the main repository.
+Этот каталог хранит контент wiki в основном репозитории.
 
-## Goal
-- Keep user documentation versioned with code changes.
-- Review docs in pull requests.
-- Publish the same content to GitHub Wiki pages.
+## Назначение
+- Хранить пользовательскую документацию вместе с изменениями кода.
+- Проводить ревью документации в pull request.
+- Публиковать тот же контент в страницы GitHub Wiki.
 
-## Current Scope
-- Beginner onboarding pages:
+## Текущий охват
+- Страницы начального онбординга:
   - `Home.md`
   - `01-Install-Windows.md`
   - `02-Registration-and-Login.md`
   - `03-First-Launch-and-Connection.md`
-- Detailed expansion plan: `WIKI-PAGES-PLAN-RU.md`.
-- Capability audit drafts:
+- Подробный план расширения: `WIKI-PAGES-PLAN-RU.md`.
+- Черновики аудита возможностей:
   - `TEMP-METASIBERIA-CAPABILITIES-PLAN.md`
   - `TEMP-METASIBERIA-CAPABILITIES-PLAN-RU.md`
 
-## File Layout
-- `Home.md` - wiki landing page
-- `_Sidebar.md` - navigation
-- `_Footer.md` - footer navigation
-- `images/README.md` - central image index and naming rules
+## Структура файлов
+- `Home.md` - главная страница wiki
+- `_Sidebar.md` - боковая навигация
+- `_Footer.md` - нижняя навигация
+- `images/README.md` - центральный реестр изображений и правила именования
 
-## Publish
-- Public GitHub Wiki is a separate git repository: `https://github.com/shipilovden/sub-metasiberia.wiki.git`
-- Use `scripts/publish_wiki_to_github.ps1` to publish the supported subset from `docs/wiki/`.
-- Published subset: `Home.md`, numbered published pages, `WIKI-PAGES-PLAN-RU.md`, `_Sidebar.md`, `_Footer.md`, and `images/`.
+## Публикация
+- Публичная GitHub Wiki является отдельным git-репозиторием: `https://github.com/shipilovden/sub-metasiberia.wiki.git`
+- Для публикации поддерживаемого подмножества из `docs/wiki/` используйте `scripts/publish_wiki_to_github.ps1`.
+- Публикуемое подмножество: `Home.md`, опубликованные нумерованные страницы, `WIKI-PAGES-PLAN-RU.md`, `_Sidebar.md`, `_Footer.md` и `images/`.
 
-## Editing Rules
-- One topic per page.
-- Keep steps short and explicit.
-- Add troubleshooting at the end of each page.
-- Keep only published pages in `_Sidebar.md`. Planned pages stay in `WIKI-PAGES-PLAN-RU.md` until they are drafted.
-- `shields.io` badges are allowed on `Home.md` for status, entry points, releases, and community links. Avoid badge overload on step-by-step tutorial pages.
-- For planned full wiki structure and mandatory images per page, use `WIKI-PAGES-PLAN-RU.md` as source of truth.
+## Правила редактирования
+- Одна тема на одну страницу.
+- Шаги должны быть короткими и прямыми.
+- В конце каждой страницы должен быть блок с устранением проблем.
+- В `_Sidebar.md` держим только реально опубликованные страницы. Плановые страницы остаются в `WIKI-PAGES-PLAN-RU.md`, пока для них нет черновика.
+- Бейджи `shields.io` допустимы на `Home.md` для статуса, точек входа, релизов и ссылок сообщества. Не перегружайте ими пошаговые tutorial-страницы.
+- Для полной структуры wiki и обязательных изображений по каждой странице используйте `WIKI-PAGES-PLAN-RU.md` как основной источник.

@@ -1,20 +1,20 @@
-- [Home](Home)
+- [Главная](Home)
 
 - **Опубликовано**
-- [01 Install Windows](01-Install-Windows)
-- [02 Registration and Login](02-Registration-and-Login)
-- [03 First Launch and Connection](03-First-Launch-and-Connection)
+- [01 Установка на Windows](01-Install-Windows)
+- [02 Регистрация и вход](02-Registration-and-Login)
+- [03 Первый запуск и подключение](03-First-Launch-and-Connection)
 
 - **Дальше по порядку**
-- 04 Client UI Overview
-- 05 Movement and Camera Modes
-- 06 Graphics Audio Mic Webcam Settings
-- 07 Troubleshooting Startup and Login
-- 08 FAQ Quick Answers
+- 04 Обзор интерфейса клиента
+- 05 Передвижение и режимы камеры
+- 06 Настройки графики, аудио, микрофона и веб-камеры
+- 07 Устранение проблем при запуске и входе
+- 08 FAQ и быстрые ответы
 
 - **План всей wiki**
-- [WIKI Pages Plan RU](WIKI-PAGES-PLAN-RU)
+- [План страниц wiki](WIKI-PAGES-PLAN-RU)
 
 - **Быстрые ссылки**
-- [Releases](https://github.com/shipilovden/sub-metasiberia/releases)
-- [Signup](https://vr.metasiberia.com/signup)
+- [Релизы](https://github.com/shipilovden/sub-metasiberia/releases)
+- [Регистрация](https://vr.metasiberia.com/signup)
