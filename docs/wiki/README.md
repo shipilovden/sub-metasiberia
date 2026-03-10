@@ -22,5 +22,6 @@ This directory stores Wiki content in the main repository.
 - One topic per page.
 - Keep steps short and explicit.
 - Add troubleshooting at the end of each page.
-- For now keep only `Home.md` in sidebar.
+- Keep only published pages in `_Sidebar.md`. Planned pages stay in `WIKI-PAGES-PLAN-RU.md` until they are drafted.
+- `shields.io` badges are allowed on `Home.md` for status, entry points, releases, and community links. Avoid badge overload on step-by-step tutorial pages.
 - For planned full wiki structure and mandatory images per page, use `WIKI-PAGES-PLAN-RU.md` as source of truth.
