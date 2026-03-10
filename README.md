@@ -9,11 +9,16 @@
 [![Release Asset](https://img.shields.io/github/actions/workflow/status/shipilovden/sub-metasiberia/release-linux-asset.yml?branch=master&label=Release%20Asset)](https://github.com/shipilovden/sub-metasiberia/actions/workflows/release-linux-asset.yml)
 [![License](https://img.shields.io/github/license/shipilovden/sub-metasiberia)](LICENCE)
 [![Stars](https://img.shields.io/github/stars/shipilovden/sub-metasiberia?style=social)](https://github.com/shipilovden/sub-metasiberia/stargazers)
+[![Admin](https://img.shields.io/website?url=https%3A%2F%2Fvr.metasiberia.com%2F&up_message=online&down_message=offline&label=admin&logo=googlechrome)](https://vr.metasiberia.com/)
+[![Signup](https://img.shields.io/website?url=https%3A%2F%2Fvr.metasiberia.com%2Fsignup&up_message=online&down_message=offline&label=signup&logo=googlechrome)](https://vr.metasiberia.com/signup)
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Fmetasiberia.com%2F&up_message=online&down_message=offline&label=website&logo=googlechrome)](https://metasiberia.com/)
 
 Metasiberia is a virtual world project inspired by and based on the open-source Substrata software.
 
 ## Quick Access
 
+- **🛠 Admin**: [https://vr.metasiberia.com/](https://vr.metasiberia.com/)
+- **📝 Signup**: [https://vr.metasiberia.com/signup](https://vr.metasiberia.com/signup)
 - **🌐 Web Client**: [https://vr.metasiberia.com/webclient](https://vr.metasiberia.com/webclient)
 - **🏠 Website**: [https://metasiberia.com/](https://metasiberia.com/)
 
