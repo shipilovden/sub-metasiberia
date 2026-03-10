@@ -22,6 +22,7 @@ This directory stores Wiki content in the main repository.
 - `Home.md` - wiki landing page
 - `_Sidebar.md` - navigation
 - `_Footer.md` - footer navigation
+- `images/README.md` - central image index and naming rules
 
 ## Publish
 - Public GitHub Wiki is a separate git repository: `https://github.com/shipilovden/sub-metasiberia.wiki.git`
