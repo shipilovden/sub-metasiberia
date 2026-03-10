@@ -1,73 +1,73 @@
-# Metasiberia Wiki Images
+# Изображения Wiki Metasiberia
 
-This directory is the central image registry for the wiki.
+Этот каталог является центральным реестром изображений для wiki.
 
-## Recommended workflow
+## Рекомендуемый порядок работы
 
-1. Find the target wiki page in this file.
-2. Use the exact folder and filename listed for the image slot.
-3. Drop the PNG into that folder without renaming the slot.
-4. If an image already exists, replace it in place with a better version.
-5. Re-run `scripts/publish_wiki_to_github.ps1` after updating images.
+1. Найдите нужную страницу wiki в этом файле.
+2. Используйте точные `folder/filename`, указанные для нужного image-slot.
+3. Положите PNG в эту папку, не переименовывая слот.
+4. Если изображение уже существует, замените его на более удачную версию с тем же именем.
+5. После обновления изображений снова запустите `scripts/publish_wiki_to_github.ps1`.
 
-## Why this is better
+## Почему это лучше
 
-- Page markdown stays stable because image paths do not keep changing.
-- You can add images later without editing the page again.
-- Missing and completed image slots are visible in one place.
-- The same structure can scale to the full 44-page wiki.
+- Markdown в страницах остаётся стабильным, потому что пути к изображениям не меняются.
+- Можно добавлять изображения позже, не редактируя страницу заново.
+- Сразу видно, какие image-slots уже заполнены, а какие ещё пустые.
+- Та же структура масштабируется на всю wiki из 44 страниц.
 
-## Important rule
+## Важное правило
 
-More images do help the wiki, but only when each image explains a step, a result, or an error state.
-Do not add near-duplicate screenshots just to increase count.
+Большое количество изображений действительно улучшает wiki, но только если каждое изображение показывает шаг, результат или ошибку.
+Не добавляйте почти одинаковые скриншоты только ради количества.
 
-## Current image map
+## Текущая карта изображений
 
 ### Home
 
-- File: `images/wiki_main_image.png`
-- Status: present
+- Файл: `images/wiki_main_image.png`
+- Статус: готово
 
 ### 01 Install Windows
 
-- Folder: `images/01-install-windows/`
-- `hero.png` - pending
-- `step-release-page.png` - present
-- `step-installer.png` - pending
-- `result-installed.png` - pending
-- `error-antivirus.png` - pending
+- Папка: `images/01-install-windows/`
+- `hero.png` - не хватает
+- `step-release-page.png` - готово
+- `step-installer.png` - не хватает
+- `result-installed.png` - не хватает
+- `error-antivirus.png` - не хватает
 
 ### 02 Registration and Login
 
-- Folder: `images/02-registration-and-login/`
-- `hero.png` - pending
-- `step-signup-form.png` - present
-- `step-terms-checkbox.png` - present
-- `result-logged-in.png` - pending
-- `error-invalid-credentials.png` - pending
+- Папка: `images/02-registration-and-login/`
+- `hero.png` - не хватает
+- `step-signup-form.png` - готово
+- `step-terms-checkbox.png` - готово
+- `result-logged-in.png` - не хватает
+- `error-invalid-credentials.png` - не хватает
 
 ### 03 First Launch and Connection
 
-- Folder: `images/03-first-launch-and-connection/`
-- `hero.png` - present
-- `step-connect.png` - present
-- `step-world-loaded.png` - present
-- `result-ready.png` - present
-- `error-connection.png` - pending
+- Папка: `images/03-first-launch-and-connection/`
+- `hero.png` - готово
+- `step-connect.png` - готово
+- `step-world-loaded.png` - готово
+- `result-ready.png` - готово
+- `error-connection.png` - не хватает
 
-## Naming convention for new pages
+## Правило именования для новых страниц
 
-- Create one folder per page slug:
+- Создавайте одну папку на один page slug:
   - `images/<page-slug>/`
-- Prefer descriptive slot names over generic numbering:
+- Используйте понятные имена слотов вместо безликой нумерации:
   - `hero.png`
   - `step-release-page.png`
   - `step-signup-form.png`
   - `result-ready.png`
   - `error-connection.png`
 
-## Next pages to prepare
+## Следующие страницы, для которых нужно подготовить слоты
 
 - `04-client-ui-overview`
 - `05-movement-and-camera-modes`
