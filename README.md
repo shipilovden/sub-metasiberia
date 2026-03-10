@@ -1,10 +1,17 @@
 ﻿# ❄️ Metasiberia - metaverse from Siberia ❄️
 
-# Metasiberia is inspired and based on Substrata
+[![C++](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)](https://isocpp.org/)
+[![Build](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
+[![UI](https://img.shields.io/badge/UI-Qt%205%20%7C%20Qt%206%20%7C%20SDL-41CD52)](https://www.qt.io/)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Android-1F6FEB)](https://github.com/shipilovden/sub-metasiberia)
+[![Windows CI](https://img.shields.io/github/actions/workflow/status/shipilovden/sub-metasiberia/windows-main-ci.yml?branch=master&label=Windows%20CI)](https://github.com/shipilovden/sub-metasiberia/actions/workflows/windows-main-ci.yml)
+[![Linux Configure](https://img.shields.io/github/actions/workflow/status/shipilovden/sub-metasiberia/cmake-configure-linux.yml?branch=master&label=Linux%20Configure)](https://github.com/shipilovden/sub-metasiberia/actions/workflows/cmake-configure-linux.yml)
+[![Release Asset](https://img.shields.io/github/actions/workflow/status/shipilovden/sub-metasiberia/release-linux-asset.yml?branch=master&label=Release%20Asset)](https://github.com/shipilovden/sub-metasiberia/actions/workflows/release-linux-asset.yml)
+[![License](https://img.shields.io/github/license/shipilovden/sub-metasiberia)](LICENCE)
+[![Stars](https://img.shields.io/github/stars/shipilovden/sub-metasiberia?style=social)](https://github.com/shipilovden/sub-metasiberia/stargazers)
 
-Metasiberia is a virtual world project created using the open-source Substrata software. 
+Metasiberia is a virtual world project inspired by and based on the open-source Substrata software.
 
-**METASIBERIA°** is a virtual world project that offers a unique digital experience.
 ## Quick Access
 
 - **🌐 Web Client**: [https://vr.metasiberia.com/webclient](https://vr.metasiberia.com/webclient)
@@ -19,12 +26,8 @@ Metasiberia is a virtual world project created using the open-source Substrata s
 
 ## Credits
 
-**Metasiberia** is inspired and based on **Substrata**
+**Metasiberia** is inspired and based on **Substrata**.
 
 - **Original Substrata**: [https://github.com/glaretechnologies/substrata](https://github.com/glaretechnologies/substrata)
 - **Substrata Creator**: [https://x.com/NickChapmn](https://x.com/NickChapmn)
 - **Metasiberia Author**: [https://x.com/denshipilovart](https://x.com/denshipilovart)
-
----
-
-Metasiberia is inspired and based on Substrata
