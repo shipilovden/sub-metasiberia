@@ -1,0 +1,11 @@
+Required captures for 03-First-Launch-and-Connection:
+- hero.png
+- step-connect.png
+- step-world-loaded.png
+- result-ready.png
+- error-connection.png
+
+Capture notes:
+- Use the Windows desktop client.
+- Include the status bar where it helps explain connection or loading state.
+- Prefer one screenshot with the world visibly loaded and UI ready for movement checks.

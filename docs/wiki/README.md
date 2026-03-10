@@ -8,7 +8,11 @@ This directory stores Wiki content in the main repository.
 - Publish the same content to GitHub Wiki pages.
 
 ## Current Scope
-- Single-page beginner onboarding (Home).
+- Beginner onboarding pages:
+  - `Home.md`
+  - `01-Install-Windows.md`
+  - `02-Registration-and-Login.md`
+  - `03-First-Launch-and-Connection.md`
 - Detailed expansion plan: `WIKI-PAGES-PLAN-RU.md`.
 - Capability audit drafts:
   - `TEMP-METASIBERIA-CAPABILITIES-PLAN.md`
@@ -17,6 +21,12 @@ This directory stores Wiki content in the main repository.
 ## File Layout
 - `Home.md` - wiki landing page
 - `_Sidebar.md` - navigation
+- `_Footer.md` - footer navigation
+
+## Publish
+- Public GitHub Wiki is a separate git repository: `https://github.com/shipilovden/sub-metasiberia.wiki.git`
+- Use `scripts/publish_wiki_to_github.ps1` to publish the supported subset from `docs/wiki/`.
+- Published subset: `Home.md`, numbered published pages, `WIKI-PAGES-PLAN-RU.md`, `_Sidebar.md`, `_Footer.md`, and `images/`.
 
 ## Editing Rules
 - One topic per page.

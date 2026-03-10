@@ -30,15 +30,15 @@
 
 - [01 Install Windows](01-Install-Windows)
 - [02 Registration and Login](02-Registration-and-Login)
+- [03 First Launch and Connection](03-First-Launch-and-Connection)
 
 ## Что делаем дальше по порядку
 
-1. `03 First Launch and Connection`
-2. `04 Client UI Overview`
-3. `05 Movement and Camera Modes`
-4. `06 Graphics Audio Mic Webcam Settings`
-5. `07 Troubleshooting Startup and Login`
-6. `08 FAQ Quick Answers`
+1. `04 Client UI Overview`
+2. `05 Movement and Camera Modes`
+3. `06 Graphics Audio Mic Webcam Settings`
+4. `07 Troubleshooting Startup and Login`
+5. `08 FAQ Quick Answers`
 
 После этого закрываем блок `B. Add-операции`, затем `C. Редакторы и настройки`, затем `D. Медиа/миры/web`, `E. Админка`, и в конце `F. Lua scripting`.
 
@@ -57,6 +57,6 @@
 ## Статус документации
 
 - Сейчас Wiki находится в фазе расширения.
-- Публично опубликованы только `Home`, `01 Install Windows`, `02 Registration and Login`.
+- Публично опубликованы `Home`, `01 Install Windows`, `02 Registration and Login`, `03 First Launch and Connection`.
 - Источник правок: `C:\programming\substrata\docs\wiki`.
 - Каждая новая страница должна содержать шаги, проверку результата, типичные ошибки и скриншоты.

@@ -3,9 +3,9 @@
 - **Опубликовано**
 - [01 Install Windows](01-Install-Windows)
 - [02 Registration and Login](02-Registration-and-Login)
+- [03 First Launch and Connection](03-First-Launch-and-Connection)
 
 - **Дальше по порядку**
-- 03 First Launch and Connection
 - 04 Client UI Overview
 - 05 Movement and Camera Modes
 - 06 Graphics Audio Mic Webcam Settings
