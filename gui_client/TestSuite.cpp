@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2023 -
 
 
 #include "ModelLoading.h"
+#include "EmojiUtils.h"
 #include "PhysicsWorld.h"
 #include "TerrainTests.h"
 #include "URLParser.h"
@@ -178,6 +179,7 @@ void TestSuite::test()
 	runTest([&]() { js::AABBox::test(); });
 	runTest([&]() { ReferenceTest::run(); });
 	runTest([&]() { CameraController::test(); });
+	runTest([&]() { EmojiUtils::test(); });
 
 #if !defined(EMSCRIPTEN)
 

@@ -27,6 +27,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "FindObjectDialog.h"
 #include "ListObjectsNearbyDialog.h"
 #include "ModelLoading.h"
+#include "EmojiUtils.h"
 #include "TestSuite.h"
 #include "TerrainSystem.h"
 #include "GuiClientApplication.h"
@@ -54,14 +55,24 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtGui/QContextMenuEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPixmap>
+#include <QtWidgets/QAction>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
+#include <QtGui/QFont>
+#include <QtGui/QGuiApplication>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QInputDialog>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QGridLayout>
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QToolButton>
+#include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QWidget>
+#include <QtGui/QScreen>
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
 #include "../qt/QtUtils.h"
@@ -155,6 +166,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	ui(NULL),
 	minidump_sender(NULL),
 	update_manager(NULL),
+	chat_emoji_popup(NULL),
 	webcam_window(NULL)
 	,avatar_dock_widget(NULL)
 	,avatar_settings_widget(NULL)
@@ -463,6 +475,71 @@ void MainWindow::initialiseUI()
 	{
 		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
 		ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+	}
+
+	if(ui->chatEmojiButton)
+	{
+		QFont emoji_font = ui->chatEmojiButton->font();
+#if defined(_WIN32)
+		emoji_font.setFamily("Segoe UI Emoji");
+#endif
+		ui->chatEmojiButton->setFont(emoji_font);
+		ui->chatEmojiButton->setText(QtUtils::toQString(EmojiUtils::pickerButtonLabel()));
+
+		chat_emoji_popup = new QDialog(this, Qt::Popup);
+		chat_emoji_popup->setWindowTitle("Эмодзи");
+
+		QVBoxLayout* popup_layout = new QVBoxLayout(chat_emoji_popup);
+		popup_layout->setContentsMargins(10, 10, 10, 10);
+		popup_layout->setSpacing(8);
+
+		QTabWidget* tab_widget = new QTabWidget(chat_emoji_popup);
+		tab_widget->setDocumentMode(true);
+		tab_widget->setMinimumSize(580, 540);
+		popup_layout->addWidget(tab_widget);
+
+		const auto make_category_page = [this, &emoji_font](const EmojiUtils::EmojiCategory& category, QWidget* parent) -> QWidget*
+		{
+			QWidget* page = new QWidget(parent);
+			QGridLayout* grid_layout = new QGridLayout(page);
+			grid_layout->setContentsMargins(8, 8, 8, 8);
+			grid_layout->setHorizontalSpacing(10);
+			grid_layout->setVerticalSpacing(10);
+			grid_layout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+
+			for(size_t i=0; i<category.num_emojis; ++i)
+			{
+				QToolButton* emoji_choice_button = new QToolButton(page);
+				emoji_choice_button->setFont(emoji_font);
+				emoji_choice_button->setText(QtUtils::toQString(category.emojis[i]));
+				emoji_choice_button->setFixedSize(QSize(64, 64));
+				emoji_choice_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+
+				const std::string emoji = std::string(category.emojis[i]);
+				connect(emoji_choice_button, &QToolButton::clicked, this, [this, emoji]() {
+					if(!EmojiUtils::isSupportedEmoji(emoji))
+						return;
+
+					gui_client.sendEmojiChatMessage(emoji);
+					if(chat_emoji_popup)
+						chat_emoji_popup->hide();
+					ui->chatMessageLineEdit->setFocus();
+				});
+
+				grid_layout->addWidget(emoji_choice_button, (int)(i / category.num_columns), (int)(i % category.num_columns));
+			}
+
+			return page;
+		};
+
+		const auto& emoji_categories = EmojiUtils::emojiCategories();
+		for(size_t i=0; i<emoji_categories.size(); ++i)
+			tab_widget->addTab(make_category_page(emoji_categories[i], tab_widget), QtUtils::toQString(emoji_categories[i].title));
+
+		chat_emoji_popup->setMinimumSize(620, 620);
+		chat_emoji_popup->resize(620, 620);
+		chat_emoji_popup->adjustSize();
+		connect(ui->chatEmojiButton, &QToolButton::clicked, this, &MainWindow::toggleChatEmojiPopup);
 	}
 
 	connect(ui->chatPushButton, SIGNAL(clicked()), this, SLOT(sendChatMessageSlot()));
@@ -4094,17 +4171,56 @@ void MainWindow::diagnosticsReloadTerrain()
 }
 
 
+void MainWindow::toggleChatEmojiPopup()
+{
+	if(!chat_emoji_popup || !ui || !ui->chatEmojiButton)
+		return;
+
+	if(chat_emoji_popup->isVisible())
+	{
+		chat_emoji_popup->hide();
+		return;
+	}
+
+	chat_emoji_popup->adjustSize();
+
+	QPoint popup_pos = ui->chatEmojiButton->mapToGlobal(
+		QPoint(
+			ui->chatEmojiButton->width() - chat_emoji_popup->width(),
+			-chat_emoji_popup->height() - 4
+		)
+	);
+
+	QScreen* target_screen = QGuiApplication::screenAt(ui->chatEmojiButton->mapToGlobal(ui->chatEmojiButton->rect().center()));
+	if(!target_screen)
+		target_screen = QGuiApplication::primaryScreen();
+
+	if(target_screen)
+	{
+		const QRect available = target_screen->availableGeometry();
+		popup_pos.setX(qBound(available.left(), popup_pos.x(), available.right() - chat_emoji_popup->width()));
+		popup_pos.setY(qBound(available.top(), popup_pos.y(), available.bottom() - chat_emoji_popup->height()));
+	}
+
+	chat_emoji_popup->move(popup_pos);
+	chat_emoji_popup->show();
+	chat_emoji_popup->raise();
+	chat_emoji_popup->activateWindow();
+}
+
+
 void MainWindow::sendChatMessageSlot()
 {
 	//conPrint("MainWindow::sendChatMessageSlot()");
 
 	const std::string message = QtUtils::toIndString(ui->chatMessageLineEdit->text());
+	if(message.empty())
+		return;
 
-	// Make message packet and enqueue to send
-	MessageUtils::initPacket(scratch_packet, Protocol::ChatMessageID);
-	scratch_packet.writeStringLengthFirst(message);
-
-	enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	if(EmojiUtils::isSupportedEmoji(message))
+		gui_client.sendEmojiChatMessage(message);
+	else
+		gui_client.sendChatMessage(message);
 
 	ui->chatMessageLineEdit->clear();
 }
