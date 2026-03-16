@@ -9,11 +9,14 @@ Copyright Glare Technologies Limited 2024 -
 #include <opengl/ui/GLUI.h>
 #include <opengl/ui/GLUIButton.h>
 #include <opengl/ui/GLUICallbackHandler.h>
+#include <opengl/ui/GLUIWindow.h>
 #include <opengl/ui/GLUITextView.h>
+#include <opengl/ui/GLUITextButton.h>
 #include <opengl/ui/GLUIImage.h>
 #include <opengl/ui/GLUILineEdit.h>
 #include <opengl/ui/GLUIGridContainer.h>
 #include "ClientThread.h"
+#include <vector>
 
 
 class GUIClient;
@@ -45,10 +48,14 @@ public:
 	void handleMouseMoved(MouseEvent& mouse_event);
 
 	virtual void eventOccurred(GLUICallbackEvent& event);
+	virtual void closeWindowEventOccurred(GLUICallbackEvent& event) override;
 private:
 	bool isInitialisedFully();
 	float computeWidgetWidth();
 	float computeWidgetHeight();
+	void rebuildEmojiPickerContents();
+	void sendEmojiMessage(const std::string& emoji);
+	void setEmojiPickerOpen(bool open);
 
 	struct ChatMessage
 	{
@@ -69,9 +76,13 @@ private:
 
 	bool expanded;
 	bool visible;
+	bool emoji_picker_open;
 	GLUIGridContainerRef grid_container;
 	GLUIButtonRef collapse_button;
 	GLUIButtonRef expand_button;
+	GLUITextButtonRef emoji_button;
+	GLUIWindowRef emoji_window;
+	GLUIGridContainerRef emoji_grid_container;
 	Vec2i last_viewport_dims;
 	GUIClient* gui_client;
 	GLUIRef gl_ui;
@@ -80,4 +91,8 @@ private:
 	float draw_area_bottom_left_y;
 
 	GLUILineEditRef chat_line_edit;
+
+	size_t current_emoji_category;
+	std::vector<GLUITextButtonRef> emoji_category_buttons;
+	std::vector<GLUITextButtonRef> emoji_picker_buttons;
 };

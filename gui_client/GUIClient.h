@@ -54,6 +54,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <maths/LineSegment4f.h>
 #include <networking/IPAddress.h>
 #include <string>
+#include <map>
 #include <unordered_set>
 #include <deque>
 class UDPSocket;
@@ -261,6 +262,9 @@ public:
 	void gestureSettingsChanged(const GestureSettings& new_gesture_settings);
 	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings);
 	void applyWorldSettingsToOpenGLEngine();
+	void spawnFloatingEmojiForAvatar(const UID& avatar_uid, const std::string& emoji, double cur_time);
+	void removeFloatingEmojiForAvatar(const UID& avatar_uid);
+	void removeAllFloatingEmoji();
 public:
 	void rotateObject(WorldObjectRef ob, const Vec4f& axis, float angle);
 	void selectObject(const WorldObjectRef& ob, int selected_mat_index);
@@ -269,6 +273,7 @@ public:
 	void deselectParcel();
 	void visitSubURL(const std::string& URL, bool push_cur_URL_on_nav_stack = true, bool adjust_cur_URL_pos_back = false); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	GLObjectRef makeNameTagGLObject(const std::string& nametag);
+	GLObjectRef makeFloatingEmojiGLObject(const std::string& emoji);
 	GLObjectRef makeSpeakerGLObject();
 public:
 	void makeShaders();
@@ -334,6 +339,7 @@ public:
 
 	int mouseOverAxisArrowOrRotArc(const Vec2f& pixel_coords, Vec4f& closest_seg_point_ws_out); // Returns closest axis arrow or -1 if no close.
 	void sendChatMessage(const std::string& message);
+	void sendEmojiChatMessage(const std::string& emoji);
 
 	// If the object was not in a parcel with write permissions at all, returns false.
 	// If the object can not be made to fit in the current parcel, returns false.
@@ -741,6 +747,14 @@ public:
 	};
 	std::unordered_map<uint64, CameraStreamRenderState> camera_stream_states;
 	size_t camera_stream_round_robin_cursor = 0;
+
+	struct FloatingEmojiState
+	{
+		std::string emoji;
+		GLObjectRef gl_ob;
+		double start_time;
+	};
+	std::map<UID, FloatingEmojiState> floating_emoji_states;
 
 	GLUIRef gl_ui;
 	GestureUI gesture_ui; // Draws gesture buttons, also selfie and enable mic button

@@ -25,6 +25,8 @@ class URLWidget;
 class QLabel;
 class LogWindow;
 class QMimeData;
+class QMenu;
+class QDialog;
 struct ID3D11Device;
 struct IMFDXGIDeviceManager;
 struct _SDL_GameController;
@@ -160,6 +162,7 @@ private slots:;
 	void openServerScriptLogSlot();
 	void on_webcamEnableCheckBox_toggled(bool checked);
 	void updateFavoritesMenu();
+	void toggleChatEmojiPopup();
 public:
 	bool connectedToUsersWorldOrGodUser();
 	void webViewMouseDoubleClicked(QMouseEvent* e);
@@ -355,6 +358,7 @@ public:
 	UserDetailsWidget* user_details;
 	URLWidget* url_widget;
 	UpdateManager* update_manager;
+	QDialog* chat_emoji_popup;
 
 	double last_timerEvent_CPU_work_elapsed;
 	double last_updateGL_time;

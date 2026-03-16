@@ -11,6 +11,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "ModelLoading.h"
 #include "MeshBuilding.h"
 #include "ThreadMessages.h"
+#include "EmojiUtils.h"
 #include "TerrainSystem.h"
 #include "TerrainDecalManager.h"
 #include "LoadScriptTask.h"
@@ -1123,6 +1124,7 @@ void GUIClient::shutdown()
 	for(size_t i=0; i<test_avatars.size(); ++i)
 		test_avatars[i]->graphics.destroy(*opengl_engine, *physics_world); // Remove any OpenGL object for it
 
+	removeAllFloatingEmoji();
 
 	disconnectFromServerAndClearAllObjects();
 
@@ -1339,6 +1341,63 @@ void GUIClient::sendChatMessage(const std::string& message)
 
 		enqueueMessageToSend(*client_thread, scratch_packet);
 	}
+}
+
+
+void GUIClient::sendEmojiChatMessage(const std::string& emoji)
+{
+	if(!EmojiUtils::isSupportedEmoji(emoji))
+		return;
+
+	if(this->connection_state == ServerConnectionState_NotConnected)
+	{
+		showErrorNotification("Can't send a chat message when not connected to server.");
+		return;
+	}
+
+	sendChatMessage(emoji);
+
+	if(audio_engine.isInitialised())
+		audio_engine.playOneShotSound(resources_dir_path + "/sounds/ms_chat_zvuk.mp3", cam_controller.getPosition().toVec4fPoint());
+}
+
+
+void GUIClient::spawnFloatingEmojiForAvatar(const UID& avatar_uid, const std::string& emoji, double cur_time)
+{
+	if(!avatar_uid.valid() || !EmojiUtils::isSupportedEmoji(emoji) || opengl_engine.isNull())
+		return;
+
+	removeFloatingEmojiForAvatar(avatar_uid);
+
+	FloatingEmojiState state;
+	state.emoji = emoji;
+	state.start_time = cur_time;
+	state.gl_ob = makeFloatingEmojiGLObject(emoji);
+	if(state.gl_ob.nonNull())
+	{
+		opengl_engine->addObject(state.gl_ob);
+		floating_emoji_states[avatar_uid] = state;
+	}
+}
+
+
+void GUIClient::removeFloatingEmojiForAvatar(const UID& avatar_uid)
+{
+	auto res = floating_emoji_states.find(avatar_uid);
+	if(res != floating_emoji_states.end())
+	{
+		checkRemoveObAndSetRefToNull(opengl_engine, res->second.gl_ob);
+		floating_emoji_states.erase(res);
+	}
+}
+
+
+void GUIClient::removeAllFloatingEmoji()
+{
+	for(auto it = floating_emoji_states.begin(); it != floating_emoji_states.end(); ++it)
+		checkRemoveObAndSetRefToNull(opengl_engine, it->second.gl_ob);
+
+	floating_emoji_states.clear();
 }
 
 
@@ -8074,6 +8133,7 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 					// Remove nametag OpenGL object
 					checkRemoveObAndSetRefToNull(opengl_engine, avatar->nametag_gl_ob);
 					checkRemoveObAndSetRefToNull(opengl_engine, avatar->speaker_gl_ob);
+					removeFloatingEmojiForAvatar(avatar->uid);
 
 					hud_ui.removeMarkerForAvatar(avatar); // Remove any marker for the avatar from the HUD
 					if(minimap)
@@ -8409,33 +8469,31 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 						}
 					}
 
+					// We want to rotate avatar UI elements towards the camera.
+					Vec4f to_cam = normalise(use_nametag_pos - this->cam_controller.getPosition().toVec4fPoint());
+					if(!isFinite(to_cam[0]))
+						to_cam = Vec4f(1, 0, 0, 0); // Handle case where to_cam was zero.
+
+					const Vec4f axis_k = Vec4f(0, 0, 1, 0);
+					if(std::fabs(dot(to_cam, axis_k)) > 0.999f) // Make vectors linearly independent.
+						to_cam[0] += 0.1f;
+
+					const Vec4f axis_j = normalise(removeComponentInDir(to_cam, axis_k));
+					const Vec4f axis_i = crossProduct(axis_j, axis_k);
+					const Matrix4f rot_matrix(axis_i, axis_j, axis_k, Vec4f(0, 0, 0, 1));
+
+					// If avatar is flying (e.g. playing floating anim) move UI elements up so they aren't blocked by the avatar head.
+					const float flying_z_offset = ((avatar->anim_state & AvatarGraphics::ANIM_STATE_IN_AIR) != 0) ? 0.3f : 0.f;
+					const float blend_speed = 0.1f;
+					avatar->nametag_z_offset = avatar->nametag_z_offset * (1 - blend_speed) + flying_z_offset * blend_speed;
+
 					// Update nametag transform also
 					if(avatar->nametag_gl_ob.nonNull())
 					{
-						// We want to rotate the nametag towards the camera.
-						Vec4f to_cam = normalise(use_nametag_pos - this->cam_controller.getPosition().toVec4fPoint());
-						if(!isFinite(to_cam[0]))
-							to_cam = Vec4f(1, 0, 0, 0); // Handle case where to_cam was zero.
-
-						const Vec4f axis_k = Vec4f(0, 0, 1, 0);
-						if(std::fabs(dot(to_cam, axis_k)) > 0.999f) // Make vectors linearly independent.
-							to_cam[0] += 0.1;
-
-						const Vec4f axis_j = normalise(removeComponentInDir(to_cam, axis_k));
-						const Vec4f axis_i = crossProduct(axis_j, axis_k);
-						const Matrix4f rot_matrix(axis_i, axis_j, axis_k, Vec4f(0, 0, 0, 1));
-
 						const float ws_height = 0.2f; // world space height of nametag in metres
 						const float ws_width = ws_height * avatar->nametag_gl_ob->mesh_data->aabb_os.axisLength(0) / avatar->nametag_gl_ob->mesh_data->aabb_os.axisLength(2);
 
 						const float total_w = ws_width + (avatar->speaker_gl_ob.nonNull() ? (0.05f + ws_height) : 0.f); // Width of nametag and speaker icon (and spacing between them).
-
-						// If avatar is flying (e.g playing floating anim) move nametag up so it isn't blocked by the avatar head, which is higher in floating anim.
-						const float flying_z_offset = ((avatar->anim_state & AvatarGraphics::ANIM_STATE_IN_AIR) != 0) ? 0.3f : 0.f;
-
-						// Blend in new z offset, don't immediately jump to it.
-						const float blend_speed = 0.1f;
-						avatar->nametag_z_offset = avatar->nametag_z_offset * (1 - blend_speed) + flying_z_offset * blend_speed;
 
 						// Rotate around z-axis, then translate to just above the avatar's head.
 						avatar->nametag_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(use_nametag_pos + Vec4f(0, 0, 0.45f + avatar->nametag_z_offset, 0)) *
@@ -8475,6 +8533,31 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 								avatar->speaker_gl_ob->materials[0].albedo_linear_rgb = col;
 								opengl_engine->objectMaterialsUpdated(*avatar->speaker_gl_ob);
 							}
+						}
+					}
+
+					auto floating_emoji_it = floating_emoji_states.find(avatar->uid);
+					if(floating_emoji_it != floating_emoji_states.end())
+					{
+						static const double FLOATING_EMOJI_DURATION = 1.6;
+						const double elapsed = cur_time - floating_emoji_it->second.start_time;
+						if(elapsed >= FLOATING_EMOJI_DURATION)
+						{
+							checkRemoveObAndSetRefToNull(opengl_engine, floating_emoji_it->second.gl_ob);
+							floating_emoji_states.erase(floating_emoji_it);
+						}
+						else if(floating_emoji_it->second.gl_ob.nonNull())
+						{
+							const float ws_height = 0.55f;
+							const float ws_width = ws_height * floating_emoji_it->second.gl_ob->mesh_data->aabb_os.axisLength(0) /
+								myMax(1.0e-4f, floating_emoji_it->second.gl_ob->mesh_data->aabb_os.axisLength(2));
+							const float rise_amount = (float)(elapsed / FLOATING_EMOJI_DURATION) * 1.25f;
+
+							floating_emoji_it->second.gl_ob->ob_to_world_matrix =
+								Matrix4f::translationMatrix(use_nametag_pos + Vec4f(0, 0, 1.02f + avatar->nametag_z_offset + rise_amount, 0)) *
+								rot_matrix * Matrix4f::translationMatrix(-ws_width/2, 0.f, 0.f) * Matrix4f::uniformScaleMatrix(ws_width);
+
+							opengl_engine->updateObjectTransformData(*floating_emoji_it->second.gl_ob);
 						}
 					}
 
@@ -9352,6 +9435,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 					web::Escaping::HTMLEscape(m->msg) + "</p>");
 
 				chat_ui.appendMessage(use_avatar_name, col, ": " + m->msg);
+
+				if(EmojiUtils::isSupportedEmoji(m->msg))
+					spawnFloatingEmojiForAvatar(m->sender_avatar_uid, m->msg, cur_time);
 
 
 				// Execute any onChatMessage event handlers.
@@ -13991,6 +14077,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	minimap = nullptr;
 
 	clearAllObjects();
+	removeAllFloatingEmoji();
 	world_state = nullptr;
 
 	if(particle_manager)
@@ -14081,6 +14168,8 @@ void GUIClient::clearAllObjects()
 			if(minimap)
 				minimap->removeMarkerForAvatar(avatar); // Remove any marker for the avatar from the minimap
 		}
+
+		removeAllFloatingEmoji();
 
 		for(auto it = world_state->lod_chunks.begin(); it != world_state->lod_chunks.end(); ++it)
 		{
@@ -16373,6 +16462,43 @@ GLObjectRef GUIClient::makeNameTagGLObject(const std::string& nametag)
 	gl_ob->materials[0].cast_shadows = false;
 	gl_ob->materials[0].tex_matrix = Matrix2f(1,0,0,-1); // Compensate for OpenGL loading textures upside down (row 0 in OpenGL is considered to be at the bottom of texture)
 	gl_ob->materials[0].tex_translation = Vec2f(0, 1);
+	return gl_ob;
+}
+
+
+GLObjectRef GUIClient::makeFloatingEmojiGLObject(const std::string& emoji)
+{
+	ZoneScopedN("makeFloatingEmojiGLObject"); // Tracy profiler
+
+	const int FONT_SIZE_PX = 160;
+	TextRendererFontFace* emoji_font = gl_ui->getFont(FONT_SIZE_PX, /*emoji=*/true);
+
+	const TextRenderer::SizeInfo size_info = emoji_font->renderer->getTextSize(emoji, emoji_font, emoji_font);
+
+	const int use_font_height = FONT_SIZE_PX;
+	const int padding_x = (int)(use_font_height * 0.3f);
+	const int padding_y = (int)(use_font_height * 0.3f);
+
+	ImageMapUInt8Ref map = new ImageMapUInt8(size_info.glyphSize().x + padding_x * 2, use_font_height + padding_y * 2, 4);
+	map->zero();
+
+	emoji_font->renderer->drawText(*map, emoji, padding_x, padding_y + use_font_height, Colour3f(1.f), /*render SDF=*/false, emoji_font, emoji_font);
+
+	GLObjectRef gl_ob = opengl_engine->allocateObject();
+	const float mesh_h = (float)map->getHeight() / (float)map->getWidth();
+	gl_ob->mesh_data = MeshPrimitiveBuilding::makeRoundedCornerRect(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,0,1,0), /*w=*/1.f, /*h=*/mesh_h, /*corner radius=*/myMin(mesh_h * 0.2f, 0.08f), /*tris_per_corner=*/8);
+	gl_ob->materials.resize(1);
+	gl_ob->materials[0].alpha_blend = false;
+	gl_ob->materials[0].allow_alpha_test = true;
+	gl_ob->materials[0].fresnel_scale = 0.f;
+	gl_ob->materials[0].albedo_linear_rgb = Colour3f(1.f);
+	TextureParams tex_params;
+	tex_params.allow_compression = false;
+	gl_ob->materials[0].albedo_texture = opengl_engine->getOrLoadOpenGLTextureForMap2D("floating_emoji_" + OpenGLTextureKey(emoji), *map, tex_params);
+	gl_ob->materials[0].cast_shadows = false;
+	gl_ob->materials[0].tex_matrix = Matrix2f(1,0,0,-1);
+	gl_ob->materials[0].tex_translation = Vec2f(0, 1);
+	gl_ob->ob_to_world_matrix = Matrix4f::identity();
 	return gl_ob;
 }
 

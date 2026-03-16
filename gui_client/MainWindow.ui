@@ -261,6 +261,13 @@
             <widget class="QLineEdit" name="chatMessageLineEdit"/>
            </item>
            <item>
+            <widget class="QToolButton" name="chatEmojiButton">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QPushButton" name="chatPushButton">
              <property name="text">
               <string>Chat</string>
