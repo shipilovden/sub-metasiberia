@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2023 -
 
 #include "ModelLoading.h"
 #include "EmojiUtils.h"
+#include "FloatingChatMessageUtils.h"
 #include "PhysicsWorld.h"
 #include "TerrainTests.h"
 #include "URLParser.h"
@@ -180,6 +181,7 @@ void TestSuite::test()
 	runTest([&]() { ReferenceTest::run(); });
 	runTest([&]() { CameraController::test(); });
 	runTest([&]() { EmojiUtils::test(); });
+	runTest([&]() { FloatingChatMessageUtils::test(); });
 
 #if !defined(EMSCRIPTEN)
 

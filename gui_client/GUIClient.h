@@ -180,6 +180,7 @@ public:
 
 	Reference<SettingsStore> getSettingsStore() { return settings; }
 	bool isLoggedIn() const { return logged_in_user_id.valid(); }
+	const std::vector<std::string>& getRecentEmojiHistory() const { return recent_emoji_history; }
 
 	void setGLWidgetContextAsCurrent();
 	Vec2i getGlWidgetPosInGlobalSpace();
@@ -262,9 +263,10 @@ public:
 	void gestureSettingsChanged(const GestureSettings& new_gesture_settings);
 	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings);
 	void applyWorldSettingsToOpenGLEngine();
-	void spawnFloatingEmojiForAvatar(const UID& avatar_uid, const std::string& emoji, double cur_time);
-	void removeFloatingEmojiForAvatar(const UID& avatar_uid);
-	void removeAllFloatingEmoji();
+	void spawnFloatingChatMessageForAvatar(const UID& avatar_uid, const std::string& message, double cur_time);
+	void removeFloatingChatMessageForAvatar(const UID& avatar_uid);
+	void removeAllFloatingChatMessages();
+	void recordRecentEmojiUsage(const std::string& emoji);
 public:
 	void rotateObject(WorldObjectRef ob, const Vec4f& axis, float angle);
 	void selectObject(const WorldObjectRef& ob, int selected_mat_index);
@@ -273,7 +275,7 @@ public:
 	void deselectParcel();
 	void visitSubURL(const std::string& URL, bool push_cur_URL_on_nav_stack = true, bool adjust_cur_URL_pos_back = false); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	GLObjectRef makeNameTagGLObject(const std::string& nametag);
-	GLObjectRef makeFloatingEmojiGLObject(const std::string& emoji);
+	GLObjectRef makeFloatingChatMessageGLObject(const std::string& message);
 	GLObjectRef makeSpeakerGLObject();
 public:
 	void makeShaders();
@@ -748,13 +750,17 @@ public:
 	std::unordered_map<uint64, CameraStreamRenderState> camera_stream_states;
 	size_t camera_stream_round_robin_cursor = 0;
 
-	struct FloatingEmojiState
+	struct FloatingChatMessageState
 	{
-		std::string emoji;
+		std::string message;
 		GLObjectRef gl_ob;
 		double start_time;
+		double duration_seconds;
+		float world_height;
+		float rise_distance;
 	};
-	std::map<UID, FloatingEmojiState> floating_emoji_states;
+	std::map<UID, FloatingChatMessageState> floating_chat_message_states;
+	std::vector<std::string> recent_emoji_history;
 
 	GLUIRef gl_ui;
 	GestureUI gesture_ui; // Draws gesture buttons, also selfie and enable mic button

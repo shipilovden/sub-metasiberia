@@ -21,6 +21,7 @@ Copyright Glare Technologies Limited 2024 -
 
 class GUIClient;
 class Avatar;
+class MouseWheelEvent;
 
 
 /*=====================================================================
@@ -45,6 +46,8 @@ public:
 
 	void setDrawAreaBottomLeftY(float draw_area_bottom_left_y);
 
+	void handleMousePress(MouseEvent& mouse_event);
+	void handleMouseWheelEvent(MouseWheelEvent& mouse_event);
 	void handleMouseMoved(MouseEvent& mouse_event);
 
 	virtual void eventOccurred(GLUICallbackEvent& event);
@@ -93,6 +96,10 @@ private:
 	GLUILineEditRef chat_line_edit;
 
 	size_t current_emoji_category;
+	float emoji_picker_scroll_offset;
+	float emoji_picker_max_scroll_offset;
+	Rect2f emoji_picker_scroll_rect;
+	Rect2f emoji_picker_category_rect;
 	std::vector<GLUITextButtonRef> emoji_category_buttons;
 	std::vector<GLUITextButtonRef> emoji_picker_buttons;
 };

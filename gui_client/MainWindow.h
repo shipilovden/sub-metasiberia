@@ -27,6 +27,7 @@ class LogWindow;
 class QMimeData;
 class QMenu;
 class QDialog;
+class QTabWidget;
 struct ID3D11Device;
 struct IMFDXGIDeviceManager;
 struct _SDL_GameController;
@@ -176,6 +177,8 @@ private:
 	virtual void timerEvent(QTimerEvent* event) override;
 	virtual void changeEvent(QEvent *event) override;
 	virtual bool eventFilter(QObject* obj, QEvent* event) override;
+	void rebuildChatEmojiPopupContents();
+	void sendChatOrEmojiMessage(const std::string& message);
 	void startMainTimer();
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
@@ -359,6 +362,7 @@ public:
 	URLWidget* url_widget;
 	UpdateManager* update_manager;
 	QDialog* chat_emoji_popup;
+	QTabWidget* chat_emoji_tab_widget;
 
 	double last_timerEvent_CPU_work_elapsed;
 	double last_updateGL_time;

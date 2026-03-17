@@ -22,6 +22,7 @@
 
 1. Поднять версию.
 2. Собрать Qt5-клиент через `C:\programming\qt_build.ps1`.
+   - Для точечной пересборки одной конфигурации допустимо использовать, например, `C:\programming\qt_build.ps1 -Configs RelWithDebInfo -SkipConfigure`.
 3. Собрать `MetasiberiaBeta-Setup-vX.Y.Z.exe`.
 4. Создать `GitHub Release` и прикрепить Windows installer.
 
