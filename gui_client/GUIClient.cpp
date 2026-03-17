@@ -12,6 +12,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "MeshBuilding.h"
 #include "ThreadMessages.h"
 #include "EmojiUtils.h"
+#include "FloatingChatMessageUtils.h"
 #include "TerrainSystem.h"
 #include "TerrainDecalManager.h"
 #include "LoadScriptTask.h"
@@ -302,6 +303,59 @@ void GUIClient::staticShutdown()
 }
 
 
+namespace
+{
+static const char* recentEmojiSettingsKey()
+{
+	return "chat/recent_emojis";
+}
+
+
+static std::vector<std::string> loadRecentEmojiHistoryFromSettings(const Reference<SettingsStore>& settings)
+{
+	std::vector<std::string> out;
+	if(settings.isNull())
+		return out;
+
+	const std::vector<std::string> tokens = ::split(settings->getStringValue(recentEmojiSettingsKey(), ""), '\n');
+	out.reserve(tokens.size());
+
+	for(size_t i=0; i<tokens.size(); ++i)
+	{
+		if(!EmojiUtils::isSupportedEmoji(tokens[i]))
+			continue;
+
+		bool already_present = false;
+		for(size_t z=0; z<out.size(); ++z)
+		{
+			if(out[z] == tokens[i])
+			{
+				already_present = true;
+				break;
+			}
+		}
+
+		if(!already_present)
+			out.push_back(tokens[i]);
+
+		if(out.size() >= EmojiUtils::maxRecentEmojiCount())
+			break;
+	}
+
+	return out;
+}
+
+
+static void saveRecentEmojiHistoryToSettings(const Reference<SettingsStore>& settings, const std::vector<std::string>& recent_emojis)
+{
+	if(settings.isNull())
+		return;
+
+	settings->setStringValue(recentEmojiSettingsKey(), StringUtils::join(recent_emojis, "\n"));
+}
+}
+
+
 // Initialise everything needed for the initial ClientThread launch.
 void GUIClient::preConnectInitialise(const std::string& cache_dir_, const Reference<SettingsStore>& settings_store_, UIInterface* ui_interface_, glare::TaskManager* high_priority_task_manager_, Reference<glare::Allocator> worker_allocator_)
 {
@@ -314,6 +368,7 @@ void GUIClient::preConnectInitialise(const std::string& cache_dir_, const Refere
 	ui_interface = ui_interface_;
 	high_priority_task_manager = high_priority_task_manager_;
 	worker_allocator = worker_allocator_;
+	recent_emoji_history = loadRecentEmojiHistoryFromSettings(settings);
 
 	PhysicsWorld::init(); // init Jolt stuff
 
@@ -1124,7 +1179,7 @@ void GUIClient::shutdown()
 	for(size_t i=0; i<test_avatars.size(); ++i)
 		test_avatars[i]->graphics.destroy(*opengl_engine, *physics_world); // Remove any OpenGL object for it
 
-	removeAllFloatingEmoji();
+	removeAllFloatingChatMessages();
 
 	disconnectFromServerAndClearAllObjects();
 
@@ -1355,6 +1410,7 @@ void GUIClient::sendEmojiChatMessage(const std::string& emoji)
 		return;
 	}
 
+	recordRecentEmojiUsage(emoji);
 	sendChatMessage(emoji);
 
 	if(audio_engine.isInitialised())
@@ -1362,42 +1418,98 @@ void GUIClient::sendEmojiChatMessage(const std::string& emoji)
 }
 
 
-void GUIClient::spawnFloatingEmojiForAvatar(const UID& avatar_uid, const std::string& emoji, double cur_time)
+void GUIClient::recordRecentEmojiUsage(const std::string& emoji)
 {
-	if(!avatar_uid.valid() || !EmojiUtils::isSupportedEmoji(emoji) || opengl_engine.isNull())
+	if(!EmojiUtils::isSupportedEmoji(emoji))
 		return;
 
-	removeFloatingEmojiForAvatar(avatar_uid);
+	size_t existing_index = recent_emoji_history.size();
+	for(size_t i=0; i<recent_emoji_history.size(); ++i)
+	{
+		if(recent_emoji_history[i] == emoji)
+		{
+			existing_index = i;
+			break;
+		}
+	}
 
-	FloatingEmojiState state;
-	state.emoji = emoji;
+	if(existing_index < recent_emoji_history.size())
+		recent_emoji_history.erase(recent_emoji_history.begin() + existing_index);
+
+	recent_emoji_history.insert(recent_emoji_history.begin(), emoji);
+
+	if(recent_emoji_history.size() > EmojiUtils::maxRecentEmojiCount())
+		recent_emoji_history.resize(EmojiUtils::maxRecentEmojiCount());
+
+	saveRecentEmojiHistoryToSettings(settings, recent_emoji_history);
+}
+
+
+static double getFloatingChatMessageDuration(const std::string& preview)
+{
+	if(EmojiUtils::isSupportedEmoji(preview))
+		return 1.6;
+
+	const double num_code_points = (double)UTF8Utils::numCodePointsInString(preview);
+	return myMin(3.0, 1.9 + num_code_points * 0.05);
+}
+
+
+static float getFloatingChatMessageWorldHeight(const std::string& preview)
+{
+	return EmojiUtils::isSupportedEmoji(preview) ? 0.55f : 0.38f;
+}
+
+
+static float getFloatingChatMessageRiseDistance(const std::string& preview)
+{
+	return EmojiUtils::isSupportedEmoji(preview) ? 1.25f : 1.0f;
+}
+
+
+void GUIClient::spawnFloatingChatMessageForAvatar(const UID& avatar_uid, const std::string& message, double cur_time)
+{
+	if(!avatar_uid.valid() || opengl_engine.isNull() || gl_ui.isNull())
+		return;
+
+	const std::string preview = FloatingChatMessageUtils::makePreview(message);
+	if(preview.empty())
+		return;
+
+	removeFloatingChatMessageForAvatar(avatar_uid);
+
+	FloatingChatMessageState state;
+	state.message = preview;
 	state.start_time = cur_time;
-	state.gl_ob = makeFloatingEmojiGLObject(emoji);
+	state.duration_seconds = getFloatingChatMessageDuration(preview);
+	state.world_height = getFloatingChatMessageWorldHeight(preview);
+	state.rise_distance = getFloatingChatMessageRiseDistance(preview);
+	state.gl_ob = makeFloatingChatMessageGLObject(preview);
 	if(state.gl_ob.nonNull())
 	{
 		opengl_engine->addObject(state.gl_ob);
-		floating_emoji_states[avatar_uid] = state;
+		floating_chat_message_states[avatar_uid] = state;
 	}
 }
 
 
-void GUIClient::removeFloatingEmojiForAvatar(const UID& avatar_uid)
+void GUIClient::removeFloatingChatMessageForAvatar(const UID& avatar_uid)
 {
-	auto res = floating_emoji_states.find(avatar_uid);
-	if(res != floating_emoji_states.end())
+	auto res = floating_chat_message_states.find(avatar_uid);
+	if(res != floating_chat_message_states.end())
 	{
 		checkRemoveObAndSetRefToNull(opengl_engine, res->second.gl_ob);
-		floating_emoji_states.erase(res);
+		floating_chat_message_states.erase(res);
 	}
 }
 
 
-void GUIClient::removeAllFloatingEmoji()
+void GUIClient::removeAllFloatingChatMessages()
 {
-	for(auto it = floating_emoji_states.begin(); it != floating_emoji_states.end(); ++it)
+	for(auto it = floating_chat_message_states.begin(); it != floating_chat_message_states.end(); ++it)
 		checkRemoveObAndSetRefToNull(opengl_engine, it->second.gl_ob);
 
-	floating_emoji_states.clear();
+	floating_chat_message_states.clear();
 }
 
 
@@ -8133,7 +8245,7 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 					// Remove nametag OpenGL object
 					checkRemoveObAndSetRefToNull(opengl_engine, avatar->nametag_gl_ob);
 					checkRemoveObAndSetRefToNull(opengl_engine, avatar->speaker_gl_ob);
-					removeFloatingEmojiForAvatar(avatar->uid);
+					removeFloatingChatMessageForAvatar(avatar->uid);
 
 					hud_ui.removeMarkerForAvatar(avatar); // Remove any marker for the avatar from the HUD
 					if(minimap)
@@ -8536,28 +8648,27 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 						}
 					}
 
-					auto floating_emoji_it = floating_emoji_states.find(avatar->uid);
-					if(floating_emoji_it != floating_emoji_states.end())
+					auto floating_chat_message_it = floating_chat_message_states.find(avatar->uid);
+					if(floating_chat_message_it != floating_chat_message_states.end())
 					{
-						static const double FLOATING_EMOJI_DURATION = 1.6;
-						const double elapsed = cur_time - floating_emoji_it->second.start_time;
-						if(elapsed >= FLOATING_EMOJI_DURATION)
+						const double elapsed = cur_time - floating_chat_message_it->second.start_time;
+						if(elapsed >= floating_chat_message_it->second.duration_seconds)
 						{
-							checkRemoveObAndSetRefToNull(opengl_engine, floating_emoji_it->second.gl_ob);
-							floating_emoji_states.erase(floating_emoji_it);
+							checkRemoveObAndSetRefToNull(opengl_engine, floating_chat_message_it->second.gl_ob);
+							floating_chat_message_states.erase(floating_chat_message_it);
 						}
-						else if(floating_emoji_it->second.gl_ob.nonNull())
+						else if(floating_chat_message_it->second.gl_ob.nonNull())
 						{
-							const float ws_height = 0.55f;
-							const float ws_width = ws_height * floating_emoji_it->second.gl_ob->mesh_data->aabb_os.axisLength(0) /
-								myMax(1.0e-4f, floating_emoji_it->second.gl_ob->mesh_data->aabb_os.axisLength(2));
-							const float rise_amount = (float)(elapsed / FLOATING_EMOJI_DURATION) * 1.25f;
+							const float ws_height = floating_chat_message_it->second.world_height;
+							const float ws_width = ws_height * floating_chat_message_it->second.gl_ob->mesh_data->aabb_os.axisLength(0) /
+								myMax(1.0e-4f, floating_chat_message_it->second.gl_ob->mesh_data->aabb_os.axisLength(2));
+							const float rise_amount = (float)(elapsed / floating_chat_message_it->second.duration_seconds) * floating_chat_message_it->second.rise_distance;
 
-							floating_emoji_it->second.gl_ob->ob_to_world_matrix =
+							floating_chat_message_it->second.gl_ob->ob_to_world_matrix =
 								Matrix4f::translationMatrix(use_nametag_pos + Vec4f(0, 0, 1.02f + avatar->nametag_z_offset + rise_amount, 0)) *
 								rot_matrix * Matrix4f::translationMatrix(-ws_width/2, 0.f, 0.f) * Matrix4f::uniformScaleMatrix(ws_width);
 
-							opengl_engine->updateObjectTransformData(*floating_emoji_it->second.gl_ob);
+							opengl_engine->updateObjectTransformData(*floating_chat_message_it->second.gl_ob);
 						}
 					}
 
@@ -9436,8 +9547,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 				chat_ui.appendMessage(use_avatar_name, col, ": " + m->msg);
 
-				if(EmojiUtils::isSupportedEmoji(m->msg))
-					spawnFloatingEmojiForAvatar(m->sender_avatar_uid, m->msg, cur_time);
+				spawnFloatingChatMessageForAvatar(m->sender_avatar_uid, m->msg, cur_time);
 
 
 				// Execute any onChatMessage event handlers.
@@ -14077,7 +14187,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	minimap = nullptr;
 
 	clearAllObjects();
-	removeAllFloatingEmoji();
+	removeAllFloatingChatMessages();
 	world_state = nullptr;
 
 	if(particle_manager)
@@ -14169,7 +14279,7 @@ void GUIClient::clearAllObjects()
 				minimap->removeMarkerForAvatar(avatar); // Remove any marker for the avatar from the minimap
 		}
 
-		removeAllFloatingEmoji();
+		removeAllFloatingChatMessages();
 
 		for(auto it = world_state->lod_chunks.begin(); it != world_state->lod_chunks.end(); ++it)
 		{
@@ -14887,6 +14997,7 @@ void GUIClient::mousePressed(MouseEvent& e)
 	if(gl_ui.nonNull())
 	{
 		gl_ui->handleMousePress(e);
+		chat_ui.handleMousePress(e);
 		if(e.accepted)
 		{
 			ui_interface->setCamRotationOnMouseDragEnabled(false); // If the user clicked on a UI widget, we don't want click+mouse dragging to move the camera.
@@ -16328,6 +16439,10 @@ void GUIClient::deselectParcel()
 
 void GUIClient::onMouseWheelEvent(MouseWheelEvent& e)
 {
+	chat_ui.handleMouseWheelEvent(e);
+	if(e.accepted)
+		return;
+
 	if(gl_ui)
 	{
 		gl_ui->handleMouseWheelEvent(e);
@@ -16466,35 +16581,69 @@ GLObjectRef GUIClient::makeNameTagGLObject(const std::string& nametag)
 }
 
 
-GLObjectRef GUIClient::makeFloatingEmojiGLObject(const std::string& emoji)
+GLObjectRef GUIClient::makeFloatingChatMessageGLObject(const std::string& message)
 {
-	ZoneScopedN("makeFloatingEmojiGLObject"); // Tracy profiler
+	ZoneScopedN("makeFloatingChatMessageGLObject"); // Tracy profiler
 
-	const int FONT_SIZE_PX = 160;
-	TextRendererFontFace* emoji_font = gl_ui->getFont(FONT_SIZE_PX, /*emoji=*/true);
-
-	const TextRenderer::SizeInfo size_info = emoji_font->renderer->getTextSize(emoji, emoji_font, emoji_font);
-
-	const int use_font_height = FONT_SIZE_PX;
-	const int padding_x = (int)(use_font_height * 0.3f);
-	const int padding_y = (int)(use_font_height * 0.3f);
-
-	ImageMapUInt8Ref map = new ImageMapUInt8(size_info.glyphSize().x + padding_x * 2, use_font_height + padding_y * 2, 4);
-	map->zero();
-
-	emoji_font->renderer->drawText(*map, emoji, padding_x, padding_y + use_font_height, Colour3f(1.f), /*render SDF=*/false, emoji_font, emoji_font);
+	const bool emoji_only = EmojiUtils::isSupportedEmoji(message);
 
 	GLObjectRef gl_ob = opengl_engine->allocateObject();
-	const float mesh_h = (float)map->getHeight() / (float)map->getWidth();
-	gl_ob->mesh_data = MeshPrimitiveBuilding::makeRoundedCornerRect(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,0,1,0), /*w=*/1.f, /*h=*/mesh_h, /*corner radius=*/myMin(mesh_h * 0.2f, 0.08f), /*tris_per_corner=*/8);
 	gl_ob->materials.resize(1);
-	gl_ob->materials[0].alpha_blend = false;
-	gl_ob->materials[0].allow_alpha_test = true;
-	gl_ob->materials[0].fresnel_scale = 0.f;
-	gl_ob->materials[0].albedo_linear_rgb = Colour3f(1.f);
-	TextureParams tex_params;
-	tex_params.allow_compression = false;
-	gl_ob->materials[0].albedo_texture = opengl_engine->getOrLoadOpenGLTextureForMap2D("floating_emoji_" + OpenGLTextureKey(emoji), *map, tex_params);
+
+	if(emoji_only)
+	{
+		const int FONT_SIZE_PX = 160;
+		TextRendererFontFace* emoji_font = gl_ui->getFont(FONT_SIZE_PX, /*emoji=*/true);
+
+		const TextRenderer::SizeInfo size_info = emoji_font->renderer->getTextSize(message, emoji_font, emoji_font);
+
+		const int use_font_height = FONT_SIZE_PX;
+		const int padding_x = (int)(use_font_height * 0.3f);
+		const int padding_y = (int)(use_font_height * 0.3f);
+
+		ImageMapUInt8Ref map = new ImageMapUInt8(size_info.glyphSize().x + padding_x * 2, use_font_height + padding_y * 2, 4);
+		map->zero();
+
+		emoji_font->renderer->drawText(*map, message, padding_x, padding_y + use_font_height, Colour3f(1.f), /*render SDF=*/false, emoji_font, emoji_font);
+
+		const float mesh_h = (float)map->getHeight() / (float)map->getWidth();
+		gl_ob->mesh_data = MeshPrimitiveBuilding::makeRoundedCornerRect(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,0,1,0), /*w=*/1.f, /*h=*/mesh_h, /*corner radius=*/myMin(mesh_h * 0.2f, 0.08f), /*tris_per_corner=*/8);
+		gl_ob->materials[0].alpha_blend = false;
+		gl_ob->materials[0].allow_alpha_test = true;
+		gl_ob->materials[0].fresnel_scale = 0.f;
+		gl_ob->materials[0].albedo_linear_rgb = Colour3f(1.f);
+		TextureParams tex_params;
+		tex_params.allow_compression = false;
+		gl_ob->materials[0].albedo_texture = opengl_engine->getOrLoadOpenGLTextureForMap2D("floating_emoji_" + OpenGLTextureKey(message), *map, tex_params);
+	}
+	else
+	{
+		const int FONT_SIZE_PX = 44;
+		TextRendererFontFace*       font = gl_ui->getFont(FONT_SIZE_PX, /*emoji=*/false);
+		TextRendererFontFace* emoji_font = gl_ui->getFont(FONT_SIZE_PX, /*emoji=*/true);
+
+		const TextRenderer::SizeInfo size_info = font->renderer->getTextSize(message, font, emoji_font);
+
+		const int use_font_height = FONT_SIZE_PX;
+		const int padding_x = (int)(use_font_height * 0.8f);
+		const int padding_y = (int)(use_font_height * 0.45f);
+
+		ImageMapUInt8Ref map = new ImageMapUInt8(size_info.glyphSize().x + padding_x * 2, use_font_height + padding_y * 2, 3);
+		map->set(245);
+
+		font->renderer->drawText(*map, message, padding_x, padding_y + use_font_height, Colour3f(0.06f), /*render SDF=*/false, font, emoji_font);
+
+		const float mesh_h = (float)map->getHeight() / (float)map->getWidth();
+		gl_ob->mesh_data = MeshPrimitiveBuilding::makeRoundedCornerRect(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,0,1,0), /*w=*/1.f, /*h=*/mesh_h, /*corner radius=*/myMin(mesh_h * 0.3f, 0.1f), /*tris_per_corner=*/8);
+		gl_ob->materials[0].alpha_blend = false;
+		gl_ob->materials[0].allow_alpha_test = false;
+		gl_ob->materials[0].fresnel_scale = 0.08f;
+		gl_ob->materials[0].albedo_linear_rgb = Colour3f(1.f);
+		TextureParams tex_params;
+		tex_params.allow_compression = false;
+		gl_ob->materials[0].albedo_texture = opengl_engine->getOrLoadOpenGLTextureForMap2D("floating_chat_message_" + OpenGLTextureKey(message), *map, tex_params);
+	}
+
 	gl_ob->materials[0].cast_shadows = false;
 	gl_ob->materials[0].tex_matrix = Matrix2f(1,0,0,-1);
 	gl_ob->materials[0].tex_translation = Vec2f(0, 1);

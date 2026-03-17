@@ -19,7 +19,11 @@ ChatUI::ChatUI()
 	expanded(true),
 	visible(true),
 	emoji_picker_open(false),
-	current_emoji_category(0)
+	current_emoji_category(0),
+	emoji_picker_scroll_offset(0.f),
+	emoji_picker_max_scroll_offset(0.f),
+	emoji_picker_scroll_rect(Vec2f(0.f), Vec2f(0.f)),
+	emoji_picker_category_rect(Vec2f(0.f), Vec2f(0.f))
 {}
 
 
@@ -30,6 +34,12 @@ ChatUI::~ChatUI()
 static const float corner_radius_px = 8;
 static const int font_size_px = 12;
 static const int msgs_padding_w_px = 8;
+static const float emoji_picker_fixed_body_width_px = 700.f;
+static const float emoji_picker_fixed_body_height_px = 220.f;
+static const float emoji_picker_category_button_width_px = 84.f;
+static const float emoji_picker_category_button_height_px = 30.f;
+static const float emoji_picker_category_gap_px = 8.f;
+static const float emoji_picker_category_bottom_gap_px = 4.f;
 
 
 void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_, GLUIRef gl_ui_)
@@ -120,6 +130,7 @@ void ChatUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_clie
 			args.title = "Эмодзи";
 			args.background_colour = Colour3f(0.1f);
 			args.background_alpha = 0.9f;
+			args.background_consumes_events = true;
 			emoji_window = new GLUIWindow(*gl_ui_, opengl_engine_, args);
 			emoji_window->setBodyWidget(emoji_grid_container);
 			emoji_window->handler = this;
@@ -170,60 +181,93 @@ void ChatUI::rebuildEmojiPickerContents()
 		return;
 
 	emoji_grid_container->removeAllContainedWidgetsFromGLUIAndClear();
+	for(size_t i=0; i<emoji_category_buttons.size(); ++i)
+		checkRemoveAndDeleteWidget(gl_ui, emoji_category_buttons[i]);
 	emoji_category_buttons.clear();
 	emoji_picker_buttons.clear();
 
-	const auto& categories = EmojiUtils::emojiCategories();
+	const std::vector<EmojiUtils::EmojiPickerCategory> categories = EmojiUtils::buildPickerCategories(gui_client->getRecentEmojiHistory());
 	if(categories.empty())
 		return;
 
 	if(current_emoji_category >= categories.size())
 		current_emoji_category = 0;
 
-	const EmojiUtils::EmojiCategory& active_category = categories[current_emoji_category];
-	const int category_num_cols = 3;
-	const int category_num_rows = (int)((categories.size() + category_num_cols - 1) / category_num_cols);
-	const int emoji_num_cols = active_category.num_columns;
-	const int emoji_num_rows = (int)((active_category.num_emojis + emoji_num_cols - 1) / emoji_num_cols);
+	if(current_emoji_category == 0 && categories[0].emojis.empty() && categories.size() > 1)
+		current_emoji_category = 1;
+
+	const EmojiUtils::EmojiPickerCategory& active_category = categories[current_emoji_category];
+	const int emoji_num_cols = myMax(1, active_category.num_columns);
+	const size_t emoji_count_for_layout = myMax<size_t>(active_category.emojis.empty() ? 1 : active_category.emojis.size(), (size_t)1);
+	const int emoji_num_rows = (int)((emoji_count_for_layout + emoji_num_cols - 1) / emoji_num_cols);
+	const float category_button_width = gl_ui->getUIWidthForDevIndepPixelWidth(84.f);
+	const float category_button_height = gl_ui->getUIWidthForDevIndepPixelWidth(30.f);
+	const float emoji_button_size = gl_ui->getUIWidthForDevIndepPixelWidth(58.f);
+	const float placeholder_width = gl_ui->getUIWidthForDevIndepPixelWidth(220.f);
+	const float placeholder_height = gl_ui->getUIWidthForDevIndepPixelWidth(42.f);
 
 	for(size_t i=0; i<categories.size(); ++i)
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Select emoji category";
+		args.tooltip = std::string(categories[i].title);
 		args.font_size_px = 13;
-		args.background_colour = (i == current_emoji_category) ? Colour3f(0.28f, 0.28f, 0.33f) : Colour3f(0.16f);
-		args.mouseover_background_colour = (i == current_emoji_category) ? Colour3f(0.34f, 0.34f, 0.4f) : Colour3f(0.23f);
-		args.text_colour = Colour3f(0.98f);
+		args.z = emoji_window.nonNull() ? (emoji_window->getZ() - 0.05f) : -0.05f;
+		args.background_colour = Colour3f(0.18f, 0.18f, 0.22f);
+		args.toggled_background_colour = Colour3f(0.36f, 0.45f, 0.6f);
+		args.mouseover_background_colour = Colour3f(0.28f, 0.32f, 0.4f);
+		args.text_colour = Colour3f(0.92f);
+		args.toggled_text_colour = Colour3f(1.f);
 		args.mouseover_text_colour = Colour3f(1.f);
 
-		GLUITextButtonRef category_button = new GLUITextButton(*gl_ui, opengl_engine, std::string(categories[i].title), Vec2f(0.f), args);
+		GLUITextButtonRef category_button = new GLUITextButton(*gl_ui, opengl_engine, categories[i].title, Vec2f(0.f), args);
 		category_button->handler = this;
+		category_button->setPosAndDims(Vec2f(0.f), Vec2f(category_button_width, category_button_height));
+		category_button->setToggled(i == current_emoji_category);
 		gl_ui->addWidget(category_button);
 		emoji_category_buttons.push_back(category_button);
-		const int x = (int)(i % category_num_cols);
-		const int y = emoji_num_rows + (category_num_rows - 1 - (int)(i / category_num_cols));
-		emoji_grid_container->setCellWidget(x, y, category_button);
 	}
 
-	for(size_t i=0; i<active_category.num_emojis; ++i)
+	if(active_category.emojis.empty())
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Send emoji";
-		args.font_size_px = 19;
-		args.background_colour = Colour3f(0.15f);
-		args.mouseover_background_colour = Colour3f(0.22f);
-		args.text_colour = Colour3f(0.98f);
-		args.mouseover_text_colour = Colour3f(1.f);
+		args.tooltip = "Recent emoji history is empty";
+		args.font_size_px = 13;
+		args.background_colour = Colour3f(0.14f);
+		args.mouseover_background_colour = Colour3f(0.18f);
+		args.text_colour = Colour3f(0.76f);
+		args.mouseover_text_colour = Colour3f(0.82f);
 
-		GLUITextButtonRef button = new GLUITextButton(*gl_ui, opengl_engine, std::string(active_category.emojis[i]), Vec2f(0.f), args);
-		button->client_data = std::string(active_category.emojis[i]);
+		GLUITextButtonRef button = new GLUITextButton(*gl_ui, opengl_engine, std::string("\xD0\x9F\xD0\xBE\xD0\xBA\xD0\xB0 \xD0\xBF\xD1\x83\xD1\x81\xD1\x82\xD0\xBE"), Vec2f(0.f), args);
+		button->client_data = "";
 		button->handler = this;
+		button->setPosAndDims(Vec2f(0.f), Vec2f(placeholder_width, placeholder_height));
 		gl_ui->addWidget(button);
 		emoji_picker_buttons.push_back(button);
+		emoji_grid_container->setCellWidget(0, 0, button);
+	}
+	else
+	{
+		for(size_t i=0; i<active_category.emojis.size(); ++i)
+		{
+			GLUITextButton::CreateArgs args;
+			args.tooltip = std::string(EmojiUtils::emojiDisplayName(active_category.emojis[i]));
+			args.font_size_px = 24;
+			args.background_colour = Colour3f(0.15f);
+			args.mouseover_background_colour = Colour3f(0.22f);
+			args.text_colour = Colour3f(0.98f);
+			args.mouseover_text_colour = Colour3f(1.f);
 
-		const int x = (int)(i % emoji_num_cols);
-		const int y = emoji_num_rows - 1 - (int)(i / emoji_num_cols);
-		emoji_grid_container->setCellWidget(x, y, button);
+			GLUITextButtonRef button = new GLUITextButton(*gl_ui, opengl_engine, active_category.emojis[i], Vec2f(0.f), args);
+			button->client_data = active_category.emojis[i];
+			button->handler = this;
+			button->setPosAndDims(Vec2f(0.f), Vec2f(emoji_button_size, emoji_button_size));
+			gl_ui->addWidget(button);
+			emoji_picker_buttons.push_back(button);
+
+			const int x = (int)(i % emoji_num_cols);
+			const int y = emoji_num_rows - 1 - (int)(i / emoji_num_cols);
+			emoji_grid_container->setCellWidget(x, y, button);
+		}
 	}
 }
 
@@ -244,6 +288,8 @@ void ChatUI::destroy()
 	checkRemoveAndDeleteWidget(gl_ui, emoji_button);
 	checkRemoveAndDeleteWidget(gl_ui, collapse_button);
 	checkRemoveAndDeleteWidget(gl_ui, expand_button);
+	for(size_t i=0; i<emoji_category_buttons.size(); ++i)
+		checkRemoveAndDeleteWidget(gl_ui, emoji_category_buttons[i]);
 	if(emoji_window.nonNull())
 		emoji_window->removeAllContainedWidgetsFromGLUIAndClear();
 	checkRemoveAndDeleteWidget(gl_ui, emoji_window);
@@ -275,6 +321,8 @@ void ChatUI::setVisible(bool visible_)
 	collapse_button->setVisible(visible && expanded);
 	expand_button->setVisible(visible && !expanded);
 	emoji_window->setVisible(visible && expanded && emoji_picker_open);
+	for(size_t i=0; i<emoji_category_buttons.size(); ++i)
+		emoji_category_buttons[i]->setVisible(visible && expanded && emoji_picker_open);
 }
 
 
@@ -467,6 +515,36 @@ void ChatUI::handleMouseMoved(MouseEvent& mouse_event)
 }
 
 
+void ChatUI::handleMousePress(MouseEvent& mouse_event)
+{
+	if(!isInitialisedFully() || !emoji_picker_open || !expanded || !visible)
+		return;
+
+	const Vec2f coords = gl_ui->UICoordsForOpenGLCoords(mouse_event.gl_coords);
+	const bool click_on_picker_window = emoji_window->isVisible() && emoji_window->getRect().inClosedRectangle(coords);
+	const bool click_on_picker_button = emoji_button->getRect().inClosedRectangle(coords);
+
+	if(!click_on_picker_window && !click_on_picker_button)
+		setEmojiPickerOpen(false);
+}
+
+
+void ChatUI::handleMouseWheelEvent(MouseWheelEvent& mouse_event)
+{
+	if(!isInitialisedFully() || !emoji_picker_open || !expanded || !visible)
+		return;
+
+	const Vec2f coords = gl_ui->UICoordsForOpenGLCoords(mouse_event.gl_coords);
+	if(!emoji_window->isVisible() || !emoji_picker_scroll_rect.inClosedRectangle(coords) || emoji_picker_max_scroll_offset <= 0.f)
+		return;
+
+	const float scroll_delta = gl_ui->getUIWidthForDevIndepPixelWidth(-mouse_event.angle_delta.y * 3.0f);
+	emoji_picker_scroll_offset = myClamp(emoji_picker_scroll_offset + scroll_delta, 0.f, emoji_picker_max_scroll_offset);
+	updateWidgetTransforms();
+	mouse_event.accepted = true;
+}
+
+
 void ChatUI::updateWidgetTransforms()
 {
 	if(!isInitialisedFully())
@@ -515,30 +593,81 @@ void ChatUI::updateWidgetTransforms()
 		Vec2f(expand_button_w, expand_button_w));
 
 	//---------------------------- Update emoji_window ----------------------------
-	const auto& categories = EmojiUtils::emojiCategories();
-	const size_t active_category_index = (current_emoji_category < categories.size()) ? current_emoji_category : 0;
-	const EmojiUtils::EmojiCategory& active_category = categories[active_category_index];
-	const int category_num_cols = 3;
-	const int category_num_rows = (int)((categories.size() + category_num_cols - 1) / category_num_cols);
-	const int picker_num_rows = (int)((active_category.num_emojis + active_category.num_columns - 1) / active_category.num_columns);
-	const float picker_body_width_px = myMax(420.f, 72.f * (float)myMax(category_num_cols, active_category.num_columns));
-	const float picker_body_height_px = 34.f + 46.f * category_num_rows + 56.f * picker_num_rows;
-	const Vec2f picker_body_dims(
-		gl_ui->getUIWidthForDevIndepPixelWidth(picker_body_width_px),
-		gl_ui->getUIWidthForDevIndepPixelWidth(picker_body_height_px)
+	const std::vector<EmojiUtils::EmojiPickerCategory> categories = EmojiUtils::buildPickerCategories(gui_client->getRecentEmojiHistory());
+	if(categories.empty())
+		return;
+	const Vec2f picker_viewport_dims(
+		gl_ui->getUIWidthForDevIndepPixelWidth(emoji_picker_fixed_body_width_px),
+		gl_ui->getUIWidthForDevIndepPixelWidth(emoji_picker_fixed_body_height_px)
 	);
-	emoji_grid_container->setPosAndDims(Vec2f(0.f, 0.f), picker_body_dims);
-	emoji_grid_container->recomputeLayout();
-	const Vec2f picker_window_dims(picker_body_dims.x + gl_ui->getUIWidthForDevIndepPixelWidth(22), picker_body_dims.y + gl_ui->getUIWidthForDevIndepPixelWidth(44));
+
+	const Vec2f picker_window_dims(
+		picker_viewport_dims.x + gl_ui->getUIWidthForDevIndepPixelWidth(22),
+		picker_viewport_dims.y + gl_ui->getUIWidthForDevIndepPixelWidth(44)
+	);
 	const float picker_margin = gl_ui->getUIWidthForDevIndepPixelWidth(20);
+	const float picker_min_x = -1.f + picker_margin;
 	const float picker_max_x = 1.f - picker_margin - picker_window_dims.x;
 	const float picker_max_y = gl_ui->getViewportMinMaxY() - picker_margin - picker_window_dims.y;
+	const float picker_safe_min_x = background_pos.x + background_w + gl_ui->getUIWidthForDevIndepPixelWidth(28.f);
+	const float picker_anchor_x = myMax(emoji_button_pos.x + emoji_button->getDims().x - picker_window_dims.x, picker_safe_min_x);
 	const Vec2f picker_pos(
-		myMin(emoji_button_pos.x, picker_max_x),
+		myClamp(picker_anchor_x, picker_min_x, picker_max_x),
 		myMin(chat_line_edit->getRect().getMax().y + gl_ui->getUIWidthForDevIndepPixelWidth(16), picker_max_y)
 	);
 
 	emoji_window->setPosAndDims(picker_pos, picker_window_dims);
+
+	const float picker_padding = gl_ui->getUIWidthForDevIndepPixelWidth(10.f);
+	const float picker_title_bar_h = gl_ui->getUIWidthForDevIndepPixelWidth(28.f);
+	const Rect2f picker_body_rect(
+		picker_pos + Vec2f(picker_padding),
+		picker_pos + picker_window_dims - Vec2f(picker_padding, picker_title_bar_h)
+	);
+	const float category_button_height = gl_ui->getUIWidthForDevIndepPixelWidth(emoji_picker_category_button_height_px);
+	const float category_gap = gl_ui->getUIWidthForDevIndepPixelWidth(emoji_picker_category_gap_px);
+	const float category_bottom_gap = gl_ui->getUIWidthForDevIndepPixelWidth(emoji_picker_category_bottom_gap_px);
+	float category_row_height = category_button_height;
+	float category_total_width = 0.f;
+	for(size_t i=0; i<emoji_category_buttons.size(); ++i)
+	{
+		const Vec2f button_dims = emoji_category_buttons[i]->getDims();
+		category_row_height = myMax(category_row_height, button_dims.y);
+		category_total_width += button_dims.x;
+	}
+	category_total_width += myMax(0, (int)emoji_category_buttons.size() - 1) * category_gap;
+	const float category_start_x = picker_body_rect.getMin().x + myMax(0.f, (picker_body_rect.getWidths().x - category_total_width) * 0.5f);
+	const float category_y = picker_body_rect.getMax().y - category_row_height;
+	emoji_picker_category_rect = Rect2f(
+		Vec2f(picker_body_rect.getMin().x, category_y - category_bottom_gap),
+		picker_body_rect.getMax()
+	);
+
+	float cur_category_x = category_start_x;
+	for(size_t i=0; i<emoji_category_buttons.size(); ++i)
+	{
+		const Vec2f button_dims = emoji_category_buttons[i]->getDims();
+		const Vec2f category_pos(cur_category_x, category_y + (category_row_height - button_dims.y) * 0.5f);
+		emoji_category_buttons[i]->setPos(category_pos);
+		emoji_category_buttons[i]->setClipRegion(emoji_picker_category_rect);
+		cur_category_x += button_dims.x + category_gap;
+	}
+
+	emoji_picker_scroll_rect = Rect2f(
+		picker_body_rect.getMin(),
+		Vec2f(picker_body_rect.getMax().x, emoji_picker_category_rect.getMin().y)
+	);
+	emoji_grid_container->setPosAndDims(Vec2f(0.f, 0.f), Vec2f(0.f));
+	emoji_grid_container->recomputeLayout();
+	const Vec2f picker_content_dims = emoji_grid_container->getDims();
+	emoji_picker_max_scroll_offset = myMax(0.f, picker_content_dims.y - emoji_picker_scroll_rect.getWidths().y);
+	emoji_picker_scroll_offset = myClamp(emoji_picker_scroll_offset, 0.f, emoji_picker_max_scroll_offset);
+	const Vec2f picker_content_pos(
+		emoji_picker_scroll_rect.getMin().x,
+		emoji_picker_scroll_rect.getMax().y - picker_content_dims.y + emoji_picker_scroll_offset
+	);
+	emoji_grid_container->setPos(picker_content_pos);
+	emoji_grid_container->setClipRegion(emoji_picker_scroll_rect);
 }
 
 
@@ -550,6 +679,8 @@ void ChatUI::setWidgetVisibilityForExpanded()
 	chat_line_edit->setVisible(expanded && visible);
 	emoji_button->setVisible(expanded && visible);
 	emoji_window->setVisible(expanded && visible && emoji_picker_open);
+	for(size_t i=0; i<emoji_category_buttons.size(); ++i)
+		emoji_category_buttons[i]->setVisible(expanded && visible && emoji_picker_open);
 
 	for(auto it = messages.begin(); it != messages.end(); ++it)
 	{
@@ -591,6 +722,7 @@ void ChatUI::eventOccurred(GLUICallbackEvent& event)
 				if(current_emoji_category != i)
 				{
 					current_emoji_category = i;
+					emoji_picker_scroll_offset = 0.f;
 					rebuildEmojiPickerContents();
 					updateWidgetTransforms();
 				}
@@ -633,12 +765,19 @@ void ChatUI::sendEmojiMessage(const std::string& emoji)
 		return;
 
 	gui_client->sendEmojiChatMessage(emoji);
-	setEmojiPickerOpen(false);
+	rebuildEmojiPickerContents();
+	updateWidgetTransforms();
 }
 
 
 void ChatUI::setEmojiPickerOpen(bool open)
 {
 	emoji_picker_open = open;
+	if(open)
+	{
+		emoji_picker_scroll_offset = 0.f;
+		rebuildEmojiPickerContents();
+		updateWidgetTransforms();
+	}
 	setWidgetVisibilityForExpanded();
 }
