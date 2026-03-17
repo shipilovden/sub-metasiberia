@@ -121,3 +121,16 @@ Browser-side note:
 
 - `Manage gestures` button icon in webclient is set to `plus.png` (same visual icon as add gesture action).
 - Source: `gui_client/GestureUI.cpp` (`edit_gestures_button`).
+
+## 10. 2026-03-17 Floating Chat Rollout
+
+- Webclient uses the same shared `GUIClient` path as the desktop client, so floating emoji and floating text previews above avatars ship to web through the normal Emscripten `gui_client` rebuild.
+- During the rebuild, two web-only blockers were fixed:
+  - `glare-core/networking/EmscriptenWebSocket.h`: added a no-op `setTimeout()` override to stay compatible with the shared `SocketInterface` contract.
+  - `gui_client/PhotoModeUI.cpp`: VK HTTP helper code is now compiled only for non-Emscripten targets, matching the existing desktop-only upload flow.
+- Verified build output in `C:\programming\substrata_output\test_builds`:
+  - `gui_client.js`
+  - `gui_client.wasm`
+  - `gui_client.data`
+  - `webclient.html`
+- Deployed these four files to `/root/cyberspace_server_state/webclient/` on `Metasiberia v2` and confirmed live `/webclient` serves the updated cache-busting hashes.

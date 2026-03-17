@@ -85,3 +85,8 @@
 - The floating-overhead chat effect is no longer limited to emoji-only messages.
 - Incoming regular chat text now spawns the same upward-moving overhead effect above the sender avatar.
 - Floating text previews are sanitised, whitespace-normalised, and truncated to a short single-line preview so they stay readable and do not produce oversized world billboards.
+
+## 2026-03-17 webclient rollout
+
+- The webclient inherits the same floating chat and floating emoji behaviour through the shared `GUIClient` code path used by the Emscripten build.
+- The Emscripten rebuild was validated in `emscripten_build3`, and the refreshed `gui_client.js`, `gui_client.wasm`, `gui_client.data`, and `webclient.html` were deployed to `Metasiberia v2`.

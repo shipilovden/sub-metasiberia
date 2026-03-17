@@ -1022,6 +1022,7 @@ static std::string safeSnippet(const std::string& s, size_t max_len)
 }
 
 
+#if !EMSCRIPTEN
 static void throwVKErrorIfPresent(const JSONParser& parser, const JSONNode& root)
 {
 	if(!root.hasChild("error"))
@@ -1125,6 +1126,7 @@ static uint64 parseVKGroupIdFromScreenName(HTTPClient& client, const std::string
 		throw glare::Exception("Unexpected VK API groups.getById response type: " + JSONNode::typeString(resp_node.type));
 	}
 }
+#endif
 
 
 static std::string getOptionalEnvVar(const char* name)
