@@ -78,23 +78,6 @@ Copyright Glare Technologies Limited 2024 -
 static void doOneMainLoopIter();
 
 
-#if defined(EMSCRIPTEN)
-static std::string firstExistingFontPathOrFallback(std::initializer_list<const char*> candidate_paths)
-{
-	for(const char* candidate : candidate_paths)
-	{
-		if(FileUtils::fileExists(candidate))
-			return candidate;
-	}
-
-	if(candidate_paths.size() == 0)
-		return std::string();
-
-	return std::string(*candidate_paths.begin());
-}
-#endif
-
-
 class SDLClientGLUICallbacks : public GLUICallbacks
 {
 public:
@@ -293,20 +276,8 @@ int main(int argc, char** argv)
 		const std::string emoji_font_path = "/System/Library/Fonts/SFNS.ttf";
 #elif defined(EMSCRIPTEN)
 		// Use a font with Cyrillic glyph coverage for webclient UI strings.
-		const std::string font_path = firstExistingFontPathOrFallback({
-			"/data/resources/Roboto-Regular.ttf",
-			"data/resources/Roboto-Regular.ttf",
-			"./data/resources/Roboto-Regular.ttf"
-		});
-		const std::string emoji_font_path = firstExistingFontPathOrFallback({
-			"/data/resources/NotoColorEmoji_WindowsCompatible.ttf",
-			"/data/resources/NotoColorEmoji.ttf",
-			"data/resources/NotoColorEmoji_WindowsCompatible.ttf",
-			"data/resources/NotoColorEmoji.ttf",
-			"./data/resources/NotoColorEmoji_WindowsCompatible.ttf",
-			"./data/resources/NotoColorEmoji.ttf",
-			"/data/resources/Roboto-Regular.ttf"
-		});
+		const std::string font_path       = base_dir + "/data/resources/Roboto-Regular.ttf";
+		const std::string emoji_font_path = base_dir + "/data/resources/Roboto-Regular.ttf";
 #else
 		// Linux:
 		const std::string font_path       = base_dir + "/data/resources/TruenoLight-E2pg.otf";

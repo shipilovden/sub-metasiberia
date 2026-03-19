@@ -480,10 +480,6 @@ void ChatUI::setDrawAreaBottomLeftY(float draw_area_bottom_left_y_)
 
 static const float button_spacing_px = 10;
 static const float button_w_px = 20;
-static const float web_expand_button_margin_px = 18.f;
-static const float web_expand_button_size_px = 52.f;
-static const float default_expand_button_margin_px = 20.f;
-static const float default_expand_button_size_px = 36.f;
 
 
 void ChatUI::handleMouseMoved(MouseEvent& mouse_event)
@@ -591,19 +587,10 @@ void ChatUI::updateWidgetTransforms()
 	collapse_button->setPosAndDims(Vec2f(background_pos.x, text_top_y + gl_ui->getUIWidthForDevIndepPixelWidth(button_spacing_px + 8)), Vec2f(button_w, button_h));
 
 	//---------------------------- Update expand_button ----------------------------
-	#if EMSCRIPTEN
-	const float expand_button_margin_px = web_expand_button_margin_px;
-	const float expand_button_size_px = web_expand_button_size_px;
-	#else
-	const float expand_button_margin_px = default_expand_button_margin_px;
-	const float expand_button_size_px = default_expand_button_size_px;
-	#endif
-	const float expand_button_w = gl_ui->getUIWidthForDevIndepPixelWidth(expand_button_size_px);
-	const float expand_button_margin = gl_ui->getUIWidthForDevIndepPixelWidth(expand_button_margin_px);
-	expand_button->setPosAndDims(
-		Vec2f(-1.f + expand_button_margin, -gl_ui->getViewportMinMaxY() + expand_button_margin),
-		Vec2f(expand_button_w, expand_button_w)
-	);
+	const float expand_button_w_px = 36;
+	const float expand_button_w = gl_ui->getUIWidthForDevIndepPixelWidth(expand_button_w_px);
+	expand_button->setPosAndDims(Vec2f(-1.f + gl_ui->getUIWidthForDevIndepPixelWidth(20), -gl_ui->getViewportMinMaxY() + gl_ui->getUIWidthForDevIndepPixelWidth(20 - 6) /*background_pos.y *//*+ background_h - button_h*/), 
+		Vec2f(expand_button_w, expand_button_w));
 
 	//---------------------------- Update emoji_window ----------------------------
 	const std::vector<EmojiUtils::EmojiPickerCategory> categories = EmojiUtils::buildPickerCategories(gui_client->getRecentEmojiHistory());

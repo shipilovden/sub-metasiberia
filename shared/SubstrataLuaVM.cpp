@@ -302,7 +302,7 @@ static int createObject(lua_State* state)
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(sub_lua_vm->gui_client->scratch_packet, Protocol::CreateObject);
-		ob->writeToNetworkStream(sub_lua_vm->gui_client->scratch_packet);
+		ob->writeToNetworkStream(sub_lua_vm->gui_client->scratch_packet, sub_lua_vm->gui_client->server_protocol_version);
 
 		enqueueMessageToSend(*sub_lua_vm->gui_client->client_thread, sub_lua_vm->gui_client->scratch_packet);
 	}
