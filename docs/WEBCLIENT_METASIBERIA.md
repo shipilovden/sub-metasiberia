@@ -142,3 +142,4 @@ Browser-side note:
 - Webclient UI emoji no longer use `Roboto-Regular.ttf` as the emoji font.
 - Added `resources/NotoColorEmoji_WindowsCompatible.ttf` plus `resources/NotoColorEmoji_LICENSE.txt`, and the Emscripten client now prefers that file for emoji rendering with a safe fallback to Roboto if the preload is stale.
 - Rebuilt `gui_client.js`, `gui_client.wasm`, `gui_client.data`, and `webclient.html` in `C:\programming\substrata_output\test_builds` and redeployed them to `/root/cyberspace_server_state/webclient/` with a server-side backup in `/root/programming/deploy_backups/`.
+- Production follow-up: `gui_client.data` is now served without `zstd/deflate` content-encoding from the built-in C++ webserver, because Chrome could intermittently fail large compressed downloads with `ERR_CONTENT_LENGTH_MISMATCH` on `vr.metasiberia.com/webclient`.
