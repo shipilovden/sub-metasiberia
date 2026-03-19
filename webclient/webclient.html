@@ -24,22 +24,13 @@
 		#status {
 			font-family: 'Arial', sans-serif;
 			font-size: 1.5em;
-			color: rgb(108, 108, 108);
-			position: fixed;
-			left: 50%;
-			top: 50%;
-			transform: translate(-50%, -50%);
-			padding: 20px 28px;
-			min-width: min(640px, calc(100vw - 64px));
-			max-width: calc(100vw - 64px);
-			box-sizing: border-box;
-			background: rgba(255, 255, 255, 0.96);
-			border: 2px solid rgb(170, 170, 170);
-			box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
-			text-align: center;
-			white-space: nowrap;
-			z-index: 20;
-			pointer-events: none;
+			color: rgb(150, 150, 150); /* font colour */
+			margin-left: auto;
+			margin-right: auto;
+			margin-top: 100px;
+			padding: 20px;
+			width: 30%;
+			border: 2px solid rgb(150, 150, 150);
 		}
 
 		.background-div {
@@ -127,7 +118,7 @@
 		</style>
 	</head>
 	<body>
-		<div id="status">Downloading MetaSiberia...</div>
+		<div id="status">downloading...</div>
 
 		<div class="background-div" id="background-div">
 			<div id="iframe-container-camera">
@@ -154,25 +145,6 @@
 		isNode = false; // To fix runtime error with new Emscripten
 
 		var statusElement = document.getElementById('status');
-
-		function formatWebclientStatusText(text) {
-			if(!text)
-				return "";
-
-			if(text.startsWith("Downloading data"))
-				return text.replace("Downloading data", "Downloading MetaSiberia");
-
-			if(text.startsWith("Downloading..."))
-				return "Downloading MetaSiberia...";
-
-			if(text.startsWith("Preparing..."))
-				return text.replace("Preparing...", "Preparing MetaSiberia...");
-
-			if(text === "All downloads complete.")
-				return "Launching MetaSiberia...";
-
-			return text;
-		}
 
 		function forceWebclientGesturePanelVisible() {
 			try
@@ -320,90 +292,10 @@
 		function installMetasiberiaButtonOverrides(moduleRef) {
 			const buttonIcons = [
 				// Keep override minimal and robust: files with spaces may 404 on current server URL decoding.
-				// We override the D-pad to control size/placement in webclient,
-				// and re-seed the collapsed chat icon so it stays visible in the lower-left corner.
-				"dir_pad.png",
-				"expand_chat_icon.png"
+				// We only override D-pad to control size/placement in webclient.
+				"dir_pad.png"
 			];
 			function processButtonIconBytes(iconName, bytes) {
-				if(iconName === "expand_chat_icon.png")
-				{
-					if(typeof document === "undefined")
-						return Promise.resolve(bytes);
-
-					const size = 256;
-					const canvas = document.createElement("canvas");
-					canvas.width = size;
-					canvas.height = size;
-					const ctx = canvas.getContext("2d");
-					if(!ctx)
-						return Promise.resolve(bytes);
-
-					const cx = size * 0.5;
-					const cy = size * 0.5;
-					const outerR = size * 0.485;
-					const innerR = size * 0.44;
-
-					ctx.clearRect(0, 0, size, size);
-					ctx.fillStyle = "#eef2f7";
-					ctx.beginPath();
-					ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-					ctx.fill();
-
-					ctx.fillStyle = "#273149";
-					ctx.beginPath();
-					ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-					ctx.fill();
-
-					ctx.strokeStyle = "#f6f8fb";
-					ctx.fillStyle = "#f6f8fb";
-					ctx.lineWidth = size * 0.075;
-					ctx.lineJoin = "round";
-
-					const bubbleX = size * 0.24;
-					const bubbleY = size * 0.28;
-					const bubbleW = size * 0.52;
-					const bubbleH = size * 0.34;
-					const bubbleR = size * 0.12;
-
-					ctx.beginPath();
-					ctx.moveTo(bubbleX + bubbleR, bubbleY);
-					ctx.lineTo(bubbleX + bubbleW - bubbleR, bubbleY);
-					ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY, bubbleX + bubbleW, bubbleY + bubbleR);
-					ctx.lineTo(bubbleX + bubbleW, bubbleY + bubbleH - bubbleR);
-					ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY + bubbleH, bubbleX + bubbleW - bubbleR, bubbleY + bubbleH);
-					ctx.lineTo(bubbleX + bubbleW * 0.45, bubbleY + bubbleH);
-					ctx.lineTo(bubbleX + bubbleW * 0.25, bubbleY + bubbleH + size * 0.14);
-					ctx.lineTo(bubbleX + bubbleW * 0.28, bubbleY + bubbleH);
-					ctx.lineTo(bubbleX + bubbleR, bubbleY + bubbleH);
-					ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleH, bubbleX, bubbleY + bubbleH - bubbleR);
-					ctx.lineTo(bubbleX, bubbleY + bubbleR);
-					ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + bubbleR, bubbleY);
-					ctx.closePath();
-					ctx.stroke();
-
-					const dotY = bubbleY + bubbleH * 0.48;
-					const dotR = size * 0.036;
-					[bubbleX + bubbleW * 0.28, bubbleX + bubbleW * 0.50, bubbleX + bubbleW * 0.72].forEach((dotX) => {
-						ctx.beginPath();
-						ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
-						ctx.fill();
-					});
-
-					return new Promise(resolve => {
-						canvas.toBlob(blob => {
-							if(!blob)
-							{
-								resolve(bytes);
-								return;
-							}
-							blob.arrayBuffer()
-								.then(buffer => resolve(new Uint8Array(buffer)))
-								.catch(() => resolve(bytes));
-						}, "image/png");
-					});
-				}
-
 				// For webclient only, keep D-pad position adjustment while restoring size.
 				if(iconName !== "dir_pad.png")
 					return Promise.resolve(bytes);
@@ -545,7 +437,7 @@
 			})(),
 			setStatus: (text) => {
 				//console.log("~~~~~~~setStatus: " + text + "~~~~~~~~~");
-				statusElement.innerText = formatWebclientStatusText(text);
+				statusElement.innerText = text;
 			},
 			totalDependencies: 0,
 			monitorRunDependencies: (left) => {
@@ -574,7 +466,8 @@
 			}
 		};
 
-		// Keep webclient boot deterministic: texture overrides are installed after the preload FS is ready.
+		// NOTE: Don't pre-seed icons here. They are now packaged in gui_client.data,
+		// and pre-creating the same files causes Emscripten preload ErrnoError (EEXIST).
 		installMetasiberiaButtonOverrides(Module);
 
 		Module.setStatus('Downloading...');

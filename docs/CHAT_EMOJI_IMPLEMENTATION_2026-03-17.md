@@ -90,3 +90,8 @@
 
 - The webclient inherits the same floating chat and floating emoji behaviour through the shared `GUIClient` code path used by the Emscripten build.
 - The Emscripten rebuild was validated in `emscripten_build3`, and the refreshed `gui_client.js`, `gui_client.wasm`, `gui_client.data`, and `webclient.html` were deployed to `Metasiberia v2`.
+
+## 2026-03-19 web overlay chat hotfix
+
+- Overlay chat in Emscripten no longer depends on successful emoji picker construction during `ChatUI::create()`: if the web-only emoji UI throws, the base chat input plus collapse/expand button still finish creating.
+- The small overlay emoji button in Emscripten now uses a plain `:)` fallback label during bootstrap, reducing the chance that early web emoji font issues can break the whole chat HUD.
