@@ -143,3 +143,10 @@ Browser-side note:
 - Added `resources/NotoColorEmoji_WindowsCompatible.ttf` plus `resources/NotoColorEmoji_LICENSE.txt`, and the Emscripten client now prefers that file for emoji rendering with a safe fallback to Roboto if the preload is stale.
 - Rebuilt `gui_client.js`, `gui_client.wasm`, `gui_client.data`, and `webclient.html` in `C:\programming\substrata_output\test_builds` and redeployed them to `/root/cyberspace_server_state/webclient/` with a server-side backup in `/root/programming/deploy_backups/`.
 - Production follow-up: `gui_client.data` is now served without `zstd/deflate` content-encoding from the built-in C++ webserver, because Chrome could intermittently fail large compressed downloads with `ERR_CONTENT_LENGTH_MISMATCH` on `vr.metasiberia.com/webclient`.
+
+## 12. 2026-03-19 Web Loading Overlay and Chat Toggle
+
+- The loading overlay in `webclient/webclient.html` is now anchored to the true viewport centre with a fixed-position panel instead of a top margin, so the Metasiberia boot message stays visually centered on desktop browsers.
+- Boot status strings are branded for Metasiberia: `Downloading MetaSiberia...`, `Preparing MetaSiberia...`, and `Launching MetaSiberia...`.
+- The collapsed lower-left chat toggle in webclient is rendered larger in `gui_client/ChatUI.cpp` for Emscripten builds.
+- `webclient.html` also refreshes `/webclient/data/resources/buttons/expand_chat_icon.png` through the existing button-override path so the lower-left chat icon does not disappear if the packaged asset is stale or unreadable in browser runtime.
