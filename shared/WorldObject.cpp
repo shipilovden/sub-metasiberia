@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2016 -
 #include "ResourceManager.h"
 #include "LuaScriptEvaluator.h"
 #include "ObjectEventHandlers.h"
+#include "Protocol.h"
 #include "URLUtils.h"
 #if GUI_CLIENT
 #include "../audio/AudioEngine.h"
@@ -117,6 +118,7 @@ WorldObject::WorldObject() noexcept
 	friction = 0.5f;
 	restitution = 0.2f;
 	centre_of_mass_offset_os = Vec3f(0.f);
+	text_font = "Default";
 
 	audio_volume = 1;
 
@@ -548,7 +550,7 @@ WorldObject::ObjectType WorldObject::objectTypeForString(const std::string& ob_t
 }
 
 
-static const uint32 WORLD_OBJECT_SERIALISATION_VERSION = 22;
+static const uint32 WORLD_OBJECT_SERIALISATION_VERSION = 23;
 /*
 Version history:
 9: introduced voxels
@@ -565,6 +567,7 @@ Version history:
 20: Added centre_of_mass_offset_os
 21: Added chunk_batch0_start etc.
 22: Added per-type data (length-prefixed)
+23: Added text_font to disk serialisation.
 */
 
 
@@ -723,6 +726,7 @@ void WorldObject::writeToStream(RandomAccessOutStream& stream) const
 
 	stream.writeStringLengthFirst(script);
 	stream.writeStringLengthFirst(content);
+	stream.writeStringLengthFirst(text_font); // New in v23.
 	stream.writeStringLengthFirst(target_url);
 	stream.writeStringLengthFirst(audio_source_url);
 	stream.writeFloat(audio_volume);
@@ -819,6 +823,11 @@ void readWorldObjectFromStream(RandomAccessInStream& stream, WorldObject& ob)
 
 	if(v >= 6)
 		ob.content = stream.readStringLengthFirst(WorldObject::MAX_CONTENT_SIZE);
+
+	if(v >= 23)
+		ob.text_font = stream.readStringLengthFirst(WorldObject::MAX_FONT_NAME_SIZE);
+	else
+		ob.text_font = "Default";
 
 	if(v >= 8)
 		ob.target_url = stream.readStringLengthFirst(WorldObject::MAX_URL_SIZE);
@@ -974,6 +983,12 @@ void readWorldObjectFromStream(RandomAccessInStream& stream, WorldObject& ob)
 
 void WorldObject::writeToNetworkStream(RandomAccessOutStream& stream) const // Write without version
 {
+	writeToNetworkStream(stream, Protocol::CyberspaceProtocolVersion);
+}
+
+
+void WorldObject::writeToNetworkStream(RandomAccessOutStream& stream, uint32 peer_protocol_version) const // Write without version
+{
 	::writeToStream(uid, stream);
 	stream.writeUInt32((uint32)object_type);
 	stream.writeStringLengthFirst(model_url);
@@ -1042,6 +1057,11 @@ void WorldObject::writeToNetworkStream(RandomAccessOutStream& stream) const // W
 
 	// New in v22:
 	writeWorldObjectPerTypeData(stream, *this);
+
+	// Append optional tail fields so older peers can ignore them safely using the packet length.
+	// Only text objects need text_font in network state.
+	if((peer_protocol_version >= 51) && (object_type == WorldObject::ObjectType_Text))
+		stream.writeStringLengthFirst(text_font);
 }
 
 
@@ -1056,6 +1076,7 @@ void WorldObject::copyNetworkStateFrom(const WorldObject& other)
 
 	script = other.script;
 	content = other.content;
+	text_font = other.text_font;
 	target_url = other.target_url;
 	audio_source_url = other.audio_source_url;
 	audio_volume = other.audio_volume;
@@ -1122,6 +1143,7 @@ std::string WorldObject::serialiseToXML(int tab_depth) const
 
 	XMLWriteUtils::writeStringElemToXML(s, "script", script, tab_depth + 1);
 	XMLWriteUtils::writeStringElemToXML(s, "content", content, tab_depth + 1);
+	XMLWriteUtils::writeStringElemToXML(s, "text_font", text_font, tab_depth + 1);
 	XMLWriteUtils::writeStringElemToXML(s, "target_url", target_url, tab_depth + 1);
 	XMLWriteUtils::writeStringElemToXML(s, "audio_source_url", audio_source_url, tab_depth + 1);
 
@@ -1208,6 +1230,7 @@ Reference<WorldObject> WorldObject::loadFromXMLElem(const std::string& object_fi
 
 	ob->script           = XMLParseUtils::parseStringWithDefault(elem, "script", "");
 	ob->content          = XMLParseUtils::parseStringWithDefault(elem, "content", "");
+	ob->text_font        = XMLParseUtils::parseStringWithDefault(elem, "text_font", "Default");
 	ob->target_url       = XMLParseUtils::parseStringWithDefault(elem, "target_url", "");
 	ob->audio_source_url = XMLParseUtils::parseStringWithDefault(elem, "audio_source_url", "");
 
@@ -1279,7 +1302,61 @@ Reference<WorldObject> WorldObject::loadFromXMLElem(const std::string& object_fi
 }
 
 
+namespace
+{
+void readWorldObjectFromNetworkStreamGivenUIDImpl(RandomAccessInStream& stream, WorldObject& ob, bool legacy_text_font_mid_stream);
+}
+
+
 void readWorldObjectFromNetworkStreamGivenUID(RandomAccessInStream& stream, WorldObject& ob) // UID will have been read already
+{
+	readWorldObjectFromNetworkStreamGivenUIDImpl(stream, ob, /*legacy_text_font_mid_stream=*/false);
+}
+
+
+namespace
+{
+bool looksLikeTargetURLString(const std::string& s)
+{
+	if(s.empty())
+		return true;
+
+	if(s.find("://") != std::string::npos)
+		return true;
+
+	if(hasPrefix(s, "/") || hasPrefix(s, "#") || hasPrefix(s, "?"))
+		return true;
+
+	if(hasPrefix(s, "www.") || hasPrefix(s, "mailto:") || hasPrefix(s, "tel:"))
+		return true;
+
+	if((s.find('.') != std::string::npos) && (s.find(' ') == std::string::npos))
+		return true;
+
+	return false;
+}
+
+
+bool looksLikeFontNameString(const std::string& s)
+{
+	if(s.empty() || (s.size() > WorldObject::MAX_FONT_NAME_SIZE))
+		return false;
+
+	if(looksLikeTargetURLString(s))
+		return false;
+
+	for(size_t i=0; i<s.size(); ++i)
+	{
+		const unsigned char c = (unsigned char)s[i];
+		if(c < 32)
+			return false;
+	}
+
+	return true;
+}
+
+
+void readWorldObjectFromNetworkStreamGivenUIDImpl(RandomAccessInStream& stream, WorldObject& ob, bool legacy_text_font_mid_stream)
 {
 	// NOTE: The data in here needs to match that in copyNetworkStateFrom()
 
@@ -1318,6 +1395,20 @@ void readWorldObjectFromNetworkStreamGivenUID(RandomAccessInStream& stream, Worl
 		if(ob.content != new_content)
 			ob.changed_flags |= WorldObject::CONTENT_CHANGED;
 		ob.content = new_content;
+	}
+
+	if(legacy_text_font_mid_stream && (ob.object_type == WorldObject::ObjectType_Text))
+	{
+		const std::string new_text_font = stream.readStringLengthFirst(WorldObject::MAX_FONT_NAME_SIZE);
+		if(ob.text_font != new_text_font)
+			ob.changed_flags |= WorldObject::TEXT_FONT_CHANGED;
+		ob.text_font = new_text_font;
+	}
+	else
+	{
+		if(ob.text_font != "Default")
+			ob.changed_flags |= WorldObject::TEXT_FONT_CHANGED;
+		ob.text_font = "Default";
 	}
 
 	ob.target_url = stream.readStringLengthFirst(WorldObject::MAX_URL_SIZE);
@@ -1417,10 +1508,100 @@ void readWorldObjectFromNetworkStreamGivenUID(RandomAccessInStream& stream, Worl
 	else
 		setWorldObjectPerTypeDataDefaults(ob);
 
+	if(!legacy_text_font_mid_stream && (ob.object_type == WorldObject::ObjectType_Text) && !stream.endOfStream())
+	{
+		const std::string new_text_font = stream.readStringLengthFirst(WorldObject::MAX_FONT_NAME_SIZE);
+		if(ob.text_font != new_text_font)
+			ob.changed_flags |= WorldObject::TEXT_FONT_CHANGED;
+		ob.text_font = new_text_font;
+	}
+
 	// Set ephemeral state
 	//ob.state = WorldObject::State_Alive;
 
 	ob.exclude_from_lod_chunk_mesh = BitUtils::isBitSet(ob.flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH);
+}
+} // anonymous namespace
+
+
+void readWorldObjectFromNetworkStreamGivenUID(RandomAccessInStream& stream, WorldObject& ob, uint32 peer_protocol_version) // UID will have been read already
+{
+	const size_t start_read_index = stream.getReadIndex();
+	const WorldObject initial_ob = ob;
+
+	WorldObject normal_ob = initial_ob;
+	size_t normal_end_read_index = start_read_index;
+	std::string normal_error_message;
+	bool normal_success = false;
+	try
+	{
+		readWorldObjectFromNetworkStreamGivenUIDImpl(stream, normal_ob, /*legacy_text_font_mid_stream=*/false);
+		normal_end_read_index = stream.getReadIndex();
+		normal_success = true;
+	}
+	catch(glare::Exception& e)
+	{
+		normal_error_message = e.what();
+	}
+
+	const bool should_try_legacy_text_parse =
+		(!normal_success) ||
+		((peer_protocol_version < 51) && (normal_ob.object_type == WorldObject::ObjectType_Text));
+
+	WorldObject legacy_ob = initial_ob;
+	size_t legacy_end_read_index = start_read_index;
+	std::string legacy_error_message;
+	bool legacy_success = false;
+	if(should_try_legacy_text_parse)
+	{
+		stream.setReadIndex(start_read_index);
+		try
+		{
+			readWorldObjectFromNetworkStreamGivenUIDImpl(stream, legacy_ob, /*legacy_text_font_mid_stream=*/true);
+			legacy_end_read_index = stream.getReadIndex();
+			legacy_success = true;
+		}
+		catch(glare::Exception& e)
+		{
+			legacy_error_message = e.what();
+		}
+	}
+
+	bool use_legacy_parse = false;
+	if(!normal_success && legacy_success)
+	{
+		use_legacy_parse = true;
+	}
+	else if(normal_success && legacy_success)
+	{
+		use_legacy_parse =
+			(legacy_ob.object_type == WorldObject::ObjectType_Text) &&
+			looksLikeFontNameString(legacy_ob.text_font) &&
+			looksLikeTargetURLString(legacy_ob.target_url) &&
+			(peer_protocol_version < 51);
+	}
+
+	if(use_legacy_parse)
+	{
+		ob.copyNetworkStateFrom(legacy_ob);
+		ob.changed_flags = legacy_ob.changed_flags;
+		stream.setReadIndex(legacy_end_read_index);
+		return;
+	}
+
+	if(normal_success)
+	{
+		ob.copyNetworkStateFrom(normal_ob);
+		ob.changed_flags = normal_ob.changed_flags;
+		stream.setReadIndex(normal_end_read_index);
+		return;
+	}
+
+	stream.setReadIndex(start_read_index);
+	if(!legacy_error_message.empty())
+		throw glare::Exception("Failed to parse WorldObject network state. Normal parse error: " + normal_error_message + ". Legacy text-font parse error: " + legacy_error_message);
+	else
+		throw glare::Exception("Failed to parse WorldObject network state. Normal parse error: " + normal_error_message);
 }
 
 
@@ -1854,6 +2035,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
 static void testObjectsEqual(WorldObject& ob1, WorldObject& ob2)
 {
 	testAssert(ob1.object_type == ob2.object_type);
+	testAssert(ob1.text_font == ob2.text_font);
 
 	testAssert(ob1.getCompressedVoxels().nonNull() == ob2.getCompressedVoxels().nonNull());
 	if(ob1.getCompressedVoxels().nonNull())
@@ -1955,10 +2137,204 @@ void WorldObject::test()
 			readWorldObjectFromStream(file, ob);
 			testAssert(ob.uid == UID(503));
 			testAssert(ob.object_type == WorldObject::ObjectType_Spotlight);
+			testAssert(ob.text_font == "Default");
 
 			// Test defaults are set
 			testAssert(ob.type_data.spotlight_data.cone_start_angle == 0.317560429291521f); // = std::acos(0.95f); (old fixed value)
 			testAssert(ob.type_data.spotlight_data.cone_end_angle   == 0.451026811796262f); // = std::acos(0.9f);  (old fixed value)
+		}
+
+		//--------------------------- Test reading legacy v22 object data without text_font ----------------------------
+		{
+			WorldObject ob;
+			ob.uid = UID(1234);
+			ob.object_type = WorldObject::ObjectType_Text;
+			ob.model_url = "legacy_text_model.bmesh";
+			ob.materials.push_back(new WorldMaterial());
+			ob.lightmap_url = "legacy_lightmap.png";
+			ob.script = "return 1";
+			ob.content = "Legacy text";
+			ob.target_url = "https://vr.metasiberia.com/legacy";
+			ob.audio_source_url = "legacy_audio.mp3";
+			ob.audio_volume = 0.75f;
+			ob.pos = Vec3d(1.0, 2.0, 3.0);
+			ob.axis = Vec3f(0, 0, 1);
+			ob.angle = 0.25f;
+			ob.scale = Vec3f(1.5f, 2.0f, 1.0f);
+			ob.created_time = TimeStamp::currentTime();
+			ob.last_modified_time = ob.created_time;
+			ob.flags = WorldObject::COLLIDABLE_FLAG;
+			ob.setAABBOS(js::AABBox(Vec4f(0, 0, 0, 1), Vec4f(2, 1, 0.25f, 1)));
+
+			BufferOutStream legacy_buf;
+			legacy_buf.writeUInt32(22);
+			::writeToStream(ob.uid, legacy_buf);
+			legacy_buf.writeUInt32((uint32)ob.object_type);
+			legacy_buf.writeStringLengthFirst(ob.model_url);
+			legacy_buf.writeUInt32((uint32)ob.materials.size());
+			for(size_t i=0; i<ob.materials.size(); ++i)
+				::writeWorldMaterialToStream(*ob.materials[i], legacy_buf);
+			legacy_buf.writeStringLengthFirst(ob.lightmap_url);
+			legacy_buf.writeStringLengthFirst(ob.script);
+			legacy_buf.writeStringLengthFirst(ob.content);
+			legacy_buf.writeStringLengthFirst(ob.target_url);
+			legacy_buf.writeStringLengthFirst(ob.audio_source_url);
+			legacy_buf.writeFloat(ob.audio_volume);
+			::writeToStream(ob.pos, legacy_buf);
+			::writeToStream(ob.axis, legacy_buf);
+			legacy_buf.writeFloat(ob.angle);
+			::writeToStream(ob.scale, legacy_buf);
+			ob.created_time.writeToStream(legacy_buf);
+			ob.last_modified_time.writeToStream(legacy_buf);
+			::writeToStream(ob.creator_id, legacy_buf);
+			legacy_buf.writeUInt32(ob.flags);
+			legacy_buf.writeData(ob.getAABBOS().min_.x, sizeof(float) * 3);
+			legacy_buf.writeData(ob.getAABBOS().max_.x, sizeof(float) * 3);
+			legacy_buf.writeInt32(ob.max_model_lod_level);
+			legacy_buf.writeFloat(ob.mass);
+			legacy_buf.writeFloat(ob.friction);
+			legacy_buf.writeFloat(ob.restitution);
+			::writeToStream(ob.centre_of_mass_offset_os, legacy_buf);
+			legacy_buf.writeUInt32(ob.chunk_batch0_start);
+			legacy_buf.writeUInt32(ob.chunk_batch0_end);
+			legacy_buf.writeUInt32(ob.chunk_batch1_start);
+			legacy_buf.writeUInt32(ob.chunk_batch1_end);
+			writeWorldObjectPerTypeData(legacy_buf, ob);
+
+			BufferInStream instream(ArrayRef<uint8>(legacy_buf.buf.data(), legacy_buf.buf.size()));
+			WorldObject ob2;
+			readWorldObjectFromStream(instream, ob2);
+			testAssert(ob2.text_font == "Default");
+			testAssert(ob2.target_url == ob.target_url);
+			testAssert(ob2.audio_source_url == ob.audio_source_url);
+			testAssert(std::fabs(ob2.audio_volume - ob.audio_volume) < 1.0e-6f);
+		}
+
+		//--------------------------- Test network roundtrip with trailing text_font ----------------------------
+		{
+			WorldObject ob;
+			ob.uid = UID(4321);
+			ob.object_type = WorldObject::ObjectType_Text;
+			ob.model_url = "network_text_model.bmesh";
+			ob.materials.push_back(new WorldMaterial());
+			ob.content = "Network text";
+			ob.text_font = "Orbitron";
+			ob.target_url = "https://vr.metasiberia.com/network";
+			ob.audio_source_url = "network_audio.mp3";
+			ob.audio_volume = 0.5f;
+
+			BufferOutStream buf;
+			ob.writeToNetworkStream(buf);
+
+			BufferInStream instream(ArrayRef<uint8>(buf.buf.data(), buf.buf.size()));
+			WorldObject ob2;
+			ob2.uid = readUIDFromStream(instream);
+			readWorldObjectFromNetworkStreamGivenUID(instream, ob2);
+			testAssert(ob2.uid == ob.uid);
+			testAssert(ob2.content == ob.content);
+			testAssert(ob2.text_font == ob.text_font);
+			testAssert(ob2.target_url == ob.target_url);
+			testAssert(ob2.audio_source_url == ob.audio_source_url);
+			testAssert(std::fabs(ob2.audio_volume - ob.audio_volume) < 1.0e-6f);
+		}
+
+		//--------------------------- Test network roundtrip for non-text object without trailing text_font ----------------------------
+		{
+			WorldObject ob;
+			ob.uid = UID(5432);
+			ob.object_type = WorldObject::ObjectType_Spotlight;
+			ob.model_url = "network_spotlight_model.bmesh";
+			ob.materials.push_back(new WorldMaterial());
+			ob.content = "Non-text content should not matter here";
+			ob.target_url = "https://vr.metasiberia.com/spotlight";
+			ob.audio_source_url = "spotlight_audio.mp3";
+			ob.audio_volume = 0.25f;
+			setWorldObjectPerTypeDataDefaults(ob);
+			ob.type_data.spotlight_data.cone_start_angle = 0.2f;
+			ob.type_data.spotlight_data.cone_end_angle = 0.8f;
+
+			BufferOutStream buf;
+			ob.writeToNetworkStream(buf);
+
+			BufferInStream instream(ArrayRef<uint8>(buf.buf.data(), buf.buf.size()));
+			WorldObject ob2;
+			ob2.uid = readUIDFromStream(instream);
+			readWorldObjectFromNetworkStreamGivenUID(instream, ob2);
+			testAssert(ob2.uid == ob.uid);
+			testAssert(ob2.object_type == ob.object_type);
+			testAssert(ob2.text_font == "Default");
+			testAssert(std::fabs(ob2.type_data.spotlight_data.cone_start_angle - ob.type_data.spotlight_data.cone_start_angle) < 1.0e-6f);
+			testAssert(std::fabs(ob2.type_data.spotlight_data.cone_end_angle - ob.type_data.spotlight_data.cone_end_angle) < 1.0e-6f);
+		}
+
+		//--------------------------- Test legacy text-object network packet with text_font inserted before target_url ----------------------------
+		{
+			WorldObject ob;
+			ob.uid = UID(6543);
+			ob.object_type = WorldObject::ObjectType_Text;
+			ob.model_url = "legacy_network_text_model.bmesh";
+			ob.materials.push_back(new WorldMaterial());
+			ob.content = "Legacy network text";
+			ob.text_font = "AAHaymaker";
+			ob.target_url = "https://vr.metasiberia.com/font-test";
+			ob.audio_source_url = "legacy_font_audio.mp3";
+			ob.audio_volume = 0.6f;
+			ob.pos = Vec3d(10.0, 20.0, 30.0);
+			ob.axis = Vec3f(0, 1, 0);
+			ob.angle = 0.75f;
+			ob.scale = Vec3f(1.25f, 1.5f, 1.0f);
+			ob.created_time = TimeStamp::currentTime();
+			ob.last_modified_time = ob.created_time;
+			ob.setAABBOS(js::AABBox(Vec4f(-1, -1, -0.1f, 1), Vec4f(1, 1, 0.1f, 1)));
+
+			BufferOutStream buf;
+			::writeToStream(ob.uid, buf);
+			buf.writeUInt32((uint32)ob.object_type);
+			buf.writeStringLengthFirst(ob.model_url);
+			buf.writeUInt32((uint32)ob.materials.size());
+			for(size_t i=0; i<ob.materials.size(); ++i)
+				::writeWorldMaterialToStream(*ob.materials[i], buf);
+			buf.writeStringLengthFirst(ob.lightmap_url);
+			buf.writeStringLengthFirst(ob.script);
+			buf.writeStringLengthFirst(ob.content);
+			buf.writeStringLengthFirst(ob.text_font); // Legacy buggy placement
+			buf.writeStringLengthFirst(ob.target_url);
+			buf.writeStringLengthFirst(ob.audio_source_url);
+			buf.writeFloat(ob.audio_volume);
+			::writeToStream(ob.pos, buf);
+			::writeToStream(ob.axis, buf);
+			buf.writeFloat(ob.angle);
+			::writeToStream(ob.scale, buf);
+			ob.created_time.writeToStream(buf);
+			ob.last_modified_time.writeToStream(buf);
+			::writeToStream(ob.creator_id, buf);
+			buf.writeUInt32(ob.flags);
+			buf.writeStringLengthFirst(ob.creator_name);
+			buf.writeData(ob.getAABBOS().min_.x, sizeof(float) * 3);
+			buf.writeData(ob.getAABBOS().max_.x, sizeof(float) * 3);
+			buf.writeInt32(ob.max_model_lod_level);
+			buf.writeFloat(ob.mass);
+			buf.writeFloat(ob.friction);
+			buf.writeFloat(ob.restitution);
+			buf.writeUInt32(ob.physics_owner_id);
+			buf.writeDouble(ob.last_physics_ownership_change_global_time);
+			::writeToStream(ob.centre_of_mass_offset_os, buf);
+			buf.writeUInt32(ob.chunk_batch0_start);
+			buf.writeUInt32(ob.chunk_batch0_end);
+			buf.writeUInt32(ob.chunk_batch1_start);
+			buf.writeUInt32(ob.chunk_batch1_end);
+			writeWorldObjectPerTypeData(buf, ob);
+
+			BufferInStream instream(ArrayRef<uint8>(buf.buf.data(), buf.buf.size()));
+			WorldObject ob2;
+			ob2.uid = readUIDFromStream(instream);
+			readWorldObjectFromNetworkStreamGivenUID(instream, ob2, /*peer_protocol_version=*/50);
+			testAssert(ob2.uid == ob.uid);
+			testAssert(ob2.content == ob.content);
+			testAssert(ob2.text_font == ob.text_font);
+			testAssert(ob2.target_url == ob.target_url);
+			testAssert(ob2.audio_source_url == ob.audio_source_url);
+			testAssert(std::fabs(ob2.audio_volume - ob.audio_volume) < 1.0e-6f);
 		}
 
 		//--------------------------- Test camera object per-type data roundtrip ----------------------------
@@ -2024,6 +2400,7 @@ void WorldObject::test()
 			ob.materials.push_back(new WorldMaterial());
 
 			ob.script = "abc";
+			ob.text_font = "Orbitron";
 
 			BufferOutStream buf;
 			ob.writeToStream(buf);

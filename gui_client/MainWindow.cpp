@@ -1068,12 +1068,14 @@ void MainWindow::showEditorDockWidget()
 
 void MainWindow::setObjectEditorControlsEditable(bool editable)
 {
+	ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
 	ui->objectEditor->setControlsEditable(editable);
 }
 
 
 void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_index, bool ob_in_editing_users_world)
 {
+	ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
 	ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 }
 
@@ -1889,7 +1891,7 @@ void MainWindow::on_actionAddHypercard_triggered()
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
@@ -1932,6 +1934,8 @@ void MainWindow::on_actionAdd_Text_triggered()
 	new_world_object->angle = total_rot_angle;
 	new_world_object->scale = Vec3f(0.4f);
 	new_world_object->content = "Some Text";
+	new_world_object->text_font = "Default"; // Initialize font field
+	new_world_object->changed_flags = 0; // NO update flags for new object creation
 	new_world_object->setAABBOS(js::AABBox(Vec4f(0,0,0,1), Vec4f(1,0,1,1)));
 
 	new_world_object->materials.resize(1);
@@ -1941,7 +1945,7 @@ void MainWindow::on_actionAdd_Text_triggered()
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
@@ -1995,7 +1999,7 @@ void MainWindow::on_actionAdd_Spotlight_triggered()
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
@@ -2111,14 +2115,14 @@ void MainWindow::on_actionAdd_Camera_triggered()
 	// Send CreateObject message for camera
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		camera_ob->writeToNetworkStream(scratch_packet);
+		camera_ob->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
 
 	// Send CreateObject message for camera screen
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		screen_ob->writeToNetworkStream(scratch_packet);
+		screen_ob->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
 
@@ -2182,7 +2186,7 @@ void MainWindow::on_actionAdd_Seat_triggered()
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
@@ -2223,7 +2227,7 @@ void MainWindow::on_actionAdd_Portal_triggered()
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
@@ -2470,7 +2474,7 @@ void MainWindow::on_actionAdd_Web_View_triggered()
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
@@ -2554,7 +2558,7 @@ void MainWindow::on_actionAdd_Video_triggered()
 			// Send CreateObject message to server
 			{
 				MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-				new_world_object->writeToNetworkStream(scratch_packet);
+				new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 				enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 			}
@@ -2653,7 +2657,7 @@ void MainWindow::on_actionAdd_Audio_Source_triggered()
 			// Send CreateObject message to server
 			{
 				MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-				new_world_object->writeToNetworkStream(scratch_packet);
+				new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 				enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 			}
@@ -2731,7 +2735,7 @@ void MainWindow::on_actionAdd_Decal_triggered()
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
@@ -2779,7 +2783,7 @@ void MainWindow::on_actionAdd_Voxels_triggered()
 	// Send CreateObject message to server
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
@@ -2947,7 +2951,7 @@ void MainWindow::handlePasteOrDropMimeData(const QMimeData* mime_data)
 					// Note that the recreated object will have a different ID than in the clipboard.
 					{
 						MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-						pasted_ob->writeToNetworkStream(scratch_packet);
+						pasted_ob->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 						enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 
@@ -3169,7 +3173,7 @@ void MainWindow::on_actionCloneObject_triggered()
 		// Send CreateObject message to server
 		{
 			MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-			new_world_object->writeToNetworkStream(scratch_packet);
+			new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
 
 			enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 		}

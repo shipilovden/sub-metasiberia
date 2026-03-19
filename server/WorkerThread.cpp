@@ -2141,7 +2141,7 @@ void WorkerThread::doRun()
 							const UID object_uid = readUIDFromStream(msg_buffer);
 
 							WorldObject temp_ob;
-							readWorldObjectFromNetworkStreamGivenUID(msg_buffer, temp_ob); // Read rest of ObjectFullUpdate message.
+							readWorldObjectFromNetworkStreamGivenUID(msg_buffer, temp_ob, client_protocol_version); // Read rest of ObjectFullUpdate message.
 
 							if(world_state->isInReadOnlyMode())
 							{
@@ -2392,7 +2392,7 @@ void WorkerThread::doRun()
 
 							WorldObjectRef new_ob = new WorldObject();
 							new_ob->uid = readUIDFromStream(msg_buffer); // Read dummy UID
-							readWorldObjectFromNetworkStreamGivenUID(msg_buffer, *new_ob);
+							readWorldObjectFromNetworkStreamGivenUID(msg_buffer, *new_ob, client_protocol_version);
 
 							conPrintIfNotFuzzing("model_url: '" + toStdString(new_ob->model_url) + "', pos: " + new_ob->pos.toString());
 

@@ -134,3 +134,11 @@ Browser-side note:
   - `gui_client.data`
   - `webclient.html`
 - Deployed these four files to `/root/cyberspace_server_state/webclient/` on `Metasiberia v2` and confirmed live `/webclient` serves the updated cache-busting hashes.
+
+## 11. 2026-03-19 Web Fonts and Emoji
+
+- The Emscripten runtime font scan for 3D text objects now checks `/data/resources/fonts` first, matching the preload layout produced by `scripts/make_emscripten_preload_data.rb`.
+- Browser text objects therefore load the same `.woff` font pack from `resources/fonts/` instead of falling back to a single default font because of a wrong runtime path.
+- Webclient UI emoji no longer use `Roboto-Regular.ttf` as the emoji font.
+- Added `resources/NotoColorEmoji_WindowsCompatible.ttf` plus `resources/NotoColorEmoji_LICENSE.txt`, and the Emscripten client now prefers that file for emoji rendering with a safe fallback to Roboto if the preload is stale.
+- Rebuilt `gui_client.js`, `gui_client.wasm`, `gui_client.data`, and `webclient.html` in `C:\programming\substrata_output\test_builds` and redeployed them to `/root/cyberspace_server_state/webclient/` with a server-side backup in `/root/programming/deploy_backups/`.
