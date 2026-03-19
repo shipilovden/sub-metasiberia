@@ -7,6 +7,7 @@
 #include "../indigo/globals.h"
 #include "../graphics/Map2D.h"
 #include "../graphics/ImageMap.h"
+#include "../graphics/TextRenderer.h"
 #include "../maths/vec3.h"
 #include "../maths/GeometrySampling.h"
 #include "../utils/Lock.h"
@@ -20,11 +21,17 @@
 #include "../utils/TaskManager.h"
 #include "../qt/SignalBlocker.h"
 #include "../qt/QtUtils.h"
+#include <QtGui/QIcon>
+#include <QtGui/QImage>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QPixmap>
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QErrorMessage>
+#include <QtWidgets/QAbstractItemView>
 #include <QtCore/QTimer>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 #include <QtWidgets/QColorDialog>
 #include <set>
 #include <stack>
@@ -37,12 +44,88 @@ static const float DEFAULT_MAX_VIDEO_VOLUME = 4;
 static const float SLIDER_MAX_VOLUME = 2;
 
 
+namespace
+{
+QString makeFontPreviewText(const QString& font_name)
+{
+	return QString::fromUtf8("Привет  ") + font_name;
+}
+
+
+QIcon makeFontPreviewIcon(TextRendererRef renderer, const QString& preview_text, const std::string& font_path)
+{
+	try
+	{
+		const int preview_width = 300;
+		const int font_size_px = 20;
+		const int padding_x = 8;
+		const int padding_y = 4;
+
+		TextRendererFontFaceSizeSetRef font_set = new TextRendererFontFaceSizeSet(renderer, font_path);
+		TextRendererFontFaceRef font = font_set->getFontFaceForSize(font_size_px);
+
+		const std::string preview_text_utf8 = QtUtils::toIndString(preview_text);
+		const TextRenderer::SizeInfo size_info = font->getTextSize(preview_text_utf8);
+		const int preview_height = std::max(32, size_info.glyphSize().y + padding_y * 2);
+
+		ImageMapUInt8Ref map = new ImageMapUInt8(preview_width, preview_height, 3);
+		map->set(255);
+
+		font->drawText(*map, preview_text_utf8, padding_x - size_info.bitmap_left, padding_y + size_info.bitmap_top, Colour3f(0, 0, 0), /*render_SDF=*/false);
+
+		const QImage image(
+			(const uchar*)map->getData(),
+			(int)map->getWidth(),
+			(int)map->getHeight(),
+			(int)(map->getWidth() * map->getN()),
+			QImage::Format_RGB888
+		);
+		return QIcon(QPixmap::fromImage(image.copy()));
+	}
+	catch(...)
+	{
+		return QIcon();
+	}
+}
+
+
+void addFontComboItem(QComboBox* combo, const QString& canonical_name, const QIcon& preview_icon)
+{
+	combo->addItem(canonical_name, canonical_name);
+
+	const int index = combo->count() - 1;
+	if(!preview_icon.isNull())
+	{
+		combo->setItemIcon(index, preview_icon);
+		combo->setItemData(index, QSize(360, 36), Qt::SizeHintRole);
+	}
+
+	combo->setItemData(index, canonical_name, Qt::ToolTipRole);
+}
+
+
+QString fontNameForComboIndex(const QComboBox* combo, int index)
+{
+	if(index < 0 || index >= combo->count())
+		return QString();
+
+	QString font_name = combo->itemData(index).toString();
+	if(font_name.isEmpty())
+		font_name = combo->itemText(index);
+	return font_name;
+}
+} // anonymous namespace
+
+
 ObjectEditor::ObjectEditor(QWidget *parent)
 :	QWidget(parent),
 	selected_mat_index(0),
 	edit_timer(new QTimer(this)),
 	shader_editor(NULL),
 	settings(NULL),
+	selected_font_name("Default"),
+	controls_editable(true),
+	text_font_feature_supported(true),
 	spotlight_col(0.85f)
 {
 	setupUi(this);
@@ -62,6 +145,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	connect(this->modelFileSelectWidget,	SIGNAL(filenameChanged(QString&)),	this, SIGNAL(objectChanged()));
 	connect(this->scriptTextEdit,			SIGNAL(textChanged()),				this, SLOT(scriptTextEditChanged()));
 	connect(this->contentTextEdit,			SIGNAL(textChanged()),				this, SIGNAL(objectChanged()));
+	connect(this->fontComboBox,				SIGNAL(currentIndexChanged(int)),	this, SLOT(onFontChanged(int)));
 	
 	connect(this->targetURLLineEdit,		SIGNAL(editingFinished()),			this, SIGNAL(objectChanged()));
 	connect(this->targetURLLineEdit,		SIGNAL(editingFinished()),			this, SLOT(targetURLChanged()));
@@ -140,6 +224,11 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	edit_timer->setInterval(300);
 
 	connect(edit_timer, SIGNAL(timeout()), this, SLOT(editTimerTimeout()));
+
+	this->fontComboBox->setMinimumContentsLength(22);
+	this->fontComboBox->setIconSize(QSize(300, 32));
+	if(this->fontComboBox->view())
+		this->fontComboBox->view()->setTextElideMode(Qt::ElideNone);
 }
 
 
@@ -150,6 +239,9 @@ void ObjectEditor::init() // settings should be set before this.
 
 	SignalBlocker::setValue(gridSpacingDoubleSpinBox, settings->value("objectEditor/gridSpacing", /*default val=*/1.0).toDouble());
 	SignalBlocker::setChecked(snapToGridCheckBox, settings->value("objectEditor/snapToGridCheckBoxChecked", /*default val=*/false).toBool());
+
+	// Initialize font list
+	loadAvailableFonts();
 }
 
 
@@ -241,6 +333,17 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	{
 		SignalBlocker b(this->contentTextEdit);
 		this->contentTextEdit->setPlainText(QtUtils::toQString(ob.content));
+	}
+	{
+		SignalBlocker b(this->fontComboBox);
+		// Set font combobox to the object's font
+		const int font_index = this->fontComboBox->findData(QtUtils::toQString(ob.text_font));
+		if(font_index >= 0)
+			this->fontComboBox->setCurrentIndex(font_index);
+		else
+			this->fontComboBox->setCurrentIndex(0); // Default to first font if not found
+
+		this->selected_font_name = fontNameForComboIndex(this->fontComboBox, this->fontComboBox->currentIndex());
 	}
 	{
 		SignalBlocker b(this->targetURLLineEdit);
@@ -557,6 +660,18 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 	ob_out.content = new_content;
 	checkStringSize(ob_out.content, WorldObject::MAX_CONTENT_SIZE);
 
+	QString resolved_font_name = this->selected_font_name;
+	if(resolved_font_name.isEmpty())
+		resolved_font_name = fontNameForComboIndex(this->fontComboBox, this->fontComboBox->currentIndex());
+	const std::string new_text_font = QtUtils::toIndString(resolved_font_name);
+	if(text_font_feature_supported)
+	{
+		if(ob_out.text_font != new_text_font)
+			ob_out.changed_flags |= WorldObject::TEXT_FONT_CHANGED;
+		ob_out.text_font = new_text_font;
+		checkStringSize(ob_out.text_font, WorldObject::MAX_FONT_NAME_SIZE);
+	}
+
 	ob_out.target_url    = QtUtils::toIndString(this->targetURLLineEdit->text());
 	checkStringSize(ob_out.target_url, WorldObject::MAX_URL_SIZE);
 
@@ -779,9 +894,11 @@ void ObjectEditor::setControlsEnabled(bool enabled)
 
 void ObjectEditor::setControlsEditable(bool editable)
 {
+	this->controls_editable = editable;
 	this->modelFileSelectWidget->setReadOnly(!editable);
 	this->scriptTextEdit->setReadOnly(!editable);
 	this->contentTextEdit->setReadOnly(!editable);
+	this->fontComboBox->setEnabled(editable && text_font_feature_supported);
 	this->targetURLLineEdit->setReadOnly(!editable);
 
 	this->posXDoubleSpinBox->setReadOnly(!editable);
@@ -821,6 +938,20 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->cameraScreenEnabledCheckBox->setEnabled(editable);
 	this->cameraScreenSourceUIDLineEdit->setReadOnly(!editable);
 	this->cameraScreenMaterialIndexSpinBox->setReadOnly(!editable);
+}
+
+
+void ObjectEditor::setTextFontFeatureSupported(bool supported)
+{
+	this->text_font_feature_supported = supported;
+	this->fontComboBox->setEnabled(this->controls_editable && supported);
+
+	const QString tooltip = supported ?
+		QString() :
+		QCoreApplication::translate("ObjectEditor", "This server does not support text font selection yet. Requires server protocol version 51 or newer.");
+
+	this->fontComboBox->setToolTip(tooltip);
+	this->fontLabel->setToolTip(tooltip);
 }
 
 
@@ -1084,6 +1215,18 @@ void ObjectEditor::linkScaleCheckBoxToggled(bool val)
 }
 
 
+void ObjectEditor::onFontChanged(int index)
+{
+	if(!text_font_feature_supported)
+		return;
+
+	this->selected_font_name = fontNameForComboIndex(this->fontComboBox, index);
+
+	// Defer the object update until the ComboBox has fully committed the new current item.
+	QTimer::singleShot(0, this, SLOT(editTimerTimeout()));
+}
+
+
 void ObjectEditor::updateSpotlightColourButton()
 {
 	const int COLOUR_BUTTON_W = 30;
@@ -1124,5 +1267,78 @@ void ObjectEditor::on_spotlightColourPushButton_clicked(bool checked)
 		updateSpotlightColourButton();
 
 		emit objectChanged();
+	}
+}
+
+
+void ObjectEditor::loadAvailableFonts()
+{
+	// Clear existing items
+	this->fontComboBox->clear();
+
+	// Add a default font option
+	addFontComboItem(this->fontComboBox, "Default", QIcon());
+	this->selected_font_name = "Default";
+
+	// Try to load fonts from resources/fonts directory
+	// Try multiple possible locations
+	std::vector<std::string> possible_paths;
+	
+	// Try 1: base_dir_path
+	if(!base_dir_path.empty())
+		possible_paths.push_back(base_dir_path + "/resources/fonts");
+	
+	// Try 2: current working directory
+	possible_paths.push_back("./resources/fonts");
+	possible_paths.push_back("resources/fonts");
+	
+	// Try 3: relative to executable
+	possible_paths.push_back("../resources/fonts");
+	possible_paths.push_back("../../resources/fonts");
+	
+	// Try 4: absolute path  (development path)
+	possible_paths.push_back("C:/programming/substrata/resources/fonts");
+	
+	for(const auto& fonts_dir : possible_paths)
+	{
+		try
+		{
+			if(FileUtils::fileExists(fonts_dir))
+			{
+				// Use Qt to list files
+				QDir font_dir(QtUtils::toQString(fonts_dir));
+				QStringList font_filters;
+				font_filters << "*.ttf" << "*.otf" << "*.fon" << "*.woff";
+				
+				QFileInfoList files = font_dir.entryInfoList(font_filters, QDir::Files | QDir::NoDotAndDotDot);
+				
+				if(files.size() > 0)
+				{
+					TextRendererRef preview_renderer = new TextRenderer();
+
+					// Sort files by name
+					std::sort(files.begin(), files.end(), [](const QFileInfo& a, const QFileInfo& b) {
+						return a.baseName() < b.baseName();
+					});
+					
+					for(const QFileInfo& file_info : files)
+					{
+						const QString font_name = file_info.baseName();
+						const QIcon preview_icon = makeFontPreviewIcon(preview_renderer, makeFontPreviewText(font_name), QtUtils::toIndString(file_info.absoluteFilePath()));
+						addFontComboItem(this->fontComboBox, font_name, preview_icon);
+					}
+					
+					if(this->fontComboBox->view())
+						this->fontComboBox->view()->setMinimumWidth(520);
+
+					// Successfully loaded fonts, break out of loop
+					break;
+				}
+			}
+		}
+		catch(const std::exception&)
+		{
+			// Continue to next path
+		}
 	}
 }

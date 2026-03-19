@@ -44,13 +44,14 @@ CyberspaceProtocolVersion
 48: Added ping+pong messages.
 49: Added AvatarSatOnSeat, AvatarGotUpFromSeat messages.
 50: Added ObjectType_Camera and ObjectType_CameraScreen.
+51: Added optional trailing text_font in WorldObject network serialisation.
 */
 namespace Protocol
 {
 
 const uint32 CyberspaceHello = 1357924680;
 
-const uint32 CyberspaceProtocolVersion = 50;
+const uint32 CyberspaceProtocolVersion = 51;
 
 const uint32 ClientProtocolOK		= 10000;
 const uint32 ClientProtocolTooOld	= 10001;

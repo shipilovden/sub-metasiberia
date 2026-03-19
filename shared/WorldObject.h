@@ -237,7 +237,8 @@ public:
 
 
 	void writeToStream(RandomAccessOutStream& stream) const;
-	void writeToNetworkStream(RandomAccessOutStream& stream) const; // Write without version
+	void writeToNetworkStream(RandomAccessOutStream& stream) const; // Write without version, assuming latest protocol.
+	void writeToNetworkStream(RandomAccessOutStream& stream, uint32 peer_protocol_version) const; // Write without version for a specific peer protocol.
 
 	void copyNetworkStateFrom(const WorldObject& other);
 
@@ -310,6 +311,7 @@ public:
 	static const size_t MAX_URL_SIZE                      = 1000;
 	static const size_t MAX_SCRIPT_SIZE                   = 10000;
 	static const size_t MAX_CONTENT_SIZE                  = 10000;
+	static const size_t MAX_FONT_NAME_SIZE                = 256;
 	
 
 	URLString model_url;
@@ -317,6 +319,7 @@ public:
 	URLString lightmap_url;
 	std::string script;
 	std::string content; // For ObjectType_Hypercard, ObjectType_Text
+	std::string text_font; // Font name for ObjectType_Text objects
 	std::string target_url;
 	Vec3d pos;
 	Vec3f axis;
@@ -447,6 +450,7 @@ public:
 	static const uint32 DYNAMIC_CHANGED				= 16;
 	static const uint32 PHYSICS_VALUE_CHANGED		= 32;
 	static const uint32 PHYSICS_OWNER_CHANGED		= 64;
+	static const uint32 TEXT_FONT_CHANGED			= 128; // Set when text_font is changed
 	uint32 changed_flags;
 
 	bool using_placeholder_model;
@@ -625,6 +629,7 @@ void WorldObject::setIsSensor(bool c)
 
 void readWorldObjectFromStream(RandomAccessInStream& stream, WorldObject& ob);
 void readWorldObjectFromNetworkStreamGivenUID(RandomAccessInStream& stream, WorldObject& ob); // UID will have been read already
+void readWorldObjectFromNetworkStreamGivenUID(RandomAccessInStream& stream, WorldObject& ob, uint32 peer_protocol_version); // UID will have been read already
 
 
 const Matrix4f obToWorldMatrix(const WorldObject& ob);
