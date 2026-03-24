@@ -46,6 +46,7 @@ private:
 	GUIClient* m_gui_client;
 
 	std::string loaded_target_url;
+	std::string loaded_audio_player_state_key;
 
 	Reference<EmbeddedBrowser> browser;
 	int html_view_handle;

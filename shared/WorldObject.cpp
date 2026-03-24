@@ -46,6 +46,71 @@ Copyright Glare Technologies Limited 2016 -
 #endif
 
 
+namespace
+{
+template <class Fn>
+void forEachAudioPlayerPlaylistURL(const WorldObject& ob, Fn&& fn)
+{
+	if(!ob.isAudioPlayerWebView())
+		return;
+
+	size_t line_start = 0;
+	while(line_start <= ob.content.size())
+	{
+		const size_t line_end = ob.content.find('\n', line_start);
+		const size_t line_size = (line_end == std::string::npos) ? (ob.content.size() - line_start) : (line_end - line_start);
+
+		const std::string line = stripHeadWhitespace(stripTailWhitespace(ob.content.substr(line_start, line_size)));
+		if(!line.empty())
+			fn(line);
+
+		if(line_end == std::string::npos)
+			break;
+
+		line_start = line_end + 1;
+	}
+}
+}
+
+
+bool WorldObject::looksLikeAudioPlayerPlaylistContent(const std::string& content)
+{
+	bool saw_track = false;
+	size_t line_start = 0;
+	while(line_start <= content.size())
+	{
+		const size_t line_end = content.find('\n', line_start);
+		const size_t line_size = (line_end == std::string::npos) ? (content.size() - line_start) : (line_end - line_start);
+
+		const std::string line = stripHeadWhitespace(stripTailWhitespace(content.substr(line_start, line_size)));
+		if(!line.empty())
+		{
+			if(!hasExtension(line, "mp3") && !hasExtension(line, "wav"))
+				return false;
+			saw_track = true;
+		}
+
+		if(line_end == std::string::npos)
+			break;
+
+		line_start = line_end + 1;
+	}
+
+	return saw_track;
+}
+
+
+bool WorldObject::isAudioPlayerWebView() const
+{
+	return
+		(object_type == ObjectType_WebView) &&
+		(
+			(target_url == audioPlayerTargetURL()) ||
+			(target_url.empty() && looksLikeAudioPlayerPlaylistContent(content))
+		);
+}
+
+
 //InstanceInfo::~InstanceInfo()
 //{
 //#if GUI_CLIENT
@@ -311,6 +376,11 @@ void WorldObject::appendDependencyURLs(int ob_lod_level, const GetDependencyOpti
 
 	if(!audio_source_url.empty())
 		URLs_out.push_back(DependencyURL(URLString(audio_source_url, glare::STLArenaAllocator<char>(options.allocator))));
+
+	forEachAudioPlayerPlaylistURL(*this, [&](const std::string& playlist_url)
+	{
+		URLs_out.push_back(DependencyURL(URLString(playlist_url, glare::STLArenaAllocator<char>(options.allocator))));
+	});
 }
 
 
@@ -343,6 +413,11 @@ void WorldObject::appendDependencyURLsForAllLODLevels(const GetDependencyOptions
 
 	if(!audio_source_url.empty())
 		URLs_out.push_back(DependencyURL(URLString(audio_source_url, glare::STLArenaAllocator<char>(options.allocator))));
+
+	forEachAudioPlayerPlaylistURL(*this, [&](const std::string& playlist_url)
+	{
+		URLs_out.push_back(DependencyURL(URLString(playlist_url, glare::STLArenaAllocator<char>(options.allocator))));
+	});
 }
 
 
@@ -369,6 +444,11 @@ void WorldObject::appendDependencyURLsBaseLevel(const GetDependencyOptions& opti
 
 	if(!audio_source_url.empty())
 		URLs_out.push_back(DependencyURL(audio_source_url));
+
+	forEachAudioPlayerPlaylistURL(*this, [&](const std::string& playlist_url)
+	{
+		URLs_out.push_back(DependencyURL(toURLString(playlist_url)));
+	});
 }
 
 
@@ -421,6 +501,25 @@ void WorldObject::convertLocalPathsToURLS(ResourceManager& resource_manager)
 
 	if(FileUtils::fileExists(this->audio_source_url)) // If the URL is a local path:
 		this->audio_source_url = resource_manager.URLForPathAndHash(toStdString(this->audio_source_url), FileChecksum::fileChecksum(this->audio_source_url));
+
+	if(this->isAudioPlayerWebView())
+	{
+		std::string converted_content;
+		bool first_line = true;
+		forEachAudioPlayerPlaylistURL(*this, [&](const std::string& playlist_url)
+		{
+			std::string converted_url = playlist_url;
+			if(FileUtils::fileExists(playlist_url))
+				converted_url = resource_manager.URLForPathAndHash(playlist_url, FileChecksum::fileChecksum(playlist_url));
+
+			if(!first_line)
+				converted_content += "\n";
+			converted_content += converted_url;
+			first_line = false;
+		});
+
+		this->content = converted_content;
+	}
 }
 
 
@@ -2126,6 +2225,30 @@ void WorldObject::test()
 	testAssert(getLODLevelForURL("something_5345345435") == 0);
 	testAssert(getLODLevelForURL("something") == 0);
 	testAssert(getLODLevelForURL("") == 0);
+
+	{
+		WorldObject ob;
+		ob.object_type = WorldObject::ObjectType_WebView;
+		ob.target_url = WorldObject::audioPlayerTargetURL();
+		ob.content = "track_a.mp3\n \ntrack_b.wav\n";
+
+		WorldObject::GetDependencyOptions options;
+		DependencyURLSet URL_set;
+		ob.getDependencyURLSet(/*ob_lod_level=*/0, options, URL_set);
+
+		testAssert(URL_set.count(DependencyURL(toURLString("track_a.mp3"))) == 1);
+		testAssert(URL_set.count(DependencyURL(toURLString("track_b.wav"))) == 1);
+	}
+
+	{
+		WorldObject ob;
+		ob.object_type = WorldObject::ObjectType_WebView;
+		ob.content = "track_a.mp3\ntrack_b.wav";
+
+		testAssert(ob.isAudioPlayerWebView());
+		testAssert(WorldObject::looksLikeAudioPlayerPlaylistContent(ob.content));
+		testAssert(!WorldObject::looksLikeAudioPlayerPlaylistContent("https://example.com\nnot_audio.txt"));
+	}
 
 	try
 	{

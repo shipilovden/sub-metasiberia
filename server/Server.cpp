@@ -48,6 +48,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/FileUtils.h>
 #include <utils/ConPrint.h>
 #include <utils/Exception.h>
+#include <utils/StringUtils.h>
 #include <utils/Parser.h>
 #include <utils/XMLParseUtils.h>
 #include <utils/IndigoXMLDoc.h>
@@ -58,6 +59,69 @@ Copyright Glare Technologies Limited 2023 -
 #if !defined(_WIN32)
 #include <signal.h>
 #endif
+
+
+static bool shouldGenerateTextureDerivativesForURLOnServer(const URLString& URL)
+{
+	return hasExtension(URL, "jpg") || hasExtension(URL, "jpeg") || hasExtension(URL, "png") || hasExtension(URL, "gif");
+}
+
+
+static void enqueueTextureDerivativeChecksForLoadedWorlds(Server& server)
+{
+	std::set<URLString> URLs_to_check;
+
+	{
+		WorldStateLock lock(server.world_state->mutex);
+
+		for(auto world_it = server.world_state->world_states.begin(); world_it != server.world_state->world_states.end(); ++world_it)
+		{
+			ServerWorldState* world = world_it->second.ptr();
+
+			for(auto it = world->getObjects(lock).begin(); it != world->getObjects(lock).end(); ++it)
+			{
+				DependencyURLSet URLs;
+				WorldObject::GetDependencyOptions options;
+				options.use_basis = false;
+				options.include_lightmaps = false;
+				options.get_optimised_mesh = false;
+				it->second->getDependencyURLSetBaseLevel(options, URLs);
+
+				for(auto URL_it = URLs.begin(); URL_it != URLs.end(); ++URL_it)
+					if(shouldGenerateTextureDerivativesForURLOnServer(URL_it->URL))
+						URLs_to_check.insert(URL_it->URL);
+			}
+
+			std::set<DependencyURL> world_setting_URLs;
+			world->world_settings.getDependencyURLSet(world_setting_URLs);
+			for(auto URL_it = world_setting_URLs.begin(); URL_it != world_setting_URLs.end(); ++URL_it)
+				if(shouldGenerateTextureDerivativesForURLOnServer(URL_it->URL))
+					URLs_to_check.insert(URL_it->URL);
+		}
+
+		for(auto user_it = server.world_state->user_id_to_users.begin(); user_it != server.world_state->user_id_to_users.end(); ++user_it)
+		{
+			Avatar avatar;
+			avatar.avatar_settings = user_it->second->avatar_settings;
+
+			DependencyURLSet URLs;
+			Avatar::GetDependencyOptions options;
+			options.use_basis = false;
+			options.get_optimised_mesh = false;
+			avatar.getDependencyURLSetBaseLevel(options, URLs);
+
+			for(auto URL_it = URLs.begin(); URL_it != URLs.end(); ++URL_it)
+				if(shouldGenerateTextureDerivativesForURLOnServer(URL_it->URL))
+					URLs_to_check.insert(URL_it->URL);
+		}
+	}
+
+	for(auto it = URLs_to_check.begin(); it != URLs_to_check.end(); ++it)
+		server.enqueueMsgForLodGenThread(new CheckGenLodResourcesForURL(*it));
+
+	if(!URLs_to_check.empty())
+		conPrint("Queued " + toString(URLs_to_check.size()) + " texture derivative check(s) for existing resources.");
+}
 
 
 void updateMapTiles(ServerAllWorldsState& world_state)
@@ -543,6 +607,7 @@ int main(int argc, char *argv[])
 		//----------------------------------------------- End launch substrata protocol server -----------------------------------------------
 
 		server.mesh_lod_gen_thread_manager.addThread(new MeshLODGenThread(&server, server.world_state.ptr()));
+		enqueueTextureDerivativeChecksForLoadedWorlds(server);
 
 		if(server_config.enable_LOD_chunking)
 			thread_manager.addThread(new ChunkGenThread(server.world_state.ptr()));

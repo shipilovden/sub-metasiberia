@@ -175,6 +175,16 @@
       <item row="0" column="1">
        <widget class="QLineEdit" name="startLocationURLLineEdit"/>
       </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>XR / VR launch mode</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QComboBox" name="xrLaunchModeComboBox"/>
+      </item>
      </layout>
     </widget>
    </item>

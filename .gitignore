@@ -1,2 +1,5 @@
 local_backups/
 .tmp_deploy_ts.txt
+
+# Legacy Emscripten build tree
+emscripten_build3/

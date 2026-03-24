@@ -18,6 +18,11 @@ namespace Indigo { class Mesh; }
 class TextureServer;
 class EnvEmitter;
 class ShaderEditorDialog;
+class QCheckBox;
+class QGroupBox;
+class QListWidget;
+class QListWidgetItem;
+class QPushButton;
 
 
 class ObjectEditor : public QWidget, public Ui::ObjectEditor
@@ -77,6 +82,11 @@ private slots:
 	void on_visitURLLabel_linkActivated(const QString& link);
 	void on_materialComboBox_currentIndexChanged(int index);
 	void on_newMaterialPushButton_clicked(bool checked);
+	void on_audioAddTracksPushButton_clicked(bool checked);
+	void on_audioAddURLPushButton_clicked(bool checked);
+	void on_audioRemoveTrackPushButton_clicked(bool checked);
+	void on_audioMoveTrackUpPushButton_clicked(bool checked);
+	void on_audioMoveTrackDownPushButton_clicked(bool checked);
 	void targetURLChanged();
 	void scriptTextEditChanged();
 	void scriptChangedFromEditor();
@@ -91,11 +101,17 @@ private slots:
 	void linkScaleCheckBoxToggled(bool val);
 	void on_spotlightColourPushButton_clicked(bool checked);
 	void onFontChanged(int index);
+	void audioPlaylistItemChanged(QListWidgetItem* item);
+	void audioPlaylistSelectionChanged();
 
 private:
 	void updateInfoLabel(const WorldObject& ob);
 	void updateSpotlightColourButton();
 	void loadAvailableFonts();
+	void syncAudioPlaylistWidgetFromContent(const std::string& content);
+	void syncContentFromAudioPlaylistWidget();
+	void addAudioPlaylistEntry(const QString& value, bool make_current);
+	void updateAudioPlaylistButtonsEnabled();
 	// Store a cloned copy of the materials.
 	// The reason for having this is so if the user selected another material,
 	// we can display it, without needing to hang on to a reference to the original world object.
@@ -116,6 +132,16 @@ private:
 	QString selected_font_name;
 	bool controls_editable;
 	bool text_font_feature_supported;
+	bool syncing_audio_playlist_widget;
+
+	QCheckBox* audioShuffleCheckBox;
+	QGroupBox* audioPlaylistGroupBox;
+	QListWidget* audioPlaylistListWidget;
+	QPushButton* audioAddTracksPushButton;
+	QPushButton* audioAddURLPushButton;
+	QPushButton* audioRemoveTrackPushButton;
+	QPushButton* audioMoveTrackUpPushButton;
+	QPushButton* audioMoveTrackDownPushButton;
 
 	Colour3f spotlight_col;
 };

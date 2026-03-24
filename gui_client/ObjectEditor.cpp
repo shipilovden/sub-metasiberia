@@ -28,6 +28,14 @@
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QAbstractItemView>
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QFileDialog>
+#include <QtWidgets/QGroupBox>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QInputDialog>
+#include <QtWidgets/QListWidget>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QVBoxLayout>
 #include <QtCore/QTimer>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
@@ -126,6 +134,15 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	selected_font_name("Default"),
 	controls_editable(true),
 	text_font_feature_supported(true),
+	syncing_audio_playlist_widget(false),
+	audioShuffleCheckBox(NULL),
+	audioPlaylistGroupBox(NULL),
+	audioPlaylistListWidget(NULL),
+	audioAddTracksPushButton(NULL),
+	audioAddURLPushButton(NULL),
+	audioRemoveTrackPushButton(NULL),
+	audioMoveTrackUpPushButton(NULL),
+	audioMoveTrackDownPushButton(NULL),
 	spotlight_col(0.85f)
 {
 	setupUi(this);
@@ -219,6 +236,46 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 
 	this->visitURLLabel->hide();
 
+	this->audioShuffleCheckBox = new QCheckBox(QCoreApplication::translate("ObjectEditor", "Shuffle"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioShuffleCheckBox, 0, 2);
+
+	this->audioPlaylistGroupBox = new QGroupBox(QCoreApplication::translate("ObjectEditor", "Playlist"), this->audioGroupBox);
+	QVBoxLayout* audio_playlist_group_layout = new QVBoxLayout(this->audioPlaylistGroupBox);
+	audio_playlist_group_layout->setContentsMargins(0, 0, 0, 0);
+	audio_playlist_group_layout->setSpacing(6);
+
+	this->audioPlaylistListWidget = new QListWidget(this->audioPlaylistGroupBox);
+	this->audioPlaylistListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+	audio_playlist_group_layout->addWidget(this->audioPlaylistListWidget);
+
+	QHBoxLayout* audio_playlist_buttons_layout = new QHBoxLayout();
+	audio_playlist_buttons_layout->setContentsMargins(0, 0, 0, 0);
+	audio_playlist_buttons_layout->setSpacing(6);
+
+	this->audioAddTracksPushButton = new QPushButton(QCoreApplication::translate("ObjectEditor", "Add Tracks"), this->audioPlaylistGroupBox);
+	this->audioAddURLPushButton = new QPushButton(QCoreApplication::translate("ObjectEditor", "Add URL"), this->audioPlaylistGroupBox);
+	this->audioRemoveTrackPushButton = new QPushButton(QCoreApplication::translate("ObjectEditor", "Remove"), this->audioPlaylistGroupBox);
+	this->audioMoveTrackUpPushButton = new QPushButton(QCoreApplication::translate("ObjectEditor", "Up"), this->audioPlaylistGroupBox);
+	this->audioMoveTrackDownPushButton = new QPushButton(QCoreApplication::translate("ObjectEditor", "Down"), this->audioPlaylistGroupBox);
+
+	audio_playlist_buttons_layout->addWidget(this->audioAddTracksPushButton);
+	audio_playlist_buttons_layout->addWidget(this->audioAddURLPushButton);
+	audio_playlist_buttons_layout->addWidget(this->audioRemoveTrackPushButton);
+	audio_playlist_buttons_layout->addWidget(this->audioMoveTrackUpPushButton);
+	audio_playlist_buttons_layout->addWidget(this->audioMoveTrackDownPushButton);
+	audio_playlist_group_layout->addLayout(audio_playlist_buttons_layout);
+
+	this->verticalLayout_6->addWidget(this->audioPlaylistGroupBox);
+
+	connect(this->audioShuffleCheckBox,		SIGNAL(toggled(bool)),				this, SIGNAL(objectChanged()));
+	connect(this->audioAddTracksPushButton, SIGNAL(clicked(bool)),				this, SLOT(on_audioAddTracksPushButton_clicked(bool)));
+	connect(this->audioAddURLPushButton,	SIGNAL(clicked(bool)),				this, SLOT(on_audioAddURLPushButton_clicked(bool)));
+	connect(this->audioRemoveTrackPushButton, SIGNAL(clicked(bool)),			this, SLOT(on_audioRemoveTrackPushButton_clicked(bool)));
+	connect(this->audioMoveTrackUpPushButton, SIGNAL(clicked(bool)),			this, SLOT(on_audioMoveTrackUpPushButton_clicked(bool)));
+	connect(this->audioMoveTrackDownPushButton, SIGNAL(clicked(bool)),		this, SLOT(on_audioMoveTrackDownPushButton_clicked(bool)));
+	connect(this->audioPlaylistListWidget,	SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(audioPlaylistItemChanged(QListWidgetItem*)));
+	connect(this->audioPlaylistListWidget,	SIGNAL(currentRowChanged(int)),		this, SLOT(audioPlaylistSelectionChanged()));
+
 	// Set up script edit timer.
 	edit_timer->setSingleShot(true);
 	edit_timer->setInterval(300);
@@ -229,6 +286,8 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	this->fontComboBox->setIconSize(QSize(300, 32));
 	if(this->fontComboBox->view())
 		this->fontComboBox->view()->setTextElideMode(Qt::ElideNone);
+
+	updateAudioPlaylistButtonsEnabled();
 }
 
 
@@ -242,6 +301,82 @@ void ObjectEditor::init() // settings should be set before this.
 
 	// Initialize font list
 	loadAvailableFonts();
+}
+
+
+void ObjectEditor::addAudioPlaylistEntry(const QString& value, bool make_current)
+{
+	const QString trimmed_value = value.trimmed();
+	if(trimmed_value.isEmpty())
+		return;
+
+	QListWidgetItem* item = new QListWidgetItem(trimmed_value, this->audioPlaylistListWidget);
+	item->setFlags(item->flags() | Qt::ItemIsEditable);
+	item->setToolTip(trimmed_value);
+
+	if(make_current)
+		this->audioPlaylistListWidget->setCurrentItem(item);
+}
+
+
+void ObjectEditor::syncAudioPlaylistWidgetFromContent(const std::string& content)
+{
+	this->syncing_audio_playlist_widget = true;
+
+	this->audioPlaylistListWidget->clear();
+
+	const QStringList lines = QtUtils::toQString(content).split('\n', Qt::KeepEmptyParts);
+	for(int i=0; i<lines.size(); ++i)
+		addAudioPlaylistEntry(lines[i], false);
+
+	if(this->audioPlaylistListWidget->count() > 0)
+		this->audioPlaylistListWidget->setCurrentRow(0);
+
+	this->syncing_audio_playlist_widget = false;
+	updateAudioPlaylistButtonsEnabled();
+}
+
+
+void ObjectEditor::syncContentFromAudioPlaylistWidget()
+{
+	if(this->syncing_audio_playlist_widget)
+		return;
+
+	QStringList lines;
+	lines.reserve(this->audioPlaylistListWidget->count());
+	for(int i=0; i<this->audioPlaylistListWidget->count(); ++i)
+	{
+		QListWidgetItem* item = this->audioPlaylistListWidget->item(i);
+		if(item)
+		{
+			const QString trimmed_text = item->text().trimmed();
+			item->setToolTip(trimmed_text);
+			if(!trimmed_text.isEmpty())
+				lines.push_back(trimmed_text);
+		}
+	}
+
+	{
+		SignalBlocker blocker(this->contentTextEdit);
+		this->contentTextEdit->setPlainText(lines.join("\n"));
+	}
+
+	updateAudioPlaylistButtonsEnabled();
+}
+
+
+void ObjectEditor::updateAudioPlaylistButtonsEnabled()
+{
+	const bool have_selection = this->audioPlaylistListWidget && (this->audioPlaylistListWidget->currentRow() >= 0);
+	const int current_row = have_selection ? this->audioPlaylistListWidget->currentRow() : -1;
+	const int num_items = this->audioPlaylistListWidget ? this->audioPlaylistListWidget->count() : 0;
+	const bool editable = this->controls_editable;
+
+	if(this->audioAddTracksPushButton) this->audioAddTracksPushButton->setEnabled(editable);
+	if(this->audioAddURLPushButton) this->audioAddURLPushButton->setEnabled(editable);
+	if(this->audioRemoveTrackPushButton) this->audioRemoveTrackPushButton->setEnabled(editable && have_selection);
+	if(this->audioMoveTrackUpPushButton) this->audioMoveTrackUpPushButton->setEnabled(editable && have_selection && current_row > 0);
+	if(this->audioMoveTrackDownPushButton) this->audioMoveTrackDownPushButton->setEnabled(editable && have_selection && current_row >= 0 && current_row + 1 < num_items);
 }
 
 
@@ -264,7 +399,7 @@ void ObjectEditor::updateInfoLabel(const WorldObject& ob)
 	case WorldObject::ObjectType_Hypercard: ob_type = QCoreApplication::translate("ObjectEditor", "Hypercard"); break;
 	case WorldObject::ObjectType_VoxelGroup: ob_type = QCoreApplication::translate("ObjectEditor", "Voxel Group"); break;
 	case WorldObject::ObjectType_Spotlight: ob_type = QCoreApplication::translate("ObjectEditor", "Spotlight"); break;
-	case WorldObject::ObjectType_WebView: ob_type = QCoreApplication::translate("ObjectEditor", "Web View"); break;
+	case WorldObject::ObjectType_WebView: ob_type = ob.isAudioPlayerWebView() ? QCoreApplication::translate("ObjectEditor", "Audio Player") : QCoreApplication::translate("ObjectEditor", "Web View"); break;
 	case WorldObject::ObjectType_Video: ob_type = QCoreApplication::translate("ObjectEditor", "Video"); break;
 	case WorldObject::ObjectType_Text: ob_type = QCoreApplication::translate("ObjectEditor", "Text"); break;
 	case WorldObject::ObjectType_Portal: ob_type = QCoreApplication::translate("ObjectEditor", "Portal"); break;
@@ -334,6 +469,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 		SignalBlocker b(this->contentTextEdit);
 		this->contentTextEdit->setPlainText(QtUtils::toQString(ob.content));
 	}
+	syncAudioPlaylistWidgetFromContent(ob.content);
 	{
 		SignalBlocker b(this->fontComboBox);
 		// Set font combobox to the object's font
@@ -375,6 +511,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 
 	SignalBlocker::setChecked(this->audioAutoplayCheckBox, BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_AUTOPLAY));
 	SignalBlocker::setChecked(this->audioLoopCheckBox,     BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_LOOP));
+	SignalBlocker::setChecked(this->audioShuffleCheckBox,  BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_SHUFFLE));
 
 	this->videoURLFileSelectWidget->setFilename(QtUtils::toQString((!ob.materials.empty()) ? ob.materials[0]->emission_texture_url : ""));
 
@@ -475,7 +612,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 		this->modelFileSelectWidget->hide();
 		this->spotlightGroupBox->hide();
 		this->seatGroupBox->hide();
-		this->audioGroupBox->hide();
+		this->audioGroupBox->setVisible(ob.isAudioPlayerWebView());
 		this->physicsSettingsGroupBox->hide();
 		this->videoGroupBox->hide();
 	}
@@ -588,7 +725,23 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 
 	//this->targetURLLabel->setVisible(ob.object_type == WorldObject::ObjectType_Hypercard);
 	//this->targetURLLineEdit->setVisible(ob.object_type == WorldObject::ObjectType_Hypercard);
-	this->visitURLLabel->setVisible(/*ob.object_type == WorldObject::ObjectType_Hypercard && */!ob.target_url.empty());
+	const bool is_audio_player = ob.isAudioPlayerWebView();
+	this->audioGroupBox->setTitle(is_audio_player ? QCoreApplication::translate("ObjectEditor", "Audio Player") : QCoreApplication::translate("ObjectEditor", "Audio"));
+	this->label_9->setVisible(!is_audio_player);
+	this->widget_5->setVisible(!is_audio_player);
+	this->label_12->setVisible(!is_audio_player);
+	this->contentTextEdit->setVisible(!is_audio_player);
+	this->fontLabel->setVisible(!is_audio_player);
+	this->fontComboBox->setVisible(!is_audio_player);
+	this->label_14->setVisible(!is_audio_player);
+	this->audioFileWidget->setVisible(!is_audio_player);
+	this->targetURLLabel->setVisible(!is_audio_player);
+	this->targetURLLineEdit->setVisible(!is_audio_player);
+	this->visitURLLabel->setVisible(!is_audio_player && !ob.target_url.empty());
+	this->audioShuffleCheckBox->setVisible(is_audio_player);
+	this->audioPlaylistGroupBox->setVisible(is_audio_player);
+	this->label_12->setText(QCoreApplication::translate("ObjectEditor", "Content"));
+	this->contentTextEdit->setPlaceholderText(QString());
 
 	if(ob.lightmap_baking)
 	{
@@ -601,6 +754,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 
 	this->audioFileWidget->setFilename(QtUtils::toQString(ob.audio_source_url));
 	SignalBlocker::setValue(volumeDoubleSpinBox, ob.audio_volume);
+	updateAudioPlaylistButtonsEnabled();
 }
 
 
@@ -642,7 +796,14 @@ static void checkStringSize(StringType& s, size_t max_size)
 
 void ObjectEditor::toObject(WorldObject& ob_out)
 {
-	const URLString new_model_url = toURLString(QtUtils::toIndString(this->modelFileSelectWidget->filename()));
+	const bool is_audio_player_webview = ob_out.isAudioPlayerWebView();
+
+	if(is_audio_player_webview)
+		syncContentFromAudioPlaylistWidget();
+
+	URLString new_model_url = toURLString(QtUtils::toIndString(this->modelFileSelectWidget->filename()));
+	if(is_audio_player_webview && new_model_url.empty())
+		new_model_url = "image_cube_5438347426447337425.bmesh";
 	if(ob_out.model_url != new_model_url)
 		ob_out.changed_flags |= WorldObject::MODEL_URL_CHANGED;
 	ob_out.model_url = new_model_url;
@@ -672,7 +833,10 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 		checkStringSize(ob_out.text_font, WorldObject::MAX_FONT_NAME_SIZE);
 	}
 
-	ob_out.target_url    = QtUtils::toIndString(this->targetURLLineEdit->text());
+	if(is_audio_player_webview)
+		ob_out.target_url = WorldObject::audioPlayerTargetURL();
+	else
+		ob_out.target_url = QtUtils::toIndString(this->targetURLLineEdit->text());
 	checkStringSize(ob_out.target_url, WorldObject::MAX_URL_SIZE);
 
 	writeTransformMembersToObject(ob_out); // Set ob_out transform members
@@ -712,6 +876,7 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 
 	BitUtils::setOrZeroBit(ob_out.flags, WorldObject::AUDIO_AUTOPLAY, this->audioAutoplayCheckBox->isChecked());
 	BitUtils::setOrZeroBit(ob_out.flags, WorldObject::AUDIO_LOOP,     this->audioLoopCheckBox    ->isChecked());
+	BitUtils::setOrZeroBit(ob_out.flags, WorldObject::AUDIO_SHUFFLE,  is_audio_player_webview && this->audioShuffleCheckBox->isChecked());
 
 	if(ob_out.object_type != WorldObject::ObjectType_Hypercard) // Don't store materials for hypercards. (doesn't use them, and matEditor may have old/invalid data)
 	{
@@ -926,6 +1091,12 @@ void ObjectEditor::setControlsEditable(bool editable)
 
 	this->audioFileWidget->setReadOnly(!editable);
 	this->volumeDoubleSpinBox->setReadOnly(!editable);
+	this->audioAutoplayCheckBox->setEnabled(editable);
+	this->audioLoopCheckBox->setEnabled(editable);
+	this->audioShuffleCheckBox->setEnabled(editable);
+	this->audioPlaylistListWidget->setEnabled(editable);
+	this->audioPlaylistListWidget->setEditTriggers(editable ? (QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked) : QAbstractItemView::NoEditTriggers);
+	updateAudioPlaylistButtonsEnabled();
 
 	this->cameraEnabledCheckBox->setEnabled(editable);
 	this->cameraFOVYDoubleSpinBox->setReadOnly(!editable);
@@ -952,6 +1123,131 @@ void ObjectEditor::setTextFontFeatureSupported(bool supported)
 
 	this->fontComboBox->setToolTip(tooltip);
 	this->fontLabel->setToolTip(tooltip);
+}
+
+
+void ObjectEditor::on_audioAddTracksPushButton_clicked(bool)
+{
+	if(!this->controls_editable)
+		return;
+
+	const QString last_audio_dir = this->settings ? this->settings->value("mainwindow/lastAudioFileDir").toString() : QString();
+	const QStringList selected_filenames = QFileDialog::getOpenFileNames(
+		this,
+		QCoreApplication::translate("ObjectEditor", "Select audio file(s)..."),
+		last_audio_dir,
+		QCoreApplication::translate("ObjectEditor", "Audio file (*.mp3 *.wav)")
+	);
+
+	if(selected_filenames.isEmpty())
+		return;
+
+	if(this->settings)
+		this->settings->setValue("mainwindow/lastAudioFileDir", QtUtils::toQString(FileUtils::getDirectory(QtUtils::toIndString(selected_filenames[0]))));
+
+	this->syncing_audio_playlist_widget = true;
+	for(int i=0; i<selected_filenames.size(); ++i)
+		addAudioPlaylistEntry(selected_filenames[i], i + 1 == selected_filenames.size());
+	this->syncing_audio_playlist_widget = false;
+
+	syncContentFromAudioPlaylistWidget();
+	emit objectChanged();
+}
+
+
+void ObjectEditor::on_audioAddURLPushButton_clicked(bool)
+{
+	if(!this->controls_editable)
+		return;
+
+	bool ok = false;
+	const QString value = QInputDialog::getText(
+		this,
+		QCoreApplication::translate("ObjectEditor", "Add Playlist Entry"),
+		QCoreApplication::translate("ObjectEditor", "Audio URL or local path:"),
+		QLineEdit::Normal,
+		QString(),
+		&ok
+	);
+	if(!ok)
+		return;
+
+	this->syncing_audio_playlist_widget = true;
+	addAudioPlaylistEntry(value, true);
+	this->syncing_audio_playlist_widget = false;
+
+	syncContentFromAudioPlaylistWidget();
+	emit objectChanged();
+}
+
+
+void ObjectEditor::on_audioRemoveTrackPushButton_clicked(bool)
+{
+	if(!this->controls_editable)
+		return;
+
+	const int current_row = this->audioPlaylistListWidget->currentRow();
+	if(current_row < 0)
+		return;
+
+	delete this->audioPlaylistListWidget->takeItem(current_row);
+
+	if(current_row < this->audioPlaylistListWidget->count())
+		this->audioPlaylistListWidget->setCurrentRow(current_row);
+	else if(this->audioPlaylistListWidget->count() > 0)
+		this->audioPlaylistListWidget->setCurrentRow(this->audioPlaylistListWidget->count() - 1);
+
+	syncContentFromAudioPlaylistWidget();
+	emit objectChanged();
+}
+
+
+void ObjectEditor::on_audioMoveTrackUpPushButton_clicked(bool)
+{
+	if(!this->controls_editable)
+		return;
+
+	const int current_row = this->audioPlaylistListWidget->currentRow();
+	if(current_row <= 0)
+		return;
+
+	QListWidgetItem* item = this->audioPlaylistListWidget->takeItem(current_row);
+	this->audioPlaylistListWidget->insertItem(current_row - 1, item);
+	this->audioPlaylistListWidget->setCurrentRow(current_row - 1);
+
+	syncContentFromAudioPlaylistWidget();
+	emit objectChanged();
+}
+
+
+void ObjectEditor::on_audioMoveTrackDownPushButton_clicked(bool)
+{
+	if(!this->controls_editable)
+		return;
+
+	const int current_row = this->audioPlaylistListWidget->currentRow();
+	if(current_row < 0 || current_row + 1 >= this->audioPlaylistListWidget->count())
+		return;
+
+	QListWidgetItem* item = this->audioPlaylistListWidget->takeItem(current_row);
+	this->audioPlaylistListWidget->insertItem(current_row + 1, item);
+	this->audioPlaylistListWidget->setCurrentRow(current_row + 1);
+
+	syncContentFromAudioPlaylistWidget();
+	emit objectChanged();
+}
+
+
+void ObjectEditor::audioPlaylistItemChanged(QListWidgetItem*)
+{
+	syncContentFromAudioPlaylistWidget();
+	emit objectChanged();
+}
+
+
+void ObjectEditor::audioPlaylistSelectionChanged()
+{
+	updateAudioPlaylistButtonsEnabled();
 }
 
 

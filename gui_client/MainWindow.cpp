@@ -1369,6 +1369,25 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	// Render world-camera streams (Camera -> CameraScreen) before the main scene draw.
 	// Requires the main GL context to be current.
 	gui_client.renderWorldCameraStreams();
+	gui_client.renderXRFrame(ui->glWidget->near_draw_dist, ui->glWidget->max_draw_dist);
+	if(gui_client.getXRMirrorView().valid)
+	{
+		const XRMirrorView& mirror_view = gui_client.getXRMirrorView();
+		ui->glWidget->setExternalPerspectiveCameraTransform(
+			mirror_view.world_to_camera_space_matrix,
+			mirror_view.sensor_width,
+			mirror_view.lens_sensor_dist,
+			mirror_view.render_aspect_ratio,
+			mirror_view.lens_shift_up,
+			mirror_view.lens_shift_right,
+			mirror_view.projection_matrix_override_valid,
+			mirror_view.projection_matrix_override
+		);
+	}
+	else
+	{
+		ui->glWidget->clearExternalPerspectiveCameraTransform();
+	}
 
 	//Timer timer;
 	{
@@ -2581,10 +2600,11 @@ void MainWindow::on_actionAdd_Audio_Source_triggered()
 {
 	try
 	{
-		const float quad_w = 0.0f;
+		const float panel_w = 0.78f;
+		const float panel_h = 0.24f;
 		const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 2.0f -
-			gui_client.cam_controller.getUpVec() * quad_w * 0.5f -
-			gui_client.cam_controller.getRightVec() * quad_w * 0.5f;
+			gui_client.cam_controller.getUpVec() * panel_h * 0.5f -
+			gui_client.cam_controller.getRightVec() * panel_w * 0.5f;
 
 		// Check permissions
 		bool ob_pos_in_parcel;
@@ -2594,7 +2614,7 @@ void MainWindow::on_actionAdd_Audio_Source_triggered()
 			if(ob_pos_in_parcel)
 				showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
 			else
-				showErrorNotification("You can only create audio sources in a parcel that you have write permissions for.");
+				showErrorNotification("You can only create audio players in a parcel that you have write permissions for.");
 			return;
 		}
 
@@ -2602,55 +2622,62 @@ void MainWindow::on_actionAdd_Audio_Source_triggered()
 
 		QFileDialog::Options options;
 		QString selected_filter;
-		const QString selected_filename = QFileDialog::getOpenFileName(this,
-			tr("Select audio file..."),
+		const QStringList selected_filenames = QFileDialog::getOpenFileNames(this,
+			tr("Select audio file(s)..."),
 			last_audio_dir,
 			tr("Audio file (*.mp3 *.wav)"), // tr("Audio file (*.mp3 *.m4a *.aac *.wav)"),
 			&selected_filter,
 			options
 		);
 
-		if(selected_filename != "")
+		if(!selected_filenames.isEmpty())
 		{
-			settings->setValue("mainwindow/lastAudioFileDir", QtUtils::toQString(FileUtils::getDirectory(QtUtils::toIndString(selected_filename))));
+			settings->setValue("mainwindow/lastAudioFileDir", QtUtils::toQString(FileUtils::getDirectory(QtUtils::toIndString(selected_filenames[0]))));
 
-			const std::string path = QtUtils::toStdString(selected_filename);
+			std::vector<URLString> audio_file_URLs;
+			audio_file_URLs.reserve(selected_filenames.size());
+			for(int i=0; i<selected_filenames.size(); ++i)
+			{
+				const std::string path = QtUtils::toStdString(selected_filenames[i]);
 
-			// Compute hash over audio file
-			const uint64 audio_file_hash = FileChecksum::fileChecksum(path);
+				// Compute hash over audio file
+				const uint64 audio_file_hash = FileChecksum::fileChecksum(path);
 
-			const URLString audio_file_URL = ResourceManager::URLForPathAndHash(path, audio_file_hash);
+				const URLString audio_file_URL = ResourceManager::URLForPathAndHash(path, audio_file_hash);
+				audio_file_URLs.push_back(audio_file_URL);
 
-			// Copy audio file to local resources dir.  UploadResourceThread will read from here.
-			gui_client.resource_manager->copyLocalFileToResourceDir(path, audio_file_URL);
+				// Copy audio file to local resources dir.  UploadResourceThread will read from here.
+				gui_client.resource_manager->copyLocalFileToResourceDir(path, audio_file_URL);
+			}
 
-			const URLString model_URL = "Capsule_obj_7611321750126528672.bmesh"; // This file is in the client distribution.
-		
 			WorldObjectRef new_world_object = new WorldObject();
 			new_world_object->uid = UID(0); // Will be set by server
-			new_world_object->object_type = WorldObject::ObjectType_Generic;
+			new_world_object->object_type = WorldObject::ObjectType_WebView;
 			new_world_object->pos = ob_pos;
 			new_world_object->axis = Vec3f(0, 0, 1);
-			new_world_object->angle = 0;
-			new_world_object->scale = Vec3f(0.2f);
-			new_world_object->model_url = model_URL;
-			new_world_object->audio_source_url = audio_file_URL;
-			new_world_object->materials.resize(1);
-			new_world_object->materials[0] = new WorldMaterial();
-			new_world_object->materials[0]->colour_rgb = Colour3f(1,0,0);
+			new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>()); // Round to nearest 45 degree angle.
+			new_world_object->scale = Vec3f(panel_w, 0.02f, panel_h);
+			new_world_object->max_model_lod_level = 0;
+			new_world_object->model_url = "image_cube_5438347426447337425.bmesh";
+			new_world_object->target_url = WorldObject::audioPlayerTargetURL();
+			new_world_object->audio_volume = 1.0f;
+			BitUtils::setOrZeroBit(new_world_object->flags, WorldObject::AUDIO_AUTOPLAY, false);
+			BitUtils::setOrZeroBit(new_world_object->flags, WorldObject::AUDIO_LOOP, false);
+			BitUtils::setOrZeroBit(new_world_object->flags, WorldObject::AUDIO_SHUFFLE, false);
 
-			// Set aabb_ws
-			
-			/*WorldObject loaded_object;
-			BatchedMeshRef batched_mesh;
-			ModelLoading::makeGLObjectForModelFile(task_manager, model_obj_path, batched_mesh, loaded_object);
-			if(batched_mesh.nonNull())
+			for(size_t i=0; i<audio_file_URLs.size(); ++i)
 			{
-				const js::AABBox aabb_os = batched_mesh->aabb_os;
-				new_world_object->aabb_ws = aabb_os.transformedAABB(obToWorldMatrix(*new_world_object));
-			}*/
+				if(i > 0)
+					new_world_object->content += "\n";
+				new_world_object->content += audio_file_URLs[i];
+			}
 
-			const js::AABBox aabb_os(Vec4f(-0.25f, -0.25f, -0.5f, 1.0f), Vec4f(0.25f, 0.25f, 0.5f, 1.0f)); // AABB os of capsule.obj
+			new_world_object->materials.resize(2);
+			new_world_object->materials[0] = new WorldMaterial();
+			new_world_object->materials[0]->colour_rgb = Colour3f(1.f);
+			new_world_object->materials[1] = new WorldMaterial();
+
+			const js::AABBox aabb_os = gui_client.image_cube_shape.getAABBOS();
 			new_world_object->setAABBOS(aabb_os);
 
 
@@ -2662,7 +2689,7 @@ void MainWindow::on_actionAdd_Audio_Source_triggered()
 				enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 			}
 
-			showInfoNotification("Added audio source.");
+			showInfoNotification("Added audio player.");
 		}
 	}
 	catch(glare::Exception& e)
@@ -4959,6 +4986,15 @@ void MainWindow::glWidgetKeyPressed(QKeyEvent* e)
 		return;
 	}
 
+	if(e->key() == Qt::Key_Home)
+	{
+		if(gui_client.requestXRRecenter())
+			gui_client.showInfoNotification("XR recentered. Keep looking straight ahead in the headset.");
+		else
+			gui_client.showInfoNotification("XR recenter is unavailable because there is no active XR session.");
+		return;
+	}
+
 #if BUILD_TESTS
 	if(e->key() == Qt::Key_F6)
 	{
@@ -5556,6 +5592,8 @@ int main(int argc, char *argv[])
 		syntax["--testscreenshot"] = std::vector<ArgumentParser::ArgumentType>(); // Test screenshot taking
 		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine
 		syntax["--no_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Disable bindless textures in graphics engine
+		syntax["--vr"] = std::vector<ArgumentParser::ArgumentType>(); // Prefer VR startup when XR is compiled in.
+		syntax["--desktop"] = std::vector<ArgumentParser::ArgumentType>(); // Disable XR startup and stay in desktop mode.
 
 		if(args.size() == 3 && args[1] == "-NSDocumentRevisionsDebugMode")
 			args.resize(1); // This is some XCode debugging rubbish, remove it

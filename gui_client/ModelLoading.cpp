@@ -1867,7 +1867,6 @@ void ModelLoading::test()
 		failTest(e.what());
 	}
 
-
 	// Performance test
 	//if(false)
 	//{
