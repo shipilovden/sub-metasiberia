@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2023 -
 
 #include "AccountHandlers.h"
 #include "ServerLuaScriptTests.h"
+#include "ServerWorldState.h"
 #include "SubEvent.h"
 #include "../shared/WorldObject.h"
 #include "../shared/RateLimiter.h"
@@ -126,6 +127,7 @@ void ServerTestSuite::test()
 	runTest([&]() { Keccak256::test();													});
 	runTest([&]() { WorldMaterial::test();												});
 	runTest([&]() { LODGeneration::test();												});
+	runTest([&]() { ServerAllWorldsState::test();										});
 	runTest([&]() { WebSocketTests::test();												});
 	runTest([&]() { GIFDecoder::test();													}, /*mem leak allowed=*/true); // NOTE: leaks mem due to https://sourceforge.net/p/giflib/bugs/165/
 	runTest([&]() { PNGDecoder::test(".");												});

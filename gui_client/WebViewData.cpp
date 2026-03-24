@@ -12,6 +12,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "CEF.h"
 #include "URLWhitelist.h"
 #include "../shared/WorldObject.h"
+#include "../shared/ResourceManager.h"
 #include "../audio/AudioEngine.h"
 #include <opengl/OpenGLEngine.h>
 #include <opengl/IncludeOpenGL.h>
@@ -20,10 +21,13 @@ Copyright Glare Technologies Limited 2023 -
 #include <networking/URL.h>
 #include <graphics/Drawing.h>
 #include <ui/UIEvents.h>
+#include <utils/FileUtils.h>
 #include <utils/FileInStream.h>
 #include <utils/PlatformUtils.h>
 #include <utils/Base64.h>
+#include <utils/StringUtils.h>
 #include "superluminal/PerformanceAPI.h"
+#include <vector>
 #if EMSCRIPTEN
 #include <emscripten.h>
 #endif
@@ -37,6 +41,7 @@ extern "C" int makeHTMLViewJS();
 
 WebViewData::WebViewData()
 :	browser(NULL),
+	loaded_audio_player_state_key(),
 	showing_click_to_load_text(false),
 	user_clicked_to_load(false),
 	previous_is_visible(true),
@@ -160,6 +165,384 @@ EM_JS(int, makeWebViewIframe, (const char* URL), {
 #endif // end if EMSCRIPTEN
 
 
+namespace
+{
+struct AudioPlayerTrack
+{
+	std::string title;
+	std::string resolved_url;
+};
+
+
+void getAudioPlayerTrackURLs(const WorldObject& ob, std::vector<std::string>& URLs_out)
+{
+	if(!ob.isAudioPlayerWebView())
+		return;
+
+	size_t line_start = 0;
+	while(line_start <= ob.content.size())
+	{
+		const size_t line_end = ob.content.find('\n', line_start);
+		const size_t line_size = (line_end == std::string::npos) ? (ob.content.size() - line_start) : (line_end - line_start);
+
+		const std::string line = stripHeadWhitespace(stripTailWhitespace(ob.content.substr(line_start, line_size)));
+		if(!line.empty())
+			URLs_out.push_back(line);
+
+		if(line_end == std::string::npos)
+			break;
+
+		line_start = line_end + 1;
+	}
+}
+
+
+std::string getAudioPlayerTrackTitle(const std::string& playlist_url)
+{
+	std::string filename = FileUtils::getFilename(playlist_url);
+	if(filename.empty())
+		filename = playlist_url;
+
+	std::string title = removeDotAndExtension(filename);
+	if(title.empty())
+		title = filename;
+
+	for(size_t i=0; i<title.size(); ++i)
+		if(title[i] == '_')
+			title[i] = ' ';
+
+	return title;
+}
+
+
+std::string resolveAudioPlayerTrackURL(const std::string& playlist_url, ResourceManager& resource_manager, const std::string& server_hostname)
+{
+	if(hasPrefix(playlist_url, "http://") || hasPrefix(playlist_url, "https://"))
+		return playlist_url;
+
+	ResourceRef resource = resource_manager.getExistingResourceForURL(toURLString(playlist_url));
+	if(resource.nonNull() && resource->getState() == Resource::State_Present)
+		return "https://resource/" + web::Escaping::URLEscape(playlist_url);
+	else
+		return "http://" + server_hostname + "/resource/" + web::Escaping::URLEscape(playlist_url);
+}
+
+
+std::string makeAudioPlayerStateKey(const WorldObject& ob)
+{
+	return ob.target_url + "\n" + toString(ob.flags) + "\n" + toString(ob.audio_volume) + "\n" + ob.content;
+}
+
+
+std::string makeAudioPlayerRootPage(const WorldObject& ob, ResourceManager& resource_manager, const std::string& server_hostname)
+{
+	std::vector<std::string> playlist_urls;
+	getAudioPlayerTrackURLs(ob, playlist_urls);
+
+	std::vector<AudioPlayerTrack> tracks;
+	tracks.reserve(playlist_urls.size());
+	for(size_t i=0; i<playlist_urls.size(); ++i)
+	{
+		AudioPlayerTrack track;
+		track.title = getAudioPlayerTrackTitle(playlist_urls[i]);
+		track.resolved_url = resolveAudioPlayerTrackURL(playlist_urls[i], resource_manager, server_hostname);
+		tracks.push_back(track);
+	}
+
+	std::string playlist_js = "[";
+	for(size_t i=0; i<tracks.size(); ++i)
+	{
+		std::string title_base64;
+		Base64::encode(tracks[i].title.data(), tracks[i].title.size(), title_base64);
+
+		std::string url_base64;
+		Base64::encode(tracks[i].resolved_url.data(), tracks[i].resolved_url.size(), url_base64);
+
+		if(i > 0)
+			playlist_js += ",";
+		playlist_js += "{title:atob('" + title_base64 + "'),url:atob('" + url_base64 + "')}";
+	}
+	playlist_js += "]";
+
+	const bool autoplay = BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_AUTOPLAY);
+	const bool loop = BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_LOOP);
+	const bool shuffle = BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_SHUFFLE);
+	float initial_volume = ob.audio_volume;
+	if(initial_volume < 0.f)
+		initial_volume = 0.f;
+	else if(initial_volume > 1.f)
+		initial_volume = 1.f;
+
+	return std::string(
+		R"PLAYER(<html>
+<head>
+<meta charset="utf-8">
+<style>
+html,body{margin:0;width:100%;height:100%;background:#ffffff;color:#111111;font-family:Segoe UI,Arial,sans-serif;overflow:hidden;-webkit-user-select:none;}
+body{display:flex;align-items:center;justify-content:center;}
+.player{width:100%;height:100%;box-sizing:border-box;padding:18px 28px 20px;background:#ffffff;display:flex;flex-direction:column;justify-content:center;gap:14px;}
+.progress-shell{height:20px;display:flex;align-items:center;}
+.progress-track{position:relative;width:100%;height:5px;border-radius:999px;background:#d3d3d3;cursor:pointer;}
+.progress-track.disabled{cursor:default;opacity:0.55;}
+.progress-fill{position:absolute;left:0;top:0;height:100%;width:0%;border-radius:999px;background:#111111;pointer-events:none;}
+.progress-thumb{position:absolute;left:0%;top:50%;width:18px;height:18px;border-radius:50%;background:#111111;transform:translate(-50%,-50%);box-shadow:0 3px 10px rgba(0,0,0,0.16);pointer-events:none;}
+.controls{display:flex;align-items:center;justify-content:center;gap:14px;}
+.icon-button,.transport-button,.play-button{border:0;background:transparent;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;transition:transform 0.12s ease,color 0.12s ease,opacity 0.12s ease;}
+.icon-button,.transport-button{color:rgba(17,17,17,0.38);}
+.icon-button{width:32px;height:32px;}
+.transport-button{width:44px;height:44px;}
+.play-button{width:74px;height:74px;border-radius:50%;background:#111111;color:#ffffff;box-shadow:0 9px 20px rgba(0,0,0,0.16);}
+.icon-button.active,.transport-button:hover,.icon-button:hover{color:#111111;}
+.play-button:hover{transform:translateY(-1px) scale(1.01);}
+.icon-button:disabled,.transport-button:disabled,.play-button:disabled{cursor:default;opacity:0.28;transform:none;box-shadow:none;}
+.icon-button svg,.transport-button svg{width:20px;height:20px;fill:currentColor;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.play-button svg{width:28px;height:28px;fill:currentColor;}
+.empty{display:none;text-align:center;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;color:rgba(17,17,17,0.48);}
+audio{display:none;}
+</style>
+</head>
+<body>
+<div class="player">
+<div class="progress-shell">
+<div class="progress-track" id="progressTrack" aria-label="Playback progress">
+<div class="progress-fill" id="progressFill"></div>
+<div class="progress-thumb" id="progressThumb"></div>
+</div>
+</div>
+<div class="controls">
+<button class="icon-button" id="shuffleButton" aria-label="Shuffle playlist"></button>
+<button class="transport-button" id="prevButton" aria-label="Previous track"></button>
+<button class="play-button" id="playButton" aria-label="Play"></button>
+<button class="transport-button" id="nextButton" aria-label="Next track"></button>
+<button class="icon-button" id="repeatButton" aria-label="Toggle repeat"></button>
+</div>
+<div class="empty" id="emptyState">Playlist is empty</div>
+<audio id="playerAudio" preload="metadata"></audio>
+</div>
+<script>
+const playlist=)PLAYER") + playlist_js + std::string(R"PLAYER(;
+const autoplay=)PLAYER") + std::string(autoplay ? "true" : "false") + std::string(R"PLAYER(;
+const loopPlaylistDefault=)PLAYER") + std::string(loop ? "true" : "false") + std::string(R"PLAYER(;
+const shufflePlaylistDefault=)PLAYER") + std::string(shuffle ? "true" : "false") + std::string(R"PLAYER(;
+const initialVolume=)PLAYER") + toString(initial_volume) + std::string(R"PLAYER(;
+const audio=document.getElementById('playerAudio');
+const progressTrack=document.getElementById('progressTrack');
+const progressFill=document.getElementById('progressFill');
+const progressThumb=document.getElementById('progressThumb');
+const emptyElem=document.getElementById('emptyState');
+const shuffleButton=document.getElementById('shuffleButton');
+const repeatButton=document.getElementById('repeatButton');
+const playButton=document.getElementById('playButton');
+const prevButton=document.getElementById('prevButton');
+const nextButton=document.getElementById('nextButton');
+audio.volume=initialVolume;
+let currentIndex=0;
+let shuffleEnabled=shufflePlaylistDefault;
+let loopEnabled=loopPlaylistDefault;
+let userIsSeeking=false;
+const shuffleSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 7h4c3.5 0 4.5 5 8 5h4' fill='none'/><path d='M17 4l3 3-3 3' fill='none'/><path d='M4 17h4c3.5 0 4.5-5 8-5h4' fill='none'/><path d='M17 14l3 3-3 3' fill='none'/></svg>`;
+const repeatSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 7h10a3 3 0 0 1 3 3v1' fill='none'/><path d='M17 4l3 3-3 3' fill='none'/><path d='M17 17H7a3 3 0 0 1-3-3v-1' fill='none'/><path d='M7 20l-3-3 3-3' fill='none'/></svg>`;
+const prevSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 5h3v14H6z'/><path d='M18 6v12l-8-6 8-6z'/></svg>`;
+const nextSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M15 5h3v14h-3z'/><path d='M6 6v12l8-6-8-6z'/></svg>`;
+const playSvg=`<svg viewBox='0 0 64 64' aria-hidden='true'><path d='M24 18l22 14-22 14z'/></svg>`;
+const pauseSvg=`<svg viewBox='0 0 64 64' aria-hidden='true'><rect x='21' y='18' width='8' height='28' rx='2'/><rect x='35' y='18' width='8' height='28' rx='2'/></svg>`;
+function clamp01(value){return Math.max(0, Math.min(1, value));}
+function hasUsableDuration(){return Number.isFinite(audio.duration) && audio.duration > 0;}
+function updateEmptyState(){emptyElem.style.display=playlist.length ? 'none' : 'block';}
+function updateProgressVisual(progress)
+{
+	const clamped=clamp01(progress);
+	const percent=(Math.round(clamped * 1000) / 10) + '%';
+	progressFill.style.width=percent;
+	progressThumb.style.left=percent;
+	progressTrack.classList.toggle('disabled', !playlist.length);
+}
+function updateButtons()
+{
+	const hasTracks=playlist.length > 0;
+	shuffleButton.innerHTML=shuffleSvg;
+	repeatButton.innerHTML=repeatSvg;
+	prevButton.innerHTML=prevSvg;
+	nextButton.innerHTML=nextSvg;
+	playButton.innerHTML=audio.paused ? playSvg : pauseSvg;
+	shuffleButton.classList.toggle('active', shuffleEnabled);
+	repeatButton.classList.toggle('active', loopEnabled);
+	shuffleButton.disabled=!hasTracks;
+	repeatButton.disabled=!hasTracks;
+	prevButton.disabled=!hasTracks;
+	nextButton.disabled=!hasTracks;
+	playButton.disabled=!hasTracks;
+	playButton.setAttribute('aria-label', audio.paused ? 'Play' : 'Pause');
+}
+function syncProgressFromAudio()
+{
+	if(!userIsSeeking)
+		updateProgressVisual(hasUsableDuration() ? (audio.currentTime / audio.duration) : 0);
+	updateButtons();
+}
+function playCurrent()
+{
+	if(!playlist.length)
+		return;
+	const playPromise=audio.play();
+	if(playPromise && playPromise.catch)
+		playPromise.catch(function(){updateButtons();});
+	updateButtons();
+}
+function chooseRandomIndex()
+{
+	if(playlist.length <= 1)
+		return currentIndex;
+	let nextIndex=currentIndex;
+	while(nextIndex === currentIndex)
+		nextIndex=Math.floor(Math.random() * playlist.length);
+	return nextIndex;
+}
+function selectTrack(index, shouldPlay)
+{
+	if(!playlist.length)
+	{
+		audio.pause();
+		audio.removeAttribute('src');
+		audio.load();
+		updateEmptyState();
+		updateProgressVisual(0);
+		updateButtons();
+		return;
+	}
+
+	updateEmptyState();
+	currentIndex=((index % playlist.length) + playlist.length) % playlist.length;
+	audio.src=playlist[currentIndex].url;
+	audio.load();
+	updateProgressVisual(0);
+	if(shouldPlay)
+		playCurrent();
+	else
+		updateButtons();
+}
+function selectNext(shouldPlay)
+{
+	if(!playlist.length)
+		return;
+
+	if(shuffleEnabled)
+		selectTrack(chooseRandomIndex(), shouldPlay);
+	else if(currentIndex + 1 < playlist.length)
+		selectTrack(currentIndex + 1, shouldPlay);
+	else if(loopEnabled)
+		selectTrack(0, shouldPlay);
+	else
+	{
+		audio.pause();
+		if(hasUsableDuration())
+			audio.currentTime=audio.duration;
+		updateProgressVisual(1);
+		updateButtons();
+	}
+}
+function selectPrev()
+{
+	if(!playlist.length)
+		return;
+
+	if(hasUsableDuration() && audio.currentTime > 2)
+	{
+		audio.currentTime=0;
+		syncProgressFromAudio();
+		return;
+	}
+
+	if(shuffleEnabled)
+		selectTrack(chooseRandomIndex(), true);
+	else if(currentIndex > 0)
+		selectTrack(currentIndex - 1, true);
+	else if(loopEnabled)
+		selectTrack(playlist.length - 1, true);
+	else
+	{
+		audio.currentTime=0;
+		syncProgressFromAudio();
+	}
+}
+function progressForEvent(event)
+{
+	const rect=progressTrack.getBoundingClientRect();
+	if(rect.width <= 0)
+		return 0;
+
+	let clientX=0;
+	if(event.touches && event.touches.length)
+		clientX=event.touches[0].clientX;
+	else if(event.changedTouches && event.changedTouches.length)
+		clientX=event.changedTouches[0].clientX;
+	else
+		clientX=event.clientX;
+
+	return clamp01((clientX - rect.left) / rect.width);
+}
+function setPlaybackProgress(progress)
+{
+	const clamped=clamp01(progress);
+	updateProgressVisual(clamped);
+	if(hasUsableDuration())
+		audio.currentTime=clamped * audio.duration;
+}
+function beginSeek(event)
+{
+	if(!playlist.length)
+		return;
+	userIsSeeking=true;
+	if(event.cancelable)
+		event.preventDefault();
+	setPlaybackProgress(progressForEvent(event));
+}
+function continueSeek(event)
+{
+	if(!userIsSeeking)
+		return;
+	if(event.cancelable)
+		event.preventDefault();
+	setPlaybackProgress(progressForEvent(event));
+}
+function endSeek(event)
+{
+	if(!userIsSeeking)
+		return;
+	if(event && event.cancelable)
+		event.preventDefault();
+	if(event)
+		setPlaybackProgress(progressForEvent(event));
+	userIsSeeking=false;
+	syncProgressFromAudio();
+}
+shuffleButton.onclick=function(){if(!playlist.length)return;shuffleEnabled=!shuffleEnabled;updateButtons();};
+repeatButton.onclick=function(){if(!playlist.length)return;loopEnabled=!loopEnabled;updateButtons();};
+playButton.onclick=function(){if(!playlist.length)return;if(!audio.src)selectTrack(currentIndex, false);if(audio.paused)playCurrent();else{audio.pause();updateButtons();}};
+prevButton.onclick=function(){selectPrev();};
+nextButton.onclick=function(){selectNext(true);};
+progressTrack.addEventListener('mousedown', beginSeek);
+document.addEventListener('mousemove', continueSeek);
+document.addEventListener('mouseup', endSeek);
+progressTrack.addEventListener('click', function(event){if(userIsSeeking || !playlist.length)return;setPlaybackProgress(progressForEvent(event));});
+audio.addEventListener('play', updateButtons);
+audio.addEventListener('pause', updateButtons);
+audio.addEventListener('timeupdate', syncProgressFromAudio);
+audio.addEventListener('loadedmetadata', syncProgressFromAudio);
+audio.addEventListener('durationchange', syncProgressFromAudio);
+audio.addEventListener('ended', function(){if(loopEnabled || shuffleEnabled || (currentIndex + 1 < playlist.length)){selectNext(true);}else{updateProgressVisual(1);updateButtons();}});
+updateEmptyState();
+updateProgressVisual(0);
+updateButtons();
+if(playlist.length)
+	selectTrack(0, autoplay);
+</script>
+</body>
+</html>)PLAYER");
+}
+}
+
+
 void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, WorldObject* ob, double anim_time, double dt)
 {
 	PERFORMANCEAPI_INSTRUMENT_FUNCTION();
@@ -266,8 +649,14 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 
 #if CEF_SUPPORT
 
-	const int viewport_width  = 1920;
-	const int viewport_height = 1080; // Webview uses 1920 : 1080 aspect ratio.  (See MainWindow::on_actionAdd_Web_View_triggered())
+	const bool is_audio_player = ob->isAudioPlayerWebView();
+	const int viewport_width  = is_audio_player ? 1200 : 1920;
+	const int viewport_height = is_audio_player ? 320  : 1080;
+	const std::string audio_player_state_key = is_audio_player ? makeAudioPlayerStateKey(*ob) : std::string();
+	const std::string effective_target_url = is_audio_player ? WorldObject::audioPlayerTargetURL() : ob->target_url;
+
+	if(is_audio_player && ob->target_url.empty())
+		ob->target_url = effective_target_url;
 
 	if(in_process_dist)
 	{
@@ -282,22 +671,22 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 		}
 		if(cef_initialized)
 		{
-			const bool has_url = !ob->target_url.empty();
+			const bool has_url = !effective_target_url.empty();
 			const bool has_opengl_ob = ob->opengl_engine_ob.nonNull();
 			const bool browser_is_null = browser.isNull();
 			
 			if(browser_is_null && has_url && has_opengl_ob)
 			{
 				// Auto-load web view when player approaches (in_process_dist is true).
-				// Always auto-load when in proximity distance, no security checks needed.
-				const bool should_auto_load = in_process_dist || user_clicked_to_load;
+				// Local audio players should load immediately, normal web views still follow the existing interaction rules.
+				const bool should_auto_load = is_audio_player || in_process_dist || user_clicked_to_load;
 				
 				conPrint("WebViewData::process: should_auto_load=" + toString(should_auto_load) + ", in_process_dist=" + toString(in_process_dist) + ", user_clicked=" + toString(user_clicked_to_load) + ", target_url='" + ob->target_url + "'");
 
 				if(should_auto_load)
 				{
-					conPrint("WebViewData::process: Creating browser, target_url: " + ob->target_url);
-					gui_client->logMessage("Creating browser, target_url: " + ob->target_url);
+					conPrint("WebViewData::process: Creating browser, target_url: " + effective_target_url);
+					gui_client->logMessage("Creating browser, target_url: " + effective_target_url);
 
 					if(ob->opengl_engine_ob.nonNull())
 					{
@@ -308,7 +697,17 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 
 					browser = new EmbeddedBrowser();
 					conPrint("WebViewData::process: Calling browser->create()...");
-					browser->create(ob->target_url, viewport_width, viewport_height, gui_client, ob, /*mat index=*/0, /*apply_to_emission_texture=*/true, OpenGLTexture::Wrapping_Clamp, opengl_engine);
+					if(is_audio_player)
+					{
+						const std::string root_page = makeAudioPlayerRootPage(*ob, *gui_client->resource_manager, gui_client->server_hostname);
+						browser->create(WorldObject::audioPlayerTargetURL(), viewport_width, viewport_height, gui_client, ob, /*mat index=*/0, /*apply_to_emission_texture=*/true, OpenGLTexture::Wrapping_Clamp, opengl_engine, root_page);
+						this->loaded_audio_player_state_key = audio_player_state_key;
+					}
+					else
+					{
+						browser->create(effective_target_url, viewport_width, viewport_height, gui_client, ob, /*mat index=*/0, /*apply_to_emission_texture=*/true, OpenGLTexture::Wrapping_Clamp, opengl_engine);
+					}
+					this->loaded_target_url = effective_target_url;
 					conPrint("WebViewData::process: browser->create() completed");
 				}
 				else
@@ -329,18 +728,19 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 				}
 			}
 
-			// Update loaded_target_url if it changed
-			if(!ob->target_url.empty())
+			if(browser.nonNull() && is_audio_player && (audio_player_state_key != this->loaded_audio_player_state_key))
 			{
-				this->loaded_target_url = ob->target_url;
+				const std::string root_page = makeAudioPlayerRootPage(*ob, *gui_client->resource_manager, gui_client->server_hostname);
+				browser->updateRootPage(root_page);
+				browser->navigate(WorldObject::audioPlayerTargetURL());
+				this->loaded_audio_player_state_key = audio_player_state_key;
+				this->loaded_target_url = effective_target_url;
 			}
-
-			// If target url has changed, tell webview to load it
-			if(browser.nonNull() && (ob->target_url != this->loaded_target_url))
+			else if(browser.nonNull() && (effective_target_url != this->loaded_target_url))
 			{
 				// Always navigate to new URL, no security checks needed
-				browser->navigate(ob->target_url);
-				this->loaded_target_url = ob->target_url;
+				browser->navigate(effective_target_url);
+				this->loaded_target_url = effective_target_url;
 			}
 
 			// While the webview is not visible by the camera, we discard any dirty-rect updates.  
@@ -371,6 +771,7 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 			conPrint("WebViewData::process: Closing browser (out of view distance), target_url: " + ob->target_url);
 			gui_client->logMessage("Closing browser (out of view distance), target_url: " + ob->target_url);
 			browser = NULL;
+			loaded_audio_player_state_key.clear();
 
 			// Remove audio source
 			if(ob->audio_source.nonNull())

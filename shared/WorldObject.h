@@ -312,6 +312,8 @@ public:
 	static const size_t MAX_SCRIPT_SIZE                   = 10000;
 	static const size_t MAX_CONTENT_SIZE                  = 10000;
 	static const size_t MAX_FONT_NAME_SIZE                = 256;
+	static const char* audioPlayerTargetURL() { return "https://localdomain/audio-player"; }
+	static bool looksLikeAudioPlayerPlaylistContent(const std::string& content);
 	
 
 	URLString model_url;
@@ -338,6 +340,7 @@ public:
 	static const uint32 EXCLUDE_FROM_LOD_CHUNK_MESH             = 512; // Should this object be excluded from LOD Chunk meshes? (for e.g. moving objects)
 	static const uint32 AUDIO_AUTOPLAY                          = 1024; // For objects that play audio, should the audio auto-play?
 	static const uint32 AUDIO_LOOP                              = 2048; // For objects that play audio, should the audio loop?
+	static const uint32 AUDIO_SHUFFLE                           = 4096; // For audio players, should playlist playback start in shuffle mode?
 	uint32 flags;
 
 	TimeStamp created_time;
@@ -414,6 +417,8 @@ public:
 #endif
 	URLString audio_source_url;
 	float audio_volume;
+
+	bool isAudioPlayerWebView() const;
 
 	enum State
 	{

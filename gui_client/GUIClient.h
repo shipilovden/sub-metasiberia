@@ -26,6 +26,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "URLParser.h"
 #include "WorldState.h"
 #include "URLWhitelist.h"
+#include "XRSession.h"
 #include "EmscriptenResourceDownloader.h"
 #include "UploadResourceThread.h"
 #include "ScriptedObjectProximityChecker.h"
@@ -57,6 +58,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <map>
 #include <unordered_set>
 #include <deque>
+#include <fstream>
 class UDPSocket;
 namespace Ui { class MainWindow; }
 class TextureServer;
@@ -176,6 +178,8 @@ public:
 
 
 	void timerEvent(const MouseCursorState& mouse_cursor_state);
+	void renderXRFrame(float near_draw_dist, float max_draw_dist);
+	const XRMirrorView& getXRMirrorView() const { return xr_mirror_view; }
 
 
 	Reference<SettingsStore> getSettingsStore() { return settings; }
@@ -358,7 +362,7 @@ public:
 	void startLoadingTextureForLocalPath(const OpenGLTextureKey& local_abs_tex_path, const Reference<Resource>& resource, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_task_dist, float importance_factor, 
 		const TextureParams& tex_params);
 	void startLoadingTextureForObjectOrAvatar(const UID& ob_uid, const UID& avatar_uid, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_dist_for_ob_lod_level, float max_dist_for_ob_lod_level_clamped_0, float importance_factor, const WorldMaterial& world_mat, 
-		int ob_lod_level, const URLString& texture_url, bool tex_has_alpha, bool use_sRGB, bool allow_compression);
+		int ob_lod_level, const URLString& texture_url, bool tex_has_alpha, bool use_sRGB, bool allow_compression, bool use_basis);
 	void startLoadingTexturesForObject(const WorldObject& ob, int ob_lod_level, float max_dist_for_ob_lod_level, float max_dist_for_ob_lod_level_clamped_0);
 	void startLoadingTexturesForAvatar(const Avatar& ob, int ob_lod_level, float max_dist_for_ob_lod_level, bool our_avatar);
 	void removeAndDeleteGLObjectsForOb(WorldObject& ob);
@@ -421,6 +425,13 @@ public:
 	void updateObjectsWithDiagnosticVis();
 
 	void processPlayerPhysicsInput(float dt, bool world_render_has_keyboard_focus, PlayerPhysicsInput& input_out);
+	bool getCurrentXRTrackedHeadPose(Vec3d& pos_out, Vec3d& angles_out) const;
+	bool getCurrentXRRawHeadPose(Vec3d& pos_out, Vec3d& angles_out) const;
+	void getCurrentAvatarPoseForNetworking(Vec3d& pos_out, Vec3d& angles_out);
+	void getCurrentListenerPose(Vec3d& pos_out, Vec3d& angles_out) const;
+	bool requestXRRecenter();
+	void resetXRTraceCapture();
+	void appendXRTraceSample();
 
 	void setFlyModeEnabled(bool enabled);
 
@@ -445,6 +456,7 @@ public:
 
 	void setOnlyLoadMostImportantObs(bool only_load_most_important_obs);
 
+	bool shouldDisableBasisTexturesForCurrentServer() const;
 	bool shouldDisableLODForCurrentServer() const;
 	int getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const;
 	void tryResolvePendingCameraPairCreateForObject(WorldObject* created_ob, WorldStateLock& world_state_lock);
@@ -640,6 +652,22 @@ public:
 	Timer fps_display_timer;
 	int num_frames_since_fps_timer_reset;
 	double last_fps;
+	XRSession* xr_session;
+	XRRuntimeProbeResult xr_runtime_probe_result;
+	XRMirrorView xr_mirror_view;
+	XRTrackedPoseState xr_head_pose_state;
+	XRTrackedPoseState xr_raw_head_pose_state;
+	XREyeViewState xr_left_eye_view_state;
+	XREyeViewState xr_right_eye_view_state;
+	XRHandInputState xr_left_hand_state;
+	XRHandInputState xr_right_hand_state;
+	bool xr_runtime_probe_done;
+	bool xr_logged_head_pose_alignment;
+	std::string xr_pose_trace_path;
+	std::ofstream xr_pose_trace_stream;
+	double xr_pose_trace_start_time;
+	double xr_pose_trace_last_write_time;
+	size_t xr_pose_trace_sample_count;
 
 	// ModelLoadedThreadMessages that have been sent to this thread, but are still to be processed.
 	std::deque<Reference<ModelLoadedThreadMessage> > model_loaded_messages_to_process;

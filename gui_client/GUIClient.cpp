@@ -146,6 +146,241 @@ static std::vector<AvatarRef> test_avatars;
 static std::vector<double> test_avatar_phases;
 
 
+static const char* const XR_LAUNCH_MODE_SETTINGS_KEY = "setting/xr_launch_mode";
+
+
+enum class XRLaunchMode
+{
+	Auto,
+	Desktop,
+	VR
+};
+
+
+struct XRLaunchModeDecision
+{
+	XRLaunchModeDecision() : mode(XRLaunchMode::Auto) {}
+
+	XRLaunchMode mode;
+	std::string source;
+	std::string detail;
+};
+
+
+static bool parseXRBooleanString(const std::string& raw_value, bool& value_out)
+{
+	const std::string value = toLowerCase(raw_value);
+	if((value == "1") || (value == "true") || (value == "yes") || (value == "on"))
+	{
+		value_out = true;
+		return true;
+	}
+	if((value == "0") || (value == "false") || (value == "no") || (value == "off"))
+	{
+		value_out = false;
+		return true;
+	}
+
+	return false;
+}
+
+
+static XRLaunchMode parseXRLaunchModeString(const std::string& raw_value)
+{
+	const std::string value = toLowerCase(raw_value);
+
+	if((value == "desktop") || (value == "off") || (value == "disabled"))
+		return XRLaunchMode::Desktop;
+	if((value == "vr") || (value == "xr") || (value == "on") || (value == "enabled"))
+		return XRLaunchMode::VR;
+
+	return XRLaunchMode::Auto;
+}
+
+
+static std::string xrLaunchModeToString(const XRLaunchMode mode)
+{
+	switch(mode)
+	{
+	case XRLaunchMode::Auto:    return "auto";
+	case XRLaunchMode::Desktop: return "desktop";
+	case XRLaunchMode::VR:      return "vr";
+	default:                    return "auto";
+	}
+}
+
+
+static XRLaunchModeDecision chooseXRLaunchMode(const ArgumentParser& parsed_args, SettingsStore* settings)
+{
+	XRLaunchModeDecision decision;
+
+	if(parsed_args.isArgPresent("--desktop") && parsed_args.isArgPresent("--vr"))
+	{
+		decision.mode = XRLaunchMode::Desktop;
+		decision.source = "command line";
+		decision.detail = "Both --desktop and --vr were specified, so desktop mode takes precedence.";
+		return decision;
+	}
+
+	if(parsed_args.isArgPresent("--desktop"))
+	{
+		decision.mode = XRLaunchMode::Desktop;
+		decision.source = "command line";
+		decision.detail = "Desktop mode was requested with --desktop.";
+		return decision;
+	}
+
+	if(parsed_args.isArgPresent("--vr"))
+	{
+		decision.mode = XRLaunchMode::VR;
+		decision.source = "command line";
+		decision.detail = "VR mode was requested with --vr.";
+		return decision;
+	}
+
+	try
+	{
+		const std::string env_value = PlatformUtils::getEnvironmentVariable("SUBSTRATA_ENABLE_XR");
+		bool env_wants_vr = false;
+		if(parseXRBooleanString(env_value, env_wants_vr))
+		{
+			decision.mode = env_wants_vr ? XRLaunchMode::VR : XRLaunchMode::Desktop;
+			decision.source = "environment";
+			decision.detail = std::string("SUBSTRATA_ENABLE_XR=") + env_value +
+				(env_wants_vr ? " requested VR startup." : " requested desktop-only startup.");
+			return decision;
+		}
+	}
+	catch(glare::Exception&)
+	{}
+
+	if(settings)
+	{
+		const XRLaunchMode settings_mode = parseXRLaunchModeString(settings->getStringValue(XR_LAUNCH_MODE_SETTINGS_KEY, "auto"));
+		decision.mode = settings_mode;
+		decision.source = "settings";
+		decision.detail = "XR launch mode loaded from settings: " + xrLaunchModeToString(settings_mode) + ".";
+		return decision;
+	}
+
+	decision.mode = XRLaunchMode::Auto;
+	decision.source = "default";
+	decision.detail = "XR launch mode defaulted to automatic startup with desktop fallback.";
+	return decision;
+}
+
+
+static XRRuntimeProbeResult makeXRLaunchInactiveResult(const XRLaunchModeDecision& decision)
+{
+	XRRuntimeProbeResult result = {};
+#if defined(XR_SUPPORT)
+	result.xr_compiled_in = true;
+	result.backend_name = "OpenXR";
+	if(decision.mode == XRLaunchMode::Desktop)
+		result.message = "XR launch mode is set to desktop, so OpenXR startup was skipped.";
+	else
+		result.message = "OpenXR startup has not been attempted yet.";
+#else
+	result.backend_name = "None";
+	if(decision.mode == XRLaunchMode::Desktop)
+		result.message = "XR support is not compiled into this build.";
+	else
+		result.message = "XR startup was requested, but XR support is not compiled into this build.";
+#endif
+	return result;
+}
+
+
+static Vec3d getCameraAnglesFromTrackedHeadBasis(const Vec3d& cam_forward, const Vec3d& camera_right)
+{
+	const Vec3d forward = normalise(cam_forward);
+	const Vec3d right = normalise(camera_right);
+
+	Vec3d rotation;
+	rotation.x = std::atan2(forward.y, forward.x);
+	rotation.y = std::acos(myClamp(forward.z, -1.0, 1.0));
+
+	const Vec3d world_up(0, 0, 1);
+	const Vec3d rollplane_x_basis = crossProduct(forward, world_up);
+	if(rollplane_x_basis.length2() > 1.0e-10)
+	{
+		const Vec3d rollplane_x = normalise(rollplane_x_basis);
+		const Vec3d rollplane_y = normalise(crossProduct(rollplane_x, forward));
+		rotation.z = std::atan2(dot(right, rollplane_y), dot(right, rollplane_x));
+	}
+	else
+	{
+		rotation.z = 0;
+	}
+
+	return rotation;
+}
+
+
+static bool extractTrackedHeadPose(const XRTrackedPoseState& head_pose_state, Vec3d& pos_out, Vec3d& angles_out)
+{
+	if(!(head_pose_state.active && head_pose_state.position_valid && head_pose_state.orientation_valid))
+		return false;
+
+	const Matrix4f& object_to_world = head_pose_state.object_to_world_matrix;
+	pos_out = toVec3d(object_to_world.getColumn(3));
+	angles_out = getCameraAnglesFromTrackedHeadBasis(toVec3d(object_to_world.getColumn(1)), toVec3d(object_to_world.getColumn(0)));
+
+	return
+		std::isfinite(pos_out.x) && std::isfinite(pos_out.y) && std::isfinite(pos_out.z) &&
+		std::isfinite(angles_out.x) && std::isfinite(angles_out.y) && std::isfinite(angles_out.z);
+}
+
+
+static std::string formatXRTraceScalar(double v)
+{
+	return std::isfinite(v) ? doubleToStringNDecimalPlaces(v, 6) : "";
+}
+
+
+static void appendXRTracePoseCSV(std::ostream& stream, const XRTrackedPoseState& pose_state)
+{
+	stream
+		<< (pose_state.active ? "1" : "0") << ','
+		<< (pose_state.position_valid ? "1" : "0") << ','
+		<< (pose_state.orientation_valid ? "1" : "0") << ','
+		<< (pose_state.position_tracked ? "1" : "0") << ','
+		<< (pose_state.orientation_tracked ? "1" : "0") << ',';
+
+	Vec3d pos;
+	Vec3d angles;
+	if(extractTrackedHeadPose(pose_state, pos, angles))
+	{
+		stream
+			<< formatXRTraceScalar(pos.x) << ','
+			<< formatXRTraceScalar(pos.y) << ','
+			<< formatXRTraceScalar(pos.z) << ','
+			<< formatXRTraceScalar(radToDegree(angles.x)) << ','
+			<< formatXRTraceScalar(radToDegree(angles.y)) << ','
+			<< formatXRTraceScalar(radToDegree(angles.z));
+	}
+	else
+	{
+		stream << ",,,,,";
+	}
+}
+
+
+static void appendXREyeViewTraceCSV(std::ostream& stream, const XREyeViewState& eye_state)
+{
+	appendXRTracePoseCSV(stream, eye_state.raw_pose);
+	stream << ',';
+	appendXRTracePoseCSV(stream, eye_state.world_pose);
+	stream
+		<< ','
+		<< (eye_state.fov_valid ? "1" : "0") << ','
+		<< formatXRTraceScalar(eye_state.angle_left_deg) << ','
+		<< formatXRTraceScalar(eye_state.angle_right_deg) << ','
+		<< formatXRTraceScalar(eye_state.angle_up_deg) << ','
+		<< formatXRTraceScalar(eye_state.angle_down_deg);
+}
+
+
 GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appdata_path_, const ArgumentParser& args)
 :	base_dir_path(base_dir_path_),
 	appdata_path(appdata_path_),
@@ -183,6 +418,12 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	url_parcel_uid(-1),
 	running_destructor(false),
 	biome_manager(NULL),
+	xr_session(NULL),
+	xr_runtime_probe_done(false),
+	xr_logged_head_pose_alignment(false),
+	xr_pose_trace_start_time(-1.0),
+	xr_pose_trace_last_write_time(-1.0),
+	xr_pose_trace_sample_count(0),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder),
 	frame_num(0),
 	next_lod_changes_begin_i(0),
@@ -623,6 +864,99 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 
 	opengl_engine = opengl_engine_;
 
+	if(xr_session)
+	{
+		delete xr_session;
+		xr_session = NULL;
+	}
+	xr_mirror_view.valid = false;
+	xr_head_pose_state = XRTrackedPoseState();
+	xr_raw_head_pose_state = XRTrackedPoseState();
+	xr_left_eye_view_state = XREyeViewState();
+	xr_right_eye_view_state = XREyeViewState();
+	xr_left_hand_state = XRHandInputState();
+	xr_right_hand_state = XRHandInputState();
+	xr_logged_head_pose_alignment = false;
+	const XRLaunchModeDecision xr_launch_mode_decision = chooseXRLaunchMode(parsed_args, settings.ptr());
+	xr_runtime_probe_result = makeXRLaunchInactiveResult(xr_launch_mode_decision);
+	if(xr_pose_trace_stream.is_open())
+		xr_pose_trace_stream.close();
+	xr_pose_trace_start_time = -1.0;
+	xr_pose_trace_last_write_time = -1.0;
+	xr_pose_trace_sample_count = 0;
+	xr_runtime_probe_done = true;
+
+	logMessage("[XR] launch mode: " + xrLaunchModeToString(xr_launch_mode_decision.mode) + " (" + xr_launch_mode_decision.source + ")");
+	logMessage("[XR] " + xr_launch_mode_decision.detail);
+
+	const bool should_attempt_xr_startup = (xr_launch_mode_decision.mode != XRLaunchMode::Desktop);
+	if(should_attempt_xr_startup)
+	{
+		xr_session = new XRSession();
+		xr_session->initialiseForCurrentOpenGLContext();
+		xr_runtime_probe_result = xr_session->getLastResult();
+		xr_mirror_view = xr_session->getMirrorView();
+		xr_head_pose_state = xr_session->getHeadPoseState();
+		xr_raw_head_pose_state = xr_session->getRawHeadPoseState();
+		xr_left_eye_view_state = xr_session->getLeftEyeViewState();
+		xr_right_eye_view_state = xr_session->getRightEyeViewState();
+		xr_left_hand_state = xr_session->getLeftHandState();
+		xr_right_hand_state = xr_session->getRightHandState();
+		if(!xr_session->isInitialised())
+		{
+			const std::string failure_message = xr_runtime_probe_result.message;
+			delete xr_session;
+			xr_session = NULL;
+			if(xr_launch_mode_decision.mode == XRLaunchMode::Auto)
+				logMessage("[XR] Automatic XR startup failed, continuing in desktop mode. Reason: " + failure_message);
+			else
+				logMessage("[XR] VR startup failed, continuing in desktop mode. Reason: " + failure_message);
+		}
+		else
+		{
+			resetXRTraceCapture();
+		}
+	}
+	else
+	{
+		logMessage("[XR] " + xr_runtime_probe_result.message);
+	}
+
+	if(should_attempt_xr_startup && xr_runtime_probe_result.xr_compiled_in)
+	{
+		std::string msg = "[XR] backend: " + xr_runtime_probe_result.backend_name + ", loader reachable: " + boolToString(xr_runtime_probe_result.loader_reachable) +
+			", instance created: " + boolToString(xr_runtime_probe_result.instance_created) +
+			", system available: " + boolToString(xr_runtime_probe_result.system_available) +
+			", graphics requirements: " + boolToString(xr_runtime_probe_result.graphics_requirements_obtained) +
+			", session created: " + boolToString(xr_runtime_probe_result.session_created) +
+			", local space: " + boolToString(xr_runtime_probe_result.local_reference_space_created);
+		if(!xr_runtime_probe_result.runtime_name.empty())
+			msg += ", runtime: " + xr_runtime_probe_result.runtime_name + " " + xr_runtime_probe_result.runtime_version_string;
+		if(!xr_runtime_probe_result.system_name.empty())
+			msg += ", system: " + xr_runtime_probe_result.system_name;
+		if(xr_runtime_probe_result.configured_view_count > 0)
+			msg += ", configured views: " + toString(xr_runtime_probe_result.configured_view_count);
+		if(!xr_runtime_probe_result.reference_space_type_string.empty())
+			msg += ", reference space: " + xr_runtime_probe_result.reference_space_type_string;
+		if(xr_runtime_probe_result.swapchains_created)
+			msg += ", swapchains: true";
+		if(xr_runtime_probe_result.action_set_created)
+			msg += ", action set: true";
+		if(xr_runtime_probe_result.action_bindings_suggested)
+			msg += ", binding profiles: " + toString(xr_runtime_probe_result.suggested_binding_profile_count);
+		if(xr_runtime_probe_result.action_spaces_created)
+			msg += ", hand spaces: true";
+		if(!xr_runtime_probe_result.swapchain_format_string.empty())
+			msg += ", swapchain format: " + xr_runtime_probe_result.swapchain_format_string;
+		logMessage(msg);
+		logMessage("[XR] " + xr_runtime_probe_result.message);
+		if(!xr_runtime_probe_result.actions_message.empty())
+			logMessage("[XR] " + xr_runtime_probe_result.actions_message);
+	}
+	else if(should_attempt_xr_startup)
+	{
+		logMessage("[XR] " + xr_runtime_probe_result.message);
+	}
 
 	this->only_load_most_important_obs = settings->getBoolValue(/*MainOptionsDialog::onlyLoadMostImportantObsKey=*/"only_load_most_important_obs", /*default value=*/onlyLoadMostImportantObjectsDefaultValue());
 
@@ -1080,6 +1414,120 @@ GUIClient::~GUIClient()
 }
 
 
+bool GUIClient::getCurrentXRTrackedHeadPose(Vec3d& pos_out, Vec3d& angles_out) const
+{
+	return extractTrackedHeadPose(this->xr_head_pose_state, pos_out, angles_out);
+}
+
+
+bool GUIClient::getCurrentXRRawHeadPose(Vec3d& pos_out, Vec3d& angles_out) const
+{
+	return extractTrackedHeadPose(this->xr_raw_head_pose_state, pos_out, angles_out);
+}
+
+
+void GUIClient::getCurrentAvatarPoseForNetworking(Vec3d& pos_out, Vec3d& angles_out)
+{
+	if(!getCurrentXRTrackedHeadPose(pos_out, angles_out))
+	{
+		pos_out = this->cam_controller.getFirstPersonPosition();
+		angles_out = this->cam_controller.getAvatarAngles();
+	}
+}
+
+
+void GUIClient::getCurrentListenerPose(Vec3d& pos_out, Vec3d& angles_out) const
+{
+	if(!getCurrentXRTrackedHeadPose(pos_out, angles_out))
+	{
+		pos_out = this->cam_controller.getPosition();
+		angles_out = this->cam_controller.getAngles();
+	}
+}
+
+
+void GUIClient::resetXRTraceCapture()
+{
+	xr_pose_trace_path = appdata_path + "/xr_pose_trace.csv";
+	if(xr_pose_trace_stream.is_open())
+		xr_pose_trace_stream.close();
+
+	xr_pose_trace_stream.open(xr_pose_trace_path.c_str(), std::ios::out | std::ios::trunc);
+	xr_pose_trace_start_time = Clock::getTimeSinceInit();
+	xr_pose_trace_last_write_time = -1.0;
+	xr_pose_trace_sample_count = 0;
+
+	if(xr_pose_trace_stream.is_open())
+	{
+		xr_pose_trace_stream
+			<< "time_s,session_state,reference_space,"
+			<< "raw_active,raw_pos_valid,raw_orient_valid,raw_pos_tracked,raw_orient_tracked,raw_x,raw_y,raw_z,raw_yaw_deg,raw_pitch_deg,raw_roll_deg,"
+			<< "world_active,world_pos_valid,world_orient_valid,world_pos_tracked,world_orient_tracked,world_x,world_y,world_z,world_yaw_deg,world_pitch_deg,world_roll_deg,"
+			<< "left_raw_active,left_raw_pos_valid,left_raw_orient_valid,left_raw_pos_tracked,left_raw_orient_tracked,left_raw_x,left_raw_y,left_raw_z,left_raw_yaw_deg,left_raw_pitch_deg,left_raw_roll_deg,"
+			<< "left_world_active,left_world_pos_valid,left_world_orient_valid,left_world_pos_tracked,left_world_orient_tracked,left_world_x,left_world_y,left_world_z,left_world_yaw_deg,left_world_pitch_deg,left_world_roll_deg,"
+			<< "left_fov_valid,left_fov_left_deg,left_fov_right_deg,left_fov_up_deg,left_fov_down_deg,"
+			<< "right_raw_active,right_raw_pos_valid,right_raw_orient_valid,right_raw_pos_tracked,right_raw_orient_tracked,right_raw_x,right_raw_y,right_raw_z,right_raw_yaw_deg,right_raw_pitch_deg,right_raw_roll_deg,"
+			<< "right_world_active,right_world_pos_valid,right_world_orient_valid,right_world_pos_tracked,right_world_orient_tracked,right_world_x,right_world_y,right_world_z,right_world_yaw_deg,right_world_pitch_deg,right_world_roll_deg,"
+			<< "right_fov_valid,right_fov_left_deg,right_fov_right_deg,right_fov_up_deg,right_fov_down_deg,"
+			<< "cam_heading_deg,cam_pitch_deg,cam_roll_deg,avatar_heading_deg,avatar_pitch_deg,avatar_roll_deg\n";
+		xr_pose_trace_stream.flush();
+		logMessage("[XR] Pose trace capture reset: " + xr_pose_trace_path);
+	}
+}
+
+
+void GUIClient::appendXRTraceSample()
+{
+	if(!xr_pose_trace_stream.is_open())
+		return;
+
+	const double now = Clock::getTimeSinceInit();
+	if((xr_pose_trace_last_write_time >= 0.0) && ((now - xr_pose_trace_last_write_time) < 0.1))
+		return;
+
+	xr_pose_trace_last_write_time = now;
+	xr_pose_trace_sample_count++;
+
+	const Vec3d cam_angles = cam_controller.getAngles();
+	const Vec3d avatar_angles = cam_controller.getAvatarAngles();
+
+	xr_pose_trace_stream
+		<< formatXRTraceScalar(now - xr_pose_trace_start_time) << ','
+		<< xr_runtime_probe_result.session_state_string << ','
+		<< xr_runtime_probe_result.reference_space_type_string << ',';
+	appendXRTracePoseCSV(xr_pose_trace_stream, xr_raw_head_pose_state);
+	xr_pose_trace_stream << ',';
+	appendXRTracePoseCSV(xr_pose_trace_stream, xr_head_pose_state);
+	xr_pose_trace_stream << ',';
+	appendXREyeViewTraceCSV(xr_pose_trace_stream, xr_left_eye_view_state);
+	xr_pose_trace_stream << ',';
+	appendXREyeViewTraceCSV(xr_pose_trace_stream, xr_right_eye_view_state);
+	xr_pose_trace_stream
+		<< ','
+		<< formatXRTraceScalar(radToDegree(cam_angles.x)) << ','
+		<< formatXRTraceScalar(radToDegree(cam_angles.y)) << ','
+		<< formatXRTraceScalar(radToDegree(cam_angles.z)) << ','
+		<< formatXRTraceScalar(radToDegree(avatar_angles.x)) << ','
+		<< formatXRTraceScalar(radToDegree(avatar_angles.y)) << ','
+		<< formatXRTraceScalar(radToDegree(avatar_angles.z)) << '\n';
+
+	if((xr_pose_trace_sample_count % 20) == 0)
+		xr_pose_trace_stream.flush();
+}
+
+
+bool GUIClient::requestXRRecenter()
+{
+	if(!xr_session)
+		return false;
+
+	xr_session->requestRecenter();
+	resetXRTraceCapture();
+	logMessage("[XR] Manual headset recenter requested. Keep the headset on your head and look straight ahead.");
+	return true;
+}
+
+
 
 void GUIClient::makeShaders()
 {
@@ -1153,6 +1601,25 @@ void GUIClient::shutdown()
 	texture_loaded_messages_to_process.clear();
 	async_model_loaded_messages_to_process.clear();
 	async_texture_loaded_messages_to_process.clear();
+
+	if(xr_session)
+	{
+		delete xr_session;
+		xr_session = NULL;
+	}
+	xr_head_pose_state = XRTrackedPoseState();
+	xr_raw_head_pose_state = XRTrackedPoseState();
+	xr_left_hand_state = XRHandInputState();
+	xr_right_hand_state = XRHandInputState();
+	xr_logged_head_pose_alignment = false;
+	if(xr_pose_trace_stream.is_open())
+	{
+		xr_pose_trace_stream.flush();
+		xr_pose_trace_stream.close();
+	}
+	xr_pose_trace_start_time = -1.0;
+	xr_pose_trace_last_write_time = -1.0;
+	xr_pose_trace_sample_count = 0;
 
 
 	// Clear web_view_obs - will close QWebEngineViews
@@ -1558,6 +2025,12 @@ static inline bool isValidLightMapURL(OpenGLEngine& opengl_engine, const string_
 }
 
 
+static bool shouldUseBasisTexturesForWorldObject(const WorldObject& ob, bool server_has_basis_textures)
+{
+	return server_has_basis_textures;
+}
+
+
 // Start loading texture, if present
 void GUIClient::startLoadingTextureIfPresent(const URLString& tex_url, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_task_dist, float importance_factor, 
 	const TextureParams& tex_params)
@@ -1610,10 +2083,10 @@ void GUIClient::startLoadingTextureForLocalPath(const OpenGLTextureKey& local_ab
 // max_dist_for_ob_lod_level: maximum distance from camera at which the object will still be at ob_lod_level.
 // max_dist_for_ob_lod_level_clamped_0: maximum distance from camera at which the object will still be at max(0, ob_lod_level).   [e.g. treats level -1 as 0]
 void GUIClient::startLoadingTextureForObjectOrAvatar(const UID& ob_uid, const UID& avatar_uid, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_dist_for_ob_lod_level, float max_dist_for_ob_lod_level_clamped_0, float importance_factor, const WorldMaterial& world_mat, int ob_lod_level, 
-	const URLString& texture_url, bool tex_has_alpha, bool use_sRGB, bool allow_compression)
+	const URLString& texture_url, bool tex_has_alpha, bool use_sRGB, bool allow_compression, bool use_basis)
 {
 	glare::ArenaFrame frame(arena_allocator);
-	const WorldMaterial::GetURLOptions get_url_options(/*use basis=*/server_has_basis_textures, /*arena allocator=*/&arena_allocator);
+	const WorldMaterial::GetURLOptions get_url_options(/*use basis=*/use_basis, /*arena allocator=*/&arena_allocator);
 
 	const URLString temp_lod_tex_url = world_mat.getLODTextureURLForLevel(get_url_options, texture_url, ob_lod_level, tex_has_alpha);
 
@@ -1632,7 +2105,6 @@ void GUIClient::startLoadingTextureForObjectOrAvatar(const UID& ob_uid, const UI
 	else if(avatar_uid.valid())
 		this->loading_texture_URL_to_avatar_UID_map[lod_tex_url].insert(avatar_uid);
 
-
 	TextureParams tex_params;
 	tex_params.use_sRGB = use_sRGB;
 	tex_params.allow_compression = allow_compression;
@@ -1642,18 +2114,20 @@ void GUIClient::startLoadingTextureForObjectOrAvatar(const UID& ob_uid, const UI
 
 void GUIClient::startLoadingTexturesForObject(const WorldObject& ob, int ob_lod_level, float max_dist_for_ob_lod_level, float max_dist_for_ob_lod_level_clamped_0)
 {
+	const bool use_basis = shouldUseBasisTexturesForWorldObject(ob, this->server_has_basis_textures);
+
 	// Process model materials - start loading any textures that are present on disk, and not already loaded and processed:
 	for(size_t i=0; i<ob.materials.size(); ++i)
 	{
 		const WorldMaterial* mat = ob.materials[i].ptr();
 		if(!mat->colour_texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(ob.uid, /*avatar uid=*/UID::invalidUID(), ob.getCentroidWS(), ob.getAABBWSLongestLength(), max_dist_for_ob_lod_level, max_dist_for_ob_lod_level_clamped_0, /*importance factor=*/1.f, *mat, ob_lod_level, mat->colour_texture_url, mat->colourTexHasAlpha(), /*use_sRGB=*/true, /*allow_compression=*/true);
+			startLoadingTextureForObjectOrAvatar(ob.uid, /*avatar uid=*/UID::invalidUID(), ob.getCentroidWS(), ob.getAABBWSLongestLength(), max_dist_for_ob_lod_level, max_dist_for_ob_lod_level_clamped_0, /*importance factor=*/1.f, *mat, ob_lod_level, mat->colour_texture_url, mat->colourTexHasAlpha(), /*use_sRGB=*/true, /*allow_compression=*/true, use_basis);
 		if(!mat->emission_texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(ob.uid, /*avatar uid=*/UID::invalidUID(), ob.getCentroidWS(), ob.getAABBWSLongestLength(), max_dist_for_ob_lod_level, max_dist_for_ob_lod_level_clamped_0, /*importance factor=*/1.f, *mat, ob_lod_level, mat->emission_texture_url, /*has_alpha=*/false, /*use_sRGB=*/true, /*allow_compression=*/true);
+			startLoadingTextureForObjectOrAvatar(ob.uid, /*avatar uid=*/UID::invalidUID(), ob.getCentroidWS(), ob.getAABBWSLongestLength(), max_dist_for_ob_lod_level, max_dist_for_ob_lod_level_clamped_0, /*importance factor=*/1.f, *mat, ob_lod_level, mat->emission_texture_url, /*has_alpha=*/false, /*use_sRGB=*/true, /*allow_compression=*/true, use_basis);
 		if(!mat->roughness.texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(ob.uid, /*avatar uid=*/UID::invalidUID(), ob.getCentroidWS(), ob.getAABBWSLongestLength(), max_dist_for_ob_lod_level, max_dist_for_ob_lod_level_clamped_0, /*importance factor=*/1.f, *mat, ob_lod_level, mat->roughness.texture_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow_compression=*/true);
+			startLoadingTextureForObjectOrAvatar(ob.uid, /*avatar uid=*/UID::invalidUID(), ob.getCentroidWS(), ob.getAABBWSLongestLength(), max_dist_for_ob_lod_level, max_dist_for_ob_lod_level_clamped_0, /*importance factor=*/1.f, *mat, ob_lod_level, mat->roughness.texture_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow_compression=*/true, use_basis);
 		if(!mat->normal_map_url.empty())
-			startLoadingTextureForObjectOrAvatar(ob.uid, /*avatar uid=*/UID::invalidUID(), ob.getCentroidWS(), ob.getAABBWSLongestLength(), max_dist_for_ob_lod_level, max_dist_for_ob_lod_level_clamped_0, /*importance factor=*/1.f, *mat, ob_lod_level, mat->normal_map_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow_compression=*/false);
+			startLoadingTextureForObjectOrAvatar(ob.uid, /*avatar uid=*/UID::invalidUID(), ob.getCentroidWS(), ob.getAABBWSLongestLength(), max_dist_for_ob_lod_level, max_dist_for_ob_lod_level_clamped_0, /*importance factor=*/1.f, *mat, ob_lod_level, mat->normal_map_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow_compression=*/false, use_basis);
 	}
 
 	// Start loading lightmap
@@ -1704,13 +2178,13 @@ void GUIClient::startLoadingTexturesForAvatar(const Avatar& av, int ob_lod_level
 	{
 		const WorldMaterial* mat = av.avatar_settings.materials[i].ptr();
 		if(!mat->colour_texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->colour_texture_url, mat->colourTexHasAlpha(), /*use_sRGB=*/true, /*allow compression=*/true);
+			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->colour_texture_url, mat->colourTexHasAlpha(), /*use_sRGB=*/true, /*allow compression=*/true, /*use_basis=*/this->server_has_basis_textures);
 		if(!mat->emission_texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->emission_texture_url, /*has_alpha=*/false, /*use_sRGB=*/true, /*allow compression=*/true);
+			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->emission_texture_url, /*has_alpha=*/false, /*use_sRGB=*/true, /*allow compression=*/true, /*use_basis=*/this->server_has_basis_textures);
 		if(!mat->roughness.texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->roughness.texture_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/true);
+			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->roughness.texture_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/true, /*use_basis=*/this->server_has_basis_textures);
 		if(!mat->normal_map_url.empty())
-			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->normal_map_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/false);
+			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->normal_map_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/false, /*use_basis=*/this->server_has_basis_textures);
 	}
 }
 
@@ -2087,21 +2561,32 @@ void GUIClient::startDownloadingResourcesForAvatar(Avatar* ob, int ob_lod_level,
 			}
 		}
 	}
+
 }
 
 
 // For when the desired texture LOD is not loaded, pick another texture LOD that is loaded (if it exists).
 // Prefer lower LOD levels (more detail).
-static Reference<OpenGLTexture> getBestTextureLOD(const WorldMaterial& world_mat, const OpenGLTextureKey& base_tex_path, bool tex_has_alpha, bool use_sRGB, bool use_basis, OpenGLEngine& opengl_engine, glare::ArenaAllocator* allocator)
+static Reference<OpenGLTexture> getBestTextureLODForFamily(const WorldMaterial& world_mat, const OpenGLTextureKey& base_tex_path, bool tex_has_alpha, bool use_sRGB, bool family_use_basis, OpenGLEngine& opengl_engine, glare::ArenaAllocator* allocator)
 {
 	for(int lvl=world_mat.minLODLevel(); lvl<=2; ++lvl)
 	{
-		const WorldMaterial::GetURLOptions get_url_options(use_basis, allocator);
+		const WorldMaterial::GetURLOptions get_url_options(family_use_basis, allocator);
 		const OpenGLTextureKey tex_lod_path = world_mat.getLODTexturePathForLevel(get_url_options, base_tex_path, lvl, tex_has_alpha);
 		Reference<OpenGLTexture> tex = opengl_engine.getTextureIfLoaded(tex_lod_path);
 		if(tex.nonNull())
 			return tex;
 	}
+
+	return Reference<OpenGLTexture>();
+}
+
+
+static Reference<OpenGLTexture> getBestTextureLOD(const WorldMaterial& world_mat, const OpenGLTextureKey& base_tex_path, bool tex_has_alpha, bool use_sRGB, bool use_basis, OpenGLEngine& opengl_engine, glare::ArenaAllocator* allocator)
+{
+	Reference<OpenGLTexture> tex = getBestTextureLODForFamily(world_mat, base_tex_path, tex_has_alpha, use_sRGB, use_basis, opengl_engine, allocator);
+	if(tex.nonNull())
+		return tex;
 
 	return Reference<OpenGLTexture>();
 }
@@ -2146,7 +2631,7 @@ static void checkAssignBestOpenGLTexture(OpenGLTextureRef& opengl_texture, const
 					OpenGLTextureKey base_tex_path(stl_allocator);
 					resource_manager.getTexPathForURL(texture_URL, /*path out=*/base_tex_path);
 
-					new_tex = getBestTextureLOD(*world_mat, base_tex_path, tex_has_alpha, /*use_sRGB=*/use_sRGB, use_basis, opengl_engine, allocator); 
+					new_tex = getBestTextureLOD(*world_mat, base_tex_path, tex_has_alpha, /*use_sRGB=*/use_sRGB, use_basis, opengl_engine, allocator);
 				}
 
 				if(new_tex != opengl_texture) // If we have a new texture to assign to opengl_texture:
@@ -2247,7 +2732,7 @@ void GUIClient::assignLoadedOpenGLTexturesToMats(WorldObject* ob)
 
 	glare::ArenaFrame frame(arena_allocator);
 
-	doAssignLoadedOpenGLTexturesToMats(ob, /*use_basis=*/this->server_has_basis_textures, this->use_lightmaps, *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
+	doAssignLoadedOpenGLTexturesToMats(ob, /*use_basis=*/shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures), this->use_lightmaps, *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
 }
 
 
@@ -2368,7 +2853,7 @@ void GUIClient::createGLAndPhysicsObsForText(const Matrix4f& ob_to_world_matrix,
 	glare::ArenaFrame frame(arena_allocator);
 
 	if(ob->materials.size() >= 1)
-		ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*ob_lod_level*/0, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, &arena_allocator, gl_mat_0);
+		ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*ob_lod_level*/0, ob->lightmap_url, /*use_basis=*/shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures), *this->resource_manager, &arena_allocator, gl_mat_0);
 
 
 	gl_mat_0.alpha_blend = true; // Make use alpha blending
@@ -2457,6 +2942,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 		return;
 
 	const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
+	const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
 	
 	// If we have a model loaded, that is not the placeholder model, and it has the correct LOD level, we don't need to do anything.
 	//if(ob->opengl_engine_ob.nonNull() && !ob->using_placeholder_model && (ob->loaded_model_lod_level == ob_model_lod_level) && (ob->/*loaded_lod_level*/loading_lod_level == ob_lod_level))
@@ -2502,7 +2988,15 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 
 	try
 	{
+		if((ob->object_type == WorldObject::ObjectType_WebView) && ob->target_url.empty() && WorldObject::looksLikeAudioPlayerPlaylistContent(ob->content))
+			ob->target_url = WorldObject::audioPlayerTargetURL();
+
 		checkTransformOK(ob); // Throws glare::Exception if not ok.
+
+		// Older locally-created web panels may have been saved without a model URL.
+		// Keep them renderable by assigning the shared image cube mesh URL on load.
+		if((ob->object_type == WorldObject::ObjectType_WebView || ob->object_type == WorldObject::ObjectType_Video) && ob->model_url.empty())
+			ob->model_url = "image_cube_5438347426447337425.bmesh";
 
 		const Matrix4f ob_to_world_matrix = obToWorldMatrix(*ob);
 
@@ -2712,7 +3206,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				// Use material[1] from the WorldObject as the light housing GL material.
 				opengl_ob->materials.resize(2);
 				if(ob->materials.size() >= 2)
-					ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[1], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
+					ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[1], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/use_basis_textures_for_ob, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
 				else
 					opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.85f));
 
@@ -2786,7 +3280,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				// Use material[0] from the WorldObject as the seat GL material.
 				opengl_ob->materials.resize(1);
 				if(ob->materials.size() >= 1)
-					ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
+					ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/use_basis_textures_for_ob, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
 				else
 				{
 					// Default semi-transparent blue-grey seat color
@@ -2842,9 +3336,9 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				for(size_t i = 0; i < required_num_mats; ++i)
 				{
 					if(i < ob->materials.size())
-						ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[i]);
+						ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/use_basis_textures_for_ob, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[i]);
 					else if(!ob->materials.empty())
-						ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[i]);
+						ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/use_basis_textures_for_ob, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[i]);
 					else
 						opengl_ob->materials[i].albedo_linear_rgb = toLinearSRGB(Colour3f(0.15f, 0.15f, 0.15f));
 
@@ -2888,7 +3382,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 
 				opengl_ob->materials.resize(1);
 				if(ob->materials.size() >= 1)
-					ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
+					ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[0], /*lod level=*/ob_lod_level, /*lightmap URL=*/"", /*use_basis=*/use_basis_textures_for_ob, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
 				else
 				{
 					opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.05f, 0.05f, 0.05f));
@@ -3100,7 +3594,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				{
 					{
 						glare::ArenaFrame frame(arena_allocator);
-						ModelLoading::setMaterialTexPathsForLODLevel(*ob->opengl_engine_ob, ob_lod_level, ob->materials, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator);
+						ModelLoading::setMaterialTexPathsForLODLevel(*ob->opengl_engine_ob, ob_lod_level, ob->materials, ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *resource_manager, &arena_allocator);
 					}
 					assignLoadedOpenGLTexturesToMats(ob);
 					for(size_t z=0; z<ob->opengl_engine_ob->materials.size(); ++z)
@@ -3203,7 +3697,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				{
 					{
 						glare::ArenaFrame frame(arena_allocator);
-						ModelLoading::setMaterialTexPathsForLODLevel(*ob->opengl_engine_ob, ob_lod_level, ob->materials, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator);
+						ModelLoading::setMaterialTexPathsForLODLevel(*ob->opengl_engine_ob, ob_lod_level, ob->materials, ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *resource_manager, &arena_allocator);
 					}
 					assignLoadedOpenGLTexturesToMats(ob);
 				}
@@ -3266,13 +3760,14 @@ void GUIClient::loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const
 
 	// Create gl and physics object now
 	Matrix4f ob_to_world_matrix = obToWorldMatrix(*ob);
+	const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
 
 	if(voxel_subsample_factor != 1)
 		ob_to_world_matrix = ob_to_world_matrix * Matrix4f::uniformScaleMatrix((float)voxel_subsample_factor);
 
 	{
 		glare::ArenaFrame frame(arena_allocator);
-		ob->opengl_engine_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data->gl_meshdata, ob_lod_level, ob->materials, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, ob_to_world_matrix);
+		ob->opengl_engine_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data->gl_meshdata, ob_lod_level, ob->materials, ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *resource_manager, &arena_allocator, ob_to_world_matrix);
 	}
 
 	if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
@@ -5085,10 +5580,12 @@ void GUIClient::updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::stri
 		resource_manager->copyLocalFileToResourceDir(bmesh_disk_path, mesh_URL);
 	}
 
-	const Vec3d cam_angles = cam_controller.getAvatarAngles();
+	Vec3d avatar_pos;
+	Vec3d cam_angles;
+	getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
 	Avatar avatar;
 	avatar.uid = client_avatar_uid;
-	avatar.pos = Vec3d(cam_controller.getFirstPersonPosition());
+	avatar.pos = avatar_pos;
 	avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
 	avatar.name = logged_in_user_name;
 	avatar.avatar_settings.model_url = mesh_URL;
@@ -5149,16 +5646,16 @@ void GUIClient::setOnlyLoadMostImportantObs(bool only_load_most_important_obs_)
 }
 
 
+bool GUIClient::shouldDisableBasisTexturesForCurrentServer() const
+{
+	// Match legacy v0.0.10 client behaviour for resource selection.
+	return false;
+}
+
+
 bool GUIClient::shouldDisableLODForCurrentServer() const
 {
-	// Keep large worlds fully visible for these specific Metasiberia hosts.
-	const std::string host = toLowerCase(server_hostname);
-	return
-		(host == "176.197.223.42") ||
-		(host == "89.104.70.23") ||
-		(host == "vr.metasiberia.com") ||
-		(host == "metasiberia.com") ||
-		(host == "www.metasiberia.com");
+	return false;
 }
 
 
@@ -6915,7 +7412,9 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 	
 
-	const Vec3d avatar_cam_angles = this->cam_controller.getAvatarAngles();
+	Vec3d avatar_pose_pos;
+	Vec3d avatar_cam_angles;
+	getCurrentAvatarPoseForNetworking(avatar_pose_pos, avatar_cam_angles);
 
 	// Find out which parcel we are in, if any.
 	ParcelID new_in_parcel_id = ParcelID::invalidParcelID();
@@ -7112,11 +7611,13 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	// Resonance seems to want a to-world transformation
 	// It also seems to use the OpenGL camera convention (x = right, y = up, -z = forwards)
 
-	const Vec3d cam_angles = this->cam_controller.getAngles();
-	const Quatf z_axis_rot_q = Quatf::fromAxisAndAngle(Vec3f(0,0,1), (float)cam_angles.x - Maths::pi_2<float>());
-	const Quatf x_axis_rot_q = Quatf::fromAxisAndAngle(Vec3f(1,0,0), Maths::pi<float>() - (float)cam_angles.y);
+	Vec3d listener_pos;
+	Vec3d listener_angles;
+	getCurrentListenerPose(listener_pos, listener_angles);
+	const Quatf z_axis_rot_q = Quatf::fromAxisAndAngle(Vec3f(0,0,1), (float)listener_angles.x - Maths::pi_2<float>());
+	const Quatf x_axis_rot_q = Quatf::fromAxisAndAngle(Vec3f(1,0,0), Maths::pi<float>() - (float)listener_angles.y);
 	const Quatf q = z_axis_rot_q * x_axis_rot_q;
-	audio_engine.setHeadTransform(this->cam_controller.getPosition().toVec4fPoint(), q);
+	audio_engine.setHeadTransform(listener_pos.toVec4fPoint(), q);
 
 
 	// Send a AvatarEnteredVehicle to server with renewal bit set, occasionally.
@@ -7292,9 +7793,10 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 								// Update materials in opengl engine.
 								glare::ArenaFrame frame(arena_allocator);
 								const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
+								const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
 								for(size_t i=0; i<ob->materials.size(); ++i)
 									if(i < opengl_ob->materials.size())
-										ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
+										ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
 
 								opengl_engine->objectMaterialsUpdated(*opengl_ob);
 
@@ -7389,9 +7891,10 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 					if(opengl_ob.nonNull())
 					{
 						glare::ArenaFrame frame(arena_allocator);
+						const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
 						for(size_t i=0; i<ob->materials.size(); ++i)
 							if(i < opengl_ob->materials.size())
-								ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
+								ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
 						opengl_engine->objectMaterialsUpdated(*opengl_ob);
 					}
 
@@ -7631,7 +8134,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 			MessageUtils::initPacket(scratch_packet, Protocol::AvatarTransformUpdate);
 			writeToStream(this->client_avatar_uid, scratch_packet);
-			writeToStream(Vec3d(this->cam_controller.getFirstPersonPosition()), scratch_packet);
+			writeToStream(avatar_pose_pos, scratch_packet);
 			writeToStream(Vec3f(0, (float)avatar_cam_angles.y, (float)avatar_cam_angles.x), scratch_packet);
 			scratch_packet.writeUInt32(anim_state | (input_bitmask << 16));
 
@@ -9223,6 +9726,12 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->server_has_basis_textures             = BitUtils::isBitSet(this->server_capabilities, Protocol::OBJECT_TEXTURE_BASISU_SUPPORT);
 			this->server_has_basisu_terrain_detail_maps = BitUtils::isBitSet(this->server_capabilities, Protocol::TERRAIN_DETAIL_MAPS_BASISU_SUPPORT);
 			this->server_has_optimised_meshes           = BitUtils::isBitSet(this->server_capabilities, Protocol::OPTIMISED_MESH_SUPPORT);
+			if(shouldDisableBasisTexturesForCurrentServer() && (this->server_has_basis_textures || this->server_has_basisu_terrain_detail_maps))
+			{
+				logMessage("[Textures] Disabling basis texture requests for this server because it is missing many advertised .basis resources. Falling back to original texture files.");
+				this->server_has_basis_textures = false;
+				this->server_has_basisu_terrain_detail_maps = false;
+			}
 
 			// Try and log in automatically if we have saved credentials for this domain, and auto_login is true.
 			if(settings->getBoolValue("LoginDialog/auto_login", /*default=*/true))
@@ -9245,10 +9754,12 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			{
 				MessageUtils::initPacket(scratch_packet, Protocol::CreateAvatar);
 
-				const Vec3d cam_angles = this->cam_controller.getAvatarAngles();
+				Vec3d avatar_pos;
+				Vec3d cam_angles;
+				getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
 				Avatar avatar;
 				avatar.uid = this->client_avatar_uid;
-				avatar.pos = Vec3d(this->cam_controller.getFirstPersonPosition());
+				avatar.pos = avatar_pos;
 				avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
 				writeAvatarToNetworkStream(avatar, scratch_packet);
 
@@ -9630,10 +10141,12 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 
 			// Send AvatarFullUpdate message, to change the nametag on our avatar.
-			const Vec3d cam_angles = this->cam_controller.getAvatarAngles();
+			Vec3d avatar_pos;
+			Vec3d cam_angles;
+			getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
 			Avatar avatar;
 			avatar.uid = this->client_avatar_uid;
-			avatar.pos = Vec3d(this->cam_controller.getFirstPersonPosition());
+			avatar.pos = avatar_pos;
 			avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
 			avatar.avatar_settings = m->avatar_settings;
 			avatar.name = m->username;
@@ -9661,10 +10174,12 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			gesture_ui.setCurrentGestureSettings(GestureSettings::defaultGestureSettings());
 
 			// Send AvatarFullUpdate message, to change the nametag on our avatar.
-			const Vec3d cam_angles = this->cam_controller.getAvatarAngles();
+			Vec3d avatar_pos;
+			Vec3d cam_angles;
+			getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
 			Avatar avatar;
 			avatar.uid = this->client_avatar_uid;
-			avatar.pos = Vec3d(this->cam_controller.getFirstPersonPosition());
+			avatar.pos = avatar_pos;
 			avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
 			avatar.avatar_settings.model_url = "";
 			avatar.name = "Anonymous";
@@ -9695,10 +10210,12 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			}
 
 			// Send AvatarFullUpdate message, to change the nametag on our avatar.
-			const Vec3d cam_angles = this->cam_controller.getAvatarAngles();
+			Vec3d avatar_pos;
+			Vec3d cam_angles;
+			getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
 			Avatar avatar;
 			avatar.uid = this->client_avatar_uid;
-			avatar.pos = Vec3d(this->cam_controller.getFirstPersonPosition());
+			avatar.pos = avatar_pos;
 			avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
 			avatar.avatar_settings.model_url = "";
 			avatar.name = m->username;
@@ -9871,9 +10388,10 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 							{
 								glare::ArenaFrame frame(arena_allocator);
 								glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&arena_allocator);
+								const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
 
 								WorldObject::GetDependencyOptions options;
-								options.use_basis = this->server_has_basis_textures;
+								options.use_basis = use_basis_textures_for_ob;
 								options.include_lightmaps = this->use_lightmaps;
 								options.get_optimised_mesh = this->server_has_optimised_meshes;
 								options.opt_mesh_version = this->server_opt_mesh_version;
@@ -10312,6 +10830,98 @@ std::string GUIClient::getDiagnosticsString(bool do_graphics_diagnostics, bool d
 		msg += "---------------------------------------------\n";
 	}
 
+	if(xr_runtime_probe_done)
+	{
+		const auto append_xr_pose_state = [&msg](const std::string& prefix, const XRTrackedPoseState& pose_state)
+		{
+			msg += prefix + " active: " + boolToString(pose_state.active) + "\n";
+			msg += prefix + " position_valid: " + boolToString(pose_state.position_valid) + "\n";
+			msg += prefix + " orientation_valid: " + boolToString(pose_state.orientation_valid) + "\n";
+			msg += prefix + " position_tracked: " + boolToString(pose_state.position_tracked) + "\n";
+			msg += prefix + " orientation_tracked: " + boolToString(pose_state.orientation_tracked) + "\n";
+			if(pose_state.position_valid && pose_state.orientation_valid)
+				msg += prefix + " world pos: " + pose_state.object_to_world_matrix.getColumn(3).toString() + "\n";
+		};
+
+		const auto append_xr_hand_state = [&msg, &append_xr_pose_state](const std::string& prefix, const XRHandInputState& hand_state)
+		{
+			msg += prefix + " subaction_path_valid: " + boolToString(hand_state.subaction_path_valid) + "\n";
+			msg += prefix + " interaction_profile_valid: " + boolToString(hand_state.interaction_profile_valid) + "\n";
+			if(!hand_state.interaction_profile.empty())
+				msg += prefix + " interaction profile: " + hand_state.interaction_profile + "\n";
+			msg += prefix + " select_active: " + boolToString(hand_state.select_active) + "\n";
+			msg += prefix + " select_pressed: " + boolToString(hand_state.select_pressed) + "\n";
+			msg += prefix + " trigger_active: " + boolToString(hand_state.trigger_active) + "\n";
+			msg += prefix + " trigger_value: " + floatToStringNDecimalPlaces(hand_state.trigger_value, 3) + "\n";
+			append_xr_pose_state(prefix + " grip pose", hand_state.grip_pose);
+			append_xr_pose_state(prefix + " aim pose", hand_state.aim_pose);
+		};
+
+		msg += "---------------------XR---------------------\n";
+		msg += "backend: " + xr_runtime_probe_result.backend_name + "\n";
+		msg += "xr_compiled_in: " + boolToString(xr_runtime_probe_result.xr_compiled_in) + "\n";
+		msg += "loader_reachable: " + boolToString(xr_runtime_probe_result.loader_reachable) + "\n";
+		msg += "instance_extensions_enumerated: " + boolToString(xr_runtime_probe_result.instance_extensions_enumerated) + "\n";
+		msg += "opengl_enable_extension_available: " + boolToString(xr_runtime_probe_result.opengl_enable_extension_available) + "\n";
+		msg += "instance_created: " + boolToString(xr_runtime_probe_result.instance_created) + "\n";
+		msg += "system_available: " + boolToString(xr_runtime_probe_result.system_available) + "\n";
+		msg += "system_properties_queried: " + boolToString(xr_runtime_probe_result.system_properties_queried) + "\n";
+		msg += "graphics_requirements_obtained: " + boolToString(xr_runtime_probe_result.graphics_requirements_obtained) + "\n";
+		msg += "graphics_requirements_compatible: " + boolToString(xr_runtime_probe_result.graphics_requirements_compatible) + "\n";
+		msg += "session_created: " + boolToString(xr_runtime_probe_result.session_created) + "\n";
+		msg += "local_reference_space_created: " + boolToString(xr_runtime_probe_result.local_reference_space_created) + "\n";
+		msg += "view_configuration_enumerated: " + boolToString(xr_runtime_probe_result.view_configuration_enumerated) + "\n";
+		msg += "environment_blend_mode_selected: " + boolToString(xr_runtime_probe_result.environment_blend_mode_selected) + "\n";
+		msg += "swapchains_created: " + boolToString(xr_runtime_probe_result.swapchains_created) + "\n";
+		msg += "session_running: " + boolToString(xr_runtime_probe_result.session_running) + "\n";
+		msg += "frame_loop_active: " + boolToString(xr_runtime_probe_result.frame_loop_active) + "\n";
+		msg += "views_located: " + boolToString(xr_runtime_probe_result.views_located) + "\n";
+		msg += "should_render_current_frame: " + boolToString(xr_runtime_probe_result.should_render_current_frame) + "\n";
+		msg += "projection_layer_submitted: " + boolToString(xr_runtime_probe_result.projection_layer_submitted) + "\n";
+		msg += "action_set_created: " + boolToString(xr_runtime_probe_result.action_set_created) + "\n";
+		msg += "pose_actions_created: " + boolToString(xr_runtime_probe_result.pose_actions_created) + "\n";
+		msg += "input_actions_created: " + boolToString(xr_runtime_probe_result.input_actions_created) + "\n";
+		msg += "action_bindings_suggested: " + boolToString(xr_runtime_probe_result.action_bindings_suggested) + "\n";
+		msg += "action_sets_attached: " + boolToString(xr_runtime_probe_result.action_sets_attached) + "\n";
+		msg += "action_spaces_created: " + boolToString(xr_runtime_probe_result.action_spaces_created) + "\n";
+		msg += "actions_synced: " + boolToString(xr_runtime_probe_result.actions_synced) + "\n";
+		msg += "mirror_view_available: " + boolToString(xr_mirror_view.valid) + "\n";
+		if(!xr_runtime_probe_result.runtime_name.empty())
+			msg += "runtime: " + xr_runtime_probe_result.runtime_name + "\n";
+		if(!xr_runtime_probe_result.runtime_version_string.empty())
+			msg += "runtime version: " + xr_runtime_probe_result.runtime_version_string + "\n";
+		if(!xr_runtime_probe_result.system_name.empty())
+			msg += "system: " + xr_runtime_probe_result.system_name + "\n";
+		if(!xr_runtime_probe_result.session_state_string.empty())
+			msg += "session state: " + xr_runtime_probe_result.session_state_string + "\n";
+		if(!xr_runtime_probe_result.environment_blend_mode_string.empty())
+			msg += "environment blend mode: " + xr_runtime_probe_result.environment_blend_mode_string + "\n";
+		if(!xr_runtime_probe_result.reference_space_type_string.empty())
+			msg += "reference space: " + xr_runtime_probe_result.reference_space_type_string + "\n";
+		if(!xr_runtime_probe_result.swapchain_format_string.empty())
+			msg += "swapchain format: " + xr_runtime_probe_result.swapchain_format_string + "\n";
+		if(xr_runtime_probe_result.configured_view_count > 0)
+			msg += "configured view count: " + toString(xr_runtime_probe_result.configured_view_count) + "\n";
+		if(xr_runtime_probe_result.located_view_count > 0)
+			msg += "located view count: " + toString(xr_runtime_probe_result.located_view_count) + "\n";
+		if(xr_runtime_probe_result.suggested_binding_profile_count > 0)
+			msg += "suggested binding profile count: " + toString(xr_runtime_probe_result.suggested_binding_profile_count) + "\n";
+		if(!xr_runtime_probe_result.graphics_api_version_string.empty())
+			msg += "graphics api version: " + xr_runtime_probe_result.graphics_api_version_string + "\n";
+		if(!xr_runtime_probe_result.graphics_api_min_version_string.empty())
+			msg += "graphics api min version: " + xr_runtime_probe_result.graphics_api_min_version_string + "\n";
+		if(!xr_runtime_probe_result.graphics_api_max_version_string.empty())
+			msg += "graphics api max version: " + xr_runtime_probe_result.graphics_api_max_version_string + "\n";
+		if(!xr_runtime_probe_result.actions_message.empty())
+			msg += "actions message: " + xr_runtime_probe_result.actions_message + "\n";
+		append_xr_pose_state("raw head pose", xr_raw_head_pose_state);
+		append_xr_pose_state("head pose", xr_head_pose_state);
+		append_xr_hand_state("left hand", xr_left_hand_state);
+		append_xr_hand_state("right hand", xr_right_hand_state);
+		msg += "message: " + xr_runtime_probe_result.message + "\n";
+		msg += "---------------------------------------------\n";
+	}
+
 	if(texture_server.nonNull())
 		msg += "texture_server total mem usage:         " + getNiceByteSize(this->texture_server->getTotalMemUsage()) + "\n";
 
@@ -10743,6 +11353,77 @@ void GUIClient::updateVoxelEditMarkers(const MouseCursorState& mouse_cursor_stat
 	{
 		opengl_engine->removeObject(this->voxel_edit_face_marker);
 		voxel_edit_face_marker_in_engine = false;
+	}
+}
+
+
+void GUIClient::renderXRFrame(float near_draw_dist, float max_draw_dist)
+{
+	if(!xr_session || opengl_engine.isNull())
+	{
+		xr_mirror_view.valid = false;
+		xr_head_pose_state = XRTrackedPoseState();
+		xr_raw_head_pose_state = XRTrackedPoseState();
+		xr_left_eye_view_state = XREyeViewState();
+		xr_right_eye_view_state = XREyeViewState();
+		xr_left_hand_state = XRHandInputState();
+		xr_right_hand_state = XRHandInputState();
+		return;
+	}
+
+	xr_session->renderFrame(*opengl_engine, cam_controller, near_draw_dist, max_draw_dist);
+	xr_runtime_probe_result = xr_session->getLastResult();
+	xr_mirror_view = xr_session->getMirrorView();
+	xr_head_pose_state = xr_session->getHeadPoseState();
+	xr_raw_head_pose_state = xr_session->getRawHeadPoseState();
+	xr_left_eye_view_state = xr_session->getLeftEyeViewState();
+	xr_right_eye_view_state = xr_session->getRightEyeViewState();
+	xr_left_hand_state = xr_session->getLeftHandState();
+	xr_right_hand_state = xr_session->getRightHandState();
+	appendXRTraceSample();
+
+	if(!xr_logged_head_pose_alignment &&
+		xr_head_pose_state.active &&
+		xr_head_pose_state.position_valid &&
+		xr_head_pose_state.orientation_valid)
+	{
+		Vec3d head_pos;
+		Vec3d head_angles;
+		if(getCurrentXRTrackedHeadPose(head_pos, head_angles))
+		{
+			logMessage(
+				"[XR] Live HMD head pose is now driving avatar/audio alignment. world_pos=" + head_pos.toString() +
+				", yaw_deg=" + doubleToStringNDecimalPlaces(radToDegree(head_angles.x), 2) +
+				", pitch_deg=" + doubleToStringNDecimalPlaces(radToDegree(head_angles.y), 2) +
+				", roll_deg=" + doubleToStringNDecimalPlaces(radToDegree(head_angles.z), 2)
+			);
+		}
+		else
+		{
+			logMessage("[XR] Live HMD head pose is now driving avatar/audio alignment.");
+		}
+		xr_logged_head_pose_alignment = true;
+
+		Vec3d left_eye_pos;
+		Vec3d left_eye_angles;
+		Vec3d right_eye_pos;
+		Vec3d right_eye_angles;
+		if(extractTrackedHeadPose(xr_left_eye_view_state.raw_pose, left_eye_pos, left_eye_angles) &&
+			extractTrackedHeadPose(xr_right_eye_view_state.raw_pose, right_eye_pos, right_eye_angles))
+		{
+			const double ipd_m = left_eye_pos.getDist(right_eye_pos);
+			logMessage(
+				"[XR] Stereo debug: raw_ipd_m=" + doubleToStringNDecimalPlaces(ipd_m, 4) +
+				", left_fov_deg=(" + doubleToStringNDecimalPlaces(xr_left_eye_view_state.angle_left_deg, 2) + "," +
+					doubleToStringNDecimalPlaces(xr_left_eye_view_state.angle_right_deg, 2) + "," +
+					doubleToStringNDecimalPlaces(xr_left_eye_view_state.angle_up_deg, 2) + "," +
+					doubleToStringNDecimalPlaces(xr_left_eye_view_state.angle_down_deg, 2) + ")" +
+				", right_fov_deg=(" + doubleToStringNDecimalPlaces(xr_right_eye_view_state.angle_left_deg, 2) + "," +
+					doubleToStringNDecimalPlaces(xr_right_eye_view_state.angle_right_deg, 2) + "," +
+					doubleToStringNDecimalPlaces(xr_right_eye_view_state.angle_up_deg, 2) + "," +
+					doubleToStringNDecimalPlaces(xr_right_eye_view_state.angle_down_deg, 2) + ")"
+			);
+		}
 	}
 }
 
@@ -11784,7 +12465,6 @@ void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded
 	new_world_object->setAABBOS(aabb_os);
 
 	normaliseObjectMaterialTexturePathsForUploadToPNG(base_dir_path, *new_world_object);
-
 	setMaterialFlagsForObject(new_world_object.ptr());
 
 
@@ -12220,12 +12900,13 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 						opengl_engine->updateObjectTransformData(*opengl_ob);
 
 						const int ob_lod_level = getEffectiveLODLevel(in_world_ob.ptr(), cam_controller.getPosition());
+						const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*in_world_ob, this->server_has_basis_textures);
 
 						// Update materials in opengl engine.
 						glare::ArenaFrame frame(arena_allocator);
 						for(size_t i=0; i<in_world_ob->materials.size(); ++i)
 							if(i < opengl_ob->materials.size())
-								ModelLoading::setGLMaterialFromWorldMaterial(*in_world_ob->materials[i], ob_lod_level, in_world_ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
+								ModelLoading::setGLMaterialFromWorldMaterial(*in_world_ob->materials[i], ob_lod_level, in_world_ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
 
 						opengl_engine->objectMaterialsUpdated(*opengl_ob);
 					}
@@ -13356,7 +14037,7 @@ void GUIClient::objectEdited()
 		// Copy all dependencies into resource directory if they are not there already.
 		// URLs will actually be paths from editing for now.
 		WorldObject::GetDependencyOptions options;
-		options.use_basis = this->server_has_basis_textures;
+		options.use_basis = shouldUseBasisTexturesForWorldObject(*this->selected_ob, this->server_has_basis_textures);
 		options.include_lightmaps = this->use_lightmaps;
 		options.get_optimised_mesh = false;//this->server_has_optimised_meshes;
 		DependencyURLVector URLs;
@@ -13412,6 +14093,7 @@ void GUIClient::objectEdited()
 				{
 					new_ob_to_world_matrix.setColumn(3, new_ob_pos.toVec4fPoint());
 					selected_ob->setTransformAndHistory(new_ob_pos, this->selected_ob->axis, this->selected_ob->angle);
+					const bool selected_ob_use_basis = shouldUseBasisTexturesForWorldObject(*this->selected_ob, this->server_has_basis_textures);
 
 					// Update in opengl engine.
 					if(this->selected_ob->object_type == WorldObject::ObjectType_Generic || this->selected_ob->object_type == WorldObject::ObjectType_VoxelGroup)
@@ -13426,7 +14108,7 @@ void GUIClient::objectEdited()
 								glare::ArenaFrame frame(arena_allocator);
 
 								for(size_t i=0; i<myMin(opengl_ob->materials.size(), this->selected_ob->materials.size()); ++i)
-									ModelLoading::setGLMaterialFromWorldMaterial(*this->selected_ob->materials[i], ob_lod_level, this->selected_ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, &arena_allocator,
+									ModelLoading::setGLMaterialFromWorldMaterial(*this->selected_ob->materials[i], ob_lod_level, this->selected_ob->lightmap_url, /*use_basis=*/selected_ob_use_basis, *this->resource_manager, &arena_allocator,
 										opengl_ob->materials[i]
 									);
 
@@ -13449,7 +14131,7 @@ void GUIClient::objectEdited()
 									*this->selected_ob->materials[0],
 									ob_lod_level,
 									/*lightmap URL=*/"",
-									/*use_basis=*/this->server_has_basis_textures,
+									/*use_basis=*/selected_ob_use_basis,
 									*this->resource_manager,
 									&arena_allocator,
 									opengl_ob->materials[0]
@@ -13485,7 +14167,7 @@ void GUIClient::objectEdited()
 										*this->selected_ob->materials[i],
 										ob_lod_level,
 										/*lightmap URL=*/"",
-										/*use_basis=*/this->server_has_basis_textures,
+										/*use_basis=*/selected_ob_use_basis,
 										*this->resource_manager,
 										&arena_allocator,
 										opengl_ob->materials[i]
@@ -13497,7 +14179,7 @@ void GUIClient::objectEdited()
 										*this->selected_ob->materials[0],
 										ob_lod_level,
 										/*lightmap URL=*/"",
-										/*use_basis=*/this->server_has_basis_textures,
+										/*use_basis=*/selected_ob_use_basis,
 										*this->resource_manager,
 										&arena_allocator,
 										opengl_ob->materials[i]
@@ -13528,7 +14210,7 @@ void GUIClient::objectEdited()
 									*this->selected_ob->materials[0],
 									ob_lod_level,
 									/*lightmap URL=*/"",
-									/*use_basis=*/this->server_has_basis_textures,
+									/*use_basis=*/selected_ob_use_basis,
 									*this->resource_manager,
 									&arena_allocator,
 									opengl_ob->materials[0]
@@ -13763,7 +14445,7 @@ void GUIClient::updateSpotlightGraphicsEngineData(const Matrix4f& ob_to_world_ma
 		glare::ArenaFrame frame(arena_allocator);
 		opengl_ob->materials.resize(2);
 		if(ob->materials.size() >= 2)
-			ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[1], /*lod level=*//*ob_lod_level*/0, /*lightmap URL=*/"", /*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
+			ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[1], /*lod level=*//*ob_lod_level*/0, /*lightmap URL=*/"", /*use_basis=*/shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures), *resource_manager, &arena_allocator, /*open gl mat=*/opengl_ob->materials[0]);
 		else
 			opengl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.85f));
 
@@ -14535,11 +15217,13 @@ void GUIClient::changeToDifferentWorld(const URLParseResults& parse_res)
 
 	// Send CreateAvatar packet for this client's avatar
 	{
-		const Vec3d cam_angles = this->cam_controller.getAvatarAngles();
+		Vec3d avatar_pos;
+		Vec3d cam_angles;
+		getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
 
 		Avatar avatar;
 		avatar.uid = this->client_avatar_uid;
-		avatar.pos = Vec3d(this->cam_controller.getFirstPersonPosition());
+		avatar.pos = avatar_pos;
 		avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
 		avatar.avatar_settings = this->logged_in_avatar_settings;
 		avatar.name = this->logged_in_user_name;
@@ -15356,7 +16040,7 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 		gl_ob->materials.resize(ob->materials.size());
 		for(uint32 i=0; i<ob->materials.size(); ++i)
 		{
-			ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/this->server_has_basis_textures, *this->resource_manager, &arena_allocator, gl_ob->materials[i]);
+			ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures), *this->resource_manager, &arena_allocator, gl_ob->materials[i]);
 			gl_ob->materials[i].gen_planar_uvs = true;
 			gl_ob->materials[i].draw_planar_uv_grid = true;
 		}
@@ -17153,15 +17837,12 @@ void GUIClient::createModelObject(const std::string& local_model_path)
 void GUIClient::createImageObjectForWidthAndHeight(const std::string& local_image_path, int w, int h, bool has_alpha)
 {
 	// NOTE: adapted from AddObjectDialog::makeMeshForWidthAndHeight()
+	static_cast<void>(has_alpha); // Alpha flags are derived in the shared createObject() path.
 
 	BatchedMeshRef batched_mesh;
 	std::vector<WorldMaterialRef> world_materials;
 	Vec3f scale;
-	GLObjectRef gl_ob = ModelLoading::makeImageCube(*opengl_engine, *opengl_engine->vert_buf_allocator, local_image_path, w, h, batched_mesh, world_materials, scale);
-
-	WorldObjectRef new_world_object = new WorldObject();
-	new_world_object->materials = world_materials;
-	new_world_object->scale = scale;
+	ModelLoading::makeImageCube(*opengl_engine, *opengl_engine->vert_buf_allocator, local_image_path, w, h, batched_mesh, world_materials, scale);
 
 
 	const float ob_cam_right_translation = -scale.x/2;
@@ -17182,41 +17863,17 @@ void GUIClient::createImageObjectForWidthAndHeight(const std::string& local_imag
 		return;
 	}
 	
-	new_world_object->pos = ob_pos;
-	new_world_object->axis = Vec3f(0,0,1);
-	new_world_object->angle = Maths::roundToMultipleFloating((float)cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>()); // Round to nearest 45 degree angle, facing camera.
-
-	new_world_object->setAABBOS(batched_mesh->aabb_os);
-
-	new_world_object->model_url = "image_cube_5438347426447337425.bmesh";
-
-	BitUtils::setOrZeroBit(new_world_object->materials[0]->flags, WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG, has_alpha); // Set COLOUR_TEX_HAS_ALPHA_FLAG flag
-
-	// Copy all dependencies (textures etc..) to resources dir.  UploadResourceThread will read from here.
-	WorldObject::GetDependencyOptions options;
-	options.use_basis = false; // Server will want the original non-basis textures.
-	options.include_lightmaps = false;
-	options.get_optimised_mesh = false; // Server will want the original unoptimised mesh.
-	DependencyURLSet paths;
-	new_world_object->getDependencyURLSet(/*ob_lod_level=*/0, options, paths);
-	for(auto it = paths.begin(); it != paths.end(); ++it)
-	{
-		const URLString& path = it->URL;
-		if(FileUtils::fileExists(path))
-		{
-			const uint64 hash = FileChecksum::fileChecksum(path);
-			const URLString resource_URL = ResourceManager::URLForPathAndHash(toStdString(path), hash);
-			resource_manager->copyLocalFileToResourceDir(toStdString(path), resource_URL);
-		}
-	}
-
-	// Convert texture paths on the object to URLs
-	new_world_object->convertLocalPathsToURLS(*resource_manager);
-
-	// Send CreateObject message to server
-	MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-	new_world_object->writeToNetworkStream(scratch_packet);
-	enqueueMessageToSend(*client_thread, scratch_packet);
+	createObject(
+		local_image_path, // mesh path used as the source of the image dependency
+		batched_mesh,
+		true, // loaded_mesh_is_image_cube
+		glare::AllocatorVector<Voxel, 16>(),
+		ob_pos,
+		scale,
+		Vec3f(0,0,1),
+		Maths::roundToMultipleFloating((float)cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>()), // Round to nearest 45 degree angle, facing camera.
+		world_materials
+	);
 
 	showInfoNotification("Object created.");
 }

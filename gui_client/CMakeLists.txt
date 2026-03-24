@@ -9,6 +9,22 @@ endif()
 include(../cmake/shared_settings.cmake)
 include(../cmake/shared_cxx_settings.cmake)
 
+if(XR_SUPPORT)
+	if(EMSCRIPTEN)
+		message(FATAL_ERROR "XR_SUPPORT is only supported for native builds.")
+	endif()
+
+	if(OPENXR_SDK_DIR STREQUAL "")
+		message(FATAL_ERROR "XR_SUPPORT=ON requires OPENXR_SDK_DIR to point to an installed OpenXR SDK root.")
+	endif()
+
+	if(NOT EXISTS "${OPENXR_SDK_DIR}/cmake/OpenXRConfig.cmake")
+		message(FATAL_ERROR "Could not find OpenXRConfig.cmake in '${OPENXR_SDK_DIR}/cmake'. Please set -DOPENXR_SDK_DIR to an installed OpenXR SDK root.")
+	endif()
+
+	find_package(OpenXR CONFIG REQUIRED PATHS "${OPENXR_SDK_DIR}/cmake" NO_DEFAULT_PATH)
+endif()
+
 # Needed for webcam/* headers that are included as "webcam/..." from within gui_client/webcam sources.
 include_directories(${CMAKE_SOURCE_DIR}/gui_client)
 
@@ -265,6 +281,10 @@ ${CMAKE_SOURCE_DIR}/gui_client/URLParser.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/URLWhitelist.h
 ${CMAKE_SOURCE_DIR}/gui_client/VehiclePhysics.h
+${CMAKE_SOURCE_DIR}/gui_client/XRSupport.cpp
+${CMAKE_SOURCE_DIR}/gui_client/XRSupport.h
+${CMAKE_SOURCE_DIR}/gui_client/XRSession.cpp
+${CMAKE_SOURCE_DIR}/gui_client/XRSession.h
 ${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.h
 ${CMAKE_SOURCE_DIR}/gui_client/WebViewData.cpp
@@ -1179,6 +1199,10 @@ ${settings}
 
 add_definitions(-DGUI_CLIENT=1)
 
+if(XR_SUPPORT)
+	add_definitions(-DXR_SUPPORT=1)
+endif()
+
 include(../cmake/shared_target_settings.cmake)
 
 if(USE_SDL)
@@ -1471,4 +1495,8 @@ else() # linux
 
 	#get_target_property(OLD_TARGET_PROPERTIES ${CURRENT_TARGET} LINK_FLAGS)
 	#set_target_properties(${CURRENT_TARGET} PROPERTIES LINK_FLAGS "${OLD_TARGET_PROPERTIES} -Xlinker -rpath='$ORIGIN/lib'")
+endif()
+
+if(XR_SUPPORT)
+	target_link_libraries(${CURRENT_TARGET} OpenXR::openxr_loader)
 endif()

@@ -76,6 +76,30 @@ WorkerThread::~WorkerThread()
 }
 
 
+static bool isResourcePresentOnServerAndUpdateStateIfNeeded(ServerAllWorldsState& world_state, const ResourceRef& resource)
+{
+	if(resource.isNull())
+		return false;
+
+	if(resource->getState() != Resource::State_Present)
+		return false;
+
+	if(FileUtils::fileExists(world_state.resource_manager->getLocalAbsPathForResource(*resource)))
+		return true;
+
+	{
+		Lock lock(world_state.mutex);
+		if(resource->getState() == Resource::State_Present)
+		{
+			resource->setState(Resource::State_NotPresent);
+			world_state.addResourceAsDBDirty(resource);
+		}
+	}
+
+	return false;
+}
+
+
 // Checks if the resource is present on the server, if not, sends a GetFile message (or rather enqueues to send) to the client.
 void WorkerThread::sendGetFileMessageIfNeeded(const URLString& resource_URL)
 {
@@ -89,7 +113,7 @@ void WorkerThread::sendGetFileMessageIfNeeded(const URLString& resource_URL)
 	// See if we have this file on the server already
 	{
 		const ResourceRef resource = server->world_state->resource_manager->getExistingResourceForURL(resource_URL);
-		if(resource && resource->isPresent())
+		if(isResourcePresentOnServerAndUpdateStateIfNeeded(*server->world_state, resource))
 		{
 			// Check hash?
 			// conPrintIfNotFuzzing("resource file with URL '" + toStdString(resource_URL) + "' already present on disk.");
@@ -423,7 +447,7 @@ void WorkerThread::handleResourceDownloadConnection()
 						// conPrint("\tRequested URL was valid.");
 
 						const ResourceRef resource = server->world_state->resource_manager->getExistingResourceForURL(URL);
-						if(resource.isNull() || (resource->getState() != Resource::State_Present))
+						if(!isResourcePresentOnServerAndUpdateStateIfNeeded(*server->world_state, resource))
 						{
 							conPrintIfNotFuzzing("\tRequested URL was not present on disk.");
 							socket->writeUInt32(1); // write error msg to client
@@ -1254,6 +1278,46 @@ void WorkerThread::doRun()
 
 	try
 	{
+		auto request_missing_owned_resources = [&]()
+		{
+			if(!client_user_id.valid())
+				return;
+
+			std::vector<URLString> URLs_to_request;
+			{
+				Lock lock(world_state->mutex);
+				Lock resource_manager_lock(world_state->resource_manager->getMutex());
+				for(auto it = world_state->resource_manager->getResourcesForURL().begin(); it != world_state->resource_manager->getResourcesForURL().end(); ++it)
+				{
+					const ResourceRef& resource = it->second;
+					if(resource->owner_id != client_user_id)
+						continue;
+					if(hasExtension(resource->URL, "basis") || (WorldObject::getLODLevelForURL(resource->URL) > 0))
+						continue;
+
+					const bool file_present_on_disk = (resource->getState() == Resource::State_Present) &&
+						FileUtils::fileExists(world_state->resource_manager->getLocalAbsPathForResource(*resource));
+
+					if(file_present_on_disk)
+						continue;
+
+					if(resource->getState() != Resource::State_NotPresent)
+					{
+						resource->setState(Resource::State_NotPresent);
+						world_state->addResourceAsDBDirty(resource);
+					}
+
+					URLs_to_request.push_back(resource->URL);
+				}
+			}
+
+			for(size_t i=0; i<URLs_to_request.size(); ++i)
+				sendGetFileMessageIfNeeded(URLs_to_request[i]);
+
+			if(!URLs_to_request.empty())
+				conPrintIfNotFuzzing("Queued " + toString(URLs_to_request.size()) + " missing owned resource(s) for re-upload.");
+		};
+
 		// Read hello bytes
 		const uint32 hello = socket->readUInt32();
 		if(hello != Protocol::CyberspaceHello)
@@ -1366,6 +1430,8 @@ void WorkerThread::doRun()
 
 				socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
 				socket->flush();
+
+				request_missing_owned_resources();
 			}
 
 			// Send TimeSyncMessage packet to client
@@ -3278,6 +3344,8 @@ void WorkerThread::doRun()
 
 								socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
 								socket->flush();
+
+								request_missing_owned_resources();
 							}
 							else
 							{

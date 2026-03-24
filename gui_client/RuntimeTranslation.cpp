@@ -56,7 +56,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "About Metasiberia", "О Metasiberia");
 	add("MainWindow", "Add Text", "Добавить текст");
 	add("MainWindow", "Add Spotlight", "Добавить прожектор");
-	add("MainWindow", "Add Audio Source", "Добавить аудио-источник");
+	add("MainWindow", "Add Audio Player", "Добавить аудио-плеер");
 	add("MainWindow", "Add Decal", "Добавить декаль");
 	add("MainWindow", "Add Portal", "Добавить портал");
 	add("MainWindow", "Add to Favorites", "Добавить в избранное");

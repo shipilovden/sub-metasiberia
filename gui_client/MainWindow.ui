@@ -725,7 +725,7 @@
   </action>
   <action name="actionAdd_Audio_Source">
    <property name="text">
-    <string>Add Audio Source</string>
+    <string>Add Audio Player</string>
    </property>
   </action>
   <action name="actionTake_Screenshot">

@@ -218,6 +218,32 @@ Building SDL is optional for the native build (can be used instead of Qt), but i
 Download SDL source, e.g https://github.com/libsdl-org/SDL/archive/refs/tags/release-2.30.9.zip
 Unzip in ~programming/SDL, e.g.
 C:\programming\SDL\SDL-release-2.30.9
+
+
+Experimental OpenXR / VR support
+================================
+The Qt VR integration work is currently experimental and native-only.
+
+If you want to build future XR-enabled native clients, you will need:
+- OpenXR SDK headers and loader library installed locally
+- an active desktop OpenXR runtime on the machine used for development/testing
+
+The codebase now has a CMake flag for the integration work:
+
+	cmake ../substrata -DXR_SUPPORT=ON
+
+Example for a local Windows setup:
+
+	cmake ../substrata -DXR_SUPPORT=ON -DOPENXR_SDK_DIR=C:/programming/OpenXR-SDK-1.1.57/install
+
+Notes:
+- XR support is not intended for Emscripten/web builds.
+- The basic integration scaffolding is present, while the full OpenXR backend is still being implemented.
+- Regular Windows desktop builds should keep XR disabled by default.
+- `C:\programming\qt_build.ps1` now configures `XR_SUPPORT=OFF` unless you pass `-EnableXR`.
+- XR-enabled binaries now default to `auto` runtime launch mode: they will try to start OpenXR, and fall back to desktop mode if the headset/runtime are unavailable.
+- You can override launch mode with `--vr`, `--desktop`, or by changing the `XR / VR launch mode` option in the client settings.
+- `SUBSTRATA_ENABLE_XR=true/false` still works as a legacy environment override.
 cd C:\programming\SDL\
 mkdir sdl_2.30.9_build
 cd sdl_2.30.9_build

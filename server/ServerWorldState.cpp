@@ -16,6 +16,7 @@ Generated at 2016-01-12 12:22:34 +1300
 #include <Lock.h>
 #include <Clock.h>
 #include <Timer.h>
+#include <PlatformUtils.h>
 #include <Database.h>
 #include <BufferOutStream.h>
 #include <BufferViewInStream.h>
@@ -174,6 +175,29 @@ static const uint32 FEATURE_FLAG_CHUNK_VERSION = 1;
 static const uint32 OBJECT_STORAGE_ITEM_VERSION = 1;
 static const uint32 USER_SECRET_VERSION = 1;
 static const uint32 MIGRATION_VERSION_CHUNK_VERSION = 1;
+
+
+size_t ServerAllWorldsState::reconcileResourcePresenceWithDisk()
+{
+	size_t num_resources_marked_missing = 0;
+
+	Lock resource_manager_lock(resource_manager->getMutex());
+	for(auto it = resource_manager->getResourcesForURL().begin(); it != resource_manager->getResourcesForURL().end(); ++it)
+	{
+		const ResourceRef& resource = it->second;
+		if(resource->getState() != Resource::State_Present)
+			continue;
+
+		if(!FileUtils::fileExists(resource_manager->getLocalAbsPathForResource(*resource)))
+		{
+			resource->setState(Resource::State_NotPresent);
+			addResourceAsDBDirty(resource);
+			num_resources_marked_missing++;
+		}
+	}
+
+	return num_resources_marked_missing;
+}
 
 
 void ServerAllWorldsState::readFromDisk(const std::string& path)
@@ -820,6 +844,10 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 		// Add everything to dirty sets so it gets saved to the DB initially.
 		addEverythingToDirtySets();
 	}
+
+	const size_t num_resources_marked_missing = reconcileResourcePresenceWithDisk();
+	if(num_resources_marked_missing > 0)
+		conPrint("Marked " + toString(num_resources_marked_missing) + " resource(s) as not present because their backing files were missing on disk.");
 
 
 	doMigrations(lock);
@@ -2048,6 +2076,51 @@ void ServerAllWorldsState::addAdminAuditLogEntry(const UserID& user_id, const st
 	const size_t MAX_ENTRIES = 500;
 	while(admin_action_log.size() > MAX_ENTRIES)
 		admin_action_log.pop_front();
+}
+
+
+void ServerAllWorldsState::test()
+{
+#if BUILD_TESTS
+	conPrint("ServerAllWorldsState::test()");
+
+	const std::string temp_dir = PlatformUtils::getTempDirPath() + "/substrata_serverworldstate_test_" + toString((uint64)(Clock::getTimeSinceInit() * 1000000.0));
+	FileUtils::createDirIfDoesNotExist(temp_dir);
+
+	try
+	{
+		ServerAllWorldsState state;
+		state.resource_manager = new ResourceManager(temp_dir);
+
+		ResourceRef present_resource = state.resource_manager->getOrCreateResourceForURL("present_texture.png");
+		present_resource->setState(Resource::State_Present);
+		FileUtils::writeEntireFile(state.resource_manager->pathForURL("present_texture.png"), "png", 3);
+
+		ResourceRef missing_resource = state.resource_manager->getOrCreateResourceForURL("missing_texture.png");
+		missing_resource->setState(Resource::State_Present);
+
+		{
+			WorldStateLock lock(state.mutex);
+			const size_t num_marked_missing = state.reconcileResourcePresenceWithDisk();
+			if(num_marked_missing != 1)
+				throw glare::Exception("Expected exactly one resource to be marked missing.");
+		}
+
+		if(present_resource->getState() != Resource::State_Present)
+			throw glare::Exception("Expected present resource to stay marked present.");
+		if(missing_resource->getState() != Resource::State_NotPresent)
+			throw glare::Exception("Expected missing resource to be marked not present.");
+	}
+	catch(...)
+	{
+		FileUtils::deleteDirectoryRecursive(temp_dir);
+		throw;
+	}
+
+	FileUtils::deleteDirectoryRecursive(temp_dir);
+
+	conPrint("ServerAllWorldsState::test() done");
+#endif
 }
 
 
