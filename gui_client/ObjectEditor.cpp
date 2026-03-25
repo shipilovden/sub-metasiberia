@@ -38,6 +38,7 @@
 #include <QtWidgets/QVBoxLayout>
 #include <QtCore/QTimer>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QSignalBlocker>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtWidgets/QColorDialog>
@@ -422,6 +423,8 @@ void ObjectEditor::updateInfoLabel(const WorldObject& ob)
 
 void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_, bool ob_in_editing_users_world)
 {
+	const QSignalBlocker signal_blocker(this);
+
 	this->editing_ob_uid = ob.uid;
 
 	//this->objectTypeLabel->setText(QtUtils::toQString(ob_type + " (UID: " + ob.uid.toString() + ")"));
@@ -794,6 +797,12 @@ static void checkStringSize(StringType& s, size_t max_size)
 }
 
 
+static bool objectTypeUsesEditableModelURL(WorldObject::ObjectType object_type)
+{
+	return object_type == WorldObject::ObjectType_Generic;
+}
+
+
 void ObjectEditor::toObject(WorldObject& ob_out)
 {
 	const bool is_audio_player_webview = ob_out.isAudioPlayerWebView();
@@ -801,8 +810,10 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 	if(is_audio_player_webview)
 		syncContentFromAudioPlaylistWidget();
 
-	URLString new_model_url = toURLString(QtUtils::toIndString(this->modelFileSelectWidget->filename()));
-	if(is_audio_player_webview && new_model_url.empty())
+	URLString new_model_url = ob_out.model_url;
+	if(objectTypeUsesEditableModelURL((WorldObject::ObjectType)ob_out.object_type))
+		new_model_url = toURLString(QtUtils::toIndString(this->modelFileSelectWidget->filename()));
+	else if((ob_out.object_type == WorldObject::ObjectType_WebView || ob_out.object_type == WorldObject::ObjectType_Video) && new_model_url.empty())
 		new_model_url = "image_cube_5438347426447337425.bmesh";
 	if(ob_out.model_url != new_model_url)
 		ob_out.changed_flags |= WorldObject::MODEL_URL_CHANGED;

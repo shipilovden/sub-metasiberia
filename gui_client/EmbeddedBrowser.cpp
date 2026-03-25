@@ -490,10 +490,15 @@ public:
 		{
 			try
 			{
-				// There seems to be a CEF bug where are a Skip call is made at the start of a resource read, after a video repeats.
-				// This breaks video looping.  Work around it by detecting the skip call and doing nothing in that case.
+				// There seems to be a CEF bug where a Skip call can be made at the start of a resource read after a video repeats.
+				// This breaks video looping, so keep the old workaround for videos only.
+				// However for audio seeking we must honour an initial Skip() call, otherwise the <audio> element jumps back to time 0 after a seek.
 				// See https://magpcss.org/ceforum/viewtopic.php?f=6&t=19171
-				if(in_stream->getReadIndex() != 0)
+				const bool ignore_initial_skip_for_video_loop_workaround =
+					(in_stream->getReadIndex() == 0) &&
+					hasPrefix(response_mime_type, "video/");
+
+				if(!ignore_initial_skip_for_video_loop_workaround)
 					in_stream->advanceReadIndex(bytes_to_skip);
 
 				bytes_skipped = bytes_to_skip;
