@@ -2,6 +2,9 @@
 
 ## Обновление 2026-03-19
 
+- 2026-03-25 runtime fix: `GUIClient::createGLAndPhysicsObsForText()` now resolves `WorldObject::text_font` to an actual font file in `data/resources/fonts` and rebuilds 3D text with the selected font immediately, instead of always rendering with the default `gl_ui->getFonts()` set.
+
+- Исправлена локальная регрессия редактирования text-объектов: `ObjectEditor` больше не пытается переписывать `model_url` для объектов, у которых модель не редактируется вручную, во время `setFromObject()` подавляются reentrant-сигналы редактора, а `GUIClient` теперь пересобирает 3D-текст не только по `CONTENT_CHANGED`, но и по `TEXT_FONT_CHANGED`/physics rebuild-поводам, не отправляя text-объект в generic mesh-loader с пустым путём.
 - Исправлена серверная совместимость при загрузке старого `server_state.bin`: `WorldObject` теперь читает `text_font` с диска только начиная с новой версии сериализации, а для старых миров подставляет `"Default"`.
 - Исправлена сетевая сериализация `WorldObject`: `text_font` больше не вставляется в середину пакета, а дописывается в хвост только для `ObjectType_Text` в `Object*`-сообщениях, чтобы старые клиенты могли безопасно игнорировать новое поле по длине сообщения, а остальные объекты не несли лишний сетевой хвост.
 - Добавлена клиентская защита по версии протокола: при подключении к серверу с `server_protocol_version < 51` выбор шрифта в `ObjectEditor` отключается, а клиент не отправляет `text_font` в `CreateObject/ObjectFullUpdate`, чтобы не ломать соединение со старым rollback-сервером.

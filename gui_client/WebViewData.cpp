@@ -514,7 +514,7 @@ function endSeek(event)
 	if(event)
 		setPlaybackProgress(progressForEvent(event));
 	userIsSeeking=false;
-	syncProgressFromAudio();
+	updateButtons();
 }
 shuffleButton.onclick=function(){if(!playlist.length)return;shuffleEnabled=!shuffleEnabled;updateButtons();};
 repeatButton.onclick=function(){if(!playlist.length)return;loopEnabled=!loopEnabled;updateButtons();};
@@ -528,6 +528,7 @@ progressTrack.addEventListener('click', function(event){if(userIsSeeking || !pla
 audio.addEventListener('play', updateButtons);
 audio.addEventListener('pause', updateButtons);
 audio.addEventListener('timeupdate', syncProgressFromAudio);
+audio.addEventListener('seeked', syncProgressFromAudio);
 audio.addEventListener('loadedmetadata', syncProgressFromAudio);
 audio.addEventListener('durationchange', syncProgressFromAudio);
 audio.addEventListener('ended', function(){if(loopEnabled || shuffleEnabled || (currentIndex + 1 < playlist.length)){selectNext(true);}else{updateProgressVisual(1);updateButtons();}});
