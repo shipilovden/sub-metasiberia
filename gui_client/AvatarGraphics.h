@@ -277,6 +277,7 @@ private:
 
 	float upper_right_arm_len, lower_right_arm_len;
 	float upper_left_arm_len, lower_left_arm_len;
+	float avatar_eye_height_above_ground;
 
 public:
 	std::string current_gesture_name;

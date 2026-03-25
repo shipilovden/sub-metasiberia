@@ -16,6 +16,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "TestSuite.h"
 #include "URLParser.h"
 #include "GestureManagerUI.h"
+#include "AvatarGroundingUtils.h"
 #include "ModelLoading.h"
 #include "CEF.h"
 #include <maths/GeometrySampling.h>
@@ -1440,10 +1441,11 @@ void processAvatarModelFile(unsigned char* data, int length, const char* filenam
 
 		// NOTE: a bunch of this code is duplicated from AvatarSettingsDialog.
 
-		Vec4f original_toe_pos = results.batched_mesh ? results.batched_mesh->animation_data.getNodePositionModelSpace("LeftToe_End", /*use_retarget_adjustment=*/false) : Vec4f(0,0.0362269469f,0,1);
-
-		// TEMP: Load animation data for ready-player-me type avatars
-		float foot_bottom_height = original_toe_pos[1] - 0.0362269469f; // Should be ~= 0
+		AvatarGrounding::GroundingInfo grounding = results.batched_mesh ?
+			AvatarGrounding::computeGroundingInfo(results.batched_mesh->animation_data, /*use_retarget_adjustment=*/false, AvatarGrounding::kDefaultToeBottomOffsetM) :
+			AvatarGrounding::GroundingInfo{0.0f, AvatarGrounding::kDefaultAvatarEyeHeightM, AvatarGrounding::kDefaultAvatarEyeHeightM};
+		float foot_bottom_height = grounding.foot_bottom_height;
+		float avatar_anchor_height = grounding.anchor_height_from_origin;
 
 		bool do_retargetting = true;
 #if EMSCRIPTEN
@@ -1463,18 +1465,21 @@ void processAvatarModelFile(unsigned char* data, int length, const char* filenam
 			extracted_anim_data.readFromStream(file);
 			animation_data_copy.loadAndRetargetAnim(extracted_anim_data);
 
-			Vec4f new_toe_pos = animation_data_copy.getNodePositionModelSpace("LeftToe_End", /*use_retarget_adjustment=*/true);
-			conPrint("new_toe_pos: " + new_toe_pos.toStringNSigFigs(4));
-
-			foot_bottom_height = new_toe_pos[1] - 0.03f; // Height of foot bottom for avatar with retargetted animation, off ground.
+			grounding = AvatarGrounding::computeGroundingInfo(
+				animation_data_copy,
+				/*use_retarget_adjustment=*/true,
+				AvatarGrounding::kRetargetedToeBottomOffsetM
+			);
+			foot_bottom_height = grounding.foot_bottom_height;
+			avatar_anchor_height = grounding.anchor_height_from_origin;
 
 			conPrint("foot_bottom_height: " + doubleToStringNSigFigs(foot_bottom_height, 4));
+			conPrint("avatar_anchor_height: " + doubleToStringNSigFigs(avatar_anchor_height, 4));
 		}
 
 
 		// Construct transformation to bring ready-player-me avatars to z-up and standing on the ground.
-		// We want to translate the avatar down from 1.67 metres in the sky (which is the default substrata eye height), to the ground
-		const Matrix4f pre_ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, -1.67f - foot_bottom_height) * results.ob_to_world;
+		const Matrix4f pre_ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, -avatar_anchor_height) * results.ob_to_world;
 
 		// conPrint("processAvatarModelFile(): pre_ob_to_world_matrix: " + pre_ob_to_world_matrix.toString());
 
