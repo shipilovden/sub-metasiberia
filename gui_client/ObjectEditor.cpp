@@ -1587,23 +1587,32 @@ void ObjectEditor::loadAvailableFonts()
 	addFontComboItem(this->fontComboBox, "Default", QIcon());
 	this->selected_font_name = "Default";
 
-	// Try to load fonts from resources/fonts directory
-	// Try multiple possible locations
+	// Try to load fonts from the packaged font directory first.
+	// Installed builds stage fonts under data/resources/fonts, while some dev setups still use resources/fonts.
 	std::vector<std::string> possible_paths;
 	
-	// Try 1: base_dir_path
+	// Try 1: packaged paths relative to the resolved app base dir.
 	if(!base_dir_path.empty())
+	{
+		possible_paths.push_back(base_dir_path + "/data/resources/fonts");
 		possible_paths.push_back(base_dir_path + "/resources/fonts");
+	}
 	
-	// Try 2: current working directory
+	// Try 2: packaged paths relative to the current working directory.
+	possible_paths.push_back("./data/resources/fonts");
+	possible_paths.push_back("data/resources/fonts");
+
+	// Try 3: legacy/current working directory fallbacks.
 	possible_paths.push_back("./resources/fonts");
 	possible_paths.push_back("resources/fonts");
 	
-	// Try 3: relative to executable
+	// Try 4: relative to executable / older layouts
+	possible_paths.push_back("../data/resources/fonts");
+	possible_paths.push_back("../../data/resources/fonts");
 	possible_paths.push_back("../resources/fonts");
 	possible_paths.push_back("../../resources/fonts");
 	
-	// Try 4: absolute path  (development path)
+	// Try 5: absolute development path fallback.
 	possible_paths.push_back("C:/programming/substrata/resources/fonts");
 	
 	for(const auto& fonts_dir : possible_paths)

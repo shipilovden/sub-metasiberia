@@ -2810,7 +2810,14 @@ static std::string getResolvedWorldTextFontPath(GUIClient& gui_client, const std
 	std::vector<std::string> font_dirs;
 	font_dirs.push_back(gui_client.resources_dir_path + "/fonts");
 	if(!gui_client.base_dir_path.empty())
+	{
+		font_dirs.push_back(gui_client.base_dir_path + "/data/resources/fonts");
 		font_dirs.push_back(gui_client.base_dir_path + "/resources/fonts");
+	}
+	font_dirs.push_back("./data/resources/fonts");
+	font_dirs.push_back("data/resources/fonts");
+	font_dirs.push_back("../data/resources/fonts");
+	font_dirs.push_back("../../data/resources/fonts");
 	font_dirs.push_back("./resources/fonts");
 	font_dirs.push_back("resources/fonts");
 	font_dirs.push_back("../resources/fonts");
