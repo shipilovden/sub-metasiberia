@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2021 -
 
 
 #include "AnimationManager.h"
+#include "AvatarGroundingUtils.h"
 #include "PhysicsWorld.h"
 #include "opengl/OpenGLEngine.h"
 #include "opengl/MeshPrimitiveBuilding.h"
@@ -46,6 +47,7 @@ AvatarGraphics::AvatarGraphics(Avatar* avatar_)
 	saccade_gap = 0.5;
 
 	last_cam_rotation_time = 0;
+	avatar_eye_height_above_ground = AvatarGrounding::kDefaultAvatarEyeHeightM;
 
 	cur_head_rot_z = 0;
 	//cur_head_rot_quat = Quatf::identity();
@@ -114,7 +116,6 @@ inline static void clearProceduralRotation(js::Vector<GLObjectAnimNodeData, 16>&
 // Matches player capsule dimensions for reliable mouse-picking of remote avatars.
 static const float AVATAR_CAPSULE_RAD = 0.3f;
 static const float AVATAR_CAPSULE_CYLINDER_HEIGHT = 1.3f;
-static const float AVATAR_EYE_HEIGHT = 1.67f;
 
 
 void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& physics_world, const Vec3d& pos, const Vec3f& cam_rotation, 
@@ -158,7 +159,7 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 
 			// Reposition capsule to animated head position so picking stays aligned with root-motion animations.
 			const Vec4f last_eye_pos = getLastHeadPosition();
-			physics_world.setNewObToWorldTransform(*physics_ob, last_eye_pos - Vec4f(0, 0, AVATAR_EYE_HEIGHT * 0.5f, 0), Quatf::xAxisRot(Maths::pi_2<float>()), Vec4f(1.f));
+			physics_world.setNewObToWorldTransform(*physics_ob, last_eye_pos - Vec4f(0, 0, avatar_eye_height_above_ground * 0.5f, 0), Quatf::xAxisRot(Maths::pi_2<float>()), Vec4f(1.f));
 #endif
 		}
 
@@ -854,7 +855,7 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 				lowest_bone_z_os = myMin(lowest_bone_z_os, left_foot_pos_os[2]);
 			}
 
-			const float lowest_node_height_above_ground = lowest_bone_z_os + 1.67f - 0.03f; // Translate up by default eye height.
+			const float lowest_node_height_above_ground = lowest_bone_z_os + avatar_eye_height_above_ground - 0.03f;
 
 			float vertical_adjustment = 0;
 			if(lowest_node_height_above_ground < 0)
@@ -991,8 +992,8 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 			const float NECK_FACTOR = 0.5f; // relative to amount of head rotation and translation
 			//const float pitch_move_forwards_factor = head_pitch_amount * 0.0f * NECK_FACTOR;
 			const float neck_yaw_amount = head_yaw_amount * NECK_FACTOR;
-			const float neck_pitch_amount = 0.3f + head_pitch_amount * NECK_FACTOR; // Idle pose neck rotation is 0.5.  A value of 0 gives a very erect posture.  Use 0.3 as a compromise.
-			// Note that ideally we would compute the neck pitch as some fraction betweeen 0.3 and head pitch amount.
+			// Keep neutral XR head pose aligned with the horizon instead of baking in a constant downward neck tilt.
+			const float neck_pitch_amount = head_pitch_amount * NECK_FACTOR;
 				
 			//Matrix4f neck_rot = Matrix4f::translationMatrix(0, 0, pitch_move_forwards_factor /*- fabs(yaw_amount) * 0.04 * NECK_FACTOR*/) *
 			//	Matrix4f::rotationAroundZAxis(-0.2f * head_yaw_amount * NECK_FACTOR) * Matrix4f::rotationAroundYAxis(head_yaw_amount * NECK_FACTOR) * Matrix4f::rotationAroundXAxis(head_pitch_amount * NECK_FACTOR);
@@ -1274,6 +1275,11 @@ void AvatarGraphics::build(bool our_avatar_)
 	turn_right_anim_i = findAnimation(*skinned_gl_ob, "Right Turn");
 
 	const AnimationData& anim_data = skinned_gl_ob->mesh_data->animation_data;
+	avatar_eye_height_above_ground = AvatarGrounding::computeGroundingInfo(
+		anim_data,
+		/*use_retarget_adjustment=*/true,
+		AvatarGrounding::kRetargetedToeBottomOffsetM
+	).eye_height_above_ground;
 
 	// root_node_i = skinned_gl_ob->mesh_data->animation_data.getNodeIndex("player_rig");
 	neck_node_i  = skinned_gl_ob->mesh_data->animation_data.getNodeIndex("Neck");

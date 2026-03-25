@@ -7,6 +7,7 @@ Dock-friendly Avatar settings UI (Qt).
 
 #include "AddObjectDialog.h"
 #include "AnimationManager.h"
+#include "AvatarGroundingUtils.h"
 #include "GUIClient.h"
 #include "ModelLoading.h"
 #include "VRoidAuthFlow.h"
@@ -350,16 +351,27 @@ void AvatarSettingsWidget::loadModelIntoPreview(const std::string& local_path, b
 			loaded_materials[1]->metallic_fraction.val = Avatar::default_mat1_metallic_frac;
 		}
 
-		Vec4f original_toe_pos = preview_gl_ob->mesh_data->animation_data.getNodePositionModelSpace("LeftToe_End", /*use_retarget_adjustment=*/false);
-		float foot_bottom_height = original_toe_pos[1] - 0.0362269469f;
+		AnimationData& animation_data = preview_gl_ob->mesh_data->animation_data;
+		AvatarGrounding::GroundingInfo grounding = AvatarGrounding::computeGroundingInfo(
+			animation_data,
+			/*use_retarget_adjustment=*/false,
+			AvatarGrounding::kDefaultToeBottomOffsetM
+		);
+		float foot_bottom_height = grounding.foot_bottom_height;
+		float avatar_anchor_height = grounding.anchor_height_from_origin;
 
 		// Append/retarget animations.
-		preview_gl_ob->mesh_data->animation_data.loadAndRetargetAnim(*anim_manager->getAnimation("Idle.subanim", *resource_manager));
+		animation_data.loadAndRetargetAnim(*anim_manager->getAnimation("Idle.subanim", *resource_manager));
 		for(size_t i = 0; i < staticArrayNumElems(anim_names); ++i)
-			preview_gl_ob->mesh_data->animation_data.appendAnimationData(*anim_manager->getAnimation(URLString(anim_names[i]) + ".subanim", *resource_manager));
+			animation_data.appendAnimationData(*anim_manager->getAnimation(URLString(anim_names[i]) + ".subanim", *resource_manager));
 
-		Vec4f new_toe_pos = preview_gl_ob->mesh_data->animation_data.getNodePositionModelSpace("LeftToe_End", /*use_retarget_adjustment=*/true);
-		foot_bottom_height = new_toe_pos[1] - 0.03f;
+		grounding = AvatarGrounding::computeGroundingInfo(
+			animation_data,
+			/*use_retarget_adjustment=*/true,
+			AvatarGrounding::kRetargetedToeBottomOffsetM
+		);
+		foot_bottom_height = grounding.foot_bottom_height;
+		avatar_anchor_height = grounding.anchor_height_from_origin;
 
 		// Populate animation combobox.
 		animationComboBox->clear();
@@ -371,7 +383,7 @@ void AvatarSettingsWidget::loadModelIntoPreview(const std::string& local_path, b
 		SignalBlocker::setCurrentIndex(animationComboBox, preview_gl_ob->current_anim_i);
 
 		// Construct transformation to bring avatars to z-up and standing on the ground.
-		this->pre_ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, -1.67 - foot_bottom_height) * preview_gl_ob->ob_to_world_matrix;
+		this->pre_ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, -avatar_anchor_height) * preview_gl_ob->ob_to_world_matrix;
 		preview_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, -foot_bottom_height) * preview_gl_ob->ob_to_world_matrix;
 
 		// Load textures for preview.
