@@ -199,3 +199,11 @@
 - Для SteamVR/OpenXR на VIVE Business Streaming swapchain format тоже нужно выбирать консервативно: `GL_RGBA16F` и даже `GL_SRGB8_ALPHA8` могут пройти через `xrCreateSwapchain`, но затем отвергаться compositor-слоем при `ComposeLayerProjection`, поэтому безопаснее предпочитать обычные color-renderable форматы (`GL_RGBA8`, `GL_RGB10_A2`, `GL_RGBA16`) и оставлять более экзотические варианты только как крайний fallback.
 - Цветные OpenXR swapchain-ресурсы для HMD должны создаваться не только с `XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT`, но и с `XR_SWAPCHAIN_USAGE_SAMPLED_BIT`, потому что compositor затем сам читает их как текстуры; без этого некоторые runtime'ы принимают swapchain, но отвергают submit уже на этапе `ComposeLayerProjection`.
 - XR runtime-реализация должна обрабатывать `XrEventDataReferenceSpaceChangePending` для активного `STAGE/LOCAL` space и запускать повторный head-alignment после runtime recenter, иначе SteamVR/Business Streaming может продолжить показывать мир уже из нового origin, пока клиент всё ещё живёт на старой калибровке.
+
+## 10. XR Locomotion Note
+
+- The Qt/OpenXR client now has a first connected `teleport locomotion` path in `GUIClient`, wired on top of the existing OpenXR action backend instead of through desktop-only input code.
+- Hold the controller `trigger` or `select` action to show the world-space teleport beam and landing marker.
+- A green landing marker means the hit surface is walkable and the teleport target is valid.
+- A blue landing marker means the current hit is invalid, or the ray reached only a non-walkable surface / empty end point.
+- Releasing the same controller button performs the teleport by moving the player capsule in physics space, so XR camera placement stays driven by the tracked HMD pose instead of an artificial camera offset.

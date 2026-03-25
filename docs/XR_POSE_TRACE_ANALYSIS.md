@@ -42,6 +42,17 @@ The helper script converts to this more intuitive `pitch_from_horizon_deg` view.
 6. Keep the head still for about half a second.
 7. Move naturally for a few seconds, then inspect the trace.
 
+## XR teleport locomotion
+
+The Qt/OpenXR client now also supports basic `teleport locomotion` on top of the same OpenXR action backend:
+
+- hold the controller `trigger` or `select` action to show the teleport beam
+- green landing marker means the surface is walkable and teleport is valid
+- blue landing marker means the current surface or ray end is not a valid teleport target
+- release the button to teleport
+
+The implementation currently prefers the right hand when both hands are pressed, and falls back to the left hand otherwise.
+
 ## What "good" looks like
 
 - A stable focused window appears after recenter.
