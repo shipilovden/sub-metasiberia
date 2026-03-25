@@ -3,6 +3,7 @@
 ## Обновление 2026-03-19
 
 - 2026-03-25 runtime fix: `GUIClient::createGLAndPhysicsObsForText()` now resolves `WorldObject::text_font` to an actual font file in `data/resources/fonts` and rebuilds 3D text with the selected font immediately, instead of always rendering with the default `gl_ui->getFonts()` set.
+- 2026-03-25 installer path fix: packaged Windows builds now search `data/resources/fonts` first in both `ObjectEditor` and world-text runtime resolution, so installed clients no longer depend on the developer fallback path `C:/programming/substrata/resources/fonts` to show the font list.
 
 - Исправлена локальная регрессия редактирования text-объектов: `ObjectEditor` больше не пытается переписывать `model_url` для объектов, у которых модель не редактируется вручную, во время `setFromObject()` подавляются reentrant-сигналы редактора, а `GUIClient` теперь пересобирает 3D-текст не только по `CONTENT_CHANGED`, но и по `TEXT_FONT_CHANGED`/physics rebuild-поводам, не отправляя text-объект в generic mesh-loader с пустым путём.
 - Исправлена серверная совместимость при загрузке старого `server_state.bin`: `WorldObject` теперь читает `text_font` с диска только начиная с новой версии сериализации, а для старых миров подставляет `"Default"`.
