@@ -65,12 +65,12 @@ This means that if teleport appears but sticks do not move the player, the first
 
 ## XR controller visibility
 
-The Qt/OpenXR client now also draws simple local controller proxies from the tracked hand poses:
+The Qt/OpenXR client now prefers stable app-side controller visuals instead of relying on the runtime overlay:
 
-- the left controller proxy is cyan
-- the right controller proxy is orange
-- they stay visible after the runtime hands/controllers overlay disappears on focus hand-off
-- short pose dropouts are now held briefly instead of hiding the proxies immediately, to avoid visible flicker
+- on VIVE Focus 3 systems with local `VIVE Business Streaming` render-model assets installed, the client loads the actual left/right controller meshes from disk and anchors them to the tracked OpenXR `grip` / `aim` poses
+- this keeps controllers visible after the runtime hands/controllers overlay disappears on focus hand-off
+- short pose dropouts are still held briefly instead of hiding the controllers immediately, to avoid visible flicker
+- if no suitable local controller render model is found, the client falls back to the simple built-in left/right proxy shapes instead of depending on compositor-owned visuals
 
 This is intentional: some runtimes show their own temporary controller overlay before the app is fully focused, then stop drawing it once the application takes ownership of XR rendering.
 

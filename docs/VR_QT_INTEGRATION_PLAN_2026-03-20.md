@@ -209,3 +209,4 @@
 - Releasing the same controller button performs the teleport by moving the player capsule in physics space, so XR camera placement stays driven by the tracked HMD pose instead of an artificial camera offset.
 - The same action backend now also maps `VECTOR2F` controller input for smooth locomotion, with left-hand `move2d` driving walk/strafe in HMD-yaw space and right-hand `move2d.x` driving smooth turn.
 - Suggested bindings now also cover HTC `vive_cosmos_controller` and `vive_focus3_controller`, so controller locomotion is not limited to Oculus/Index-only profiles.
+- For controller visibility, the client should now prefer app-side render models over runtime-owned overlays; on VIVE Focus 3 systems it can load the local Business Streaming controller meshes and anchor them to OpenXR `grip` / `aim` poses, with the older proxy shapes kept only as fallback when those meshes are unavailable.
