@@ -91,6 +91,9 @@ This is intentional: some runtimes show their own temporary controller overlay b
 - Trace looks good, but the HMD image still feels heavily zoomed or cropped:
   inspect the XR stereo render path, especially whether the eye swapchain resolution is also driving the engine main viewport/offscreen buffers.
   If XR renders with a desktop-sized main framebuffer and only the GL viewport changes to the eye size, the headset can look strongly zoomed even though tracking and recenter are correct.
+- Trace looks good, but portals turn into white planes in the headset or the XR image becomes noticeably darker than desktop:
+  inspect the XR eye render path for accidental bypass of the engine main/offscreen framebuffer chain.
+  Portals and final imaging rely on that path; forcing XR to skip it can remove the portal content and tonemapping/bloom pass.
 - Trace looks good and scale feels right, but you can see parts of your own face/head in the headset:
   do not push the XR camera forward as a workaround.
   The correct fix is to keep the HMD camera at the tracked eye position and suppress the local avatar head/body mesh for first-person XR rendering.
