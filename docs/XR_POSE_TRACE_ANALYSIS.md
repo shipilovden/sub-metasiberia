@@ -70,6 +70,7 @@ The Qt/OpenXR client now also draws simple local controller proxies from the tra
 - the left controller proxy is cyan
 - the right controller proxy is orange
 - they stay visible after the runtime hands/controllers overlay disappears on focus hand-off
+- short pose dropouts are now held briefly instead of hiding the proxies immediately, to avoid visible flicker
 
 This is intentional: some runtimes show their own temporary controller overlay before the app is fully focused, then stop drawing it once the application takes ownership of XR rendering.
 
