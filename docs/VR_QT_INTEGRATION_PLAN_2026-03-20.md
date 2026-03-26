@@ -207,3 +207,5 @@
 - A green landing marker means the hit surface is walkable and the teleport target is valid.
 - A blue landing marker means the current hit is invalid, or the ray reached only a non-walkable surface / empty end point.
 - Releasing the same controller button performs the teleport by moving the player capsule in physics space, so XR camera placement stays driven by the tracked HMD pose instead of an artificial camera offset.
+- The same action backend now also maps `VECTOR2F` controller input for smooth locomotion, with left-hand `move2d` driving walk/strafe in HMD-yaw space and right-hand `move2d.x` driving smooth turn.
+- Suggested bindings now also cover HTC `vive_cosmos_controller` and `vive_focus3_controller`, so controller locomotion is not limited to Oculus/Index-only profiles.

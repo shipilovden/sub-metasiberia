@@ -53,6 +53,16 @@ The Qt/OpenXR client now also supports basic `teleport locomotion` on top of the
 
 The implementation currently prefers the right hand when both hands are pressed, and falls back to the left hand otherwise.
 
+## XR smooth locomotion
+
+The same OpenXR action backend now also exposes controller `move2d` input for smooth locomotion:
+
+- left thumbstick or trackpad moves the player in the direction of the current HMD yaw
+- right thumbstick or trackpad `x` rotates the player smoothly
+- supported bindings now cover Oculus Touch, Valve Index, HTC Vive wand trackpad, HTC Vive Cosmos, HTC Vive Focus 3, and Microsoft motion controllers
+
+This means that if teleport appears but sticks do not move the player, the first thing to inspect is the live XR diagnostics block for `move2d_active` and `move2d_value` on each hand.
+
 ## What "good" looks like
 
 - A stable focused window appears after recenter.
