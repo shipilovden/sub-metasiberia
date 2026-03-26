@@ -1,5 +1,5 @@
 #pragma once
 
 // Metasiberia version - separate from Substrata version
-// Format: semantic versioning (e.g., "0.0.18")
-const std::string metasiberia_version = "0.0.18";
+// Format: semantic versioning (e.g., "0.0.19")
+const std::string metasiberia_version = "0.0.19";
