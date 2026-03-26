@@ -63,6 +63,16 @@ The same OpenXR action backend now also exposes controller `move2d` input for sm
 
 This means that if teleport appears but sticks do not move the player, the first thing to inspect is the live XR diagnostics block for `move2d_active` and `move2d_value` on each hand.
 
+## XR controller visibility
+
+The Qt/OpenXR client now also draws simple local controller proxies from the tracked hand poses:
+
+- the left controller proxy is cyan
+- the right controller proxy is orange
+- they stay visible after the runtime hands/controllers overlay disappears on focus hand-off
+
+This is intentional: some runtimes show their own temporary controller overlay before the app is fully focused, then stop drawing it once the application takes ownership of XR rendering.
+
 ## What "good" looks like
 
 - A stable focused window appears after recenter.
