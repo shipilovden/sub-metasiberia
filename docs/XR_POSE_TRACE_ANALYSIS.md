@@ -59,7 +59,7 @@ The same OpenXR action backend now also exposes controller `move2d` input for sm
 
 - left thumbstick or trackpad moves the player in the direction of the current HMD yaw
 - right thumbstick or trackpad `x` rotates the player smoothly
-- supported bindings now cover Oculus Touch, Valve Index, HTC Vive wand trackpad, HTC Vive Cosmos, HTC Vive Focus 3, and Microsoft motion controllers
+- supported bindings now cover Oculus Touch plus explicit Meta Quest 2 / Touch Plus / Touch Pro profiles, Valve Index, HTC Vive wand trackpad, HTC Vive Cosmos, HTC Vive Focus 3, Khronos generic controllers, and Microsoft motion controllers
 
 This means that if teleport appears but sticks do not move the player, the first thing to inspect is the live XR diagnostics block for `move2d_active` and `move2d_value` on each hand.
 
