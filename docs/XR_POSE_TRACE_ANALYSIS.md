@@ -21,6 +21,28 @@ Or pass an explicit file:
 python C:/programming/substrata/scripts/analyze_xr_pose_trace.py C:/Users/<user>/AppData/Roaming/Cyberspace/xr_pose_trace.csv
 ```
 
+## Auto-copy headset recordings
+
+If VIVE Focus 3 is connected by USB and visible through `adb`, you can sync headset screen recordings to the local workspace recordings folder automatically:
+
+```bash
+python C:/programming/substrata/scripts/sync_vive_recordings.py --watch --latest-on-start 1
+```
+
+This watches `/sdcard/Movies/Screenrecorder` and copies each new recording into `C:/programming/recordings`.
+
+For a simple one-shot copy of the latest two recordings:
+
+```bash
+python C:/programming/substrata/scripts/sync_vive_recordings.py --latest 2
+```
+
+There is also a PowerShell launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:/programming/substrata/scripts/start_vive_recording_sync.ps1
+```
+
 ## Important interpretation detail
 
 In the current trace format, `pitch_deg=90` means "looking at the horizon".
