@@ -71,22 +71,38 @@ struct XRHandInputState
 	XRHandInputState()
 	:	subaction_path_valid(false),
 		interaction_profile_valid(false),
+		grip_active(false),
+		grip_value(0.f),
 		select_active(false),
 		select_pressed(false),
 		trigger_active(false),
 		trigger_value(0.f),
+		trigger_touch_active(false),
+		trigger_touched(false),
 		move2d_active(false),
-		move2d_value(0.f, 0.f)
+		move2d_value(0.f, 0.f),
+		move2d_touch_active(false),
+		move2d_touched(false),
+		move2d_click_active(false),
+		move2d_clicked(false)
 	{}
 
 	bool subaction_path_valid;
 	bool interaction_profile_valid;
+	bool grip_active;
+	float grip_value;
 	bool select_active;
 	bool select_pressed;
 	bool trigger_active;
 	float trigger_value;
+	bool trigger_touch_active;
+	bool trigger_touched;
 	bool move2d_active;
 	Vec2f move2d_value;
+	bool move2d_touch_active;
+	bool move2d_touched;
+	bool move2d_click_active;
+	bool move2d_clicked;
 	std::string interaction_profile;
 	XRTrackedPoseState grip_pose;
 	XRTrackedPoseState aim_pose;
