@@ -427,10 +427,12 @@ public:
 	void processPlayerPhysicsInput(float dt, bool world_render_has_keyboard_focus, PlayerPhysicsInput& input_out);
 	void updateXRControllerLocomotion(float dt, bool& move_key_pressed);
 	void updateXRControllerVisuals();
+	void updateXRHandGuideVisuals();
 	void tryUpgradeXRControllerVisualsToViveFocus3RenderModels();
 	void updateXRTeleportLocomotion();
 	void hideXRControllerVisuals();
 	void hideXRTeleportVisuals();
+	bool isXRActive() const;
 	bool getCurrentXRTrackedHeadPose(Vec3d& pos_out, Vec3d& angles_out) const;
 	bool getCurrentXRRawHeadPose(Vec3d& pos_out, Vec3d& angles_out) const;
 	void getCurrentAvatarPoseForNetworking(Vec3d& pos_out, Vec3d& angles_out);
@@ -923,6 +925,10 @@ public:
 	bool xr_left_controller_vis_in_engine;
 	Reference<GLObject> xr_right_controller_vis;
 	bool xr_right_controller_vis_in_engine;
+	std::vector<Reference<GLObject> > xr_left_hand_vis_parts;
+	bool xr_left_hand_vis_in_engine;
+	std::vector<Reference<GLObject> > xr_right_hand_vis_parts;
+	bool xr_right_hand_vis_in_engine;
 	bool xr_focus3_controller_render_models_attempted;
 	bool xr_focus3_controller_render_models_loaded;
 	Reference<GLObject> xr_teleport_beam;

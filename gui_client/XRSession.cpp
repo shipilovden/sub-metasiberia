@@ -79,6 +79,8 @@ static XRRuntimeProbeResult makeDefaultResult()
 
 
 #if defined(XR_SUPPORT)
+static const float XR_WORLD_VERTICAL_TRIM_METRES = -0.8f;
+
 static std::string makeVersionString(uint64_t version)
 {
 	return std::to_string(XR_VERSION_MAJOR(version)) + "." + std::to_string(XR_VERSION_MINOR(version)) + "." + std::to_string(XR_VERSION_PATCH(version));
@@ -691,9 +693,9 @@ struct XRSession::OpaqueState
 		XrSpace aim_space;
 	};
 
-	OpaqueState()
-	:	instance(XR_NULL_HANDLE),
-		system_id(XR_NULL_SYSTEM_ID),
+		OpaqueState()
+		:	instance(XR_NULL_HANDLE),
+			system_id(XR_NULL_SYSTEM_ID),
 		session(XR_NULL_HANDLE),
 		app_space(XR_NULL_HANDLE),
 		view_space(XR_NULL_HANDLE),
@@ -710,14 +712,18 @@ struct XRSession::OpaqueState
 		calibration_tracking_head_pos_engine(0.f),
 		calibration_candidate_start_time(-1.0),
 		calibration_candidate_pose_valid(false),
-		action_set(XR_NULL_HANDLE),
-		grip_pose_action(XR_NULL_HANDLE),
-		aim_pose_action(XR_NULL_HANDLE),
-		select_action(XR_NULL_HANDLE),
-		trigger_action(XR_NULL_HANDLE),
-		move2d_action(XR_NULL_HANDLE)
-	{
-		std::memset(&view_state, 0, sizeof(view_state));
+			action_set(XR_NULL_HANDLE),
+			grip_pose_action(XR_NULL_HANDLE),
+			aim_pose_action(XR_NULL_HANDLE),
+			grip_value_action(XR_NULL_HANDLE),
+			select_action(XR_NULL_HANDLE),
+			trigger_action(XR_NULL_HANDLE),
+			trigger_touch_action(XR_NULL_HANDLE),
+			move2d_touch_action(XR_NULL_HANDLE),
+			move2d_click_action(XR_NULL_HANDLE),
+			move2d_action(XR_NULL_HANDLE)
+		{
+			std::memset(&view_state, 0, sizeof(view_state));
 		view_state.type = XR_TYPE_VIEW_STATE;
 	}
 
@@ -745,13 +751,17 @@ struct XRSession::OpaqueState
 	double calibration_candidate_start_time;
 	XrPosef calibration_candidate_pose;
 	bool calibration_candidate_pose_valid;
-	XrActionSet action_set;
-	XrAction grip_pose_action;
-	XrAction aim_pose_action;
-	XrAction select_action;
-	XrAction trigger_action;
-	XrAction move2d_action;
-	HandActionState hands[2];
+		XrActionSet action_set;
+		XrAction grip_pose_action;
+		XrAction aim_pose_action;
+		XrAction grip_value_action;
+		XrAction select_action;
+		XrAction trigger_action;
+		XrAction trigger_touch_action;
+		XrAction move2d_touch_action;
+		XrAction move2d_click_action;
+		XrAction move2d_action;
+		HandActionState hands[2];
 };
 
 
@@ -807,6 +817,24 @@ static void destroyActionSubsystem(XRHandInputState& left_hand_state_out, XRHand
 		state.hands[i].user_path = XR_NULL_PATH;
 	}
 
+	if(state.move2d_click_action != XR_NULL_HANDLE)
+	{
+		xrDestroyAction(state.move2d_click_action);
+		state.move2d_click_action = XR_NULL_HANDLE;
+	}
+
+	if(state.move2d_touch_action != XR_NULL_HANDLE)
+	{
+		xrDestroyAction(state.move2d_touch_action);
+		state.move2d_touch_action = XR_NULL_HANDLE;
+	}
+
+	if(state.trigger_touch_action != XR_NULL_HANDLE)
+	{
+		xrDestroyAction(state.trigger_touch_action);
+		state.trigger_touch_action = XR_NULL_HANDLE;
+	}
+
 	if(state.trigger_action != XR_NULL_HANDLE)
 	{
 		xrDestroyAction(state.trigger_action);
@@ -823,6 +851,12 @@ static void destroyActionSubsystem(XRHandInputState& left_hand_state_out, XRHand
 	{
 		xrDestroyAction(state.select_action);
 		state.select_action = XR_NULL_HANDLE;
+	}
+
+	if(state.grip_value_action != XR_NULL_HANDLE)
+	{
+		xrDestroyAction(state.grip_value_action);
+		state.grip_value_action = XR_NULL_HANDLE;
 	}
 
 	if(state.aim_pose_action != XR_NULL_HANDLE)
@@ -982,6 +1016,12 @@ static bool initialiseActionSubsystem(XRRuntimeProbeResult& result, XRHandInputS
 
 	result.pose_actions_created = true;
 
+	if(!createAction(state.action_set, "hand_grip_value", "Hand Grip Value", XR_ACTION_TYPE_FLOAT_INPUT, hand_subaction_paths, 2, state.grip_value_action, error))
+	{
+		result.actions_message = error;
+		return false;
+	}
+
 	if(!createAction(state.action_set, "hand_select", "Hand Select", XR_ACTION_TYPE_BOOLEAN_INPUT, hand_subaction_paths, 2, state.select_action, error))
 	{
 		result.actions_message = error;
@@ -994,7 +1034,25 @@ static bool initialiseActionSubsystem(XRRuntimeProbeResult& result, XRHandInputS
 		return false;
 	}
 
+	if(!createAction(state.action_set, "hand_trigger_touch", "Hand Trigger Touch", XR_ACTION_TYPE_BOOLEAN_INPUT, hand_subaction_paths, 2, state.trigger_touch_action, error))
+	{
+		result.actions_message = error;
+		return false;
+	}
+
 	if(!createAction(state.action_set, "hand_move2d", "Hand Move2D", XR_ACTION_TYPE_VECTOR2F_INPUT, hand_subaction_paths, 2, state.move2d_action, error))
+	{
+		result.actions_message = error;
+		return false;
+	}
+
+	if(!createAction(state.action_set, "hand_move2d_touch", "Hand Move2D Touch", XR_ACTION_TYPE_BOOLEAN_INPUT, hand_subaction_paths, 2, state.move2d_touch_action, error))
+	{
+		result.actions_message = error;
+		return false;
+	}
+
+	if(!createAction(state.action_set, "hand_move2d_click", "Hand Move2D Click", XR_ACTION_TYPE_BOOLEAN_INPUT, hand_subaction_paths, 2, state.move2d_click_action, error))
 	{
 		result.actions_message = error;
 		return false;
@@ -1149,19 +1207,27 @@ static bool initialiseActionSubsystem(XRRuntimeProbeResult& result, XRHandInputS
 			last_binding_error = error;
 	}
 
-	{
-		const ActionBindingDef bindings[] = {
-			{ state.grip_pose_action, "/user/hand/left/input/grip/pose" },
-			{ state.aim_pose_action, "/user/hand/left/input/aim/pose" },
-			{ state.trigger_action, "/user/hand/left/input/trigger/value" },
-			{ state.select_action, "/user/hand/left/input/trackpad/click" },
-			{ state.move2d_action, "/user/hand/left/input/trackpad" },
-			{ state.grip_pose_action, "/user/hand/right/input/grip/pose" },
-			{ state.aim_pose_action, "/user/hand/right/input/aim/pose" },
-			{ state.trigger_action, "/user/hand/right/input/trigger/value" },
-			{ state.select_action, "/user/hand/right/input/trackpad/click" },
-			{ state.move2d_action, "/user/hand/right/input/trackpad" }
-		};
+		{
+			const ActionBindingDef bindings[] = {
+				{ state.grip_pose_action, "/user/hand/left/input/grip/pose" },
+				{ state.aim_pose_action, "/user/hand/left/input/aim/pose" },
+				{ state.grip_value_action, "/user/hand/left/input/squeeze/value" },
+				{ state.trigger_action, "/user/hand/left/input/trigger/value" },
+				{ state.trigger_touch_action, "/user/hand/left/input/trigger/touch" },
+				{ state.select_action, "/user/hand/left/input/trackpad/click" },
+				{ state.move2d_action, "/user/hand/left/input/trackpad" },
+				{ state.move2d_touch_action, "/user/hand/left/input/trackpad/touch" },
+				{ state.move2d_click_action, "/user/hand/left/input/trackpad/click" },
+				{ state.grip_pose_action, "/user/hand/right/input/grip/pose" },
+				{ state.aim_pose_action, "/user/hand/right/input/aim/pose" },
+				{ state.grip_value_action, "/user/hand/right/input/squeeze/value" },
+				{ state.trigger_action, "/user/hand/right/input/trigger/value" },
+				{ state.trigger_touch_action, "/user/hand/right/input/trigger/touch" },
+				{ state.select_action, "/user/hand/right/input/trackpad/click" },
+				{ state.move2d_action, "/user/hand/right/input/trackpad" },
+				{ state.move2d_touch_action, "/user/hand/right/input/trackpad/touch" },
+				{ state.move2d_click_action, "/user/hand/right/input/trackpad/click" }
+			};
 
 		if(suggestBindingsForProfile(state.instance, "/interaction_profiles/htc/vive_controller", bindings, sizeof(bindings) / sizeof(bindings[0]), error))
 			successful_binding_profile_count++;
@@ -1169,17 +1235,25 @@ static bool initialiseActionSubsystem(XRRuntimeProbeResult& result, XRHandInputS
 			last_binding_error = error;
 	}
 
-	{
-		const ActionBindingDef bindings[] = {
-			{ state.grip_pose_action, "/user/hand/left/input/grip/pose" },
-			{ state.aim_pose_action, "/user/hand/left/input/aim/pose" },
-			{ state.trigger_action, "/user/hand/left/input/trigger/value" },
-			{ state.move2d_action, "/user/hand/left/input/thumbstick" },
-			{ state.grip_pose_action, "/user/hand/right/input/grip/pose" },
-			{ state.aim_pose_action, "/user/hand/right/input/aim/pose" },
-			{ state.trigger_action, "/user/hand/right/input/trigger/value" },
-			{ state.move2d_action, "/user/hand/right/input/thumbstick" }
-		};
+		{
+			const ActionBindingDef bindings[] = {
+				{ state.grip_pose_action, "/user/hand/left/input/grip/pose" },
+				{ state.aim_pose_action, "/user/hand/left/input/aim/pose" },
+				{ state.grip_value_action, "/user/hand/left/input/squeeze/value" },
+				{ state.trigger_action, "/user/hand/left/input/trigger/value" },
+				{ state.trigger_touch_action, "/user/hand/left/input/trigger/touch" },
+				{ state.move2d_action, "/user/hand/left/input/thumbstick" },
+				{ state.move2d_touch_action, "/user/hand/left/input/thumbstick/touch" },
+				{ state.move2d_click_action, "/user/hand/left/input/thumbstick/click" },
+				{ state.grip_pose_action, "/user/hand/right/input/grip/pose" },
+				{ state.aim_pose_action, "/user/hand/right/input/aim/pose" },
+				{ state.grip_value_action, "/user/hand/right/input/squeeze/value" },
+				{ state.trigger_action, "/user/hand/right/input/trigger/value" },
+				{ state.trigger_touch_action, "/user/hand/right/input/trigger/touch" },
+				{ state.move2d_action, "/user/hand/right/input/thumbstick" },
+				{ state.move2d_touch_action, "/user/hand/right/input/thumbstick/touch" },
+				{ state.move2d_click_action, "/user/hand/right/input/thumbstick/click" }
+			};
 
 		if(suggestBindingsForProfile(state.instance, "/interaction_profiles/microsoft/motion_controller", bindings, sizeof(bindings) / sizeof(bindings[0]), error))
 			successful_binding_profile_count++;
@@ -1187,17 +1261,25 @@ static bool initialiseActionSubsystem(XRRuntimeProbeResult& result, XRHandInputS
 			last_binding_error = error;
 	}
 
-	{
-		const ActionBindingDef bindings[] = {
-			{ state.grip_pose_action, "/user/hand/left/input/grip/pose" },
-			{ state.aim_pose_action, "/user/hand/left/input/aim/pose" },
-			{ state.trigger_action, "/user/hand/left/input/trigger/value" },
-			{ state.move2d_action, "/user/hand/left/input/thumbstick" },
-			{ state.grip_pose_action, "/user/hand/right/input/grip/pose" },
-			{ state.aim_pose_action, "/user/hand/right/input/aim/pose" },
-			{ state.trigger_action, "/user/hand/right/input/trigger/value" },
-			{ state.move2d_action, "/user/hand/right/input/thumbstick" }
-		};
+		{
+			const ActionBindingDef bindings[] = {
+				{ state.grip_pose_action, "/user/hand/left/input/grip/pose" },
+				{ state.aim_pose_action, "/user/hand/left/input/aim/pose" },
+				{ state.grip_value_action, "/user/hand/left/input/squeeze/value" },
+				{ state.trigger_action, "/user/hand/left/input/trigger/value" },
+				{ state.trigger_touch_action, "/user/hand/left/input/trigger/touch" },
+				{ state.move2d_action, "/user/hand/left/input/thumbstick" },
+				{ state.move2d_touch_action, "/user/hand/left/input/thumbstick/touch" },
+				{ state.move2d_click_action, "/user/hand/left/input/thumbstick/click" },
+				{ state.grip_pose_action, "/user/hand/right/input/grip/pose" },
+				{ state.aim_pose_action, "/user/hand/right/input/aim/pose" },
+				{ state.grip_value_action, "/user/hand/right/input/squeeze/value" },
+				{ state.trigger_action, "/user/hand/right/input/trigger/value" },
+				{ state.trigger_touch_action, "/user/hand/right/input/trigger/touch" },
+				{ state.move2d_action, "/user/hand/right/input/thumbstick" },
+				{ state.move2d_touch_action, "/user/hand/right/input/thumbstick/touch" },
+				{ state.move2d_click_action, "/user/hand/right/input/thumbstick/click" }
+			};
 
 		if(suggestBindingsForProfile(state.instance, "/interaction_profiles/htc/vive_cosmos_controller", bindings, sizeof(bindings) / sizeof(bindings[0]), error))
 			successful_binding_profile_count++;
@@ -1957,16 +2039,40 @@ void XRSession::renderFrame(OpenGLEngine& opengl_engine, const CameraController&
 			if(!queryBooleanActionState(state->session, state->select_action, state->hands[1].user_path, right_hand_state.select_active, right_hand_state.select_pressed, action_error))
 				last_result.actions_message = action_error;
 
+			if(!queryFloatActionState(state->session, state->grip_value_action, state->hands[0].user_path, left_hand_state.grip_active, left_hand_state.grip_value, action_error))
+				last_result.actions_message = action_error;
+
+			if(!queryFloatActionState(state->session, state->grip_value_action, state->hands[1].user_path, right_hand_state.grip_active, right_hand_state.grip_value, action_error))
+				last_result.actions_message = action_error;
+
 			if(!queryFloatActionState(state->session, state->trigger_action, state->hands[0].user_path, left_hand_state.trigger_active, left_hand_state.trigger_value, action_error))
 				last_result.actions_message = action_error;
 
 			if(!queryFloatActionState(state->session, state->trigger_action, state->hands[1].user_path, right_hand_state.trigger_active, right_hand_state.trigger_value, action_error))
 				last_result.actions_message = action_error;
 
+			if(!queryBooleanActionState(state->session, state->trigger_touch_action, state->hands[0].user_path, left_hand_state.trigger_touch_active, left_hand_state.trigger_touched, action_error))
+				last_result.actions_message = action_error;
+
+			if(!queryBooleanActionState(state->session, state->trigger_touch_action, state->hands[1].user_path, right_hand_state.trigger_touch_active, right_hand_state.trigger_touched, action_error))
+				last_result.actions_message = action_error;
+
 			if(!queryVector2fActionState(state->session, state->move2d_action, state->hands[0].user_path, left_hand_state.move2d_active, left_hand_state.move2d_value, action_error))
 				last_result.actions_message = action_error;
 
 			if(!queryVector2fActionState(state->session, state->move2d_action, state->hands[1].user_path, right_hand_state.move2d_active, right_hand_state.move2d_value, action_error))
+				last_result.actions_message = action_error;
+
+			if(!queryBooleanActionState(state->session, state->move2d_touch_action, state->hands[0].user_path, left_hand_state.move2d_touch_active, left_hand_state.move2d_touched, action_error))
+				last_result.actions_message = action_error;
+
+			if(!queryBooleanActionState(state->session, state->move2d_touch_action, state->hands[1].user_path, right_hand_state.move2d_touch_active, right_hand_state.move2d_touched, action_error))
+				last_result.actions_message = action_error;
+
+			if(!queryBooleanActionState(state->session, state->move2d_click_action, state->hands[0].user_path, left_hand_state.move2d_click_active, left_hand_state.move2d_clicked, action_error))
+				last_result.actions_message = action_error;
+
+			if(!queryBooleanActionState(state->session, state->move2d_click_action, state->hands[1].user_path, right_hand_state.move2d_click_active, right_hand_state.move2d_clicked, action_error))
 				last_result.actions_message = action_error;
 
 			if(last_result.actions_message.empty())
@@ -2105,7 +2211,7 @@ void XRSession::renderFrame(OpenGLEngine& opengl_engine, const CameraController&
 						Quatf::zAxisRot(current_world_heading - state->calibration_world_heading) * state->tracking_base_orientation_offset
 					);
 					const Vec3d anchor_pos_d = cam_controller.getFirstPersonPosition();
-					const Vec3f anchor_pos((float)anchor_pos_d.x, (float)anchor_pos_d.y, (float)anchor_pos_d.z);
+					const Vec3f anchor_pos((float)anchor_pos_d.x, (float)anchor_pos_d.y, (float)anchor_pos_d.z + XR_WORLD_VERTICAL_TRIM_METRES);
 					const Vec3f world_translation = anchor_pos - rotateAroundWorldUp(state->calibration_tracking_head_pos_engine, effective_yaw_offset);
 
 					head_pose_state.active = true;

@@ -160,6 +160,8 @@ static const float XR_MOVE2D_DEADZONE = 0.18f;
 static const float XR_SMOOTH_TURN_SPEED = 400.f;
 static const float XR_CONTROLLER_VIS_RADIUS = 0.018f;
 static const float XR_CONTROLLER_VIS_LENGTH = 0.12f;
+static const float XR_FOCUS3_TELEPORT_ORIGIN_DROP = 0.012f;
+static const size_t XR_HAND_GUIDE_PART_COUNT = 5;
 
 
 enum class XRLaunchMode
@@ -408,55 +410,86 @@ static std::string xrGetViveFocus3ControllerModelPath(bool right_hand)
 
 static Matrix4f xrMakeControllerRenderModelComponentTransform(const Vec4f& origin_obj_space, const Vec3f& rotate_xyz_deg)
 {
-	// ModelLoading rotates OBJ coordinates into the engine's z-up basis with +90 deg about X, so match that here for vendor JSON anchors.
+	// ModelLoading rotates OBJ coordinates into the engine's z-up basis with +90 deg about X.
+	// Vendor JSON anchors are authored in the original OBJ basis, so convert the full local anchor transform
+	// with a proper change-of-basis instead of just pre-multiplying the basis rotation.
 	const Matrix4f obj_to_engine_basis = Matrix4f::rotationAroundXAxis(Maths::pi_2<float>());
+	const Matrix4f engine_to_obj_basis = Matrix4f::rotationAroundXAxis(-Maths::pi_2<float>());
 	const Matrix4f component_rotation =
 		Matrix4f::rotationAroundZAxis(::degreeToRad(rotate_xyz_deg.z)) *
 		Matrix4f::rotationAroundYAxis(::degreeToRad(rotate_xyz_deg.y)) *
 		Matrix4f::rotationAroundXAxis(::degreeToRad(rotate_xyz_deg.x));
 
-	return obj_to_engine_basis * Matrix4f::translationMatrix(origin_obj_space) * component_rotation;
+	return obj_to_engine_basis * Matrix4f::translationMatrix(origin_obj_space) * component_rotation * engine_to_obj_basis;
 }
 
 
 static Matrix4f xrGetViveFocus3ControllerGripToModelTransform(bool right_hand)
 {
 	const Vec4f grip_origin(right_hand ? -0.007f : 0.007f, -0.00182941f, 0.1019482f, 1.f);
-	const Matrix4f model_from_grip = xrMakeControllerRenderModelComponentTransform(grip_origin, Vec3f(20.6f, 0.f, 0.f));
+	return xrMakeControllerRenderModelComponentTransform(grip_origin, Vec3f(20.6f, 0.f, 0.f));
+}
 
-	Matrix4f grip_to_model;
-	const bool invertible = model_from_grip.getInverseForAffine3Matrix(grip_to_model);
+
+static Matrix4f xrGetViveFocus3ControllerModelToGripTransform(bool right_hand)
+{
+	const Matrix4f grip_to_model = xrGetViveFocus3ControllerGripToModelTransform(right_hand);
+
+	// Invert the vendor grip anchor so we can place the render model from the runtime grip pose.
+	Matrix4f model_to_grip;
+	const bool invertible = grip_to_model.getInverseForAffine3Matrix(model_to_grip);
 	assert(invertible);
 	(void)invertible;
-	return grip_to_model;
+	return model_to_grip;
 }
 
 
 static Matrix4f xrGetViveFocus3ControllerAimToModelTransform(bool right_hand)
 {
 	const Vec4f aim_origin(right_hand ? -0.007f : 0.007f, -0.03894766f, 0.00949694f, 1.f);
-	const Matrix4f model_from_aim = xrMakeControllerRenderModelComponentTransform(aim_origin, Vec3f(-39.4f, 0.f, 0.f));
-
-	Matrix4f aim_to_model;
-	const bool invertible = model_from_aim.getInverseForAffine3Matrix(aim_to_model);
-	assert(invertible);
-	(void)invertible;
-	return aim_to_model;
+	return xrMakeControllerRenderModelComponentTransform(aim_origin, Vec3f(-39.4f, 0.f, 0.f));
 }
 
 
-static bool buildXRControllerVisualTransform(const XRHandInputState& hand_state, bool use_focus3_render_model, bool right_hand, Matrix4f& ob_to_world_out)
+static Matrix4f xrGetViveFocus3ControllerTipToModelTransform(bool right_hand)
+{
+        const Vec4f tip_origin(right_hand ? -0.01f : 0.01f, -0.025f, 0.029f, 1.f);
+        return xrMakeControllerRenderModelComponentTransform(tip_origin, Vec3f(-30.f, 0.f, 0.f));
+}
+
+
+static Matrix4f xrGetViveFocus3ControllerHandModelToModelTransform(bool right_hand)
+{
+        const Vec4f hand_origin(right_hand ? 0.01125f : -0.01125f, -0.00182941f, 0.1019482f, 1.f);
+        return xrMakeControllerRenderModelComponentTransform(hand_origin, Vec3f(-39.4f, 0.f, 0.f));
+}
+
+
+static Matrix4f xrGetViveFocus3ControllerModelToAimTransform(bool right_hand)
+{
+        const Matrix4f aim_to_model = xrGetViveFocus3ControllerAimToModelTransform(right_hand);
+
+	// Invert the vendor aim anchor so we can place the render model from the runtime aim pose.
+	Matrix4f model_to_aim;
+	const bool invertible = aim_to_model.getInverseForAffine3Matrix(model_to_aim);
+	assert(invertible);
+	(void)invertible;
+	return model_to_aim;
+}
+
+
+static bool buildXRControllerModelToWorldTransform(const XRHandInputState& hand_state, bool use_focus3_render_model, bool right_hand, Matrix4f& model_to_world_out)
 {
 	if(use_focus3_render_model)
 	{
 		if(xrTrackedPoseHasWorldTransform(hand_state.grip_pose))
 		{
-			ob_to_world_out = hand_state.grip_pose.object_to_world_matrix * xrGetViveFocus3ControllerGripToModelTransform(right_hand);
+			model_to_world_out = hand_state.grip_pose.object_to_world_matrix * xrGetViveFocus3ControllerModelToGripTransform(right_hand);
 			return true;
 		}
 		if(xrTrackedPoseHasWorldTransform(hand_state.aim_pose))
 		{
-			ob_to_world_out = hand_state.aim_pose.object_to_world_matrix * xrGetViveFocus3ControllerAimToModelTransform(right_hand);
+			model_to_world_out = hand_state.aim_pose.object_to_world_matrix * xrGetViveFocus3ControllerModelToAimTransform(right_hand);
 			return true;
 		}
 
@@ -476,8 +509,150 @@ static bool buildXRControllerVisualTransform(const XRHandInputState& hand_state,
 	const Vec4f controller_up = pose.getColumn(2);
 	const Vec4f controller_pos = pose.getColumn(3) + controller_forward * 0.055f - controller_up * 0.015f;
 	const Matrix4f controller_basis(controller_right, controller_up, controller_forward, controller_pos);
-	ob_to_world_out = controller_basis * Matrix4f::scaleMatrix(XR_CONTROLLER_VIS_RADIUS, XR_CONTROLLER_VIS_RADIUS, XR_CONTROLLER_VIS_LENGTH);
+	model_to_world_out = controller_basis * Matrix4f::scaleMatrix(XR_CONTROLLER_VIS_RADIUS, XR_CONTROLLER_VIS_RADIUS, XR_CONTROLLER_VIS_LENGTH);
 	return true;
+}
+
+
+static bool buildXRControllerVisualTransform(const XRHandInputState& hand_state, bool use_focus3_render_model, bool right_hand, Matrix4f& ob_to_world_out)
+{
+        return buildXRControllerModelToWorldTransform(hand_state, use_focus3_render_model, right_hand, ob_to_world_out);
+}
+
+
+static bool buildXRHandGuideRootToWorldTransform(const XRHandInputState& hand_state, bool use_focus3_controller_anchors, bool right_hand, Matrix4f& hand_root_to_world_out)
+{
+        if(use_focus3_controller_anchors)
+        {
+                Matrix4f model_to_world;
+                if(buildXRControllerModelToWorldTransform(hand_state, /*use_focus3_render_model=*/true, right_hand, model_to_world))
+                {
+                        hand_root_to_world_out = model_to_world * xrGetViveFocus3ControllerHandModelToModelTransform(right_hand);
+                        return true;
+                }
+        }
+
+        if(xrTrackedPoseHasWorldTransform(hand_state.grip_pose))
+        {
+                const float side = right_hand ? 1.f : -1.f;
+                hand_root_to_world_out =
+                        hand_state.grip_pose.object_to_world_matrix *
+                        Matrix4f::translationMatrix(side * 0.028f, 0.012f, -0.012f) *
+                        Matrix4f::rotationAroundXAxis(-0.45f);
+                return true;
+        }
+
+        if(xrTrackedPoseHasWorldTransform(hand_state.aim_pose))
+        {
+                const float side = right_hand ? 1.f : -1.f;
+                hand_root_to_world_out =
+                        hand_state.aim_pose.object_to_world_matrix *
+                        Matrix4f::translationMatrix(side * 0.022f, -0.008f, -0.02f) *
+                        Matrix4f::rotationAroundXAxis(-0.35f);
+                return true;
+        }
+
+        return false;
+}
+
+
+static bool xrHandUsesFocus3ControllerAnchors(const XRHandInputState& hand_state)
+{
+        return hand_state.interaction_profile.find("vive_focus3_controller") != std::string::npos;
+}
+
+
+static float xrGetHandGuideGripCurl(const XRHandInputState& hand_state)
+{
+        return myClamp(hand_state.grip_active ? hand_state.grip_value : 0.f, 0.f, 1.f);
+}
+
+
+static float xrGetHandGuideIndexCurl(const XRHandInputState& hand_state)
+{
+        float curl = hand_state.trigger_active ? hand_state.trigger_value : 0.f;
+        if(hand_state.trigger_touch_active && hand_state.trigger_touched)
+                curl = myMax(curl, 0.22f);
+        if(hand_state.select_active && hand_state.select_pressed)
+                curl = 1.f;
+        return myClamp(curl, 0.f, 1.f);
+}
+
+
+static float xrGetHandGuideThumbPress(const XRHandInputState& hand_state)
+{
+        const float move_mag = hand_state.move2d_active ? std::sqrt(hand_state.move2d_value.x * hand_state.move2d_value.x + hand_state.move2d_value.y * hand_state.move2d_value.y) : 0.f;
+        float press = myClamp(move_mag, 0.f, 1.f);
+        if(hand_state.move2d_touch_active && hand_state.move2d_touched)
+                press = myMax(press, 0.3f);
+        if(hand_state.move2d_click_active && hand_state.move2d_clicked)
+                press = 1.f;
+        return myClamp(press, 0.f, 1.f);
+}
+
+
+static Matrix4f xrBuildHandGuidePalmTransform(const Matrix4f& hand_root_to_world)
+{
+        return hand_root_to_world * Matrix4f::translationMatrix(0.f, 0.015f, -0.006f) * Matrix4f::scaleMatrix(0.04f, 0.055f, 0.018f);
+}
+
+
+static Matrix4f xrBuildHandGuideFingerTransform(const Matrix4f& hand_root_to_world, const Vec3f& start_local, const Vec3f& dir_local, float radius, float length)
+{
+        return
+                hand_root_to_world *
+                Matrix4f::translationMatrix(start_local.x, start_local.y, start_local.z) *
+                Matrix4f::constructFromVectorStatic(normalise(Vec4f(dir_local.x, dir_local.y, dir_local.z, 0.f))) *
+                Matrix4f::scaleMatrix(radius, radius, length);
+}
+
+
+static bool buildXRHandGuidePartTransforms(const XRHandInputState& hand_state, bool use_focus3_controller_anchors, bool right_hand, Matrix4f* part_transforms_out, size_t part_count)
+{
+        if(part_count < XR_HAND_GUIDE_PART_COUNT)
+                return false;
+
+        Matrix4f hand_root_to_world;
+        if(!buildXRHandGuideRootToWorldTransform(hand_state, use_focus3_controller_anchors, right_hand, hand_root_to_world))
+                return false;
+
+        const float side = right_hand ? 1.f : -1.f;
+        const float grip_curl = xrGetHandGuideGripCurl(hand_state);
+        const float index_curl = xrGetHandGuideIndexCurl(hand_state);
+        const float thumb_press = xrGetHandGuideThumbPress(hand_state);
+
+        part_transforms_out[0] = xrBuildHandGuidePalmTransform(hand_root_to_world);
+        part_transforms_out[1] = xrBuildHandGuideFingerTransform(hand_root_to_world, Vec3f(side * 0.024f, 0.016f, -0.002f), Vec3f(side * (0.72f - 0.42f * thumb_press), 0.55f - 0.12f * thumb_press, -0.2f - 0.35f * thumb_press), 0.0075f, 0.045f);
+        part_transforms_out[2] = xrBuildHandGuideFingerTransform(hand_root_to_world, Vec3f(side * 0.010f, 0.028f, 0.004f), Vec3f(side * 0.05f, 1.f - 0.65f * index_curl, -0.9f * index_curl), 0.0065f, 0.058f);
+        part_transforms_out[3] = xrBuildHandGuideFingerTransform(hand_root_to_world, Vec3f(side * 0.001f, 0.025f, 0.001f), Vec3f(0.f, 1.f - 0.7f * grip_curl, -0.95f * grip_curl), 0.0075f, 0.061f);
+        part_transforms_out[4] = xrBuildHandGuideFingerTransform(hand_root_to_world, Vec3f(side * -0.011f, 0.022f, -0.003f), Vec3f(side * -0.05f, 1.f - 0.72f * grip_curl, -1.f * grip_curl), 0.007f, 0.054f);
+        return true;
+}
+
+
+static bool buildXRTeleportRayFromController(const XRHandInputState& hand_state, bool use_focus3_controller_anchors, bool right_hand, Vec4f& ray_origin_out, Vec4f& ray_dir_out)
+{
+        if(use_focus3_controller_anchors)
+        {
+		Matrix4f model_to_world;
+		if(buildXRControllerModelToWorldTransform(hand_state, /*use_focus3_render_model=*/true, right_hand, model_to_world))
+		{
+                        // Use the vendor "tip" anchor for the beam origin so the ray visibly exits from the ring/front of the held controller,
+                        // while keeping the OpenXR aim anchor for beam direction.
+                        const Matrix4f aim_to_world = model_to_world * xrGetViveFocus3ControllerAimToModelTransform(right_hand);
+                        const Matrix4f tip_to_world = model_to_world * xrGetViveFocus3ControllerTipToModelTransform(right_hand);
+                        ray_origin_out = tip_to_world.getColumn(3) - aim_to_world.getColumn(2) * XR_FOCUS3_TELEPORT_ORIGIN_DROP;
+                        ray_dir_out = normalise(aim_to_world.getColumn(1));
+                        return ray_dir_out.length2() > 1.0e-10f;
+                }
+	}
+
+	if(!xrTrackedPoseHasWorldTransform(hand_state.aim_pose))
+		return false;
+
+	ray_origin_out = getXRTrackedPoseWorldPosition(hand_state.aim_pose);
+	ray_dir_out = getXRTrackedPoseWorldForwardDir(hand_state.aim_pose);
+	return ray_dir_out.length2() > 1.0e-10f;
 }
 
 
@@ -544,6 +719,8 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	last_fps(0),
 	xr_left_controller_vis_in_engine(false),
 	xr_right_controller_vis_in_engine(false),
+	xr_left_hand_vis_in_engine(false),
+	xr_right_hand_vis_in_engine(false),
 	xr_focus3_controller_render_models_attempted(false),
 	xr_focus3_controller_render_models_loaded(false),
 	xr_teleport_beam_in_engine(false),
@@ -1385,11 +1562,11 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 		xr_right_controller_vis->mesh_data = opengl_engine->getCylinderMesh();
 		xr_right_controller_vis->always_visible = true;
 
-		OpenGLMaterial right_material;
-		right_material.albedo_linear_rgb = toLinearSRGB(Colour3f(1.0f, 0.55f, 0.2f));
-		right_material.transparent = true;
-		right_material.alpha = 0.92f;
-		xr_right_controller_vis->setSingleMaterial(right_material);
+                OpenGLMaterial right_material;
+                right_material.albedo_linear_rgb = toLinearSRGB(Colour3f(1.0f, 0.55f, 0.2f));
+                right_material.transparent = true;
+                right_material.alpha = 0.92f;
+                xr_right_controller_vis->setSingleMaterial(right_material);
 
 		xr_teleport_beam = opengl_engine->allocateObject();
 		xr_teleport_beam->ob_to_world_matrix = Matrix4f::identity();
@@ -1626,6 +1803,12 @@ GUIClient::~GUIClient()
 bool GUIClient::getCurrentXRTrackedHeadPose(Vec3d& pos_out, Vec3d& angles_out) const
 {
 	return extractTrackedHeadPose(this->xr_head_pose_state, pos_out, angles_out);
+}
+
+
+bool GUIClient::isXRActive() const
+{
+	return (xr_session != NULL) && xr_session->isInitialised();
 }
 
 
@@ -1922,6 +2105,10 @@ void GUIClient::shutdown()
 	xr_right_controller_vis = NULL;
 	xr_left_controller_vis_in_engine = false;
 	xr_right_controller_vis_in_engine = false;
+	xr_left_hand_vis_parts.clear();
+	xr_right_hand_vis_parts.clear();
+	xr_left_hand_vis_in_engine = false;
+	xr_right_hand_vis_in_engine = false;
 	xr_focus3_controller_render_models_attempted = false;
 	xr_focus3_controller_render_models_loaded = false;
 	xr_left_controller_last_transform = Matrix4f::identity();
@@ -5735,7 +5922,7 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 				Avatar* av = res2->second.ptr();
 						
 				const bool our_avatar = av->uid == this->client_avatar_uid;
-				const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled();
+				const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled() && !isXRActive();
 				if(!our_avatar || should_show_our_avatar_model) // Don't load graphics for our avatar in first-person view.
 				{
 					const int av_lod_level = av->getLODLevel(cam_controller.getPosition());
@@ -5999,14 +6186,16 @@ void GUIClient::setOnlyLoadMostImportantObs(bool only_load_most_important_obs_)
 
 bool GUIClient::shouldDisableBasisTexturesForCurrentServer() const
 {
-	// Match legacy v0.0.10 client behaviour for resource selection.
+	// Match legacy v0.0.19 behaviour for resource selection.
 	return false;
 }
 
 
 bool GUIClient::shouldDisableLODForCurrentServer() const
 {
-	return false;
+	// Keep the large Shki-Nvkz world fully visible on the legacy host that still needs it.
+	const std::string host = toLowerCase(server_hostname);
+	return host == "176.197.223.42";
 }
 
 
@@ -6804,7 +6993,7 @@ void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboa
 				last_cursor_movement_was_from_mouse = false; // then last cursor movement is from gamepad
 		}
 
-		hud_ui.setCrosshairDotVisible(!last_cursor_movement_was_from_mouse);
+		hud_ui.setCrosshairDotVisible(!isXRActive() && !last_cursor_movement_was_from_mouse);
 	}
 
 	updateXRControllerLocomotion(dt, move_key_pressed);
@@ -6875,16 +7064,32 @@ void GUIClient::updateXRControllerLocomotion(float dt, bool& move_key_pressed)
 
 void GUIClient::hideXRControllerVisuals()
 {
-	if(opengl_engine.nonNull())
-	{
-		if(xr_left_controller_vis_in_engine && xr_left_controller_vis.nonNull())
-			opengl_engine->removeObject(xr_left_controller_vis);
-		if(xr_right_controller_vis_in_engine && xr_right_controller_vis.nonNull())
-			opengl_engine->removeObject(xr_right_controller_vis);
-	}
+        if(opengl_engine.nonNull())
+        {
+                if(xr_left_controller_vis_in_engine && xr_left_controller_vis.nonNull())
+                        opengl_engine->removeObject(xr_left_controller_vis);
+                if(xr_right_controller_vis_in_engine && xr_right_controller_vis.nonNull())
+                        opengl_engine->removeObject(xr_right_controller_vis);
 
-	xr_left_controller_vis_in_engine = false;
-	xr_right_controller_vis_in_engine = false;
+                if(xr_left_hand_vis_in_engine)
+                {
+                        for(size_t i=0; i<xr_left_hand_vis_parts.size(); ++i)
+                                if(xr_left_hand_vis_parts[i].nonNull())
+                                        opengl_engine->removeObject(xr_left_hand_vis_parts[i]);
+                }
+
+                if(xr_right_hand_vis_in_engine)
+                {
+                        for(size_t i=0; i<xr_right_hand_vis_parts.size(); ++i)
+                                if(xr_right_hand_vis_parts[i].nonNull())
+                                        opengl_engine->removeObject(xr_right_hand_vis_parts[i]);
+                }
+        }
+
+        xr_left_controller_vis_in_engine = false;
+        xr_right_controller_vis_in_engine = false;
+        xr_left_hand_vis_in_engine = false;
+        xr_right_hand_vis_in_engine = false;
 }
 
 
@@ -6995,8 +7200,54 @@ void GUIClient::updateXRControllerVisuals()
 			opengl_engine->updateObjectTransformData(*vis_ob);
 	};
 
-	update_controller_vis(xr_left_hand_state, xr_left_controller_vis, xr_left_controller_vis_in_engine, xr_left_controller_last_transform, xr_left_controller_last_valid_time, /*right_hand=*/false);
-	update_controller_vis(xr_right_hand_state, xr_right_controller_vis, xr_right_controller_vis_in_engine, xr_right_controller_last_transform, xr_right_controller_last_valid_time, /*right_hand=*/true);
+        update_controller_vis(xr_left_hand_state, xr_left_controller_vis, xr_left_controller_vis_in_engine, xr_left_controller_last_transform, xr_left_controller_last_valid_time, /*right_hand=*/false);
+        update_controller_vis(xr_right_hand_state, xr_right_controller_vis, xr_right_controller_vis_in_engine, xr_right_controller_last_transform, xr_right_controller_last_valid_time, /*right_hand=*/true);
+        updateXRHandGuideVisuals();
+}
+
+
+void GUIClient::updateXRHandGuideVisuals()
+{
+        const auto update_hand_vis = [this](const XRHandInputState& hand_state, std::vector<Reference<GLObject> >& vis_parts, bool& in_engine, bool right_hand)
+        {
+                if(vis_parts.size() < XR_HAND_GUIDE_PART_COUNT)
+                        return;
+
+                Matrix4f part_transforms[XR_HAND_GUIDE_PART_COUNT];
+                const bool use_focus3_controller_anchors = xr_focus3_controller_render_models_loaded || xrHandUsesFocus3ControllerAnchors(hand_state);
+                const bool have_live_pose = buildXRHandGuidePartTransforms(hand_state, use_focus3_controller_anchors, right_hand, part_transforms, XR_HAND_GUIDE_PART_COUNT);
+                if(!have_live_pose)
+                {
+                        if(in_engine)
+                        {
+                                for(size_t i=0; i<vis_parts.size(); ++i)
+                                        if(vis_parts[i].nonNull())
+                                                opengl_engine->removeObject(vis_parts[i]);
+                                in_engine = false;
+                        }
+                        return;
+                }
+
+                for(size_t i=0; i<XR_HAND_GUIDE_PART_COUNT; ++i)
+                        vis_parts[i]->ob_to_world_matrix = part_transforms[i];
+
+                if(!in_engine)
+                {
+                        for(size_t i=0; i<vis_parts.size(); ++i)
+                                if(vis_parts[i].nonNull())
+                                        opengl_engine->addObject(vis_parts[i]);
+                        in_engine = true;
+                }
+                else
+                {
+                        for(size_t i=0; i<vis_parts.size(); ++i)
+                                if(vis_parts[i].nonNull())
+                                        opengl_engine->updateObjectTransformData(*vis_parts[i]);
+                }
+        };
+
+        update_hand_vis(xr_left_hand_state, xr_left_hand_vis_parts, xr_left_hand_vis_in_engine, /*right_hand=*/false);
+        update_hand_vis(xr_right_hand_state, xr_right_hand_vis_parts, xr_right_hand_vis_in_engine, /*right_hand=*/true);
 }
 
 
@@ -7084,15 +7335,19 @@ void GUIClient::updateXRTeleportLocomotion()
 		}
 	}
 
-	if(!active_hand_state || !xrTrackedPoseHasWorldTransform(active_hand_state->aim_pose))
+	Vec4f ray_origin;
+	Vec4f ray_dir;
+	const bool use_focus3_controller_anchors =
+		active_hand_state &&
+		(xr_focus3_controller_render_models_loaded || xrHandUsesFocus3ControllerAnchors(*active_hand_state));
+	if(!active_hand_state || !buildXRTeleportRayFromController(*active_hand_state, use_focus3_controller_anchors, xr_teleport_active_hand_is_right, ray_origin, ray_dir))
 	{
 		xr_teleport_target_valid = false;
 		hideXRTeleportVisuals();
 		return;
 	}
-
-	const Vec4f ray_dir = getXRTrackedPoseWorldForwardDir(active_hand_state->aim_pose);
-	const Vec4f ray_origin = getXRTrackedPoseWorldPosition(active_hand_state->aim_pose) + ray_dir * 0.03f;
+	if(!use_focus3_controller_anchors)
+		ray_origin += ray_dir * 0.03f;
 
 	RayTraceResult trace_results;
 	this->physics_world->traceRay(ray_origin, ray_dir, XR_TELEPORT_TRACE_MAX_DIST, /*ignore body id=*/JPH::BodyID(), trace_results);
@@ -7438,7 +7693,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	if(!ui_interface->isCursorHidden())
 	{
 		//const QPoint widget_pos = ui->glWidget->mapFromGlobal(QCursor::pos());
-		const bool use_mouse_cursor_as_cursor = last_cursor_movement_was_from_mouse;
+		const bool use_mouse_cursor_as_cursor = !isXRActive() && last_cursor_movement_was_from_mouse;
 		Vec2i cursor_pos;
 		Vec2f cursor_gl_coords;
 		if(use_mouse_cursor_as_cursor)
@@ -9458,7 +9713,7 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 				else
 				{
 					bool reload_opengl_model = false; // load or reload model?
-					const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled();
+					const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled() && !isXRActive();
 
 					if(avatar->state == Avatar::State_JustCreated)
 					{
@@ -11019,7 +11274,6 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				if(resource_manager->isFileForURLPresent(m->URL))
 				{
 					const std::string path = resource_manager->pathForURL(m->URL);
-
 					const std::string username = ui_interface->getUsernameForDomain(server_hostname);
 					const std::string password = ui_interface->getDecryptedPasswordForDomain(server_hostname);
 
@@ -11536,21 +11790,29 @@ std::string GUIClient::getDiagnosticsString(bool do_graphics_diagnostics, bool d
 				msg += prefix + " world pos: " + pose_state.object_to_world_matrix.getColumn(3).toString() + "\n";
 		};
 
-		const auto append_xr_hand_state = [&msg, &append_xr_pose_state](const std::string& prefix, const XRHandInputState& hand_state)
-		{
-			msg += prefix + " subaction_path_valid: " + boolToString(hand_state.subaction_path_valid) + "\n";
-			msg += prefix + " interaction_profile_valid: " + boolToString(hand_state.interaction_profile_valid) + "\n";
-			if(!hand_state.interaction_profile.empty())
-				msg += prefix + " interaction profile: " + hand_state.interaction_profile + "\n";
-			msg += prefix + " select_active: " + boolToString(hand_state.select_active) + "\n";
-			msg += prefix + " select_pressed: " + boolToString(hand_state.select_pressed) + "\n";
-			msg += prefix + " trigger_active: " + boolToString(hand_state.trigger_active) + "\n";
-			msg += prefix + " trigger_value: " + floatToStringNDecimalPlaces(hand_state.trigger_value, 3) + "\n";
-			msg += prefix + " move2d_active: " + boolToString(hand_state.move2d_active) + "\n";
-			msg += prefix + " move2d_value: (" + floatToStringNDecimalPlaces(hand_state.move2d_value.x, 3) + ", " + floatToStringNDecimalPlaces(hand_state.move2d_value.y, 3) + ")\n";
-			append_xr_pose_state(prefix + " grip pose", hand_state.grip_pose);
-			append_xr_pose_state(prefix + " aim pose", hand_state.aim_pose);
-		};
+                const auto append_xr_hand_state = [&msg, &append_xr_pose_state](const std::string& prefix, const XRHandInputState& hand_state)
+                {
+                        msg += prefix + " subaction_path_valid: " + boolToString(hand_state.subaction_path_valid) + "\n";
+                        msg += prefix + " interaction_profile_valid: " + boolToString(hand_state.interaction_profile_valid) + "\n";
+                        if(!hand_state.interaction_profile.empty())
+                                msg += prefix + " interaction profile: " + hand_state.interaction_profile + "\n";
+                        msg += prefix + " grip_active: " + boolToString(hand_state.grip_active) + "\n";
+                        msg += prefix + " grip_value: " + floatToStringNDecimalPlaces(hand_state.grip_value, 3) + "\n";
+                        msg += prefix + " select_active: " + boolToString(hand_state.select_active) + "\n";
+                        msg += prefix + " select_pressed: " + boolToString(hand_state.select_pressed) + "\n";
+                        msg += prefix + " trigger_active: " + boolToString(hand_state.trigger_active) + "\n";
+                        msg += prefix + " trigger_value: " + floatToStringNDecimalPlaces(hand_state.trigger_value, 3) + "\n";
+                        msg += prefix + " trigger_touch_active: " + boolToString(hand_state.trigger_touch_active) + "\n";
+                        msg += prefix + " trigger_touched: " + boolToString(hand_state.trigger_touched) + "\n";
+                        msg += prefix + " move2d_active: " + boolToString(hand_state.move2d_active) + "\n";
+                        msg += prefix + " move2d_value: (" + floatToStringNDecimalPlaces(hand_state.move2d_value.x, 3) + ", " + floatToStringNDecimalPlaces(hand_state.move2d_value.y, 3) + ")\n";
+                        msg += prefix + " move2d_touch_active: " + boolToString(hand_state.move2d_touch_active) + "\n";
+                        msg += prefix + " move2d_touched: " + boolToString(hand_state.move2d_touched) + "\n";
+                        msg += prefix + " move2d_click_active: " + boolToString(hand_state.move2d_click_active) + "\n";
+                        msg += prefix + " move2d_clicked: " + boolToString(hand_state.move2d_clicked) + "\n";
+                        append_xr_pose_state(prefix + " grip pose", hand_state.grip_pose);
+                        append_xr_pose_state(prefix + " aim pose", hand_state.aim_pose);
+                };
 
 		msg += "---------------------XR---------------------\n";
 		msg += "backend: " + xr_runtime_probe_result.backend_name + "\n";
@@ -12078,6 +12340,27 @@ void GUIClient::renderXRFrame(float near_draw_dist, float max_draw_dist)
 	xr_right_hand_state = xr_session->getRightHandState();
 	updateXRControllerVisuals();
 	appendXRTraceSample();
+
+	static bool xr_logged_hand_input_bindings = false;
+	if(!xr_logged_hand_input_bindings &&
+		((xr_left_hand_state.interaction_profile_valid && !xr_left_hand_state.interaction_profile.empty()) ||
+		 (xr_right_hand_state.interaction_profile_valid && !xr_right_hand_state.interaction_profile.empty())))
+	{
+		logMessage(
+			"[XR] Hand input state: left_profile='" + xr_left_hand_state.interaction_profile +
+			"', right_profile='" + xr_right_hand_state.interaction_profile +
+			"', left(grip_active=" + boolToString(xr_left_hand_state.grip_active) +
+			", trigger_touch_active=" + boolToString(xr_left_hand_state.trigger_touch_active) +
+			", move2d_touch_active=" + boolToString(xr_left_hand_state.move2d_touch_active) +
+			", move2d_click_active=" + boolToString(xr_left_hand_state.move2d_click_active) +
+			"), right(grip_active=" + boolToString(xr_right_hand_state.grip_active) +
+			", trigger_touch_active=" + boolToString(xr_right_hand_state.trigger_touch_active) +
+			", move2d_touch_active=" + boolToString(xr_right_hand_state.move2d_touch_active) +
+			", move2d_click_active=" + boolToString(xr_right_hand_state.move2d_click_active) +
+			")."
+		);
+		xr_logged_hand_input_bindings = true;
+	}
 
 	if(!xr_logged_head_pose_alignment &&
 		xr_head_pose_state.active &&
@@ -17152,8 +17435,15 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 
 void GUIClient::mouseMoved(MouseEvent& mouse_event)
 {
-	last_cursor_movement_was_from_mouse = true;
-	hud_ui.setCrosshairDotVisible(false);
+	if(!isXRActive())
+	{
+		last_cursor_movement_was_from_mouse = true;
+		hud_ui.setCrosshairDotVisible(false);
+	}
+	else
+	{
+		hud_ui.setCrosshairDotVisible(false);
+	}
 
 	if(gl_ui.nonNull())
 	{
@@ -17169,7 +17459,7 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 			minimap->handleMouseMoved(mouse_event);
 	}
 
-	if(!ui_interface->isCursorHidden())
+	if(!ui_interface->isCursorHidden() && !isXRActive())
 		updateInfoUIForMousePosition(mouse_event.cursor_pos, mouse_event.gl_coords, &mouse_event, /*cursor_is_mouse_cursor=*/true);
 
 
