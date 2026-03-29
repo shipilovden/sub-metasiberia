@@ -1391,7 +1391,7 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 	//Timer timer;
 	{
-		if(!gui_client.getXRMirrorView().valid)
+		if(!gui_client.isXRActive())
 		{
 			Timer timer2;
 			ZoneScopedNC("updateGL", 0x33FF33); // Tracy profiler
@@ -1407,6 +1407,8 @@ void MainWindow::timerEvent(QTimerEvent* event)
 		else
 		{
 			// Avoid a third full-scene desktop render while XR is active.
+			// Mirror-view availability can briefly flap during XR runtime transitions, but that should not
+			// re-enable the expensive companion render while the HMD session is still live.
 			// SteamVR counts companion window work as extra "other" frame time, and this path can eat enough CPU/GPU budget
 			// to expose compositor background on quick head turns even when the stereo eye submission path is otherwise correct.
 			this->last_updateGL_time = 0.0;

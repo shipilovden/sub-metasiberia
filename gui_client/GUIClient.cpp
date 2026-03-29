@@ -5922,7 +5922,7 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 				Avatar* av = res2->second.ptr();
 						
 				const bool our_avatar = av->uid == this->client_avatar_uid;
-				const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled();
+				const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled() && !isXRActive();
 				if(!our_avatar || should_show_our_avatar_model) // Don't load graphics for our avatar in first-person view.
 				{
 					const int av_lod_level = av->getLODLevel(cam_controller.getPosition());
@@ -9717,7 +9717,14 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 				else
 				{
 					bool reload_opengl_model = false; // load or reload model?
-					const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled();
+					const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled() && !isXRActive();
+
+					if(our_avatar && isXRActive())
+					{
+						avatar->graphics.destroy(*opengl_engine, *physics_world);
+						checkRemoveObAndSetRefToNull(opengl_engine, avatar->nametag_gl_ob);
+						checkRemoveObAndSetRefToNull(opengl_engine, avatar->speaker_gl_ob);
+					}
 
 					if(avatar->state == Avatar::State_JustCreated)
 					{
