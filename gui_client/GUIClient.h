@@ -425,7 +425,7 @@ public:
 	void updateObjectsWithDiagnosticVis();
 
 	void processPlayerPhysicsInput(float dt, bool world_render_has_keyboard_focus, PlayerPhysicsInput& input_out);
-	void updateXRControllerLocomotion(float dt, bool& move_key_pressed);
+	void updateXRControllerLocomotion(float dt, bool& move_key_pressed, PlayerPhysicsInput& input_out);
 	void updateXRControllerVisuals();
 	void updateXRHandGuideVisuals();
 	void tryUpgradeXRControllerVisualsToViveFocus3RenderModels();

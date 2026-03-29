@@ -1391,16 +1391,26 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 	//Timer timer;
 	{
-		Timer timer2;
-		ZoneScopedNC("updateGL", 0x33FF33); // Tracy profiler
+		if(!gui_client.getXRMirrorView().valid)
+		{
+			Timer timer2;
+			ZoneScopedNC("updateGL", 0x33FF33); // Tracy profiler
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-		ui->glWidget->update();
+			ui->glWidget->update();
 #else
-		ui->glWidget->updateGL();
+			ui->glWidget->updateGL();
 #endif
-		//if(timer.elapsed() > 0.020)
-		//	conPrint(doubleToStringNDecimalPlaces(Clock::getTimeSinceInit(), 3) + ": updateGL() took " + timer.elapsedStringNSigFigs(4));
-		this->last_updateGL_time = timer2.elapsed();
+			//if(timer.elapsed() > 0.020)
+			//	conPrint(doubleToStringNDecimalPlaces(Clock::getTimeSinceInit(), 3) + ": updateGL() took " + timer.elapsedStringNSigFigs(4));
+			this->last_updateGL_time = timer2.elapsed();
+		}
+		else
+		{
+			// Avoid a third full-scene desktop render while XR is active.
+			// SteamVR counts companion window work as extra "other" frame time, and this path can eat enough CPU/GPU budget
+			// to expose compositor background on quick head turns even when the stereo eye submission path is otherwise correct.
+			this->last_updateGL_time = 0.0;
+		}
 	}
 
 	// Plot the total time spent on CPU work this frame.

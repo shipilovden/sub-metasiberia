@@ -206,13 +206,23 @@ static void clampRecommendedSwapchainSizeForRuntime(const XRRuntimeProbeResult& 
 	const uint32_t max_dim = myMax(width, height);
 	// VIVE Business Streaming + SteamVR can recommend eye sizes that are a bit too ambitious for stable head-turn latency.
 	// Clamp more aggressively so the compositor has enough headroom and doesn't expose black reprojection edges on quick turns.
-	static const uint32_t steamvr_safe_max_dim = 2200u;
+	static const uint32_t steamvr_safe_max_dim = 2000u;
 	if(max_dim <= steamvr_safe_max_dim)
 		return;
 
 	const double scale = (double)steamvr_safe_max_dim / (double)max_dim;
 	width = myMax(1u, (uint32_t)std::floor((double)width * scale));
 	height = myMax(1u, (uint32_t)std::floor((double)height * scale));
+}
+
+
+static float expandXRCullingSensorWidth(float sensor_width)
+{
+	// Keep the runtime projection exact, but pad the engine frustum used for CPU culling a little.
+	// Some runtimes expose slightly asymmetric per-eye FOVs, and a small culling overscan avoids edge pop/black slivers
+	// on fast turns without changing the submitted OpenXR projection.
+	static const float xr_culling_sensor_width_scale = 1.08f;
+	return sensor_width * xr_culling_sensor_width_scale;
 }
 
 
@@ -1083,10 +1093,12 @@ static bool initialiseActionSubsystem(XRRuntimeProbeResult& result, XRHandInputS
 		const ActionBindingDef bindings[] = {
 			{ state.grip_pose_action, "/user/hand/left/input/grip/pose" },
 			{ state.aim_pose_action, "/user/hand/left/input/aim/pose" },
+			{ state.grip_value_action, "/user/hand/left/input/squeeze/value" },
 			{ state.trigger_action, "/user/hand/left/input/trigger/value" },
 			{ state.move2d_action, "/user/hand/left/input/thumbstick" },
 			{ state.grip_pose_action, "/user/hand/right/input/grip/pose" },
 			{ state.aim_pose_action, "/user/hand/right/input/aim/pose" },
+			{ state.grip_value_action, "/user/hand/right/input/squeeze/value" },
 			{ state.trigger_action, "/user/hand/right/input/trigger/value" },
 			{ state.move2d_action, "/user/hand/right/input/thumbstick" }
 		};
@@ -2397,7 +2409,7 @@ void XRSession::renderFrame(OpenGLEngine& opengl_engine, const CameraController&
 							last_mirror_view.projection_matrix_override_valid = true;
 							last_mirror_view.projection_matrix_override = xr_projection_matrix;
 						}
-						opengl_engine.setPerspectiveCameraTransform(world_to_camera_space_matrix, sensor_width, lens_sensor_dist, render_aspect_ratio, lens_shift_up, lens_shift_right);
+						opengl_engine.setPerspectiveCameraTransform(world_to_camera_space_matrix, expandXRCullingSensorWidth(sensor_width), lens_sensor_dist, render_aspect_ratio, lens_shift_up, lens_shift_right);
 						// Feed the runtime's exact per-eye frustum to the shader path, while keeping the existing camera/frustum setup for culling.
 						opengl_engine.setProjectionMatrixOverride(xr_projection_matrix);
 						opengl_engine.draw();
