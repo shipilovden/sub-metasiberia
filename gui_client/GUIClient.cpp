@@ -5922,7 +5922,7 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 				Avatar* av = res2->second.ptr();
 						
 				const bool our_avatar = av->uid == this->client_avatar_uid;
-				const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled() && !isXRActive();
+				const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled();
 				if(!our_avatar || should_show_our_avatar_model) // Don't load graphics for our avatar in first-person view.
 				{
 					const int av_lod_level = av->getLODLevel(cam_controller.getPosition());
@@ -6996,7 +6996,7 @@ void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboa
 		hud_ui.setCrosshairDotVisible(!isXRActive() && !last_cursor_movement_was_from_mouse);
 	}
 
-	updateXRControllerLocomotion(dt, move_key_pressed);
+	updateXRControllerLocomotion(dt, move_key_pressed, input_out);
 
 	if(cam_controller.current_cam_mode == CameraController::CameraMode_FreeCamera)
 	{
@@ -7013,7 +7013,7 @@ void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboa
 }
 
 
-void GUIClient::updateXRControllerLocomotion(float dt, bool& move_key_pressed)
+void GUIClient::updateXRControllerLocomotion(float dt, bool& move_key_pressed, PlayerPhysicsInput& input_out)
 {
 	const bool xr_locomotion_allowed =
 		(xr_session != NULL) &&
@@ -7033,20 +7033,24 @@ void GUIClient::updateXRControllerLocomotion(float dt, bool& move_key_pressed)
 	CameraController xr_move_cam = this->cam_controller;
 	xr_move_cam.setAngles(Vec3d(/*heading=*/xr_head_angles.x, /*pitch=*/Maths::pi_2<double>(), /*roll=*/0.0));
 
-	const float move_speed_factor = player_physics.flyModeEnabled() ? 4.f : 2.f;
+	const float move_speed_factor = 1.f; // Match the standard desktop walk speed to avoid overly aggressive XR locomotion.
 	const float left_axis_x = xr_left_hand_state.move2d_active ? xrFilterMove2DAxis(xr_left_hand_state.move2d_value.x) : 0.f;
 	const float left_axis_y = xr_left_hand_state.move2d_active ? xrFilterMove2DAxis(xr_left_hand_state.move2d_value.y) : 0.f;
+	const bool xr_run_pressed = xr_left_hand_state.grip_active && (xr_left_hand_state.grip_value >= 0.5f);
+
+	if(xr_run_pressed)
+		input_out.SHIFT_down = true;
 
 	if(left_axis_x != 0.f)
 	{
-		player_physics.processStrafeRight(move_speed_factor * std::pow(left_axis_x, 3.f), /*runpressed=*/false, xr_move_cam);
+		player_physics.processStrafeRight(move_speed_factor * std::pow(left_axis_x, 3.f), /*runpressed=*/xr_run_pressed, xr_move_cam);
 		move_key_pressed = true;
 		last_cursor_movement_was_from_mouse = false;
 	}
 
 	if(left_axis_y != 0.f)
 	{
-		player_physics.processMoveForwards(move_speed_factor * std::pow(left_axis_y, 3.f), /*runpressed=*/false, xr_move_cam);
+		player_physics.processMoveForwards(move_speed_factor * std::pow(left_axis_y, 3.f), /*runpressed=*/xr_run_pressed, xr_move_cam);
 		move_key_pressed = true;
 		last_cursor_movement_was_from_mouse = false;
 	}
@@ -9713,7 +9717,7 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 				else
 				{
 					bool reload_opengl_model = false; // load or reload model?
-					const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled() && !isXRActive();
+					const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled();
 
 					if(avatar->state == Avatar::State_JustCreated)
 					{

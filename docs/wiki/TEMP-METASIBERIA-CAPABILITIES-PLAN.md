@@ -102,7 +102,7 @@ Goal: capture all major user/admin capabilities in order, from installation and 
   - Add Spotlight
   - Add Camera
   - Add Seat
-  - Add Audio Source
+  - Add Audio Player
   - Add Web View
   - Add Video
   - Add Decal
@@ -232,10 +232,13 @@ Goal: capture all major user/admin capabilities in order, from installation and 
 - Video URL stored in material emission texture field.
 - Defaults: autoplay + loop flags.
 
-## 6.10 Add Audio Source
+## 6.10 Add Audio Player
 
-- Select `.mp3/.wav`, copies into resources, assigns audio URL.
-- Creates generic object with audio source URL and volume.
+- Select one or more `.mp3/.wav` files, copy them into resources, and assemble a playlist.
+- Creates a panel-style audio player object based on `WebView` instead of a red generic capsule.
+- The playlist is stored in `content` (one URL per line), while the panel UI is a compact transport bar with just a progress bar and `Shuffle`, `Prev`, `Play/Pause`, `Next`, and `Repeat` controls.
+- Playlist editing is moved into the editor: add tracks, add URLs, remove tracks, and reorder tracks.
+- `.mp3/.wav` tracks are served to the player with correct audio MIME types so playback does not stall right after startup.
 
 ## 6.11 Add Decal
 

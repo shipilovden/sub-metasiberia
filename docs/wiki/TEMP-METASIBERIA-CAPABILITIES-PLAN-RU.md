@@ -102,7 +102,7 @@
   - Add Spotlight
   - Add Camera
   - Add Seat
-  - Add Audio Source
+  - Add Audio Player
   - Add Web View
   - Add Video
   - Add Decal
@@ -232,10 +232,14 @@
 - URL видео сохраняется в emission texture материала.
 - Default-флаги: autoplay + loop.
 
-## 6.10 Add Audio Source
+## 6.10 Add Audio Player
 
-- Выбор `.mp3/.wav`, копирование в resources, назначение audio URL.
-- Создает generic-объект с `audio_source_url` и volume.
+- Выбор одного или нескольких `.mp3/.wav`, копирование в resources и сборка плейлиста.
+- Создает panel-объект audio player на базе `WebView`, а не красную generic-капсулу.
+- Плейлист хранится в `content` (по одному URL на строку), а сам panel UI выполнен как компактный transport-bar только с progress bar и кнопками `Shuffle`, `Prev`, `Play/Pause`, `Next`, `Repeat`.
+- Редактирование плейлиста перенесено в editor: добавление треков, добавление URL, удаление и перестановка треков.
+- Даже если у legacy/битого объекта временно пустой `target_url`, audio player должен восстанавливаться по playlist-content и снова показываться как panel, а не как generic webview/cube.
+- Треки `.mp3/.wav` раздаются в плеер с корректными audio MIME-типами, чтобы воспроизведение не обрывалось после старта.
 
 ## 6.11 Add Decal
 
