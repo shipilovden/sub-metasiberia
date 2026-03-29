@@ -79,7 +79,7 @@ static XRRuntimeProbeResult makeDefaultResult()
 
 
 #if defined(XR_SUPPORT)
-static const float XR_WORLD_VERTICAL_TRIM_METRES = -0.8f;
+static const float XR_WORLD_VERTICAL_TRIM_METRES = 0.0f;
 
 static std::string makeVersionString(uint64_t version)
 {
