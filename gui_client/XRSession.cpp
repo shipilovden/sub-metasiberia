@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2026 -
 
 
 #include "CameraController.h"
+#include "PlayerPhysics.h"
 #include "../maths/Quat.h"
 #include "../opengl/FrameBuffer.h"
 #include "../opengl/OpenGLEngine.h"
@@ -79,7 +80,7 @@ static XRRuntimeProbeResult makeDefaultResult()
 
 
 #if defined(XR_SUPPORT)
-static const float XR_WORLD_VERTICAL_TRIM_METRES = 0.0f;
+static const float XR_WORLD_VERTICAL_TRIM_METRES = 0.9f;
 
 static std::string makeVersionString(uint64_t version)
 {
@@ -2224,7 +2225,11 @@ void XRSession::renderFrame(OpenGLEngine& opengl_engine, const CameraController&
 					);
 					const Vec3d anchor_pos_d = cam_controller.getFirstPersonPosition();
 					const Vec3f anchor_pos((float)anchor_pos_d.x, (float)anchor_pos_d.y, (float)anchor_pos_d.z + XR_WORLD_VERTICAL_TRIM_METRES);
-					const Vec3f world_translation = anchor_pos - rotateAroundWorldUp(state->calibration_tracking_head_pos_engine, effective_yaw_offset);
+					const Vec3f rotated_calibration_head_pos = rotateAroundWorldUp(state->calibration_tracking_head_pos_engine, effective_yaw_offset);
+					Vec3f world_translation = anchor_pos - rotated_calibration_head_pos;
+					// Keep the vertical XR baseline tied to the engine eye height instead of the transient headset height
+					// observed during the current focus/recenter pose.
+					world_translation.z = (float)anchor_pos_d.z - PlayerPhysics::getEyeHeight() + XR_WORLD_VERTICAL_TRIM_METRES;
 
 					head_pose_state.active = true;
 					raw_head_pose_state.active = true;
