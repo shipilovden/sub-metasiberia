@@ -191,6 +191,8 @@ public:
 	bool initialiseForCurrentOpenGLContext();
 	void renderFrame(OpenGLEngine& opengl_engine, const CameraController& cam_controller, float near_draw_dist, float max_draw_dist);
 	bool isInitialised() const;
+	bool isSessionRunning() const { return last_result.session_running; }
+	bool isVisibleOrFocused() const;
 
 	const XRRuntimeProbeResult& getLastResult() const { return last_result; }
 	const XRMirrorView& getMirrorView() const { return last_mirror_view; }

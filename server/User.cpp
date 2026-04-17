@@ -143,8 +143,23 @@ void User::setNewPasswordAndSalt(const std::string& new_password)
 }
 
 
-static const uint32 USER_SERIALISATION_VERSION = 6;
+void User::updateEquippedGearIDs(const GearItems& equipped_gear_items)
+{
+	equipped_gear_ids.clear();
+	equipped_gear_ids.reserve(equipped_gear_items.items.size());
 
+	for(size_t i=0; i<equipped_gear_items.items.size(); ++i)
+	{
+		const UID item_id = equipped_gear_items.items[i]->id;
+		if(gear_ids.count(item_id) > 0)
+			equipped_gear_ids.push_back(item_id);
+	}
+}
+
+
+static const uint32 USER_SERIALISATION_VERSION = 7;
+
+// Version 7: Added gear_ids and equipped_gear_ids
 // Version 6: Added gesture_settings
 // Version 5: Added flags
 // Version 4: Added avatar_settings
@@ -178,6 +193,14 @@ void writeUserToStream(const User& user, RandomAccessOutStream& stream)
 	user.gesture_settings.writeToStream(stream);
 
 	stream.writeUInt32(user.flags);
+
+	stream.writeUInt32((uint32)user.gear_ids.size());
+	for(auto it = user.gear_ids.begin(); it != user.gear_ids.end(); ++it)
+		::writeToStream(*it, stream);
+
+	stream.writeUInt32((uint32)user.equipped_gear_ids.size());
+	for(size_t i=0; i<user.equipped_gear_ids.size(); ++i)
+		::writeToStream(user.equipped_gear_ids[i], stream);
 }
 
 
@@ -222,4 +245,22 @@ void readUserFromStream(RandomAccessInStream& stream, User& user)
 
 	if(v >= 5)
 		user.flags = stream.readUInt32();
+
+	if(v >= 7)
+	{
+		const uint32 gear_ids_size = stream.readUInt32();
+		if(gear_ids_size > 10000u)
+			throw glare::Exception("gear_ids_size too large: " + toString(gear_ids_size));
+
+		for(size_t i=0; i<gear_ids_size; ++i)
+			user.gear_ids.insert(readUIDFromStream(stream));
+
+		const uint32 equipped_gear_ids_size = stream.readUInt32();
+		if(equipped_gear_ids_size > 10000u)
+			throw glare::Exception("equipped_gear_ids_size too large: " + toString(equipped_gear_ids_size));
+
+		user.equipped_gear_ids.resize(equipped_gear_ids_size);
+		for(size_t i=0; i<equipped_gear_ids_size; ++i)
+			user.equipped_gear_ids[i] = readUIDFromStream(stream);
+	}
 }

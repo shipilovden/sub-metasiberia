@@ -10,7 +10,7 @@ Copyright Glare Technologies Limited 2016 -
 #include "ThreadManager.h"
 #include "../shared/ResourceManager.h"
 #include "../shared/LuaScriptEvaluator.h"
-#include "../shared/TimerQueue.h"
+#include "../shared/ScriptTimerQueue.h"
 #include <IPAddress.h>
 #include <utils/UniqueRef.h>
 #include <utils/Timer.h>
@@ -123,6 +123,10 @@ public:
 	// Thread-safe, can be called from any thread.
 	void enqueuePacketToBroadcastForWorld(const SocketBufferOutStream& packet_buffer, ServerWorldState* world);
 
+	// Enqueues packet to all WorkerThreads.
+	// Thread-safe, can be called from any thread.
+	void enqueuePacketToBroadcastForAllWorlds(const SocketBufferOutStream& packet_buffer);
+
 
 	Reference<ServerAllWorldsState> world_state;
 
@@ -149,8 +153,8 @@ public:
 	glare::AtomicInt connected_clients_changed;
 
 	Timer total_timer;
-	TimerQueue timer_queue;
-	std::vector<TimerQueueTimer> temp_triggered_timers;
+	ScriptTimerQueue timer_queue;
+	std::vector<ScriptTimerQueueTimer> temp_triggered_timers;
 
 	Reference<LuaHTTPRequestManager> lua_http_manager;
 };

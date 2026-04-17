@@ -29,6 +29,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "BuildScatteringInfoTask.h"
 #include "LoadTextureTask.h"
 #include "LoadAudioTask.h"
+#include <graphics/FormatDecoderSubVox.h>
 #include "../audio/MicReadThread.h"
 #include "MakeHypercardTextureTask.h"
 #include "SaveResourcesDBThread.h"
@@ -43,6 +44,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "BikePhysics.h"
 #include "CarPhysics.h"
 #include "BoatPhysics.h"
+#include "GearInventoryUI.h"
 #include "JoltUtils.h"
 #include "MiniMap.h"
 #include "CEF.h"
@@ -762,6 +764,7 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	xr_session(NULL),
 	xr_runtime_probe_done(false),
 	xr_logged_head_pose_alignment(false),
+	xr_last_live_head_pose_time(-1.0),
 	xr_pose_trace_start_time(-1.0),
 	xr_pose_trace_last_write_time(-1.0),
 	xr_pose_trace_sample_count(0),
@@ -1218,6 +1221,7 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	xr_left_hand_state = XRHandInputState();
 	xr_right_hand_state = XRHandInputState();
 	xr_logged_head_pose_alignment = false;
+	xr_last_live_head_pose_time = -1.0;
 	const XRLaunchModeDecision xr_launch_mode_decision = chooseXRLaunchMode(parsed_args, settings.ptr());
 	xr_runtime_probe_result = makeXRLaunchInactiveResult(xr_launch_mode_decision);
 	if(xr_pose_trace_stream.is_open())
@@ -1802,13 +1806,27 @@ GUIClient::~GUIClient()
 
 bool GUIClient::getCurrentXRTrackedHeadPose(Vec3d& pos_out, Vec3d& angles_out) const
 {
+	if(!isXRActive())
+		return false;
+
 	return extractTrackedHeadPose(this->xr_head_pose_state, pos_out, angles_out);
 }
 
 
 bool GUIClient::isXRActive() const
 {
-	return (xr_session != NULL) && xr_session->isInitialised();
+	if((xr_session == NULL) || !xr_session->isSessionRunning() || !xr_session->isVisibleOrFocused())
+		return false;
+
+	if(xrTrackedPoseHasWorldTransform(xr_head_pose_state))
+		return true;
+
+	// SteamVR / Business Streaming can keep the OpenXR session alive while momentarily dropping
+	// the current head pose. Keep XR active for a short grace window so normal VR use does not flicker.
+	static const double xr_live_pose_grace_seconds = 0.5;
+	return
+		(xr_last_live_head_pose_time >= 0.0) &&
+		((Clock::getTimeSinceInit() - xr_last_live_head_pose_time) <= xr_live_pose_grace_seconds);
 }
 
 
@@ -2004,6 +2022,7 @@ void GUIClient::shutdown()
 	xr_left_hand_state = XRHandInputState();
 	xr_right_hand_state = XRHandInputState();
 	xr_logged_head_pose_alignment = false;
+	xr_last_live_head_pose_time = -1.0;
 	if(xr_pose_trace_stream.is_open())
 	{
 		xr_pose_trace_stream.flush();
@@ -4460,10 +4479,14 @@ void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const R
 
 	avatar->graphics.loaded_lod_level = av_lod_level;
 
+	const bool our_avatar = avatar->uid == this->client_avatar_uid;
+
 	opengl_engine->addObject(avatar->graphics.skinned_gl_ob);
 
+	if(our_avatar && gear_inventory_ui)
+		gear_inventory_ui->setAvatarGLObject(avatar->graphics, avatar->graphics.skinned_gl_ob, avatar->avatar_settings.pre_ob_to_world_matrix);
+
 	// If we just loaded the graphics for our own avatar, see if there is a gesture animation we should be playing, and if so, play it.
-	const bool our_avatar = avatar->uid == this->client_avatar_uid;
 	if(our_avatar)
 	{
 		std::string gesture_name;
@@ -5965,6 +5988,9 @@ void GUIClient::handleUploadedTexture(const OpenGLTextureKey& path, const URLStr
 	if(minimap)
 		minimap->handleUploadedTexture(path, URL, opengl_tex);
 
+	if(gear_inventory_ui)
+		gear_inventory_ui->handleUploadedTexture(path, URL, opengl_tex);
+
 	// Look up any LODChunks, objects or avatars using this texture, and assign the newly loaded texture to them.
 	{
 		WorldStateLock lock(this->world_state->mutex);
@@ -7016,8 +7042,7 @@ void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboa
 void GUIClient::updateXRControllerLocomotion(float dt, bool& move_key_pressed, PlayerPhysicsInput& input_out)
 {
 	const bool xr_locomotion_allowed =
-		(xr_session != NULL) &&
-		xr_session->isInitialised() &&
+		isXRActive() &&
 		(vehicle_controller_inside.isNull()) &&
 		(this->cam_controller.current_cam_mode == CameraController::CameraMode_Standard);
 
@@ -7153,8 +7178,7 @@ void GUIClient::tryUpgradeXRControllerVisualsToViveFocus3RenderModels()
 void GUIClient::updateXRControllerVisuals()
 {
 	const bool xr_visuals_allowed =
-		(xr_session != NULL) &&
-		xr_session->isInitialised() &&
+		isXRActive() &&
 		opengl_engine.nonNull();
 
 	if(!xr_visuals_allowed)
@@ -7273,8 +7297,7 @@ void GUIClient::hideXRTeleportVisuals()
 void GUIClient::updateXRTeleportLocomotion()
 {
 	const bool xr_locomotion_allowed =
-		(xr_session != NULL) &&
-		xr_session->isInitialised() &&
+		isXRActive() &&
 		opengl_engine.nonNull() &&
 		physics_world.nonNull() &&
 		(vehicle_controller_inside.isNull()) &&
@@ -7475,7 +7498,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 		for(size_t i=0; i<temp_triggered_timers.size(); ++i)
 		{
-			TimerQueueTimer& timer = temp_triggered_timers[i];
+			ScriptTimerQueueTimer& timer = temp_triggered_timers[i];
 			
 			LuaScriptEvaluator* script_evaluator = timer.lua_script_evaluator.getPtrIfAlive();
 			if(script_evaluator)
@@ -7686,6 +7709,12 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	
 	gesture_ui.think();
 	hud_ui.think();
+	if(gear_inventory_ui)
+	{
+		gear_inventory_ui->think();
+		if(gear_inventory_ui->close_soon)
+			gear_inventory_ui = nullptr;
+	}
 	if(minimap)
 		minimap->think();
 
@@ -11071,6 +11100,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->logged_in_user_name = m->username;
 			this->logged_in_user_flags = m->user_flags;
 			this->logged_in_avatar_settings = m->avatar_settings;
+			this->logged_in_equipped_gear = m->equipped_gear;
 
 			logMessage("Logged in as '" + m->username + "', id " + toString(this->logged_in_user_id.value()));
 
@@ -11109,6 +11139,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
 			avatar.avatar_settings = m->avatar_settings;
 			avatar.name = m->username;
+			avatar.equipped_gear = m->equipped_gear;
 
 			MessageUtils::initPacket(scratch_packet, Protocol::AvatarFullUpdate);
 			writeAvatarToNetworkStream(avatar, scratch_packet);
@@ -11123,6 +11154,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->logged_in_user_name = "";
 			this->logged_in_user_flags = 0;
 			this->logged_in_avatar_settings = AvatarSettings();
+			this->logged_in_equipped_gear = GearItems();
 
 			recolourParcelsForLoggedInState();
 			ui_interface->updateWorldSettingsControlsEditable();
@@ -11147,6 +11179,13 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			writeAvatarToNetworkStream(avatar, scratch_packet);
 
 			enqueueMessageToSend(*this->client_thread, scratch_packet);
+		}
+		break;
+		case Msg_UserGearListMessage:
+		{
+			const UserGearListMessage* m = checkedDowncastPtr<const UserGearListMessage>(msg);
+			if(gear_inventory_ui)
+				gear_inventory_ui->setAllGear(m->all_gear);
 		}
 		break;
 		case Msg_SignedUpMessage:
@@ -12337,6 +12376,7 @@ void GUIClient::renderXRFrame(float near_draw_dist, float max_draw_dist)
 		xr_left_hand_state = XRHandInputState();
 		xr_right_hand_state = XRHandInputState();
 		hideXRControllerVisuals();
+		xr_last_live_head_pose_time = -1.0;
 		return;
 	}
 
@@ -12349,6 +12389,19 @@ void GUIClient::renderXRFrame(float near_draw_dist, float max_draw_dist)
 	xr_right_eye_view_state = xr_session->getRightEyeViewState();
 	xr_left_hand_state = xr_session->getLeftHandState();
 	xr_right_hand_state = xr_session->getRightHandState();
+	if(!xr_session->isVisibleOrFocused())
+	{
+		xr_mirror_view.valid = false;
+		xr_head_pose_state = XRTrackedPoseState();
+		xr_raw_head_pose_state = XRTrackedPoseState();
+		xr_left_eye_view_state = XREyeViewState();
+		xr_right_eye_view_state = XREyeViewState();
+		xr_left_hand_state = XRHandInputState();
+		xr_right_hand_state = XRHandInputState();
+		xr_last_live_head_pose_time = -1.0;
+	}
+	else if(xrTrackedPoseHasWorldTransform(xr_head_pose_state))
+		xr_last_live_head_pose_time = Clock::getTimeSinceInit();
 	updateXRControllerVisuals();
 	appendXRTraceSample();
 
@@ -18246,6 +18299,8 @@ void GUIClient::viewportResized(int w, int h)
 
 	chat_ui.viewportResized(w, h);
 	photo_mode_ui.viewportResized(w, h);
+	if(gear_inventory_ui)
+		gear_inventory_ui->viewportResized(w, h);
 	if(minimap)
 		minimap->viewportResized(w, h);
 }
@@ -19285,6 +19340,223 @@ void GUIClient::gestureSettingsChanged(const GestureSettings& new_gesture_settin
 }
 
 
+Avatar* GUIClient::getOurAvatar(WorldStateLock& /*world_state_lock*/)
+{
+	if(this->world_state == NULL)
+		return nullptr;
+
+	auto res = this->world_state->avatars.find(this->client_avatar_uid);
+	if(res != this->world_state->avatars.end())
+		return res->second.ptr();
+	else
+		return nullptr;
+}
+
+
+void GUIClient::openGearInventory()
+{
+	if(gear_inventory_ui)
+	{
+		gear_inventory_ui = nullptr;
+		return;
+	}
+
+	if(gl_ui.isNull())
+		return;
+
+	gear_inventory_ui = new GearInventoryUI(this, gl_ui);
+
+	if(world_state)
+	{
+		WorldStateLock lock(world_state->mutex);
+		Avatar* av = getOurAvatar(lock);
+		if(av && av->graphics.skinned_gl_ob)
+			gear_inventory_ui->setAvatarGLObject(av->graphics, av->graphics.skinned_gl_ob, av->avatar_settings.pre_ob_to_world_matrix);
+	}
+
+	gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+
+	if((connection_state == ServerConnectionState_Connected) && (server_protocol_version < 52))
+	{
+		showInfoNotification("This server does not support gear sync yet. Opening local gear inventory only.");
+		return;
+	}
+
+	if(client_thread && (connection_state == ServerConnectionState_Connected))
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::QueryUserGear);
+		enqueueMessageToSend(*client_thread, scratch_packet);
+	}
+}
+
+
+void GUIClient::convertSelectedObjectToGearItem()
+{
+	if(connection_state != ServerConnectionState_Connected)
+	{
+		showErrorNotification("You must be connected to a gear-enabled server to create gear items.");
+		return;
+	}
+
+	if(server_protocol_version < 52)
+	{
+		showErrorNotification("This server does not support gear creation yet.");
+		return;
+	}
+
+	if(selected_ob.isNull())
+	{
+		showErrorNotification("Please select an object first");
+		return;
+	}
+
+	URLString use_model_url = selected_ob->model_url;
+
+	if(selected_ob->getCompressedVoxels())
+	{
+		SubVoxVoxelGroup group;
+		selected_ob->decompressVoxels();
+		const VoxelGroup& src_group = selected_ob->getDecompressedVoxelGroup();
+		group.voxels.resize(src_group.voxels.size());
+		for(size_t i=0; i<src_group.voxels.size(); ++i)
+			group.voxels[i] = SubVoxVoxel(src_group.voxels[i].pos, src_group.voxels[i].mat_index);
+
+		const std::string subvox_path = PlatformUtils::getTempDirPath() + "/temp.subvox";
+		FormatDecoderSubVox::writeSubVoxFile(subvox_path, group);
+
+		const uint64 model_hash = FileChecksum::fileChecksum(subvox_path);
+		const URLString subvox_URL = ResourceManager::URLForNameAndExtensionAndHash("voxels", "subvox", model_hash);
+		resource_manager->copyLocalFileToResourceDir(subvox_path, subvox_URL);
+		use_model_url = subvox_URL;
+	}
+
+	GearItemRef item = new GearItem();
+	item->creator_id = logged_in_user_id;
+	item->owner_id = logged_in_user_id;
+	item->model_url = use_model_url;
+	item->materials = selected_ob->materials;
+	item->bone_name = "LeftHand";
+	item->translation = Vec3f(0.f);
+	item->axis = Vec3f(0, 0, 1);
+	item->angle = 0.f;
+	item->scale = selected_ob->scale;
+	item->name = "New gear item";
+
+	if(client_thread)
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::CreateGearItem);
+		item->writeToStream(scratch_packet);
+		enqueueMessageToSend(*client_thread, scratch_packet);
+	}
+}
+
+
+void GUIClient::gearItemClicked(const GearItemRef& item)
+{
+	for(size_t i=0; i<logged_in_equipped_gear.items.size(); ++i)
+		if(logged_in_equipped_gear.items[i]->id == item->id)
+			return;
+
+	logged_in_equipped_gear.items.push_back(item);
+
+	if(world_state)
+	{
+		WorldStateLock lock(world_state->mutex);
+		Avatar* avatar = getOurAvatar(lock);
+		if(avatar)
+		{
+			avatar->equipped_gear.items.push_back(item);
+			avatar->other_dirty = true;
+			avatar->transform_dirty = true;
+
+			if(client_thread)
+			{
+				MessageUtils::initPacket(scratch_packet, Protocol::AvatarFullUpdate);
+				writeAvatarToNetworkStream(*avatar, scratch_packet);
+				enqueueMessageToSend(*client_thread, scratch_packet);
+			}
+		}
+	}
+
+	if(gear_inventory_ui)
+		gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+}
+
+
+void GUIClient::equippedGearItemClicked(const GearItemRef& item)
+{
+	logged_in_equipped_gear.removeItem(item);
+
+	if(world_state)
+	{
+		WorldStateLock lock(world_state->mutex);
+		Avatar* avatar = getOurAvatar(lock);
+		if(avatar)
+		{
+			avatar->equipped_gear.removeItem(item);
+			avatar->other_dirty = true;
+			avatar->transform_dirty = true;
+
+			if(client_thread)
+			{
+				MessageUtils::initPacket(scratch_packet, Protocol::AvatarFullUpdate);
+				writeAvatarToNetworkStream(*avatar, scratch_packet);
+				enqueueMessageToSend(*client_thread, scratch_packet);
+			}
+		}
+	}
+
+	if(gear_inventory_ui)
+		gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+}
+
+
+void GUIClient::gearItemChangedOnOurAvatar(GearItem* updated_item)
+{
+	if(updated_item == NULL)
+		return;
+
+	for(size_t i=0; i<logged_in_equipped_gear.items.size(); ++i)
+	{
+		if(logged_in_equipped_gear.items[i]->id == updated_item->id)
+		{
+			logged_in_equipped_gear.items[i]->copyUserSettableFieldsFromOther(*updated_item);
+			break;
+		}
+	}
+
+	if(world_state)
+	{
+		WorldStateLock lock(world_state->mutex);
+		Avatar* avatar = getOurAvatar(lock);
+		if(avatar)
+		{
+			for(size_t i=0; i<avatar->equipped_gear.items.size(); ++i)
+			{
+				if(avatar->equipped_gear.items[i]->id == updated_item->id)
+				{
+					avatar->equipped_gear.items[i]->copyUserSettableFieldsFromOther(*updated_item);
+					break;
+				}
+			}
+
+			avatar->other_dirty = true;
+			avatar->transform_dirty = true;
+		}
+	}
+
+	if(client_thread && (connection_state == ServerConnectionState_Connected) && (server_protocol_version >= 52))
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::GearItemUpdate);
+		updated_item->writeToStream(scratch_packet);
+		enqueueMessageToSend(*client_thread, scratch_packet);
+	}
+
+	if(gear_inventory_ui)
+		gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+}
+
+
 void GUIClient::worldSettingsChangedFromUI(const WorldSettings& new_world_settings)
 {
 	const bool terrain_changed = !(this->connected_world_settings.terrain_spec == new_world_settings.terrain_spec);
@@ -19418,6 +19690,13 @@ void GUIClient::keyPressed(KeyEvent& e)
 		gl_ui->handleKeyPressedEvent(e);
 	if(e.accepted)
 		return;
+
+	if(gear_inventory_ui)
+	{
+		gear_inventory_ui->keyPressed(e);
+		if(e.accepted)
+			return;
+	}
 
 	// Update our key-state variables, jump if space was pressed.
 	{

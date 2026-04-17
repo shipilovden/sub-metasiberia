@@ -51,8 +51,10 @@ SET(shared_files
 ../shared/SubstrataLuaVM.h
 ../shared/LuaScriptEvaluator.cpp
 ../shared/LuaScriptEvaluator.h
-../shared/TimerQueue.cpp
-../shared/TimerQueue.h
+../shared/GearItem.cpp
+../shared/GearItem.h
+../shared/ScriptTimerQueue.cpp
+../shared/ScriptTimerQueue.h
 ../shared/ObjectEventHandlers.cpp
 ../shared/ObjectEventHandlers.h
 ../shared/RateLimiter.cpp
