@@ -123,7 +123,10 @@ QString fontNameForComboIndex(const QComboBox* combo, int index)
 		font_name = combo->itemText(index);
 	return font_name;
 }
+
 } // anonymous namespace
+
+static int remapAudioPlayerMaterialIndexForEditor(int selected_index, size_t material_count);
 
 
 ObjectEditor::ObjectEditor(QWidget *parent)
@@ -136,6 +139,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	controls_editable(true),
 	text_font_feature_supported(true),
 	syncing_audio_playlist_widget(false),
+	editing_audio_player_webview(false),
 	audioShuffleCheckBox(NULL),
 	audioPlaylistGroupBox(NULL),
 	audioPlaylistListWidget(NULL),
@@ -426,6 +430,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	const QSignalBlocker signal_blocker(this);
 
 	this->editing_ob_uid = ob.uid;
+	this->editing_audio_player_webview = ob.isAudioPlayerWebView();
 
 	//this->objectTypeLabel->setText(QtUtils::toQString(ob_type + " (UID: " + ob.uid.toString() + ")"));
 
@@ -462,6 +467,9 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	// The spotlight model has multiple materials, we want to edit material 0 though.
 	if(ob.object_type == WorldObject::ObjectType_Spotlight)
 		this->selected_mat_index = 0;
+
+	if(this->editing_audio_player_webview)
+		this->selected_mat_index = remapAudioPlayerMaterialIndexForEditor(this->selected_mat_index, ob.materials.size());
 
 	this->modelFileSelectWidget->setFilename(QtUtils::toQString(ob.model_url));
 	{
@@ -523,8 +531,8 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	lightmapURLLabel->setText(QtUtils::toQString(ob.lightmap_url));
 
 	WorldMaterialRef selected_mat;
-	if(selected_mat_index >= 0 && selected_mat_index < (int)ob.materials.size())
-		selected_mat = ob.materials[selected_mat_index];
+	if(this->selected_mat_index >= 0 && this->selected_mat_index < (int)ob.materials.size())
+		selected_mat = ob.materials[this->selected_mat_index];
 	else
 		selected_mat = new WorldMaterial();
 
@@ -676,9 +684,16 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 		SignalBlocker blocker(this->materialComboBox);
 		this->materialComboBox->clear();
 		for(size_t i=0; i<ob.materials.size(); ++i)
-			this->materialComboBox->addItem(QtUtils::toQString("Material " + toString(i)), (int)i);
+		{
+			if(this->editing_audio_player_webview && i == 0)
+				this->materialComboBox->addItem(QCoreApplication::translate("ObjectEditor", "Material 0 (Player Screen)"), (int)i);
+			else if(this->editing_audio_player_webview && i == 1)
+				this->materialComboBox->addItem(QCoreApplication::translate("ObjectEditor", "Material 1 (Player Body)"), (int)i);
+			else
+				this->materialComboBox->addItem(QtUtils::toQString("Material " + toString(i)), (int)i);
+		}
 
-		this->materialComboBox->setCurrentIndex(selected_mat_index);
+		this->materialComboBox->setCurrentIndex(this->selected_mat_index);
 	}
 
 
@@ -803,6 +818,16 @@ static bool objectTypeUsesEditableModelURL(WorldObject::ObjectType object_type)
 }
 
 
+static int remapAudioPlayerMaterialIndexForEditor(int selected_index, size_t material_count)
+{
+	// Keep material slot 0 reserved for the live browser surface.
+	// In editor we treat slot 1 as the primary editable "player body" material.
+	if(material_count > 1 && selected_index == 0)
+		return 1;
+	return selected_index;
+}
+
+
 void ObjectEditor::toObject(WorldObject& ob_out)
 {
 	const bool is_audio_player_webview = ob_out.isAudioPlayerWebView();
@@ -891,15 +916,19 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 
 	if(ob_out.object_type != WorldObject::ObjectType_Hypercard) // Don't store materials for hypercards. (doesn't use them, and matEditor may have old/invalid data)
 	{
-		if(selected_mat_index >= (int)cloned_materials.size())
+		int mat_index_for_edit = selected_mat_index;
+		if(is_audio_player_webview)
+			mat_index_for_edit = remapAudioPlayerMaterialIndexForEditor(mat_index_for_edit, cloned_materials.size());
+
+		if(mat_index_for_edit >= (int)cloned_materials.size())
 		{
-			cloned_materials.resize(selected_mat_index + 1);
+			cloned_materials.resize(mat_index_for_edit + 1);
 			for(size_t i=0; i<cloned_materials.size(); ++i)
 				if(cloned_materials[i].isNull())
 					cloned_materials[i] = new WorldMaterial();
 		}
 
-		this->matEditor->toMaterial(*cloned_materials[selected_mat_index]);
+		this->matEditor->toMaterial(*cloned_materials[mat_index_for_edit]);
 
 		ob_out.materials.resize(cloned_materials.size());
 		for(size_t i=0; i<cloned_materials.size(); ++i)
@@ -1293,8 +1322,12 @@ void ObjectEditor::on_materialComboBox_currentIndexChanged(int index)
 {
 	this->selected_mat_index = index;
 
-	if(index < (int)this->cloned_materials.size())
-		this->matEditor->setFromMaterial(*this->cloned_materials[index]);
+	int editor_mat_index = index;
+	if(this->editing_audio_player_webview)
+		editor_mat_index = remapAudioPlayerMaterialIndexForEditor(index, this->cloned_materials.size());
+
+	if(editor_mat_index < (int)this->cloned_materials.size())
+		this->matEditor->setFromMaterial(*this->cloned_materials[editor_mat_index]);
 }
 
 
