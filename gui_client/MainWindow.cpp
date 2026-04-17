@@ -145,6 +145,7 @@ static const Colour4f PARCEL_OUTLINE_COLOUR    = Colour4f::fromHTMLHexString("f0
 static std::vector<std::string> qt_debug_msgs;
 
 static FileOutStream* log_file = nullptr;
+static const double XR_COMPANION_UPDATE_PERIOD_S = 1.0 / 20.0;
 
 
 MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& appdata_path_, const ArgumentParser& args, QWidget* parent)
@@ -152,6 +153,9 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	appdata_path(appdata_path_),
 	parsed_args(args),
 	QMainWindow(parent),
+	last_timerEvent_CPU_work_elapsed(0.0),
+	last_updateGL_time(0.0),
+	last_xr_companion_update_time(-1.0),
 	need_help_info_dock_widget_position(false),
 	log_window(NULL),
 	in_CEF_message_loop(false),
@@ -1403,15 +1407,32 @@ void MainWindow::timerEvent(QTimerEvent* event)
 			//if(timer.elapsed() > 0.020)
 			//	conPrint(doubleToStringNDecimalPlaces(Clock::getTimeSinceInit(), 3) + ": updateGL() took " + timer.elapsedStringNSigFigs(4));
 			this->last_updateGL_time = timer2.elapsed();
+			this->last_xr_companion_update_time = -1.0;
 		}
 		else
 		{
-			// Avoid a third full-scene desktop render while XR is active.
-			// Mirror-view availability can briefly flap during XR runtime transitions, but that should not
-			// re-enable the expensive companion render while the HMD session is still live.
-			// SteamVR counts companion window work as extra "other" frame time, and this path can eat enough CPU/GPU budget
-			// to expose compositor background on quick head turns even when the stereo eye submission path is otherwise correct.
-			this->last_updateGL_time = 0.0;
+			// While XR is active, render the desktop companion view at a throttled rate:
+			// - high enough to keep visible sync with headset locomotion,
+			// - low enough to avoid reintroducing the heavy per-frame companion cost.
+			const bool can_render_companion_view = gui_client.getXRMirrorView().valid && this->isVisible() && !this->isMinimized();
+			const double now = Clock::getTimeSinceInit();
+			const bool companion_interval_elapsed = (this->last_xr_companion_update_time < 0.0) || ((now - this->last_xr_companion_update_time) >= XR_COMPANION_UPDATE_PERIOD_S);
+			if(can_render_companion_view && companion_interval_elapsed)
+			{
+				Timer timer2;
+				ZoneScopedNC("updateGL", 0x33FF33); // Tracy profiler
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+				ui->glWidget->update();
+#else
+				ui->glWidget->updateGL();
+#endif
+				this->last_updateGL_time = timer2.elapsed();
+				this->last_xr_companion_update_time = now;
+			}
+			else
+			{
+				this->last_updateGL_time = 0.0;
+			}
 		}
 	}
 
