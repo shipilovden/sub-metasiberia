@@ -58,6 +58,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QSettings>
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QTimer>
+#include <QtCore/QUrl>
 #include <QtGui/QContextMenuEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPixmap>
@@ -495,6 +496,30 @@ static std::string canonicalHostForMetasiberia(const std::string& host)
 }
 
 
+static std::string canonicaliseHostPortForMetasiberia(const std::string& host_port)
+{
+	std::string host = host_port;
+	std::string port_suffix;
+
+	const size_t colon_pos = host_port.find(':');
+	if(colon_pos != std::string::npos)
+	{
+		host = host_port.substr(0, colon_pos);
+		port_suffix = host_port.substr(colon_pos);
+	}
+
+	return canonicalHostForMetasiberia(host) + port_suffix;
+}
+
+
+static bool hostIsLocalForWebMode(const std::string& host_port)
+{
+	const size_t colon_pos = host_port.find(':');
+	const std::string host = (colon_pos == std::string::npos) ? host_port : host_port.substr(0, colon_pos);
+	return (host == "localhost") || (host == "127.0.0.1");
+}
+
+
 static std::string canonicaliseMetasiberiaSubURLHost(const std::string& url)
 {
 	if(!hasPrefix(url, "sub://"))
@@ -678,12 +703,32 @@ void MainWindow::initialiseUI()
 	url_widget->backPushButton->setFixedSize(button_W, button_W);
 	url_widget->backPushButton->setText("");
 
+	QIcon browser_icon;
+	const std::string browser_icon_path = base_dir_path + "/data/resources/buttons/browser_globe.png";
+	if(QFile::exists(QtUtils::toQString(browser_icon_path)))
+		browser_icon = QIcon(QtUtils::toQString(browser_icon_path));
+	if(browser_icon.isNull())
+		browser_icon = style()->standardIcon(QStyle::SP_DriveNetIcon);
+	if(browser_icon.isNull())
+	{
+		url_widget->browserPushButton->setText("Web");
+	}
+	else
+	{
+		url_widget->browserPushButton->setIcon(browser_icon);
+		url_widget->browserPushButton->setIconSize(QSize(button_W - 2, button_W - 2));
+		url_widget->browserPushButton->setText("");
+	}
+	url_widget->browserPushButton->setFixedSize(button_W, button_W);
+	url_widget->browserPushButton->setToolTip(tr("Open Current Location In Browser"));
+
 	ui->toolBar->addWidget(url_widget);
 
 	user_details = new UserDetailsWidget(this);
 	ui->toolBar->addWidget(user_details);
 
 	connect(url_widget->backPushButton, SIGNAL(clicked(bool)), this, SLOT(on_actionGo_Back_triggered()));
+	connect(url_widget->browserPushButton, SIGNAL(clicked(bool)), this, SLOT(openCurrentLocationInBrowserSlot()));
 
 
 
@@ -4576,6 +4621,19 @@ void MainWindow::on_actionEnter_Fullscreen_triggered()
 void MainWindow::on_actionGo_Back_triggered()
 {
 	gui_client.goBack();
+}
+
+
+void MainWindow::openCurrentLocationInBrowserSlot()
+{
+	std::string host = gui_client.server_hostname.empty() ? std::string("vr.metasiberia.com") : gui_client.server_hostname;
+	host = canonicaliseHostPortForMetasiberia(host);
+
+	const bool use_http = hostIsLocalForWebMode(host);
+	const std::string web_url = (use_http ? "http://" : "https://") + host + gui_client.getCurrentWebClientURLPath();
+	const QUrl qurl = QUrl(QtUtils::toQString(web_url));
+	if(!QDesktopServices::openUrl(qurl))
+		showErrorNotification("Failed to open URL in browser: " + web_url);
 }
 
 
