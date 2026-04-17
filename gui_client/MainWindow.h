@@ -368,6 +368,7 @@ public:
 
 	double last_timerEvent_CPU_work_elapsed;
 	double last_updateGL_time;
+	double last_xr_companion_update_time;
 private:
 	bool need_help_info_dock_widget_position; // We may need to position the Help info dock widget to the bottom right of the GL view.
 	// But we need to wait until the gl view has been resized before we do this, so set this flag to do in a timer event.
