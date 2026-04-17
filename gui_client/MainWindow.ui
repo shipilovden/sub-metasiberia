@@ -147,6 +147,11 @@
     <addaction name="actionAbout_Substrata"/>
     <addaction name="actionUpdate"/>
    </widget>
+   <widget class="QMenu" name="menuThemes">
+    <property name="title">
+     <string>Themes</string>
+    </property>
+   </widget>
    <widget class="QMenu" name="menuAvatar">
     <property name="title">
      <string>Avatar</string>
@@ -185,6 +190,7 @@
    <addaction name="menuGo"/>
    <addaction name="menuTools"/>
    <addaction name="menuWindow"/>
+   <addaction name="menuThemes"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>

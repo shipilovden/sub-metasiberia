@@ -27,6 +27,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Go", "Переход");
 	add("MainWindow", "Tools", "Инструменты");
 	add("MainWindow", "Window", "Окно");
+	add("MainWindow", "Themes", "Темы");
 	add("MainWindow", "Help", "Справка");
 	add("MainWindow", "Language", "Язык");
 	add("MainWindow", "English", "English");
@@ -94,6 +95,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Are you sure you want to delete this favorite?", "Вы уверены, что хотите удалить это избранное?");
 	add("MainWindow", "Favorite deleted.", "Избранное удалено.");
 	add("MainWindow", "(No favorites)", "(Нет избранного)");
+	add("MainWindow", "Default", "По умолчанию");
 	add("MainWindow", "Use the W/A/S/D keys and arrow keys to move and look around.\n", "Используйте клавиши W/A/S/D и стрелки для передвижения и обзора.\n");
 	add("MainWindow", "Click and drag the mouse on the 3D view to look around.\n", "Нажмите и перетаскивайте мышь в 3D-окне для обзора.\n");
 	add("MainWindow", "Space key: jump\n", "Пробел: прыжок\n");
