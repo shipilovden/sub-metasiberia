@@ -133,6 +133,7 @@ private:
 	bool controls_editable;
 	bool text_font_feature_supported;
 	bool syncing_audio_playlist_widget;
+	bool editing_audio_player_webview;
 
 	QCheckBox* audioShuffleCheckBox;
 	QGroupBox* audioPlaylistGroupBox;

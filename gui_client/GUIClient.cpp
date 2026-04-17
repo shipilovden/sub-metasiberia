@@ -3980,10 +3980,11 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				GLObjectRef opengl_ob = opengl_engine->allocateObject();
 				opengl_ob->mesh_data = this->image_cube_opengl_mesh;
 				opengl_ob->materials.resize(2);
-				opengl_ob->materials[0].albedo_linear_rgb = Colour3f(0.f);
-				opengl_ob->materials[0].emission_linear_rgb = Colour3f(1.f);
+				const bool is_audio_player_webview = ob->isAudioPlayerWebView();
+				opengl_ob->materials[0].albedo_linear_rgb = is_audio_player_webview ? Colour3f(1.f) : Colour3f(0.f);
+				opengl_ob->materials[0].emission_linear_rgb = is_audio_player_webview ? Colour3f(0.f) : Colour3f(1.f);
 				const float luminance = 24000; // nits.  Chosen so videos look about the right brightness in daylight.
-				opengl_ob->materials[0].emission_scale = luminance / (683.002f * 106.856e-9f) * 1.0e-9f; // See ModelLoading::setGLMaterialFromWorldMaterialWithLocalPaths().  1.0e-9f factor to avoid floating point issues.
+				opengl_ob->materials[0].emission_scale = is_audio_player_webview ? 0.f : (luminance / (683.002f * 106.856e-9f) * 1.0e-9f); // See ModelLoading::setGLMaterialFromWorldMaterialWithLocalPaths().  1.0e-9f factor to avoid floating point issues.
 				opengl_ob->materials[0].tex_matrix = Matrix2f(1, 0, 0, -1); // OpenGL expects texture data to have bottom left pixel at offset 0, we have top left pixel, so flip
 				opengl_ob->materials[0].tex_translation = Vec2f(0, 1);
 				opengl_ob->materials[0].materialise_effect = use_materialise_effect;
@@ -8776,6 +8777,18 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 									if(i < opengl_ob->materials.size())
 										ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
 
+								if(ob->isAudioPlayerWebView() && !opengl_ob->materials.empty())
+								{
+									OpenGLMaterial& front_mat = opengl_ob->materials[0];
+									front_mat.albedo_linear_rgb = Colour3f(1.f);
+									front_mat.tex_path.clear();
+									front_mat.emission_linear_rgb = Colour3f(0.f);
+									front_mat.emission_scale = 0.f;
+									front_mat.emission_tex_path.clear();
+									front_mat.emission_texture = NULL;
+									front_mat.fresnel_scale = 0.0f;
+								}
+
 								opengl_engine->objectMaterialsUpdated(*opengl_ob);
 
 								if(ob->object_type == WorldObject::ObjectType_Spotlight)
@@ -8874,6 +8887,18 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 						for(size_t i=0; i<ob->materials.size(); ++i)
 							if(i < opengl_ob->materials.size())
 								ModelLoading::setGLMaterialFromWorldMaterial(*ob->materials[i], ob_lod_level, ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
+
+						if(ob->isAudioPlayerWebView() && !opengl_ob->materials.empty())
+						{
+							OpenGLMaterial& front_mat = opengl_ob->materials[0];
+							front_mat.albedo_linear_rgb = Colour3f(1.f);
+							front_mat.tex_path.clear();
+							front_mat.emission_linear_rgb = Colour3f(0.f);
+							front_mat.emission_scale = 0.f;
+							front_mat.emission_tex_path.clear();
+							front_mat.emission_texture = NULL;
+							front_mat.fresnel_scale = 0.0f;
+						}
 						opengl_engine->objectMaterialsUpdated(*opengl_ob);
 					}
 
@@ -15288,6 +15313,123 @@ void GUIClient::objectEdited()
 							}
 
 							assignLoadedOpenGLTexturesToMats(selected_ob.ptr());
+							opengl_engine->objectMaterialsUpdated(*opengl_ob);
+						}
+					}
+					else if(this->selected_ob->object_type == WorldObject::ObjectType_WebView)
+					{
+						if(opengl_ob.nonNull())
+						{
+							glare::ArenaFrame frame(arena_allocator);
+
+							size_t required_num_mats = 1;
+							if(opengl_ob->mesh_data.nonNull())
+							{
+								for(size_t i = 0; i < opengl_ob->mesh_data->batches.size(); ++i)
+									required_num_mats = myMax(required_num_mats, (size_t)opengl_ob->mesh_data->batches[i].material_index + 1);
+							}
+							required_num_mats = myMax(required_num_mats, this->selected_ob->materials.size());
+
+							const bool is_audio_player_webview = this->selected_ob->isAudioPlayerWebView();
+
+							// Material 0 is the live browser display surface.
+							OpenGLTextureRef existing_display_tex;
+							if(!opengl_ob->materials.empty())
+							{
+								if(is_audio_player_webview)
+									existing_display_tex = opengl_ob->materials[0].albedo_texture.nonNull() ? opengl_ob->materials[0].albedo_texture : opengl_ob->materials[0].emission_texture;
+								else
+									existing_display_tex = opengl_ob->materials[0].emission_texture;
+							}
+
+							const WorldMaterial* screen_source_mat = NULL;
+							if(this->selected_ob->materials.size() > 1 && this->selected_ob->materials[1].nonNull())
+								screen_source_mat = this->selected_ob->materials[1].ptr();
+							else if(!this->selected_ob->materials.empty() && this->selected_ob->materials[0].nonNull())
+								screen_source_mat = this->selected_ob->materials[0].ptr();
+
+							opengl_ob->materials.resize(required_num_mats);
+							for(size_t i = 0; i < required_num_mats; ++i)
+							{
+								if(i == 0)
+								{
+									if(is_audio_player_webview)
+									{
+										// Audio-player screen uses albedo browser texture. Body/front colour is authored in HTML (WebViewData.cpp).
+										opengl_ob->materials[i].albedo_linear_rgb = Colour3f(1.f);
+										opengl_ob->materials[i].alpha = 1.0f;
+										opengl_ob->materials[i].albedo_texture = existing_display_tex;
+										opengl_ob->materials[i].tex_path.clear();
+
+										opengl_ob->materials[i].emission_linear_rgb = Colour3f(0.f);
+										opengl_ob->materials[i].emission_scale = 0.f;
+										opengl_ob->materials[i].emission_texture = NULL;
+										opengl_ob->materials[i].emission_tex_path.clear();
+
+										opengl_ob->materials[i].tex_matrix = Matrix2f(1, 0, 0, -1);
+										opengl_ob->materials[i].tex_translation = Vec2f(0, 1);
+										opengl_ob->materials[i].fresnel_scale = 0.0f;
+										opengl_ob->materials[i].allow_alpha_test = false;
+										continue;
+									}
+									else if(screen_source_mat)
+									{
+										ModelLoading::setGLMaterialFromWorldMaterial(
+											*screen_source_mat,
+											ob_lod_level,
+											/*lightmap URL=*/"",
+											/*use_basis=*/selected_ob_use_basis,
+											*this->resource_manager,
+											&arena_allocator,
+											opengl_ob->materials[i]
+										);
+									}
+									else
+									{
+										opengl_ob->materials[i].albedo_linear_rgb = toLinearSRGB(Colour3f(0.85f));
+										opengl_ob->materials[i].alpha = 1.0f;
+									}
+
+									// Non-audio web views keep browser output in emission.
+									opengl_ob->materials[i].emission_linear_rgb = Colour3f(1.f);
+									const float luminance = 24000; // nits
+									opengl_ob->materials[i].emission_scale = luminance / (683.002f * 106.856e-9f) * 1.0e-9f;
+									opengl_ob->materials[i].emission_texture = existing_display_tex;
+									opengl_ob->materials[i].emission_tex_path.clear();
+									opengl_ob->materials[i].fresnel_scale = 0.0f;
+									opengl_ob->materials[i].allow_alpha_test = false;
+									continue;
+								}
+
+								const WorldMaterial* source_mat = NULL;
+								if(i < this->selected_ob->materials.size() && this->selected_ob->materials[i].nonNull())
+									source_mat = this->selected_ob->materials[i].ptr();
+								else if(this->selected_ob->materials.size() > 1 && this->selected_ob->materials[1].nonNull())
+									source_mat = this->selected_ob->materials[1].ptr();
+								else if(!this->selected_ob->materials.empty() && this->selected_ob->materials[0].nonNull())
+									source_mat = this->selected_ob->materials[0].ptr();
+
+								if(source_mat)
+								{
+									ModelLoading::setGLMaterialFromWorldMaterial(
+										*source_mat,
+										ob_lod_level,
+										/*lightmap URL=*/"",
+										/*use_basis=*/selected_ob_use_basis,
+										*this->resource_manager,
+										&arena_allocator,
+										opengl_ob->materials[i]
+									);
+								}
+								else
+								{
+									opengl_ob->materials[i].albedo_linear_rgb = toLinearSRGB(Colour3f(0.85f));
+									opengl_ob->materials[i].alpha = 1.0f;
+								}
+							}
+
+							assignLoadedOpenGLTexturesToMats(selected_ob.ptr());
+							opengl_engine->materialTextureChanged(*opengl_ob, opengl_ob->materials[0]);
 							opengl_engine->objectMaterialsUpdated(*opengl_ob);
 						}
 					}

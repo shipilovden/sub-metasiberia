@@ -174,6 +174,25 @@ struct AudioPlayerTrack
 };
 
 
+Colour3f getAudioPlayerBodyColour(const WorldObject& ob)
+{
+	if(ob.materials.size() > 1 && ob.materials[1].nonNull())
+		return ob.materials[1]->colour_rgb;
+	else if(!ob.materials.empty() && ob.materials[0].nonNull())
+		return ob.materials[0]->colour_rgb;
+	else
+		return Colour3f(0.85f);
+}
+
+
+int toCSSChannel(float v)
+{
+	if(v < 0.f) v = 0.f;
+	if(v > 1.f) v = 1.f;
+	return (int)(v * 255.f + 0.5f);
+}
+
+
 void getAudioPlayerTrackURLs(const WorldObject& ob, std::vector<std::string>& URLs_out)
 {
 	if(!ob.isAudioPlayerWebView())
@@ -230,7 +249,9 @@ std::string resolveAudioPlayerTrackURL(const std::string& playlist_url, Resource
 
 std::string makeAudioPlayerStateKey(const WorldObject& ob)
 {
-	return ob.target_url + "\n" + toString(ob.flags) + "\n" + toString(ob.audio_volume) + "\n" + ob.content;
+	const Colour3f body_col = getAudioPlayerBodyColour(ob);
+	return ob.target_url + "\n" + toString(ob.flags) + "\n" + toString(ob.audio_volume) + "\n" + ob.content + "\n" +
+		toString(body_col.r) + "," + toString(body_col.g) + "," + toString(body_col.b);
 }
 
 
@@ -273,26 +294,32 @@ std::string makeAudioPlayerRootPage(const WorldObject& ob, ResourceManager& reso
 	else if(initial_volume > 1.f)
 		initial_volume = 1.f;
 
+	const Colour3f body_col = getAudioPlayerBodyColour(ob);
+	const std::string body_col_css = "rgb(" +
+		toString(toCSSChannel(body_col.r)) + "," +
+		toString(toCSSChannel(body_col.g)) + "," +
+		toString(toCSSChannel(body_col.b)) + ")";
+
 	return std::string(
 		R"PLAYER(<html>
 <head>
 <meta charset="utf-8">
 <style>
-html,body{margin:0;width:100%;height:100%;background:#ffffff;color:#111111;font-family:Segoe UI,Arial,sans-serif;overflow:hidden;-webkit-user-select:none;}
+html,body{margin:0;width:100%;height:100%;background:)PLAYER") + body_col_css + std::string(R"PLAYER(;color:#111111;font-family:Segoe UI,Arial,sans-serif;overflow:hidden;-webkit-user-select:none;}
 body{display:flex;align-items:center;justify-content:center;}
-.player{width:100%;height:100%;box-sizing:border-box;padding:18px 28px 20px;background:#ffffff;display:flex;flex-direction:column;justify-content:center;gap:14px;}
+.player{width:100%;height:100%;box-sizing:border-box;padding:18px 28px 20px;background:)PLAYER") + body_col_css + std::string(R"PLAYER(;display:flex;flex-direction:column;justify-content:center;gap:14px;}
 .progress-shell{height:20px;display:flex;align-items:center;}
-.progress-track{position:relative;width:100%;height:5px;border-radius:999px;background:#d3d3d3;cursor:pointer;}
+.progress-track{position:relative;width:100%;height:5px;border-radius:999px;background:#000000;cursor:pointer;}
 .progress-track.disabled{cursor:default;opacity:0.55;}
-.progress-fill{position:absolute;left:0;top:0;height:100%;width:0%;border-radius:999px;background:#111111;pointer-events:none;}
-.progress-thumb{position:absolute;left:0%;top:50%;width:18px;height:18px;border-radius:50%;background:#111111;transform:translate(-50%,-50%);box-shadow:0 3px 10px rgba(0,0,0,0.16);pointer-events:none;}
+.progress-fill{position:absolute;left:0;top:0;height:100%;width:0%;border-radius:999px;background:#000000;pointer-events:none;}
+.progress-thumb{position:absolute;left:0%;top:50%;width:18px;height:18px;border-radius:50%;background:#000000;transform:translate(-50%,-50%);box-shadow:0 3px 10px rgba(0,0,0,0.16);pointer-events:none;}
 .controls{display:flex;align-items:center;justify-content:center;gap:14px;}
 .icon-button,.transport-button,.play-button{border:0;background:transparent;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;transition:transform 0.12s ease,color 0.12s ease,opacity 0.12s ease;}
-.icon-button,.transport-button{color:rgba(17,17,17,0.38);}
+.icon-button,.transport-button{color:#000000;}
 .icon-button{width:32px;height:32px;}
 .transport-button{width:44px;height:44px;}
-.play-button{width:74px;height:74px;border-radius:50%;background:#111111;color:#ffffff;box-shadow:0 9px 20px rgba(0,0,0,0.16);}
-.icon-button.active,.transport-button:hover,.icon-button:hover{color:#111111;}
+.play-button{width:74px;height:74px;border-radius:50%;background:#000000;color:#ffffff;box-shadow:0 9px 20px rgba(0,0,0,0.16);}
+.icon-button.active,.transport-button:hover,.icon-button:hover{color:#000000;}
 .play-button:hover{transform:translateY(-1px) scale(1.01);}
 .icon-button:disabled,.transport-button:disabled,.play-button:disabled{cursor:default;opacity:0.28;transform:none;box-shadow:none;}
 .icon-button svg,.transport-button svg{width:20px;height:20px;fill:currentColor;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
@@ -768,7 +795,7 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 					if(is_audio_player)
 					{
 						const std::string root_page = makeAudioPlayerRootPage(*ob, *gui_client->resource_manager, gui_client->server_hostname);
-						browser->create(WorldObject::audioPlayerTargetURL(), viewport_width, viewport_height, gui_client, ob, /*mat index=*/0, /*apply_to_emission_texture=*/true, OpenGLTexture::Wrapping_Clamp, opengl_engine, root_page);
+						browser->create(WorldObject::audioPlayerTargetURL(), viewport_width, viewport_height, gui_client, ob, /*mat index=*/0, /*apply_to_emission_texture=*/false, OpenGLTexture::Wrapping_Clamp, opengl_engine, root_page);
 						this->loaded_audio_player_state_key = audio_player_state_key;
 					}
 					else
