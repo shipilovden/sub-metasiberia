@@ -28,6 +28,7 @@ class QMimeData;
 class QMenu;
 class QDialog;
 class QTabWidget;
+class QActionGroup;
 struct ID3D11Device;
 struct IMFDXGIDeviceManager;
 struct _SDL_GameController;
@@ -185,6 +186,11 @@ private:
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
 private:
+	void initialiseThemesMenu();
+	bool applyNamedQtTheme(const std::string& theme_name, bool persist_setting);
+	void applyDefaultQtTheme(bool persist_setting);
+	void updateThemesMenuCheckedState(const std::string& active_theme_name);
+
 	void updateStatusBar();
 	void updateDiagnostics();
 	void runScreenshotCode();
@@ -365,10 +371,13 @@ public:
 	UpdateManager* update_manager;
 	QDialog* chat_emoji_popup;
 	QTabWidget* chat_emoji_tab_widget;
+	QActionGroup* theme_action_group;
 
 	double last_timerEvent_CPU_work_elapsed;
 	double last_updateGL_time;
 	double last_xr_companion_update_time;
+	bool default_qt_style_name_set;
+	std::string default_qt_style_name;
 private:
 	bool need_help_info_dock_widget_position; // We may need to position the Help info dock widget to the bottom right of the GL view.
 	// But we need to wait until the gl view has been resized before we do this, so set this flag to do in a timer event.

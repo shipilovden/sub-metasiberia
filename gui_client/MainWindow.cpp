@@ -49,6 +49,12 @@ Copyright Glare Technologies Limited 2024 -
 #include "../shared/ImageDecoding.h"
 #include "../shared/MessageUtils.h"
 #include <QtCore/QMimeData>
+#include <QtCore/QDir>
+#include <QtCore/QFile>
+#include <QtCore/QFileInfo>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
+#include <QtCore/QJsonParseError>
 #include <QtCore/QSettings>
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QTimer>
@@ -56,6 +62,8 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPixmap>
 #include <QtWidgets/QAction>
+#include <QtWidgets/QActionGroup>
+#include <QtWidgets/QApplication>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QFont>
@@ -76,6 +84,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
+#include <QtWidgets/QStyleFactory>
 #include <QtGui/QScreen>
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
@@ -146,6 +155,253 @@ static std::vector<std::string> qt_debug_msgs;
 
 static FileOutStream* log_file = nullptr;
 static const double XR_COMPANION_UPDATE_PERIOD_S = 1.0 / 20.0;
+static const char* const QT_THEME_SETTINGS_KEY = "setting/qt_theme_name";
+static const char* const QT_THEME_DIR_REL_PATH = "/data/resources/qt_themes";
+
+
+namespace
+{
+struct QtThemeColors
+{
+	QColor primary;
+	QColor secondary;
+
+	QColor text;
+	QColor overlay2;
+	QColor overlay1;
+	QColor overlay0;
+	QColor surface2;
+	QColor surface1;
+	QColor surface0;
+	QColor base;
+	QColor mantle;
+	QColor crust;
+};
+
+
+static bool parseThemeColor(const QJsonObject& json_obj, const char* key, QColor& colour_out, std::string& error_out)
+{
+	const QJsonValue value = json_obj.value(QLatin1String(key));
+	if(!value.isString())
+	{
+		error_out = std::string("Theme key '") + key + "' is missing or not a string.";
+		return false;
+	}
+
+	const QColor colour(value.toString());
+	if(!colour.isValid())
+	{
+		error_out = std::string("Theme key '") + key + "' has an invalid colour value.";
+		return false;
+	}
+
+	colour_out = colour;
+	return true;
+}
+
+
+static bool loadQtThemeColorsFromFile(const QString& file_path, QtThemeColors& theme_out, std::string& error_out)
+{
+	QFile file(file_path);
+	if(!file.open(QIODevice::ReadOnly))
+	{
+		error_out = "Failed to open theme file '" + QtUtils::toIndString(file_path) + "'.";
+		return false;
+	}
+
+	QJsonParseError parse_error;
+	const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parse_error);
+	if(parse_error.error != QJsonParseError::NoError)
+	{
+		error_out = "Failed to parse theme JSON '" + QtUtils::toIndString(file_path) + "': " + QtUtils::toIndString(parse_error.errorString()) + ".";
+		return false;
+	}
+
+	if(!doc.isObject())
+	{
+		error_out = "Theme JSON root is not an object for '" + QtUtils::toIndString(file_path) + "'.";
+		return false;
+	}
+
+	const QJsonObject obj = doc.object();
+	return
+		parseThemeColor(obj, "primary", theme_out.primary, error_out) &&
+		parseThemeColor(obj, "secondary", theme_out.secondary, error_out) &&
+		parseThemeColor(obj, "text", theme_out.text, error_out) &&
+		parseThemeColor(obj, "overlay2", theme_out.overlay2, error_out) &&
+		parseThemeColor(obj, "overlay1", theme_out.overlay1, error_out) &&
+		parseThemeColor(obj, "overlay0", theme_out.overlay0, error_out) &&
+		parseThemeColor(obj, "surface2", theme_out.surface2, error_out) &&
+		parseThemeColor(obj, "surface1", theme_out.surface1, error_out) &&
+		parseThemeColor(obj, "surface0", theme_out.surface0, error_out) &&
+		parseThemeColor(obj, "base", theme_out.base, error_out) &&
+		parseThemeColor(obj, "mantle", theme_out.mantle, error_out) &&
+		parseThemeColor(obj, "crust", theme_out.crust, error_out);
+}
+
+
+static QString makeThemeDisplayName(const QString& internal_name)
+{
+	QStringList parts = internal_name.split('_', Qt::SkipEmptyParts);
+	for(int i = 0; i < parts.size(); ++i)
+	{
+		if(!parts[i].isEmpty())
+			parts[i][0] = parts[i][0].toUpper();
+	}
+	return parts.join(' ');
+}
+
+
+static void applyQtThemePalette(const QtThemeColors& theme)
+{
+	// Use Fusion so the palette roles are applied consistently to Qt widgets.
+	if(QStyle* fusion_style = QStyleFactory::create("Fusion"))
+		QApplication::setStyle(fusion_style);
+
+	const QColor highlighted_colour = theme.primary;
+	const QColor highlighted_text_colour = (highlighted_colour.valueF() > 0.5) ? theme.mantle : theme.text;
+
+	qreal h = 0, s = 0, v = 0, a = 1;
+	theme.text.getHsvF(&h, &s, &v, &a);
+	const QColor bright_text_colour = QColor::fromHsvF(h, s, 1.0 - v, a);
+
+	const bool dark_theme = theme.text.value() > theme.base.value();
+
+	QPalette palette;
+
+	// Normal
+	if(dark_theme)
+	{
+		palette.setColor(QPalette::Base, theme.mantle);
+		palette.setColor(QPalette::AlternateBase, theme.base);
+	}
+	else
+	{
+		palette.setColor(QPalette::Base, theme.crust);
+		palette.setColor(QPalette::AlternateBase, theme.mantle);
+	}
+	palette.setColor(QPalette::Window, theme.base);
+	palette.setColor(QPalette::WindowText, theme.text);
+	palette.setColor(QPalette::PlaceholderText, theme.overlay1);
+	palette.setColor(QPalette::Text, theme.text);
+	palette.setColor(QPalette::Button, theme.base);
+	palette.setColor(QPalette::ButtonText, theme.text);
+	palette.setColor(QPalette::BrightText, bright_text_colour);
+	palette.setColor(QPalette::ToolTipBase, theme.mantle);
+	palette.setColor(QPalette::ToolTipText, theme.overlay2);
+
+	palette.setColor(QPalette::Highlight, highlighted_colour);
+	palette.setColor(QPalette::HighlightedText, highlighted_text_colour);
+	palette.setColor(QPalette::Link, theme.secondary);
+	palette.setColor(QPalette::LinkVisited, theme.secondary);
+
+	palette.setColor(QPalette::Light, theme.crust);
+	palette.setColor(QPalette::Midlight, theme.mantle);
+	palette.setColor(QPalette::Mid, theme.surface0);
+	palette.setColor(QPalette::Dark, theme.surface1);
+	palette.setColor(QPalette::Shadow, theme.overlay0);
+
+	// Inactive
+	palette.setColor(QPalette::Inactive, QPalette::Highlight, theme.surface1);
+	palette.setColor(QPalette::Inactive, QPalette::Link, theme.surface1);
+	palette.setColor(QPalette::Inactive, QPalette::LinkVisited, theme.surface1);
+
+	// Disabled
+	palette.setColor(QPalette::Disabled, QPalette::WindowText, theme.overlay1);
+	palette.setColor(QPalette::Disabled, QPalette::Base, theme.base);
+	palette.setColor(QPalette::Disabled, QPalette::AlternateBase, theme.base);
+	palette.setColor(QPalette::Disabled, QPalette::Text, theme.overlay1);
+	palette.setColor(QPalette::Disabled, QPalette::PlaceholderText, theme.overlay1);
+	palette.setColor(QPalette::Disabled, QPalette::Button, theme.base);
+	palette.setColor(QPalette::Disabled, QPalette::ButtonText, theme.overlay1);
+	palette.setColor(QPalette::Disabled, QPalette::BrightText, theme.mantle);
+	palette.setColor(QPalette::Disabled, QPalette::Highlight, theme.surface2);
+	palette.setColor(QPalette::Disabled, QPalette::HighlightedText, theme.surface0);
+	palette.setColor(QPalette::Disabled, QPalette::Link, theme.surface0);
+	palette.setColor(QPalette::Disabled, QPalette::LinkVisited, theme.surface0);
+
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	palette.setColor(QPalette::Accent, theme.secondary);
+	palette.setColor(QPalette::Inactive, QPalette::Accent, theme.surface1);
+	palette.setColor(QPalette::Disabled, QPalette::Accent, theme.surface2);
+#endif
+
+	QApplication::setPalette(palette);
+}
+
+#if defined(_WIN32)
+typedef HRESULT (WINAPI *DwmSetWindowAttributeFn)(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute);
+
+static DwmSetWindowAttributeFn getDwmSetWindowAttributeFn()
+{
+	static DwmSetWindowAttributeFn fn = nullptr;
+	static bool attempted_load = false;
+	if(!attempted_load)
+	{
+		attempted_load = true;
+		if(HMODULE dwmapi_module = ::LoadLibraryA("dwmapi.dll"))
+			fn = reinterpret_cast<DwmSetWindowAttributeFn>(::GetProcAddress(dwmapi_module, "DwmSetWindowAttribute"));
+	}
+	return fn;
+}
+
+
+static bool setDwmWindowAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD value_size)
+{
+	DwmSetWindowAttributeFn fn = getDwmSetWindowAttributeFn();
+	return fn && (fn(hwnd, attribute, value, value_size) == S_OK);
+}
+
+
+static DWORD toColorRef(const QColor& colour)
+{
+	return RGB(colour.red(), colour.green(), colour.blue());
+}
+
+
+static void applyNativeWindowCaptionTheme(QWidget* widget, const QtThemeColors* theme)
+{
+	if(!widget)
+		return;
+
+	const HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+	if(!hwnd)
+		return;
+
+	// DWM attributes are available on modern Windows builds. If an attribute is unsupported, the call fails and we ignore it.
+	static const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_NEW = 20;
+	static const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
+	static const DWORD DWMWA_BORDER_COLOR = 34;
+	static const DWORD DWMWA_CAPTION_COLOR = 35;
+	static const DWORD DWMWA_TEXT_COLOR = 36;
+	static const DWORD DWM_COLOR_DEFAULT = 0xFFFFFFFFu;
+
+	if(theme)
+	{
+		const bool dark_caption = theme->base.value() < 128;
+		const BOOL immersive_dark = dark_caption ? TRUE : FALSE;
+		if(!setDwmWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_NEW, &immersive_dark, sizeof(immersive_dark)))
+			(void)setDwmWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, &immersive_dark, sizeof(immersive_dark));
+
+		const DWORD caption_colour = toColorRef(theme->base);
+		const DWORD border_colour = toColorRef(theme->surface1);
+		const DWORD text_colour = toColorRef(theme->text);
+		(void)setDwmWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &caption_colour, sizeof(caption_colour));
+		(void)setDwmWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &border_colour, sizeof(border_colour));
+		(void)setDwmWindowAttribute(hwnd, DWMWA_TEXT_COLOR, &text_colour, sizeof(text_colour));
+	}
+	else
+	{
+		const BOOL immersive_dark = FALSE;
+		if(!setDwmWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_NEW, &immersive_dark, sizeof(immersive_dark)))
+			(void)setDwmWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, &immersive_dark, sizeof(immersive_dark));
+		(void)setDwmWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &DWM_COLOR_DEFAULT, sizeof(DWM_COLOR_DEFAULT));
+		(void)setDwmWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &DWM_COLOR_DEFAULT, sizeof(DWM_COLOR_DEFAULT));
+		(void)setDwmWindowAttribute(hwnd, DWMWA_TEXT_COLOR, &DWM_COLOR_DEFAULT, sizeof(DWM_COLOR_DEFAULT));
+	}
+}
+#endif
+} // namespace
 
 
 MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& appdata_path_, const ArgumentParser& args, QWidget* parent)
@@ -153,9 +409,11 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	appdata_path(appdata_path_),
 	parsed_args(args),
 	QMainWindow(parent),
+	theme_action_group(NULL),
 	last_timerEvent_CPU_work_elapsed(0.0),
 	last_updateGL_time(0.0),
 	last_xr_companion_update_time(-1.0),
+	default_qt_style_name_set(false),
 	need_help_info_dock_widget_position(false),
 	log_window(NULL),
 	in_CEF_message_loop(false),
@@ -433,6 +691,8 @@ void MainWindow::initialiseUI()
 	log_window = new LogWindow(this, settings);
 	connect(log_window, SIGNAL(openServerScriptLogSignal()), this, SLOT(openServerScriptLogSlot()));
 
+	initialiseThemesMenu();
+
 	logMessage("Qt version: " + std::string(qVersion()));
 	logMessage("CEF version: " + CEF::CEFVersionString());
 
@@ -654,6 +914,135 @@ void MainWindow::initialiseUI()
 			logMessage("Successfully opened game controller with SDL.");
 	}
 #endif
+}
+
+
+void MainWindow::initialiseThemesMenu()
+{
+	if(!ui || !ui->menuThemes)
+		return;
+
+	if(!default_qt_style_name_set && QApplication::style())
+	{
+		default_qt_style_name = QtUtils::toIndString(QApplication::style()->objectName());
+		default_qt_style_name_set = !default_qt_style_name.empty();
+	}
+
+	ui->menuThemes->clear();
+
+	theme_action_group = new QActionGroup(this);
+	theme_action_group->setExclusive(true);
+
+	QAction* default_theme_action = ui->menuThemes->addAction(tr("Default"));
+	default_theme_action->setCheckable(true);
+	default_theme_action->setData(QString());
+	theme_action_group->addAction(default_theme_action);
+	ui->menuThemes->addSeparator();
+
+	const QString themes_dir_path = QtUtils::toQString(base_dir_path + QT_THEME_DIR_REL_PATH);
+	QDir themes_dir(themes_dir_path);
+	const QStringList theme_files = themes_dir.entryList(QStringList() << "*.json", QDir::Files, QDir::Name);
+	for(int i = 0; i < theme_files.size(); ++i)
+	{
+		const QString theme_name = QFileInfo(theme_files[i]).completeBaseName();
+		QAction* action = ui->menuThemes->addAction(makeThemeDisplayName(theme_name));
+		action->setCheckable(true);
+		action->setData(theme_name);
+		theme_action_group->addAction(action);
+	}
+
+	connect(theme_action_group, &QActionGroup::triggered, this, [this](QAction* action)
+	{
+		if(!action)
+			return;
+
+		const std::string theme_name = QtUtils::toStdString(action->data().toString());
+		if(theme_name.empty())
+			applyDefaultQtTheme(/*persist_setting=*/true);
+		else if(!applyNamedQtTheme(theme_name, /*persist_setting=*/true))
+			applyDefaultQtTheme(/*persist_setting=*/true);
+	});
+
+	const std::string saved_theme = QtUtils::toStdString(settings->value(QT_THEME_SETTINGS_KEY, QString()).toString());
+	if(saved_theme.empty())
+	{
+		default_theme_action->setChecked(true);
+		return;
+	}
+
+	if(!applyNamedQtTheme(saved_theme, /*persist_setting=*/false))
+		applyDefaultQtTheme(/*persist_setting=*/false);
+}
+
+
+bool MainWindow::applyNamedQtTheme(const std::string& theme_name, bool persist_setting)
+{
+	if(theme_name.empty())
+	{
+		applyDefaultQtTheme(persist_setting);
+		return true;
+	}
+
+	const QString themes_dir_path = QtUtils::toQString(base_dir_path + QT_THEME_DIR_REL_PATH);
+	const QString theme_file_path = QDir(themes_dir_path).filePath(QtUtils::toQString(theme_name + ".json"));
+
+	QtThemeColors theme_colours;
+	std::string error_message;
+	if(!loadQtThemeColorsFromFile(theme_file_path, theme_colours, error_message))
+	{
+		logMessage("[Theme] " + error_message);
+		if(persist_setting && settings)
+			settings->remove(QT_THEME_SETTINGS_KEY);
+		return false;
+	}
+
+	applyQtThemePalette(theme_colours);
+#if defined(_WIN32)
+	applyNativeWindowCaptionTheme(this, &theme_colours);
+#endif
+	if(persist_setting && settings)
+		settings->setValue(QT_THEME_SETTINGS_KEY, QtUtils::toQString(theme_name));
+
+	updateThemesMenuCheckedState(theme_name);
+	logMessage("[Theme] Applied theme '" + theme_name + "'.");
+	return true;
+}
+
+
+void MainWindow::applyDefaultQtTheme(bool persist_setting)
+{
+	if(default_qt_style_name_set)
+	{
+		if(QStyle* default_style = QStyleFactory::create(QtUtils::toQString(default_qt_style_name)))
+			QApplication::setStyle(default_style);
+	}
+
+	QApplication::setPalette(QPalette());
+#if defined(_WIN32)
+	applyNativeWindowCaptionTheme(this, nullptr);
+#endif
+
+	if(persist_setting && settings)
+		settings->remove(QT_THEME_SETTINGS_KEY);
+
+	updateThemesMenuCheckedState(std::string());
+	logMessage("[Theme] Applied default Qt theme.");
+}
+
+
+void MainWindow::updateThemesMenuCheckedState(const std::string& active_theme_name)
+{
+	if(!theme_action_group)
+		return;
+
+	const QString active_name = QtUtils::toQString(active_theme_name);
+	QList<QAction*> actions = theme_action_group->actions();
+	for(int i = 0; i < actions.size(); ++i)
+	{
+		QAction* action = actions[i];
+		if(action)
+			action->setChecked(action->data().toString() == active_name);
+	}
 }
 
 
