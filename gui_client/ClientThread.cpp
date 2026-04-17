@@ -1191,6 +1191,9 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			if(!msg_buffer.endOfStream())
 				readGestureSettingsFromStream(msg_buffer, msg->gesture_settings);
 
+			if(!msg_buffer.endOfStream())
+				readGearItemsFromStream(msg_buffer, msg->equipped_gear);
+
 
 			out_msg_queue->enqueue(msg);
 
@@ -1200,6 +1203,13 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 		{
 			//conPrint("Received LoggedOutMessageID msg.");
 			out_msg_queue->enqueue(new LoggedOutMessage());
+			break;
+		}
+	case Protocol::UserGearList:
+		{
+			Reference<UserGearListMessage> msg = new UserGearListMessage();
+			readGearItemsFromStream(msg_buffer, msg->all_gear);
+			out_msg_queue->enqueue(msg);
 			break;
 		}
 	case Protocol::SignedUpMessageID:

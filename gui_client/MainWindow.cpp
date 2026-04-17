@@ -3720,6 +3720,18 @@ void MainWindow::on_actionUpdate_triggered()
 }
 
 
+void MainWindow::on_actionOpen_Gear_Inventory_triggered()
+{
+	gui_client.openGearInventory();
+}
+
+
+void MainWindow::on_actionConvert_Selected_Object_To_Gear_Item_triggered()
+{
+	gui_client.convertSelectedObjectToGearItem();
+}
+
+
 void MainWindow::on_actionOptions_triggered()
 {
 	const std::string prev_audio_input_dev_name = QtUtils::toStdString(settings->value(MainOptionsDialog::inputDeviceNameKey(), "Default").toString());

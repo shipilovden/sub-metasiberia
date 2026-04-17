@@ -98,10 +98,10 @@ Avatar::~Avatar()
 
 void Avatar::appendDependencyURLs(int ob_lod_level, const GetDependencyOptions& options, DependencyURLVector& URLs_out)
 {
+	GetLODModelURLOptions url_options(options.get_optimised_mesh, options.opt_mesh_version);
+
 	if(!avatar_settings.model_url.empty())
 	{
-		GetLODModelURLOptions url_options(options.get_optimised_mesh, options.opt_mesh_version);
-
 		URLs_out.push_back(DependencyURL(getLODModelURLForLevel(avatar_settings.model_url, ob_lod_level, url_options)));
 	}
 
@@ -109,15 +109,24 @@ void Avatar::appendDependencyURLs(int ob_lod_level, const GetDependencyOptions& 
 
 	for(size_t i=0; i<avatar_settings.materials.size(); ++i)
 		avatar_settings.materials[i]->appendDependencyURLs(mat_options, ob_lod_level, URLs_out);
+
+	for(size_t i=0; i<equipped_gear.items.size(); ++i)
+	{
+		const GearItem* item = equipped_gear.items[i].ptr();
+		URLs_out.push_back(DependencyURL(getLODModelURLForLevel(item->model_url, ob_lod_level, url_options)));
+
+		for(size_t z=0; z<item->materials.size(); ++z)
+			item->materials[z]->appendDependencyURLs(mat_options, ob_lod_level, URLs_out);
+	}
 }
 
 
 void Avatar::appendDependencyURLsForAllLODLevels(const GetDependencyOptions& options, DependencyURLVector& URLs_out)
 {
+	GetLODModelURLOptions url_options(options.get_optimised_mesh, options.opt_mesh_version);
+
 	if(!avatar_settings.model_url.empty())
 	{
-		GetLODModelURLOptions url_options(options.get_optimised_mesh, options.opt_mesh_version);
-
 		URLs_out.push_back(DependencyURL(getLODModelURLForLevel(avatar_settings.model_url, 0, url_options)));
 		URLs_out.push_back(DependencyURL(getLODModelURLForLevel(avatar_settings.model_url, 1, url_options)));
 		URLs_out.push_back(DependencyURL(getLODModelURLForLevel(avatar_settings.model_url, 2, url_options)));
@@ -127,15 +136,25 @@ void Avatar::appendDependencyURLsForAllLODLevels(const GetDependencyOptions& opt
 
 	for(size_t i=0; i<avatar_settings.materials.size(); ++i)
 		avatar_settings.materials[i]->appendDependencyURLsAllLODLevels(mat_options, URLs_out);
+
+	for(size_t i=0; i<equipped_gear.items.size(); ++i)
+	{
+		const GearItem* item = equipped_gear.items[i].ptr();
+		for(int level=0; level<3; ++level)
+			URLs_out.push_back(DependencyURL(getLODModelURLForLevel(item->model_url, level, url_options)));
+
+		for(size_t z=0; z<item->materials.size(); ++z)
+			item->materials[z]->appendDependencyURLsAllLODLevels(mat_options, URLs_out);
+	}
 }
 
 
 void Avatar::appendDependencyURLsBaseLevel(const GetDependencyOptions& options, DependencyURLVector& URLs_out) const
 {
+	GetLODModelURLOptions url_options(options.get_optimised_mesh, options.opt_mesh_version);
+
 	if(!avatar_settings.model_url.empty())
 	{
-		GetLODModelURLOptions url_options(options.get_optimised_mesh, options.opt_mesh_version);
-
 		URLs_out.push_back(DependencyURL(getLODModelURLForLevel(avatar_settings.model_url, 0, url_options)));
 	}
 
@@ -143,6 +162,15 @@ void Avatar::appendDependencyURLsBaseLevel(const GetDependencyOptions& options, 
 
 	for(size_t i=0; i<avatar_settings.materials.size(); ++i)
 		avatar_settings.materials[i]->appendDependencyURLsBaseLevel(mat_options, URLs_out);
+
+	for(size_t i=0; i<equipped_gear.items.size(); ++i)
+	{
+		const GearItem* item = equipped_gear.items[i].ptr();
+		URLs_out.push_back(DependencyURL(getLODModelURLForLevel(item->model_url, 0, url_options)));
+
+		for(size_t z=0; z<item->materials.size(); ++z)
+			item->materials[z]->appendDependencyURLsBaseLevel(mat_options, URLs_out);
+	}
 }
 
 
@@ -180,6 +208,17 @@ void Avatar::convertLocalPathsToURLS(ResourceManager& resource_manager)
 
 	for(size_t i=0; i<avatar_settings.materials.size(); ++i)
 		avatar_settings.materials[i]->convertLocalPathsToURLS(resource_manager);
+
+	for(size_t i=0; i<equipped_gear.items.size(); ++i)
+	{
+		GearItem* item = equipped_gear.items[i].ptr();
+
+		if(FileUtils::fileExists(item->model_url))
+			item->model_url = resource_manager.URLForPathAndHash(toStdString(item->model_url), FileChecksum::fileChecksum(item->model_url));
+
+		for(size_t z=0; z<item->materials.size(); ++z)
+			item->materials[z]->convertLocalPathsToURLS(resource_manager);
+	}
 }
 
 
@@ -343,6 +382,7 @@ void Avatar::copyNetworkStateFrom(const Avatar& other)
 	avatar_settings.copyNetworkStateFrom(other.avatar_settings);
 
 	flags = other.flags;
+	equipped_gear = other.equipped_gear;
 }
 
 
@@ -427,6 +467,7 @@ void writeAvatarToNetworkStream(const Avatar& avatar, RandomAccessOutStream& str
 	writeAvatarSettingsToStream(avatar.avatar_settings, stream);
 
 	stream.writeUInt32(avatar.flags);
+	avatar.equipped_gear.writeToStream(stream);
 }
 
 
@@ -440,5 +481,8 @@ void readAvatarFromNetworkStreamGivenUID(RandomAccessInStream& stream, Avatar& a
 	if(!stream.endOfStream())
 	{
 		avatar.flags = stream.readUInt32();
+
+		if(!stream.endOfStream())
+			readGearItemsFromStream(stream, avatar.equipped_gear);
 	}
 }

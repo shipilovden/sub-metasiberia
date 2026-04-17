@@ -93,6 +93,14 @@ public:
 		const js::Vector<bool>& create_physics_tris_for_mat,
 		glare::Allocator* mem_allocator,
 		PhysicsShape& physics_shape_out);
+	static Reference<OpenGLMeshRenderData> makeGLMeshDataAndPhysicsShape(const std::string& lod_model_path, ArrayRef<uint8> model_data_buf, VertexBufferAllocator* vert_buf_allocator, bool skip_opengl_calls, bool build_physics_ob, bool build_dynamic_physics_ob,
+		const js::Vector<bool>& create_physics_tris_for_mat,
+		glare::Allocator* mem_allocator,
+		PhysicsShape& physics_shape_out)
+	{
+		return makeGLMeshDataAndBatchedMeshForModelPath(lod_model_path, model_data_buf, vert_buf_allocator, skip_opengl_calls, build_physics_ob, build_dynamic_physics_ob,
+			create_physics_tris_for_mat, mem_allocator, physics_shape_out);
+	}
 
 	// Build OpenGLMeshRenderData from voxel data.  Also return a reference to a physics shape.
 	static Reference<OpenGLMeshRenderData> makeModelForVoxelGroup(const VoxelGroup& voxel_group, int subsample_factor, const Matrix4f& ob_to_world, 
@@ -117,7 +125,8 @@ bool ModelLoading::isSupportedModelExtension(string_view extension)
 		StringUtils::equalCaseInsensitive(extension, "gltf") ||
 		StringUtils::equalCaseInsensitive(extension, "glb") ||
 		StringUtils::equalCaseInsensitive(extension, "vrm") ||
-		StringUtils::equalCaseInsensitive(extension, "igmesh");
+		StringUtils::equalCaseInsensitive(extension, "igmesh") ||
+		StringUtils::equalCaseInsensitive(extension, "subvox");
 }
 
 

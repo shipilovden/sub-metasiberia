@@ -176,6 +176,7 @@ public:
 	AvatarSettings avatar_settings;
 	uint32 user_flags;
 	GestureSettings gesture_settings;
+	GearItems equipped_gear;
 };
 
 
@@ -183,6 +184,14 @@ class LoggedOutMessage : public ThreadMessage
 {
 public:
 	LoggedOutMessage() : ThreadMessage(Msg_LoggedOutMessage) {}
+};
+
+
+class UserGearListMessage : public ThreadMessage
+{
+public:
+	UserGearListMessage() : ThreadMessage(Msg_UserGearListMessage) {}
+	GearItems all_gear;
 };
 
 

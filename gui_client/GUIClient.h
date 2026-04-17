@@ -38,8 +38,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "../opengl/PBOAsyncTextureUploader.h"
 #include "../opengl/AsyncGeometryUploader.h"
 #include "../shared/WorldObject.h"
+#include "../shared/GearItem.h"
 #include "../shared/LuaScriptEvaluator.h"
-#include "../shared/TimerQueue.h"
+#include "../shared/ScriptTimerQueue.h"
 #include "../settings/SettingsStore.h"
 #include <ui/UIEvents.h>
 #include <utils/ArgumentParser.h>
@@ -65,6 +66,7 @@ class TextureServer;
 class UserDetailsWidget;
 class URLWidget;
 class VideoReader;
+class GearInventoryUI;
 class ModelLoadedThreadMessage;
 class TextureLoadedThreadMessage;
 struct tls_config;
@@ -265,6 +267,10 @@ public:
 	std::string getCurrentURL() const;
 	void goBack();
 	void gestureSettingsChanged(const GestureSettings& new_gesture_settings);
+	void openGearInventory();
+	void convertSelectedObjectToGearItem();
+	void gearItemClicked(const GearItemRef& item);
+	void equippedGearItemClicked(const GearItemRef& item);
 	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings);
 	void applyWorldSettingsToOpenGLEngine();
 	void spawnFloatingChatMessageForAvatar(const UID& avatar_uid, const std::string& message, double cur_time);
@@ -283,10 +289,12 @@ public:
 	GLObjectRef makeSpeakerGLObject();
 public:
 	void makeShaders();
+	Avatar* getOurAvatar(WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
 	void loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
 	void loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, int voxel_subsample_factor, WorldStateLock& world_state_lock);
 	void loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
 	void loadModelForAvatar(Avatar* avatar);
+	void gearItemChangedOnOurAvatar(GearItem* item);
 	void loadScriptForObject(WorldObject* ob, WorldStateLock& world_state_lock);
 	void handleScriptLoadedForObUsingScript(ScriptLoadedThreadMessage* loaded_msg, WorldObject* ob);
 	void doBiomeScatteringForObject(WorldObject* ob);
@@ -675,6 +683,7 @@ public:
 	double xr_right_controller_last_valid_time;
 	bool xr_runtime_probe_done;
 	bool xr_logged_head_pose_alignment;
+	double xr_last_live_head_pose_time;
 	std::string xr_pose_trace_path;
 	std::ofstream xr_pose_trace_stream;
 	double xr_pose_trace_start_time;
@@ -810,6 +819,7 @@ public:
 	ChatUI chat_ui; // Draws chat user-interface, showing chat from other users plus the line edit for chatting.
 	PhotoModeUI photo_mode_ui;
 	WebcamCapture webcam_capture; // Webcam capture and display
+	Reference<GearInventoryUI> gear_inventory_ui;
 	Reference<MiniMap> minimap;
 
 	bool running_destructor;
@@ -909,6 +919,7 @@ public:
 	std::string logged_in_user_name;
 	uint32 logged_in_user_flags;
 	AvatarSettings logged_in_avatar_settings; // Last avatar settings received from server in a LoggedInMessage.
+	GearItems logged_in_equipped_gear; // Last equipped gear settings received from server in a LoggedInMessage.
 
 	bool server_using_lod_chunks; // Should be equal to !world_state->lod_chunks.empty(), cached in a boolean.
 
@@ -975,8 +986,8 @@ public:
 
 	Reference<SubstrataLuaVM> lua_vm;
 
-	TimerQueue timer_queue;
-	std::vector<TimerQueueTimer> temp_triggered_timers;
+	ScriptTimerQueue timer_queue;
+	std::vector<ScriptTimerQueueTimer> temp_triggered_timers;
 
 	struct ContactAddedEvent
 	{

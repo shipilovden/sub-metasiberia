@@ -80,7 +80,7 @@ static XRRuntimeProbeResult makeDefaultResult()
 
 
 #if defined(XR_SUPPORT)
-static const float XR_WORLD_VERTICAL_TRIM_METRES = 0.9f;
+static const float XR_WORLD_VERTICAL_TRIM_METRES = 0.0f;
 
 static std::string makeVersionString(uint64_t version)
 {
@@ -2168,38 +2168,40 @@ void XRSession::renderFrame(OpenGLEngine& opengl_engine, const CameraController&
 
 				if(head_pose_ready)
 				{
-					const float current_world_heading = (float)cam_controller.getAngles().x;
+					if(!(head_position_tracked && head_orientation_tracked))
+					{
+						last_result.message = "OpenXR headset pose is valid but not actively tracked yet; waiting for a live tracked HMD pose before XR alignment.";
+					}
+					else
+					{
+						const float current_world_heading = (float)cam_controller.getAngles().x;
 					bool calibration_ready = !state->tracking_space_calibration_pending;
 					if(state->tracking_space_calibration_pending && (state->session_state == XR_SESSION_STATE_FOCUSED))
 					{
 						const double now = Clock::getTimeSinceInit();
+						const bool stage_head_height_plausible =
+							(state->app_space_type != XR_REFERENCE_SPACE_TYPE_STAGE) ||
+							(head_pose.position.y >= 1.05f);
+						const double required_stable_pose_seconds = stage_head_height_plausible ? 0.35 : 0.75;
 
-						// If SteamVR gives us a floor-relative STAGE space, don't calibrate while the headset is still resting low on a desk.
-						if((state->app_space_type == XR_REFERENCE_SPACE_TYPE_STAGE) && !(head_pose.position.y >= 1.05f))
+						const bool moved_since_candidate =
+							!state->calibration_candidate_pose_valid ||
+							(positionDistance(head_pose.position, state->calibration_candidate_pose.position) > 0.05f) ||
+							(orientationAngleDelta(head_pose.orientation, state->calibration_candidate_pose.orientation) > degreeToRad(6.f));
+
+						if(moved_since_candidate)
 						{
-							state->calibration_candidate_pose_valid = false;
-							state->calibration_candidate_start_time = -1.0;
-							last_result.message = "OpenXR head alignment is waiting for the headset to be worn at head height.";
+							state->calibration_candidate_pose = head_pose;
+							state->calibration_candidate_pose_valid = true;
+							state->calibration_candidate_start_time = now;
+							last_result.message = stage_head_height_plausible ?
+								"OpenXR head alignment is waiting for a stable neutral headset pose." :
+								"OpenXR STAGE head height looks low for this runtime; waiting for a stable focused headset pose before calibrating anyway.";
 						}
-						else
+						else if((state->calibration_candidate_start_time >= 0.0) && ((now - state->calibration_candidate_start_time) >= required_stable_pose_seconds))
 						{
-							const bool moved_since_candidate =
-								!state->calibration_candidate_pose_valid ||
-								(positionDistance(head_pose.position, state->calibration_candidate_pose.position) > 0.05f) ||
-								(orientationAngleDelta(head_pose.orientation, state->calibration_candidate_pose.orientation) > degreeToRad(6.f));
-
-							if(moved_since_candidate)
-							{
-								state->calibration_candidate_pose = head_pose;
-								state->calibration_candidate_pose_valid = true;
-								state->calibration_candidate_start_time = now;
-								last_result.message = "OpenXR head alignment is waiting for a stable neutral headset pose.";
-							}
-							else if((state->calibration_candidate_start_time >= 0.0) && ((now - state->calibration_candidate_start_time) >= 0.35))
-							{
-								calibration_ready = true;
-								state->tracking_space_calibration_pending = false;
-							}
+							calibration_ready = true;
+							state->tracking_space_calibration_pending = false;
 						}
 					}
 
@@ -2225,11 +2227,7 @@ void XRSession::renderFrame(OpenGLEngine& opengl_engine, const CameraController&
 					);
 					const Vec3d anchor_pos_d = cam_controller.getFirstPersonPosition();
 					const Vec3f anchor_pos((float)anchor_pos_d.x, (float)anchor_pos_d.y, (float)anchor_pos_d.z + XR_WORLD_VERTICAL_TRIM_METRES);
-					const Vec3f rotated_calibration_head_pos = rotateAroundWorldUp(state->calibration_tracking_head_pos_engine, effective_yaw_offset);
-					Vec3f world_translation = anchor_pos - rotated_calibration_head_pos;
-					// Keep the vertical XR baseline tied to the engine eye height instead of the transient headset height
-					// observed during the current focus/recenter pose.
-					world_translation.z = (float)anchor_pos_d.z - PlayerPhysics::getEyeHeight() + XR_WORLD_VERTICAL_TRIM_METRES;
+					const Vec3f world_translation = anchor_pos - rotateAroundWorldUp(state->calibration_tracking_head_pos_engine, effective_yaw_offset);
 
 					head_pose_state.active = true;
 					raw_head_pose_state.active = true;
@@ -2463,6 +2461,7 @@ void XRSession::renderFrame(OpenGLEngine& opengl_engine, const CameraController&
 						last_result.message = "OpenXR projection layer submitted with " + std::to_string(projection_views.size()) + " stereo views.";
 					}
 				}
+				}
 			}
 			else if(last_result.located_view_count == 0)
 			{
@@ -2499,6 +2498,21 @@ void XRSession::renderFrame(OpenGLEngine& opengl_engine, const CameraController&
 bool XRSession::isInitialised() const
 {
 	return last_result.session_created && last_result.local_reference_space_created && last_result.swapchains_created;
+}
+
+
+bool XRSession::isVisibleOrFocused() const
+{
+#if defined(XR_SUPPORT)
+	if(!state)
+		return false;
+
+	return
+		(state->session_state == XR_SESSION_STATE_VISIBLE) ||
+		(state->session_state == XR_SESSION_STATE_FOCUSED);
+#else
+	return false;
+#endif
 }
 
 
