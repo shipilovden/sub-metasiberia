@@ -27,6 +27,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/Base64.h>
 #include <utils/StringUtils.h>
 #include "superluminal/PerformanceAPI.h"
+#include <cmath>
 #include <vector>
 #if EMSCRIPTEN
 #include <emscripten.h>
@@ -174,14 +175,44 @@ struct AudioPlayerTrack
 };
 
 
-Colour3f getAudioPlayerBodyColour(const WorldObject& ob)
+const WorldMaterial* getAudioPlayerBodyMaterial(const WorldObject& ob)
 {
 	if(ob.materials.size() > 1 && ob.materials[1].nonNull())
-		return ob.materials[1]->colour_rgb;
+		return ob.materials[1].ptr();
 	else if(!ob.materials.empty() && ob.materials[0].nonNull())
-		return ob.materials[0]->colour_rgb;
+		return ob.materials[0].ptr();
+	else
+		return NULL;
+}
+
+
+Colour3f getAudioPlayerBodyColour(const WorldObject& ob)
+{
+	const WorldMaterial* body_mat = getAudioPlayerBodyMaterial(ob);
+	if(body_mat)
+		return body_mat->colour_rgb;
 	else
 		return Colour3f(0.85f);
+}
+
+
+URLString getAudioPlayerBodyTextureURL(const WorldObject& ob)
+{
+	const WorldMaterial* body_mat = getAudioPlayerBodyMaterial(ob);
+	if(body_mat)
+		return body_mat->colour_texture_url;
+	else
+		return URLString();
+}
+
+
+Vec2f getAudioPlayerBodyTextureScale(const WorldObject& ob)
+{
+	const WorldMaterial* body_mat = getAudioPlayerBodyMaterial(ob);
+	if(body_mat)
+		return Vec2f(body_mat->tex_matrix.elem(0, 0), body_mat->tex_matrix.elem(1, 1));
+	else
+		return Vec2f(1.f);
 }
 
 
@@ -247,11 +278,31 @@ std::string resolveAudioPlayerTrackURL(const std::string& playlist_url, Resource
 }
 
 
+std::string resolveAudioPlayerAssetURL(const URLString& asset_url, ResourceManager& resource_manager, const std::string& server_hostname)
+{
+	if(asset_url.empty())
+		return "";
+
+	const std::string asset_url_std = toStdString(asset_url);
+	if(hasPrefix(asset_url_std, "http://") || hasPrefix(asset_url_std, "https://"))
+		return asset_url_std;
+
+	ResourceRef resource = resource_manager.getExistingResourceForURL(asset_url);
+	if(resource.nonNull() && resource->getState() == Resource::State_Present)
+		return "https://resource/" + web::Escaping::URLEscape(asset_url_std);
+	else
+		return "http://" + server_hostname + "/resource/" + web::Escaping::URLEscape(asset_url_std);
+}
+
+
 std::string makeAudioPlayerStateKey(const WorldObject& ob)
 {
 	const Colour3f body_col = getAudioPlayerBodyColour(ob);
+	const URLString body_tex_url = getAudioPlayerBodyTextureURL(ob);
+	const Vec2f body_tex_scale = getAudioPlayerBodyTextureScale(ob);
 	return ob.target_url + "\n" + toString(ob.flags) + "\n" + toString(ob.audio_volume) + "\n" + ob.content + "\n" +
-		toString(body_col.r) + "," + toString(body_col.g) + "," + toString(body_col.b);
+		toString(body_col.r) + "," + toString(body_col.g) + "," + toString(body_col.b) + "\n" +
+		toStdString(body_tex_url) + "\n" + toString(body_tex_scale.x) + "," + toString(body_tex_scale.y);
 }
 
 
@@ -299,6 +350,14 @@ std::string makeAudioPlayerRootPage(const WorldObject& ob, ResourceManager& reso
 		toString(toCSSChannel(body_col.r)) + "," +
 		toString(toCSSChannel(body_col.g)) + "," +
 		toString(toCSSChannel(body_col.b)) + ")";
+
+	const std::string resolved_body_texture_url = resolveAudioPlayerAssetURL(getAudioPlayerBodyTextureURL(ob), resource_manager, server_hostname);
+	std::string body_texture_url_base64;
+	Base64::encode(resolved_body_texture_url.data(), resolved_body_texture_url.size(), body_texture_url_base64);
+
+	const Vec2f body_tex_scale = getAudioPlayerBodyTextureScale(ob);
+	const float body_tex_scale_x = (std::fabs(body_tex_scale.x) > 1.0e-4f) ? body_tex_scale.x : 1.f;
+	const float body_tex_scale_y = (std::fabs(body_tex_scale.y) > 1.0e-4f) ? body_tex_scale.y : 1.f;
 
 	return std::string(
 		R"PLAYER(<html>
@@ -352,6 +411,9 @@ const autoplay=)PLAYER") + std::string(autoplay ? "true" : "false") + std::strin
 const loopPlaylistDefault=)PLAYER") + std::string(loop ? "true" : "false") + std::string(R"PLAYER(;
 const shufflePlaylistDefault=)PLAYER") + std::string(shuffle ? "true" : "false") + std::string(R"PLAYER(;
 const initialVolume=)PLAYER") + toString(initial_volume) + std::string(R"PLAYER(;
+const bodyTextureURL=atob(')PLAYER") + body_texture_url_base64 + std::string(R"PLAYER(');
+const bodyTextureScaleX=)PLAYER") + toString(body_tex_scale_x) + std::string(R"PLAYER(;
+const bodyTextureScaleY=)PLAYER") + toString(body_tex_scale_y) + std::string(R"PLAYER(;
 const audio=document.getElementById('playerAudio');
 const progressTrack=document.getElementById('progressTrack');
 const progressFill=document.getElementById('progressFill');
@@ -379,6 +441,30 @@ const nextSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M15 5h3v14h-
 const playSvg=`<svg viewBox='0 0 64 64' aria-hidden='true'><path d='M24 18l22 14-22 14z'/></svg>`;
 const pauseSvg=`<svg viewBox='0 0 64 64' aria-hidden='true'><rect x='21' y='18' width='8' height='28' rx='2'/><rect x='35' y='18' width='8' height='28' rx='2'/></svg>`;
 function clamp01(value){return Math.max(0, Math.min(1, value));}
+function applyBodyTextureStyles()
+{
+	if(!bodyTextureURL)
+		return;
+
+	const safeScaleX=Math.max(Math.abs(bodyTextureScaleX), 0.0001);
+	const safeScaleY=Math.max(Math.abs(bodyTextureScaleY), 0.0001);
+	const bgSize=(100 / safeScaleX) + '% ' + (100 / safeScaleY) + '%';
+	const bgImage='url(' + JSON.stringify(bodyTextureURL) + ')';
+
+	document.body.style.backgroundImage=bgImage;
+	document.body.style.backgroundRepeat='repeat';
+	document.body.style.backgroundSize=bgSize;
+	document.body.style.backgroundPosition='0 0';
+
+	const playerElem=document.querySelector('.player');
+	if(playerElem)
+	{
+		playerElem.style.backgroundImage=bgImage;
+		playerElem.style.backgroundRepeat='repeat';
+		playerElem.style.backgroundSize=bgSize;
+		playerElem.style.backgroundPosition='0 0';
+	}
+}
 function hasUsableDuration(){return Number.isFinite(audio.duration) && audio.duration > 0;}
 function clearPendingSeek()
 {
@@ -626,6 +712,7 @@ audio.addEventListener('loadedmetadata', function(){applyPendingSeekIfPossible(t
 audio.addEventListener('durationchange', function(){applyPendingSeekIfPossible(true);syncProgressFromAudio();});
 audio.addEventListener('canplay', function(){applyPendingSeekIfPossible(true);syncProgressFromAudio();});
 audio.addEventListener('ended', function(){if(loopEnabled || shuffleEnabled || (currentIndex + 1 < playlist.length)){selectNext(true);}else{updateProgressVisual(1);updateButtons();}});
+applyBodyTextureStyles();
 updateEmptyState();
 updateProgressVisual(0);
 updateButtons();
