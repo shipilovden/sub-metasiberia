@@ -26,6 +26,10 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/BufferInStream.h>
 #include <utils/Base64.h>
 #include <utils/RuntimeCheck.h>
+#include <algorithm>
+#include <cctype>
+#include <cerrno>
+#include <cstdlib>
 #include <direct3d/Direct3DUtils.h>
 #include <tracy/Tracy.hpp>
 #ifdef _WIN32
@@ -386,7 +390,11 @@ public:
 class EmbeddedBrowserResourceHandler : public CefResourceHandler
 {
 public:
-	EmbeddedBrowserResourceHandler(Reference<ResourceManager> resource_manager_, const std::string& root_page_) : in_stream(NULL), resource_manager(resource_manager_), root_page(root_page_) {}
+	EmbeddedBrowserResourceHandler(Reference<ResourceManager> resource_manager_, const std::string& root_page_)
+	:	in_stream(NULL), resource_manager(resource_manager_), root_page(root_page_),
+		response_total_size(0), response_range_start(0), response_range_end(0), response_num_bytes_remaining(0),
+		partial_content_response(false), invalid_range_request(false)
+	{}
 	~EmbeddedBrowserResourceHandler() { delete in_stream; }
 
 	// Open the response stream. To handle the request immediately set
@@ -412,6 +420,8 @@ public:
 			in_stream = new BufferInStream(root_page);
 
 			response_mime_type = "text/html";
+			initResponseStateForCurrentStream();
+			prepareByteRangeResponseState(request);
 			return true;
 		}
 
@@ -430,6 +440,8 @@ public:
 					in_stream = new FileInStream(path);
 
 					response_mime_type = web::ResponseUtils::getContentTypeForPath(resource_URL);
+					initResponseStateForCurrentStream();
+					prepareByteRangeResponseState(request);
 
 					handle_request = true;
 					return true;
@@ -466,9 +478,29 @@ public:
 	virtual void GetResponseHeaders(CefRefPtr<CefResponse> response, int64& response_length, CefString& redirectUrl) override
 	{
 		response->SetMimeType(response_mime_type);
+		response->SetHeaderByName("Accept-Ranges", "bytes", true);
+
+		if(invalid_range_request)
+		{
+			response->SetStatus(416);
+			response->SetStatusText("Requested Range Not Satisfiable");
+			response->SetHeaderByName("Content-Range", "bytes */" + toString(response_total_size), true);
+			response_length = 0;
+			return;
+		}
 
 		if(in_stream)
-			response_length = (int64)this->in_stream->size();
+		{
+			if(partial_content_response)
+			{
+				response->SetStatus(206);
+				response->SetStatusText("Partial Content");
+				response->SetHeaderByName("Content-Range", "bytes " + toString(response_range_start) + "-" + toString(response_range_end) + "/" + toString(response_total_size), true);
+				response_length = (int64)response_num_bytes_remaining;
+			}
+			else
+				response_length = (int64)response_num_bytes_remaining;
+		}
 		else
 			response_length = -1;
 	}
@@ -486,10 +518,16 @@ public:
 		CefRefPtr<CefResourceSkipCallback> callback) override
 	{
 		//conPrint("Skipping " + toString(bytes_to_skip) + " B...");
-		if(in_stream)
+		if(in_stream && !invalid_range_request)
 		{
 			try
 			{
+				if(bytes_to_skip <= 0)
+				{
+					bytes_skipped = 0;
+					return true;
+				}
+
 				// There seems to be a CEF bug where a Skip call can be made at the start of a resource read after a video repeats.
 				// This breaks video looping, so keep the old workaround for videos only.
 				// However for audio seeking we must honour an initial Skip() call, otherwise the <audio> element jumps back to time 0 after a seek.
@@ -499,9 +537,17 @@ public:
 					hasPrefix(response_mime_type, "video/");
 
 				if(!ignore_initial_skip_for_video_loop_workaround)
-					in_stream->advanceReadIndex(bytes_to_skip);
+				{
+					const size_t file_bytes_available = in_stream->size() - in_stream->getReadIndex();
+					const size_t bytes_available = std::min(file_bytes_available, response_num_bytes_remaining);
+					const size_t use_bytes_to_skip = std::min((size_t)bytes_to_skip, bytes_available);
+					in_stream->advanceReadIndex(use_bytes_to_skip);
+					response_num_bytes_remaining -= use_bytes_to_skip;
+					bytes_skipped = (int64)use_bytes_to_skip;
+				}
+				else
+					bytes_skipped = bytes_to_skip;
 
-				bytes_skipped = bytes_to_skip;
 				return true;
 			}
 			catch(glare::Exception&)
@@ -531,12 +577,13 @@ public:
 	// called.
 	virtual bool Read(void* data_out, int bytes_to_read, int& bytes_read, CefRefPtr<CefResourceReadCallback> callback) override
 	{
-		if(in_stream)
+		if(in_stream && !invalid_range_request)
 		{
 			try
 			{
 				//conPrint("Reading up to " + toString(bytes_to_read) + " B, getReadIndex: " + toString(file_in_stream->getReadIndex()));
-				const size_t bytes_available = in_stream->size() - in_stream->getReadIndex(); // bytes still available to read in the file
+				const size_t file_bytes_available = in_stream->size() - in_stream->getReadIndex(); // bytes still available to read in the file
+				const size_t bytes_available = std::min(file_bytes_available, response_num_bytes_remaining);
 				if(bytes_available == 0)
 				{
 					bytes_read = 0; // indicate response completion (EOF)
@@ -546,6 +593,7 @@ public:
 				{
 					const size_t use_bytes_to_read = myMin((size_t)bytes_to_read, bytes_available);
 					in_stream->readData(data_out, use_bytes_to_read);
+					response_num_bytes_remaining -= use_bytes_to_read;
 					bytes_read = (int)use_bytes_to_read;
 					return true;
 				}
@@ -570,10 +618,184 @@ public:
 		// conPrint("\n" + doubleToStringNDecimalPlaces(Clock::getTimeSinceInit(), 2) + "------------------AnimatedTexResourceHandler::Cancel()------------------");
 	}
 
+private:
+	static std::string trimASCIIWhitespace(const std::string& s)
+	{
+		size_t begin = 0;
+		size_t end = s.size();
+		while((begin < end) && std::isspace((unsigned char)s[begin]))
+			++begin;
+		while((end > begin) && std::isspace((unsigned char)s[end - 1]))
+			--end;
+		return s.substr(begin, end - begin);
+	}
+
+	static bool equalsIgnoreCaseASCII(const std::string& a, const std::string& b)
+	{
+		if(a.size() != b.size())
+			return false;
+		for(size_t i=0; i<a.size(); ++i)
+			if(std::tolower((unsigned char)a[i]) != std::tolower((unsigned char)b[i]))
+				return false;
+		return true;
+	}
+
+	static bool parseUnsignedInt64(const std::string& s, uint64& value_out)
+	{
+		if(s.empty())
+			return false;
+		for(size_t i=0; i<s.size(); ++i)
+			if(!std::isdigit((unsigned char)s[i]))
+				return false;
+
+		errno = 0;
+		char* endptr = NULL;
+		const unsigned long long parsed = std::strtoull(s.c_str(), &endptr, 10);
+		if((endptr == s.c_str()) || (*endptr != '\0') || (errno == ERANGE))
+			return false;
+
+		value_out = (uint64)parsed;
+		return true;
+	}
+
+	static std::string getHeaderValueCaseInsensitive(const CefRequest::HeaderMap& header_map, const std::string& header_name)
+	{
+		for(CefRequest::HeaderMap::const_iterator it=header_map.begin(); it!=header_map.end(); ++it)
+			if(equalsIgnoreCaseASCII(it->first.ToString(), header_name))
+				return it->second.ToString();
+		return "";
+	}
+
+	void initResponseStateForCurrentStream()
+	{
+		partial_content_response = false;
+		invalid_range_request = false;
+
+		response_total_size = in_stream ? in_stream->size() : 0;
+		response_range_start = 0;
+		response_range_end = response_total_size > 0 ? response_total_size - 1 : 0;
+		response_num_bytes_remaining = response_total_size;
+	}
+
+	void prepareByteRangeResponseState(CefRefPtr<CefRequest> request)
+	{
+		if(!in_stream || !request)
+			return;
+
+		CefRequest::HeaderMap header_map;
+		request->GetHeaderMap(header_map);
+
+		const std::string range_header_raw = trimASCIIWhitespace(getHeaderValueCaseInsensitive(header_map, "Range"));
+		if(range_header_raw.empty())
+			return;
+
+		std::string range_header_lower = range_header_raw;
+		for(size_t i=0; i<range_header_lower.size(); ++i)
+			range_header_lower[i] = (char)std::tolower((unsigned char)range_header_lower[i]);
+
+		if(!hasPrefix(range_header_lower, "bytes="))
+			return;
+
+		const uint64 total_size = (uint64)response_total_size;
+		if(total_size == 0)
+		{
+			invalid_range_request = true;
+			response_num_bytes_remaining = 0;
+			return;
+		}
+
+		std::string range_spec = trimASCIIWhitespace(range_header_raw.substr(6));
+		const size_t comma_pos = range_spec.find(',');
+		if(comma_pos != std::string::npos)
+			range_spec = trimASCIIWhitespace(range_spec.substr(0, comma_pos));
+
+		const size_t dash_pos = range_spec.find('-');
+		if(dash_pos == std::string::npos)
+		{
+			invalid_range_request = true;
+			response_num_bytes_remaining = 0;
+			return;
+		}
+
+		const std::string start_str = trimASCIIWhitespace(range_spec.substr(0, dash_pos));
+		const std::string end_str = trimASCIIWhitespace(range_spec.substr(dash_pos + 1));
+		if(start_str.empty() && end_str.empty())
+		{
+			invalid_range_request = true;
+			response_num_bytes_remaining = 0;
+			return;
+		}
+
+		uint64 start = 0;
+		uint64 end = total_size - 1;
+		if(start_str.empty()) // bytes=-500 (last 500 bytes)
+		{
+			uint64 suffix_len = 0;
+			if(!parseUnsignedInt64(end_str, suffix_len) || (suffix_len == 0))
+			{
+				invalid_range_request = true;
+				response_num_bytes_remaining = 0;
+				return;
+			}
+
+			if(suffix_len >= total_size)
+				start = 0;
+			else
+				start = total_size - suffix_len;
+		}
+		else
+		{
+			if(!parseUnsignedInt64(start_str, start) || (start >= total_size))
+			{
+				invalid_range_request = true;
+				response_num_bytes_remaining = 0;
+				return;
+			}
+
+			if(!end_str.empty())
+			{
+				if(!parseUnsignedInt64(end_str, end))
+				{
+					invalid_range_request = true;
+					response_num_bytes_remaining = 0;
+					return;
+				}
+				if(end < start)
+				{
+					invalid_range_request = true;
+					response_num_bytes_remaining = 0;
+					return;
+				}
+				if(end >= total_size)
+					end = total_size - 1;
+			}
+		}
+
+		try
+		{
+			in_stream->setReadIndex((size_t)start);
+			response_range_start = (size_t)start;
+			response_range_end = (size_t)end;
+			response_num_bytes_remaining = (size_t)(end - start + 1);
+			partial_content_response = true;
+		}
+		catch(glare::Exception&)
+		{
+			invalid_range_request = true;
+			response_num_bytes_remaining = 0;
+		}
+	}
+
 	std::string root_page;
 	std::string response_mime_type;
 	RandomAccessInStream* in_stream;
 	Reference<ResourceManager> resource_manager;
+	size_t response_total_size;
+	size_t response_range_start;
+	size_t response_range_end;
+	size_t response_num_bytes_remaining;
+	bool partial_content_response;
+	bool invalid_range_request;
 
 	IMPLEMENT_REFCOUNTING(EmbeddedBrowserResourceHandler);
 };

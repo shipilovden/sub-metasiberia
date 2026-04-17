@@ -340,6 +340,11 @@ let currentIndex=0;
 let shuffleEnabled=shufflePlaylistDefault;
 let loopEnabled=loopPlaylistDefault;
 let userIsSeeking=false;
+let pendingSeekProgress=null;
+let pendingSeekAttemptCount=0;
+let pendingSeekLastAttemptMs=0;
+const pendingSeekRetryDelayMs=180;
+const pendingSeekMaxAttempts=12;
 const shuffleSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 7h4c3.5 0 4.5 5 8 5h4' fill='none'/><path d='M17 4l3 3-3 3' fill='none'/><path d='M4 17h4c3.5 0 4.5-5 8-5h4' fill='none'/><path d='M17 14l3 3-3 3' fill='none'/></svg>`;
 const repeatSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 7h10a3 3 0 0 1 3 3v1' fill='none'/><path d='M17 4l3 3-3 3' fill='none'/><path d='M17 17H7a3 3 0 0 1-3-3v-1' fill='none'/><path d='M7 20l-3-3 3-3' fill='none'/></svg>`;
 const prevSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 5h3v14H6z'/><path d='M18 6v12l-8-6 8-6z'/></svg>`;
@@ -348,6 +353,52 @@ const playSvg=`<svg viewBox='0 0 64 64' aria-hidden='true'><path d='M24 18l22 14
 const pauseSvg=`<svg viewBox='0 0 64 64' aria-hidden='true'><rect x='21' y='18' width='8' height='28' rx='2'/><rect x='35' y='18' width='8' height='28' rx='2'/></svg>`;
 function clamp01(value){return Math.max(0, Math.min(1, value));}
 function hasUsableDuration(){return Number.isFinite(audio.duration) && audio.duration > 0;}
+function clearPendingSeek()
+{
+	pendingSeekProgress=null;
+	pendingSeekAttemptCount=0;
+	pendingSeekLastAttemptMs=0;
+}
+function pendingSeekTargetTime(){return clamp01(pendingSeekProgress) * audio.duration;}
+function pendingSeekReachedTarget()
+{
+	const tolerance=Math.max(0.08, audio.duration * 0.001);
+	return Math.abs(audio.currentTime - pendingSeekTargetTime()) <= tolerance;
+}
+function applyPendingSeekIfPossible(force)
+{
+	if(pendingSeekProgress === null)
+		return;
+
+	if(!hasUsableDuration())
+		return;
+
+	if(pendingSeekReachedTarget())
+	{
+		clearPendingSeek();
+		return;
+	}
+
+	const now=performance.now();
+	if(!force)
+	{
+		if(audio.seeking)
+			return;
+
+		if((pendingSeekAttemptCount > 0) && ((now - pendingSeekLastAttemptMs) < pendingSeekRetryDelayMs))
+			return;
+	}
+
+	if(pendingSeekAttemptCount >= pendingSeekMaxAttempts)
+	{
+		clearPendingSeek();
+		return;
+	}
+
+	audio.currentTime=pendingSeekTargetTime();
+	pendingSeekAttemptCount++;
+	pendingSeekLastAttemptMs=now;
+}
 function updateEmptyState(){emptyElem.style.display=playlist.length ? 'none' : 'block';}
 function updateProgressVisual(progress)
 {
@@ -376,8 +427,17 @@ function updateButtons()
 }
 function syncProgressFromAudio()
 {
+	applyPendingSeekIfPossible(false);
+
 	if(!userIsSeeking)
-		updateProgressVisual(hasUsableDuration() ? (audio.currentTime / audio.duration) : 0);
+	{
+		if(pendingSeekProgress !== null)
+			updateProgressVisual(pendingSeekProgress);
+		else if(hasUsableDuration())
+			updateProgressVisual(audio.currentTime / audio.duration);
+		else
+			updateProgressVisual(0);
+	}
 	updateButtons();
 }
 function playCurrent()
@@ -402,6 +462,7 @@ function selectTrack(index, shouldPlay)
 {
 	if(!playlist.length)
 	{
+		clearPendingSeek();
 		audio.pause();
 		audio.removeAttribute('src');
 		audio.load();
@@ -413,6 +474,7 @@ function selectTrack(index, shouldPlay)
 
 	updateEmptyState();
 	currentIndex=((index % playlist.length) + playlist.length) % playlist.length;
+	clearPendingSeek();
 	audio.src=playlist[currentIndex].url;
 	audio.load();
 	updateProgressVisual(0);
@@ -484,9 +546,11 @@ function progressForEvent(event)
 function setPlaybackProgress(progress)
 {
 	const clamped=clamp01(progress);
+	pendingSeekProgress=clamped;
+	pendingSeekAttemptCount=0;
+	pendingSeekLastAttemptMs=0;
 	updateProgressVisual(clamped);
-	if(hasUsableDuration())
-		audio.currentTime=clamped * audio.duration;
+	applyPendingSeekIfPossible(true);
 }
 function beginSeek(event)
 {
@@ -528,9 +592,12 @@ progressTrack.addEventListener('click', function(event){if(userIsSeeking || !pla
 audio.addEventListener('play', updateButtons);
 audio.addEventListener('pause', updateButtons);
 audio.addEventListener('timeupdate', syncProgressFromAudio);
-audio.addEventListener('seeked', syncProgressFromAudio);
-audio.addEventListener('loadedmetadata', syncProgressFromAudio);
-audio.addEventListener('durationchange', syncProgressFromAudio);
+audio.addEventListener('seeking', syncProgressFromAudio);
+audio.addEventListener('seeked', function(){applyPendingSeekIfPossible(true);syncProgressFromAudio();});
+audio.addEventListener('progress', syncProgressFromAudio);
+audio.addEventListener('loadedmetadata', function(){applyPendingSeekIfPossible(true);syncProgressFromAudio();});
+audio.addEventListener('durationchange', function(){applyPendingSeekIfPossible(true);syncProgressFromAudio();});
+audio.addEventListener('canplay', function(){applyPendingSeekIfPossible(true);syncProgressFromAudio();});
 audio.addEventListener('ended', function(){if(loopEnabled || shuffleEnabled || (currentIndex + 1 < playlist.length)){selectNext(true);}else{updateProgressVisual(1);updateButtons();}});
 updateEmptyState();
 updateProgressVisual(0);
