@@ -196,11 +196,41 @@ Colour3f getAudioPlayerBodyColour(const WorldObject& ob)
 }
 
 
+Colour3f getAudioPlayerBodyEmissionColour(const WorldObject& ob)
+{
+	const WorldMaterial* body_mat = getAudioPlayerBodyMaterial(ob);
+	if(body_mat)
+		return body_mat->emission_rgb;
+	else
+		return Colour3f(0.f);
+}
+
+
+float getAudioPlayerBodyLuminance(const WorldObject& ob)
+{
+	const WorldMaterial* body_mat = getAudioPlayerBodyMaterial(ob);
+	if(body_mat)
+		return body_mat->emission_lum_flux_or_lum;
+	else
+		return 0.f;
+}
+
+
 URLString getAudioPlayerBodyTextureURL(const WorldObject& ob)
 {
 	const WorldMaterial* body_mat = getAudioPlayerBodyMaterial(ob);
 	if(body_mat)
 		return body_mat->colour_texture_url;
+	else
+		return URLString();
+}
+
+
+URLString getAudioPlayerBodyEmissionTextureURL(const WorldObject& ob)
+{
+	const WorldMaterial* body_mat = getAudioPlayerBodyMaterial(ob);
+	if(body_mat)
+		return body_mat->emission_texture_url;
 	else
 		return URLString();
 }
@@ -298,11 +328,16 @@ std::string resolveAudioPlayerAssetURL(const URLString& asset_url, ResourceManag
 std::string makeAudioPlayerStateKey(const WorldObject& ob)
 {
 	const Colour3f body_col = getAudioPlayerBodyColour(ob);
+	const Colour3f emission_col = getAudioPlayerBodyEmissionColour(ob);
+	const float luminance = getAudioPlayerBodyLuminance(ob);
 	const URLString body_tex_url = getAudioPlayerBodyTextureURL(ob);
+	const URLString emission_tex_url = getAudioPlayerBodyEmissionTextureURL(ob);
 	const Vec2f body_tex_scale = getAudioPlayerBodyTextureScale(ob);
 	return ob.target_url + "\n" + toString(ob.flags) + "\n" + toString(ob.audio_volume) + "\n" + ob.content + "\n" +
 		toString(body_col.r) + "," + toString(body_col.g) + "," + toString(body_col.b) + "\n" +
-		toStdString(body_tex_url) + "\n" + toString(body_tex_scale.x) + "," + toString(body_tex_scale.y);
+		toStdString(body_tex_url) + "\n" + toString(body_tex_scale.x) + "," + toString(body_tex_scale.y) + "\n" +
+		toString(emission_col.r) + "," + toString(emission_col.g) + "," + toString(emission_col.b) + "\n" +
+		toString(luminance) + "\n" + toStdString(emission_tex_url);
 }
 
 
@@ -351,9 +386,20 @@ std::string makeAudioPlayerRootPage(const WorldObject& ob, ResourceManager& reso
 		toString(toCSSChannel(body_col.g)) + "," +
 		toString(toCSSChannel(body_col.b)) + ")";
 
+	const Colour3f emission_col = getAudioPlayerBodyEmissionColour(ob);
+	const int emission_col_r = toCSSChannel(emission_col.r);
+	const int emission_col_g = toCSSChannel(emission_col.g);
+	const int emission_col_b = toCSSChannel(emission_col.b);
+	const float body_luminance = getAudioPlayerBodyLuminance(ob);
+	const float luminance = (body_luminance > 0.f) ? body_luminance : 0.f;
+
 	const std::string resolved_body_texture_url = resolveAudioPlayerAssetURL(getAudioPlayerBodyTextureURL(ob), resource_manager, server_hostname);
 	std::string body_texture_url_base64;
 	Base64::encode(resolved_body_texture_url.data(), resolved_body_texture_url.size(), body_texture_url_base64);
+
+	const std::string resolved_emission_texture_url = resolveAudioPlayerAssetURL(getAudioPlayerBodyEmissionTextureURL(ob), resource_manager, server_hostname);
+	std::string emission_texture_url_base64;
+	Base64::encode(resolved_emission_texture_url.data(), resolved_emission_texture_url.size(), emission_texture_url_base64);
 
 	const Vec2f body_tex_scale = getAudioPlayerBodyTextureScale(ob);
 	const float body_tex_scale_x = (std::fabs(body_tex_scale.x) > 1.0e-4f) ? body_tex_scale.x : 1.f;
@@ -366,7 +412,11 @@ std::string makeAudioPlayerRootPage(const WorldObject& ob, ResourceManager& reso
 <style>
 html,body{margin:0;width:100%;height:100%;background:)PLAYER") + body_col_css + std::string(R"PLAYER(;color:#111111;font-family:Segoe UI,Arial,sans-serif;overflow:hidden;-webkit-user-select:none;}
 body{display:flex;align-items:center;justify-content:center;}
-.player{width:100%;height:100%;box-sizing:border-box;padding:18px 28px 20px;background:)PLAYER") + body_col_css + std::string(R"PLAYER(;display:flex;flex-direction:column;justify-content:center;gap:14px;}
+.player{position:relative;width:100%;height:100%;box-sizing:border-box;overflow:hidden;}
+.player-base,.player-emission{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;}
+.player-base{background:)PLAYER") + body_col_css + std::string(R"PLAYER(;}
+.player-emission{opacity:0;mix-blend-mode:screen;}
+.player-content{position:relative;z-index:1;width:100%;height:100%;box-sizing:border-box;padding:18px 28px 20px;display:flex;flex-direction:column;justify-content:center;gap:14px;}
 .progress-shell{height:20px;display:flex;align-items:center;}
 .progress-track{position:relative;width:100%;height:5px;border-radius:999px;background:#000000;cursor:pointer;}
 .progress-track.disabled{cursor:default;opacity:0.55;}
@@ -389,6 +439,9 @@ audio{display:none;}
 </head>
 <body>
 <div class="player">
+<div class="player-base" id="playerBase"></div>
+<div class="player-emission" id="playerEmission"></div>
+<div class="player-content">
 <div class="progress-shell">
 <div class="progress-track" id="progressTrack" aria-label="Playback progress">
 <div class="progress-fill" id="progressFill"></div>
@@ -405,6 +458,7 @@ audio{display:none;}
 <div class="empty" id="emptyState">Playlist is empty</div>
 <audio id="playerAudio" preload="metadata"></audio>
 </div>
+</div>
 <script>
 const playlist=)PLAYER") + playlist_js + std::string(R"PLAYER(;
 const autoplay=)PLAYER") + std::string(autoplay ? "true" : "false") + std::string(R"PLAYER(;
@@ -414,7 +468,14 @@ const initialVolume=)PLAYER") + toString(initial_volume) + std::string(R"PLAYER(
 const bodyTextureURL=atob(')PLAYER") + body_texture_url_base64 + std::string(R"PLAYER(');
 const bodyTextureScaleX=)PLAYER") + toString(body_tex_scale_x) + std::string(R"PLAYER(;
 const bodyTextureScaleY=)PLAYER") + toString(body_tex_scale_y) + std::string(R"PLAYER(;
+const emissionTextureURL=atob(')PLAYER") + emission_texture_url_base64 + std::string(R"PLAYER(');
+const emissionColourR=)PLAYER") + toString(emission_col_r) + std::string(R"PLAYER(;
+const emissionColourG=)PLAYER") + toString(emission_col_g) + std::string(R"PLAYER(;
+const emissionColourB=)PLAYER") + toString(emission_col_b) + std::string(R"PLAYER(;
+const emissionLuminance=)PLAYER") + toString(luminance) + std::string(R"PLAYER(;
 const audio=document.getElementById('playerAudio');
+const playerBase=document.getElementById('playerBase');
+const playerEmission=document.getElementById('playerEmission');
 const progressTrack=document.getElementById('progressTrack');
 const progressFill=document.getElementById('progressFill');
 const progressThumb=document.getElementById('progressThumb');
@@ -441,29 +502,91 @@ const nextSvg=`<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M15 5h3v14h-
 const playSvg=`<svg viewBox='0 0 64 64' aria-hidden='true'><path d='M24 18l22 14-22 14z'/></svg>`;
 const pauseSvg=`<svg viewBox='0 0 64 64' aria-hidden='true'><rect x='21' y='18' width='8' height='28' rx='2'/><rect x='35' y='18' width='8' height='28' rx='2'/></svg>`;
 function clamp01(value){return Math.max(0, Math.min(1, value));}
-function applyBodyTextureStyles()
+function textureSizeForScale()
 {
-	if(!bodyTextureURL)
-		return;
-
 	const safeScaleX=Math.max(Math.abs(bodyTextureScaleX), 0.0001);
 	const safeScaleY=Math.max(Math.abs(bodyTextureScaleY), 0.0001);
-	const bgSize=(100 / safeScaleX) + '% ' + (100 / safeScaleY) + '%';
-	const bgImage='url(' + JSON.stringify(bodyTextureURL) + ')';
-
-	document.body.style.backgroundImage=bgImage;
-	document.body.style.backgroundRepeat='repeat';
-	document.body.style.backgroundSize=bgSize;
-	document.body.style.backgroundPosition='0 0';
-
-	const playerElem=document.querySelector('.player');
-	if(playerElem)
+	return (100 / safeScaleX) + '% ' + (100 / safeScaleY) + '%';
+}
+function applyBodyTextureStyles()
+{
+	if(playerBase)
 	{
-		playerElem.style.backgroundImage=bgImage;
-		playerElem.style.backgroundRepeat='repeat';
-		playerElem.style.backgroundSize=bgSize;
-		playerElem.style.backgroundPosition='0 0';
+		if(bodyTextureURL)
+		{
+			playerBase.style.backgroundImage='url(' + JSON.stringify(bodyTextureURL) + ')';
+			playerBase.style.backgroundRepeat='repeat';
+			playerBase.style.backgroundSize=textureSizeForScale();
+			playerBase.style.backgroundPosition='0 0';
+		}
+		else
+		{
+			playerBase.style.backgroundImage='none';
+		}
 	}
+
+	if(bodyTextureURL)
+	{
+		document.body.style.backgroundImage='url(' + JSON.stringify(bodyTextureURL) + ')';
+		document.body.style.backgroundRepeat='repeat';
+		document.body.style.backgroundSize=textureSizeForScale();
+		document.body.style.backgroundPosition='0 0';
+	}
+}
+function luminanceToStrength(luminance)
+{
+	if(luminance <= 0)
+		return 0;
+
+	const mapped=Math.log10(1 + luminance) / 5.0;
+	return clamp01(mapped);
+}
+function applyEmissionStyles()
+{
+	if(!playerEmission)
+		return;
+
+	const glowStrength=luminanceToStrength(emissionLuminance);
+	const hasEmissionTexture=!!emissionTextureURL;
+	if(glowStrength <= 0 && !hasEmissionTexture)
+	{
+		playerEmission.style.opacity='0';
+		playerEmission.style.backgroundImage='none';
+		playerEmission.style.boxShadow='none';
+		return;
+	}
+
+	const colourSum=emissionColourR + emissionColourG + emissionColourB;
+	const glowR=(colourSum > 0) ? emissionColourR : 255;
+	const glowG=(colourSum > 0) ? emissionColourG : 255;
+	const glowB=(colourSum > 0) ? emissionColourB : 255;
+
+	const tintAlpha=0.10 + glowStrength * 0.55;
+	const innerAlpha=0.12 + glowStrength * 0.50;
+	const outerAlpha=0.16 + glowStrength * 0.58;
+
+	playerEmission.style.opacity='1';
+	playerEmission.style.backgroundColor='rgba(' + glowR + ',' + glowG + ',' + glowB + ',' + tintAlpha + ')';
+	if(hasEmissionTexture)
+	{
+		playerEmission.style.backgroundImage='url(' + JSON.stringify(emissionTextureURL) + ')';
+		playerEmission.style.backgroundRepeat='repeat';
+		playerEmission.style.backgroundSize=textureSizeForScale();
+		playerEmission.style.backgroundPosition='0 0';
+	}
+	else
+	{
+		playerEmission.style.backgroundImage='none';
+	}
+
+	const innerBlur=Math.round(20 + 70 * glowStrength);
+	const outerBlur=Math.round(46 + 150 * glowStrength);
+	const innerGlow='rgba(' + glowR + ',' + glowG + ',' + glowB + ',' + innerAlpha + ')';
+	const outerGlow='rgba(' + glowR + ',' + glowG + ',' + glowB + ',' + outerAlpha + ')';
+	playerEmission.style.boxShadow='inset 0 0 ' + innerBlur + 'px ' + innerGlow + ', 0 0 ' + outerBlur + 'px ' + outerGlow;
+	playerEmission.style.mixBlendMode='screen';
+	playerEmission.style.filter='saturate(1.08)';
+	playerEmission.style.backgroundBlendMode='screen';
 }
 function hasUsableDuration(){return Number.isFinite(audio.duration) && audio.duration > 0;}
 function clearPendingSeek()
@@ -713,6 +836,7 @@ audio.addEventListener('durationchange', function(){applyPendingSeekIfPossible(t
 audio.addEventListener('canplay', function(){applyPendingSeekIfPossible(true);syncProgressFromAudio();});
 audio.addEventListener('ended', function(){if(loopEnabled || shuffleEnabled || (currentIndex + 1 < playlist.length)){selectNext(true);}else{updateProgressVisual(1);updateButtons();}});
 applyBodyTextureStyles();
+applyEmissionStyles();
 updateEmptyState();
 updateProgressVisual(0);
 updateButtons();
@@ -874,7 +998,8 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 					{
 						gui_client->setGLWidgetContextAsCurrent(); // Make sure the correct context is current while making OpenGL calls.
 
-						ob->opengl_engine_ob->materials[0].fresnel_scale = 0; // Remove specular reflections, reduces washed-out look.
+						if(!is_audio_player)
+							ob->opengl_engine_ob->materials[0].fresnel_scale = 0; // Remove specular reflections, reduces washed-out look.
 					}
 
 					browser = new EmbeddedBrowser();
