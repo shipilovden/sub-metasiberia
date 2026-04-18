@@ -142,6 +142,16 @@ public:
 	float doppler_factor;
 
 	Vec4f pos;
+	Quatf rot;
+	bool use_custom_distance_model;
+	bool use_linear_distance_rolloff;
+	float min_distance_m;
+	float max_distance_m;
+	bool use_custom_directionality;
+	float directivity_alpha;
+	float directivity_order;
+	float spread_degrees;
+	float max_distance_for_culling;
 
 	float num_occlusions;
 
@@ -211,6 +221,8 @@ public:
 	void sourcePositionUpdated(AudioSource& source);
 
 	void sourceVolumeUpdated(AudioSource& source);
+
+	void sourceSpatialSettingsUpdated(AudioSource& source);
 
 	void sourceNumOcclusionsUpdated(AudioSource& source);
 

@@ -1,4 +1,5 @@
 #include "ObjectEditor.h"
+#include "RuntimeTranslation.h"
 
 
 #include "ShaderEditorDialog.h"
@@ -29,6 +30,7 @@
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QAbstractItemView>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QGroupBox>
@@ -60,6 +62,38 @@ namespace
 QString makeFontPreviewText(const QString& font_name)
 {
 	return QString::fromUtf8("Привет  ") + font_name;
+}
+
+
+RuntimeTranslation::UILanguage currentUILanguageForObjectEditor(const QSettings* settings)
+{
+	QString lang_value;
+	if(QApplication::instance())
+		lang_value = QApplication::instance()->property("metasiberia.ui_language").toString();
+
+	if(lang_value.isEmpty() && settings)
+		lang_value = settings->value("setting/ui_language", settings->value("ui/language", QStringLiteral("en"))).toString();
+
+	const QString lower = lang_value.trimmed().toLower();
+	if(lower.startsWith("ru") || lower == "russian")
+		return RuntimeTranslation::UILanguage::Russian;
+
+	return RuntimeTranslation::UILanguage::English;
+}
+
+
+QString translateObjectEditorRuntimeText(RuntimeTranslation::UILanguage language, const char* source_text)
+{
+	if(!source_text)
+		return QString();
+
+	const QString source_qstr = QString::fromUtf8(source_text);
+	if(language != RuntimeTranslation::UILanguage::Russian)
+		return source_qstr;
+
+	static RuntimeTranslation::RuntimeTranslator translator;
+	const QString translated = translator.translate("ObjectEditor", source_text, nullptr, -1);
+	return translated.isEmpty() ? source_qstr : translated;
 }
 
 
@@ -145,6 +179,20 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	audioShuffleCheckBox(NULL),
 	audioActivationDistanceLabel(NULL),
 	audioActivationDistanceSpinBox(NULL),
+	audioSoundRadiusLabel(NULL),
+	audioSoundRadiusSpinBox(NULL),
+	audioDirectionalityEnabledCheckBox(NULL),
+	audioDirectivityAlphaLabel(NULL),
+	audioDirectivityAlphaSpinBox(NULL),
+	audioDirectivityOrderLabel(NULL),
+	audioDirectivityOrderSpinBox(NULL),
+	audioSpreadDegreesLabel(NULL),
+	audioSpreadDegreesSpinBox(NULL),
+	audioScheduleEnabledCheckBox(NULL),
+	audioScheduleStartHourLabel(NULL),
+	audioScheduleStartHourSpinBox(NULL),
+	audioScheduleEndHourLabel(NULL),
+	audioScheduleEndHourSpinBox(NULL),
 	audioPlaylistGroupBox(NULL),
 	audioPlaylistListWidget(NULL),
 	audioAddTracksPushButton(NULL),
@@ -261,6 +309,88 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	this->audioActivationDistanceSpinBox->setSuffix(QCoreApplication::translate("ObjectEditor", " m"));
 	this->gridLayout_3->addWidget(this->audioActivationDistanceSpinBox, 1, 1, 1, 2);
 
+	this->audioSoundRadiusLabel = new QLabel(QCoreApplication::translate("ObjectEditor", "Sound Radius"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioSoundRadiusLabel, 2, 0);
+
+	this->audioSoundRadiusSpinBox = new RealControl(this->audioGroupBox);
+	this->audioSoundRadiusSpinBox->setMinimum(WorldObject::MIN_AUDIO_PLAYER_SOUND_RADIUS);
+	this->audioSoundRadiusSpinBox->setMaximum(WorldObject::MAX_AUDIO_PLAYER_SOUND_RADIUS);
+	this->audioSoundRadiusSpinBox->setSingleStep(0.5);
+	this->audioSoundRadiusSpinBox->setSliderMinimum(WorldObject::MIN_AUDIO_PLAYER_SOUND_RADIUS);
+	this->audioSoundRadiusSpinBox->setSliderMaximum(120.0);
+	this->audioSoundRadiusSpinBox->setSliderSteps(240);
+	this->audioSoundRadiusSpinBox->setSuffix(QCoreApplication::translate("ObjectEditor", " m"));
+	this->gridLayout_3->addWidget(this->audioSoundRadiusSpinBox, 2, 1, 1, 2);
+
+	this->audioDirectionalityEnabledCheckBox = new QCheckBox(QCoreApplication::translate("ObjectEditor", "3D Directionality"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioDirectionalityEnabledCheckBox, 3, 0, 1, 3);
+
+	this->audioDirectivityAlphaLabel = new QLabel(QCoreApplication::translate("ObjectEditor", "Directionality Focus"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioDirectivityAlphaLabel, 4, 0);
+
+	this->audioDirectivityAlphaSpinBox = new RealControl(this->audioGroupBox);
+	this->audioDirectivityAlphaSpinBox->setMinimum(WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ALPHA);
+	this->audioDirectivityAlphaSpinBox->setMaximum(WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ALPHA);
+	this->audioDirectivityAlphaSpinBox->setSingleStep(0.05);
+	this->audioDirectivityAlphaSpinBox->setSliderMinimum(WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ALPHA);
+	this->audioDirectivityAlphaSpinBox->setSliderMaximum(WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ALPHA);
+	this->audioDirectivityAlphaSpinBox->setSliderSteps(200);
+	this->gridLayout_3->addWidget(this->audioDirectivityAlphaSpinBox, 4, 1, 1, 2);
+
+	this->audioDirectivityOrderLabel = new QLabel(QCoreApplication::translate("ObjectEditor", "Directionality Sharpness"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioDirectivityOrderLabel, 5, 0);
+
+	this->audioDirectivityOrderSpinBox = new RealControl(this->audioGroupBox);
+	this->audioDirectivityOrderSpinBox->setMinimum(WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ORDER);
+	this->audioDirectivityOrderSpinBox->setMaximum(WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ORDER);
+	this->audioDirectivityOrderSpinBox->setSingleStep(0.25);
+	this->audioDirectivityOrderSpinBox->setSliderMinimum(WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ORDER);
+	this->audioDirectivityOrderSpinBox->setSliderMaximum(8.0);
+	this->audioDirectivityOrderSpinBox->setSliderSteps(280);
+	this->gridLayout_3->addWidget(this->audioDirectivityOrderSpinBox, 5, 1, 1, 2);
+
+	this->audioSpreadDegreesLabel = new QLabel(QCoreApplication::translate("ObjectEditor", "Directional Spread"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioSpreadDegreesLabel, 6, 0);
+
+	this->audioSpreadDegreesSpinBox = new RealControl(this->audioGroupBox);
+	this->audioSpreadDegreesSpinBox->setMinimum(WorldObject::MIN_AUDIO_PLAYER_SPREAD_DEGREES);
+	this->audioSpreadDegreesSpinBox->setMaximum(WorldObject::MAX_AUDIO_PLAYER_SPREAD_DEGREES);
+	this->audioSpreadDegreesSpinBox->setSingleStep(1.0);
+	this->audioSpreadDegreesSpinBox->setSliderMinimum(WorldObject::MIN_AUDIO_PLAYER_SPREAD_DEGREES);
+	this->audioSpreadDegreesSpinBox->setSliderMaximum(WorldObject::MAX_AUDIO_PLAYER_SPREAD_DEGREES);
+	this->audioSpreadDegreesSpinBox->setSliderSteps(360);
+	this->audioSpreadDegreesSpinBox->setSuffix(QCoreApplication::translate("ObjectEditor", " deg"));
+	this->gridLayout_3->addWidget(this->audioSpreadDegreesSpinBox, 6, 1, 1, 2);
+
+	this->audioScheduleEnabledCheckBox = new QCheckBox(QCoreApplication::translate("ObjectEditor", "Use Daily Schedule"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioScheduleEnabledCheckBox, 7, 0, 1, 3);
+
+	this->audioScheduleStartHourLabel = new QLabel(QCoreApplication::translate("ObjectEditor", "Schedule Start"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioScheduleStartHourLabel, 8, 0);
+
+	this->audioScheduleStartHourSpinBox = new RealControl(this->audioGroupBox);
+	this->audioScheduleStartHourSpinBox->setMinimum(WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR);
+	this->audioScheduleStartHourSpinBox->setMaximum(WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR);
+	this->audioScheduleStartHourSpinBox->setSingleStep(0.25);
+	this->audioScheduleStartHourSpinBox->setSliderMinimum(WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR);
+	this->audioScheduleStartHourSpinBox->setSliderMaximum(WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR);
+	this->audioScheduleStartHourSpinBox->setSliderSteps(96);
+	this->audioScheduleStartHourSpinBox->setSuffix(QCoreApplication::translate("ObjectEditor", " h"));
+	this->gridLayout_3->addWidget(this->audioScheduleStartHourSpinBox, 8, 1, 1, 2);
+
+	this->audioScheduleEndHourLabel = new QLabel(QCoreApplication::translate("ObjectEditor", "Schedule End"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioScheduleEndHourLabel, 9, 0);
+
+	this->audioScheduleEndHourSpinBox = new RealControl(this->audioGroupBox);
+	this->audioScheduleEndHourSpinBox->setMinimum(WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR);
+	this->audioScheduleEndHourSpinBox->setMaximum(WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR);
+	this->audioScheduleEndHourSpinBox->setSingleStep(0.25);
+	this->audioScheduleEndHourSpinBox->setSliderMinimum(WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR);
+	this->audioScheduleEndHourSpinBox->setSliderMaximum(WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR);
+	this->audioScheduleEndHourSpinBox->setSliderSteps(96);
+	this->audioScheduleEndHourSpinBox->setSuffix(QCoreApplication::translate("ObjectEditor", " h"));
+	this->gridLayout_3->addWidget(this->audioScheduleEndHourSpinBox, 9, 1, 1, 2);
+
 	this->audioPlaylistGroupBox = new QGroupBox(QCoreApplication::translate("ObjectEditor", "Playlist"), this->audioGroupBox);
 	QVBoxLayout* audio_playlist_group_layout = new QVBoxLayout(this->audioPlaylistGroupBox);
 	audio_playlist_group_layout->setContentsMargins(0, 0, 0, 0);
@@ -291,6 +421,16 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 
 	connect(this->audioShuffleCheckBox,		SIGNAL(toggled(bool)),				this, SIGNAL(objectChanged()));
 	connect(this->audioActivationDistanceSpinBox, SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
+	connect(this->audioSoundRadiusSpinBox, SIGNAL(valueChanged(double)),		this, SIGNAL(objectChanged()));
+	connect(this->audioDirectionalityEnabledCheckBox, SIGNAL(toggled(bool)),	this, SIGNAL(objectChanged()));
+	connect(this->audioDirectionalityEnabledCheckBox, SIGNAL(toggled(bool)),	this, SLOT(audioDirectionalityToggled(bool)));
+	connect(this->audioDirectivityAlphaSpinBox, SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
+	connect(this->audioDirectivityOrderSpinBox, SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
+	connect(this->audioSpreadDegreesSpinBox, SIGNAL(valueChanged(double)),		this, SIGNAL(objectChanged()));
+	connect(this->audioScheduleEnabledCheckBox, SIGNAL(toggled(bool)),			this, SIGNAL(objectChanged()));
+	connect(this->audioScheduleEnabledCheckBox, SIGNAL(toggled(bool)),			this, SLOT(audioScheduleToggled(bool)));
+	connect(this->audioScheduleStartHourSpinBox, SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
+	connect(this->audioScheduleEndHourSpinBox, SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
 	connect(this->audioAddTracksPushButton, SIGNAL(clicked(bool)),				this, SLOT(on_audioAddTracksPushButton_clicked(bool)));
 	connect(this->audioAddURLPushButton,	SIGNAL(clicked(bool)),				this, SLOT(on_audioAddURLPushButton_clicked(bool)));
 	connect(this->audioRemoveTrackPushButton, SIGNAL(clicked(bool)),			this, SLOT(on_audioRemoveTrackPushButton_clicked(bool)));
@@ -310,6 +450,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	if(this->fontComboBox->view())
 		this->fontComboBox->view()->setTextElideMode(Qt::ElideNone);
 
+	retranslateDynamicAudioPlayerUI();
 	updateAudioPlaylistButtonsEnabled();
 }
 
@@ -324,6 +465,100 @@ void ObjectEditor::init() // settings should be set before this.
 
 	// Initialize font list
 	loadAvailableFonts();
+}
+
+
+void ObjectEditor::changeEvent(QEvent* event)
+{
+	if(event->type() == QEvent::LanguageChange)
+	{
+		this->retranslateUi(this);
+		retranslateDynamicAudioPlayerUI();
+	}
+
+	QWidget::changeEvent(event);
+}
+
+
+void ObjectEditor::retranslateDynamicAudioPlayerUI()
+{
+	if(!this->audioGroupBox)
+		return;
+
+	const RuntimeTranslation::UILanguage ui_language = currentUILanguageForObjectEditor(this->settings);
+	auto tr_audio = [ui_language](const char* source_text)
+	{
+		return translateObjectEditorRuntimeText(ui_language, source_text);
+	};
+
+	const bool is_audio_player = this->editing_audio_player_webview;
+	this->audioGroupBox->setTitle(is_audio_player ? tr_audio("Audio Player") : tr_audio("Audio"));
+
+	this->label_8->setText(tr_audio("Volume"));
+	this->label_14->setText(tr_audio("Audio File"));
+	this->audioAutoplayCheckBox->setText(tr_audio("Autoplay"));
+	this->audioLoopCheckBox->setText(tr_audio("Loop"));
+	this->audioShuffleCheckBox->setText(tr_audio("Shuffle"));
+	this->audioActivationDistanceLabel->setText(tr_audio("Activation Distance"));
+	this->audioSoundRadiusLabel->setText(tr_audio("Sound Radius"));
+	this->audioDirectionalityEnabledCheckBox->setText(tr_audio("3D Directionality"));
+	this->audioDirectivityAlphaLabel->setText(tr_audio("Directionality Focus"));
+	this->audioDirectivityOrderLabel->setText(tr_audio("Directionality Sharpness"));
+	this->audioSpreadDegreesLabel->setText(tr_audio("Directional Spread"));
+	this->audioScheduleEnabledCheckBox->setText(tr_audio("Use Daily Schedule"));
+	this->audioScheduleStartHourLabel->setText(tr_audio("Schedule Start"));
+	this->audioScheduleEndHourLabel->setText(tr_audio("Schedule End"));
+	this->audioPlaylistGroupBox->setTitle(tr_audio("Playlist"));
+	this->audioAddTracksPushButton->setText(tr_audio("Add Tracks"));
+	this->audioAddURLPushButton->setText(tr_audio("Add URL"));
+	this->audioRemoveTrackPushButton->setText(tr_audio("Remove"));
+	this->audioMoveTrackUpPushButton->setText(tr_audio("Up"));
+	this->audioMoveTrackDownPushButton->setText(tr_audio("Down"));
+
+	this->audioActivationDistanceSpinBox->setSuffix(tr_audio(" m"));
+	this->audioSoundRadiusSpinBox->setSuffix(tr_audio(" m"));
+	this->audioSpreadDegreesSpinBox->setSuffix(tr_audio(" deg"));
+	this->audioScheduleStartHourSpinBox->setSuffix(tr_audio(" h"));
+	this->audioScheduleEndHourSpinBox->setSuffix(tr_audio(" h"));
+
+	const QString volume_tip = tr_audio("Playback volume for this audio player.");
+	const QString autoplay_tip = tr_audio("Enable automatic playback when this object loads.");
+	const QString loop_tip = tr_audio("Loop the playlist when it reaches the end.");
+	const QString shuffle_tip = tr_audio("Shuffle playlist order.");
+	const QString activation_tip = tr_audio("Distance from camera where the player becomes active.");
+	const QString sound_radius_tip = tr_audio("Maximum audible distance for this player's sound.");
+	const QString directionality_tip = tr_audio("Enable directional 3D sound cone.");
+	const QString focus_tip = tr_audio("Forward focus of directional sound pattern.");
+	const QString sharpness_tip = tr_audio("Sharpness of directional sound attenuation.");
+	const QString spread_tip = tr_audio("Angular spread of directional sound in degrees.");
+	const QString schedule_toggle_tip = tr_audio("Restrict playback to a daily time window.");
+	const QString schedule_start_tip = tr_audio("Playback start time in local hours.");
+	const QString schedule_end_tip = tr_audio("Playback end time in local hours.");
+	const QString playlist_tip = tr_audio("Tracks and stream URLs played by this audio player.");
+
+	this->label_8->setToolTip(volume_tip);
+	this->volumeDoubleSpinBox->setToolTip(volume_tip);
+	this->audioAutoplayCheckBox->setToolTip(autoplay_tip);
+	this->audioLoopCheckBox->setToolTip(loop_tip);
+	this->audioShuffleCheckBox->setToolTip(shuffle_tip);
+	this->audioActivationDistanceLabel->setToolTip(activation_tip);
+	this->audioActivationDistanceSpinBox->setToolTip(activation_tip);
+	this->audioSoundRadiusLabel->setToolTip(sound_radius_tip);
+	this->audioSoundRadiusSpinBox->setToolTip(sound_radius_tip);
+	this->audioDirectionalityEnabledCheckBox->setToolTip(directionality_tip);
+	this->audioDirectivityAlphaLabel->setToolTip(focus_tip);
+	this->audioDirectivityAlphaSpinBox->setToolTip(focus_tip);
+	this->audioDirectivityOrderLabel->setToolTip(sharpness_tip);
+	this->audioDirectivityOrderSpinBox->setToolTip(sharpness_tip);
+	this->audioSpreadDegreesLabel->setToolTip(spread_tip);
+	this->audioSpreadDegreesSpinBox->setToolTip(spread_tip);
+	this->audioScheduleEnabledCheckBox->setToolTip(schedule_toggle_tip);
+	this->audioScheduleStartHourLabel->setToolTip(schedule_start_tip);
+	this->audioScheduleStartHourSpinBox->setToolTip(schedule_start_tip);
+	this->audioScheduleEndHourLabel->setToolTip(schedule_end_tip);
+	this->audioScheduleEndHourSpinBox->setToolTip(schedule_end_tip);
+	this->audioPlaylistGroupBox->setToolTip(playlist_tip);
+	this->audioPlaylistListWidget->setToolTip(playlist_tip);
 }
 
 
@@ -543,6 +778,20 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	SignalBlocker::setChecked(this->audioShuffleCheckBox,  BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_SHUFFLE));
 	SignalBlocker::setValue(this->audioActivationDistanceSpinBox, myClamp((double)ob.audio_player_activation_distance,
 		(double)WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE, (double)WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE));
+	SignalBlocker::setValue(this->audioSoundRadiusSpinBox, myClamp((double)ob.audio_player_sound_radius,
+		(double)WorldObject::MIN_AUDIO_PLAYER_SOUND_RADIUS, (double)WorldObject::MAX_AUDIO_PLAYER_SOUND_RADIUS));
+	SignalBlocker::setChecked(this->audioDirectionalityEnabledCheckBox, ob.audio_player_directionality_enabled);
+	SignalBlocker::setValue(this->audioDirectivityAlphaSpinBox, myClamp((double)ob.audio_player_directivity_alpha,
+		(double)WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ALPHA, (double)WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ALPHA));
+	SignalBlocker::setValue(this->audioDirectivityOrderSpinBox, myClamp((double)ob.audio_player_directivity_order,
+		(double)WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ORDER, (double)WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ORDER));
+	SignalBlocker::setValue(this->audioSpreadDegreesSpinBox, myClamp((double)ob.audio_player_spread_degrees,
+		(double)WorldObject::MIN_AUDIO_PLAYER_SPREAD_DEGREES, (double)WorldObject::MAX_AUDIO_PLAYER_SPREAD_DEGREES));
+	SignalBlocker::setChecked(this->audioScheduleEnabledCheckBox, ob.audio_player_schedule_enabled);
+	SignalBlocker::setValue(this->audioScheduleStartHourSpinBox, myClamp((double)ob.audio_player_schedule_start_hour,
+		(double)WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR, (double)WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR));
+	SignalBlocker::setValue(this->audioScheduleEndHourSpinBox, myClamp((double)ob.audio_player_schedule_end_hour,
+		(double)WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR, (double)WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR));
 
 	this->videoURLFileSelectWidget->setFilename(QtUtils::toQString((!ob.materials.empty()) ? ob.materials[0]->emission_texture_url : ""));
 
@@ -764,7 +1013,12 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	//this->targetURLLabel->setVisible(ob.object_type == WorldObject::ObjectType_Hypercard);
 	//this->targetURLLineEdit->setVisible(ob.object_type == WorldObject::ObjectType_Hypercard);
 	const bool is_audio_player = ob.isAudioPlayerWebView();
-	this->audioGroupBox->setTitle(is_audio_player ? QCoreApplication::translate("ObjectEditor", "Audio Player") : QCoreApplication::translate("ObjectEditor", "Audio"));
+	const RuntimeTranslation::UILanguage ui_language = currentUILanguageForObjectEditor(this->settings);
+	auto tr_audio = [ui_language](const char* source_text)
+	{
+		return translateObjectEditorRuntimeText(ui_language, source_text);
+	};
+	this->audioGroupBox->setTitle(is_audio_player ? tr_audio("Audio Player") : tr_audio("Audio"));
 	this->label_9->setVisible(!is_audio_player);
 	this->widget_5->setVisible(!is_audio_player);
 	this->label_12->setVisible(!is_audio_player);
@@ -779,8 +1033,29 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->audioShuffleCheckBox->setVisible(is_audio_player);
 	this->audioActivationDistanceLabel->setVisible(is_audio_player);
 	this->audioActivationDistanceSpinBox->setVisible(is_audio_player);
+	this->audioSoundRadiusLabel->setVisible(is_audio_player);
+	this->audioSoundRadiusSpinBox->setVisible(is_audio_player);
+	this->audioDirectionalityEnabledCheckBox->setVisible(is_audio_player);
+	this->audioDirectivityAlphaLabel->setVisible(is_audio_player);
+	this->audioDirectivityAlphaSpinBox->setVisible(is_audio_player);
+	this->audioDirectivityOrderLabel->setVisible(is_audio_player);
+	this->audioDirectivityOrderSpinBox->setVisible(is_audio_player);
+	this->audioSpreadDegreesLabel->setVisible(is_audio_player);
+	this->audioSpreadDegreesSpinBox->setVisible(is_audio_player);
+	this->audioScheduleEnabledCheckBox->setVisible(is_audio_player);
+	this->audioScheduleStartHourLabel->setVisible(is_audio_player);
+	this->audioScheduleStartHourSpinBox->setVisible(is_audio_player);
+	this->audioScheduleEndHourLabel->setVisible(is_audio_player);
+	this->audioScheduleEndHourSpinBox->setVisible(is_audio_player);
 	this->audioPlaylistGroupBox->setVisible(is_audio_player);
-	this->label_12->setText(QCoreApplication::translate("ObjectEditor", "Content"));
+	const bool directionality_controls_enabled = is_audio_player && this->audioDirectionalityEnabledCheckBox->isChecked();
+	this->audioDirectivityAlphaSpinBox->setEnabled(directionality_controls_enabled);
+	this->audioDirectivityOrderSpinBox->setEnabled(directionality_controls_enabled);
+	this->audioSpreadDegreesSpinBox->setEnabled(directionality_controls_enabled);
+	const bool schedule_controls_enabled = is_audio_player && this->audioScheduleEnabledCheckBox->isChecked();
+	this->audioScheduleStartHourSpinBox->setEnabled(schedule_controls_enabled);
+	this->audioScheduleEndHourSpinBox->setEnabled(schedule_controls_enabled);
+	this->label_12->setText(tr_audio("Content"));
 	this->contentTextEdit->setPlaceholderText(QString());
 
 	if(ob.lightmap_baking)
@@ -939,6 +1214,20 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 	{
 		ob_out.audio_player_activation_distance = myClamp((float)this->audioActivationDistanceSpinBox->value(),
 			WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE, WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE);
+		ob_out.audio_player_sound_radius = myClamp((float)this->audioSoundRadiusSpinBox->value(),
+			WorldObject::MIN_AUDIO_PLAYER_SOUND_RADIUS, WorldObject::MAX_AUDIO_PLAYER_SOUND_RADIUS);
+		ob_out.audio_player_directionality_enabled = this->audioDirectionalityEnabledCheckBox->isChecked();
+		ob_out.audio_player_directivity_alpha = myClamp((float)this->audioDirectivityAlphaSpinBox->value(),
+			WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ALPHA, WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ALPHA);
+		ob_out.audio_player_directivity_order = myClamp((float)this->audioDirectivityOrderSpinBox->value(),
+			WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ORDER, WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ORDER);
+		ob_out.audio_player_spread_degrees = myClamp((float)this->audioSpreadDegreesSpinBox->value(),
+			WorldObject::MIN_AUDIO_PLAYER_SPREAD_DEGREES, WorldObject::MAX_AUDIO_PLAYER_SPREAD_DEGREES);
+		ob_out.audio_player_schedule_enabled = this->audioScheduleEnabledCheckBox->isChecked();
+		ob_out.audio_player_schedule_start_hour = myClamp((float)this->audioScheduleStartHourSpinBox->value(),
+			WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR, WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR);
+		ob_out.audio_player_schedule_end_hour = myClamp((float)this->audioScheduleEndHourSpinBox->value(),
+			WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR, WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR);
 	}
 
 	if(ob_out.object_type != WorldObject::ObjectType_Hypercard) // Don't store materials for hypercards. (doesn't use them, and matEditor may have old/invalid data)
@@ -1162,6 +1451,14 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->audioLoopCheckBox->setEnabled(editable);
 	this->audioShuffleCheckBox->setEnabled(editable);
 	this->audioActivationDistanceSpinBox->setReadOnly(!editable);
+	this->audioSoundRadiusSpinBox->setReadOnly(!editable);
+	this->audioDirectionalityEnabledCheckBox->setEnabled(editable);
+	this->audioDirectivityAlphaSpinBox->setReadOnly(!editable);
+	this->audioDirectivityOrderSpinBox->setReadOnly(!editable);
+	this->audioSpreadDegreesSpinBox->setReadOnly(!editable);
+	this->audioScheduleEnabledCheckBox->setEnabled(editable);
+	this->audioScheduleStartHourSpinBox->setReadOnly(!editable);
+	this->audioScheduleEndHourSpinBox->setReadOnly(!editable);
 	this->audioPlaylistListWidget->setEnabled(editable);
 	this->audioPlaylistListWidget->setEditTriggers(editable ? (QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked) : QAbstractItemView::NoEditTriggers);
 	updateAudioPlaylistButtonsEnabled();
@@ -1316,6 +1613,21 @@ void ObjectEditor::audioPlaylistItemChanged(QListWidgetItem*)
 void ObjectEditor::audioPlaylistSelectionChanged()
 {
 	updateAudioPlaylistButtonsEnabled();
+}
+
+
+void ObjectEditor::audioDirectionalityToggled(bool checked)
+{
+	this->audioDirectivityAlphaSpinBox->setEnabled(checked);
+	this->audioDirectivityOrderSpinBox->setEnabled(checked);
+	this->audioSpreadDegreesSpinBox->setEnabled(checked);
+}
+
+
+void ObjectEditor::audioScheduleToggled(bool checked)
+{
+	this->audioScheduleStartHourSpinBox->setEnabled(checked);
+	this->audioScheduleEndHourSpinBox->setEnabled(checked);
 }
 
 

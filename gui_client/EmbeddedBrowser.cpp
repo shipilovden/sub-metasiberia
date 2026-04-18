@@ -1075,6 +1075,7 @@ public:
 			audio_source->debugname = "webview: " + ob->target_url;
 			audio_source->sampling_rate = gui_client->audio_engine.getSampleRate();
 			audio_source->volume = myClamp(ob->audio_volume, 0.f, 10.f);
+			gui_client->configureAudioSourceSpatialSettingsFromObject(*ob, *audio_source);
 
 			{
 				Lock lock(gui_client->world_state->mutex);
@@ -1085,6 +1086,8 @@ public:
 
 			ob->audio_source = audio_source;
 			gui_client->audio_engine.addSource(audio_source);
+			gui_client->audio_engine.sourcePositionUpdated(*audio_source);
+			gui_client->audio_engine.sourceSpatialSettingsUpdated(*audio_source);
 		}
 
 		return true;

@@ -93,6 +93,51 @@ float sanitiseAudioPlayerActivationDistance(float distance)
 }
 
 
+float sanitiseAudioPlayerSoundRadius(float radius)
+{
+	if(!isFinite(radius))
+		return WorldObject::DEFAULT_AUDIO_PLAYER_SOUND_RADIUS;
+
+	return myClamp(radius, WorldObject::MIN_AUDIO_PLAYER_SOUND_RADIUS, WorldObject::MAX_AUDIO_PLAYER_SOUND_RADIUS);
+}
+
+
+float sanitiseAudioPlayerDirectivityAlpha(float alpha)
+{
+	if(!isFinite(alpha))
+		return WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ALPHA;
+
+	return myClamp(alpha, WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ALPHA, WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ALPHA);
+}
+
+
+float sanitiseAudioPlayerDirectivityOrder(float order)
+{
+	if(!isFinite(order))
+		return WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ORDER;
+
+	return myClamp(order, WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ORDER, WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ORDER);
+}
+
+
+float sanitiseAudioPlayerSpreadDegrees(float spread_degrees)
+{
+	if(!isFinite(spread_degrees))
+		return WorldObject::DEFAULT_AUDIO_PLAYER_SPREAD_DEGREES;
+
+	return myClamp(spread_degrees, WorldObject::MIN_AUDIO_PLAYER_SPREAD_DEGREES, WorldObject::MAX_AUDIO_PLAYER_SPREAD_DEGREES);
+}
+
+
+float sanitiseAudioPlayerScheduleHour(float hour, float default_hour)
+{
+	if(!isFinite(hour))
+		return default_hour;
+
+	return myClamp(hour, WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR, WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR);
+}
+
+
 template <class Fn>
 void forEachAudioPlayerPlaylistURL(const WorldObject& ob, Fn&& fn)
 {
@@ -233,6 +278,14 @@ WorldObject::WorldObject() noexcept
 
 	audio_volume = 1;
 	audio_player_activation_distance = DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE;
+	audio_player_sound_radius = DEFAULT_AUDIO_PLAYER_SOUND_RADIUS;
+	audio_player_directivity_alpha = DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ALPHA;
+	audio_player_directivity_order = DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ORDER;
+	audio_player_spread_degrees = DEFAULT_AUDIO_PLAYER_SPREAD_DEGREES;
+	audio_player_schedule_start_hour = DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR;
+	audio_player_schedule_end_hour = DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR;
+	audio_player_directionality_enabled = false;
+	audio_player_schedule_enabled = false;
 
 	allocator = NULL;
 	refcount = 0;
@@ -696,7 +749,7 @@ WorldObject::ObjectType WorldObject::objectTypeForString(const std::string& ob_t
 }
 
 
-static const uint32 WORLD_OBJECT_SERIALISATION_VERSION = 24;
+static const uint32 WORLD_OBJECT_SERIALISATION_VERSION = 25;
 /*
 Version history:
 9: introduced voxels
@@ -715,6 +768,7 @@ Version history:
 22: Added per-type data (length-prefixed)
 23: Added text_font to disk serialisation.
 24: Added audio_player_activation_distance to disk serialisation.
+25: Added audio-player radius/schedule/directivity settings to disk serialisation.
 */
 
 
@@ -878,6 +932,14 @@ void WorldObject::writeToStream(RandomAccessOutStream& stream) const
 	stream.writeStringLengthFirst(audio_source_url);
 	stream.writeFloat(audio_volume);
 	stream.writeFloat(sanitiseAudioPlayerActivationDistance(audio_player_activation_distance));
+	stream.writeFloat(sanitiseAudioPlayerSoundRadius(audio_player_sound_radius));
+	stream.writeFloat(sanitiseAudioPlayerDirectivityAlpha(audio_player_directivity_alpha));
+	stream.writeFloat(sanitiseAudioPlayerDirectivityOrder(audio_player_directivity_order));
+	stream.writeFloat(sanitiseAudioPlayerSpreadDegrees(audio_player_spread_degrees));
+	stream.writeFloat(sanitiseAudioPlayerScheduleHour(audio_player_schedule_start_hour, WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR));
+	stream.writeFloat(sanitiseAudioPlayerScheduleHour(audio_player_schedule_end_hour, WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR));
+	stream.writeUInt32(audio_player_directionality_enabled ? 1u : 0u);
+	stream.writeUInt32(audio_player_schedule_enabled ? 1u : 0u);
 
 	::writeToStream(pos, stream);
 	::writeToStream(axis, stream);
@@ -988,6 +1050,29 @@ void readWorldObjectFromStream(RandomAccessInStream& stream, WorldObject& ob)
 			ob.audio_player_activation_distance = sanitiseAudioPlayerActivationDistance(stream.readFloat());
 		else
 			ob.audio_player_activation_distance = WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE;
+
+		if(v >= 25)
+		{
+			ob.audio_player_sound_radius = sanitiseAudioPlayerSoundRadius(stream.readFloat());
+			ob.audio_player_directivity_alpha = sanitiseAudioPlayerDirectivityAlpha(stream.readFloat());
+			ob.audio_player_directivity_order = sanitiseAudioPlayerDirectivityOrder(stream.readFloat());
+			ob.audio_player_spread_degrees = sanitiseAudioPlayerSpreadDegrees(stream.readFloat());
+			ob.audio_player_schedule_start_hour = sanitiseAudioPlayerScheduleHour(stream.readFloat(), WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR);
+			ob.audio_player_schedule_end_hour = sanitiseAudioPlayerScheduleHour(stream.readFloat(), WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR);
+			ob.audio_player_directionality_enabled = stream.readUInt32() != 0;
+			ob.audio_player_schedule_enabled = stream.readUInt32() != 0;
+		}
+		else
+		{
+			ob.audio_player_sound_radius = WorldObject::DEFAULT_AUDIO_PLAYER_SOUND_RADIUS;
+			ob.audio_player_directivity_alpha = WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ALPHA;
+			ob.audio_player_directivity_order = WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ORDER;
+			ob.audio_player_spread_degrees = WorldObject::DEFAULT_AUDIO_PLAYER_SPREAD_DEGREES;
+			ob.audio_player_schedule_start_hour = WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR;
+			ob.audio_player_schedule_end_hour = WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR;
+			ob.audio_player_directionality_enabled = false;
+			ob.audio_player_schedule_enabled = false;
+		}
 	}
 
 	ob.pos = readVec3FromStream<double>(stream);
@@ -1217,6 +1302,14 @@ void WorldObject::writeToNetworkStream(RandomAccessOutStream& stream, uint32 pee
 
 	// Per-audio-player auto activation distance (meters). Keep this in the optional tail so older peers can ignore it.
 	stream.writeFloat(sanitiseAudioPlayerActivationDistance(audio_player_activation_distance));
+	stream.writeFloat(sanitiseAudioPlayerSoundRadius(audio_player_sound_radius));
+	stream.writeFloat(sanitiseAudioPlayerDirectivityAlpha(audio_player_directivity_alpha));
+	stream.writeFloat(sanitiseAudioPlayerDirectivityOrder(audio_player_directivity_order));
+	stream.writeFloat(sanitiseAudioPlayerSpreadDegrees(audio_player_spread_degrees));
+	stream.writeFloat(sanitiseAudioPlayerScheduleHour(audio_player_schedule_start_hour, WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR));
+	stream.writeFloat(sanitiseAudioPlayerScheduleHour(audio_player_schedule_end_hour, WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR));
+	stream.writeUInt32(audio_player_directionality_enabled ? 1u : 0u);
+	stream.writeUInt32(audio_player_schedule_enabled ? 1u : 0u);
 }
 
 
@@ -1236,6 +1329,14 @@ void WorldObject::copyNetworkStateFrom(const WorldObject& other)
 	audio_source_url = other.audio_source_url;
 	audio_volume = other.audio_volume;
 	audio_player_activation_distance = other.audio_player_activation_distance;
+	audio_player_sound_radius = other.audio_player_sound_radius;
+	audio_player_directivity_alpha = other.audio_player_directivity_alpha;
+	audio_player_directivity_order = other.audio_player_directivity_order;
+	audio_player_spread_degrees = other.audio_player_spread_degrees;
+	audio_player_schedule_start_hour = other.audio_player_schedule_start_hour;
+	audio_player_schedule_end_hour = other.audio_player_schedule_end_hour;
+	audio_player_directionality_enabled = other.audio_player_directionality_enabled;
+	audio_player_schedule_enabled = other.audio_player_schedule_enabled;
 
 	pos = other.pos;
 	axis = other.axis;
@@ -1305,6 +1406,14 @@ std::string WorldObject::serialiseToXML(int tab_depth) const
 
 	XMLWriteUtils::writeFloatToXML(s, "audio_volume", audio_volume, tab_depth + 1);
 	XMLWriteUtils::writeFloatToXML(s, "audio_player_activation_distance", sanitiseAudioPlayerActivationDistance(audio_player_activation_distance), tab_depth + 1);
+	XMLWriteUtils::writeFloatToXML(s, "audio_player_sound_radius", sanitiseAudioPlayerSoundRadius(audio_player_sound_radius), tab_depth + 1);
+	XMLWriteUtils::writeFloatToXML(s, "audio_player_directivity_alpha", sanitiseAudioPlayerDirectivityAlpha(audio_player_directivity_alpha), tab_depth + 1);
+	XMLWriteUtils::writeFloatToXML(s, "audio_player_directivity_order", sanitiseAudioPlayerDirectivityOrder(audio_player_directivity_order), tab_depth + 1);
+	XMLWriteUtils::writeFloatToXML(s, "audio_player_spread_degrees", sanitiseAudioPlayerSpreadDegrees(audio_player_spread_degrees), tab_depth + 1);
+	XMLWriteUtils::writeFloatToXML(s, "audio_player_schedule_start_hour", sanitiseAudioPlayerScheduleHour(audio_player_schedule_start_hour, WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR), tab_depth + 1);
+	XMLWriteUtils::writeFloatToXML(s, "audio_player_schedule_end_hour", sanitiseAudioPlayerScheduleHour(audio_player_schedule_end_hour, WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR), tab_depth + 1);
+	XMLWriteUtils::writeUInt32ToXML(s, "audio_player_directionality_enabled", audio_player_directionality_enabled ? 1 : 0, tab_depth + 1);
+	XMLWriteUtils::writeUInt32ToXML(s, "audio_player_schedule_enabled", audio_player_schedule_enabled ? 1 : 0, tab_depth + 1);
 
 	XMLWriteUtils::writeVec3ToXML(s, "pos", pos, tab_depth + 1);
 	XMLWriteUtils::writeVec3ToXML(s, "axis", axis, tab_depth + 1);
@@ -1395,6 +1504,30 @@ Reference<WorldObject> WorldObject::loadFromXMLElem(const std::string& object_fi
 	ob->audio_player_activation_distance = sanitiseAudioPlayerActivationDistance(
 		XMLParseUtils::parseFloatWithDefault(elem, "audio_player_activation_distance", WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE)
 	);
+	ob->audio_player_sound_radius = sanitiseAudioPlayerSoundRadius(
+		XMLParseUtils::parseFloatWithDefault(elem, "audio_player_sound_radius", WorldObject::DEFAULT_AUDIO_PLAYER_SOUND_RADIUS)
+	);
+	ob->audio_player_directivity_alpha = sanitiseAudioPlayerDirectivityAlpha(
+		XMLParseUtils::parseFloatWithDefault(elem, "audio_player_directivity_alpha", WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ALPHA)
+	);
+	ob->audio_player_directivity_order = sanitiseAudioPlayerDirectivityOrder(
+		XMLParseUtils::parseFloatWithDefault(elem, "audio_player_directivity_order", WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ORDER)
+	);
+	ob->audio_player_spread_degrees = sanitiseAudioPlayerSpreadDegrees(
+		XMLParseUtils::parseFloatWithDefault(elem, "audio_player_spread_degrees", WorldObject::DEFAULT_AUDIO_PLAYER_SPREAD_DEGREES)
+	);
+	ob->audio_player_schedule_start_hour = sanitiseAudioPlayerScheduleHour(
+		XMLParseUtils::parseFloatWithDefault(elem, "audio_player_schedule_start_hour", WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR),
+		WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR
+	);
+	ob->audio_player_schedule_end_hour = sanitiseAudioPlayerScheduleHour(
+		XMLParseUtils::parseFloatWithDefault(elem, "audio_player_schedule_end_hour", WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR),
+		WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR
+	);
+	ob->audio_player_directionality_enabled =
+		XMLParseUtils::parseUInt64WithDefault(elem, "audio_player_directionality_enabled", 0) != 0;
+	ob->audio_player_schedule_enabled =
+		XMLParseUtils::parseUInt64WithDefault(elem, "audio_player_schedule_enabled", 0) != 0;
 
 	ob->pos   = XMLParseUtils::parseVec3d(elem, "pos");
 	ob->axis  = XMLParseUtils::parseVec3fWithDefault(elem, "axis", Vec3f(0,0,1));
@@ -1684,6 +1817,46 @@ void readWorldObjectFromNetworkStreamGivenUIDImpl(RandomAccessInStream& stream, 
 	{
 		ob.audio_player_activation_distance = WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE;
 	}
+
+	if(!stream.endOfStream())
+		ob.audio_player_sound_radius = sanitiseAudioPlayerSoundRadius(stream.readFloat());
+	else if(!isFinite(ob.audio_player_sound_radius))
+		ob.audio_player_sound_radius = WorldObject::DEFAULT_AUDIO_PLAYER_SOUND_RADIUS;
+
+	if(!stream.endOfStream())
+		ob.audio_player_directivity_alpha = sanitiseAudioPlayerDirectivityAlpha(stream.readFloat());
+	else if(!isFinite(ob.audio_player_directivity_alpha))
+		ob.audio_player_directivity_alpha = WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ALPHA;
+
+	if(!stream.endOfStream())
+		ob.audio_player_directivity_order = sanitiseAudioPlayerDirectivityOrder(stream.readFloat());
+	else if(!isFinite(ob.audio_player_directivity_order))
+		ob.audio_player_directivity_order = WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ORDER;
+
+	if(!stream.endOfStream())
+		ob.audio_player_spread_degrees = sanitiseAudioPlayerSpreadDegrees(stream.readFloat());
+	else if(!isFinite(ob.audio_player_spread_degrees))
+		ob.audio_player_spread_degrees = WorldObject::DEFAULT_AUDIO_PLAYER_SPREAD_DEGREES;
+
+	if(!stream.endOfStream())
+		ob.audio_player_schedule_start_hour = sanitiseAudioPlayerScheduleHour(stream.readFloat(), WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR);
+	else if(!isFinite(ob.audio_player_schedule_start_hour))
+		ob.audio_player_schedule_start_hour = WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR;
+
+	if(!stream.endOfStream())
+		ob.audio_player_schedule_end_hour = sanitiseAudioPlayerScheduleHour(stream.readFloat(), WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR);
+	else if(!isFinite(ob.audio_player_schedule_end_hour))
+		ob.audio_player_schedule_end_hour = WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR;
+
+	if(!stream.endOfStream())
+		ob.audio_player_directionality_enabled = stream.readUInt32() != 0;
+	else
+		ob.audio_player_directionality_enabled = false;
+
+	if(!stream.endOfStream())
+		ob.audio_player_schedule_enabled = stream.readUInt32() != 0;
+	else
+		ob.audio_player_schedule_enabled = false;
 
 	// Set ephemeral state
 	//ob.state = WorldObject::State_Alive;
@@ -2206,6 +2379,14 @@ static void testObjectsEqual(WorldObject& ob1, WorldObject& ob2)
 	testAssert(ob1.object_type == ob2.object_type);
 	testAssert(ob1.text_font == ob2.text_font);
 	testAssert(std::fabs(ob1.audio_player_activation_distance - ob2.audio_player_activation_distance) < 1.0e-6f);
+	testAssert(std::fabs(ob1.audio_player_sound_radius - ob2.audio_player_sound_radius) < 1.0e-6f);
+	testAssert(std::fabs(ob1.audio_player_directivity_alpha - ob2.audio_player_directivity_alpha) < 1.0e-6f);
+	testAssert(std::fabs(ob1.audio_player_directivity_order - ob2.audio_player_directivity_order) < 1.0e-6f);
+	testAssert(std::fabs(ob1.audio_player_spread_degrees - ob2.audio_player_spread_degrees) < 1.0e-6f);
+	testAssert(std::fabs(ob1.audio_player_schedule_start_hour - ob2.audio_player_schedule_start_hour) < 1.0e-6f);
+	testAssert(std::fabs(ob1.audio_player_schedule_end_hour - ob2.audio_player_schedule_end_hour) < 1.0e-6f);
+	testAssert(ob1.audio_player_directionality_enabled == ob2.audio_player_directionality_enabled);
+	testAssert(ob1.audio_player_schedule_enabled == ob2.audio_player_schedule_enabled);
 
 	testAssert(ob1.getCompressedVoxels().nonNull() == ob2.getCompressedVoxels().nonNull());
 	if(ob1.getCompressedVoxels().nonNull())
@@ -2418,6 +2599,14 @@ void WorldObject::test()
 			ob.audio_source_url = "network_audio.mp3";
 			ob.audio_volume = 0.5f;
 			ob.audio_player_activation_distance = 12.5f;
+			ob.audio_player_sound_radius = 87.0f;
+			ob.audio_player_directivity_alpha = 0.7f;
+			ob.audio_player_directivity_order = 4.0f;
+			ob.audio_player_spread_degrees = 45.0f;
+			ob.audio_player_schedule_start_hour = 8.5f;
+			ob.audio_player_schedule_end_hour = 23.0f;
+			ob.audio_player_directionality_enabled = true;
+			ob.audio_player_schedule_enabled = true;
 
 			BufferOutStream buf;
 			ob.writeToNetworkStream(buf);
@@ -2433,6 +2622,14 @@ void WorldObject::test()
 			testAssert(ob2.audio_source_url == ob.audio_source_url);
 			testAssert(std::fabs(ob2.audio_volume - ob.audio_volume) < 1.0e-6f);
 			testAssert(std::fabs(ob2.audio_player_activation_distance - ob.audio_player_activation_distance) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_sound_radius - ob.audio_player_sound_radius) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_directivity_alpha - ob.audio_player_directivity_alpha) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_directivity_order - ob.audio_player_directivity_order) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_spread_degrees - ob.audio_player_spread_degrees) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_schedule_start_hour - ob.audio_player_schedule_start_hour) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_schedule_end_hour - ob.audio_player_schedule_end_hour) < 1.0e-6f);
+			testAssert(ob2.audio_player_directionality_enabled == ob.audio_player_directionality_enabled);
+			testAssert(ob2.audio_player_schedule_enabled == ob.audio_player_schedule_enabled);
 		}
 
 		//--------------------------- Test network roundtrip for non-text object without trailing text_font ----------------------------
@@ -2447,6 +2644,14 @@ void WorldObject::test()
 			ob.audio_source_url = "spotlight_audio.mp3";
 			ob.audio_volume = 0.25f;
 			ob.audio_player_activation_distance = 6.f;
+			ob.audio_player_sound_radius = 15.f;
+			ob.audio_player_directivity_alpha = 0.3f;
+			ob.audio_player_directivity_order = 3.f;
+			ob.audio_player_spread_degrees = 120.f;
+			ob.audio_player_schedule_start_hour = 1.f;
+			ob.audio_player_schedule_end_hour = 6.f;
+			ob.audio_player_directionality_enabled = true;
+			ob.audio_player_schedule_enabled = true;
 			setWorldObjectPerTypeDataDefaults(ob);
 			ob.type_data.spotlight_data.cone_start_angle = 0.2f;
 			ob.type_data.spotlight_data.cone_end_angle = 0.8f;
@@ -2462,6 +2667,14 @@ void WorldObject::test()
 			testAssert(ob2.object_type == ob.object_type);
 			testAssert(ob2.text_font == "Default");
 			testAssert(std::fabs(ob2.audio_player_activation_distance - ob.audio_player_activation_distance) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_sound_radius - ob.audio_player_sound_radius) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_directivity_alpha - ob.audio_player_directivity_alpha) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_directivity_order - ob.audio_player_directivity_order) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_spread_degrees - ob.audio_player_spread_degrees) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_schedule_start_hour - ob.audio_player_schedule_start_hour) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_schedule_end_hour - ob.audio_player_schedule_end_hour) < 1.0e-6f);
+			testAssert(ob2.audio_player_directionality_enabled == ob.audio_player_directionality_enabled);
+			testAssert(ob2.audio_player_schedule_enabled == ob.audio_player_schedule_enabled);
 			testAssert(std::fabs(ob2.type_data.spotlight_data.cone_start_angle - ob.type_data.spotlight_data.cone_start_angle) < 1.0e-6f);
 			testAssert(std::fabs(ob2.type_data.spotlight_data.cone_end_angle - ob.type_data.spotlight_data.cone_end_angle) < 1.0e-6f);
 		}
@@ -2535,6 +2748,14 @@ void WorldObject::test()
 			testAssert(ob2.audio_source_url == ob.audio_source_url);
 			testAssert(std::fabs(ob2.audio_volume - ob.audio_volume) < 1.0e-6f);
 			testAssert(std::fabs(ob2.audio_player_activation_distance - WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_sound_radius - WorldObject::DEFAULT_AUDIO_PLAYER_SOUND_RADIUS) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_directivity_alpha - WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ALPHA) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_directivity_order - WorldObject::DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ORDER) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_spread_degrees - WorldObject::DEFAULT_AUDIO_PLAYER_SPREAD_DEGREES) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_schedule_start_hour - WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_schedule_end_hour - WorldObject::DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR) < 1.0e-6f);
+			testAssert(ob2.audio_player_directionality_enabled == false);
+			testAssert(ob2.audio_player_schedule_enabled == false);
 		}
 
 		//--------------------------- Test camera object per-type data roundtrip ----------------------------

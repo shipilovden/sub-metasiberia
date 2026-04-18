@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "UIInterface.h"
 #include "GUIClient.h"
 #include "CredentialManager.h"
+#include "RuntimeTranslation.h"
 #include <utils/ArgumentParser.h>
 #include <utils/Timer.h>
 #include <utils/ComObHandle.h>
@@ -121,6 +122,8 @@ private slots:;
 	void on_actionLoad_Objects_From_Disk_triggered();
 	void on_actionDelete_All_Parcel_Objects_triggered();
 	void on_actionEnter_Fullscreen_triggered();
+	void on_actionLanguage_English_triggered();
+	void on_actionLanguage_Russian_triggered();
 	void on_actionGo_Back_triggered();
 	void openCurrentLocationInBrowserSlot();
 
@@ -188,6 +191,10 @@ private:
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
 private:
 	void initialiseThemesMenu();
+	void initialiseLanguageMenu();
+	void applyUILanguage(RuntimeTranslation::UILanguage language, bool persist_setting);
+	void refreshTranslatedUiText();
+	void updateMenuTooltips();
 	bool applyNamedQtTheme(const std::string& theme_name, bool persist_setting);
 	void applyDefaultQtTheme(bool persist_setting);
 	void updateThemesMenuCheckedState(const std::string& active_theme_name);
@@ -373,6 +380,9 @@ public:
 	QDialog* chat_emoji_popup;
 	QTabWidget* chat_emoji_tab_widget;
 	QActionGroup* theme_action_group;
+	QActionGroup* language_action_group;
+	RuntimeTranslation::RuntimeTranslator* runtime_translator;
+	RuntimeTranslation::UILanguage current_ui_language;
 
 	double last_timerEvent_CPU_work_elapsed;
 	double last_updateGL_time;

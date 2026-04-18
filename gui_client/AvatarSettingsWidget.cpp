@@ -22,6 +22,9 @@ Dock-friendly Avatar settings UI (Qt).
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QEvent>
+#include <QtCore/QByteArray>
 
 
 static const char* anim_names[] = {
@@ -35,6 +38,20 @@ static const char* anim_names[] = {
 	"Left Turn",
 	"Right Turn",
 };
+
+
+namespace
+{
+static QString buildCreateAvatarLinksText()
+{
+	const QString ready_player_me_link_text = QCoreApplication::translate("AvatarSettingsWidget", "Create a ReadyPlayerMe avatar");
+	const QString avaturn_me_link_text = QCoreApplication::translate("AvatarSettingsWidget", "Create a AvaturnMe avatar");
+	const QString after_create_text = QCoreApplication::translate("AvatarSettingsWidget", "After creating, download and select in file browser above.");
+
+	return QString("<br/><a href=\"https://substrata.readyplayer.me/\">%1</a>.  %2<br/><br/><a href=\"https://avaturn.me/\">%3</a>.  %2")
+		.arg(ready_player_me_link_text, after_create_text, avaturn_me_link_text);
+}
+}
 
 
 AvatarSettingsWidget::AvatarSettingsWidget(
@@ -60,12 +77,7 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 	setupUi(this);
 
 	texture_server = new TextureServer(/*use_canonical_path_keys=*/false);
-
-	std::string display_str;
-	display_str += "<br/><a href=\"https://substrata.readyplayer.me/\">Create a ReadyPlayerMe avatar</a>.  After creating, download and select in file browser above.";
-	display_str += "<br/><br/><a href=\"https://avaturn.me/\">Create a AvaturnMe avatar</a>.  After creating, download and select in file browser above.";
-	this->createReadyPlayerMeLabel->setText(QtUtils::toQString(display_str));
-	this->createReadyPlayerMeLabel->setOpenExternalLinks(true);
+	retranslateDynamicUi();
 
 	this->avatarPreviewGLWidget->init(base_dir_path, settings_, texture_server);
 	// Restore main GL context after preview widget init.
@@ -106,7 +118,7 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 		this->vroidModelsListWidget->clear();
 		this->vroidFetchModelsButton->setEnabled(false);
 		this->vroidLogoutButton->setEnabled(false);
-		this->vroidStatusLabel->setText("VRoid: not logged in");
+		this->setVRoidStatusSourceText("VRoid: not logged in");
 	});
 
 	connect(this->vroidFetchModelsButton, &QPushButton::clicked, this, [this]()
@@ -117,7 +129,7 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 
 	connect(vroid_auth_flow, &VRoidAuthFlow::statusChanged, this, [this](const QString& s)
 	{
-		this->vroidStatusLabel->setText(s);
+		this->setVRoidStatusSourceText(s);
 	});
 
 	connect(vroid_auth_flow, &VRoidAuthFlow::loginSucceeded, this, [this]()
@@ -128,8 +140,8 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 
 	connect(vroid_auth_flow, &VRoidAuthFlow::loginFailed, this, [this](const QString& err)
 	{
-		this->vroidStatusLabel->setText("VRoid: login failed");
-		QMessageBox::warning(this, "VRoid", err);
+		this->setVRoidStatusSourceText("VRoid: login failed");
+		QMessageBox::warning(this, QCoreApplication::translate("AvatarSettingsWidget", "VRoid"), this->translateVRoidAuthFlowText(err));
 	});
 
 	connect(vroid_auth_flow, &VRoidAuthFlow::modelsUpdated, this, [this](const QStringList& items)
@@ -140,18 +152,18 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 
 	connect(vroid_auth_flow, &VRoidAuthFlow::modelsFailed, this, [this](const QString& err)
 	{
-		QMessageBox::warning(this, "VRoid", err);
+		QMessageBox::warning(this, QCoreApplication::translate("AvatarSettingsWidget", "VRoid"), this->translateVRoidAuthFlowText(err));
 	});
 
 	if(vroid_auth_flow->hasAccessToken())
 	{
-		this->vroidStatusLabel->setText("VRoid: logged in.");
+		this->setVRoidStatusSourceText("VRoid: logged in.");
 		this->vroidFetchModelsButton->setEnabled(true);
 		this->vroidLogoutButton->setEnabled(true);
 	}
 	else
 	{
-		this->vroidStatusLabel->setText("VRoid: not logged in");
+		this->setVRoidStatusSourceText("VRoid: not logged in");
 	}
 
 	// Drive preview redraw and initial load.
@@ -282,6 +294,49 @@ void AvatarSettingsWidget::onTick()
 		loadModelIntoPreview(path_for_preview, /*show_error_dialogs=*/false);
 		done_initial_load = true;
 	}
+}
+
+
+void AvatarSettingsWidget::changeEvent(QEvent* event)
+{
+	if(event && event->type() == QEvent::LanguageChange)
+	{
+		retranslateUi(this);
+		retranslateDynamicUi();
+	}
+
+	QWidget::changeEvent(event);
+}
+
+
+void AvatarSettingsWidget::retranslateDynamicUi()
+{
+	this->createReadyPlayerMeLabel->setText(buildCreateAvatarLinksText());
+	this->createReadyPlayerMeLabel->setOpenExternalLinks(true);
+
+	if(last_vroid_status_source_text.isEmpty())
+		last_vroid_status_source_text = QStringLiteral("VRoid: not logged in");
+	this->setVRoidStatusSourceText(last_vroid_status_source_text);
+}
+
+
+void AvatarSettingsWidget::setVRoidStatusSourceText(const QString& status_source_text)
+{
+	last_vroid_status_source_text = status_source_text;
+	this->vroidStatusLabel->setText(translateVRoidAuthFlowText(status_source_text));
+}
+
+
+QString AvatarSettingsWidget::translateVRoidAuthFlowText(const QString& source_text) const
+{
+	const QByteArray source_utf8 = source_text.toUtf8();
+	return QCoreApplication::translate("VRoidAuthFlow", source_utf8.constData());
+}
+
+
+QString AvatarSettingsWidget::translateVRoidAuthFlowText(const char* source_text) const
+{
+	return QCoreApplication::translate("VRoidAuthFlow", source_text);
 }
 
 

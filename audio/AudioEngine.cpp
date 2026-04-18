@@ -68,7 +68,8 @@ namespace glare
 
 AudioSource::AudioSource()
 :	resonance_handle(INVALID_RESONANCE_HANDLE), cur_read_i(0), type(SourceType_NonStreaming), spatial_type(SourceSpatialType_Spatial), paused(false), looping(true), remove_on_finish(false), volume(1.f), mute_volume_factor(1.f), mute_change_start_time(-2), mute_change_end_time(-1), mute_vol_fac_start(1.f),
-	mute_vol_fac_end(1.f), pos(0,0,0,1), num_occlusions(0), userdata_1(0), doppler_factor(1), smoothed_cur_level(0), sampling_rate(44100), EOF_marker_position(std::numeric_limits<int64>::max())
+	mute_vol_fac_end(1.f), pos(0,0,0,1), rot(Quatf::identity()), use_custom_distance_model(false), use_linear_distance_rolloff(false), min_distance_m(1.f), max_distance_m(60.f), use_custom_directionality(false),
+	directivity_alpha(0.f), directivity_order(1.f), spread_degrees(360.f), max_distance_for_culling(60.f), num_occlusions(0), userdata_1(0), doppler_factor(1), smoothed_cur_level(0), sampling_rate(44100), EOF_marker_position(std::numeric_limits<int64>::max())
 {}
 
 
@@ -861,6 +862,7 @@ void AudioEngine::createResonanceObAndResamplerForSource(AudioSource& source_)
 			resonance->SetSourcePosition(source->resonance_handle, source->pos[0], source->pos[1], source->pos[2]);
 			resonance->SetSourceVolume(source->resonance_handle, source->volume * source->getMuteVolumeFactor());
 		}
+		sourceSpatialSettingsUpdated(*source);
 	}
 	else if(source->spatial_type == AudioSource::SourceSpatialType_NonSpatial)
 	{
@@ -963,6 +965,45 @@ void AudioEngine::sourceVolumeUpdated(AudioSource& source)
 	// conPrint("Setting volume to " + doubleToStringNSigFigs(source.volume, 4));
 	if(source.resonance_handle != INVALID_RESONANCE_HANDLE)
 		resonance->SetSourceVolume(source.resonance_handle, source.volume * source.getMuteVolumeFactor());
+}
+
+
+void AudioEngine::sourceSpatialSettingsUpdated(AudioSource& source)
+{
+	if(!initialised)
+		return;
+
+	if(source.resonance_handle == INVALID_RESONANCE_HANDLE)
+		return;
+
+	if(source.spatial_type != AudioSource::SourceSpatialType_Spatial)
+		return;
+
+	if(source.use_custom_distance_model)
+	{
+		const float min_distance = myMax(0.01f, source.min_distance_m);
+		const float max_distance = myMax(min_distance + 0.01f, source.max_distance_m);
+		const vraudio::DistanceRolloffModel rolloff = source.use_linear_distance_rolloff ? vraudio::kLinear : vraudio::kLogarithmic;
+		resonance->SetSourceDistanceModel(source.resonance_handle, rolloff, min_distance, max_distance);
+	}
+
+	const Quatf use_rot = source.rot.v.isFinite() ? source.rot : Quatf::identity();
+	resonance->SetSourceRotation(source.resonance_handle, use_rot.v[0], use_rot.v[1], use_rot.v[2], use_rot.v[3]);
+
+	if(source.use_custom_directionality)
+	{
+		const float use_alpha = myClamp(source.directivity_alpha, 0.f, 1.f);
+		const float use_order = myMax(1.f, source.directivity_order);
+		const float use_spread = myClamp(source.spread_degrees, 0.f, 360.f);
+		resonance->SetSoundObjectDirectivity(source.resonance_handle, use_alpha, use_order);
+		resonance->SetSoundObjectSpread(source.resonance_handle, use_spread);
+	}
+	else
+	{
+		// Neutral pattern: omnidirectional and fully spread.
+		resonance->SetSoundObjectDirectivity(source.resonance_handle, 0.f, 1.f);
+		resonance->SetSoundObjectSpread(source.resonance_handle, 360.f);
+	}
 }
 
 

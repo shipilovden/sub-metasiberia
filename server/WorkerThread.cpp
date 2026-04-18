@@ -2258,6 +2258,36 @@ void WorkerThread::doRun()
 												WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE,
 												WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE
 											);
+											ob->audio_player_sound_radius = myClamp(
+												ob->audio_player_sound_radius,
+												WorldObject::MIN_AUDIO_PLAYER_SOUND_RADIUS,
+												WorldObject::MAX_AUDIO_PLAYER_SOUND_RADIUS
+											);
+											ob->audio_player_directivity_alpha = myClamp(
+												ob->audio_player_directivity_alpha,
+												WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ALPHA,
+												WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ALPHA
+											);
+											ob->audio_player_directivity_order = myClamp(
+												ob->audio_player_directivity_order,
+												WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ORDER,
+												WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ORDER
+											);
+											ob->audio_player_spread_degrees = myClamp(
+												ob->audio_player_spread_degrees,
+												WorldObject::MIN_AUDIO_PLAYER_SPREAD_DEGREES,
+												WorldObject::MAX_AUDIO_PLAYER_SPREAD_DEGREES
+											);
+											ob->audio_player_schedule_start_hour = myClamp(
+												ob->audio_player_schedule_start_hour,
+												WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR,
+												WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR
+											);
+											ob->audio_player_schedule_end_hour = myClamp(
+												ob->audio_player_schedule_end_hour,
+												WorldObject::MIN_AUDIO_PLAYER_SCHEDULE_HOUR,
+												WorldObject::MAX_AUDIO_PLAYER_SCHEDULE_HOUR
+											);
 
 											ob->last_modified_time = TimeStamp::currentTime();
 

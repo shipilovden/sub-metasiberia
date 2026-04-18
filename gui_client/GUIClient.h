@@ -299,6 +299,8 @@ public:
 	void handleScriptLoadedForObUsingScript(ScriptLoadedThreadMessage* loaded_msg, WorldObject* ob);
 	void doBiomeScatteringForObject(WorldObject* ob);
 	void loadAudioForObject(WorldObject* ob, const Reference<LoadedBuffer>& loaded_buffer);
+	float getMaxAudioDistForObject(const WorldObject& ob) const;
+	void configureAudioSourceSpatialSettingsFromObject(const WorldObject& ob, glare::AudioSource& source) const;
 	void showErrorNotification(const std::string& message);
 	void showInfoNotification(const std::string& message);
 	void showScriptMessage(const std::string& message);
