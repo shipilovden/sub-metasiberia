@@ -97,6 +97,9 @@ public:
 			else
 				ob->opengl_engine_ob->materials[mat_index].albedo_texture = new_tex;
 
+			if(!apply_to_emission_texture && ob->isAudioPlayerWebView())
+				ob->opengl_engine_ob->materials[mat_index].emission_texture = new_tex;
+
 			ob->opengl_engine_ob->materials[mat_index].allow_alpha_test = false;
 			opengl_engine->materialTextureChanged(*ob->opengl_engine_ob, ob->opengl_engine_ob->materials[mat_index]);
 		}
@@ -237,6 +240,7 @@ public:
 							const int tex_height = desc.Height;
 
 							runtimeCheck(mat_index < ob->opengl_engine_ob->materials.size());
+							const bool mirror_to_audio_emission = !apply_to_emission_texture && ob->isAudioPlayerWebView();
 							OpenGLTextureRef& tex_to_apply_to = apply_to_emission_texture ? ob->opengl_engine_ob->materials[mat_index].emission_texture : ob->opengl_engine_ob->materials[mat_index].albedo_texture;
 
 							if(!texture_copy || 
@@ -268,6 +272,8 @@ public:
 
 								
 								tex_to_apply_to = video_display_opengl_tex;
+								if(mirror_to_audio_emission)
+									ob->opengl_engine_ob->materials[mat_index].emission_texture = video_display_opengl_tex;
 								ob->opengl_engine_ob->materials[mat_index].allow_alpha_test = false;
 
 								opengl_engine->materialTextureChanged(*ob->opengl_engine_ob, ob->opengl_engine_ob->materials[mat_index]);

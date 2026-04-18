@@ -3444,6 +3444,66 @@ void GUIClient::createGLAndPhysicsObsForText(const Matrix4f& ob_to_world_matrix,
 }
 
 
+static const WorldMaterial* getWebViewScreenSourceMaterial(const WorldObject& ob)
+{
+	// For audio players, material slot 1 is the editable "Player Body" material.
+	if(ob.materials.size() > 1 && ob.materials[1].nonNull())
+		return ob.materials[1].ptr();
+	else if(!ob.materials.empty() && ob.materials[0].nonNull())
+		return ob.materials[0].ptr();
+	else
+		return NULL;
+}
+
+
+static void configureAudioPlayerFrontMaterialFromBodyMaterial(OpenGLMaterial& front_mat, const WorldObject& ob, int ob_lod_level, bool use_basis_textures_for_ob, ResourceManager& resource_manager, glare::ArenaAllocator* allocator)
+{
+	const OpenGLTextureRef browser_surface_tex = front_mat.albedo_texture.nonNull() ? front_mat.albedo_texture : front_mat.emission_texture;
+
+	const WorldMaterial* screen_source_mat = getWebViewScreenSourceMaterial(ob);
+	if(screen_source_mat)
+	{
+		ModelLoading::setGLMaterialFromWorldMaterial(
+			*screen_source_mat,
+			ob_lod_level,
+			/*lightmap URL=*/"",
+			/*use_basis=*/use_basis_textures_for_ob,
+			resource_manager,
+			allocator,
+			front_mat
+		);
+	}
+	else
+	{
+		front_mat.roughness = 0.5f;
+		front_mat.metallic_frac = 0.0f;
+		front_mat.fresnel_scale = 0.3f;
+		front_mat.metallic_roughness_tex_path.clear();
+		front_mat.normal_map_path.clear();
+		front_mat.emission_linear_rgb = Colour3f(0.f);
+		front_mat.emission_scale = 0.f;
+		front_mat.metallic_roughness_texture = NULL;
+		front_mat.normal_map = NULL;
+	}
+
+	// Keep browser content untinted and use it as albedo.
+	front_mat.albedo_linear_rgb = Colour3f(1.f);
+	front_mat.alpha = 1.0f;
+	front_mat.tex_path.clear();
+	front_mat.emission_tex_path.clear();
+	front_mat.emission_texture = browser_surface_tex;
+
+	front_mat.tex_matrix = Matrix2f(1, 0, 0, -1); // Keep browser texture orientation correct.
+	front_mat.tex_translation = Vec2f(0, 1);
+	front_mat.allow_alpha_test = false;
+
+	if(front_mat.metallic_roughness_tex_path.empty())
+		front_mat.metallic_roughness_texture = NULL;
+	if(front_mat.normal_map_path.empty())
+		front_mat.normal_map = NULL;
+}
+
+
 void GUIClient::printFromLuaScript(LuaScript* script, const char* s, size_t len)
 {
 	// If this is our script, print message to console and log
@@ -3981,12 +4041,26 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				opengl_ob->mesh_data = this->image_cube_opengl_mesh;
 				opengl_ob->materials.resize(2);
 				const bool is_audio_player_webview = ob->isAudioPlayerWebView();
-				opengl_ob->materials[0].albedo_linear_rgb = is_audio_player_webview ? Colour3f(1.f) : Colour3f(0.f);
-				opengl_ob->materials[0].emission_linear_rgb = is_audio_player_webview ? Colour3f(0.f) : Colour3f(1.f);
-				const float luminance = 24000; // nits.  Chosen so videos look about the right brightness in daylight.
-				opengl_ob->materials[0].emission_scale = is_audio_player_webview ? 0.f : (luminance / (683.002f * 106.856e-9f) * 1.0e-9f); // See ModelLoading::setGLMaterialFromWorldMaterialWithLocalPaths().  1.0e-9f factor to avoid floating point issues.
-				opengl_ob->materials[0].tex_matrix = Matrix2f(1, 0, 0, -1); // OpenGL expects texture data to have bottom left pixel at offset 0, we have top left pixel, so flip
-				opengl_ob->materials[0].tex_translation = Vec2f(0, 1);
+				if(is_audio_player_webview)
+				{
+					configureAudioPlayerFrontMaterialFromBodyMaterial(
+						opengl_ob->materials[0],
+						*ob,
+						ob_lod_level,
+						use_basis_textures_for_ob,
+						*this->resource_manager,
+						&arena_allocator
+					);
+				}
+				else
+				{
+					opengl_ob->materials[0].albedo_linear_rgb = Colour3f(0.f);
+					opengl_ob->materials[0].emission_linear_rgb = Colour3f(1.f);
+					const float luminance = 24000; // nits.  Chosen so videos look about the right brightness in daylight.
+					opengl_ob->materials[0].emission_scale = luminance / (683.002f * 106.856e-9f) * 1.0e-9f; // See ModelLoading::setGLMaterialFromWorldMaterialWithLocalPaths().  1.0e-9f factor to avoid floating point issues.
+					opengl_ob->materials[0].tex_matrix = Matrix2f(1, 0, 0, -1); // OpenGL expects texture data to have bottom left pixel at offset 0, we have top left pixel, so flip
+					opengl_ob->materials[0].tex_translation = Vec2f(0, 1);
+				}
 				opengl_ob->materials[0].materialise_effect = use_materialise_effect;
 				opengl_ob->materials[0].materialise_start_time = ob->materialise_effect_start_time;
 				opengl_ob->ob_to_world_matrix = ob_to_world_matrix;
@@ -8780,13 +8854,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 								if(ob->isAudioPlayerWebView() && !opengl_ob->materials.empty())
 								{
 									OpenGLMaterial& front_mat = opengl_ob->materials[0];
-									front_mat.albedo_linear_rgb = Colour3f(1.f);
-									front_mat.tex_path.clear();
-									front_mat.emission_linear_rgb = Colour3f(0.f);
-									front_mat.emission_scale = 0.f;
-									front_mat.emission_tex_path.clear();
-									front_mat.emission_texture = NULL;
-									front_mat.fresnel_scale = 0.0f;
+									configureAudioPlayerFrontMaterialFromBodyMaterial(front_mat, *ob, ob_lod_level, use_basis_textures_for_ob, *this->resource_manager, &arena_allocator);
 								}
 
 								opengl_engine->objectMaterialsUpdated(*opengl_ob);
@@ -8891,13 +8959,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 						if(ob->isAudioPlayerWebView() && !opengl_ob->materials.empty())
 						{
 							OpenGLMaterial& front_mat = opengl_ob->materials[0];
-							front_mat.albedo_linear_rgb = Colour3f(1.f);
-							front_mat.tex_path.clear();
-							front_mat.emission_linear_rgb = Colour3f(0.f);
-							front_mat.emission_scale = 0.f;
-							front_mat.emission_tex_path.clear();
-							front_mat.emission_texture = NULL;
-							front_mat.fresnel_scale = 0.0f;
+							configureAudioPlayerFrontMaterialFromBodyMaterial(front_mat, *ob, ob_lod_level, use_basis_textures_for_ob, *this->resource_manager, &arena_allocator);
 						}
 						opengl_engine->objectMaterialsUpdated(*opengl_ob);
 					}
@@ -15355,21 +15417,18 @@ void GUIClient::objectEdited()
 								{
 									if(is_audio_player_webview)
 									{
-										// Audio-player screen uses albedo browser texture. Body/front colour is authored in HTML (WebViewData.cpp).
-										opengl_ob->materials[i].albedo_linear_rgb = Colour3f(1.f);
-										opengl_ob->materials[i].alpha = 1.0f;
+										// Audio-player screen uses albedo browser texture, but keeps PBR properties from Player Body material.
+										configureAudioPlayerFrontMaterialFromBodyMaterial(
+											opengl_ob->materials[i],
+											*this->selected_ob,
+											ob_lod_level,
+											selected_ob_use_basis,
+											*this->resource_manager,
+											&arena_allocator
+										);
+
 										opengl_ob->materials[i].albedo_texture = existing_display_tex;
-										opengl_ob->materials[i].tex_path.clear();
-
-										opengl_ob->materials[i].emission_linear_rgb = Colour3f(0.f);
-										opengl_ob->materials[i].emission_scale = 0.f;
-										opengl_ob->materials[i].emission_texture = NULL;
-										opengl_ob->materials[i].emission_tex_path.clear();
-
-										opengl_ob->materials[i].tex_matrix = Matrix2f(1, 0, 0, -1);
-										opengl_ob->materials[i].tex_translation = Vec2f(0, 1);
-										opengl_ob->materials[i].fresnel_scale = 0.0f;
-										opengl_ob->materials[i].allow_alpha_test = false;
+										opengl_ob->materials[i].emission_texture = existing_display_tex;
 										continue;
 									}
 									else if(screen_source_mat)
