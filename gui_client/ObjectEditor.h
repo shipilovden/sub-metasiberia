@@ -69,6 +69,7 @@ public:
 	QSettings* settings;
 	std::string base_dir_path;
 protected:
+	virtual void changeEvent(QEvent* event) override;
 
 signals:;
 	void objectTransformChanged();
@@ -105,6 +106,8 @@ private slots:
 	void onFontChanged(int index);
 	void audioPlaylistItemChanged(QListWidgetItem* item);
 	void audioPlaylistSelectionChanged();
+	void audioDirectionalityToggled(bool checked);
+	void audioScheduleToggled(bool checked);
 
 private:
 	void updateInfoLabel(const WorldObject& ob);
@@ -114,6 +117,7 @@ private:
 	void syncContentFromAudioPlaylistWidget();
 	void addAudioPlaylistEntry(const QString& value, bool make_current);
 	void updateAudioPlaylistButtonsEnabled();
+	void retranslateDynamicAudioPlayerUI();
 	// Store a cloned copy of the materials.
 	// The reason for having this is so if the user selected another material,
 	// we can display it, without needing to hang on to a reference to the original world object.
@@ -140,6 +144,20 @@ private:
 	QCheckBox* audioShuffleCheckBox;
 	QLabel* audioActivationDistanceLabel;
 	RealControl* audioActivationDistanceSpinBox;
+	QLabel* audioSoundRadiusLabel;
+	RealControl* audioSoundRadiusSpinBox;
+	QCheckBox* audioDirectionalityEnabledCheckBox;
+	QLabel* audioDirectivityAlphaLabel;
+	RealControl* audioDirectivityAlphaSpinBox;
+	QLabel* audioDirectivityOrderLabel;
+	RealControl* audioDirectivityOrderSpinBox;
+	QLabel* audioSpreadDegreesLabel;
+	RealControl* audioSpreadDegreesSpinBox;
+	QCheckBox* audioScheduleEnabledCheckBox;
+	QLabel* audioScheduleStartHourLabel;
+	RealControl* audioScheduleStartHourSpinBox;
+	QLabel* audioScheduleEndHourLabel;
+	RealControl* audioScheduleEndHourSpinBox;
 	QGroupBox* audioPlaylistGroupBox;
 	QListWidget* audioPlaylistListWidget;
 	QPushButton* audioAddTracksPushButton;

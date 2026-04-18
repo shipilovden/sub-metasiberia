@@ -19,6 +19,7 @@ namespace RuntimeTranslation
 		explicit RuntimeTranslator(QObject* parent = nullptr);
 
 		virtual QString translate(const char* context, const char* sourceText, const char* disambiguation = nullptr, int n = -1) const override;
+		virtual bool isEmpty() const override;
 
 	private:
 		static QString key(const char* context, const char* sourceText);
@@ -26,4 +27,3 @@ namespace RuntimeTranslation
 		QHash<QString, QString> ru_translations;
 	};
 }
-

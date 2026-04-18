@@ -316,6 +316,22 @@ public:
 	static constexpr float DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE = 20.f;
 	static constexpr float MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE = 0.5f;
 	static constexpr float MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE = 500.f;
+	static constexpr float DEFAULT_AUDIO_PLAYER_SOUND_RADIUS = 40.f;
+	static constexpr float MIN_AUDIO_PLAYER_SOUND_RADIUS = 1.f;
+	static constexpr float MAX_AUDIO_PLAYER_SOUND_RADIUS = 500.f;
+	static constexpr float DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ALPHA = 0.5f;
+	static constexpr float MIN_AUDIO_PLAYER_DIRECTIVITY_ALPHA = 0.f;
+	static constexpr float MAX_AUDIO_PLAYER_DIRECTIVITY_ALPHA = 1.f;
+	static constexpr float DEFAULT_AUDIO_PLAYER_DIRECTIVITY_ORDER = 2.f;
+	static constexpr float MIN_AUDIO_PLAYER_DIRECTIVITY_ORDER = 1.f;
+	static constexpr float MAX_AUDIO_PLAYER_DIRECTIVITY_ORDER = 16.f;
+	static constexpr float DEFAULT_AUDIO_PLAYER_SPREAD_DEGREES = 70.f;
+	static constexpr float MIN_AUDIO_PLAYER_SPREAD_DEGREES = 0.f;
+	static constexpr float MAX_AUDIO_PLAYER_SPREAD_DEGREES = 360.f;
+	static constexpr float DEFAULT_AUDIO_PLAYER_SCHEDULE_START_HOUR = 0.f;
+	static constexpr float DEFAULT_AUDIO_PLAYER_SCHEDULE_END_HOUR = 24.f;
+	static constexpr float MIN_AUDIO_PLAYER_SCHEDULE_HOUR = 0.f;
+	static constexpr float MAX_AUDIO_PLAYER_SCHEDULE_HOUR = 24.f;
 	static bool looksLikeAudioPlayerPlaylistContent(const std::string& content);
 	
 
@@ -421,6 +437,14 @@ public:
 	URLString audio_source_url;
 	float audio_volume;
 	float audio_player_activation_distance;
+	float audio_player_sound_radius;
+	float audio_player_directivity_alpha;
+	float audio_player_directivity_order;
+	float audio_player_spread_degrees;
+	float audio_player_schedule_start_hour;
+	float audio_player_schedule_end_hour;
+	bool audio_player_directionality_enabled;
+	bool audio_player_schedule_enabled;
 
 	bool isAudioPlayerWebView() const;
 

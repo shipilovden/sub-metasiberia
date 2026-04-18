@@ -385,6 +385,8 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.h
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.ui
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindowTestCode.txt
+		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.h
 		${CMAKE_SOURCE_DIR}/gui_client/UpdateDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/UpdateDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/UpdateManager.cpp
@@ -1204,6 +1206,15 @@ ${lua}
 ${basisu_transcoder_files}
 ${settings}
 )
+
+if(MSVC)
+	# RuntimeTranslation.cpp contains Russian literals that are decoded with QString::fromUtf8().
+	# Force UTF-8 source + execution charset for this TU to avoid CP1251->UTF8 mojibake ("����").
+	set_source_files_properties(
+		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.cpp
+		PROPERTIES COMPILE_OPTIONS "/utf-8"
+	)
+endif()
 
 add_definitions(-DGUI_CLIENT=1)
 

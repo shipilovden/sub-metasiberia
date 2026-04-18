@@ -2713,6 +2713,54 @@ static inline float maxAudioDistForSourceVolFactor(float volume_factor)
 }
 
 
+static Quatf safeQuatFromAxisAndAngle(const Vec3f& axis, float angle)
+{
+	if(!axis.isFinite() || !isFinite(angle) || (axis.length2() < 1.0e-12f))
+		return Quatf::identity();
+
+	return Quatf::fromAxisAndAngle(normalise(axis.toVec4fVector()), angle);
+}
+
+
+float GUIClient::getMaxAudioDistForObject(const WorldObject& ob) const
+{
+	if(ob.isAudioPlayerWebView())
+		return myClamp(ob.audio_player_sound_radius, WorldObject::MIN_AUDIO_PLAYER_SOUND_RADIUS, WorldObject::MAX_AUDIO_PLAYER_SOUND_RADIUS);
+
+	return maxAudioDistForSourceVolFactor(ob.audio_volume);
+}
+
+
+void GUIClient::configureAudioSourceSpatialSettingsFromObject(const WorldObject& ob, glare::AudioSource& source) const
+{
+	source.pos = ob.getCentroidWS();
+
+	if(ob.isAudioPlayerWebView())
+	{
+		const float max_dist = myClamp(ob.audio_player_sound_radius, WorldObject::MIN_AUDIO_PLAYER_SOUND_RADIUS, WorldObject::MAX_AUDIO_PLAYER_SOUND_RADIUS);
+		source.use_custom_distance_model = true;
+		source.use_linear_distance_rolloff = false;
+		source.min_distance_m = 1.0f;
+		source.max_distance_m = myMax(source.min_distance_m + 0.01f, max_dist);
+		source.max_distance_for_culling = source.max_distance_m;
+		source.rot = safeQuatFromAxisAndAngle(ob.axis, ob.angle);
+
+		source.use_custom_directionality = ob.audio_player_directionality_enabled;
+		source.directivity_alpha = myClamp(ob.audio_player_directivity_alpha, WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ALPHA, WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ALPHA);
+		source.directivity_order = myClamp(ob.audio_player_directivity_order, WorldObject::MIN_AUDIO_PLAYER_DIRECTIVITY_ORDER, WorldObject::MAX_AUDIO_PLAYER_DIRECTIVITY_ORDER);
+		source.spread_degrees = myClamp(ob.audio_player_spread_degrees, WorldObject::MIN_AUDIO_PLAYER_SPREAD_DEGREES, WorldObject::MAX_AUDIO_PLAYER_SPREAD_DEGREES);
+	}
+	else
+	{
+		source.use_custom_distance_model = false;
+		source.use_linear_distance_rolloff = false;
+		source.use_custom_directionality = false;
+		source.rot = Quatf::identity();
+		source.max_distance_for_culling = maxAudioDistForSourceVolFactor(source.volume);
+	}
+}
+
+
 // Returns false if the resource is already being loaded, or is already loaded into e.g. the opengl engine.
 // Also returns false if it's audio that is past the max audio distance etc.
 bool GUIClient::isResourceCurrentlyNeededForObjectGivenIsDependency(const URLString& url, const WorldObject* ob) const
@@ -2756,7 +2804,7 @@ bool GUIClient::isResourceCurrentlyNeededForObjectGivenIsDependency(const URLStr
 				}
 
 				const double ob_dist = ob->pos.getDist(cam_controller.getPosition());
-				const bool in_range = ob_dist < maxAudioDistForSourceVolFactor(ob->audio_volume);
+				const bool in_range = ob_dist < getMaxAudioDistForObject(*ob);
 				if(!in_range)
 				{
 					// conPrint("'" + url + "' is not in range.");
@@ -5015,7 +5063,7 @@ void GUIClient::loadAudioForObject(WorldObject* ob, const Reference<LoadedBuffer
 			
 				// If the object is further than MAX_AUDIO_DIST from the camera, don't load the audio.
 				const float dist = cam_controller.getPosition().toVec4fVector().getDist(ob->pos.toVec4fVector());
-				if(dist > maxAudioDistForSourceVolFactor(ob->audio_volume))
+				if(dist > getMaxAudioDistForObject(*ob))
 					return;
 
 				// Remove any existing audio source
@@ -5070,7 +5118,7 @@ void GUIClient::loadAudioForObject(WorldObject* ob, const Reference<LoadedBuffer
 								load_audio_task->audio_source_path = resource_manager->pathForURL(ob->audio_source_url);
 								load_audio_task->result_msg_queue = &this->msg_queue;
 
-								load_item_queue.enqueueItem(/*key=*/ob->audio_source_url, *ob, load_audio_task, /*task max dist=*/maxAudioDistForSourceVolFactor(ob->audio_volume));
+								load_item_queue.enqueueItem(/*key=*/ob->audio_source_url, *ob, load_audio_task, /*task max dist=*/getMaxAudioDistForObject(*ob));
 							}
 							else
 							{
@@ -5080,6 +5128,9 @@ void GUIClient::loadAudioForObject(WorldObject* ob, const Reference<LoadedBuffer
 						else
 						{
 							glare::AudioSourceRef source = audio_engine.addSourceFromStreamingSoundFile(params, ob->pos.toVec4fPoint());
+							configureAudioSourceSpatialSettingsFromObject(*ob, *source);
+							audio_engine.sourcePositionUpdated(*source);
+							audio_engine.sourceSpatialSettingsUpdated(*source);
 
 							Lock lock(world_state->mutex);
 							const Parcel* parcel = world_state->getParcelPointIsIn(ob->pos);
@@ -5126,7 +5177,7 @@ void GUIClient::loadAudioForObject(WorldObject* ob, const Reference<LoadedBuffer
 							load_audio_task->result_msg_queue = &this->msg_queue;
 							load_audio_task->loaded_buffer = loaded_buffer;
 
-							load_item_queue.enqueueItem(/*key=*/ob->audio_source_url, *ob, load_audio_task, /*task max dist=*/maxAudioDistForSourceVolFactor(ob->audio_volume));
+							load_item_queue.enqueueItem(/*key=*/ob->audio_source_url, *ob, load_audio_task, /*task max dist=*/getMaxAudioDistForObject(*ob));
 						}
 						else
 						{
@@ -5667,8 +5718,9 @@ void GUIClient::doMoveAndRotateObject(WorldObjectRef ob, const Vec3d& new_ob_pos
 	// Update audio source position in audio engine.
 	if(ob->audio_source.nonNull())
 	{
-		ob->audio_source->pos = ob->getCentroidWS();
+		configureAudioSourceSpatialSettingsFromObject(*ob, *ob->audio_source);
 		audio_engine.sourcePositionUpdated(*ob->audio_source);
+		audio_engine.sourceSpatialSettingsUpdated(*ob->audio_source);
 	}
 
 	if(this->terrain_system.nonNull() && ::hasPrefix(ob->content, "biome:"))
@@ -5893,7 +5945,7 @@ void GUIClient::checkForAudioRangeChanges()
 			WorldObject* ob = it->ptr();
 
 			const float dist2 = cam_pos.getDist2(ob->pos.toVec4fPoint());
-			const float max_audio_dist2 = Maths::square(maxAudioDistForSourceVolFactor(ob->audio_volume)); // MAX_AUDIO_DIST
+			const float max_audio_dist2 = Maths::square(getMaxAudioDistForObject(*ob));
 			
 			if(ob->in_audio_proximity && (dist2 > max_audio_dist2)) // If object was in audio proximity, and moved out of it:
 			{
@@ -8259,8 +8311,9 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 							// Update audio source for the object, if it has one.
 							if(ob->audio_source.nonNull())
 							{
-								ob->audio_source->pos = ob->getCentroidWS();
+								configureAudioSourceSpatialSettingsFromObject(*ob, *ob->audio_source);
 								audio_engine.sourcePositionUpdated(*ob->audio_source);
+								audio_engine.sourceSpatialSettingsUpdated(*ob->audio_source);
 							}
 
 							// For dynamic objects that we are physics-owner of, get some extra state needed for physics snaphots
@@ -8580,7 +8633,10 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 			glare::AudioSource* source = it->ptr();
 
 			const float dist = source->pos.getDist(campos); // Dist from camera to source position
-			if(dist < maxAudioDistForSourceVolFactor(source->volume)) // Only do tracing for nearby objects
+			const float max_trace_audio_dist = (isFinite(source->max_distance_for_culling) && source->max_distance_for_culling > 0.f) ?
+				source->max_distance_for_culling :
+				maxAudioDistForSourceVolFactor(source->volume);
+			if(dist < max_trace_audio_dist) // Only do tracing for nearby objects
 			{
 				const Vec4f trace_dir = (dist == 0) ? Vec4f(1,0,0,0) : ((source->pos - campos) / dist); // Trace from camera to source position
 				assert(trace_dir.isUnitLength());
@@ -9133,8 +9189,9 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 							if(ob->audio_source.nonNull())
 							{
 								// Update in audio engine
-								ob->audio_source->pos = ob->getCentroidWS();
+								configureAudioSourceSpatialSettingsFromObject(*ob, *ob->audio_source);
 								audio_engine.sourcePositionUpdated(*ob->audio_source);
+								audio_engine.sourceSpatialSettingsUpdated(*ob->audio_source);
 							}
 						}
 
@@ -10639,6 +10696,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 								params.paused = !BitUtils::isBitSet(ob->flags, WorldObject::AUDIO_AUTOPLAY);
 
 								glare::AudioSourceRef source = audio_engine.addSourceFromStreamingSoundFile(params, ob->pos.toVec4fPoint());
+								configureAudioSourceSpatialSettingsFromObject(*ob, *source);
+								audio_engine.sourcePositionUpdated(*source);
+								audio_engine.sourceSpatialSettingsUpdated(*source);
 
 								const Parcel* parcel = world_state->getParcelPointIsIn(ob->pos);
 								source->userdata_1 = parcel ? parcel->id.value() : ParcelID::invalidParcelID().value(); // Save the ID of the parcel the object is in, in userdata_1 field of the audio source.
@@ -10677,8 +10737,8 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 								ob->audio_source->paused = !BitUtils::isBitSet(ob->flags, WorldObject::AUDIO_AUTOPLAY);
 								ob->audio_source->shared_buffer = loaded_msg->sound_file->buf;
 								ob->audio_source->sampling_rate = loaded_msg->sound_file->sample_rate;
-								ob->audio_source->pos = ob->getCentroidWS();
 								ob->audio_source->volume = ob->audio_volume;
+								configureAudioSourceSpatialSettingsFromObject(*ob, *ob->audio_source);
 								const double audio_len_s = loaded_msg->sound_file->buf->buffer.size() / (double)loaded_msg->sound_file->sample_rate;
 								const double source_time_offset = Maths::doubleMod(global_time, audio_len_s);
 								ob->audio_source->cur_read_i = Maths::intMod((int)(source_time_offset * loaded_msg->sound_file->sample_rate), (int)loaded_msg->sound_file->buf->buffer.size());
@@ -14052,8 +14112,9 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 					if(in_world_ob->audio_source.nonNull())
 					{
 						// Update in audio engine
-						in_world_ob->audio_source->pos = in_world_ob->getCentroidWS();
+						configureAudioSourceSpatialSettingsFromObject(*in_world_ob, *in_world_ob->audio_source);
 						audio_engine.sourcePositionUpdated(*in_world_ob->audio_source);
+						audio_engine.sourceSpatialSettingsUpdated(*in_world_ob->audio_source);
 					}
 
 					// Update in Indigo view
@@ -14956,8 +15017,9 @@ void GUIClient::objectTransformEdited()
 
 		if(this->selected_ob->audio_source.nonNull())
 		{
-			this->selected_ob->audio_source->pos = this->selected_ob->getCentroidWS();
+			configureAudioSourceSpatialSettingsFromObject(*this->selected_ob, *this->selected_ob->audio_source);
 			this->audio_engine.sourcePositionUpdated(*this->selected_ob->audio_source);
+			this->audio_engine.sourceSpatialSettingsUpdated(*this->selected_ob->audio_source);
 		}
 
 		if(this->terrain_system.nonNull() && ::hasPrefix(selected_ob->content, "biome:"))
@@ -15674,8 +15736,9 @@ void GUIClient::objectEdited()
 
 		if(this->selected_ob->audio_source.nonNull())
 		{
-			this->selected_ob->audio_source->pos = this->selected_ob->getCentroidWS();
+			configureAudioSourceSpatialSettingsFromObject(*this->selected_ob, *this->selected_ob->audio_source);
 			this->audio_engine.sourcePositionUpdated(*this->selected_ob->audio_source);
+			this->audio_engine.sourceSpatialSettingsUpdated(*this->selected_ob->audio_source);
 
 			this->selected_ob->audio_source->volume = this->selected_ob->audio_volume;
 			this->audio_engine.sourceVolumeUpdated(*this->selected_ob->audio_source);

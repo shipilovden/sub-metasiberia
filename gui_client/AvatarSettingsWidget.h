@@ -9,6 +9,7 @@
 
 #include <QtWidgets/QWidget>
 #include <QtCore/QTimer>
+#include <QtCore/QString>
 #include <functional>
 
 class GUIClient;
@@ -50,8 +51,15 @@ private slots:
 	void onCloseClicked();
 	void onTick();
 
+protected:
+	void changeEvent(QEvent* event) override;
+
 private:
 	void loadModelIntoPreview(const std::string& local_path, bool show_error_dialogs);
+	void retranslateDynamicUi();
+	void setVRoidStatusSourceText(const QString& status_source_text);
+	QString translateVRoidAuthFlowText(const QString& source_text) const;
+	QString translateVRoidAuthFlowText(const char* source_text) const;
 
 	std::string base_dir_path;
 	QSettings* settings;
@@ -66,6 +74,7 @@ private:
 
 	bool done_initial_load;
 	QTimer tick_timer;
+	QString last_vroid_status_source_text;
 
 public:
 	// Last successfully loaded model data (used for Apply).

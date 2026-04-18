@@ -23,6 +23,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Movement", "Движение");
 	add("MainWindow", "Avatar", "Аватар");
 	add("MainWindow", "Vehicles", "Транспорт");
+	add("MainWindow", "Gear", "Снаряжение");
 	add("MainWindow", "View", "Вид");
 	add("MainWindow", "Go", "Переход");
 	add("MainWindow", "Tools", "Инструменты");
@@ -45,6 +46,8 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Help Information", "Справочная информация");
 	add("MainWindow", "Diagnostics", "Диагностика");
 	add("MainWindow", "Lightmaps", "Лайтмапы");
+	add("MainWindow", "Bake Lightmaps (fast) for all objects in parcel", "Запечь лайтмапы (быстро) для всех объектов участка");
+	add("MainWindow", "Bake lightmaps (high quality) for all objects in parcel", "Запечь лайтмапы (высокое качество) для всех объектов участка");
 
 	// Toolbar / actions
 	add("MainWindow", "Add Model / Image", "Добавить модель / изображение");
@@ -69,6 +72,22 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Summon Boat", "Вызвать лодку");
 	add("MainWindow", "Summon Jet Ski", "Вызвать гидроцикл");
 	add("MainWindow", "Summon Car", "Вызвать машину");
+	add("MainWindow", "Fly Mode     F", "Режим полёта     F");
+	add("MainWindow", "Third Person Camera       V", "Камера от третьего лица       V");
+	add("MainWindow", "Open Gear Inventory", "Открыть инвентарь снаряжения");
+	add("MainWindow", "Convert Selected Object To Gear Item", "Преобразовать выбранный объект в предмет снаряжения");
+	add("MainWindow", "Go Back", "Назад");
+	add("MainWindow", "Go to Position", "Перейти к позиции");
+	add("MainWindow", "Go to Parcel", "Перейти к участку");
+	add("MainWindow", "Go To Start Location", "Перейти к стартовой локации");
+	add("MainWindow", "Go to Main World", "Перейти в главный мир");
+	add("MainWindow", "Go to Personal World", "Перейти в персональный мир");
+	add("MainWindow", "Go to Cryptovoxels World", "Перейти в мир Cryptovoxels");
+	add("MainWindow", "Go to Substrata", "Перейти в Substrata");
+	add("MainWindow", "Go to Metasiberia", "Перейти в Metasiberia");
+	add("MainWindow", "Go to Shki-Nvkz", "Перейти в Shki-Nvkz");
+	add("MainWindow", "Go to Favorites", "Переход в избранное");
+	add("MainWindow", "Set current location as start location", "Сделать текущую локацию стартовой");
 
 	// Frequently used menu actions
 	add("MainWindow", "Undo", "Отменить");
@@ -88,14 +107,19 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	// Dynamic strings from MainWindow.cpp
 	add("MainWindow", "Rename", "Переименовать");
 	add("MainWindow", "Rename Favorite", "Переименовать избранное");
+	add("MainWindow", "Rename favorite", "Переименовать избранное");
 	add("MainWindow", "Enter new name:", "Введите новое имя:");
+	add("MainWindow", "New name:", "Новое имя:");
 	add("MainWindow", "Favorite renamed.", "Избранное переименовано.");
 	add("MainWindow", "Delete", "Удалить");
 	add("MainWindow", "Delete Favorite", "Удалить избранное");
+	add("MainWindow", "Delete favorite", "Удалить избранное");
 	add("MainWindow", "Are you sure you want to delete this favorite?", "Вы уверены, что хотите удалить это избранное?");
+	add("MainWindow", "Delete this favorite?", "Удалить это избранное?");
 	add("MainWindow", "Favorite deleted.", "Избранное удалено.");
 	add("MainWindow", "(No favorites)", "(Нет избранного)");
 	add("MainWindow", "Default", "По умолчанию");
+	add("MainWindow", "Open Current Location In Browser", "Открыть текущую локацию в браузере");
 	add("MainWindow", "Use the W/A/S/D keys and arrow keys to move and look around.\n", "Используйте клавиши W/A/S/D и стрелки для передвижения и обзора.\n");
 	add("MainWindow", "Click and drag the mouse on the 3D view to look around.\n", "Нажмите и перетаскивайте мышь в 3D-окне для обзора.\n");
 	add("MainWindow", "Space key: jump\n", "Пробел: прыжок\n");
@@ -103,6 +127,10 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 
 	// FileSelectWidget
 	add("FileSelectWidget", "Browse", "Обзор");
+	add("QPlatformTheme", "OK", "ОК");
+	add("QPlatformTheme", "Cancel", "Отмена");
+	add("QPlatformTheme", "Apply", "Применить");
+	add("QPlatformTheme", "Close", "Закрыть");
 
 	// ObjectEditor
 	add("ObjectEditor", "Model", "Модель");
@@ -140,7 +168,40 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("ObjectEditor", "Restitution (elasticity)", "Упругость");
 	add("ObjectEditor", "Centre of mass offset", "Смещение центра масс");
 	add("ObjectEditor", "Audio", "Аудио");
+	add("ObjectEditor", "Audio Player", "Аудио-плеер");
 	add("ObjectEditor", "Audio File", "Аудиофайл");
+	add("ObjectEditor", "Shuffle", "Перемешивание");
+	add("ObjectEditor", "Activation Distance", "Дистанция активации");
+	add("ObjectEditor", "Sound Radius", "Радиус звука");
+	add("ObjectEditor", "3D Directionality", "3D направленность");
+	add("ObjectEditor", "Directionality Focus", "Фокус направленности");
+	add("ObjectEditor", "Directionality Sharpness", "Резкость направленности");
+	add("ObjectEditor", "Directional Spread", "Угол направленности");
+	add("ObjectEditor", "Use Daily Schedule", "Использовать расписание");
+	add("ObjectEditor", "Schedule Start", "Начало расписания");
+	add("ObjectEditor", "Schedule End", "Конец расписания");
+	add("ObjectEditor", "Playlist", "Плейлист");
+	add("ObjectEditor", "Add Tracks", "Добавить треки");
+	add("ObjectEditor", "Add URL", "Добавить URL");
+	add("ObjectEditor", "Remove", "Удалить");
+	add("ObjectEditor", "Up", "Вверх");
+	add("ObjectEditor", "Down", "Вниз");
+	add("ObjectEditor", "Add Playlist Entry", "Добавить элемент плейлиста");
+	add("ObjectEditor", "Audio/Radio stream URL or local path:", "URL аудио/радиопотока или локальный путь:");
+	add("ObjectEditor", "Playback volume for this audio player.", "Громкость воспроизведения этого аудио-плеера.");
+	add("ObjectEditor", "Enable automatic playback when this object loads.", "Автоматически запускать воспроизведение при загрузке объекта.");
+	add("ObjectEditor", "Loop the playlist when it reaches the end.", "Зацикливать плейлист при достижении конца.");
+	add("ObjectEditor", "Shuffle playlist order.", "Перемешивать порядок воспроизведения плейлиста.");
+	add("ObjectEditor", "Distance from camera where the player becomes active.", "Расстояние от камеры, на котором плеер становится активным.");
+	add("ObjectEditor", "Maximum audible distance for this player's sound.", "Максимальная слышимая дистанция звука этого плеера.");
+	add("ObjectEditor", "Enable directional 3D sound cone.", "Включить направленный 3D-конус звука.");
+	add("ObjectEditor", "Forward focus of directional sound pattern.", "Фокус вперёд для диаграммы направленности звука.");
+	add("ObjectEditor", "Sharpness of directional sound attenuation.", "Резкость затухания направленного звука.");
+	add("ObjectEditor", "Angular spread of directional sound in degrees.", "Угловая ширина направленного звука в градусах.");
+	add("ObjectEditor", "Restrict playback to a daily time window.", "Ограничить воспроизведение ежедневным временным окном.");
+	add("ObjectEditor", "Playback start time in local hours.", "Локальное время начала воспроизведения (часы).");
+	add("ObjectEditor", "Playback end time in local hours.", "Локальное время окончания воспроизведения (часы).");
+	add("ObjectEditor", "Tracks and stream URLs played by this audio player.", "Треки и потоковые URL, которые воспроизводит этот аудио-плеер.");
 	add("ObjectEditor", "Spotlight", "Прожектор");
 	add("ObjectEditor", "Luminous flux:", "Световой поток:");
 	add("ObjectEditor", "Colour", "Цвет");
@@ -178,6 +239,53 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MaterialEditor", "Double sided", "Двусторонний");
 	add("MaterialEditor", "Decal", "Декаль");
 
+	// Add model/image dialog
+	add("AddObjectDialog", "Add Model or Image", "Добавить модель или изображение");
+	add("AddObjectDialog", "Model library", "Библиотека моделей");
+	add("AddObjectDialog", "<html><head/><body><p>Supported model formats: OBJ, GLTF, GLB, VOX, STL and IGMESH</p><p>Supported image formats: JPG, PNG, GIF, EXR, KTX, KTX2, BASIS, TIF, TIFF, BMP, TGA, WEBP</p></body></html>",
+		"<html><head/><body><p>Поддерживаемые форматы моделей: OBJ, GLTF, GLB, VOX, STL и IGMESH</p><p>Поддерживаемые форматы изображений: JPG, PNG, GIF, EXR, KTX, KTX2, BASIS, TIF, TIFF, BMP, TGA, WEBP</p></body></html>");
+	add("AddObjectDialog", "From disk", "С диска");
+	add("AddObjectDialog", "URL", "URL");
+	add("AddObjectDialog", "From Web", "Из Web");
+	add("AddObjectDialog", "Preview:", "Предпросмотр:");
+
+	// Avatar settings
+	add("AvatarSettingsWidget", "Model:", "Модель:");
+	add("AvatarSettingsWidget", "Preview animation", "Анимация предпросмотра");
+	add("AvatarSettingsWidget", "Avatar", "Аватар");
+	add("AvatarSettingsWidget", "VRoid: not logged in", "VRoid: вход не выполнен");
+	add("AvatarSettingsWidget", "Login", "Войти");
+	add("AvatarSettingsWidget", "Fetch models", "Получить модели");
+	add("AvatarSettingsWidget", "Logout", "Выйти");
+	add("AvatarSettingsWidget", "VRoid workflow: log in, fetch models, then download VRM/GLB in browser and select it on the Avatar tab.",
+		"Процесс VRoid: войдите, получите список моделей, затем скачайте VRM/GLB в браузере и выберите файл на вкладке «Аватар».");
+	add("AvatarSettingsWidget", "<a href=\"https://hub.vroid.com/\">Open VRoid Hub</a>", "<a href=\"https://hub.vroid.com/\">Открыть VRoid Hub</a>");
+	add("AvatarSettingsWidget", "VRoid", "VRoid");
+	add("AvatarSettingsWidget", "Create a ReadyPlayerMe avatar", "Создать аватар ReadyPlayerMe");
+	add("AvatarSettingsWidget", "Create a AvaturnMe avatar", "Создать аватар AvaturnMe");
+	add("AvatarSettingsWidget", "After creating, download and select in file browser above.",
+		"После создания скачайте файл и выберите его в браузере файлов выше.");
+
+	add("AvatarSettingsDialog", "Avatar Settings", "Настройки аватара");
+	add("AvatarSettingsDialog", "Your name:", "Ваше имя:");
+	add("AvatarSettingsDialog", "Model:", "Модель:");
+	add("AvatarSettingsDialog", "Preview animation", "Анимация предпросмотра");
+	add("AvatarSettingsDialog", "Create ReadyPlayerme avatars at XXX", "Создайте аватары ReadyPlayerMe на XXX");
+
+	// VRoid auth status/error strings shown in Avatar settings.
+	add("VRoidAuthFlow", "VRoid: waiting for browser login...", "VRoid: ожидание входа в браузере...");
+	add("VRoidAuthFlow", "VRoid: exchanging token...", "VRoid: обмен токеном...");
+	add("VRoidAuthFlow", "VRoid: logged in.", "VRoid: вход выполнен.");
+	add("VRoidAuthFlow", "VRoid: logged out.", "VRoid: выход выполнен.");
+	add("VRoidAuthFlow", "VRoid: not logged in.", "VRoid: вход не выполнен.");
+	add("VRoidAuthFlow", "VRoid: not logged in", "VRoid: вход не выполнен");
+	add("VRoidAuthFlow", "VRoid: login failed", "VRoid: ошибка входа");
+	add("VRoidAuthFlow", "VRoid: settings is null", "VRoid: настройки недоступны");
+	add("VRoidAuthFlow", "VRoid OAuth callback missing code.", "VRoid OAuth: в callback отсутствует code.");
+	add("VRoidAuthFlow", "VRoid OAuth state mismatch.", "VRoid OAuth: несовпадение state.");
+	add("VRoidAuthFlow", "VRoid OAuth is not configured (client_id/client_secret missing).",
+		"VRoid OAuth не настроен (client_id/client_secret отсутствуют).");
+
 	// About dialog
 	add("AboutDialog", "About", "О программе");
 	add("AboutDialog", "Generate Crash", "Сгенерировать сбой");
@@ -195,4 +303,10 @@ QString RuntimeTranslator::translate(const char* context, const char* sourceText
 		return QString();
 
 	return ru_translations.value(key(context, sourceText), QString());
+}
+
+
+bool RuntimeTranslator::isEmpty() const
+{
+	return ru_translations.isEmpty();
 }

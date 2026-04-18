@@ -56,6 +56,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonParseError>
 #include <QtCore/QSettings>
+#include <QtCore/QSignalBlocker>
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
@@ -72,6 +73,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QMenu>
+#include <QtWidgets/QMenuBar>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QInputDialog>
@@ -108,6 +110,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/FileOutStream.h"
 #include "../utils/BufferOutStream.h"
 #include <algorithm>
+#include <functional>
 #include "../utils/IndigoXMLDoc.h"
 #include "../utils/LimitedAllocator.h"
 #include <Escaping.h>
@@ -157,6 +160,9 @@ static std::vector<std::string> qt_debug_msgs;
 static FileOutStream* log_file = nullptr;
 static const double XR_COMPANION_UPDATE_PERIOD_S = 1.0 / 20.0;
 static const char* const QT_THEME_SETTINGS_KEY = "setting/qt_theme_name";
+static const char* const UI_LANGUAGE_SETTINGS_KEY = "setting/ui_language";
+static const char* const LEGACY_UI_LANGUAGE_SETTINGS_KEY = "ui/language";
+static const char* const UI_LANGUAGE_APP_PROPERTY_KEY = "metasiberia.ui_language";
 static const char* const QT_THEME_DIR_REL_PATH = "/data/resources/qt_themes";
 
 
@@ -411,6 +417,9 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	parsed_args(args),
 	QMainWindow(parent),
 	theme_action_group(NULL),
+	language_action_group(NULL),
+	runtime_translator(NULL),
+	current_ui_language(RuntimeTranslation::UILanguage::English),
 	last_timerEvent_CPU_work_elapsed(0.0),
 	last_updateGL_time(0.0),
 	last_xr_companion_update_time(-1.0),
@@ -548,10 +557,30 @@ static std::string canonicaliseMetasiberiaSubURLHost(const std::string& url)
 }
 
 
-static const char* default_help_info_message = "Use the W/A/S/D keys and arrow keys to move and look around.\n"
-	"Click and drag the mouse on the 3D view to look around.\n"
-	"Space key: jump\n"
-	"Double-click an object to select it.";
+static QString defaultHelpInfoMessageText()
+{
+	return
+		QCoreApplication::translate("MainWindow", "Use the W/A/S/D keys and arrow keys to move and look around.\n") +
+		QCoreApplication::translate("MainWindow", "Click and drag the mouse on the 3D view to look around.\n") +
+		QCoreApplication::translate("MainWindow", "Space key: jump\n") +
+		QCoreApplication::translate("MainWindow", "Double-click an object to select it.");
+}
+
+
+static RuntimeTranslation::UILanguage uiLanguageFromSettingsValue(const QString& value)
+{
+	const QString lower = value.trimmed().toLower();
+	if(lower.startsWith("ru") || lower == "russian")
+		return RuntimeTranslation::UILanguage::Russian;
+
+	return RuntimeTranslation::UILanguage::English;
+}
+
+
+static QString uiLanguageToSettingsValue(RuntimeTranslation::UILanguage language)
+{
+	return (language == RuntimeTranslation::UILanguage::Russian) ? "ru" : "en";
+}
 
 
 void MainWindow::startMainTimer()
@@ -583,11 +612,22 @@ void MainWindow::initialiseUI()
 
 	QGamepadManager::instance(); // Creating the instance here before any windows are created is required for querying gamepads to work.
 
+	const QString saved_ui_language = settings->value(
+		UI_LANGUAGE_SETTINGS_KEY,
+		settings->value(LEGACY_UI_LANGUAGE_SETTINGS_KEY, QStringLiteral("en"))
+	).toString();
+	const RuntimeTranslation::UILanguage startup_language = uiLanguageFromSettingsValue(
+		saved_ui_language
+	);
+	applyUILanguage(startup_language, /*persist_setting=*/false);
+
 	{
 		ZoneScopedN("setupUi"); // Tracy profiler
 		ui = new Ui::MainWindow();
 		ui->setupUi(this);
 	}
+
+	initialiseLanguageMenu();
 
 	// Keep favorites menu up to date (actions are rebuilt on-demand when the menu opens).
 	if(ui->menuGo_to_Favorites)
@@ -665,6 +705,7 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(ui->indigoViewDockWidget->toggleViewAction());
 #endif
 	ui->menuWindow->addAction(ui->diagnosticsDockWidget->toggleViewAction());
+	updateMenuTooltips();
 
 
 	// Always disable MDI for now, seems to be slower in general in Substrata
@@ -883,7 +924,7 @@ void MainWindow::initialiseUI()
 	setUIForSelectedObject();
 
 	// Update help text
-	this->ui->helpInfoLabel->setText(default_help_info_message);
+	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
 
 	if(!settings->contains("mainwindow/geometry"))
 		need_help_info_dock_widget_position = true;
@@ -974,6 +1015,12 @@ void MainWindow::initialiseThemesMenu()
 	}
 
 	ui->menuThemes->clear();
+
+	if(theme_action_group)
+	{
+		delete theme_action_group;
+		theme_action_group = NULL;
+	}
 
 	theme_action_group = new QActionGroup(this);
 	theme_action_group->setExclusive(true);
@@ -1087,6 +1134,129 @@ void MainWindow::updateThemesMenuCheckedState(const std::string& active_theme_na
 		QAction* action = actions[i];
 		if(action)
 			action->setChecked(action->data().toString() == active_name);
+	}
+}
+
+
+void MainWindow::initialiseLanguageMenu()
+{
+	if(!ui)
+		return;
+
+	if(!language_action_group)
+	{
+		language_action_group = new QActionGroup(this);
+		language_action_group->setExclusive(true);
+	}
+
+	language_action_group->addAction(ui->actionLanguage_English);
+	language_action_group->addAction(ui->actionLanguage_Russian);
+
+	applyUILanguage(current_ui_language, /*persist_setting=*/false);
+
+	connect(ui->actionLanguage_English, &QAction::toggled, this, [this](bool checked)
+	{
+		if(checked)
+			applyUILanguage(RuntimeTranslation::UILanguage::English, /*persist_setting=*/true);
+	}, Qt::UniqueConnection);
+	connect(ui->actionLanguage_Russian, &QAction::toggled, this, [this](bool checked)
+	{
+		if(checked)
+			applyUILanguage(RuntimeTranslation::UILanguage::Russian, /*persist_setting=*/true);
+	}, Qt::UniqueConnection);
+
+	updateMenuTooltips();
+}
+
+
+void MainWindow::applyUILanguage(RuntimeTranslation::UILanguage language, bool persist_setting)
+{
+	current_ui_language = language;
+
+	if(!runtime_translator)
+		runtime_translator = new RuntimeTranslation::RuntimeTranslator(this);
+
+	if(QApplication::instance())
+	{
+		QApplication::instance()->removeTranslator(runtime_translator);
+		if(language == RuntimeTranslation::UILanguage::Russian)
+			QApplication::instance()->installTranslator(runtime_translator);
+		QApplication::instance()->setProperty(UI_LANGUAGE_APP_PROPERTY_KEY, uiLanguageToSettingsValue(language));
+	}
+
+	if(persist_setting && settings)
+	{
+		const QString ui_language_value = uiLanguageToSettingsValue(language);
+		settings->setValue(UI_LANGUAGE_SETTINGS_KEY, ui_language_value);
+		settings->setValue(LEGACY_UI_LANGUAGE_SETTINGS_KEY, ui_language_value);
+	}
+
+	if(ui)
+	{
+		const QSignalBlocker block_english(ui->actionLanguage_English);
+		const QSignalBlocker block_russian(ui->actionLanguage_Russian);
+		ui->actionLanguage_English->setChecked(language == RuntimeTranslation::UILanguage::English);
+		ui->actionLanguage_Russian->setChecked(language == RuntimeTranslation::UILanguage::Russian);
+		refreshTranslatedUiText();
+	}
+}
+
+
+void MainWindow::refreshTranslatedUiText()
+{
+	if(!ui)
+		return;
+
+	ui->retranslateUi(this);
+	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
+
+	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
+
+	if(theme_action_group)
+		initialiseThemesMenu();
+
+	updateMenuTooltips();
+}
+
+
+void MainWindow::updateMenuTooltips()
+{
+	if(!ui || !menuBar())
+		return;
+
+	std::function<void(QMenu*)> apply_menu_tooltips_recursive;
+	apply_menu_tooltips_recursive = [&](QMenu* menu)
+	{
+		if(!menu)
+			return;
+
+		menu->setToolTipsVisible(true);
+
+		for(QAction* action : menu->actions())
+		{
+			if(!action)
+				continue;
+
+			const QString action_text = QString(action->text()).remove('&');
+			action->setToolTip(action_text);
+			action->setStatusTip(action_text);
+
+			if(QMenu* sub_menu = action->menu())
+				apply_menu_tooltips_recursive(sub_menu);
+		}
+	};
+
+	for(QAction* top_level_action : menuBar()->actions())
+	{
+		if(!top_level_action)
+			continue;
+
+		const QString action_text = QString(top_level_action->text()).remove('&');
+		top_level_action->setToolTip(action_text);
+		top_level_action->setStatusTip(action_text);
+
+		if(QMenu* menu = top_level_action->menu())
+			apply_menu_tooltips_recursive(menu);
 	}
 }
 
@@ -1223,6 +1393,9 @@ void MainWindow::afterGLInitInitialise()
 MainWindow::~MainWindow()
 {
 	running_destructor = true; // Set this to not append log messages during destruction, causes assert failure in Qt.
+
+	if(runtime_translator && QApplication::instance())
+		QApplication::instance()->removeTranslator(runtime_translator);
 
 	delete main_task_manager;
 	delete high_priority_task_manager;
@@ -1883,6 +2056,9 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 void MainWindow::changeEvent(QEvent* event)
 {
+	if(event->type() == QEvent::LanguageChange)
+		refreshTranslatedUiText();
+
 	// When the window is minimised, reduce the timer frequency from the default 1000hz.  Otherwise too much CPU will be used as no GL rendering takes place.
 	// Restore it when maximised.
 	if(event->type() == QEvent::WindowStateChange)
@@ -1897,6 +2073,8 @@ void MainWindow::changeEvent(QEvent* event)
 			startMainTimer();
 		}
 	}
+
+	QMainWindow::changeEvent(event);
 }
 
 
@@ -4620,6 +4798,18 @@ void MainWindow::on_actionEnter_Fullscreen_triggered()
 }
 
 
+void MainWindow::on_actionLanguage_English_triggered()
+{
+	// Language switching is handled explicitly via QAction::toggled connections in initialiseLanguageMenu().
+}
+
+
+void MainWindow::on_actionLanguage_Russian_triggered()
+{
+	// Language switching is handled explicitly via QAction::toggled connections in initialiseLanguageMenu().
+}
+
+
 void MainWindow::on_actionGo_Back_triggered()
 {
 	gui_client.goBack();
@@ -5187,7 +5377,7 @@ bool MainWindow::hasFocus()
 
 void MainWindow::setHelpInfoLabelToDefaultText()
 {
-	this->ui->helpInfoLabel->setText(default_help_info_message);
+	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
 }
 
 
@@ -6322,3 +6512,4 @@ int main(int argc, char *argv[])
 
 
 #endif // End #ifndef FUZZING
+

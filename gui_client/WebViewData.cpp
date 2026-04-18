@@ -28,6 +28,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/StringUtils.h>
 #include "superluminal/PerformanceAPI.h"
 #include <cmath>
+#include <ctime>
 #include <vector>
 #if EMSCRIPTEN
 #include <emscripten.h>
@@ -338,6 +339,40 @@ std::string makeAudioPlayerStateKey(const WorldObject& ob)
 		toStdString(body_tex_url) + "\n" + toString(body_tex_scale.x) + "," + toString(body_tex_scale.y) + "\n" +
 		toString(emission_col.r) + "," + toString(emission_col.g) + "," + toString(emission_col.b) + "\n" +
 		toString(luminance) + "\n" + toStdString(emission_tex_url);
+}
+
+
+int getLocalMinuteOfDay()
+{
+	std::time_t now_t = std::time(nullptr);
+	std::tm local_tm;
+#if defined(_WIN32)
+	localtime_s(&local_tm, &now_t);
+#else
+	localtime_r(&now_t, &local_tm);
+#endif
+	return myClamp(local_tm.tm_hour * 60 + local_tm.tm_min, 0, 24 * 60 - 1);
+}
+
+
+bool audioPlayerScheduleAllowsPlaybackNow(const WorldObject& ob)
+{
+	if(!ob.audio_player_schedule_enabled)
+		return true;
+
+	const int start_min = myClamp((int)std::lround((double)ob.audio_player_schedule_start_hour * 60.0), 0, 24 * 60);
+	const int end_min = myClamp((int)std::lround((double)ob.audio_player_schedule_end_hour * 60.0), 0, 24 * 60);
+	const int minute_of_day = getLocalMinuteOfDay();
+
+	// Equal start/end means "always active" (24h).
+	if(start_min == end_min)
+		return true;
+
+	if(start_min < end_min)
+		return (minute_of_day >= start_min) && (minute_of_day < end_min);
+
+	// Wrapped interval across midnight.
+	return (minute_of_day >= start_min) || (minute_of_day < end_min);
 }
 
 
@@ -860,14 +895,15 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 	const double max_play_dist = is_audio_player ?
 		(double)myClamp(ob->audio_player_activation_distance, WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE, WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE) :
 		maxBrowserDist();
+	const bool schedule_allows_playback = !is_audio_player || audioPlayerScheduleAllowsPlaybackNow(*ob);
 	[[maybe_unused]]const double unload_dist = max_play_dist * 1.3;
-	const bool in_process_dist = ob_dist_from_cam < max_play_dist;
+	const bool in_process_dist = schedule_allows_playback && (ob_dist_from_cam < max_play_dist);
 	
 	// Debug output - always log for webview objects
 	static int debug_counter = 0;
 	if(++debug_counter % 60 == 0) // Log every 60 frames (~1 second)
 	{
-		conPrint("WebViewData::process: ob_dist=" + toString(ob_dist_from_cam) + ", max_dist=" + toString(max_play_dist) + ", in_process=" + toString(in_process_dist) + ", target_url='" + ob->target_url + "', opengl_engine_ob=" + toString(ob->opengl_engine_ob.nonNull()) + ", browser=" + toString(browser.nonNull()));
+		conPrint("WebViewData::process: ob_dist=" + toString(ob_dist_from_cam) + ", max_dist=" + toString(max_play_dist) + ", in_process=" + toString(in_process_dist) + ", schedule_allows=" + toString(schedule_allows_playback) + ", target_url='" + ob->target_url + "', opengl_engine_ob=" + toString(ob->opengl_engine_ob.nonNull()) + ", browser=" + toString(browser.nonNull()));
 	}
 
 #if EMSCRIPTEN
