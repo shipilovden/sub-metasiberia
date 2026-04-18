@@ -855,9 +855,12 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 
 	m_gui_client = gui_client;
 
+	const bool is_audio_player = ob->isAudioPlayerWebView();
 	const double ob_dist_from_cam = ob->pos.getDist(gui_client->cam_controller.getPosition());
-	const double max_play_dist = maxBrowserDist();
-	[[maybe_unused]]const double unload_dist = maxBrowserDist() * 1.3;
+	const double max_play_dist = is_audio_player ?
+		(double)myClamp(ob->audio_player_activation_distance, WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE, WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE) :
+		maxBrowserDist();
+	[[maybe_unused]]const double unload_dist = max_play_dist * 1.3;
 	const bool in_process_dist = ob_dist_from_cam < max_play_dist;
 	
 	// Debug output - always log for webview objects
@@ -955,7 +958,6 @@ void WebViewData::process(GUIClient* gui_client, OpenGLEngine* opengl_engine, Wo
 
 #if CEF_SUPPORT
 
-	const bool is_audio_player = ob->isAudioPlayerWebView();
 	const int viewport_width  = is_audio_player ? 1200 : 1920;
 	const int viewport_height = is_audio_player ? 320  : 1080;
 	const std::string audio_player_state_key = is_audio_player ? makeAudioPlayerStateKey(*ob) : std::string();

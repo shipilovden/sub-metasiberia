@@ -3092,7 +3092,7 @@ void MainWindow::on_actionAdd_Audio_Source_triggered()
 		const QStringList selected_filenames = QFileDialog::getOpenFileNames(this,
 			tr("Select audio file(s)..."),
 			last_audio_dir,
-			tr("Audio file (*.mp3 *.wav)"), // tr("Audio file (*.mp3 *.m4a *.aac *.wav)"),
+			tr("Audio file (*.mp3 *.wav *.aac *.m4a *.ogg *.opus *.flac)"),
 			&selected_filter,
 			options
 		);
@@ -3128,6 +3128,7 @@ void MainWindow::on_actionAdd_Audio_Source_triggered()
 			new_world_object->model_url = "image_cube_5438347426447337425.bmesh";
 			new_world_object->target_url = WorldObject::audioPlayerTargetURL();
 			new_world_object->audio_volume = 1.0f;
+			new_world_object->audio_player_activation_distance = WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE;
 			BitUtils::setOrZeroBit(new_world_object->flags, WorldObject::AUDIO_AUTOPLAY, false);
 			BitUtils::setOrZeroBit(new_world_object->flags, WorldObject::AUDIO_LOOP, false);
 			BitUtils::setOrZeroBit(new_world_object->flags, WorldObject::AUDIO_SHUFFLE, false);
@@ -3656,6 +3657,7 @@ void MainWindow::on_actionCloneObject_triggered()
 		new_world_object->getCompressedVoxels() = source_ob->getCompressedVoxels();
 		new_world_object->audio_source_url = source_ob->audio_source_url;
 		new_world_object->audio_volume = source_ob->audio_volume;
+		new_world_object->audio_player_activation_distance = source_ob->audio_player_activation_distance;
 		new_world_object->setAABBOS(source_ob->getAABBOS());
 
 		new_world_object->max_model_lod_level = source_ob->max_model_lod_level;
