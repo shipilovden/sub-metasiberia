@@ -313,6 +313,9 @@ public:
 	static const size_t MAX_CONTENT_SIZE                  = 10000;
 	static const size_t MAX_FONT_NAME_SIZE                = 256;
 	static const char* audioPlayerTargetURL() { return "https://localdomain/audio-player"; }
+	static constexpr float DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE = 20.f;
+	static constexpr float MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE = 0.5f;
+	static constexpr float MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE = 500.f;
 	static bool looksLikeAudioPlayerPlaylistContent(const std::string& content);
 	
 
@@ -417,6 +420,7 @@ public:
 #endif
 	URLString audio_source_url;
 	float audio_volume;
+	float audio_player_activation_distance;
 
 	bool isAudioPlayerWebView() const;
 

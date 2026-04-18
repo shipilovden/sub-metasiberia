@@ -21,6 +21,7 @@
 #include "../utils/TaskManager.h"
 #include "../qt/SignalBlocker.h"
 #include "../qt/QtUtils.h"
+#include "../qt/RealControl.h"
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QMouseEvent>
@@ -33,6 +34,7 @@
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QInputDialog>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QVBoxLayout>
@@ -141,6 +143,8 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	syncing_audio_playlist_widget(false),
 	editing_audio_player_webview(false),
 	audioShuffleCheckBox(NULL),
+	audioActivationDistanceLabel(NULL),
+	audioActivationDistanceSpinBox(NULL),
 	audioPlaylistGroupBox(NULL),
 	audioPlaylistListWidget(NULL),
 	audioAddTracksPushButton(NULL),
@@ -244,6 +248,19 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	this->audioShuffleCheckBox = new QCheckBox(QCoreApplication::translate("ObjectEditor", "Shuffle"), this->audioGroupBox);
 	this->gridLayout_3->addWidget(this->audioShuffleCheckBox, 0, 2);
 
+	this->audioActivationDistanceLabel = new QLabel(QCoreApplication::translate("ObjectEditor", "Activation Distance"), this->audioGroupBox);
+	this->gridLayout_3->addWidget(this->audioActivationDistanceLabel, 1, 0);
+
+	this->audioActivationDistanceSpinBox = new RealControl(this->audioGroupBox);
+	this->audioActivationDistanceSpinBox->setMinimum(WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE);
+	this->audioActivationDistanceSpinBox->setMaximum(WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE);
+	this->audioActivationDistanceSpinBox->setSingleStep(0.5);
+	this->audioActivationDistanceSpinBox->setSliderMinimum(WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE);
+	this->audioActivationDistanceSpinBox->setSliderMaximum(60.0);
+	this->audioActivationDistanceSpinBox->setSliderSteps(240);
+	this->audioActivationDistanceSpinBox->setSuffix(QCoreApplication::translate("ObjectEditor", " m"));
+	this->gridLayout_3->addWidget(this->audioActivationDistanceSpinBox, 1, 1, 1, 2);
+
 	this->audioPlaylistGroupBox = new QGroupBox(QCoreApplication::translate("ObjectEditor", "Playlist"), this->audioGroupBox);
 	QVBoxLayout* audio_playlist_group_layout = new QVBoxLayout(this->audioPlaylistGroupBox);
 	audio_playlist_group_layout->setContentsMargins(0, 0, 0, 0);
@@ -273,6 +290,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	this->verticalLayout_6->addWidget(this->audioPlaylistGroupBox);
 
 	connect(this->audioShuffleCheckBox,		SIGNAL(toggled(bool)),				this, SIGNAL(objectChanged()));
+	connect(this->audioActivationDistanceSpinBox, SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
 	connect(this->audioAddTracksPushButton, SIGNAL(clicked(bool)),				this, SLOT(on_audioAddTracksPushButton_clicked(bool)));
 	connect(this->audioAddURLPushButton,	SIGNAL(clicked(bool)),				this, SLOT(on_audioAddURLPushButton_clicked(bool)));
 	connect(this->audioRemoveTrackPushButton, SIGNAL(clicked(bool)),			this, SLOT(on_audioRemoveTrackPushButton_clicked(bool)));
@@ -523,6 +541,8 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	SignalBlocker::setChecked(this->audioAutoplayCheckBox, BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_AUTOPLAY));
 	SignalBlocker::setChecked(this->audioLoopCheckBox,     BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_LOOP));
 	SignalBlocker::setChecked(this->audioShuffleCheckBox,  BitUtils::isBitSet(ob.flags, WorldObject::AUDIO_SHUFFLE));
+	SignalBlocker::setValue(this->audioActivationDistanceSpinBox, myClamp((double)ob.audio_player_activation_distance,
+		(double)WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE, (double)WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE));
 
 	this->videoURLFileSelectWidget->setFilename(QtUtils::toQString((!ob.materials.empty()) ? ob.materials[0]->emission_texture_url : ""));
 
@@ -757,6 +777,8 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->targetURLLineEdit->setVisible(!is_audio_player);
 	this->visitURLLabel->setVisible(!is_audio_player && !ob.target_url.empty());
 	this->audioShuffleCheckBox->setVisible(is_audio_player);
+	this->audioActivationDistanceLabel->setVisible(is_audio_player);
+	this->audioActivationDistanceSpinBox->setVisible(is_audio_player);
 	this->audioPlaylistGroupBox->setVisible(is_audio_player);
 	this->label_12->setText(QCoreApplication::translate("ObjectEditor", "Content"));
 	this->contentTextEdit->setPlaceholderText(QString());
@@ -913,6 +935,11 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 	BitUtils::setOrZeroBit(ob_out.flags, WorldObject::AUDIO_AUTOPLAY, this->audioAutoplayCheckBox->isChecked());
 	BitUtils::setOrZeroBit(ob_out.flags, WorldObject::AUDIO_LOOP,     this->audioLoopCheckBox    ->isChecked());
 	BitUtils::setOrZeroBit(ob_out.flags, WorldObject::AUDIO_SHUFFLE,  is_audio_player_webview && this->audioShuffleCheckBox->isChecked());
+	if(is_audio_player_webview)
+	{
+		ob_out.audio_player_activation_distance = myClamp((float)this->audioActivationDistanceSpinBox->value(),
+			WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE, WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE);
+	}
 
 	if(ob_out.object_type != WorldObject::ObjectType_Hypercard) // Don't store materials for hypercards. (doesn't use them, and matEditor may have old/invalid data)
 	{
@@ -1134,6 +1161,7 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->audioAutoplayCheckBox->setEnabled(editable);
 	this->audioLoopCheckBox->setEnabled(editable);
 	this->audioShuffleCheckBox->setEnabled(editable);
+	this->audioActivationDistanceSpinBox->setReadOnly(!editable);
 	this->audioPlaylistListWidget->setEnabled(editable);
 	this->audioPlaylistListWidget->setEditTriggers(editable ? (QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked) : QAbstractItemView::NoEditTriggers);
 	updateAudioPlaylistButtonsEnabled();
@@ -1176,7 +1204,7 @@ void ObjectEditor::on_audioAddTracksPushButton_clicked(bool)
 		this,
 		QCoreApplication::translate("ObjectEditor", "Select audio file(s)..."),
 		last_audio_dir,
-		QCoreApplication::translate("ObjectEditor", "Audio file (*.mp3 *.wav)")
+		QCoreApplication::translate("ObjectEditor", "Audio file (*.mp3 *.wav *.aac *.m4a *.ogg *.opus *.flac)")
 	);
 
 	if(selected_filenames.isEmpty())
@@ -1204,7 +1232,7 @@ void ObjectEditor::on_audioAddURLPushButton_clicked(bool)
 	const QString value = QInputDialog::getText(
 		this,
 		QCoreApplication::translate("ObjectEditor", "Add Playlist Entry"),
-		QCoreApplication::translate("ObjectEditor", "Audio URL or local path:"),
+		QCoreApplication::translate("ObjectEditor", "Audio/Radio stream URL or local path:"),
 		QLineEdit::Normal,
 		QString(),
 		&ok

@@ -2253,6 +2253,11 @@ void WorkerThread::doRun()
 											
 											// Clamp volume to the max allowed level
 											ob->audio_volume = myClamp(ob->audio_volume, 0.f, maxAudioVolumeForObject(*ob, client_user_id, *cur_world_state));
+											ob->audio_player_activation_distance = myClamp(
+												ob->audio_player_activation_distance,
+												WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE,
+												WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE
+											);
 
 											ob->last_modified_time = TimeStamp::currentTime();
 

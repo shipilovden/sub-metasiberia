@@ -20,9 +20,11 @@ class EnvEmitter;
 class ShaderEditorDialog;
 class QCheckBox;
 class QGroupBox;
+class QLabel;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class RealControl;
 
 
 class ObjectEditor : public QWidget, public Ui::ObjectEditor
@@ -136,6 +138,8 @@ private:
 	bool editing_audio_player_webview;
 
 	QCheckBox* audioShuffleCheckBox;
+	QLabel* audioActivationDistanceLabel;
+	RealControl* audioActivationDistanceSpinBox;
 	QGroupBox* audioPlaylistGroupBox;
 	QListWidget* audioPlaylistListWidget;
 	QPushButton* audioAddTracksPushButton;

@@ -48,6 +48,51 @@ Copyright Glare Technologies Limited 2016 -
 
 namespace
 {
+bool hasAudioPlayerTrackLikeExtension(const std::string& lower_line)
+{
+	return
+		hasExtension(lower_line, "mp3") ||
+		hasExtension(lower_line, "wav") ||
+		hasExtension(lower_line, "aac") ||
+		hasExtension(lower_line, "m4a") ||
+		hasExtension(lower_line, "ogg") ||
+		hasExtension(lower_line, "oga") ||
+		hasExtension(lower_line, "flac") ||
+		hasExtension(lower_line, "opus") ||
+		hasExtension(lower_line, "weba") ||
+		hasExtension(lower_line, "m3u") ||
+		hasExtension(lower_line, "m3u8") ||
+		hasExtension(lower_line, "pls");
+}
+
+
+bool looksLikeRadioStreamURL(const std::string& lower_line)
+{
+	if(!hasPrefix(lower_line, "http://") && !hasPrefix(lower_line, "https://"))
+		return false;
+
+	if(hasAudioPlayerTrackLikeExtension(lower_line))
+		return true;
+
+	// Many radio endpoints are extension-less (for example ".../stream").
+	return
+		(lower_line.find("stream")    != std::string::npos) ||
+		(lower_line.find("radio")     != std::string::npos) ||
+		(lower_line.find("icecast")   != std::string::npos) ||
+		(lower_line.find("shoutcast") != std::string::npos) ||
+		(lower_line.find("listen")    != std::string::npos);
+}
+
+
+float sanitiseAudioPlayerActivationDistance(float distance)
+{
+	if(!isFinite(distance))
+		return WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE;
+
+	return myClamp(distance, WorldObject::MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE, WorldObject::MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE);
+}
+
+
 template <class Fn>
 void forEachAudioPlayerPlaylistURL(const WorldObject& ob, Fn&& fn)
 {
@@ -85,7 +130,8 @@ bool WorldObject::looksLikeAudioPlayerPlaylistContent(const std::string& content
 		const std::string line = stripHeadWhitespace(stripTailWhitespace(content.substr(line_start, line_size)));
 		if(!line.empty())
 		{
-			if(!hasExtension(line, "mp3") && !hasExtension(line, "wav"))
+			const std::string lower_line = toLowerCase(line);
+			if(!hasAudioPlayerTrackLikeExtension(lower_line) && !looksLikeRadioStreamURL(lower_line))
 				return false;
 			saw_track = true;
 		}
@@ -186,6 +232,7 @@ WorldObject::WorldObject() noexcept
 	text_font = "Default";
 
 	audio_volume = 1;
+	audio_player_activation_distance = DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE;
 
 	allocator = NULL;
 	refcount = 0;
@@ -649,7 +696,7 @@ WorldObject::ObjectType WorldObject::objectTypeForString(const std::string& ob_t
 }
 
 
-static const uint32 WORLD_OBJECT_SERIALISATION_VERSION = 23;
+static const uint32 WORLD_OBJECT_SERIALISATION_VERSION = 24;
 /*
 Version history:
 9: introduced voxels
@@ -667,6 +714,7 @@ Version history:
 21: Added chunk_batch0_start etc.
 22: Added per-type data (length-prefixed)
 23: Added text_font to disk serialisation.
+24: Added audio_player_activation_distance to disk serialisation.
 */
 
 
@@ -829,6 +877,7 @@ void WorldObject::writeToStream(RandomAccessOutStream& stream) const
 	stream.writeStringLengthFirst(target_url);
 	stream.writeStringLengthFirst(audio_source_url);
 	stream.writeFloat(audio_volume);
+	stream.writeFloat(sanitiseAudioPlayerActivationDistance(audio_player_activation_distance));
 
 	::writeToStream(pos, stream);
 	::writeToStream(axis, stream);
@@ -935,6 +984,10 @@ void readWorldObjectFromStream(RandomAccessInStream& stream, WorldObject& ob)
 	{
 		ob.audio_source_url = stream.readStringLengthFirst(WorldObject::MAX_URL_SIZE);
 		ob.audio_volume = stream.readFloat();
+		if(v >= 24)
+			ob.audio_player_activation_distance = sanitiseAudioPlayerActivationDistance(stream.readFloat());
+		else
+			ob.audio_player_activation_distance = WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE;
 	}
 
 	ob.pos = readVec3FromStream<double>(stream);
@@ -1161,6 +1214,9 @@ void WorldObject::writeToNetworkStream(RandomAccessOutStream& stream, uint32 pee
 	// Only text objects need text_font in network state.
 	if((peer_protocol_version >= 51) && (object_type == WorldObject::ObjectType_Text))
 		stream.writeStringLengthFirst(text_font);
+
+	// Per-audio-player auto activation distance (meters). Keep this in the optional tail so older peers can ignore it.
+	stream.writeFloat(sanitiseAudioPlayerActivationDistance(audio_player_activation_distance));
 }
 
 
@@ -1179,6 +1235,7 @@ void WorldObject::copyNetworkStateFrom(const WorldObject& other)
 	target_url = other.target_url;
 	audio_source_url = other.audio_source_url;
 	audio_volume = other.audio_volume;
+	audio_player_activation_distance = other.audio_player_activation_distance;
 
 	pos = other.pos;
 	axis = other.axis;
@@ -1247,6 +1304,7 @@ std::string WorldObject::serialiseToXML(int tab_depth) const
 	XMLWriteUtils::writeStringElemToXML(s, "audio_source_url", audio_source_url, tab_depth + 1);
 
 	XMLWriteUtils::writeFloatToXML(s, "audio_volume", audio_volume, tab_depth + 1);
+	XMLWriteUtils::writeFloatToXML(s, "audio_player_activation_distance", sanitiseAudioPlayerActivationDistance(audio_player_activation_distance), tab_depth + 1);
 
 	XMLWriteUtils::writeVec3ToXML(s, "pos", pos, tab_depth + 1);
 	XMLWriteUtils::writeVec3ToXML(s, "axis", axis, tab_depth + 1);
@@ -1334,6 +1392,9 @@ Reference<WorldObject> WorldObject::loadFromXMLElem(const std::string& object_fi
 	ob->audio_source_url = XMLParseUtils::parseStringWithDefault(elem, "audio_source_url", "");
 
 	ob->audio_volume = XMLParseUtils::parseFloatWithDefault(elem, "audio_volume", 1.f);
+	ob->audio_player_activation_distance = sanitiseAudioPlayerActivationDistance(
+		XMLParseUtils::parseFloatWithDefault(elem, "audio_player_activation_distance", WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE)
+	);
 
 	ob->pos   = XMLParseUtils::parseVec3d(elem, "pos");
 	ob->axis  = XMLParseUtils::parseVec3fWithDefault(elem, "axis", Vec3f(0,0,1));
@@ -1613,6 +1674,15 @@ void readWorldObjectFromNetworkStreamGivenUIDImpl(RandomAccessInStream& stream, 
 		if(ob.text_font != new_text_font)
 			ob.changed_flags |= WorldObject::TEXT_FONT_CHANGED;
 		ob.text_font = new_text_font;
+	}
+
+	if(!stream.endOfStream())
+	{
+		ob.audio_player_activation_distance = sanitiseAudioPlayerActivationDistance(stream.readFloat());
+	}
+	else if(!isFinite(ob.audio_player_activation_distance))
+	{
+		ob.audio_player_activation_distance = WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE;
 	}
 
 	// Set ephemeral state
@@ -2135,6 +2205,7 @@ static void testObjectsEqual(WorldObject& ob1, WorldObject& ob2)
 {
 	testAssert(ob1.object_type == ob2.object_type);
 	testAssert(ob1.text_font == ob2.text_font);
+	testAssert(std::fabs(ob1.audio_player_activation_distance - ob2.audio_player_activation_distance) < 1.0e-6f);
 
 	testAssert(ob1.getCompressedVoxels().nonNull() == ob2.getCompressedVoxels().nonNull());
 	if(ob1.getCompressedVoxels().nonNull())
@@ -2247,6 +2318,7 @@ void WorldObject::test()
 
 		testAssert(ob.isAudioPlayerWebView());
 		testAssert(WorldObject::looksLikeAudioPlayerPlaylistContent(ob.content));
+		testAssert(WorldObject::looksLikeAudioPlayerPlaylistContent("https://my.radio.example/live/stream"));
 		testAssert(!WorldObject::looksLikeAudioPlayerPlaylistContent("https://example.com\nnot_audio.txt"));
 	}
 
@@ -2345,6 +2417,7 @@ void WorldObject::test()
 			ob.target_url = "https://vr.metasiberia.com/network";
 			ob.audio_source_url = "network_audio.mp3";
 			ob.audio_volume = 0.5f;
+			ob.audio_player_activation_distance = 12.5f;
 
 			BufferOutStream buf;
 			ob.writeToNetworkStream(buf);
@@ -2359,6 +2432,7 @@ void WorldObject::test()
 			testAssert(ob2.target_url == ob.target_url);
 			testAssert(ob2.audio_source_url == ob.audio_source_url);
 			testAssert(std::fabs(ob2.audio_volume - ob.audio_volume) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_activation_distance - ob.audio_player_activation_distance) < 1.0e-6f);
 		}
 
 		//--------------------------- Test network roundtrip for non-text object without trailing text_font ----------------------------
@@ -2372,6 +2446,7 @@ void WorldObject::test()
 			ob.target_url = "https://vr.metasiberia.com/spotlight";
 			ob.audio_source_url = "spotlight_audio.mp3";
 			ob.audio_volume = 0.25f;
+			ob.audio_player_activation_distance = 6.f;
 			setWorldObjectPerTypeDataDefaults(ob);
 			ob.type_data.spotlight_data.cone_start_angle = 0.2f;
 			ob.type_data.spotlight_data.cone_end_angle = 0.8f;
@@ -2386,6 +2461,7 @@ void WorldObject::test()
 			testAssert(ob2.uid == ob.uid);
 			testAssert(ob2.object_type == ob.object_type);
 			testAssert(ob2.text_font == "Default");
+			testAssert(std::fabs(ob2.audio_player_activation_distance - ob.audio_player_activation_distance) < 1.0e-6f);
 			testAssert(std::fabs(ob2.type_data.spotlight_data.cone_start_angle - ob.type_data.spotlight_data.cone_start_angle) < 1.0e-6f);
 			testAssert(std::fabs(ob2.type_data.spotlight_data.cone_end_angle - ob.type_data.spotlight_data.cone_end_angle) < 1.0e-6f);
 		}
@@ -2458,6 +2534,7 @@ void WorldObject::test()
 			testAssert(ob2.target_url == ob.target_url);
 			testAssert(ob2.audio_source_url == ob.audio_source_url);
 			testAssert(std::fabs(ob2.audio_volume - ob.audio_volume) < 1.0e-6f);
+			testAssert(std::fabs(ob2.audio_player_activation_distance - WorldObject::DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE) < 1.0e-6f);
 		}
 
 		//--------------------------- Test camera object per-type data roundtrip ----------------------------
