@@ -55,11 +55,13 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Add Hypercard", "Добавить гиперкарточку");
 	add("MainWindow", "Add Voxels", "Добавить воксели");
 	add("MainWindow", "Add Web View", "Добавить Web View");
-	add("MainWindow", "Show Parcels", "Показать участки");
+	add("MainWindow", "Parcels", "Участки");
 	add("MainWindow", "Avatar Settings", "Настройки аватара");
 	add("MainWindow", "About Metasiberia", "О Metasiberia");
 	add("MainWindow", "Add Text", "Добавить текст");
 	add("MainWindow", "Add Spotlight", "Добавить прожектор");
+	add("MainWindow", "Add Camera", "Добавить камеру");
+	add("MainWindow", "Add Seat", "Добавить сиденье");
 	add("MainWindow", "Add Audio Player", "Добавить аудио-плеер");
 	add("MainWindow", "Add Decal", "Добавить декаль");
 	add("MainWindow", "Add Portal", "Добавить портал");
@@ -124,6 +126,10 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Click and drag the mouse on the 3D view to look around.\n", "Нажмите и перетаскивайте мышь в 3D-окне для обзора.\n");
 	add("MainWindow", "Space key: jump\n", "Пробел: прыжок\n");
 	add("MainWindow", "Double-click an object to select it.", "Дважды щёлкните по объекту, чтобы выбрать его.");
+	add("MainWindow", "Enable Webcam", "Включить веб-камеру");
+	add("MainWindow", "Waiting for webcam frame...", "Ожидание кадра с веб-камеры...");
+	add("MainWindow", "Webcam capture is not supported on this platform/build.", "Захват веб-камеры не поддерживается в этой платформе/сборке.");
+	add("MainWindow", "Webcam disabled", "Веб-камера выключена");
 
 	// FileSelectWidget
 	add("FileSelectWidget", "Browse", "Обзор");
@@ -131,6 +137,59 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("QPlatformTheme", "Cancel", "Отмена");
 	add("QPlatformTheme", "Apply", "Применить");
 	add("QPlatformTheme", "Close", "Закрыть");
+
+	// Webcam UI
+	add("WebcamControlPanel", "Enable Webcam", "Включить веб-камеру");
+	add("WebcamControlPanel", "Photo", "Фото");
+	add("WebcamControlPanel", "Capture a photo", "Сделать фото");
+	add("WebcamControlPanel", "Record", "Запись");
+	add("WebcamControlPanel", "Start recording video", "Начать запись видео");
+	add("WebcamControlPanel", "Stop", "Стоп");
+	add("WebcamControlPanel", "Stop recording", "Остановить запись");
+	add("WebcamControlPanel", "Open folder with photos and recordings", "Открыть папку с фото и записями");
+	add("WebcamControlPanel", "Settings", "Настройки");
+	add("WebcamControlPanel", "Resolution, FPS, photo and video settings", "Разрешение, FPS, настройки фото и видео");
+	add("WebcamControlPanel", "Inactive", "Неактивно");
+
+	add("WebcamSettingsDialog", "Webcam Settings", "Настройки веб-камеры");
+	add("WebcamSettingsDialog", "Preview", "Предпросмотр");
+	add("WebcamSettingsDialog", "Resolution:", "Разрешение:");
+	add("WebcamSettingsDialog", "Frame rate:", "Частота кадров:");
+	add("WebcamSettingsDialog", "Photo", "Фото");
+	add("WebcamSettingsDialog", "JPEG quality:", "Качество JPEG:");
+	add("WebcamSettingsDialog", "Video", "Видео");
+	add("WebcamSettingsDialog", " Mbps", " Мбит/с");
+	add("WebcamSettingsDialog", "Bitrate:", "Битрейт:");
+	add("WebcamSettingsDialog", " FPS", " FPS");
+
+	add("WebcamVideoView", "Webcam feed will appear here", "Здесь появится изображение с веб-камеры");
+
+	add("WebcamWindow", "Webcam", "Веб-камера");
+	add("WebcamWindow", "Webcam Settings", "Настройки веб-камеры");
+	add("WebcamWindow", "Preview: -", "Предпросмотр: -");
+	add("WebcamWindow", "Preview: %1", "Предпросмотр: %1");
+	add("WebcamWindow", "No cameras found", "Камеры не найдены");
+	add("WebcamWindow", "No camera available.", "Камера недоступна.");
+	add("WebcamWindow", "Camera failed to start", "Не удалось запустить камеру");
+	add("WebcamWindow", "Active", "Активно");
+	add("WebcamWindow", "Inactive", "Неактивно");
+	add("WebcamWindow", "Recording...", "Идёт запись...");
+	add("WebcamWindow", "Starting...", "Запуск...");
+	add("WebcamWindow", "Saving...", "Сохранение...");
+	add("WebcamWindow", "Preparing...", "Подготовка...");
+	add("WebcamWindow", "Photo failed to start", "Не удалось начать съёмку фото");
+	add("WebcamWindow", "Could not start photo capture.", "Не удалось запустить съёмку фото.");
+	add("WebcamWindow", "Photo failed", "Ошибка фото");
+	add("WebcamWindow", "Photo could not be saved. No image data.", "Не удалось сохранить фото: нет данных изображения.");
+	add("WebcamWindow", "Could not save image to file:\n%1", "Не удалось сохранить изображение в файл:\n%1");
+	add("WebcamWindow", "Photo could not be saved: %1", "Не удалось сохранить фото: %1");
+	add("WebcamWindow", "Saved: %1", "Сохранено: %1");
+	add("WebcamWindow", "Saved to: %1", "Сохранено в: %1");
+	add("WebcamWindow", "Recording failed", "Ошибка записи");
+	add("WebcamWindow", "Video recording error: %1", "Ошибка записи видео: %1");
+	add("WebcamWindow", "Camera error", "Ошибка камеры");
+	add("WebcamWindow", "Camera error: %1", "Ошибка камеры: %1");
+	add("WebcamWindow", "Unknown error", "Неизвестная ошибка");
 
 	// ObjectEditor
 	add("ObjectEditor", "Model", "Модель");
@@ -290,10 +349,10 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("AboutDialog", "About", "О программе");
 	add("AboutDialog", "Generate Crash", "Сгенерировать сбой");
 	add("AboutDialog", "Metasiberia v%1", "Metasiberia v%1");
-	add("AboutDialog", "Metasiberia is inspired and based on <a href=\"https://substrata.info\"><span style=\" text-decoration: underline; color:#222222;\">Substrata</span></a>.<br>",
-		"Metasiberia вдохновлена и основана на <a href=\"https://substrata.info\"><span style=\" text-decoration: underline; color:#222222;\">Substrata</span></a>.<br>");
-	add("AboutDialog", "Forked by <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>",
-		"Форк от <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>");
+	add("AboutDialog", "Metasiberia is inspired and based on <a href=\"https://www.glaretechnologies.com/\"><span style=\" text-decoration: underline; color:#222222;\">Glare-core</span></a>.<br>",
+		"Metasiberia вдохновлена и основана на <a href=\"https://www.glaretechnologies.com/\"><span style=\" text-decoration: underline; color:#222222;\">Glare-core</span></a>.<br>");
+	add("AboutDialog", "Author: <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>",
+		"Автор: <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>");
 }
 
 

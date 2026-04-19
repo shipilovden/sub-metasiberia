@@ -439,6 +439,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder),
 	settings(NULL),
 	user_details(NULL),
+	url_widget(NULL),
 	ui(NULL),
 	minidump_sender(NULL),
 	update_manager(NULL),
@@ -763,6 +764,14 @@ void MainWindow::initialiseUI()
 	url_widget->browserPushButton->setFixedSize(button_W, button_W);
 	url_widget->browserPushButton->setToolTip(tr("Open Current Location In Browser"));
 
+	url_widget->favoritePushButton->setFixedSize(button_W, button_W);
+	url_widget->favoritePushButton->setText(QString(QChar(0x2605))); // Filled star glyph.
+	QFont favorite_font = url_widget->favoritePushButton->font();
+	favorite_font.setBold(true);
+	favorite_font.setPointSizeF(favorite_font.pointSizeF() + 2.0);
+	url_widget->favoritePushButton->setFont(favorite_font);
+	url_widget->favoritePushButton->setToolTip(tr("Add to Favorites"));
+
 	ui->toolBar->addWidget(url_widget);
 
 	user_details = new UserDetailsWidget(this);
@@ -770,6 +779,7 @@ void MainWindow::initialiseUI()
 
 	connect(url_widget->backPushButton, SIGNAL(clicked(bool)), this, SLOT(on_actionGo_Back_triggered()));
 	connect(url_widget->browserPushButton, SIGNAL(clicked(bool)), this, SLOT(openCurrentLocationInBrowserSlot()));
+	connect(url_widget->favoritePushButton, SIGNAL(clicked(bool)), this, SLOT(on_actionAdd_to_Favorites_triggered()));
 
 
 
@@ -1211,6 +1221,12 @@ void MainWindow::refreshTranslatedUiText()
 	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
 
 	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
+
+	if(url_widget)
+	{
+		url_widget->browserPushButton->setToolTip(tr("Open Current Location In Browser"));
+		url_widget->favoritePushButton->setToolTip(tr("Add to Favorites"));
+	}
 
 	if(theme_action_group)
 		initialiseThemesMenu();

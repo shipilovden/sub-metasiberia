@@ -49,8 +49,8 @@ WebcamControlPanel::WebcamControlPanel(QWidget* parent)
 
 	status_label_ = new QLabel(this);
 	status_label_->setObjectName("webcamStatusLabel");
-	status_label_->setText(tr("• Inactive"));
-	setStatusText(tr("• Inactive"), false);
+	status_label_->setText(tr("Inactive"));
+	setStatusText(tr("Inactive"), false);
 
 	QHBoxLayout* layout = new QHBoxLayout(this);
 	layout->setContentsMargins(8, 6, 8, 6);
