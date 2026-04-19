@@ -29,8 +29,76 @@ Copyright Glare Technologies Limited 2025 -
 #if EMSCRIPTEN
 #include <networking/EmscriptenWebSocket.h>
 #endif
+#include <cctype>
 
 static std::string getOptionalEnvVar(const char* name);
+
+
+namespace
+{
+static bool useRussianUI(const Reference<SettingsStore>& settings)
+{
+	if(settings.isNull())
+		return false;
+
+	std::string lang = settings->getStringValue("setting/ui_language", settings->getStringValue("ui/language", "en"));
+	std::transform(lang.begin(), lang.end(), lang.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	return (lang.rfind("ru", 0) == 0) || (lang == "russian");
+}
+
+
+static std::string trPhoto(const Reference<SettingsStore>& settings, const std::string& src)
+{
+	if(!useRussianUI(settings))
+		return src;
+
+	if(src == "Photo Mode Settings") return "Настройки фоторежима";
+	if(src == "standard camera") return "стандартная камера";
+	if(src == "selfie camera") return "селфи-камера";
+	if(src == "fixed angle camera") return "камера с фиксированным углом";
+	if(src == "free camera") return "свободная камера";
+	if(src == "tracking camera") return "следящая камера";
+	if(src == "Autofocus") return "Автофокус";
+	if(src == "Off") return "Выкл";
+	if(src == "Eye") return "Глаз";
+	if(src == "Depth of field blur") return "Размытие глубины резкости";
+	if(src == "Focus Distance") return "Дистанция фокуса";
+	if(src == "EV adjust") return "Коррекция EV";
+	if(src == "Saturation") return "Насыщенность";
+	if(src == "Focal length") return "Фокусное расстояние";
+	if(src == "Roll") return "Крен";
+	if(src == "Reset") return "Сброс";
+	if(src == "Show photos") return "Показать фото";
+	if(src == "Upload photo") return "Загрузить фото";
+	if(src == "Hide UI") return "Скрыть UI";
+	if(src == "Take photo") return "Сделать фото";
+	if(src == "Caption") return "Подпись";
+	if(src == "Caption:") return "Подпись:";
+	if(src == "Upload") return "Загрузить";
+	if(src == "Cancel") return "Отмена";
+	if(src == "Take a photo first!") return "Сначала сделайте фото!";
+	if(src == "You must be logged in to upload a photo.") return "Нужно войти в аккаунт, чтобы загрузить фото.";
+	if(src == "Failed to load or convert photo for upload: ") return "Не удалось загрузить или конвертировать фото для загрузки: ";
+
+	if(src == "The standard camera mode when not in photo mode.") return "Стандартный режим камеры вне фоторежима.";
+	if(src == "A camera that looks back at the avatar's face.  The avatar will look towards the camera.") return "Камера смотрит на лицо аватара. Аватар поворачивается к камере.";
+	if(src == "A camera with a fixed angle relative to the player avatar or vehicle.") return "Камера с фиксированным углом относительно аватара или транспорта.";
+	if(src == "The free camera can move anywhere and look in any direction") return "Свободная камера может перемещаться куда угодно и смотреть в любом направлении.";
+	if(src == "A camera with a fixed positon that looks at the avatar") return "Камера с фиксированной позицией, смотрящая на аватара.";
+	if(src == "Disable autofocus.  Focus Distance slider is used instead.") return "Отключить автофокус. Вместо него используется слайдер дистанции фокуса.";
+	if(src == "Automatically focus on the nearest avatar eye.") return "Автоматически фокусироваться на ближайшем глазе аватара.";
+	if(src == "Depth of field blur strength") return "Сила размытия глубины резкости";
+	if(src == "Colour saturation") return "Насыщенность цвета";
+	if(src == "Camera focal length") return "Фокусное расстояние камеры";
+	if(src == "Camera roll angle") return "Угол крена камеры";
+	if(src == "Reset photo mode camera settings") return "Сбросить настройки камеры фоторежима";
+	if(src == "Show photos folder") return "Открыть папку с фото";
+	if(src == "Upload photo (server handles Telegram posting when configured)") return "Загрузить фото (сервер отправит в Telegram, если это настроено)";
+	if(src == "Hide user interface") return "Скрыть интерфейс";
+
+	return src;
+}
+}
 
 PhotoModeUI::PhotoModeUI()
 :	gui_client(NULL)
@@ -129,8 +197,8 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	int cell_y = 20;
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "The standard camera mode when not in photo mode.";
-		standard_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "standard camera", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "The standard camera mode when not in photo mode.");
+		standard_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "standard camera"), Vec2f(0), args);
 		standard_cam_button->handler = this;
 		gl_ui->addWidget(standard_cam_button);
 		grid_container->setCellWidget(0, cell_y--, standard_cam_button);
@@ -139,8 +207,8 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera that looks back at the avatar's face.  The avatar will look towards the camera.";
-		selfie_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "selfie camera", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "A camera that looks back at the avatar's face.  The avatar will look towards the camera.");
+		selfie_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "selfie camera"), Vec2f(0), args);
 		selfie_cam_button->handler = this;
 		gl_ui->addWidget(selfie_cam_button);
 		grid_container->setCellWidget(0, cell_y--, selfie_cam_button);
@@ -149,24 +217,24 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera with a fixed angle relative to the player avatar or vehicle.";
-		fixed_angle_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "fixed angle camera", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "A camera with a fixed angle relative to the player avatar or vehicle.");
+		fixed_angle_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "fixed angle camera"), Vec2f(0), args);
 		fixed_angle_cam_button->handler = this;
 		gl_ui->addWidget(fixed_angle_cam_button);
 		grid_container->setCellWidget(0, cell_y--, fixed_angle_cam_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "The free camera can move anywhere and look in any direction";
-		free_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "free camera", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "The free camera can move anywhere and look in any direction");
+		free_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "free camera"), Vec2f(0), args);
 		free_cam_button->handler = this;
 		gl_ui->addWidget(free_cam_button);
 		grid_container->setCellWidget(0, cell_y--, free_cam_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "A camera with a fixed positon that looks at the avatar";
-		tracking_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, "tracking camera", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "A camera with a fixed positon that looks at the avatar");
+		tracking_cam_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "tracking camera"), Vec2f(0), args);
 		tracking_cam_button->handler = this;
 		gl_ui->addWidget(tracking_cam_button);
 		grid_container->setCellWidget(0, cell_y--, tracking_cam_button);
@@ -186,25 +254,25 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 			GLUITextView::CreateArgs text_view_args;
 			text_view_args.background_alpha = 0;
 			text_view_args.text_colour = Colour3f(0.9f);
-			text_view_args.tooltip = "Autofocus";
+			text_view_args.tooltip = trPhoto(settings, "Autofocus");
 
-			autofocus_label = new GLUITextView(*gl_ui, opengl_engine, "Autofocus", Vec2f(0), text_view_args);
+			autofocus_label = new GLUITextView(*gl_ui, opengl_engine, trPhoto(settings, "Autofocus"), Vec2f(0), text_view_args);
 			gl_ui->addWidget(autofocus_label);
 			autofocus_grid->setCellWidget(0, 0, autofocus_label);
 		}
 
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Disable autofocus.  Focus Distance slider is used instead.";
-			autofocus_off_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Off", Vec2f(0), args);
+			args.tooltip = trPhoto(settings, "Disable autofocus.  Focus Distance slider is used instead.");
+			autofocus_off_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "Off"), Vec2f(0), args);
 			autofocus_off_button->handler = this;
 			gl_ui->addWidget(autofocus_off_button);
 			autofocus_grid->setCellWidget(1, 0, autofocus_off_button);
 		}
 		{
 			GLUITextButton::CreateArgs args;
-			args.tooltip = "Automatically focus on the nearest avatar eye.";
-			autofocus_eye_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Eye", Vec2f(0), args);
+			args.tooltip = trPhoto(settings, "Automatically focus on the nearest avatar eye.");
+			autofocus_eye_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "Eye"), Vec2f(0), args);
 			autofocus_eye_button->handler = this;
 			gl_ui->addWidget(autofocus_eye_button);
 			autofocus_grid->setCellWidget(2, 0, autofocus_eye_button);
@@ -214,35 +282,35 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 
 
-	makePhotoModeSlider(dof_blur_slider, /*label=*/"Depth of field blur", /*tooltip=*/"Depth of field blur strength", 
+	makePhotoModeSlider(dof_blur_slider, /*label=*/trPhoto(settings, "Depth of field blur"), /*tooltip=*/trPhoto(settings, "Depth of field blur strength"), 
 		/*min val=*/0.0, /*max val=*/1.0, /*initial val=*/opengl_engine->getCurrentScene()->dof_blur_strength, /*scroll speed=*/1.0, cell_y);
 
-	makePhotoModeSlider(dof_focus_distance_slider, /*label=*/"Focus Distance", /*tooltip=*/"Focus Distance", 
+	makePhotoModeSlider(dof_focus_distance_slider, /*label=*/trPhoto(settings, "Focus Distance"), /*tooltip=*/trPhoto(settings, "Focus Distance"), 
 		/*min val=*/0.001, /*max val=*/1.0, /*initial val=*/sliderValForFocusDist(opengl_engine->getCurrentScene()->dof_blur_focus_distance), /*scroll speed=*/1.0, cell_y);
 
-	makePhotoModeSlider(ev_adjust_slider, /*label=*/"EV adjust", /*tooltip=*/"EV adjust", 
+	makePhotoModeSlider(ev_adjust_slider, /*label=*/trPhoto(settings, "EV adjust"), /*tooltip=*/trPhoto(settings, "EV adjust"), 
 		/*min val=*/-8, /*max val=*/8, /*initial val=*/0, /*scroll speed=*/1.0, cell_y);
 
-	makePhotoModeSlider(saturation_slider, /*label=*/"Saturation", /*tooltip=*/"Colour saturation", 
+	makePhotoModeSlider(saturation_slider, /*label=*/trPhoto(settings, "Saturation"), /*tooltip=*/trPhoto(settings, "Colour saturation"), 
 		/*min val=*/0, /*max val=*/2, /*initial val=*/1, /*scroll speed=*/1.0, cell_y);
 
-	makePhotoModeSlider(focal_length_slider, /*label=*/"Focal length", /*tooltip=*/"Camera focal length", 
+	makePhotoModeSlider(focal_length_slider, /*label=*/trPhoto(settings, "Focal length"), /*tooltip=*/trPhoto(settings, "Camera focal length"), 
 		/*min val=*/0.010, /*max val=*/1.0, /*initial val=*/0.025, /*scroll speed=*/0.05, cell_y);
 
-	makePhotoModeSlider(roll_slider, /*label=*/"Roll", /*tooltip=*/"Camera roll angle", 
+	makePhotoModeSlider(roll_slider, /*label=*/trPhoto(settings, "Roll"), /*tooltip=*/trPhoto(settings, "Camera roll angle"), 
 		/*min val=*/-90, /*max val=*/90, /*initial val=*/0, /*scroll speed=*/1.0, cell_y);
 
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Reset photo mode camera settings";
-		reset_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Reset", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "Reset photo mode camera settings");
+		reset_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "Reset"), Vec2f(0), args);
 		reset_button->handler = this;
 		gl_ui->addWidget(reset_button);
 		grid_container->setCellWidget(0, cell_y--, reset_button);
 	}
 	{
 		GLUIButton::CreateArgs args;
-		args.tooltip = "Take photo";
+		args.tooltip = trPhoto(settings, "Take photo");
 		args.sizing_type_x = GLUIWidget::SizingType_FixedSizePx;
 		args.sizing_type_y = GLUIWidget::SizingType_FixedSizePx;
 		args.fixed_size = Vec2f(50.f);
@@ -254,24 +322,24 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Show photos folder";
-		show_screenshots_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Show photos", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "Show photos folder");
+		show_screenshots_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "Show photos"), Vec2f(0), args);
 		show_screenshots_button->handler = this;
 		gl_ui->addWidget(show_screenshots_button);
 		grid_container->setCellWidget(0, cell_y--, show_screenshots_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Upload photo (server handles Telegram posting when configured)";
-		upload_photo_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Upload photo", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "Upload photo (server handles Telegram posting when configured)");
+		upload_photo_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "Upload photo"), Vec2f(0), args);
 		upload_photo_button->handler = this;
 		gl_ui->addWidget(upload_photo_button);
 	}
 	grid_container->setCellWidget(0, cell_y--, upload_photo_button);
 	{
 		GLUITextButton::CreateArgs args;
-		args.tooltip = "Hide user interface";
-		hide_ui_button = new GLUITextButton(*gl_ui_, opengl_engine_, "Hide UI", Vec2f(0), args);
+		args.tooltip = trPhoto(settings, "Hide user interface");
+		hide_ui_button = new GLUITextButton(*gl_ui_, opengl_engine_, trPhoto(settings, "Hide UI"), Vec2f(0), args);
 		hide_ui_button->handler = this;
 		gl_ui->addWidget(hide_ui_button);
 		grid_container->setCellWidget(0, cell_y--, hide_ui_button);
@@ -281,7 +349,7 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	// Create window
 	{
 		GLUIWindow::CreateArgs args;
-		args.title = "Photo Mode Settings";
+		args.title = trPhoto(settings, "Photo Mode Settings");
 		args.background_alpha = 0.6f;
 		args.background_colour = Colour3f(0.1f);
 		window = new GLUIWindow(*gl_ui_, opengl_engine_, args);
@@ -599,7 +667,7 @@ void PhotoModeUI::eventOccurred(GLUICallbackEvent& event)
 		{
 			if(!gui_client->logged_in_user_id.valid())
 			{
-				gui_client->showErrorNotification("You must be logged in to upload a photo.");
+				gui_client->showErrorNotification(trPhoto(settings, "You must be logged in to upload a photo."));
 			}
 			else
 			{
@@ -777,7 +845,7 @@ void PhotoModeUI::showUploadPhotoWidget()
 
 			if(last_saved_photo_path.empty())
 			{
-				gui_client->showErrorNotification("Take a photo first!");
+				gui_client->showErrorNotification(trPhoto(settings, "Take a photo first!"));
 				return;
 			}
 
@@ -801,7 +869,7 @@ void PhotoModeUI::showUploadPhotoWidget()
 		}
 		catch(glare::Exception& e)
 		{
-			gui_client->showErrorNotification("Failed to load or convert photo for upload: " + e.what());
+			gui_client->showErrorNotification(trPhoto(settings, "Failed to load or convert photo for upload: ") + e.what());
 			return;
 		}
 
@@ -812,9 +880,9 @@ void PhotoModeUI::showUploadPhotoWidget()
 		GLUITextView::CreateArgs args;
 		args.background_alpha = 0;
 		args.text_colour = toLinearSRGB(Colour3f(0.1f));
-		args.tooltip = "Caption";
+		args.tooltip = trPhoto(settings, "Caption");
 		args.z = -0.5f;
-		caption_label = new GLUITextView(*gl_ui, opengl_engine, "Caption:", Vec2f(0.f), args);
+		caption_label = new GLUITextView(*gl_ui, opengl_engine, trPhoto(settings, "Caption:"), Vec2f(0.f), args);
 		gl_ui->addWidget(caption_label);
 	}
 
@@ -832,14 +900,14 @@ void PhotoModeUI::showUploadPhotoWidget()
 	{
 		GLUITextButton::CreateArgs args;
 		args.z = -0.5f;
-		ok_button = new GLUITextButton(*gl_ui, opengl_engine, "Upload", Vec2f(0), args);
+		ok_button = new GLUITextButton(*gl_ui, opengl_engine, trPhoto(settings, "Upload"), Vec2f(0), args);
 		ok_button->handler = this;
 		gl_ui->addWidget(ok_button);
 	}
 	{
 		GLUITextButton::CreateArgs args;
 		args.z = -0.5f;
-		cancel_button = new GLUITextButton(*gl_ui, opengl_engine, "Cancel", Vec2f(0), args);
+		cancel_button = new GLUITextButton(*gl_ui, opengl_engine, trPhoto(settings, "Cancel"), Vec2f(0), args);
 		cancel_button->handler = this;
 		gl_ui->addWidget(cancel_button);
 	}

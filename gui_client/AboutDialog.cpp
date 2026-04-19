@@ -21,8 +21,8 @@ AboutDialog::AboutDialog(QWidget* parent, const std::string& appdata_path)
 	QString display_str = "<h2>" + tr("Metasiberia v%1").arg(QString::fromStdString(::cyberspace_version)) + "</h2>";
 
 	display_str += "<p>";
-	display_str += tr("Metasiberia is inspired and based on <a href=\"https://substrata.info\"><span style=\" text-decoration: underline; color:#222222;\">Substrata</span></a>.<br>");
-	display_str += tr("Forked by <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>");
+	display_str += tr("Metasiberia is inspired and based on <a href=\"https://www.glaretechnologies.com/\"><span style=\" text-decoration: underline; color:#222222;\">Glare-core</span></a>.<br>");
+	display_str += tr("Author: <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>");
 	display_str += "</p>";
 
 	this->text->setText(display_str);

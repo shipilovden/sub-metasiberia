@@ -191,6 +191,7 @@
    <addaction name="menuTools"/>
    <addaction name="menuWindow"/>
    <addaction name="menuThemes"/>
+   <addaction name="actionShow_Parcels"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
@@ -215,7 +216,6 @@
    <addaction name="actionAddHypercard"/>
    <addaction name="actionAdd_Voxels"/>
    <addaction name="actionAdd_Web_View"/>
-   <addaction name="actionShow_Parcels"/>
   </widget>
   <widget class="QDockWidget" name="chatDockWidget">
    <property name="sizePolicy">
@@ -607,7 +607,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Show Parcels</string>
+    <string>Parcels</string>
    </property>
   </action>
   <action name="actionFly_Mode">
