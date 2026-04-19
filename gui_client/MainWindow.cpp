@@ -1218,6 +1218,8 @@ void MainWindow::refreshTranslatedUiText()
 		return;
 
 	ui->retranslateUi(this);
+	ui->worldSettingsWidget->retranslateUiText();
+	ui->environmentOptionsWidget->retranslateUi(ui->environmentOptionsWidget);
 	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
 
 	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
@@ -1230,6 +1232,12 @@ void MainWindow::refreshTranslatedUiText()
 
 	if(theme_action_group)
 		initialiseThemesMenu();
+
+	if(ui->environmentDockWidget && ui->environmentDockWidget->toggleViewAction())
+	{
+		const QString title = ui->environmentDockWidget->windowTitle();
+		ui->environmentDockWidget->toggleViewAction()->setText(title);
+	}
 
 	updateMenuTooltips();
 }

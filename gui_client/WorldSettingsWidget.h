@@ -21,10 +21,12 @@ class WorldSettingsWidget : public QWidget, public Ui::WorldSettingsWidget
 	Q_OBJECT        // must include this if you use Qt signals/slots
 
 public:
-	WorldSettingsWidget(QWidget* parent);
+	WorldSettingsWidget(QWidget* parent = NULL);
 	~WorldSettingsWidget();
 
 	void init(MainWindow* main_window);
+
+	void retranslateUiText();
 
 	void setFromWorldSettings(const WorldSettings& world_settings);
 
@@ -44,9 +46,18 @@ protected slots:
 
 	void settingsChangedSlot();
 
+protected:
+	bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
+	void setTerrainSectionAreaHeight(int target_height);
+	bool shouldStartTerrainSectionResize(const QPoint& pos_in_scroll_area) const;
+
 	URLString getURLForFileSelectWidget(FileSelectWidget* widget);
 
 	//std::vector<TerrainSpecSectionWidget*> section_widgets;
 	MainWindow* main_window;
+	bool terrain_section_resize_drag_active;
+	int terrain_section_resize_drag_start_global_y;
+	int terrain_section_resize_drag_start_height;
 };

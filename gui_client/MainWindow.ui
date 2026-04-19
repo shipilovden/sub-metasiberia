@@ -543,7 +543,21 @@
    <widget class="QWidget" name="dockWidgetContents_3">
     <layout class="QVBoxLayout" name="verticalLayout_13">
      <item>
-      <widget class="WorldSettingsWidget" name="worldSettingsWidget" native="true"/>
+      <widget class="QScrollArea" name="worldSettingsScrollArea">
+       <property name="widgetResizable">
+        <bool>true</bool>
+       </property>
+       <widget class="WorldSettingsWidget" name="worldSettingsWidget">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>357</width>
+          <height>747</height>
+         </rect>
+        </property>
+       </widget>
+      </widget>
      </item>
     </layout>
    </widget>

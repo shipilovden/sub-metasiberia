@@ -280,6 +280,40 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("ObjectEditor", "Lightmap is baking...", "Лайтмапа запекается...");
 	add("ObjectEditor", "Lightmap baked.", "Лайтмапа запечена.");
 
+	// World settings
+	add("WorldSettingsWidget", "New terrain section", "Новая секция рельефа");
+	add("WorldSettingsWidget", "detail col map 0 (rock) URL", "URL карты цвета detail 0 (камень)");
+	add("WorldSettingsWidget", "detail col map 1 (sediment) URL", "URL карты цвета detail 1 (осадок)");
+	add("WorldSettingsWidget", "detail col map 2 (vegetation) URL", "URL карты цвета detail 2 (растительность)");
+	add("WorldSettingsWidget", "detail col map 3 URL", "URL карты цвета detail 3");
+	add("WorldSettingsWidget", "detail height map 0 (rock) URL", "URL карты высот detail 0 (камень)");
+	add("WorldSettingsWidget", "terrain section width", "Ширина секции рельефа");
+	add("WorldSettingsWidget", "default terrain z", "Базовая высота рельефа (z)");
+	add("WorldSettingsWidget", "terrain height scale", "Масштаб высоты рельефа");
+	add("WorldSettingsWidget", "water z coord", "Координата воды по z");
+	add("WorldSettingsWidget", "water", "Вода");
+	add("WorldSettingsWidget", "Apply", "Применить");
+	add("WorldSettingsWidget", "Sun", "Солнце");
+	add("WorldSettingsWidget", "Sun angle from vertical", "Угол солнца от вертикали");
+	add("WorldSettingsWidget", "Sun azimuthal angle", "Азимутальный угол солнца");
+	add("WorldSettingsWidget", "Fog", "Туман");
+	add("WorldSettingsWidget", "Layer 0 thickness", "Плотность слоя 0");
+	add("WorldSettingsWidget", "Layer 0 height scale", "Масштаб высоты слоя 0");
+	add("WorldSettingsWidget", "Layer 1 thickness", "Плотность слоя 1");
+	add("WorldSettingsWidget", "Layer 1 height scale", "Масштаб высоты слоя 1");
+
+	add("TerrainSpecSectionWidget", "Height map URL", "URL карты высот");
+	add("TerrainSpecSectionWidget", "Mask map URL", "URL карты маски");
+	add("TerrainSpecSectionWidget", "Tree mask map URL", "URL карты маски деревьев");
+	add("TerrainSpecSectionWidget", "Remove", "Удалить");
+
+	// Environment options
+	add("EnvironmentOptionsWidget", "Sun angle from vertical", "Угол солнца от вертикали");
+	add("EnvironmentOptionsWidget", "Sun azimuthal angle", "Азимутальный угол солнца");
+	add("EnvironmentOptionsWidget", "Use local sun direction", "Использовать локальное направление солнца");
+	add("EnvironmentOptionsWidget", "Northern Lights", "Северное сияние");
+	add("EnvironmentOptionsWidget", " deg", " град");
+
 	// MaterialEditor
 	add("MaterialEditor", "Colour", "Цвет");
 	add("MaterialEditor", "Texture", "Текстура");

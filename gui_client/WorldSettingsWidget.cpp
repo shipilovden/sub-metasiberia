@@ -13,11 +13,19 @@ Copyright Glare Technologies Limited 2023 -
 #include <FileUtils.h>
 #include <FileChecksum.h>
 #include <QtCore/QSettings>
+#include <QtCore/QEvent>
+#include <QtCore/QObject>
+#include <QtGui/QMouseEvent>
 #include <QtWidgets/QMessageBox>
+#include <algorithm>
 
 
 WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
-:	QWidget(parent)
+:	QWidget(parent),
+	main_window(NULL),
+	terrain_section_resize_drag_active(false),
+	terrain_section_resize_drag_start_global_y(0),
+	terrain_section_resize_drag_start_height(0)
 {
 	setupUi(this);
 
@@ -37,6 +45,11 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	connect(this->layer0HeightScaleSpinBox,     SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->layer1ASpinBox,               SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->layer1HeightScaleSpinBox,     SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+
+	terrainSectionScrollArea->setMouseTracking(true);
+	terrainSectionScrollArea->viewport()->setMouseTracking(true);
+	terrainSectionScrollArea->installEventFilter(this);
+	terrainSectionScrollArea->viewport()->installEventFilter(this);
 }
 
 
@@ -49,6 +62,123 @@ void WorldSettingsWidget::init(MainWindow* main_window_)
 	main_window = main_window_;
 
 	updateControlsEditable();
+}
+
+
+void WorldSettingsWidget::retranslateUiText()
+{
+	retranslateUi(this);
+
+	QLayout* sections_layout = terrainSectionScrollAreaWidgetContents->layout();
+	if(!sections_layout)
+		return;
+
+	for(int i=0; i<sections_layout->count(); ++i)
+	{
+		if(QWidget* widget = sections_layout->itemAt(i)->widget())
+		{
+			TerrainSpecSectionWidget* section_widget = dynamic_cast<TerrainSpecSectionWidget*>(widget);
+			if(section_widget)
+				section_widget->retranslateUi(section_widget);
+		}
+	}
+}
+
+
+bool WorldSettingsWidget::shouldStartTerrainSectionResize(const QPoint& pos_in_scroll_area) const
+{
+	const int resize_hot_zone_px = 6;
+	const int h = terrainSectionScrollArea->height();
+	return (pos_in_scroll_area.y() >= h - resize_hot_zone_px) && (pos_in_scroll_area.y() <= h + resize_hot_zone_px);
+}
+
+
+void WorldSettingsWidget::setTerrainSectionAreaHeight(int target_height)
+{
+	const int min_height = 70;
+	const int max_height = std::max(min_height, this->height() - 180);
+	const int clamped_height = std::max(min_height, std::min(target_height, max_height));
+
+	terrainSectionScrollArea->setMinimumHeight(clamped_height);
+	terrainSectionScrollArea->setMaximumHeight(clamped_height);
+}
+
+
+bool WorldSettingsWidget::eventFilter(QObject* watched, QEvent* event)
+{
+	const bool relevant_object = (watched == terrainSectionScrollArea) || (watched == terrainSectionScrollArea->viewport());
+	if(!relevant_object)
+		return QWidget::eventFilter(watched, event);
+
+	auto toScrollAreaPos = [&](const QPoint& pos_in_watched) -> QPoint
+	{
+		if(watched == terrainSectionScrollArea)
+			return pos_in_watched;
+		return terrainSectionScrollArea->viewport()->mapTo(terrainSectionScrollArea, pos_in_watched);
+	};
+
+	if(event->type() == QEvent::MouseButtonPress)
+	{
+		QMouseEvent* mouse_event = static_cast<QMouseEvent*>(event);
+		if(mouse_event->button() == Qt::LeftButton)
+		{
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+			const QPoint local_pos = mouse_event->position().toPoint();
+			const int global_y = mouse_event->globalPosition().toPoint().y();
+#else
+			const QPoint local_pos = mouse_event->pos();
+			const int global_y = mouse_event->globalY();
+#endif
+			if(shouldStartTerrainSectionResize(toScrollAreaPos(local_pos)))
+			{
+				terrain_section_resize_drag_active = true;
+				terrain_section_resize_drag_start_global_y = global_y;
+				terrain_section_resize_drag_start_height = terrainSectionScrollArea->height();
+				terrainSectionScrollArea->setCursor(Qt::SizeVerCursor);
+				return true;
+			}
+		}
+	}
+	else if(event->type() == QEvent::MouseMove)
+	{
+		QMouseEvent* mouse_event = static_cast<QMouseEvent*>(event);
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+		const QPoint local_pos = mouse_event->position().toPoint();
+		const int global_y = mouse_event->globalPosition().toPoint().y();
+#else
+		const QPoint local_pos = mouse_event->pos();
+		const int global_y = mouse_event->globalY();
+#endif
+
+		if(terrain_section_resize_drag_active)
+		{
+			const int delta_y = global_y - terrain_section_resize_drag_start_global_y;
+			setTerrainSectionAreaHeight(terrain_section_resize_drag_start_height + delta_y);
+			return true;
+		}
+
+		if(shouldStartTerrainSectionResize(toScrollAreaPos(local_pos)))
+			terrainSectionScrollArea->setCursor(Qt::SizeVerCursor);
+		else
+			terrainSectionScrollArea->unsetCursor();
+	}
+	else if(event->type() == QEvent::MouseButtonRelease)
+	{
+		QMouseEvent* mouse_event = static_cast<QMouseEvent*>(event);
+		if(terrain_section_resize_drag_active && (mouse_event->button() == Qt::LeftButton))
+		{
+			terrain_section_resize_drag_active = false;
+			terrainSectionScrollArea->unsetCursor();
+			return true;
+		}
+	}
+	else if(event->type() == QEvent::Leave)
+	{
+		if(!terrain_section_resize_drag_active)
+			terrainSectionScrollArea->unsetCursor();
+	}
+
+	return QWidget::eventFilter(watched, event);
 }
 
 
