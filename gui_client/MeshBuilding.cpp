@@ -453,10 +453,32 @@ MeshBuilding::MeshBuildingResults MeshBuilding::makePortalMeshes(const std::stri
 
 	batched_mesh->checkValidAndSanitiseMesh();
 
+	if(batched_mesh->batches.size() != 6)
+		throw glare::Exception("Unexpected portal.bmesh batch count: " + toString(batched_mesh->batches.size()));
+
+	// Split the shared portal material assignments into dedicated slots so each visible portal section can be edited independently.
+	// Batch order in portal.bmesh is fixed and was verified against the in-editor portal colouring:
+	//   0 -> inner rim
+	//   1 -> arch body
+	//   2 -> merged into outer edge
+	//   3 -> portal effect
+	//   4 -> threshold
+	//   5 -> outer edge
+	static const uint32 portal_batch_to_material_index[6] = {
+		WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX,
+		WorldObject::PORTAL_ARCH_MATERIAL_INDEX,
+		WorldObject::PORTAL_FRAME_MATERIAL_INDEX,
+		WorldObject::PORTAL_EFFECT_MATERIAL_INDEX,
+		WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX,
+		WorldObject::PORTAL_FRAME_MATERIAL_INDEX
+	};
+	for(size_t i=0; i<batched_mesh->batches.size(); ++i)
+		batched_mesh->batches[i].material_index = portal_batch_to_material_index[i];
+
 	Reference<OpenGLMeshRenderData> portal_opengl_mesh = GLMeshBuilding::buildBatchedMesh(&allocator, batched_mesh, /*skip opengl calls=*/false); // Build OpenGLMeshRenderData
 
-	js::Vector<bool> create_tris_for_mat(4, true);
-	create_tris_for_mat[3] = false; // Material with index 3 is the blue portal shader material that shouldn't be collidable.
+	js::Vector<bool> create_tris_for_mat(WorldObject::PORTAL_MATERIAL_COUNT, true);
+	create_tris_for_mat[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX] = false; // Procedural portal effect plane shouldn't be collidable.
 	PhysicsShape arch_shape = PhysicsWorld::createJoltShapeForBatchedMesh(*batched_mesh, /*build_dynamic_physics_ob=*/false, /*mem allocator=*/nullptr, &create_tris_for_mat);
 
 

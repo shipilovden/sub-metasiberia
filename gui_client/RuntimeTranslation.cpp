@@ -204,10 +204,17 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("ObjectEditor", "Edit", "Редактировать");
 	add("ObjectEditor", "Content", "Содержимое");
 	add("ObjectEditor", "Target URL", "Целевой URL");
+	add("ObjectEditor", "Portal Target URL", "Целевой URL портала");
+	add("ObjectEditor", "Walk through the portal to travel to this sub:// destination.", "Пройдите через портал, чтобы перейти по этому адресу sub://.");
 	add("ObjectEditor", "<a href=\"#boo\">Open URL in web browser</a>", "<a href=\"#boo\">Открыть URL в браузере</a>");
 	add("ObjectEditor", "Materials", "Материалы");
 	add("ObjectEditor", "Current mat:", "Текущий мат.:");
 	add("ObjectEditor", "New Material", "Новый материал");
+	add("ObjectEditor", "Material 0 (Inner Rim)", "Материал 0 (Внутренний обод)");
+	add("ObjectEditor", "Material 1 (Arch Body)", "Материал 1 (Тело арки)");
+	add("ObjectEditor", "Material 2 (Outer Edge)", "Материал 2 (Внешний кант)");
+	add("ObjectEditor", "Material 3 (Portal Effect)", "Материал 3 (Эффект портала)");
+	add("ObjectEditor", "Material 4 (Threshold)", "Материал 4 (Порог)");
 	add("ObjectEditor", "Lightmap", "Лайтмапа");
 	add("ObjectEditor", "Lightmap URL:", "URL лайтмапы:");
 	add("ObjectEditor", "Bake lightmap (fast)", "Запечь лайтмапу (быстро)");

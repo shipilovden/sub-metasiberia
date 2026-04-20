@@ -313,6 +313,12 @@ public:
 	static const size_t MAX_CONTENT_SIZE                  = 10000;
 	static const size_t MAX_FONT_NAME_SIZE                = 256;
 	static const char* audioPlayerTargetURL() { return "https://localdomain/audio-player"; }
+	static constexpr size_t PORTAL_MATERIAL_COUNT = 5;
+	static constexpr size_t PORTAL_INNER_RIM_MATERIAL_INDEX = 0;
+	static constexpr size_t PORTAL_ARCH_MATERIAL_INDEX = 1;
+	static constexpr size_t PORTAL_FRAME_MATERIAL_INDEX = 2; // Portal outer edge.
+	static constexpr size_t PORTAL_EFFECT_MATERIAL_INDEX = 3;
+	static constexpr size_t PORTAL_THRESHOLD_MATERIAL_INDEX = 4;
 	static constexpr float DEFAULT_AUDIO_PLAYER_ACTIVATION_DISTANCE = 20.f;
 	static constexpr float MIN_AUDIO_PLAYER_ACTIVATION_DISTANCE = 0.5f;
 	static constexpr float MAX_AUDIO_PLAYER_ACTIVATION_DISTANCE = 500.f;
@@ -333,6 +339,8 @@ public:
 	static constexpr float MIN_AUDIO_PLAYER_SCHEDULE_HOUR = 0.f;
 	static constexpr float MAX_AUDIO_PLAYER_SCHEDULE_HOUR = 24.f;
 	static bool looksLikeAudioPlayerPlaylistContent(const std::string& content);
+	static void ensurePortalMaterialsPresent(std::vector<WorldMaterialRef>& materials);
+	void ensurePortalMaterialsPresent();
 	
 
 	URLString model_url;

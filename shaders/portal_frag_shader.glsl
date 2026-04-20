@@ -133,10 +133,11 @@ void main()
 	
 
 	float T = 0.2;
+	vec3 portal_tint = max(colour, vec3(0.0));
 #if ORDER_INDEPENDENT_TRANSPARENCY
-	accum_out = vec4(accum * 10.0, 0.0);
+	accum_out = vec4(accum * portal_tint * 10.0, 0.0);
 	transmittance_out = vec4(T, T, T, T);
 #else
-	colour_out = vec4(accum * 10.0, 1.0 - T);
+	colour_out = vec4(accum * portal_tint * 10.0, 1.0 - T);
 #endif
 }

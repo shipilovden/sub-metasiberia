@@ -124,6 +124,7 @@ private:
 	std::vector<WorldMaterialRef> cloned_materials;
 
 	UID editing_ob_uid;
+	WorldObject::ObjectType editing_object_type;
 	int selected_mat_index;
 
 	QTimer* edit_timer;
