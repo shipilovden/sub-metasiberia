@@ -167,6 +167,7 @@ static int remapAudioPlayerMaterialIndexForEditor(int selected_index, size_t mat
 
 ObjectEditor::ObjectEditor(QWidget *parent)
 :	QWidget(parent),
+	editing_object_type(WorldObject::ObjectType_Generic),
 	selected_mat_index(0),
 	edit_timer(new QTimer(this)),
 	shader_editor(NULL),
@@ -492,6 +493,7 @@ void ObjectEditor::retranslateDynamicAudioPlayerUI()
 	};
 
 	const bool is_audio_player = this->editing_audio_player_webview;
+	const bool is_portal = (this->editing_object_type == WorldObject::ObjectType_Portal);
 	this->audioGroupBox->setTitle(is_audio_player ? tr_audio("Audio Player") : tr_audio("Audio"));
 
 	this->label_8->setText(tr_audio("Volume"));
@@ -520,6 +522,8 @@ void ObjectEditor::retranslateDynamicAudioPlayerUI()
 	this->audioSpreadDegreesSpinBox->setSuffix(tr_audio(" deg"));
 	this->audioScheduleStartHourSpinBox->setSuffix(tr_audio(" h"));
 	this->audioScheduleEndHourSpinBox->setSuffix(tr_audio(" h"));
+	this->targetURLLabel->setText(tr_audio(is_portal ? "Portal Target URL" : "Target URL"));
+	this->targetURLLineEdit->setToolTip(is_portal ? tr_audio("Walk through the portal to travel to this sub:// destination.") : QString());
 
 	const QString volume_tip = tr_audio("Playback volume for this audio player.");
 	const QString autoplay_tip = tr_audio("Enable automatic playback when this object loads.");
@@ -683,7 +687,9 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	const QSignalBlocker signal_blocker(this);
 
 	this->editing_ob_uid = ob.uid;
+	this->editing_object_type = ob.object_type;
 	this->editing_audio_player_webview = ob.isAudioPlayerWebView();
+	const RuntimeTranslation::UILanguage ui_language = currentUILanguageForObjectEditor(this->settings);
 
 	//this->objectTypeLabel->setText(QtUtils::toQString(ob_type + " (UID: " + ob.uid.toString() + ")"));
 
@@ -709,6 +715,8 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->cloned_materials.resize(ob.materials.size());
 	for(size_t i=0; i<ob.materials.size(); ++i)
 		this->cloned_materials[i] = ob.materials[i]->clone();
+	if(ob.isPortal())
+		WorldObject::ensurePortalMaterialsPresent(this->cloned_materials);
 
 	//this->createdByLabel->setText(QtUtils::toQString(creator_name));
 	//this->createdTimeLabel->setText(QtUtils::toQString(ob.created_time.timeAgoDescription()));
@@ -800,8 +808,8 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	lightmapURLLabel->setText(QtUtils::toQString(ob.lightmap_url));
 
 	WorldMaterialRef selected_mat;
-	if(this->selected_mat_index >= 0 && this->selected_mat_index < (int)ob.materials.size())
-		selected_mat = ob.materials[this->selected_mat_index];
+	if(this->selected_mat_index >= 0 && this->selected_mat_index < (int)this->cloned_materials.size())
+		selected_mat = this->cloned_materials[this->selected_mat_index];
 	else
 		selected_mat = new WorldMaterial();
 
@@ -922,7 +930,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	}
 	else if(ob.object_type == WorldObject::ObjectType_Portal)
 	{
-		this->materialsGroupBox->hide();
+		this->materialsGroupBox->show();
 		this->lightmapGroupBox->hide();
 		this->modelLabel->hide();
 		this->modelFileSelectWidget->hide();
@@ -952,12 +960,22 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 		// Set materials combobox
 		SignalBlocker blocker(this->materialComboBox);
 		this->materialComboBox->clear();
-		for(size_t i=0; i<ob.materials.size(); ++i)
+		for(size_t i=0; i<this->cloned_materials.size(); ++i)
 		{
 			if(this->editing_audio_player_webview && i == 0)
 				this->materialComboBox->addItem(QCoreApplication::translate("ObjectEditor", "Material 0 (Player Screen)"), (int)i);
 			else if(this->editing_audio_player_webview && i == 1)
 				this->materialComboBox->addItem(QCoreApplication::translate("ObjectEditor", "Material 1 (Player Body)"), (int)i);
+			else if(ob.isPortal() && i == WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX)
+				this->materialComboBox->addItem(translateObjectEditorRuntimeText(ui_language, "Material 0 (Inner Rim)"), (int)i);
+			else if(ob.isPortal() && i == WorldObject::PORTAL_ARCH_MATERIAL_INDEX)
+				this->materialComboBox->addItem(translateObjectEditorRuntimeText(ui_language, "Material 1 (Arch Body)"), (int)i);
+			else if(ob.isPortal() && i == WorldObject::PORTAL_FRAME_MATERIAL_INDEX)
+				this->materialComboBox->addItem(translateObjectEditorRuntimeText(ui_language, "Material 2 (Outer Edge)"), (int)i);
+			else if(ob.isPortal() && i == WorldObject::PORTAL_EFFECT_MATERIAL_INDEX)
+				this->materialComboBox->addItem(translateObjectEditorRuntimeText(ui_language, "Material 3 (Portal Effect)"), (int)i);
+			else if(ob.isPortal() && i == WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX)
+				this->materialComboBox->addItem(translateObjectEditorRuntimeText(ui_language, "Material 4 (Threshold)"), (int)i);
 			else
 				this->materialComboBox->addItem(QtUtils::toQString("Material " + toString(i)), (int)i);
 		}
@@ -1013,23 +1031,23 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	//this->targetURLLabel->setVisible(ob.object_type == WorldObject::ObjectType_Hypercard);
 	//this->targetURLLineEdit->setVisible(ob.object_type == WorldObject::ObjectType_Hypercard);
 	const bool is_audio_player = ob.isAudioPlayerWebView();
-	const RuntimeTranslation::UILanguage ui_language = currentUILanguageForObjectEditor(this->settings);
-	auto tr_audio = [ui_language](const char* source_text)
+	const bool is_portal = ob.isPortal();
+	auto tr_object_editor = [ui_language](const char* source_text)
 	{
 		return translateObjectEditorRuntimeText(ui_language, source_text);
 	};
-	this->audioGroupBox->setTitle(is_audio_player ? tr_audio("Audio Player") : tr_audio("Audio"));
+	this->audioGroupBox->setTitle(is_audio_player ? tr_object_editor("Audio Player") : tr_object_editor("Audio"));
 	this->label_9->setVisible(!is_audio_player);
 	this->widget_5->setVisible(!is_audio_player);
 	this->label_12->setVisible(!is_audio_player);
 	this->contentTextEdit->setVisible(!is_audio_player);
-	this->fontLabel->setVisible(!is_audio_player);
-	this->fontComboBox->setVisible(!is_audio_player);
+	this->fontLabel->setVisible(!is_audio_player && !is_portal);
+	this->fontComboBox->setVisible(!is_audio_player && !is_portal);
 	this->label_14->setVisible(!is_audio_player);
 	this->audioFileWidget->setVisible(!is_audio_player);
 	this->targetURLLabel->setVisible(!is_audio_player);
 	this->targetURLLineEdit->setVisible(!is_audio_player);
-	this->visitURLLabel->setVisible(!is_audio_player && !ob.target_url.empty());
+	this->visitURLLabel->setVisible(!is_audio_player && !is_portal && !ob.target_url.empty());
 	this->audioShuffleCheckBox->setVisible(is_audio_player);
 	this->audioActivationDistanceLabel->setVisible(is_audio_player);
 	this->audioActivationDistanceSpinBox->setVisible(is_audio_player);
@@ -1055,8 +1073,12 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	const bool schedule_controls_enabled = is_audio_player && this->audioScheduleEnabledCheckBox->isChecked();
 	this->audioScheduleStartHourSpinBox->setEnabled(schedule_controls_enabled);
 	this->audioScheduleEndHourSpinBox->setEnabled(schedule_controls_enabled);
-	this->label_12->setText(tr_audio("Content"));
+	this->label_12->setText(tr_object_editor("Content"));
 	this->contentTextEdit->setPlaceholderText(QString());
+	this->targetURLLabel->setText(tr_object_editor(is_portal ? "Portal Target URL" : "Target URL"));
+	this->targetURLLineEdit->setPlaceholderText(is_portal ? QStringLiteral("sub://vr.metasiberia.com/World?x=0&y=0&z=0&heading=0") : QString());
+	this->targetURLLineEdit->setToolTip(is_portal ? tr_object_editor("Walk through the portal to travel to this sub:// destination.") : QString());
+	this->newMaterialPushButton->setVisible(!is_portal);
 
 	if(ob.lightmap_baking)
 	{
@@ -1734,7 +1756,11 @@ void ObjectEditor::on_removeLightmapPushButton_clicked(bool checked)
 
 void ObjectEditor::targetURLChanged()
 {
-	this->visitURLLabel->setVisible(!this->targetURLLineEdit->text().isEmpty());
+	this->visitURLLabel->setVisible(
+		(this->editing_object_type != WorldObject::ObjectType_Portal) &&
+		!this->editing_audio_player_webview &&
+		!this->targetURLLineEdit->text().isEmpty()
+	);
 }
 
 

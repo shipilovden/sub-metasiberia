@@ -227,6 +227,38 @@ static std::string xrLaunchModeToString(const XRLaunchMode mode)
 }
 
 
+static void configurePortalOpenGLMaterialsFromWorldObject(const WorldObject& ob, int ob_lod_level, bool use_basis, ResourceManager& resource_manager,
+	glare::ArenaAllocator* arena_allocator, OpenGLProgram* portal_shader_prog, GLObject& opengl_ob)
+{
+	opengl_ob.materials.resize(WorldObject::PORTAL_MATERIAL_COUNT);
+
+	for(size_t i=0; i<WorldObject::PORTAL_MATERIAL_COUNT; ++i)
+	{
+		if(i < ob.materials.size() && ob.materials[i].nonNull())
+		{
+			ModelLoading::setGLMaterialFromWorldMaterial(
+				*ob.materials[i],
+				ob_lod_level,
+				/*lightmap URL=*/"",
+				use_basis,
+				resource_manager,
+				arena_allocator,
+				opengl_ob.materials[i]
+			);
+		}
+		else
+		{
+			opengl_ob.materials[i] = OpenGLMaterial();
+		}
+	}
+
+	OpenGLMaterial& effect_mat = opengl_ob.materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX];
+	effect_mat.transparent = true;
+	effect_mat.shader_prog = portal_shader_prog;
+	effect_mat.auto_assign_shader = false;
+}
+
+
 static XRLaunchModeDecision chooseXRLaunchMode(const ArgumentParser& parsed_args, SettingsStore* settings)
 {
 	XRLaunchModeDecision decision;
@@ -3654,6 +3686,8 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 	{
 		if((ob->object_type == WorldObject::ObjectType_WebView) && ob->target_url.empty() && WorldObject::looksLikeAudioPlayerPlaylistContent(ob->content))
 			ob->target_url = WorldObject::audioPlayerTargetURL();
+		if(ob->isPortal())
+			ob->ensurePortalMaterialsPresent();
 
 		checkTransformOK(ob); // Throws glare::Exception if not ok.
 
@@ -3790,32 +3824,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				opengl_ob->mesh_data = this->portal_opengl_mesh;
 				
 				glare::ArenaFrame frame(arena_allocator);
-
-				opengl_ob->materials.resize(4);
-				opengl_ob->materials[0].albedo_linear_rgb = Colour3f(1,1,1); // mat 0 not used
-
-				const int inner_rim_mat_index = 0;
-				const int arch_mat_index = 1;
-				const int portal_plane_index = 3;
-				//--------------------- solid arch volume: marble material ---------------------
-				opengl_ob->materials[arch_mat_index].albedo_linear_rgb = Colour3f(1,1,1);
-				opengl_ob->materials[arch_mat_index].tex_matrix = Matrix2f(0.05f, 0, 0, 0.05f);
-
-				const URLString carrara1_tex_URL = "carrara1.jpg";
-				const OpenGLTextureKey carrara1_tex_local_abs_path = OpenGLTextureKey(base_dir_path + "/data/resources/materials/white marble/carrara1.jpg");
-				
-				opengl_ob->materials[arch_mat_index].tex_path = carrara1_tex_local_abs_path;
-
-				//--------------------- Inside wall of arch: gold material ---------------------
-				opengl_ob->materials[inner_rim_mat_index].albedo_linear_rgb = toLinearSRGB(Colour3f(216/255.f, 207/255.f, 140/255.f)); // Inside wall of arch: gold material
-				opengl_ob->materials[inner_rim_mat_index].metallic_frac = 1.f;
-				opengl_ob->materials[inner_rim_mat_index].roughness = 0.3f;
-
-
-				//--------------------- portal plane: glowing pattern ---------------------
-				opengl_ob->materials[portal_plane_index].transparent = true;
-				opengl_ob->materials[portal_plane_index].shader_prog = this->portal_shader_prog;
-				opengl_ob->materials[portal_plane_index].auto_assign_shader = false;
+				configurePortalOpenGLMaterialsFromWorldObject(*ob, ob_lod_level, use_basis_textures_for_ob, *resource_manager, &arena_allocator, this->portal_shader_prog.ptr(), *opengl_ob);
 
 				for(size_t i=0; i<opengl_ob->materials.size(); ++i)
 				{
@@ -3829,21 +3838,11 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				ob->physics_object = physics_ob;
 
 				opengl_engine->addObject(ob->opengl_engine_ob);
+				assignLoadedOpenGLTexturesToMats(ob);
 
 				physics_world->addObject(ob->physics_object);
 
 				loadScriptForObject(ob, world_state_lock); // Load any script for the object.
-
-
-				// Start loading the marble texture
-				ResourceRef resource = resource_manager->getExistingResourceForURL(carrara1_tex_URL);
-				if(!resource)
-				{
-					resource = new Resource(carrara1_tex_URL, /*local (abs) path=*/base_dir_path, Resource::State_Present, UserID(), /*external_resource=*/true);
-					resource_manager->addResource(resource);
-				}
-				startLoadingTextureForLocalPath(carrara1_tex_local_abs_path, resource, ob->getCentroidWS(), ob->getAABBWSLongestLength(), /*max task dist=*/1.0e10f, 1.f, TextureParams());
-				loading_texture_URL_to_world_ob_UID_map[carrara1_tex_URL].insert(ob->uid);
 			}
 		}
 		else if(ob->object_type == WorldObject::ObjectType_Spotlight)
@@ -14095,9 +14094,18 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 
 						// Update materials in opengl engine.
 						glare::ArenaFrame frame(arena_allocator);
-						for(size_t i=0; i<in_world_ob->materials.size(); ++i)
-							if(i < opengl_ob->materials.size())
-								ModelLoading::setGLMaterialFromWorldMaterial(*in_world_ob->materials[i], ob_lod_level, in_world_ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
+						if(in_world_ob->isPortal())
+						{
+							in_world_ob->ensurePortalMaterialsPresent();
+							configurePortalOpenGLMaterialsFromWorldObject(*in_world_ob, ob_lod_level, use_basis_textures_for_ob, *this->resource_manager, &arena_allocator, this->portal_shader_prog.ptr(), *opengl_ob);
+							assignLoadedOpenGLTexturesToMats(in_world_ob.ptr());
+						}
+						else
+						{
+							for(size_t i=0; i<in_world_ob->materials.size(); ++i)
+								if(i < opengl_ob->materials.size())
+									ModelLoading::setGLMaterialFromWorldMaterial(*in_world_ob->materials[i], ob_lod_level, in_world_ob->lightmap_url, /*use_basis=*/use_basis_textures_for_ob, *this->resource_manager, &arena_allocator, opengl_ob->materials[i]);
+						}
 
 						opengl_engine->objectMaterialsUpdated(*opengl_ob);
 					}
@@ -15268,9 +15276,11 @@ void GUIClient::objectEdited()
 				resource_manager->copyLocalFileToResourceDir(toStdString(local_path), URL);
 			}
 		}
-		
 
 
+
+		if(this->selected_ob->isPortal())
+			this->selected_ob->ensurePortalMaterialsPresent();
 		this->selected_ob->convertLocalPathsToURLS(*this->resource_manager);
 
 		//if(!task_manager)
@@ -15436,6 +15446,17 @@ void GUIClient::objectEdited()
 								opengl_ob->materials[0].alpha = 1.0f;
 							}
 
+							assignLoadedOpenGLTexturesToMats(selected_ob.ptr());
+							opengl_engine->objectMaterialsUpdated(*opengl_ob);
+						}
+					}
+					else if(this->selected_ob->object_type == WorldObject::ObjectType_Portal)
+					{
+						if(opengl_ob.nonNull())
+						{
+							glare::ArenaFrame frame(arena_allocator);
+
+							configurePortalOpenGLMaterialsFromWorldObject(*this->selected_ob, ob_lod_level, selected_ob_use_basis, *this->resource_manager, &arena_allocator, this->portal_shader_prog.ptr(), *opengl_ob);
 							assignLoadedOpenGLTexturesToMats(selected_ob.ptr());
 							opengl_engine->objectMaterialsUpdated(*opengl_ob);
 						}
@@ -18930,7 +18951,9 @@ void GUIClient::reloadShaders()
 				WorldObject* ob = it.getValue().ptr();
 				if(ob->isPortal() && ob->opengl_engine_ob)
 				{
-					ob->opengl_engine_ob->materials[3].shader_prog = this->portal_shader_prog;
+					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].shader_prog = this->portal_shader_prog;
+					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].transparent = true;
+					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].auto_assign_shader = false;
 					opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
 				}
 			}

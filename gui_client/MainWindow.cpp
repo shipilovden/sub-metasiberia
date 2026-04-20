@@ -2904,6 +2904,7 @@ void MainWindow::on_actionAdd_Portal_triggered()
 	WorldObjectRef new_world_object = new WorldObject();
 	new_world_object->uid = UID(0); // Will be set by server
 	new_world_object->object_type = WorldObject::ObjectType_Portal;
+	new_world_object->ensurePortalMaterialsPresent();
 	new_world_object->pos = ob_pos;
 	new_world_object->axis = Vec3f(0, 0, 1);
 	new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>()); // Round to nearest 45 degree angle, facing player.

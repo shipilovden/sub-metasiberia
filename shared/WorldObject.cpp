@@ -160,6 +160,51 @@ void forEachAudioPlayerPlaylistURL(const WorldObject& ob, Fn&& fn)
 		line_start = line_end + 1;
 	}
 }
+
+
+void setPortalInnerRimMaterialDefaults(WorldMaterial& mat)
+{
+	mat = WorldMaterial();
+	mat.name = "Portal Inner Rim";
+	mat.colour_rgb = Colour3f(216 / 255.f, 207 / 255.f, 140 / 255.f);
+	mat.emission_rgb = mat.colour_rgb;
+	mat.roughness = ScalarVal(0.3f);
+	mat.metallic_fraction = ScalarVal(1.f);
+}
+
+
+void setPortalArchMaterialDefaults(WorldMaterial& mat)
+{
+	mat = WorldMaterial();
+	mat.name = "Portal Arch Body";
+	mat.colour_rgb = Colour3f(1.f);
+	mat.emission_rgb = Colour3f(0.85f);
+	mat.colour_texture_url = "carrara1.jpg";
+	mat.tex_matrix = Matrix2f(0.05f, 0, 0, 0.05f);
+}
+
+
+void setPortalFrameMaterialDefaults(WorldMaterial& mat)
+{
+	setPortalArchMaterialDefaults(mat);
+	mat.name = "Portal Outer Edge";
+}
+
+
+void setPortalThresholdMaterialDefaults(WorldMaterial& mat)
+{
+	setPortalInnerRimMaterialDefaults(mat);
+	mat.name = "Portal Threshold";
+}
+
+
+void setPortalEffectMaterialDefaults(WorldMaterial& mat)
+{
+	mat = WorldMaterial();
+	mat.name = "Portal Effect";
+	mat.colour_rgb = Colour3f(1.f);
+	mat.emission_rgb = Colour3f(1.f);
+}
 }
 
 
@@ -188,6 +233,77 @@ bool WorldObject::looksLikeAudioPlayerPlaylistContent(const std::string& content
 	}
 
 	return saw_track;
+}
+
+
+void WorldObject::ensurePortalMaterialsPresent(std::vector<WorldMaterialRef>& materials)
+{
+	const bool create_full_default_set = materials.empty();
+	const size_t old_material_count = materials.size();
+	WorldMaterialRef legacy_inner_rim;
+	if(!create_full_default_set)
+	{
+		if(old_material_count > PORTAL_INNER_RIM_MATERIAL_INDEX && materials[PORTAL_INNER_RIM_MATERIAL_INDEX].nonNull())
+			legacy_inner_rim = materials[PORTAL_INNER_RIM_MATERIAL_INDEX]->clone();
+	}
+	if(materials.size() > PORTAL_MATERIAL_COUNT)
+		materials.resize(PORTAL_MATERIAL_COUNT);
+	if(materials.size() < PORTAL_MATERIAL_COUNT)
+		materials.resize(PORTAL_MATERIAL_COUNT);
+
+	auto ensure_slot = [&materials, create_full_default_set](size_t index, void (*set_defaults)(WorldMaterial&))
+	{
+		if(create_full_default_set || materials[index].isNull())
+		{
+			if(materials[index].isNull())
+				materials[index] = new WorldMaterial();
+			set_defaults(*materials[index]);
+		}
+	};
+
+	ensure_slot(PORTAL_INNER_RIM_MATERIAL_INDEX, &setPortalInnerRimMaterialDefaults);
+	ensure_slot(PORTAL_ARCH_MATERIAL_INDEX,      &setPortalArchMaterialDefaults);
+	ensure_slot(PORTAL_FRAME_MATERIAL_INDEX,     &setPortalFrameMaterialDefaults);
+	ensure_slot(PORTAL_EFFECT_MATERIAL_INDEX,    &setPortalEffectMaterialDefaults);
+
+	auto assign_clone_or_defaults = [&materials](const WorldMaterialRef& source_mat, size_t dest_index, const char* new_name, void (*set_defaults)(WorldMaterial&))
+	{
+		if(source_mat.nonNull())
+		{
+			materials[dest_index] = source_mat->clone();
+			materials[dest_index]->name = new_name;
+		}
+		else
+		{
+			if(materials[dest_index].isNull())
+				materials[dest_index] = new WorldMaterial();
+			set_defaults(*materials[dest_index]);
+		}
+	};
+
+	if(create_full_default_set)
+	{
+		ensure_slot(PORTAL_THRESHOLD_MATERIAL_INDEX, &setPortalThresholdMaterialDefaults);
+	}
+	else
+	{
+		if(old_material_count < PORTAL_MATERIAL_COUNT)
+		{
+			// Legacy 4-slot portals already keep their useful outer-edge state in slot 2.
+			assign_clone_or_defaults(legacy_inner_rim, PORTAL_THRESHOLD_MATERIAL_INDEX, "Portal Threshold", &setPortalThresholdMaterialDefaults);
+		}
+		else
+		{
+			ensure_slot(PORTAL_THRESHOLD_MATERIAL_INDEX, &setPortalThresholdMaterialDefaults);
+		}
+	}
+}
+
+
+void WorldObject::ensurePortalMaterialsPresent()
+{
+	if(this->isPortal())
+		WorldObject::ensurePortalMaterialsPresent(this->materials);
 }
 
 
@@ -2808,6 +2924,44 @@ void WorldObject::test()
 			IndigoXMLDoc doc(xml.c_str(), xml.size());
 			WorldObjectRef ob3 = WorldObject::loadFromXMLElem(/*object_file_path=*/".", /*convert_rel_paths_to_abs_disk_paths=*/false, doc.getRootElement());
 			testObjectsEqual(ob, *ob3);
+		}
+
+		//--------------------------- Test portal default materials helper ----------------------------
+		{
+			std::vector<WorldMaterialRef> mats;
+			WorldObject::ensurePortalMaterialsPresent(mats);
+			testAssert(mats.size() == WorldObject::PORTAL_MATERIAL_COUNT);
+			testAssert(mats[WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX].nonNull());
+			testAssert(mats[WorldObject::PORTAL_ARCH_MATERIAL_INDEX].nonNull());
+			testAssert(mats[WorldObject::PORTAL_FRAME_MATERIAL_INDEX].nonNull());
+			testAssert(mats[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].nonNull());
+			testAssert(mats[WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX].nonNull());
+			testAssert(mats[WorldObject::PORTAL_ARCH_MATERIAL_INDEX]->colour_texture_url == "carrara1.jpg");
+			testAssert(mats[WorldObject::PORTAL_FRAME_MATERIAL_INDEX]->colour_texture_url == "carrara1.jpg");
+			testAssert(mats[WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX]->metallic_fraction.val == 1.f);
+			testAssert(mats[WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX]->roughness.val == 0.3f);
+			testAssert(mats[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX]->colour_rgb == Colour3f(1.f));
+			testAssert(mats[WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX]->name == "Portal Threshold");
+		}
+
+		{
+			std::vector<WorldMaterialRef> mats(4);
+			for(size_t i=0; i<4; ++i)
+				mats[i] = new WorldMaterial();
+
+			setPortalInnerRimMaterialDefaults(*mats[WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX]);
+			setPortalArchMaterialDefaults(*mats[WorldObject::PORTAL_ARCH_MATERIAL_INDEX]);
+			setPortalFrameMaterialDefaults(*mats[WorldObject::PORTAL_FRAME_MATERIAL_INDEX]);
+			setPortalEffectMaterialDefaults(*mats[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX]);
+
+			mats[WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX]->colour_rgb = Colour3f(0.1f, 0.2f, 0.3f);
+			mats[WorldObject::PORTAL_FRAME_MATERIAL_INDEX]->colour_rgb = Colour3f(0.7f, 0.8f, 0.9f);
+
+			WorldObject::ensurePortalMaterialsPresent(mats);
+			testAssert(mats.size() == WorldObject::PORTAL_MATERIAL_COUNT);
+			testAssert(mats[WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX].ptr() != mats[WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX].ptr());
+			testAssert(mats[WorldObject::PORTAL_FRAME_MATERIAL_INDEX]->colour_rgb == Colour3f(0.7f, 0.8f, 0.9f));
+			testAssert(mats[WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX]->colour_rgb == Colour3f(0.1f, 0.2f, 0.3f));
 		}
 
 
