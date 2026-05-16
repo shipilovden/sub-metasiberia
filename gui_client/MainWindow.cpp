@@ -448,6 +448,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	webcam_window(NULL)
 	,avatar_dock_widget(NULL)
 	,avatar_settings_widget(NULL)
+	,map_dock_widget(NULL)
+	,map_dock_label(NULL)
 	//game_controller(NULL)
 {
 	ZoneScoped; // Tracy profiler
@@ -692,6 +694,16 @@ void MainWindow::initialiseUI()
 	avatar_dock_widget->hide();
 	connect(avatar_settings_widget, SIGNAL(requestClose()), avatar_dock_widget, SLOT(hide()));
 
+	map_dock_widget = new QDockWidget(tr("Map"), this);
+	map_dock_widget->setObjectName("mapDockWidget");
+	map_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	map_dock_label = new QLabel(map_dock_widget);
+	map_dock_label->setWordWrap(true);
+	map_dock_label->setMargin(12);
+	map_dock_widget->setWidget(map_dock_label);
+	addDockWidget(Qt::LeftDockWidgetArea, map_dock_widget);
+	map_dock_widget->hide();
+
 	// Add dock widgets to Window menu
 	ui->menuWindow->addSeparator();
 	ui->menuWindow->addAction(ui->editorDockWidget->toggleViewAction());
@@ -699,6 +711,7 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(ui->materialBrowserDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->environmentDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->worldSettingsDockWidget->toggleViewAction());
+	ui->menuWindow->addAction(map_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(ui->chatDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->helpInfoDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->webcamDockWidget->toggleViewAction());
@@ -925,6 +938,9 @@ void MainWindow::initialiseUI()
 
 	ui->objectEditor->setControlsEnabled(false);
 	ui->parcelEditor->hide();
+
+	refreshMapDockText();
+	updateMapDockState();
 
 	startMainTimer();
 	
@@ -1230,6 +1246,8 @@ void MainWindow::refreshTranslatedUiText()
 		url_widget->favoritePushButton->setToolTip(tr("Add to Favorites"));
 	}
 
+	refreshMapDockText();
+
 	if(theme_action_group)
 		initialiseThemesMenu();
 
@@ -1240,6 +1258,49 @@ void MainWindow::refreshTranslatedUiText()
 	}
 
 	updateMenuTooltips();
+}
+
+
+void MainWindow::refreshMapDockText()
+{
+	if(map_dock_widget)
+		map_dock_widget->setWindowTitle(tr("Map"));
+
+	if(map_dock_label)
+	{
+		map_dock_label->setText(
+			tr("Map settings will appear here in the next step.\n\n"
+			   "This panel is available only in the special map world "
+			   "\"sub://vr.metasiberia.com/map\".\n\n"
+			   "Ground rendering in that world now uses a streamed OpenStreetMap ground layer.")
+		);
+	}
+
+	if(map_dock_widget && map_dock_widget->toggleViewAction())
+		map_dock_widget->toggleViewAction()->setText(map_dock_widget->windowTitle());
+}
+
+
+void MainWindow::updateMapDockState()
+{
+	if(!map_dock_widget)
+		return;
+
+	const bool map_world_active = gui_client.isMetasiberiaMapWorld();
+
+	if(!map_world_active && map_dock_widget->isVisible())
+		map_dock_widget->hide();
+
+	map_dock_widget->setEnabled(map_world_active);
+	if(map_dock_widget->toggleViewAction())
+	{
+		map_dock_widget->toggleViewAction()->setEnabled(map_world_active);
+		map_dock_widget->toggleViewAction()->setToolTip(
+			map_world_active ?
+				tr("Open map settings") :
+				tr("Map settings are available only in sub://vr.metasiberia.com/map")
+		);
+	}
 }
 
 
@@ -1963,6 +2024,7 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	updateDiagnostics();
 	
 	updateStatusBar();
+	updateMapDockState();
 
 	runScreenshotCode();
 	
@@ -4102,6 +4164,12 @@ void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
 void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
 {
 	visitSubURL("sub://176.197.223.42/");
+}
+
+
+void MainWindow::on_actionGo_to_Map_World_triggered()
+{
+	visitSubURL("sub://vr.metasiberia.com/map?x=0.0&y=0.0&z=1.67&heading=0.0");
 }
 
 

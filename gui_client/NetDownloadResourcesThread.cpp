@@ -18,6 +18,87 @@ Generated at 2016-01-16 22:59:23 +1300
 #include <FileUtils.h>
 #include <KillThreadMessage.h>
 #include <PlatformUtils.h>
+#include <unordered_map>
+
+
+namespace
+{
+struct PendingNetResource
+{
+	PendingNetResource() : priority(0) {}
+	PendingNetResource(const URLString& url_, int priority_) : url(url_), priority(priority_) {}
+
+	URLString url;
+	int priority;
+
+	bool operator<(const PendingNetResource& other) const
+	{
+		if(priority != other.priority)
+			return priority > other.priority; // Higher priority first.
+
+		return url < other.url;
+	}
+};
+
+
+static bool processQueuedNetDownloadMessage(const Reference<ThreadMessage>& msg,
+	std::set<PendingNetResource>& pending_resources,
+	std::unordered_map<URLString, int, URLStringHasher>& pending_priorities)
+{
+	if(dynamic_cast<DownloadResourceMessage*>(msg.getPointer()))
+	{
+		DownloadResourceMessage* const download_msg = msg.downcastToPtr<DownloadResourceMessage>();
+		if(download_msg->processed.increment() == 0) // If this is the first thread to process this message:
+		{
+			auto res = pending_priorities.find(download_msg->URL);
+			if(res == pending_priorities.end())
+			{
+				pending_priorities[download_msg->URL] = download_msg->priority;
+				pending_resources.insert(PendingNetResource(download_msg->URL, download_msg->priority));
+			}
+			else if(download_msg->priority > res->second)
+			{
+				pending_resources.erase(PendingNetResource(download_msg->URL, res->second));
+				res->second = download_msg->priority;
+				pending_resources.insert(PendingNetResource(download_msg->URL, download_msg->priority));
+			}
+		}
+
+		return false;
+	}
+	else if(dynamic_cast<KillThreadMessage*>(msg.getPointer()))
+	{
+		return true;
+	}
+
+	return false;
+}
+
+
+static bool collectQueuedNetDownloadMessages(ThreadSafeQueue<Reference<ThreadMessage> >& message_queue, size_t max_messages,
+	std::set<PendingNetResource>& pending_resources,
+	std::unordered_map<URLString, int, URLStringHasher>& pending_priorities)
+{
+	js::Vector<Reference<ThreadMessage>, 16> queued_messages;
+	queued_messages.reserve(max_messages);
+
+	{
+		Lock lock(message_queue.getMutex());
+		size_t num_collected = 0;
+		while(message_queue.unlockedNonEmpty() && num_collected < max_messages)
+		{
+			queued_messages.push_back(message_queue.unlockedDequeue());
+			++num_collected;
+		}
+	}
+
+	for(size_t i = 0; i < queued_messages.size(); ++i)
+		if(processQueuedNetDownloadMessage(queued_messages[i], pending_resources, pending_priorities))
+			return true;
+
+	return false;
+}
+}
 
 
 NetDownloadResourcesThread::NetDownloadResourcesThread(ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue_, Reference<ResourceManager> resource_manager_,
@@ -28,7 +109,7 @@ NetDownloadResourcesThread::NetDownloadResourcesThread(ThreadSafeQueue<Reference
 {
 #if !defined(EMSCRIPTEN)
 	client = new HTTPClient();
-	client->additional_headers.push_back("User-Agent: Substrata client");
+	client->additional_headers.push_back("User-Agent: Metasiberia client (vr.metasiberia.com)");
 #endif
 }
 
@@ -65,37 +146,40 @@ void NetDownloadResourcesThread::doRun()
 
 	try
 	{
-		
-		std::set<URLString> URLs_to_get; // Set of URLs to get from the server
+		static const size_t EXTRA_QUEUED_MESSAGES_TO_COLLECT = 24;
+
+		std::set<PendingNetResource> pending_resources;
+		std::unordered_map<URLString, int, URLStringHasher> pending_priorities;
 
 		while(1)
 		{
-			if(URLs_to_get.empty())
+			if(pending_resources.empty())
 			{
 				// Wait on the message queue until we have something to download
 				ThreadMessageRef msg;
 				getMessageQueue().dequeue(msg);
 
-				if(dynamic_cast<DownloadResourceMessage*>(msg.getPointer()))
-				{
-					if(msg.downcastToPtr<DownloadResourceMessage>()->processed.increment() == 0) // If this is the first thread to process this message:
-						URLs_to_get.insert(msg.downcastToPtr<DownloadResourceMessage>()->URL);
-				}
-				else if(dynamic_cast<KillThreadMessage*>(msg.getPointer()))
-				{
+				if(processQueuedNetDownloadMessage(msg, pending_resources, pending_priorities))
 					return;
-				}
+
+				if(collectQueuedNetDownloadMessages(getMessageQueue(), EXTRA_QUEUED_MESSAGES_TO_COLLECT, pending_resources, pending_priorities))
+					return;
 			}
 			else
 			{
 				if(this->should_die != 0)
 					return;
 
+				if(collectQueuedNetDownloadMessages(getMessageQueue(), EXTRA_QUEUED_MESSAGES_TO_COLLECT, pending_resources, pending_priorities))
+					return;
+
 				NumResourcesDownloadingDecrementor d;
 				d.num_net_resources_downloading = this->num_net_resources_downloading;
 
-				URLString url = *URLs_to_get.begin();
-				URLs_to_get.erase(URLs_to_get.begin());
+				const PendingNetResource pending_resource = *pending_resources.begin();
+				URLString url = pending_resource.url;
+				pending_priorities.erase(url);
+				pending_resources.erase(pending_resources.begin());
 
 				ResourceRef resource = resource_manager->getOrCreateResourceForURL(url);
 

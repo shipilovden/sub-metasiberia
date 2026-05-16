@@ -39,6 +39,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "BrowserVidPlayer.h"
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
+#include "MapWorldLayer.h"
 #include "Scripting.h"
 #include "HoverCarPhysics.h"
 #include "BikePhysics.h"
@@ -2264,6 +2265,7 @@ void GUIClient::startDownloadingResource(const URLString& url, const Vec4f& cent
 			DownloadingResourceInfo& existing_info = this->URL_to_downloading_info[url];
 			existing_info.used_by_terrain   = existing_info.used_by_terrain   || resource_info.used_by_terrain;
 			existing_info.used_by_other     = existing_info.used_by_other     || resource_info.used_by_other;
+			existing_info.net_download_priority = myMax(existing_info.net_download_priority, resource_info.net_download_priority);
 
 			if(!resource_info.using_objects.using_object_uids.empty())
 				existing_info.using_objects.using_object_uids.push_back(resource_info.using_objects.using_object_uids[0]);
@@ -2271,7 +2273,7 @@ void GUIClient::startDownloadingResource(const URLString& url, const Vec4f& cent
 
 		if(hasPrefix(url, "http://") || hasPrefix(url, "https://"))
 		{
-			this->net_resource_download_thread_manager.enqueueMessage(new DownloadResourceMessage(url));
+			this->net_resource_download_thread_manager.enqueueMessage(new DownloadResourceMessage(url, resource_info.net_download_priority));
 			num_net_resources_downloading++;
 		}
 		else
@@ -3100,6 +3102,15 @@ static Reference<OpenGLTexture> getBestTextureLOD(const WorldMaterial& world_mat
 		return tex;
 
 	return Reference<OpenGLTexture>();
+}
+
+
+static std::string canonicalHostForMetasiberiaInGUIClient(const std::string& host)
+{
+	if(host == "89.104.70.23")
+		return "vr.metasiberia.com";
+
+	return host;
 }
 
 
@@ -6114,6 +6125,9 @@ void GUIClient::handleUploadedTexture(const OpenGLTextureKey& path, const URLStr
 	if(minimap)
 		minimap->handleUploadedTexture(path, URL, opengl_tex);
 
+	if(map_world_layer)
+		map_world_layer->handleUploadedTexture(path, URL, opengl_tex);
+
 	if(gear_inventory_ui)
 		gear_inventory_ui->handleUploadedTexture(path, URL, opengl_tex);
 
@@ -7843,6 +7857,8 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	}
 	if(minimap)
 		minimap->think();
+	if(map_world_layer)
+		map_world_layer->think();
 
 	updateObjectsWithDiagnosticVis();
 
@@ -11429,6 +11445,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 			if(minimap)
 				this->minimap->handleMapTilesResultReceivedMessage(*m);
+
+			if(map_world_layer)
+				this->map_world_layer->handleMapTilesResultReceivedMessage(*m);
 		}
 		break;
 		case Msg_UserSelectedObjectMessage:
@@ -16220,6 +16239,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	gesture_ui.untoggleMicButton(); // Since mic_read_thread_manager has thread killed above.
 
 	minimap = nullptr;
+	map_world_layer = nullptr;
 
 	clearAllObjects();
 	removeAllFloatingChatMessages();
@@ -16648,7 +16668,16 @@ void GUIClient::checkCreateManagersAndMinimap()
 
 		if(!minimap)
 			minimap = new MiniMap(opengl_engine, /*gui_client_=*/this, gl_ui);
+
+		if(!map_world_layer)
+			map_world_layer = new MapWorldLayer(opengl_engine, /*gui_client_=*/this);
 	}
+}
+
+
+bool GUIClient::isMetasiberiaMapWorld() const
+{
+	return (canonicalHostForMetasiberiaInGUIClient(this->server_hostname) == "vr.metasiberia.com") && (this->server_worldname == "map");
 }
 
 
@@ -18911,6 +18940,20 @@ void GUIClient::updateGroundPlane()
 
 		terrain_system = new TerrainSystem();
 		terrain_system->init(path_spec, this->base_dir_path, opengl_engine.ptr(), this->physics_world.ptr(), biome_manager, this->cam_controller.getPosition(), &this->model_and_texture_loader_task_manager, stack_allocator, &this->msg_queue);
+
+		if(isMetasiberiaMapWorld())
+		{
+			ImageMapUInt8Ref blank_detail_map = new ImageMapUInt8(1, 1, 4);
+			blank_detail_map->getPixel(0, 0)[0] = 255;
+			blank_detail_map->getPixel(0, 0)[1] = 255;
+			blank_detail_map->getPixel(0, 0)[2] = 255;
+			blank_detail_map->getPixel(0, 0)[3] = 255;
+
+			const TextureParams tex_params;
+			const OpenGLTextureRef blank_detail_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(OpenGLTextureKey("__metasiberia_map_world_blank_detail__"), *blank_detail_map, tex_params);
+			for(int i = 0; i < 4; ++i)
+				opengl_engine->setDetailTexture(i, blank_detail_tex);
+		}
 	}
 
 #if 0

@@ -92,6 +92,7 @@ private slots:;
 	void on_actionGo_to_Substrata_Server_triggered();
 	void on_actionGo_to_Metasiberia_Server_triggered();
 	void on_actionGo_to_Shki_nvkz_Server_triggered();
+	void on_actionGo_to_Map_World_triggered();
 	void on_actionGo_to_Parcel_triggered();
 	void on_actionGo_to_Position_triggered();
 	void on_actionSet_Start_Location_triggered();
@@ -195,6 +196,8 @@ private:
 	void applyUILanguage(RuntimeTranslation::UILanguage language, bool persist_setting);
 	void refreshTranslatedUiText();
 	void updateMenuTooltips();
+	void refreshMapDockText();
+	void updateMapDockState();
 	bool applyNamedQtTheme(const std::string& theme_name, bool persist_setting);
 	void applyDefaultQtTheme(bool persist_setting);
 	void updateThemesMenuCheckedState(const std::string& active_theme_name);
@@ -432,4 +435,6 @@ public:
 
 	QDockWidget* avatar_dock_widget;
 	AvatarSettingsWidget* avatar_settings_widget;
+	QDockWidget* map_dock_widget;
+	QLabel* map_dock_label;
 };

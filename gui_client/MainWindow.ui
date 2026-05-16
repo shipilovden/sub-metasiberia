@@ -119,6 +119,7 @@
     <addaction name="actionGo_to_Substrata_Server"/>
     <addaction name="actionGo_to_Metasiberia_Server"/>
     <addaction name="actionGo_to_Shki_nvkz_Server"/>
+    <addaction name="actionGo_to_Map_World"/>
     <addaction name="separator"/>
     <widget class="QMenu" name="menuGo_to_Favorites">
      <property name="title">
@@ -665,6 +666,11 @@
   <action name="actionGo_to_Shki_nvkz_Server">
    <property name="text">
     <string>Go to Shki-Nvkz</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Map_World">
+   <property name="text">
+    <string>Go to Map</string>
    </property>
   </action>
   <action name="actionExport_view_to_Indigo">

@@ -231,6 +231,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/MeshBuilding.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/MeshBuilding.h
 ${CMAKE_SOURCE_DIR}/gui_client/MeshManager.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/MeshManager.h
+${CMAKE_SOURCE_DIR}/gui_client/MapWorldLayer.cpp
+${CMAKE_SOURCE_DIR}/gui_client/MapWorldLayer.h
 ${CMAKE_SOURCE_DIR}/gui_client/MiniMap.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/MiniMap.h
 ${CMAKE_SOURCE_DIR}/gui_client/MiscInfoUI.cpp

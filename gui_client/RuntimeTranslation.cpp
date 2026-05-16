@@ -88,6 +88,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Go to Substrata", "Перейти в Substrata");
 	add("MainWindow", "Go to Metasiberia", "Перейти в Metasiberia");
 	add("MainWindow", "Go to Shki-Nvkz", "Перейти в Shki-Nvkz");
+	add("MainWindow", "Go to Map", "Перейти в карту");
 	add("MainWindow", "Go to Favorites", "Переход в избранное");
 	add("MainWindow", "Set current location as start location", "Сделать текущую локацию стартовой");
 
@@ -121,7 +122,11 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Favorite deleted.", "Избранное удалено.");
 	add("MainWindow", "(No favorites)", "(Нет избранного)");
 	add("MainWindow", "Default", "По умолчанию");
+	add("MainWindow", "Map", "Карта");
 	add("MainWindow", "Open Current Location In Browser", "Открыть текущую локацию в браузере");
+	add("MainWindow", "Open map settings", "Открыть настройки карты");
+	add("MainWindow", "Map settings are available only in sub://vr.metasiberia.com/map", "Настройки карты доступны только в sub://vr.metasiberia.com/map");
+	add("MainWindow", "Map settings will appear here in the next step.\n\nThis panel is available only in the special map world \"sub://vr.metasiberia.com/map\".\n\nGround rendering in that world now uses a streamed OpenStreetMap ground layer.", "Настройки карты появятся здесь на следующем шаге.\n\nЭта панель доступна только в специальном мире карты \"sub://vr.metasiberia.com/map\".\n\nПоверхность земли в этом мире теперь рисуется потоковым слоем OpenStreetMap.");
 	add("MainWindow", "Use the W/A/S/D keys and arrow keys to move and look around.\n", "Используйте клавиши W/A/S/D и стрелки для передвижения и обзора.\n");
 	add("MainWindow", "Click and drag the mouse on the 3D view to look around.\n", "Нажмите и перетаскивайте мышь в 3D-окне для обзора.\n");
 	add("MainWindow", "Space key: jump\n", "Пробел: прыжок\n");

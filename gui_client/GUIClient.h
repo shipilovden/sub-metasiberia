@@ -98,6 +98,7 @@ struct PBOAsyncUploadedTextureInfo;
 class OpenGLUploadThread;
 class AnimatedTextureManager;
 class MiniMap;
+class MapWorldLayer;
 class VBOPool;
 class PBOPool;
 class VBO;
@@ -114,7 +115,7 @@ struct ResourceUserList
 
 struct DownloadingResourceInfo
 {
-	DownloadingResourceInfo() : build_physics_ob(true), build_dynamic_physics_ob(false), used_by_terrain(false), used_by_other(false) {}
+	DownloadingResourceInfo() : build_physics_ob(true), build_dynamic_physics_ob(false), used_by_terrain(false), used_by_other(false), net_download_priority(0) {}
 
 	TextureParams texture_params; // For downloading textures.  We keep track of this so we can load e.g. metallic-roughness textures into the OpenGL engine without sRGB.
 
@@ -129,6 +130,7 @@ struct DownloadingResourceInfo
 
 	bool used_by_terrain;
 	bool used_by_other; // avatar or minimap or LOD chunk
+	int net_download_priority; // Higher values are dequeued earlier by the HTTP resource downloader.
 };
 
 
@@ -276,6 +278,7 @@ public:
 	void spawnFloatingChatMessageForAvatar(const UID& avatar_uid, const std::string& message, double cur_time);
 	void removeFloatingChatMessageForAvatar(const UID& avatar_uid);
 	void removeAllFloatingChatMessages();
+	bool isMetasiberiaMapWorld() const;
 	void recordRecentEmojiUsage(const std::string& emoji);
 public:
 	void rotateObject(WorldObjectRef ob, const Vec4f& axis, float angle);
@@ -823,6 +826,7 @@ public:
 	WebcamCapture webcam_capture; // Webcam capture and display
 	Reference<GearInventoryUI> gear_inventory_ui;
 	Reference<MiniMap> minimap;
+	Reference<MapWorldLayer> map_world_layer;
 
 	bool running_destructor;
 
