@@ -42,6 +42,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "ThreadMessages.h"
 #include "MeshBuilding.h"
 #include "MiniMap.h"
+#include "GearInventoryUI.h"
 #include "PlayerPhysics.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
@@ -1247,6 +1248,9 @@ void MainWindow::refreshTranslatedUiText()
 	}
 
 	refreshMapDockText();
+
+	if(gui_client.gear_inventory_ui)
+		gui_client.gear_inventory_ui->refreshText(current_ui_language == RuntimeTranslation::UILanguage::Russian);
 
 	if(theme_action_group)
 		initialiseThemesMenu();
@@ -4451,6 +4455,8 @@ void MainWindow::on_actionUpdate_triggered()
 void MainWindow::on_actionOpen_Gear_Inventory_triggered()
 {
 	gui_client.openGearInventory();
+	if(gui_client.gear_inventory_ui)
+		gui_client.gear_inventory_ui->refreshText(current_ui_language == RuntimeTranslation::UILanguage::Russian);
 }
 
 

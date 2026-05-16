@@ -47,6 +47,7 @@ public:
 	virtual void closeWindowEventOccurred(GLUICallbackEvent& event) override;
 	void updateWidgetPositions();
 	void handleUploadedTexture(const OpenGLTextureKey& path, const URLString& URL, const OpenGLTextureRef& opengl_tex);
+	void refreshText(bool is_russian);
 
 	bool close_soon;
 
@@ -74,6 +75,9 @@ private:
 	std::vector<GearItemUI> all_gear_ui;
 
 	Reference<AvatarPreviewGLUIWidget> avatar_preview_widget;
+	GLUITextViewRef preview_header_text;
+	GLUITextViewRef equipped_header_text;
+	GLUITextViewRef all_gear_header_text;
 	GLUIGridContainerRef outer_grid;
 	GLUIGridContainerRef equipped_grid;
 	GLUIGridContainerRef all_gear_grid;

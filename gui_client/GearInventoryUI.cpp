@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2026 -
 
 #include "AvatarPreviewGLUIWidget.h"
 #include "GUIClient.h"
+#include "PlayerPhysics.h"
 #include "../shared/ResourceManager.h"
 #include <opengl/ui/GLUIInertWidget.h>
 #include <opengl/OpenGLEngine.h>
@@ -71,9 +72,12 @@ GearInventoryUI::GearInventoryUI(GUIClient* gui_client_, GLUIRef gl_ui_)
 	outer_args.cell_y_padding_px = OUTER_GRID_PADDING_PX * 0.75f;
 	outer_grid = new GLUIGridContainer(*gl_ui, opengl_engine, outer_args);
 
-	outer_grid->setCellWidget(/*x=*/0, /*y=*/1, makeHeader(gl_ui, opengl_engine, "Preview"));
-	outer_grid->setCellWidget(/*x=*/1, /*y=*/1, makeHeader(gl_ui, opengl_engine, "Equipped Gear"));
-	outer_grid->setCellWidget(/*x=*/2, /*y=*/1, makeHeader(gl_ui, opengl_engine, "All Gear"));
+	preview_header_text  = makeHeader(gl_ui, opengl_engine, "Preview");
+	equipped_header_text = makeHeader(gl_ui, opengl_engine, "Equipped Gear");
+	all_gear_header_text = makeHeader(gl_ui, opengl_engine, "All Gear");
+	outer_grid->setCellWidget(/*x=*/0, /*y=*/1, preview_header_text);
+	outer_grid->setCellWidget(/*x=*/1, /*y=*/1, equipped_header_text);
+	outer_grid->setCellWidget(/*x=*/2, /*y=*/1, all_gear_header_text);
 
 	avatar_preview_scene = new OpenGLScene(*opengl_engine);
 	avatar_preview_scene->draw_water = false;
@@ -281,20 +285,9 @@ void GearInventoryUI::setAvatarGLObject(const AvatarGraphics& /*graphics*/, cons
 		avatar_preview_gl_ob->mesh_data = avatar_gl_ob->mesh_data;
 		avatar_preview_gl_ob->materials = avatar_gl_ob->materials;
 
-		// Use the runtime avatar transform (correct model scale/orientation), but keep it centred in preview X/Y.
-		Matrix4f preview_ob_to_world = avatar_gl_ob->ob_to_world_matrix;
-		const Vec4f preview_translation = preview_ob_to_world.getColumn(3);
-		preview_ob_to_world.setColumn(3, Vec4f(0.f, 0.f, preview_translation[2], 1.f));
-		avatar_preview_gl_ob->ob_to_world_matrix = preview_ob_to_world;
+		avatar_preview_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0.f, 0.f, PlayerPhysics::getEyeHeight()) * pre_ob_to_world_matrix;
 
 		opengl_engine->addObject(avatar_preview_gl_ob);
-		opengl_engine->updateObjectTransformData(*avatar_preview_gl_ob);
-
-		if(avatar_preview_widget.nonNull())
-		{
-			avatar_preview_widget->resetCameraFromAvatarTransform(avatar_preview_gl_ob->ob_to_world_matrix);
-			avatar_preview_widget->fitCameraToAABB(avatar_preview_gl_ob->aabb_ws);
-		}
 	}
 
 	opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
@@ -371,6 +364,20 @@ void GearInventoryUI::handleUploadedTexture(const OpenGLTextureKey& /*path*/, co
 			break;
 		}
 	}
+}
+
+
+void GearInventoryUI::refreshText(bool is_russian)
+{
+	if(preview_header_text.nonNull())
+		preview_header_text->setText(*gl_ui, is_russian ? "Предпросмотр" : "Preview");
+	if(equipped_header_text.nonNull())
+		equipped_header_text->setText(*gl_ui, is_russian ? "Экипировка" : "Equipped Gear");
+	if(all_gear_header_text.nonNull())
+		all_gear_header_text->setText(*gl_ui, is_russian ? "Всё снаряжение" : "All Gear");
+	if(window.nonNull())
+		window->setTitle(*gl_ui, is_russian ? "Инвентарь снаряжения" : "Gear Inventory");
+	updateWidgetPositions();
 }
 
 
@@ -485,7 +492,4 @@ void GearInventoryUI::recreateAvatarPreviewFBO()
 
 	avatar_preview_widget->recreateFBO(avatar_preview_w, avatar_preview_h);
 	avatar_preview_widget->setFixedDimsPx(Vec2f(preview_w_dev_ind_px, preview_h_dev_ind_px), *gl_ui);
-
-	if(avatar_preview_gl_ob.nonNull())
-		avatar_preview_widget->fitCameraToAABB(avatar_preview_gl_ob->aabb_ws);
 }
