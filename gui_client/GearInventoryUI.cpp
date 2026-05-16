@@ -13,7 +13,6 @@ Copyright Glare Technologies Limited 2026 -
 #include <opengl/ui/GLUIInertWidget.h>
 #include <opengl/OpenGLEngine.h>
 #include <opengl/FrameBuffer.h>
-#include <graphics/SRGBUtils.h>
 
 
 namespace
@@ -83,6 +82,9 @@ GearInventoryUI::GearInventoryUI(GUIClient* gui_client_, GLUIRef gl_ui_)
 	avatar_preview_scene->draw_water = false;
 	avatar_preview_scene->water_level_z = -10000.0;
 	avatar_preview_scene->background_colour = Colour3f(0.2f);
+	avatar_preview_scene->collect_stats = false;
+	avatar_preview_scene->cloud_shadows = false;
+	avatar_preview_scene->exposure_factor = 0.4f;
 	opengl_engine->addScene(avatar_preview_scene);
 
 	{
@@ -90,27 +92,7 @@ GearInventoryUI::GearInventoryUI(GUIClient* gui_client_, GLUIRef gl_ui_)
 		opengl_engine->setCurrentScene(avatar_preview_scene);
 
 		OpenGLMaterial env_mat;
-		opengl_engine->setEnvMat(env_mat);
-		opengl_engine->setSunDir(normalise(Vec4f(1, -1, 1, 0)));
-
-		const float W = 200.f;
-		GLObjectRef ob = opengl_engine->allocateObject();
-		ob->materials.resize(1);
-		ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(0.8f));
-		try
-		{
-			ob->materials[0].albedo_texture = opengl_engine->getTexture(gui_client->base_dir_path + "/data/resources/obstacle.png");
-		}
-		catch(glare::Exception& e)
-		{
-			conPrint("ERROR: " + e.what());
-		}
-		ob->materials[0].roughness = 0.8f;
-		ob->materials[0].fresnel_scale = 0.5f;
-		ob->materials[0].tex_matrix = Matrix2f(W, 0, 0, W);
-		ob->ob_to_world_matrix = Matrix4f::scaleMatrix(W, W, 1) * Matrix4f::translationMatrix(-0.5f, -0.5f, 0);
-		ob->mesh_data = opengl_engine->getUnitQuadMeshData();
-		opengl_engine->addObject(ob);
+		opengl_engine->setEnvMat(env_mat); // Blank env mat: no sky texture in the preview.
 
 		opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
 	}

@@ -4454,6 +4454,7 @@ void MainWindow::on_actionUpdate_triggered()
 
 void MainWindow::on_actionOpen_Gear_Inventory_triggered()
 {
+	ui->glWidget->makeCurrent(); // Ensure GL context is current for FBO/texture creation inside GearInventoryUI.
 	gui_client.openGearInventory();
 	if(gui_client.gear_inventory_ui)
 		gui_client.gear_inventory_ui->refreshText(current_ui_language == RuntimeTranslation::UILanguage::Russian);
