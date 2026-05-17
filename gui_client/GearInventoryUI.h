@@ -87,6 +87,8 @@ private:
 	Reference<OpenGLScene> main_world_scene;
 	GLObjectRef avatar_preview_gl_ob;
 	Matrix4f avatar_pre_ob_to_world_matrix;
+	GLLightRef preview_key_light;
+	GLLightRef preview_fill_light;
 
 	GLUIWindowRef window;
 	bool need_rebuild_equipped;

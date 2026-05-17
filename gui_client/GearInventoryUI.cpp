@@ -81,10 +81,13 @@ GearInventoryUI::GearInventoryUI(GUIClient* gui_client_, GLUIRef gl_ui_)
 	avatar_preview_scene = new OpenGLScene(*opengl_engine);
 	avatar_preview_scene->draw_water = false;
 	avatar_preview_scene->water_level_z = -10000.0;
-	avatar_preview_scene->background_colour = Colour3f(0.2f);
+	avatar_preview_scene->background_colour = Colour3f(0.15f);
 	avatar_preview_scene->collect_stats = false;
 	avatar_preview_scene->cloud_shadows = false;
 	avatar_preview_scene->exposure_factor = 0.4f;
+	avatar_preview_scene->shadow_mapping = false; // No sun, no shadows needed.
+	avatar_preview_scene->draw_overlay_objects = false; // No overlay objects in preview scene.
+	avatar_preview_scene->render_to_main_render_framebuffer = false; // Render directly to avatar_preview_fbo; bypass shared main_render_framebuffer.
 	opengl_engine->addScene(avatar_preview_scene);
 
 	{
@@ -93,6 +96,24 @@ GearInventoryUI::GearInventoryUI(GUIClient* gui_client_, GLUIRef gl_ui_)
 
 		OpenGLMaterial env_mat;
 		opengl_engine->setEnvMat(env_mat); // Blank env mat: no sky texture in the preview.
+
+		// Key light: in front of and above the avatar (camera side, phi=pi => -Y axis is camera side).
+		preview_key_light = new GLLight();
+		preview_key_light->gpu_data.pos = Vec4f(0.f, -2.5f, 2.f, 1.f);
+		preview_key_light->gpu_data.col = Colour4f(8.f, 8.f, 8.f, 0.f);
+		preview_key_light->gpu_data.light_type = 0; // point light
+		preview_key_light->max_light_dist = 10.f;
+		preview_key_light->aabb_ws = js::AABBox(Vec4f(-10.f, -10.f, -10.f, 1.f), Vec4f(10.f, 10.f, 10.f, 1.f));
+		opengl_engine->addLight(preview_key_light);
+
+		// Fill light: from the side and slightly behind, softer.
+		preview_fill_light = new GLLight();
+		preview_fill_light->gpu_data.pos = Vec4f(2.f, 1.5f, 1.f, 1.f);
+		preview_fill_light->gpu_data.col = Colour4f(3.f, 3.f, 3.5f, 0.f);
+		preview_fill_light->gpu_data.light_type = 0;
+		preview_fill_light->max_light_dist = 10.f;
+		preview_fill_light->aabb_ws = js::AABBox(Vec4f(-10.f, -10.f, -10.f, 1.f), Vec4f(10.f, 10.f, 10.f, 1.f));
+		opengl_engine->addLight(preview_fill_light);
 
 		opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
 	}
@@ -137,6 +158,11 @@ GearInventoryUI::~GearInventoryUI()
 		opengl_engine->setCurrentScene(avatar_preview_scene);
 
 		checkRemoveObAndSetRefToNull(*opengl_engine, avatar_preview_gl_ob);
+
+		if(preview_key_light.nonNull())
+			opengl_engine->removeLight(preview_key_light);
+		if(preview_fill_light.nonNull())
+			opengl_engine->removeLight(preview_fill_light);
 
 		opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
 		opengl_engine->removeScene(avatar_preview_scene);
@@ -273,6 +299,9 @@ void GearInventoryUI::setAvatarGLObject(const AvatarGraphics& /*graphics*/, cons
 	}
 
 	opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
+
+	if(avatar_preview_widget.nonNull() && avatar_preview_gl_ob.nonNull())
+		avatar_preview_widget->resetCameraFromAvatarTransform(avatar_preview_gl_ob->ob_to_world_matrix);
 
 	if(gear_editor_ui)
 		gear_editor_ui->setAvatarGLObject(avatar_preview_gl_ob, avatar_pre_ob_to_world_matrix);
