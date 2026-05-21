@@ -47,6 +47,7 @@ enum GuiClientThreadMessages
 	Msg_TerrainChunkGeneratedMsg,
 	Msg_WindNoiseLoaded,
 	Msg_UserGearListMessage,
+	Msg_ChatBotCreatedMessage,
 	Msg_TextureUploadedMessage = 1000, // Should match the values from <opengl/OpenGLUploadThread.h>
 	Msg_AnimatedTextureUpdated = 1001,
 	Msg_GeometryUploadedMessage = 1002,

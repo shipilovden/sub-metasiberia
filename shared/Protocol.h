@@ -100,6 +100,11 @@ const uint32 UserGearList			= 1401; // Server sends back GearItems for all gear 
 const uint32 GearItemUpdate			= 1402; // A client has modified a GearItem (e.g. in the gear editor).
 const uint32 CreateGearItem			= 1403; // A client wants to create a new GearItem.
 
+const uint32 CreateChatBot			= 1500; // Client wants to create a new chatbot (pos + heading + name).
+const uint32 ChatBotCreated			= 1501; // Server confirms creation and sends back the bot id.
+const uint32 UpdateChatBot			= 1502; // Client wants to update an existing chatbot (full settings).
+const uint32 DeleteChatBot			= 1503; // Client wants to delete a chatbot.
+
 
 const uint32 ChatMessageID			= 2000;
 

@@ -81,6 +81,7 @@
     <addaction name="actionAdd_Video"/>
     <addaction name="actionAdd_Decal"/>
     <addaction name="actionAdd_Portal"/>
+    <addaction name="actionAddBot"/>
     <addaction name="separator"/>
     <addaction name="actionAdd_to_Favorites"/>
     <addaction name="separator"/>
@@ -912,6 +913,14 @@
   <action name="actionAdd_Portal">
    <property name="text">
     <string>Add Portal</string>
+   </property>
+  </action>
+  <action name="actionAddBot">
+   <property name="text">
+    <string>Add Bot</string>
+   </property>
+   <property name="toolTip">
+    <string>Add a chatbot to the world</string>
    </property>
   </action>
   <action name="actionAdd_to_Favorites">

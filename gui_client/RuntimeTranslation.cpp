@@ -65,6 +65,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Add Audio Player", "Добавить аудио-плеер");
 	add("MainWindow", "Add Decal", "Добавить декаль");
 	add("MainWindow", "Add Portal", "Добавить портал");
+	add("MainWindow", "Add Bot", "Добавить бота");
 	add("MainWindow", "Add to Favorites", "Добавить в избранное");
 	add("MainWindow", "Save Object To Disk", "Сохранить объект на диск");
 	add("MainWindow", "Save Parcel Objects To Disk", "Сохранить объекты участка на диск");

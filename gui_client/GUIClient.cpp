@@ -11350,6 +11350,14 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				gear_inventory_ui->setAllGear(m->all_gear);
 		}
 		break;
+		case Msg_ChatBotCreatedMessage:
+		{
+			const ChatBotCreatedMessage* m = checkedDowncastPtr<const ChatBotCreatedMessage>(msg);
+			// Signal the UI to open bot settings dialog
+			if(ui_interface)
+				ui_interface->openBotSettingsDialog(m->bot_id);
+		}
+		break;
 		case Msg_SignedUpMessage:
 		{
 			const SignedUpMessage* m = checkedDowncastPtr<const SignedUpMessage>(msg);
@@ -19884,6 +19892,54 @@ void GUIClient::gearItemChangedOnOurAvatar(GearItem* updated_item)
 
 	if(gear_inventory_ui)
 		gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+}
+
+
+void GUIClient::createBot(const Vec3d& pos, float heading)
+{
+	if(client_thread.isNull()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::CreateChatBot);
+	scratch_packet.writeStringLengthFirst("Bot");
+	::writeToStream(pos, scratch_packet);
+	scratch_packet.writeFloat(heading);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::string& prompt,
+	const AvatarSettings& avatar_settings,
+	const std::string& greeting_name, const std::string& greeting_url, float greeting_cooldown,
+	const std::string& idle_name,     const std::string& idle_url,     float idle_interval,
+	const std::string& reactive_name, const std::string& reactive_url, float reactive_cooldown)
+{
+	if(client_thread.isNull()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::UpdateChatBot);
+	scratch_packet.writeUInt64(bot_id);
+	scratch_packet.writeStringLengthFirst(name);
+	scratch_packet.writeStringLengthFirst(prompt);
+	writeAvatarSettingsToStream(avatar_settings, scratch_packet);
+	scratch_packet.writeStringLengthFirst(greeting_name);
+	scratch_packet.writeStringLengthFirst(greeting_url);
+	scratch_packet.writeFloat(greeting_cooldown);
+	scratch_packet.writeStringLengthFirst(idle_name);
+	scratch_packet.writeStringLengthFirst(idle_url);
+	scratch_packet.writeFloat(idle_interval);
+	scratch_packet.writeStringLengthFirst(reactive_name);
+	scratch_packet.writeStringLengthFirst(reactive_url);
+	scratch_packet.writeFloat(reactive_cooldown);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::deleteBot(uint64 bot_id)
+{
+	if(client_thread.isNull()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::DeleteChatBot);
+	scratch_packet.writeUInt64(bot_id);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
 }
 
 

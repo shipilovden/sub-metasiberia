@@ -117,6 +117,8 @@ private slots:;
 	void on_actionSummon_Car_triggered();
 	void on_actionOpen_Gear_Inventory_triggered();
 	void on_actionConvert_Selected_Object_To_Gear_Item_triggered();
+	void on_actionAddBot_triggered();
+	virtual void openBotSettingsDialog(uint64 bot_id) override;
 	void on_actionMute_Audio_toggled(bool checked);
 	void on_actionSave_Object_To_Disk_triggered();
 	void on_actionSave_Parcel_Objects_To_Disk_triggered();

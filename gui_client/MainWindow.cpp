@@ -43,6 +43,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "MeshBuilding.h"
 #include "MiniMap.h"
 #include "GearInventoryUI.h"
+#include "BotSettingsDialog.h"
 #include "PlayerPhysics.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
@@ -4464,6 +4465,30 @@ void MainWindow::on_actionOpen_Gear_Inventory_triggered()
 void MainWindow::on_actionConvert_Selected_Object_To_Gear_Item_triggered()
 {
 	gui_client.convertSelectedObjectToGearItem();
+}
+
+
+void MainWindow::on_actionAddBot_triggered()
+{
+	// Position the bot 3 m in front of the player at ground level.
+	const Vec3d bot_pos = gui_client.cam_controller.getFirstPersonPosition() +
+		removeComponentInDir(gui_client.cam_controller.getForwardsVec(), Vec3d(0, 0, 1)) * 3.0 -
+		Vec3d(0, 0, PlayerPhysics::getEyeHeight());
+
+	// Heading: face toward the player (opposite of camera forward direction).
+	const Vec3d fwd = gui_client.cam_controller.getForwardsVec();
+	const float heading = (float)std::atan2(-fwd.x, -fwd.y); // bot faces the player
+
+	gui_client.createBot(bot_pos, heading);
+	showInfoNotification("Adding bot... Settings dialog will open on confirmation.");
+}
+
+
+void MainWindow::openBotSettingsDialog(uint64 bot_id)  // UIInterface override
+{
+	BotSettingsDialog* dlg = new BotSettingsDialog(this, &gui_client, bot_id);
+	dlg->setAttribute(Qt::WA_DeleteOnClose);
+	dlg->show();
 }
 
 

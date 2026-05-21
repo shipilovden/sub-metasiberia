@@ -1212,6 +1212,14 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			out_msg_queue->enqueue(msg);
 			break;
 		}
+	case Protocol::ChatBotCreated:
+		{
+			Reference<ChatBotCreatedMessage> msg = new ChatBotCreatedMessage();
+			msg->bot_id    = msg_buffer.readUInt64();
+			msg->avatar_uid = readUIDFromStream(msg_buffer);
+			out_msg_queue->enqueue(msg);
+			break;
+		}
 	case Protocol::SignedUpMessageID:
 		{
 			//conPrint("Received SignedUpMessageID msg.");

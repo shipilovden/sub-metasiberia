@@ -162,4 +162,6 @@ public:
 		std::vector<std::string> file_types; // e.g. "png", "jpg"
 	};
 	virtual std::string showOpenFileDialog(const std::string& caption, const std::vector<FileTypeFilter>& file_type_filters, const std::string& settings_key) = 0; // Returns path to file selected or empty string if cancelled.
+
+	virtual void openBotSettingsDialog(uint64 bot_id) {}
 };

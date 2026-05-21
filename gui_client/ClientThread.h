@@ -195,6 +195,15 @@ public:
 };
 
 
+class ChatBotCreatedMessage : public ThreadMessage
+{
+public:
+	ChatBotCreatedMessage() : ThreadMessage(Msg_ChatBotCreatedMessage), bot_id(0) {}
+	uint64 bot_id;
+	UID    avatar_uid;
+};
+
+
 class SignedUpMessage : public ThreadMessage
 {
 public:

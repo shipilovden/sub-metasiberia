@@ -271,6 +271,13 @@ public:
 	void gestureSettingsChanged(const GestureSettings& new_gesture_settings);
 	void openGearInventory();
 	void convertSelectedObjectToGearItem();
+	void createBot(const Vec3d& pos, float heading);
+	void updateBot(uint64 bot_id, const std::string& name, const std::string& prompt,
+		const AvatarSettings& avatar_settings,
+		const std::string& greeting_name, const std::string& greeting_url, float greeting_cooldown,
+		const std::string& idle_name,     const std::string& idle_url,     float idle_interval,
+		const std::string& reactive_name, const std::string& reactive_url, float reactive_cooldown);
+	void deleteBot(uint64 bot_id);
 	void gearItemClicked(const GearItemRef& item);
 	void equippedGearItemClicked(const GearItemRef& item);
 	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings);
