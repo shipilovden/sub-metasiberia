@@ -22,7 +22,9 @@ Copyright Glare Technologies Limited 2026 -
 
 LLMThread::LLMThread(const std::string& AI_model_id_)
 :	cur_ai_model_is_anthropic(false),
-	AI_model_id(AI_model_id_)
+	AI_model_id(AI_model_id_),
+	temperature(0.7f),
+	max_tokens(0)
 {
 }
 
@@ -184,9 +186,13 @@ void LLMThread::sendChatRequestToLLMServer(const AIModel& cur_ai_model, Referenc
 								
 	if(cur_ai_model_is_anthropic)
 	{
-		post_content += "\"max_tokens\": 1024,";
+		post_content += "\"max_tokens\": " + toString(max_tokens == 0 ? 1024 : max_tokens) + ",";
 		post_content += "\"system\": \"" +this->base_prompt_json_escaped + "\","; // For Claude, the system prompt is separate and not part of the chat messages
 	}
+	else if(max_tokens != 0)
+		post_content += "\"max_tokens\": " + toString(max_tokens) + ",";
+
+	post_content += "\"temperature\": " + doubleToStringMaxNDecimalPlaces(temperature, 3) + ",";
 
 	//------------ Write messages array -----------
 	post_content += "\"messages\": [";

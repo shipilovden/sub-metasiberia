@@ -5425,6 +5425,36 @@ void GUIClient::updateSelectedObjectPlacementBeamAndGizmos()
 		selected_ob->edit_aabb->ob_to_world_matrix = obToWorldMatrix(*selected_ob) * Matrix4f::translationMatrix(-DECAL_EDGE_AABB_WIDTH, -DECAL_EDGE_AABB_WIDTH, -DECAL_EDGE_AABB_WIDTH);
 		opengl_engine->updateObjectTransformData(*selected_ob->edit_aabb);
 	}
+
+	// Update bot gizmo arrows (3 XYZ arrows at bot position, fixed world-space axes)
+	if(selected_bot_avatar_uid.valid() && selected_ob.isNull())
+	{
+		axis_and_rot_obs_enabled = true; // Keep gizmo active every frame while bot is selected
+
+		Lock lock(world_state->mutex);
+		auto it = world_state->avatars.find(selected_bot_avatar_uid);
+		if(it != world_state->avatars.end())
+		{
+			const Vec4f bot_origin = it->second->pos.toVec4fPoint();
+			const float cam_dist = (bot_origin - cam_controller.getPosition().toVec4fPoint()).length();
+			const float arrow_len = myMax(0.5f, cam_dist * 0.2f);
+
+			// Fixed +X/+Y/+Z axes — no directional flipping, consistent drag behavior
+			axis_arrow_segments[0] = LineSegment4f(bot_origin, bot_origin + Vec4f(arrow_len, 0, 0, 0));
+			axis_arrow_segments[1] = LineSegment4f(bot_origin, bot_origin + Vec4f(0, arrow_len, 0, 0));
+			axis_arrow_segments[2] = LineSegment4f(bot_origin, bot_origin + Vec4f(0, 0, arrow_len, 0));
+
+			for(int i = 0; i < NUM_AXIS_ARROWS; ++i)
+			{
+				axis_arrow_objects[i]->ob_to_world_matrix = OpenGLEngine::arrowObjectTransform(
+					axis_arrow_segments[i].a, axis_arrow_segments[i].b, arrow_len);
+				if(opengl_engine->isObjectAdded(axis_arrow_objects[i]))
+					opengl_engine->updateObjectTransformData(*axis_arrow_objects[i]);
+				else
+					opengl_engine->addObject(axis_arrow_objects[i]);
+			}
+		}
+	}
 }
 
 
@@ -10449,8 +10479,23 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 						// Send UserMovedNearToAvatar/UserMovedAwayFromAvatar messages to server if needed.  Used by chatbot code.
 						if(server_protocol_version >= 46) // UserMovedNearToAvatar, UserMovedAwayFromAvatar messages were added in protocol version 46.
 						{
-							const double AVATAR_NEARBY_DIST = 6;
-							const bool near_avatar = avatar->pos.getDist2(this->cam_controller.getFirstPersonPosition()) < Maths::square(AVATAR_NEARBY_DIST);
+							double near_dist = 6.0;
+							double away_dist = 6.0;
+							if(avatar->isChatBotAvatar())
+							{
+								auto bot_it = avatar_uid_to_bot_id.find(avatar->uid);
+								if(bot_it != avatar_uid_to_bot_id.end())
+								{
+									auto info_it = bot_infos.find(bot_it->second);
+									if(info_it != bot_infos.end())
+									{
+										near_dist = myMax(0.5f, info_it->second.greeting_distance);
+										away_dist = myMax(near_dist, (double)info_it->second.farewell_distance);
+									}
+								}
+							}
+							const double avatar_dist2 = avatar->pos.getDist2(this->cam_controller.getFirstPersonPosition());
+							const bool near_avatar = avatar->in_proximity ? (avatar_dist2 < Maths::square(away_dist)) : (avatar_dist2 < Maths::square(near_dist));
 							if(near_avatar)
 							{
 								if(!avatar->in_proximity)
@@ -11307,6 +11352,10 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			writeAvatarToNetworkStream(avatar, scratch_packet);
 				
 			enqueueMessageToSend(*this->client_thread, scratch_packet);
+
+			// Request user's chatbot list so bot editor works for existing bots
+			if(server_protocol_version >= 53)
+				queryUserBots();
 		}
 		break;
 		case Msg_LoggedOutMessage:
@@ -11317,6 +11366,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->logged_in_user_flags = 0;
 			this->logged_in_avatar_settings = AvatarSettings();
 			this->logged_in_equipped_gear = GearItems();
+			this->avatar_uid_to_bot_id.clear();
+			this->bot_infos.clear();
+			updateBotListUI();
 
 			recolourParcelsForLoggedInState();
 			ui_interface->updateWorldSettingsControlsEditable();
@@ -11353,9 +11405,91 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		case Msg_ChatBotCreatedMessage:
 		{
 			const ChatBotCreatedMessage* m = checkedDowncastPtr<const ChatBotCreatedMessage>(msg);
-			// Signal the UI to open bot settings dialog
-			if(ui_interface)
-				ui_interface->openBotSettingsDialog(m->bot_id);
+			avatar_uid_to_bot_id[m->avatar_uid] = m->bot_id;
+			BotClientInfo& info = bot_infos[m->bot_id];
+			info.bot_id = m->bot_id;
+			info.avatar_uid = m->avatar_uid;
+			info.name = m->name.empty() ? "Bot" : m->name;
+			info.prompt = m->prompt;
+			info.avatar_settings = m->avatar_settings;
+			info.pos = m->pos;
+			info.heading = m->heading;
+			info.greeting_name = m->greeting_name;
+			info.greeting_url = m->greeting_url;
+			info.greeting_cooldown = m->greeting_cooldown;
+			info.idle_name = m->idle_name;
+			info.idle_url = m->idle_url;
+			info.idle_interval = m->idle_interval;
+			info.reactive_name = m->reactive_name;
+			info.reactive_url = m->reactive_url;
+			info.reactive_cooldown = m->reactive_cooldown;
+			info.flags = m->flags;
+			info.greeting_distance = m->greeting_distance;
+			info.farewell_distance = m->farewell_distance;
+			info.chat_radius = m->chat_radius;
+			info.model_scale = m->model_scale;
+			info.ai_model_id = m->ai_model_id;
+			info.ai_personality_preset = m->ai_personality_preset;
+			info.ai_knowledge = m->ai_knowledge;
+			info.ai_temperature = m->ai_temperature;
+			info.ai_max_tokens = m->ai_max_tokens;
+			info.audio_url = m->audio_url;
+			info.audio_volume = m->audio_volume;
+			info.audio_radius = m->audio_radius;
+			info.audio_activation_distance = m->audio_activation_distance;
+			info.audio_cooldown = m->audio_cooldown;
+			info.trigger_flags = m->trigger_flags;
+			info.trigger_keywords = m->trigger_keywords;
+			info.trigger_cooldown = m->trigger_cooldown;
+			updateBotListUI();
+			selectBotAvatar(m->avatar_uid);
+		}
+		break;
+		case Msg_UserBotListMessage:
+		{
+			const UserBotListMessage* m = checkedDowncastPtr<const UserBotListMessage>(msg);
+			avatar_uid_to_bot_id.clear();
+			bot_infos.clear();
+			for(const auto& info : m->bots)
+			{
+				avatar_uid_to_bot_id[info.avatar_uid] = info.bot_id;
+				BotClientInfo& bot_info = bot_infos[info.bot_id];
+				bot_info.bot_id = info.bot_id;
+				bot_info.avatar_uid = info.avatar_uid;
+				bot_info.name = info.name;
+				bot_info.prompt = info.prompt;
+				bot_info.avatar_settings = info.avatar_settings;
+				bot_info.pos = info.pos;
+				bot_info.heading = info.heading;
+				bot_info.greeting_name = info.greeting_name;
+				bot_info.greeting_url = info.greeting_url;
+				bot_info.greeting_cooldown = info.greeting_cooldown;
+				bot_info.idle_name = info.idle_name;
+				bot_info.idle_url = info.idle_url;
+				bot_info.idle_interval = info.idle_interval;
+				bot_info.reactive_name = info.reactive_name;
+				bot_info.reactive_url = info.reactive_url;
+				bot_info.reactive_cooldown = info.reactive_cooldown;
+				bot_info.flags = info.flags;
+				bot_info.greeting_distance = info.greeting_distance;
+				bot_info.farewell_distance = info.farewell_distance;
+				bot_info.chat_radius = info.chat_radius;
+				bot_info.model_scale = info.model_scale;
+				bot_info.ai_model_id = info.ai_model_id;
+				bot_info.ai_personality_preset = info.ai_personality_preset;
+				bot_info.ai_knowledge = info.ai_knowledge;
+				bot_info.ai_temperature = info.ai_temperature;
+				bot_info.ai_max_tokens = info.ai_max_tokens;
+				bot_info.audio_url = info.audio_url;
+				bot_info.audio_volume = info.audio_volume;
+				bot_info.audio_radius = info.audio_radius;
+				bot_info.audio_activation_distance = info.audio_activation_distance;
+				bot_info.audio_cooldown = info.audio_cooldown;
+				bot_info.trigger_flags = info.trigger_flags;
+				bot_info.trigger_keywords = info.trigger_keywords;
+				bot_info.trigger_cooldown = info.trigger_cooldown;
+			}
+			updateBotListUI();
 		}
 		break;
 		case Msg_SignedUpMessage:
@@ -17199,6 +17333,20 @@ void GUIClient::mousePressed(MouseEvent& e)
 			ui_interface->setCamRotationOnMouseDragEnabled(false);
 		}
 	}
+	else if(selected_bot_avatar_uid.valid() && selected_ob.isNull())
+	{
+		grabbed_axis = mouseOverAxisArrowOrRotArc(Vec2f((float)e.cursor_pos.x, (float)e.cursor_pos.y), this->grabbed_point_ws);
+		if(grabbed_axis >= NUM_AXIS_ARROWS) grabbed_axis = -1; // Translation only for bots
+
+		if(grabbed_axis >= 0)
+		{
+			Lock lock(world_state->mutex);
+			auto it = world_state->avatars.find(selected_bot_avatar_uid);
+			if(it != world_state->avatars.end())
+				this->ob_origin_at_grab = it->second->pos.toVec4fPoint();
+			ui_interface->setCamRotationOnMouseDragEnabled(false);
+		}
+	}
 
 	if(selectedObjectIsVoxelOb())
 	{
@@ -17326,16 +17474,47 @@ void GUIClient::mouseReleased(MouseEvent& e)
 		grabbed_axis = -1;
 		ui_interface->setParcelEditorForParcel(*selected_parcel);
 	}
+	else if(grabbed_axis != -1 && selected_bot_avatar_uid.valid() && selected_ob.isNull())
+	{
+		// Send final bot position to server
+		auto bot_it = avatar_uid_to_bot_id.find(selected_bot_avatar_uid);
+		if(bot_it != avatar_uid_to_bot_id.end())
+		{
+			Vec3d final_pos;
+			float final_heading = 0.f;
+			bool found_avatar = false;
+			{
+				Lock lock(world_state->mutex);
+				auto av_it = world_state->avatars.find(selected_bot_avatar_uid);
+				if(av_it != world_state->avatars.end())
+				{
+					final_pos = av_it->second->pos;
+					final_heading = av_it->second->rotation[2];
+					found_avatar = true;
+				}
+			}
+			if(found_avatar)
+				moveBot(bot_it->second, final_pos, final_heading);
+		}
+		grabbed_axis = -1;
+	}
 
-	// Trace through scene to see if we are clicking on a web-view.  Send mouseReleased events to the web view if so.
+	// Trace through scene for single-click selection and web-view events
 	if(this->physics_world.nonNull())
 	{
-		// Trace ray through scene
 		const Vec4f origin = this->cam_controller.getPosition().toVec4fPoint();
 		const Vec4f dir = getDirForPixelTrace(e.cursor_pos.x, e.cursor_pos.y);
 
 		RayTraceResult results;
 		this->physics_world->traceRay(origin, dir, /*max_t=*/1.0e5f, /*ignore body id=*/JPH::BodyID(), results);
+
+		// Single-click on chatbot avatar → select bot immediately (don't require double-click)
+		if(results.hit_object && results.hit_object->userdata && results.hit_object->userdata_type == 3)
+		{
+			const Avatar* hit_av = static_cast<const Avatar*>(results.hit_object->userdata);
+			if(hit_av && hit_av->isChatBotAvatar() && grabbed_axis < 0)
+				selectBotAvatar(hit_av->uid);
+		}
 
 		if(results.hit_object && results.hit_object->userdata && results.hit_object->userdata_type == 0)
 		{
@@ -17633,6 +17812,14 @@ void GUIClient::doObjectSelectionTraceForMouseEvent(MouseEvent& e)
 			//InstanceInfo* instance = static_cast<InstanceInfo*>(results.hit_object->userdata);
 			//selectObject(instance->prototype_object, results.hit_mat_index); // Select the original prototype object that the hit object is an instance of.
 		}
+		else if(results.hit_object->userdata && results.hit_object->userdata_type == 3) // If we hit an avatar:
+		{
+			const Avatar* hit_av = static_cast<const Avatar*>(results.hit_object->userdata);
+			if(hit_av && hit_av->isChatBotAvatar())
+			{
+				selectBotAvatar(hit_av->uid);
+			}
+		}
 		else // Else if the trace didn't hit anything:
 		{
 			ui_interface->setObjectEditorEnabled(false);
@@ -17652,6 +17839,16 @@ void GUIClient::doObjectSelectionTraceForMouseEvent(MouseEvent& e)
 		// Deselect any currently selected object
 		deselectObject();
 		deselectParcel();
+		// Hide bot editor if open
+		if(selected_bot_avatar_uid.valid())
+		{
+			selected_bot_avatar_uid = UID();
+			axis_and_rot_obs_enabled = false;
+			if(ui_interface) ui_interface->hideBotEditor();
+			for(int i=0; i<NUM_AXIS_ARROWS; ++i)
+				if(opengl_engine->isObjectAdded(axis_arrow_objects[i]))
+					opengl_engine->removeObject(axis_arrow_objects[i]);
+		}
 	}
 }
 
@@ -17990,6 +18187,51 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 			}
 
 			ui_interface->setParcelEditorForParcel(*selected_parcel);
+		}
+	}
+	else if(selected_bot_avatar_uid.valid() && selected_ob.isNull() && grabbed_axis >= 0 && grabbed_axis < NUM_AXIS_ARROWS) // Bot translation via gizmo
+	{
+		const Vec4f origin = cam_controller.getPosition().toVec4fPoint();
+		Vec2f start_pixelpos, end_pixelpos;
+		const float MAX_MOVE_DIST = 100;
+		const Vec4f line_dir = normalise(axis_arrow_segments[grabbed_axis].b - axis_arrow_segments[grabbed_axis].a);
+		Vec4f use_line_start = axis_arrow_segments[grabbed_axis].a - line_dir * MAX_MOVE_DIST;
+		Vec4f use_line_end   = axis_arrow_segments[grabbed_axis].a + line_dir * MAX_MOVE_DIST;
+		const Vec4f camforw_ws = cam_controller.getForwardsVec().toVec4fVector();
+		Planef plane(origin + camforw_ws * 0.1f, -camforw_ws);
+		clipLineToPlaneBackHalfSpace(plane, use_line_start, use_line_end);
+		bool start_vis = getPixelForPoint(use_line_start, start_pixelpos);
+		bool end_vis   = getPixelForPoint(use_line_end,   end_pixelpos);
+		if(start_vis && end_vis)
+		{
+			const Vec2f mousepos((float)mouse_event.cursor_pos.x, (float)mouse_event.cursor_pos.y);
+			const Vec2f closest_pixel = closestPointOnLineSegment(mousepos, start_pixelpos, end_pixelpos);
+			Vec4f new_p = pointOnLineWorldSpace(axis_arrow_segments[grabbed_axis].a, axis_arrow_segments[grabbed_axis].b, closest_pixel);
+			Vec4f delta_p = new_p - grabbed_point_ws;
+			Vec4f new_bot_pos = ob_origin_at_grab + delta_p;
+
+			// Update avatar position locally for immediate visual feedback
+			GLObjectRef bot_gl_ob;
+			{
+				Lock lock(world_state->mutex);
+				auto it = world_state->avatars.find(selected_bot_avatar_uid);
+				if(it != world_state->avatars.end())
+				{
+					it->second->pos = Vec3d(new_bot_pos[0], new_bot_pos[1], new_bot_pos[2]);
+					bot_gl_ob = it->second->graphics.skinned_gl_ob;
+					if(bot_gl_ob.nonNull())
+						bot_gl_ob->ob_to_world_matrix = obToWorldMatrix(*it->second);
+				}
+			}
+			// Update GL transform outside lock
+			if(bot_gl_ob.nonNull())
+				opengl_engine->updateObjectTransformData(*bot_gl_ob);
+			auto bot_it = avatar_uid_to_bot_id.find(selected_bot_avatar_uid);
+			if(bot_it != avatar_uid_to_bot_id.end())
+				bot_infos[bot_it->second].pos = Vec3d(new_bot_pos[0], new_bot_pos[1], new_bot_pos[2]);
+			// Update position spinboxes in bot editor
+			if(ui_interface)
+				ui_interface->updateBotEditorPosition(new_bot_pos[0], new_bot_pos[1], new_bot_pos[2]);
 		}
 	}
 	else if(selected_ob.nonNull() && grabbed_axis >= NUM_AXIS_ARROWS && grabbed_axis < (NUM_AXIS_ARROWS + 3)) // If we have grabbed a rotation arc and are moving it:
@@ -19897,13 +20139,151 @@ void GUIClient::gearItemChangedOnOurAvatar(GearItem* updated_item)
 
 void GUIClient::createBot(const Vec3d& pos, float heading)
 {
-	if(client_thread.isNull()) return;
+	if(client_thread.isNull() || server_protocol_version < 53) return;
+	// Spawn bot at eye height (1.70 m) above the ground at the given XY
+	Vec3d spawn_pos = pos;
+	spawn_pos.z = 1.70; // avatar eye height above ground
 	MessageUtils::initPacket(scratch_packet, Protocol::CreateChatBot);
 	scratch_packet.writeStringLengthFirst("Bot");
-	::writeToStream(pos, scratch_packet);
+	::writeToStream(spawn_pos, scratch_packet);
 	scratch_packet.writeFloat(heading);
 	MessageUtils::updatePacketLengthField(scratch_packet);
 	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::updateBotListUI()
+{
+	if(!ui_interface)
+		return;
+
+	std::vector<UIInterface::BotListEntry> bots;
+	bots.reserve(bot_infos.size());
+	for(const auto& it : bot_infos)
+	{
+		UIInterface::BotListEntry entry;
+		entry.bot_id = it.second.bot_id;
+		entry.avatar_uid = it.second.avatar_uid;
+		entry.name = it.second.name;
+		if(entry.name.empty())
+		{
+			Lock lock(world_state->mutex);
+			auto av_it = world_state->avatars.find(entry.avatar_uid);
+			if(av_it != world_state->avatars.end())
+				entry.name = av_it->second->name;
+		}
+		bots.push_back(entry);
+	}
+	ui_interface->setBotList(bots);
+}
+
+
+void GUIClient::selectBotAvatar(const UID& avatar_uid)
+{
+	if(!avatar_uid.valid())
+		return;
+
+	if(this->selected_ob.nonNull())
+		deselectObject();
+	if(this->selected_parcel.nonNull())
+		deselectParcel();
+
+	uint64 bot_id = 0;
+	auto bot_map_it = avatar_uid_to_bot_id.find(avatar_uid);
+	if(bot_map_it != avatar_uid_to_bot_id.end())
+		bot_id = bot_map_it->second;
+	if(bot_id == 0)
+		return;
+
+	BotClientInfo info;
+	auto info_it = bot_infos.find(bot_id);
+	if(info_it != bot_infos.end())
+		info = info_it->second;
+	else
+	{
+		info.bot_id = bot_id;
+		info.avatar_uid = avatar_uid;
+	}
+
+	GLObjectRef bot_gl_ob;
+	{
+		Lock lock(world_state->mutex);
+		auto av_it = world_state->avatars.find(avatar_uid);
+		if(av_it != world_state->avatars.end())
+		{
+			const Avatar* av = av_it->second.ptr();
+			bot_gl_ob = av->graphics.skinned_gl_ob;
+			if(info.name.empty())
+				info.name = av->name;
+			if(info.avatar_settings.model_url.empty())
+				info.avatar_settings = av->avatar_settings;
+			info.pos = av->pos;
+			info.heading = av->rotation[2];
+		}
+	}
+
+	if(bot_gl_ob.nonNull())
+	{
+		opengl_engine->selectObject(bot_gl_ob);
+		opengl_engine->setSelectionOutlineColour(Colour4f(0.3f, 0.7f, 1.f, 1.f));
+	}
+
+	selected_bot_avatar_uid = avatar_uid;
+	axis_and_rot_obs_enabled = true;
+
+	// Add gizmo arrows immediately at bot position; timerEvent will keep them updated.
+	{
+		Lock lock(world_state->mutex);
+		auto av_it = world_state->avatars.find(avatar_uid);
+		if(av_it != world_state->avatars.end())
+		{
+			const Vec4f bot_origin = av_it->second->pos.toVec4fPoint();
+			const float arrow_len = 1.0f; // timerEvent will rescale based on camera distance
+			axis_arrow_segments[0] = LineSegment4f(bot_origin, bot_origin + Vec4f(arrow_len, 0, 0, 0));
+			axis_arrow_segments[1] = LineSegment4f(bot_origin, bot_origin + Vec4f(0, arrow_len, 0, 0));
+			axis_arrow_segments[2] = LineSegment4f(bot_origin, bot_origin + Vec4f(0, 0, arrow_len, 0));
+			for(int i = 0; i < NUM_AXIS_ARROWS; ++i)
+			{
+				axis_arrow_objects[i]->ob_to_world_matrix = OpenGLEngine::arrowObjectTransform(
+					axis_arrow_segments[i].a, axis_arrow_segments[i].b, arrow_len);
+				if(!opengl_engine->isObjectAdded(axis_arrow_objects[i]))
+					opengl_engine->addObject(axis_arrow_objects[i]);
+				else
+					opengl_engine->updateObjectTransformData(*axis_arrow_objects[i]);
+			}
+		}
+	}
+
+	updateBotListUI();
+
+	if(ui_interface)
+	{
+		ui_interface->showBotEditor(info.bot_id, info.avatar_uid,
+			info.name, toStdString(info.avatar_settings.model_url), info.prompt,
+			info.pos.x, info.pos.y, info.pos.z, (double)info.heading,
+			info.greeting_name, info.greeting_url, info.greeting_cooldown,
+			info.idle_name, info.idle_url, info.idle_interval,
+			info.reactive_name, info.reactive_url, info.reactive_cooldown,
+			info.flags, info.greeting_distance, info.farewell_distance, info.chat_radius,
+			info.model_scale,
+			info.ai_model_id, info.ai_personality_preset, info.ai_knowledge, info.ai_temperature, info.ai_max_tokens,
+			info.audio_url, info.audio_volume, info.audio_radius, info.audio_activation_distance, info.audio_cooldown,
+			info.trigger_flags, info.trigger_keywords, info.trigger_cooldown);
+		ui_interface->showEditorDockWidget();
+		ui_interface->setObjectEditorEnabled(false);
+	}
+}
+
+
+std::string GUIClient::uploadLocalFileForBot(const std::string& local_abs_path)
+{
+	if(!resource_manager || !FileUtils::fileExists(local_abs_path))
+		return local_abs_path;
+
+	const uint64 hash = FileChecksum::fileChecksum(local_abs_path);
+	const URLString url = ResourceManager::URLForPathAndHash(local_abs_path, hash);
+	resource_manager->copyLocalFileToResourceDir(local_abs_path, url);
+	return toStdString(url);
 }
 
 
@@ -19911,14 +20291,102 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	const AvatarSettings& avatar_settings,
 	const std::string& greeting_name, const std::string& greeting_url, float greeting_cooldown,
 	const std::string& idle_name,     const std::string& idle_url,     float idle_interval,
-	const std::string& reactive_name, const std::string& reactive_url, float reactive_cooldown)
+	const std::string& reactive_name, const std::string& reactive_url, float reactive_cooldown,
+	uint32 flags, float greeting_distance, float farewell_distance, float chat_radius,
+	const Vec3f& model_scale,
+	const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, float ai_temperature, uint32 ai_max_tokens,
+	const std::string& audio_url, float audio_volume, float audio_radius, float audio_activation_distance, float audio_cooldown,
+	uint32 trigger_flags, const std::string& trigger_keywords, float trigger_cooldown)
 {
+	BotClientInfo& info = bot_infos[bot_id];
+	AvatarSettings use_avatar_settings = avatar_settings;
+	if(use_avatar_settings.materials.empty() && !info.avatar_settings.materials.empty())
+		use_avatar_settings.materials = info.avatar_settings.materials;
+	if(use_avatar_settings.model_url.empty())
+		use_avatar_settings.model_url = info.avatar_settings.model_url;
+	info.bot_id = bot_id;
+	info.name = name;
+	info.prompt = prompt;
+	info.avatar_settings = use_avatar_settings;
+	info.greeting_name = greeting_name;
+	info.greeting_url = greeting_url;
+	info.greeting_cooldown = greeting_cooldown;
+	info.idle_name = idle_name;
+	info.idle_url = idle_url;
+	info.idle_interval = idle_interval;
+	info.reactive_name = reactive_name;
+	info.reactive_url = reactive_url;
+	info.reactive_cooldown = reactive_cooldown;
+	info.flags = flags;
+	info.greeting_distance = greeting_distance;
+	info.farewell_distance = farewell_distance;
+	info.chat_radius = chat_radius;
+	info.model_scale = model_scale;
+	info.ai_model_id = ai_model_id;
+	info.ai_personality_preset = ai_personality_preset;
+	info.ai_knowledge = ai_knowledge;
+	info.ai_temperature = ai_temperature;
+	info.ai_max_tokens = ai_max_tokens;
+	info.audio_url = audio_url;
+	info.audio_volume = audio_volume;
+	info.audio_radius = audio_radius;
+	info.audio_activation_distance = audio_activation_distance;
+	info.audio_cooldown = audio_cooldown;
+	info.trigger_flags = trigger_flags;
+	info.trigger_keywords = trigger_keywords;
+	info.trigger_cooldown = trigger_cooldown;
+
+	for(auto& pair : avatar_uid_to_bot_id)
+	{
+		if(pair.second == bot_id)
+		{
+			info.avatar_uid = pair.first;
+
+			GLObjectRef old_nametag;
+			bool model_url_changed = false;
+			{
+				Lock lock(world_state->mutex);
+				auto av_it = world_state->avatars.find(pair.first);
+				if(av_it != world_state->avatars.end())
+				{
+					Avatar* av = av_it->second.ptr();
+					model_url_changed = (av->avatar_settings.model_url != use_avatar_settings.model_url);
+					const bool scale_changed = (std::memcmp(av->avatar_settings.pre_ob_to_world_matrix.e, use_avatar_settings.pre_ob_to_world_matrix.e, sizeof(float)*16) != 0);
+					av->name = name;
+					av->avatar_settings = use_avatar_settings;
+					if(model_url_changed || scale_changed)
+						av->other_dirty = true; // trigger full model reload / rescale in timerEvent
+					old_nametag = av->nametag_gl_ob;
+					av->nametag_gl_ob = nullptr;
+				}
+			}
+			// Remove old nametag outside lock
+			if(old_nametag.nonNull())
+				opengl_engine->removeObject(old_nametag);
+			// Build new nametag immediately if model didn't change (no timerEvent reload needed)
+			if(!model_url_changed && opengl_engine)
+			{
+				Lock lock(world_state->mutex);
+				auto av_it = world_state->avatars.find(pair.first);
+				if(av_it != world_state->avatars.end())
+				{
+					Avatar* av = av_it->second.ptr();
+					av->nametag_gl_ob = makeNameTagGLObject(av->getUseName());
+					av->nametag_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(av->pos.toVec4fVector());
+					opengl_engine->addObject(av->nametag_gl_ob);
+				}
+			}
+			break;
+		}
+	}
+	updateBotListUI();
+
 	if(client_thread.isNull()) return;
 	MessageUtils::initPacket(scratch_packet, Protocol::UpdateChatBot);
 	scratch_packet.writeUInt64(bot_id);
 	scratch_packet.writeStringLengthFirst(name);
 	scratch_packet.writeStringLengthFirst(prompt);
-	writeAvatarSettingsToStream(avatar_settings, scratch_packet);
+	writeAvatarSettingsToStream(use_avatar_settings, scratch_packet);
 	scratch_packet.writeStringLengthFirst(greeting_name);
 	scratch_packet.writeStringLengthFirst(greeting_url);
 	scratch_packet.writeFloat(greeting_cooldown);
@@ -19928,6 +20396,127 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	scratch_packet.writeStringLengthFirst(reactive_name);
 	scratch_packet.writeStringLengthFirst(reactive_url);
 	scratch_packet.writeFloat(reactive_cooldown);
+	scratch_packet.writeUInt32(flags);
+	scratch_packet.writeFloat(greeting_distance);
+	scratch_packet.writeFloat(farewell_distance);
+	scratch_packet.writeFloat(chat_radius);
+	writeToStream(model_scale, scratch_packet);
+	scratch_packet.writeStringLengthFirst(ai_model_id);
+	scratch_packet.writeStringLengthFirst(ai_personality_preset);
+	scratch_packet.writeStringLengthFirst(ai_knowledge);
+	scratch_packet.writeFloat(ai_temperature);
+	scratch_packet.writeUInt32(ai_max_tokens);
+	scratch_packet.writeStringLengthFirst(audio_url);
+	scratch_packet.writeFloat(audio_volume);
+	scratch_packet.writeFloat(audio_radius);
+	scratch_packet.writeFloat(audio_activation_distance);
+	scratch_packet.writeFloat(audio_cooldown);
+	scratch_packet.writeUInt32(trigger_flags);
+	scratch_packet.writeStringLengthFirst(trigger_keywords);
+	scratch_packet.writeFloat(trigger_cooldown);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::deleteBotImmediate(uint64 bot_id, const UID& avatar_uid_param)
+{
+	// Collect GL objects to remove (GL calls must be outside the world lock)
+	GLObjectRef gl_ob_to_remove;
+	GLObjectRef nametag_to_remove;
+	{
+		Lock lock(world_state->mutex);
+		auto av_it = world_state->avatars.find(avatar_uid_param);
+		if(av_it != world_state->avatars.end())
+		{
+			gl_ob_to_remove  = av_it->second->graphics.skinned_gl_ob;
+			nametag_to_remove = av_it->second->nametag_gl_ob;
+			world_state->avatars.erase(av_it);
+		}
+	}
+
+	// Remove GL objects outside lock (skinned mesh + floating name tag)
+	if(gl_ob_to_remove.nonNull())
+		opengl_engine->removeObject(gl_ob_to_remove);
+	if(nametag_to_remove.nonNull())
+		opengl_engine->removeObject(nametag_to_remove);
+
+	avatar_uid_to_bot_id.erase(avatar_uid_param);
+	bot_infos.erase(bot_id);
+
+	if(selected_bot_avatar_uid == avatar_uid_param)
+	{
+		selected_bot_avatar_uid = UID();
+		axis_and_rot_obs_enabled = false;
+		for(int i=0; i<NUM_AXIS_ARROWS; ++i)
+			if(opengl_engine->isObjectAdded(axis_arrow_objects[i]))
+				opengl_engine->removeObject(axis_arrow_objects[i]);
+	}
+	updateBotListUI();
+
+	deleteBot(bot_id);
+}
+
+
+void GUIClient::moveBot(uint64 bot_id, const Vec3d& pos, float heading)
+{
+	BotClientInfo& info = bot_infos[bot_id];
+	info.bot_id = bot_id;
+	info.pos = pos;
+	info.heading = heading;
+
+	// Update visual position immediately for all bots matching this id
+	for(auto& pair : avatar_uid_to_bot_id)
+	{
+		if(pair.second == bot_id)
+		{
+			info.avatar_uid = pair.first;
+			GLObjectRef bot_gl;
+			{
+				Lock lock(world_state->mutex);
+				auto av_it = world_state->avatars.find(pair.first);
+				if(av_it != world_state->avatars.end())
+				{
+					av_it->second->pos = pos;
+					av_it->second->rotation = Vec3f(0.f, (float)Maths::pi_2<float>(), heading);
+					bot_gl = av_it->second->graphics.skinned_gl_ob;
+					if(bot_gl.nonNull())
+						bot_gl->ob_to_world_matrix = obToWorldMatrix(*av_it->second);
+				}
+			}
+			if(bot_gl.nonNull())
+				opengl_engine->updateObjectTransformData(*bot_gl);
+			break;
+		}
+	}
+
+	if(client_thread.isNull()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::MoveChatBot);
+	scratch_packet.writeUInt64(bot_id);
+	::writeToStream(pos, scratch_packet);
+	scratch_packet.writeFloat(heading);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::testBotGesture(uint64 bot_id, uint32 gesture_slot)
+{
+	if(client_thread.isNull())
+		return;
+
+	MessageUtils::initPacket(scratch_packet, Protocol::TestChatBotGesture);
+	scratch_packet.writeUInt64(bot_id);
+	scratch_packet.writeUInt32(gesture_slot);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::queryUserBots()
+{
+	if(client_thread.isNull()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::QueryUserBots);
 	MessageUtils::updatePacketLengthField(scratch_packet);
 	enqueueMessageToSend(*client_thread, scratch_packet);
 }
@@ -20168,6 +20757,16 @@ void GUIClient::keyPressed(KeyEvent& e)
 		if(this->selected_ob.nonNull())
 		{
 			deleteSelectedObject();
+		}
+		else if(selected_bot_avatar_uid.valid())
+		{
+			auto bot_it = avatar_uid_to_bot_id.find(selected_bot_avatar_uid);
+			if(bot_it != avatar_uid_to_bot_id.end())
+			{
+				deleteBotImmediate(bot_it->second, selected_bot_avatar_uid);
+				if(ui_interface)
+					ui_interface->hideBotEditor();
+			}
 		}
 	}
 	else if(e.key == Key::Key_O)

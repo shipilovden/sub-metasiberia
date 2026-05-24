@@ -100,6 +100,7 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client IndigoView)
 	addMocFileRule(gui_client ShaderEditorDialog)
 	addMocFileRule(gui_client AboutDialog)
+	addMocFileRule(gui_client BotEditorWidget)
 	addMocFileRule(gui_client UpdateDialog)
 	addMocFileRule(gui_client UpdateManager)
 	addMocFileRule(gui_client MainOptionsDialog)
@@ -347,6 +348,8 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsWidget.ui
+		${CMAKE_SOURCE_DIR}/gui_client/BotEditorWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/BotEditorWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.ui
@@ -473,6 +476,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_IndigoView.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ShaderEditorDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AboutDialog.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_BotEditorWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateManager.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_MainOptionsDialog.cpp

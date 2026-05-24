@@ -400,6 +400,39 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 		"Metasiberia вдохновлена и основана на <a href=\"https://www.glaretechnologies.com/\"><span style=\" text-decoration: underline; color:#222222;\">Glare-core</span></a>.<br>");
 	add("AboutDialog", "Author: <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>",
 		"Автор: <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>");
+
+	// BotSettingsDialog / BotEditorWidget
+	add("BotSettingsDialog", "Bot Settings",      "Настройки бота");
+	add("BotSettingsDialog", "Identity",          "Личность");
+	add("BotSettingsDialog", "AI / Prompt",       "ИИ / Промпт");
+	add("BotSettingsDialog", "Animations",        "Анимации");
+	add("BotSettingsDialog", "Reactions",         "Реакции");
+	add("BotSettingsDialog", "Name:",             "Имя:");
+	add("BotSettingsDialog", "Bot name",          "Имя бота");
+	add("BotSettingsDialog", "Avatar model URL:", "URL модели аватара:");
+	add("BotSettingsDialog", "Browse...",         "Обзор...");
+	add("BotSettingsDialog", "System prompt (character, instructions):", "Системный промпт (характер, инструкции):");
+	add("BotSettingsDialog", "<i>LLM provider and API key are configured in server settings.</i>",
+		"<i>Провайдер LLM и API ключ настраиваются в настройках сервера.</i>");
+	add("BotSettingsDialog", "<b>Greeting gesture</b> (plays when a user approaches)", "<b>Жест приветствия</b> (играет когда пользователь подходит)");
+	add("BotSettingsDialog", "<b>Idle gesture</b> (plays periodically)", "<b>Жест ожидания</b> (играет периодически)");
+	add("BotSettingsDialog", "<b>Reactive gesture</b> (reaction to user actions)", "<b>Реактивный жест</b> (реакция на действия пользователя)");
+	add("BotSettingsDialog", "Name:",           "Имя:");
+	add("BotSettingsDialog", "URL:",            "URL:");
+	add("BotSettingsDialog", "Cooldown (s):",   "Пауза (с):");
+	add("BotSettingsDialog", "Interval (s):",   "Интервал (с):");
+	add("BotSettingsDialog", "Test",            "Тест");
+	add("BotSettingsDialog", "<b>Proximity reactions</b>",        "<b>Реакции на расстояние</b>");
+	add("BotSettingsDialog", "Greet when user within (m):",       "Приветствовать когда пользователь ближе (м):");
+	add("BotSettingsDialog", "Farewell when user beyond (m):",    "Прощаться когда пользователь дальше (м):");
+	add("BotSettingsDialog", "<i>Reaction to chat messages: bot automatically replies to messages within greeting distance.</i>",
+		"<i>Реакция на чат: бот автоматически отвечает на сообщения в радиусе приветствия.</i>");
+	add("BotSettingsDialog", "<b>Bot state</b>",       "<b>Состояние бота</b>");
+	add("BotSettingsDialog", "Disabled (pause bot):", "Отключён (пауза бота):");
+	add("BotSettingsDialog", "Delete Bot",   "Удалить бота");
+	add("BotSettingsDialog", "Cancel",       "Отмена");
+	add("BotSettingsDialog", "Save",         "Сохранить");
+	add("BotSettingsDialog", "Bot Editor",   "Редактор бота");
 }
 
 

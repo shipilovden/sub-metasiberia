@@ -277,7 +277,7 @@ void AvatarPreviewGLUIWidget::resetCameraFromAvatarTransform(const Matrix4f& ava
 	// Stable default framing: keep the avatar centred even before precise AABB fit is available.
 	cam_target_pos = Vec4f(ob_translation[0], ob_translation[1], ob_translation[2] + 0.95f, 1.f);
 	cam_dist = 2.0f;
-	cam_phi = Maths::pi<float>();
+	cam_phi = 0.f;
 	cam_theta = 1.35f;
 }
 
@@ -297,7 +297,7 @@ void AvatarPreviewGLUIWidget::fitCameraToAABB(const js::AABBox& aabb_ws)
 	const float half_height = myMax(0.18f, height * 0.5f);
 
 	cam_target_pos = Vec4f(centre[0], centre[1], aabb_min[2] + height * 0.56f, 1.f);
-	cam_phi = Maths::pi<float>();
+	cam_phi = 0.f;
 	cam_theta = 1.35f;
 
 	const float sensor_width = 0.035f;

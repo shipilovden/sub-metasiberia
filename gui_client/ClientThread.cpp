@@ -36,6 +36,55 @@ Copyright Glare Technologies Limited 2024 -
 static const size_t MAX_STRING_LEN = 10000;
 
 
+static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, std::string& name, std::string& prompt, AvatarSettings& avatar_settings,
+	Vec3d& pos, float& heading,
+	std::string& greeting_name, std::string& greeting_url, float& greeting_cooldown,
+	std::string& idle_name, std::string& idle_url, float& idle_interval,
+	std::string& reactive_name, std::string& reactive_url, float& reactive_cooldown,
+	uint32& flags, float& greeting_distance, float& farewell_distance, float& chat_radius,
+	Vec3f& model_scale,
+	std::string& ai_model_id, std::string& ai_personality_preset, std::string& ai_knowledge, float& ai_temperature, uint32& ai_max_tokens,
+	std::string& audio_url, float& audio_volume, float& audio_radius, float& audio_activation_distance, float& audio_cooldown,
+	uint32& trigger_flags, std::string& trigger_keywords, float& trigger_cooldown)
+{
+	name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	prompt = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	readAvatarSettingsFromStream(msg_buffer, avatar_settings);
+	pos = readVec3FromStream<double>(msg_buffer);
+	heading = msg_buffer.readFloat();
+	greeting_name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	greeting_url = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	greeting_cooldown = msg_buffer.readFloat();
+	idle_name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	idle_url = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	idle_interval = msg_buffer.readFloat();
+	reactive_name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	reactive_url = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	reactive_cooldown = msg_buffer.readFloat();
+	flags = msg_buffer.readUInt32();
+	greeting_distance = msg_buffer.readFloat();
+	farewell_distance = msg_buffer.readFloat();
+	chat_radius = msg_buffer.readFloat();
+	if(!msg_buffer.endOfStream())
+	{
+		model_scale = readVec3FromStream<float>(msg_buffer);
+		ai_model_id = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		ai_personality_preset = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		ai_knowledge = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		ai_temperature = msg_buffer.readFloat();
+		ai_max_tokens = msg_buffer.readUInt32();
+		audio_url = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		audio_volume = msg_buffer.readFloat();
+		audio_radius = msg_buffer.readFloat();
+		audio_activation_distance = msg_buffer.readFloat();
+		audio_cooldown = msg_buffer.readFloat();
+		trigger_flags = msg_buffer.readUInt32();
+		trigger_keywords = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		trigger_cooldown = msg_buffer.readFloat();
+	}
+}
+
+
 ClientThread::ClientThread(ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue_, const std::string& hostname_, int port_,
 						   const std::string& initial_world_name_, struct tls_config* config_, const Reference<glare::FastPoolAllocator>& world_ob_pool_allocator_, Reference<WorldState> world_state_)
 :	out_msg_queue(out_msg_queue_),
@@ -1217,6 +1266,43 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			Reference<ChatBotCreatedMessage> msg = new ChatBotCreatedMessage();
 			msg->bot_id    = msg_buffer.readUInt64();
 			msg->avatar_uid = readUIDFromStream(msg_buffer);
+			if(!msg_buffer.endOfStream())
+			{
+				readChatBotClientInfoFields(msg_buffer, msg->name, msg->prompt, msg->avatar_settings,
+					msg->pos, msg->heading,
+					msg->greeting_name, msg->greeting_url, msg->greeting_cooldown,
+					msg->idle_name, msg->idle_url, msg->idle_interval,
+					msg->reactive_name, msg->reactive_url, msg->reactive_cooldown,
+					msg->flags, msg->greeting_distance, msg->farewell_distance, msg->chat_radius,
+					msg->model_scale,
+					msg->ai_model_id, msg->ai_personality_preset, msg->ai_knowledge, msg->ai_temperature, msg->ai_max_tokens,
+					msg->audio_url, msg->audio_volume, msg->audio_radius, msg->audio_activation_distance, msg->audio_cooldown,
+					msg->trigger_flags, msg->trigger_keywords, msg->trigger_cooldown);
+			}
+			out_msg_queue->enqueue(msg);
+			break;
+		}
+	case Protocol::UserBotList:
+		{
+			Reference<UserBotListMessage> msg = new UserBotListMessage();
+			const uint32 count = msg_buffer.readUInt32();
+			for(uint32 i = 0; i < count; ++i)
+			{
+				UserBotListMessage::BotInfo info;
+				info.bot_id    = msg_buffer.readUInt64();
+				info.avatar_uid = readUIDFromStream(msg_buffer);
+				readChatBotClientInfoFields(msg_buffer, info.name, info.prompt, info.avatar_settings,
+					info.pos, info.heading,
+					info.greeting_name, info.greeting_url, info.greeting_cooldown,
+					info.idle_name, info.idle_url, info.idle_interval,
+					info.reactive_name, info.reactive_url, info.reactive_cooldown,
+					info.flags, info.greeting_distance, info.farewell_distance, info.chat_radius,
+					info.model_scale,
+					info.ai_model_id, info.ai_personality_preset, info.ai_knowledge, info.ai_temperature, info.ai_max_tokens,
+					info.audio_url, info.audio_volume, info.audio_radius, info.audio_activation_distance, info.audio_cooldown,
+					info.trigger_flags, info.trigger_keywords, info.trigger_cooldown);
+				msg->bots.push_back(info);
+			}
 			out_msg_queue->enqueue(msg);
 			break;
 		}

@@ -272,12 +272,24 @@ public:
 	void openGearInventory();
 	void convertSelectedObjectToGearItem();
 	void createBot(const Vec3d& pos, float heading);
+	std::string uploadLocalFileForBot(const std::string& local_abs_path); // Copy local file to resources dir and return sub:// URL
 	void updateBot(uint64 bot_id, const std::string& name, const std::string& prompt,
 		const AvatarSettings& avatar_settings,
 		const std::string& greeting_name, const std::string& greeting_url, float greeting_cooldown,
 		const std::string& idle_name,     const std::string& idle_url,     float idle_interval,
-		const std::string& reactive_name, const std::string& reactive_url, float reactive_cooldown);
+		const std::string& reactive_name, const std::string& reactive_url, float reactive_cooldown,
+		uint32 flags, float greeting_distance, float farewell_distance, float chat_radius,
+		const Vec3f& model_scale,
+		const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, float ai_temperature, uint32 ai_max_tokens,
+		const std::string& audio_url, float audio_volume, float audio_radius, float audio_activation_distance, float audio_cooldown,
+		uint32 trigger_flags, const std::string& trigger_keywords, float trigger_cooldown);
 	void deleteBot(uint64 bot_id);
+	void deleteBotImmediate(uint64 bot_id, const UID& avatar_uid); // Delete bot and remove from scene immediately
+	void moveBot(uint64 bot_id, const Vec3d& pos, float heading);
+	void testBotGesture(uint64 bot_id, uint32 gesture_slot);
+	void queryUserBots();
+	void selectBotAvatar(const UID& avatar_uid);
+	void updateBotListUI();
 	void gearItemClicked(const GearItemRef& item);
 	void equippedGearItemClicked(const GearItemRef& item);
 	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings);
@@ -932,6 +944,46 @@ public:
 	std::string logged_in_user_name;
 	uint32 logged_in_user_flags;
 	AvatarSettings logged_in_avatar_settings; // Last avatar settings received from server in a LoggedInMessage.
+	struct BotClientInfo
+	{
+		uint64 bot_id = 0;
+		UID avatar_uid;
+		std::string name;
+		std::string prompt;
+		AvatarSettings avatar_settings;
+		Vec3d pos;
+		float heading = 0.f;
+		std::string greeting_name;
+		std::string greeting_url;
+		float greeting_cooldown = 30.f;
+		std::string idle_name;
+		std::string idle_url;
+		float idle_interval = 20.f;
+		std::string reactive_name;
+		std::string reactive_url;
+		float reactive_cooldown = 15.f;
+		uint32 flags = 0;
+		float greeting_distance = 6.f;
+		float farewell_distance = 10.f;
+		float chat_radius = 8.f;
+		Vec3f model_scale = Vec3f(1.f);
+		std::string ai_model_id;
+		std::string ai_personality_preset = "assistant";
+		std::string ai_knowledge;
+		float ai_temperature = 0.7f;
+		uint32 ai_max_tokens = 0;
+		std::string audio_url;
+		float audio_volume = 1.f;
+		float audio_radius = 10.f;
+		float audio_activation_distance = 12.f;
+		float audio_cooldown = 0.f;
+		uint32 trigger_flags = 3;
+		std::string trigger_keywords;
+		float trigger_cooldown = 3.f;
+	};
+	std::map<UID, uint64> avatar_uid_to_bot_id; // Maps chatbot avatar UID → chatbot id (for bot editor)
+	std::map<uint64, BotClientInfo> bot_infos;
+	UID selected_bot_avatar_uid; // Currently selected bot avatar UID (for gizmo)
 	GearItems logged_in_equipped_gear; // Last equipped gear settings received from server in a LoggedInMessage.
 
 	bool server_using_lod_chunks; // Should be equal to !world_state->lod_chunks.empty(), cached in a boolean.

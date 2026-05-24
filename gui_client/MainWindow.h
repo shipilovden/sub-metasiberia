@@ -119,6 +119,25 @@ private slots:;
 	void on_actionConvert_Selected_Object_To_Gear_Item_triggered();
 	void on_actionAddBot_triggered();
 	virtual void openBotSettingsDialog(uint64 bot_id) override;
+	virtual void setBotList(const std::vector<UIInterface::BotListEntry>& bots) override;
+	virtual void updateBotEditorPosition(double x, double y, double z) override;
+	virtual void showBotEditor(uint64 bot_id, const UID& avatar_uid,
+		const std::string& name, const std::string& avatar_url, const std::string& prompt,
+		double px, double py, double pz, double heading_deg,
+		const std::string& greeting_name, const std::string& greeting_url, double greeting_cooldown,
+		const std::string& idle_name, const std::string& idle_url, double idle_interval,
+		const std::string& reactive_name, const std::string& reactive_url, double reactive_cooldown,
+		uint32 flags, double greeting_distance, double farewell_distance, double chat_radius,
+		const Vec3f& model_scale,
+		const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, double ai_temperature, uint32 ai_max_tokens,
+		const std::string& audio_url, double audio_volume, double audio_radius, double audio_activation_distance, double audio_cooldown,
+		uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown) override;
+	virtual void hideBotEditor() override;
+private slots:
+	void onBotEditorSave();
+	void onBotEditorDelete();
+	void onBotEditorCancel();
+	void onBotEditorBotSelected(uint64 bot_id, const UID& avatar_uid);
 	void on_actionMute_Audio_toggled(bool checked);
 	void on_actionSave_Object_To_Disk_triggered();
 	void on_actionSave_Parcel_Objects_To_Disk_triggered();

@@ -94,6 +94,7 @@ public:
 
 	// Queue a test gesture playback request. Executed in think() on the main server loop.
 	void queueManualGesturePlayback(const std::string& gesture_name, const URLString& gesture_URL, uint32 gesture_flags);
+	void clampAnimationSettings();
 
 	void writeToStream(RandomAccessOutStream& stream);
 
@@ -137,9 +138,48 @@ public:
 	uint32 reactive_gesture_flags;
 	float reactive_gesture_cooldown_s;
 
+	float greeting_distance;
+	float farewell_distance;
+	float chat_radius;
+
+	Vec3f model_scale;
+
+	static const int MAX_AI_MODEL_ID_SIZE = 200;
+	static const int MAX_AI_PRESET_SIZE = 200;
+	static const int MAX_AI_KNOWLEDGE_SIZE = 10000;
+	std::string ai_model_id; // Empty means use the server default model.
+	std::string ai_personality_preset;
+	std::string ai_knowledge;
+	float ai_temperature;
+	uint32 ai_max_tokens; // 0 means provider/server default.
+
+	static const int MAX_AUDIO_URL_SIZE = 10000;
+	URLString audio_source_url;
+	float audio_volume;
+	float audio_radius;
+	float audio_activation_distance;
+	float audio_cooldown_s;
+
+	static const int MAX_TRIGGER_KEYWORDS_SIZE = 4000;
+	uint32 trigger_flags;
+	std::string trigger_keywords;
+	float trigger_cooldown_s;
+
 	std::map<std::string, Reference<ChatBotToolFunction>> info_tool_functions; // Map from function name to ChatBotToolFunction ref.  Tool functions that the LLM can call.
 
 	static const uint32 DISABLED_FLAG = 1; // If set, chatbot logic is disabled.
+	static const uint32 ALWAYS_FACE_NEAREST_USER_FLAG = 2;
+	static const uint32 STATIONARY_FLAG = 4;
+	static const uint32 AUDIO_LOOP_FLAG = 8;
+	static const uint32 AUDIO_SPATIAL_FLAG = 16;
+	static const uint32 AUDIO_AUTOPLAY_FLAG = 32;
+
+	static const uint32 TRIGGER_PROXIMITY_FLAG = 1;
+	static const uint32 TRIGGER_CHAT_FLAG = 2;
+	static const uint32 TRIGGER_KEYWORDS_FLAG = 4;
+	static const uint32 TRIGGER_GESTURE_FLAG = 8;
+	static const uint32 TRIGGER_USE_ACTION_FLAG = 16;
+
 	bool isDisabled() const { return BitUtils::isBitSet(flags, DISABLED_FLAG); }
 
 	DatabaseKey database_key;
@@ -189,7 +229,6 @@ private:
 
 	void playGestureNow(const std::string& gesture_name, const URLString& gesture_URL, uint32 gesture_flags, Server* server);
 	bool canTriggerTimer(const Timer& timer, float min_interval_s) const;
-	void clampAnimationSettings();
 
 	SocketBufferOutStream scratch_packet;
 };

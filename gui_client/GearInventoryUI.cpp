@@ -81,13 +81,13 @@ GearInventoryUI::GearInventoryUI(GUIClient* gui_client_, GLUIRef gl_ui_)
 	avatar_preview_scene = new OpenGLScene(*opengl_engine);
 	avatar_preview_scene->draw_water = false;
 	avatar_preview_scene->water_level_z = -10000.0;
-	avatar_preview_scene->background_colour = Colour3f(0.15f);
+	avatar_preview_scene->background_colour = Colour3f(0.2f);
 	avatar_preview_scene->collect_stats = false;
 	avatar_preview_scene->cloud_shadows = false;
 	avatar_preview_scene->exposure_factor = 0.4f;
-	avatar_preview_scene->shadow_mapping = false; // No sun, no shadows needed.
-	avatar_preview_scene->draw_overlay_objects = false; // No overlay objects in preview scene.
-	avatar_preview_scene->render_to_main_render_framebuffer = false; // Render directly to avatar_preview_fbo; bypass shared main_render_framebuffer.
+	avatar_preview_scene->shadow_mapping = false;
+	avatar_preview_scene->draw_overlay_objects = false;
+	avatar_preview_scene->render_to_main_render_framebuffer = false;
 	opengl_engine->addScene(avatar_preview_scene);
 
 	{
@@ -95,25 +95,8 @@ GearInventoryUI::GearInventoryUI(GUIClient* gui_client_, GLUIRef gl_ui_)
 		opengl_engine->setCurrentScene(avatar_preview_scene);
 
 		OpenGLMaterial env_mat;
-		opengl_engine->setEnvMat(env_mat); // Blank env mat: no sky texture in the preview.
-
-		// Key light: in front of and above the avatar (camera side, phi=pi => -Y axis is camera side).
-		preview_key_light = new GLLight();
-		preview_key_light->gpu_data.pos = Vec4f(0.f, -2.5f, 2.f, 1.f);
-		preview_key_light->gpu_data.col = Colour4f(8.f, 8.f, 8.f, 0.f);
-		preview_key_light->gpu_data.light_type = 0; // point light
-		preview_key_light->max_light_dist = 10.f;
-		preview_key_light->aabb_ws = js::AABBox(Vec4f(-10.f, -10.f, -10.f, 1.f), Vec4f(10.f, 10.f, 10.f, 1.f));
-		opengl_engine->addLight(preview_key_light);
-
-		// Fill light: from the side and slightly behind, softer.
-		preview_fill_light = new GLLight();
-		preview_fill_light->gpu_data.pos = Vec4f(2.f, 1.5f, 1.f, 1.f);
-		preview_fill_light->gpu_data.col = Colour4f(3.f, 3.f, 3.5f, 0.f);
-		preview_fill_light->gpu_data.light_type = 0;
-		preview_fill_light->max_light_dist = 10.f;
-		preview_fill_light->aabb_ws = js::AABBox(Vec4f(-10.f, -10.f, -10.f, 1.f), Vec4f(10.f, 10.f, 10.f, 1.f));
-		opengl_engine->addLight(preview_fill_light);
+		opengl_engine->setEnvMat(env_mat);
+		opengl_engine->setSunDir(normalise(Vec4f(1.f, -1.f, 1.f, 0.f)));
 
 		opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
 	}
@@ -158,11 +141,6 @@ GearInventoryUI::~GearInventoryUI()
 		opengl_engine->setCurrentScene(avatar_preview_scene);
 
 		checkRemoveObAndSetRefToNull(*opengl_engine, avatar_preview_gl_ob);
-
-		if(preview_key_light.nonNull())
-			opengl_engine->removeLight(preview_key_light);
-		if(preview_fill_light.nonNull())
-			opengl_engine->removeLight(preview_fill_light);
 
 		opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
 		opengl_engine->removeScene(avatar_preview_scene);
@@ -278,30 +256,20 @@ void GearInventoryUI::setAllGear(const GearItems& all_gear_)
 void GearInventoryUI::setAvatarGLObject(const AvatarGraphics& /*graphics*/, const Reference<GLObject>& avatar_gl_ob, const Matrix4f& pre_ob_to_world_matrix)
 {
 	avatar_pre_ob_to_world_matrix = pre_ob_to_world_matrix;
+	world_avatar_gl_ob = avatar_gl_ob; // store for preview camera
 
-	if(avatar_preview_scene.isNull())
-		return;
-
-	OpenGLSceneRef old_scene = opengl_engine->getCurrentScene();
-	opengl_engine->setCurrentScene(avatar_preview_scene);
-
-	checkRemoveObAndSetRefToNull(*opengl_engine, avatar_preview_gl_ob);
-
-	if(avatar_gl_ob.nonNull())
+	if(avatar_preview_widget.nonNull() && avatar_gl_ob.nonNull())
 	{
-		avatar_preview_gl_ob = opengl_engine->allocateObject();
-		avatar_preview_gl_ob->mesh_data = avatar_gl_ob->mesh_data;
-		avatar_preview_gl_ob->materials = avatar_gl_ob->materials;
-
-		avatar_preview_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0.f, 0.f, PlayerPhysics::getEyeHeight()) * pre_ob_to_world_matrix;
-
-		opengl_engine->addObject(avatar_preview_gl_ob);
+		// Point camera directly at the avatar's FRONT.
+		// Avatar forward direction = column 1 of ob_to_world_matrix (Y-axis).
+		const Vec4f pos = avatar_gl_ob->ob_to_world_matrix.getColumn(3);
+		const Vec4f fwd = avatar_gl_ob->ob_to_world_matrix.getColumn(1); // forward = Y-axis
+		avatar_preview_widget->cam_target_pos = Vec4f(pos[0], pos[1], pos[2] + 1.0f, 1.f);
+		avatar_preview_widget->cam_dist  = 2.5f;
+		avatar_preview_widget->cam_theta = 1.4f;
+		// cam_phi = heading so camera is directly in front of the avatar
+		avatar_preview_widget->cam_phi = std::atan2(fwd[0], fwd[1]);
 	}
-
-	opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
-
-	if(avatar_preview_widget.nonNull() && avatar_preview_gl_ob.nonNull())
-		avatar_preview_widget->resetCameraFromAvatarTransform(avatar_preview_gl_ob->ob_to_world_matrix);
 
 	if(gear_editor_ui)
 		gear_editor_ui->setAvatarGLObject(avatar_preview_gl_ob, avatar_pre_ob_to_world_matrix);
@@ -335,6 +303,8 @@ void GearInventoryUI::eventOccurred(GLUICallbackEvent& event)
 void GearInventoryUI::closeWindowEventOccurred(GLUICallbackEvent& /*event*/)
 {
 	close_soon = true;
+	if(window)
+		window->setVisible(false); // Hide immediately; destructor runs on next think().
 }
 
 
@@ -476,16 +446,25 @@ void GearInventoryUI::openEditorForItem(const GearItemRef& item)
 
 void GearInventoryUI::renderAvatarPreview()
 {
-	if(avatar_preview_scene.isNull() || avatar_preview_widget.isNull())
+	if(avatar_preview_widget.isNull() || main_world_scene.isNull())
 		return;
 
 	OpenGLSceneRef old_scene = opengl_engine->getCurrentScene();
 	Reference<FrameBuffer> old_fbo = opengl_engine->getTargetFrameBuffer();
+	const int saved_main_w = opengl_engine->getMainViewPortWidth();
+	const int saved_main_h = opengl_engine->getMainViewPortHeight();
 
-	opengl_engine->setCurrentScene(avatar_preview_scene);
+	// Render the world scene into the preview FBO at preview resolution.
+	// This gives proper sky, sun, IBL lighting, and world background.
+	const int preview_w = avatar_preview_widget->getPreviewFBOWidth();
+	const int preview_h = avatar_preview_widget->getPreviewFBOHeight();
+	opengl_engine->setMainViewportDims(preview_w, preview_h);
+	opengl_engine->setCurrentScene(main_world_scene);
+
 	avatar_preview_widget->renderAvatarPreview();
 
-	opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
+	opengl_engine->setMainViewportDims(saved_main_w, saved_main_h);
+	opengl_engine->setCurrentScene(main_world_scene);
 	opengl_engine->setTargetFrameBuffer(old_fbo);
 }
 

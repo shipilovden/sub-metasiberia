@@ -162,6 +162,8 @@ private:
 public:
 	std::string base_prompt_json_escaped;
 	std::string tools_json;
+	float temperature;
+	uint32 max_tokens; // 0 means provider default.
 
 	LLMChatMessage current_assistant_response; // Accumulated complete response from the LLM
 

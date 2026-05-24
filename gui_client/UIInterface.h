@@ -9,7 +9,9 @@ Copyright Glare Technologies Limited 2023 -
 #include "../shared/UID.h"
 #include <graphics/ImageMap.h>
 #include <maths/vec2.h>
+#include <maths/vec3.h>
 #include <string>
+#include <vector>
 class WorldObject;
 class Parcel;
 
@@ -164,4 +166,25 @@ public:
 	virtual std::string showOpenFileDialog(const std::string& caption, const std::vector<FileTypeFilter>& file_type_filters, const std::string& settings_key) = 0; // Returns path to file selected or empty string if cancelled.
 
 	virtual void openBotSettingsDialog(uint64 bot_id) {}
+	// Show bot editor in left panel
+	struct BotListEntry
+	{
+		uint64 bot_id = 0;
+		UID avatar_uid;
+		std::string name;
+	};
+	virtual void setBotList(const std::vector<BotListEntry>& bots) {}
+	virtual void updateBotEditorPosition(double x, double y, double z) {}
+	virtual void showBotEditor(uint64 bot_id, const UID& avatar_uid,
+		const std::string& name, const std::string& avatar_url, const std::string& prompt,
+		double px, double py, double pz, double heading_deg,
+		const std::string& greeting_name, const std::string& greeting_url, double greeting_cooldown,
+		const std::string& idle_name, const std::string& idle_url, double idle_interval,
+		const std::string& reactive_name, const std::string& reactive_url, double reactive_cooldown,
+		uint32 flags, double greeting_distance, double farewell_distance, double chat_radius,
+		const Vec3f& model_scale,
+		const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, double ai_temperature, uint32 ai_max_tokens,
+		const std::string& audio_url, double audio_volume, double audio_radius, double audio_activation_distance, double audio_cooldown,
+		uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown) {}
+	virtual void hideBotEditor() {}
 };

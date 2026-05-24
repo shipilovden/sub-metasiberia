@@ -46,7 +46,15 @@ void BotSettingsDialog::on_saveButton_clicked()
 		(float)ui->idleIntervalSpin->value(),
 		ui->reactiveNameEdit->text().toStdString(),
 		ui->reactiveURLEdit->text().toStdString(),
-		(float)ui->reactiveCooldownSpin->value()
+		(float)ui->reactiveCooldownSpin->value(),
+		0,
+		6.f,
+		10.f,
+		8.f,
+		Vec3f(1.f),
+		"", "assistant", "", 0.7f, 0,
+		"", 1.f, 10.f, 12.f, 0.f,
+		3u, "", 3.f
 	);
 
 	accept();

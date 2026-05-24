@@ -44,6 +44,13 @@ public:
 	void renderAvatarPreview();
 	void resetCameraFromAvatarTransform(const Matrix4f& avatar_ob_to_world_matrix);
 	void fitCameraToAABB(const js::AABBox& aabb_ws);
+	int getPreviewFBOWidth()  const { return avatar_preview_fbo.nonNull() ? (int)avatar_preview_fbo->xRes() : 16; }
+	int getPreviewFBOHeight() const { return avatar_preview_fbo.nonNull() ? (int)avatar_preview_fbo->yRes() : 16; }
+
+	float cam_phi;
+	float cam_dist;
+	float cam_theta;
+	Vec4f cam_target_pos;
 
 	std::function<void()> pre_draw_func;
 	std::function<bool(MouseEvent&)> press_interceptor;
@@ -62,10 +69,6 @@ private:
 	Reference<RenderBuffer> avatar_preview_depth_rb;
 	Reference<OpenGLTexture> avatar_preview_tex;
 
-	float cam_phi;
-	float cam_dist;
-	float cam_theta;
-	Vec4f cam_target_pos;
 	bool drag_active;
 	float drag_start_x;
 	float drag_start_phi;

@@ -379,6 +379,9 @@
          <item>
           <widget class="ParcelEditor" name="parcelEditor" native="true"/>
          </item>
+         <item>
+          <widget class="BotEditorWidget" name="botEditorWidget" native="true"/>
+         </item>
         </layout>
        </widget>
       </widget>
@@ -969,6 +972,12 @@
    <class>ParcelEditor</class>
    <extends>QWidget</extends>
    <header>ParcelEditor.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>BotEditorWidget</class>
+   <extends>QWidget</extends>
+   <header>BotEditorWidget.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

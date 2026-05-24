@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../shared/WorldDetails.h"
 #include "../shared/GestureSettings.h"
 #include <networking/IPAddress.h>
+#include <maths/vec3.h>
 #include <utils/MessageableThread.h>
 #include <utils/Platform.h>
 #include <utils/SocketBufferOutStream.h>
@@ -201,6 +202,81 @@ public:
 	ChatBotCreatedMessage() : ThreadMessage(Msg_ChatBotCreatedMessage), bot_id(0) {}
 	uint64 bot_id;
 	UID    avatar_uid;
+	std::string name;
+	std::string prompt;
+	AvatarSettings avatar_settings;
+	Vec3d pos;
+	float heading = 0.f;
+	std::string greeting_name;
+	std::string greeting_url;
+	float greeting_cooldown = 0.f;
+	std::string idle_name;
+	std::string idle_url;
+	float idle_interval = 0.f;
+	std::string reactive_name;
+	std::string reactive_url;
+	float reactive_cooldown = 0.f;
+	uint32 flags = 0;
+	float greeting_distance = 6.f;
+	float farewell_distance = 10.f;
+	float chat_radius = 8.f;
+	Vec3f model_scale = Vec3f(1.f);
+	std::string ai_model_id;
+	std::string ai_personality_preset = "assistant";
+	std::string ai_knowledge;
+	float ai_temperature = 0.7f;
+	uint32 ai_max_tokens = 0;
+	std::string audio_url;
+	float audio_volume = 1.f;
+	float audio_radius = 10.f;
+	float audio_activation_distance = 12.f;
+	float audio_cooldown = 0.f;
+	uint32 trigger_flags = 3;
+	std::string trigger_keywords;
+	float trigger_cooldown = 3.f;
+};
+class UserBotListMessage : public ThreadMessage
+{
+public:
+	UserBotListMessage() : ThreadMessage(Msg_UserBotListMessage) {}
+	struct BotInfo
+	{
+		uint64 bot_id = 0;
+		UID avatar_uid;
+		std::string name;
+		std::string prompt;
+		AvatarSettings avatar_settings;
+		Vec3d pos;
+		float heading = 0.f;
+		std::string greeting_name;
+		std::string greeting_url;
+		float greeting_cooldown = 0.f;
+		std::string idle_name;
+		std::string idle_url;
+		float idle_interval = 0.f;
+		std::string reactive_name;
+		std::string reactive_url;
+		float reactive_cooldown = 0.f;
+		uint32 flags = 0;
+		float greeting_distance = 6.f;
+		float farewell_distance = 10.f;
+		float chat_radius = 8.f;
+		Vec3f model_scale = Vec3f(1.f);
+		std::string ai_model_id;
+		std::string ai_personality_preset = "assistant";
+		std::string ai_knowledge;
+		float ai_temperature = 0.7f;
+		uint32 ai_max_tokens = 0;
+		std::string audio_url;
+		float audio_volume = 1.f;
+		float audio_radius = 10.f;
+		float audio_activation_distance = 12.f;
+		float audio_cooldown = 0.f;
+		uint32 trigger_flags = 3;
+		std::string trigger_keywords;
+		float trigger_cooldown = 3.f;
+	};
+	std::vector<BotInfo> bots;
 };
 
 

@@ -21,10 +21,13 @@ Copyright Glare Technologies Limited 2026 -
 #include <RuntimeCheck.h>
 #include <RandomAccessOutStream.h>
 #include <algorithm>
+#include <limits>
 
 
 static const double GREETING_COOLDOWN_PERIOD = 60.0; // Don't send greeting messages more often than this.
 static const double FAREWELL_COOLDOWN_PERIOD = 60.0;
+
+static bool chatMessageMatchesKeywords(const std::string& msg, const std::string& keywords);
 
 
 ChatBot::ChatBot()
@@ -38,12 +41,25 @@ ChatBot::ChatBot()
 	idle_gesture_interval_s(30.f),
 	reactive_gesture_flags(0),
 	reactive_gesture_cooldown_s(6.f),
+	greeting_distance(6.f),
+	farewell_distance(10.f),
+	chat_radius(8.f),
+	model_scale(Vec3f(1.f)),
+	ai_temperature(0.7f),
+	ai_max_tokens(0),
+	audio_volume(1.f),
+	audio_radius(10.f),
+	audio_activation_distance(12.f),
+	audio_cooldown_s(0.f),
+	trigger_flags(TRIGGER_PROXIMITY_FLAG | TRIGGER_CHAT_FLAG),
+	trigger_cooldown_s(3.f),
 	pending_manual_gesture(false),
 	pending_manual_gesture_flags(0),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder)
 {
 	greeting_gesture_name = "Waving 1";
 	reactive_gesture_name = "Quick Informal Bow";
+	ai_personality_preset = "assistant";
 
 	next_sentence_search_pos = 0;
 	next_sentence_start_index = 0;
@@ -96,6 +112,8 @@ ChatBot::EventHandlerResults ChatBot::userMovedNearToBotAvatar(AvatarRef other_a
 	EventHandlerResults res;
 	if(isDisabled())
 		return res;
+	if(!BitUtils::isBitSet(trigger_flags, TRIGGER_PROXIMITY_FLAG))
+		return res;
 
 	// Add to list of avatars nearby the chatbot.
 	auto other_res = other_avatar_info.find(other_avatar);
@@ -117,6 +135,8 @@ ChatBot::EventHandlerResults ChatBot::userMovedAwayFromBotAvatar(AvatarRef other
 
 	EventHandlerResults res;
 	if(isDisabled())
+		return res;
+	if(!BitUtils::isBitSet(trigger_flags, TRIGGER_PROXIMITY_FLAG))
 		return res;
 
 	auto other_res = other_avatar_info.find(other_avatar);
@@ -163,12 +183,16 @@ ChatBot::EventHandlerResults ChatBot::processHeardChatMessage(const std::string&
 	EventHandlerResults res;
 	if(isDisabled())
 		return res;
+	if(!BitUtils::isBitSet(trigger_flags, TRIGGER_CHAT_FLAG))
+		return res;
+	if(BitUtils::isBitSet(trigger_flags, TRIGGER_KEYWORDS_FLAG) && !chatMessageMatchesKeywords(msg, trigger_keywords))
+		return res;
 
 	// Backwards compatible handling for old clients that don't send UserMovedNearToAvatar and userMovedAwayFromBotAvatar msgs:
 	// Just add any avatar that chats near the chatbot to other_avatar_info.
 	if(!BitUtils::isBitSet(client_capabilities, Protocol::SENDS_USER_MOVED_CHATBOT_MSGS))
 	{
-		if((sender_avatar->pos.getDist(this->pos) < 6.0) && (other_avatar_info.count(sender_avatar) == 0))
+		if((sender_avatar->pos.getDist(this->pos) < chat_radius) && (other_avatar_info.count(sender_avatar) == 0))
 		{
 			other_avatar_info[sender_avatar] = OtherAvatarInfo();
 			other_avatar_info[sender_avatar].attention_timer.pause();
@@ -236,6 +260,30 @@ bool ChatBot::canTriggerTimer(const Timer& timer, float min_interval_s) const
 }
 
 
+static bool chatMessageMatchesKeywords(const std::string& msg, const std::string& keywords)
+{
+	if(keywords.empty())
+		return true;
+
+	const std::string msg_lower = toLowerCase(msg);
+	size_t start = 0;
+	while(start < keywords.size())
+	{
+		size_t end = start;
+		while(end < keywords.size() && keywords[end] != ',' && keywords[end] != ';' && keywords[end] != '\n')
+			end++;
+
+		std::string keyword = stripHeadAndTailWhitespace(keywords.substr(start, end - start));
+		if(!keyword.empty() && StringUtils::containsStringCaseInvariant(msg_lower, toLowerCase(keyword)))
+			return true;
+
+		start = end + 1;
+	}
+
+	return false;
+}
+
+
 void ChatBot::clampAnimationSettings()
 {
 	if(greeting_gesture_name.size() > MAX_GESTURE_NAME_SIZE)
@@ -270,6 +318,57 @@ void ChatBot::clampAnimationSettings()
 	greeting_gesture_cooldown_s = myClamp(greeting_gesture_cooldown_s, 0.f, 3600.f);
 	idle_gesture_interval_s = myClamp(idle_gesture_interval_s, 0.f, 3600.f);
 	reactive_gesture_cooldown_s = myClamp(reactive_gesture_cooldown_s, 0.f, 3600.f);
+	if(!std::isfinite(greeting_distance))
+		greeting_distance = 6.f;
+	if(!std::isfinite(farewell_distance))
+		farewell_distance = 10.f;
+	if(!std::isfinite(chat_radius))
+		chat_radius = 8.f;
+	greeting_distance = myClamp(greeting_distance, 0.5f, 100.f);
+	farewell_distance = myClamp(farewell_distance, greeting_distance, 150.f);
+	chat_radius = myClamp(chat_radius, 0.5f, 100.f);
+
+	if(!std::isfinite(model_scale.x)) model_scale.x = 1.f;
+	if(!std::isfinite(model_scale.y)) model_scale.y = 1.f;
+	if(!std::isfinite(model_scale.z)) model_scale.z = 1.f;
+	model_scale.x = myClamp(model_scale.x, 0.05f, 20.f);
+	model_scale.y = myClamp(model_scale.y, 0.05f, 20.f);
+	model_scale.z = myClamp(model_scale.z, 0.05f, 20.f);
+
+	if(ai_model_id.size() > MAX_AI_MODEL_ID_SIZE)
+		ai_model_id.resize(MAX_AI_MODEL_ID_SIZE);
+	if(ai_personality_preset.size() > MAX_AI_PRESET_SIZE)
+		ai_personality_preset.resize(MAX_AI_PRESET_SIZE);
+	if(ai_knowledge.size() > MAX_AI_KNOWLEDGE_SIZE)
+		ai_knowledge.resize(MAX_AI_KNOWLEDGE_SIZE);
+	if(!std::isfinite(ai_temperature))
+		ai_temperature = 0.7f;
+	ai_temperature = myClamp(ai_temperature, 0.f, 2.f);
+	if(ai_max_tokens > 32000)
+		ai_max_tokens = 32000;
+
+	std::string audio_url = toStdString(audio_source_url);
+	if(audio_url.size() > MAX_AUDIO_URL_SIZE)
+		audio_url.resize(MAX_AUDIO_URL_SIZE);
+	audio_source_url = toURLString(audio_url);
+	if(!std::isfinite(audio_volume))
+		audio_volume = 1.f;
+	if(!std::isfinite(audio_radius))
+		audio_radius = 10.f;
+	if(!std::isfinite(audio_activation_distance))
+		audio_activation_distance = 12.f;
+	if(!std::isfinite(audio_cooldown_s))
+		audio_cooldown_s = 0.f;
+	audio_volume = myClamp(audio_volume, 0.f, 4.f);
+	audio_radius = myClamp(audio_radius, 0.1f, 500.f);
+	audio_activation_distance = myClamp(audio_activation_distance, 0.1f, 500.f);
+	audio_cooldown_s = myClamp(audio_cooldown_s, 0.f, 3600.f);
+
+	if(trigger_keywords.size() > MAX_TRIGGER_KEYWORDS_SIZE)
+		trigger_keywords.resize(MAX_TRIGGER_KEYWORDS_SIZE);
+	if(!std::isfinite(trigger_cooldown_s))
+		trigger_cooldown_s = 3.f;
+	trigger_cooldown_s = myClamp(trigger_cooldown_s, 0.f, 3600.f);
 }
 
 
@@ -625,6 +724,24 @@ ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 	}
 
 
+	if(BitUtils::isBitSet(flags, ALWAYS_FACE_NEAREST_USER_FLAG))
+	{
+		Reference<const Avatar> nearest_avatar;
+		double nearest_dist2 = std::numeric_limits<double>::infinity();
+		for(auto it = other_avatar_info.begin(); it != other_avatar_info.end(); ++it)
+		{
+			const AvatarRef other_avatar = it->first;
+			const double dist2 = other_avatar->pos.getDist2(this->pos);
+			if(dist2 < nearest_dist2)
+			{
+				nearest_dist2 = dist2;
+				nearest_avatar = other_avatar.ptr();
+			}
+		}
+		if(nearest_avatar.nonNull())
+			this->look_target_avatar = nearest_avatar;
+	}
+
 	// Set rotation so the chatbot avatar looks at look_target_avatar.
 	const double FACE_TOWARDS_CHATTING_AV_DIST = 6.0;
 	if(look_target_avatar && (look_target_avatar->pos.getDist2(this->pos) < Maths::square(FACE_TOWARDS_CHATTING_AV_DIST)) && avatar)
@@ -715,8 +832,18 @@ Reference<LLMThread> ChatBot::createLLMThread(Server* server)
 		"\"tool_choice\": \"auto\",														\n";
 
 	
-	Reference<LLMThread> new_llm_thread = new LLMThread(server->config.AI_model_id);
-	new_llm_thread->base_prompt_json_escaped = web::Escaping::JSONEscape(server->config.shared_LLM_prompt_part + this->custom_prompt_part);
+	const std::string use_ai_model_id = this->ai_model_id.empty() ? server->config.AI_model_id : this->ai_model_id;
+	Reference<LLMThread> new_llm_thread = new LLMThread(use_ai_model_id);
+
+	std::string bot_prompt = server->config.shared_LLM_prompt_part;
+	if(!this->ai_personality_preset.empty())
+		bot_prompt += "\nBot personality preset: " + this->ai_personality_preset + "\n";
+	if(!this->ai_knowledge.empty())
+		bot_prompt += "\nBot private knowledge:\n" + this->ai_knowledge + "\n";
+	bot_prompt += this->custom_prompt_part;
+	new_llm_thread->base_prompt_json_escaped = web::Escaping::JSONEscape(bot_prompt);
+	new_llm_thread->temperature = this->ai_temperature;
+	new_llm_thread->max_tokens = this->ai_max_tokens;
 	new_llm_thread->tools_json = tools_json;
 	new_llm_thread->chatbot = this;
 
@@ -779,6 +906,24 @@ void ChatBot::writeToStream(RandomAccessOutStream& stream)
 	stream.writeUInt32(reactive_gesture_flags);
 	stream.writeFloat(reactive_gesture_cooldown_s);
 
+	stream.writeFloat(greeting_distance);
+	stream.writeFloat(farewell_distance);
+	stream.writeFloat(chat_radius);
+
+	::writeToStream(model_scale, stream);
+	stream.writeStringLengthFirst(ai_model_id);
+	stream.writeStringLengthFirst(ai_personality_preset);
+	stream.writeStringLengthFirst(ai_knowledge);
+	stream.writeFloat(ai_temperature);
+	stream.writeUInt32(ai_max_tokens);
+	stream.writeStringLengthFirst(audio_source_url);
+	stream.writeFloat(audio_volume);
+	stream.writeFloat(audio_radius);
+	stream.writeFloat(audio_activation_distance);
+	stream.writeFloat(audio_cooldown_s);
+	stream.writeUInt32(trigger_flags);
+	stream.writeStringLengthFirst(trigger_keywords);
+	stream.writeFloat(trigger_cooldown_s);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)(stream.getWriteIndex() - initial_write_index);
@@ -845,6 +990,30 @@ void readChatBotFromStream(RandomAccessInStream& stream, ChatBot& chatbot)
 		chatbot.reactive_gesture_URL = toURLString(stream.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
 		chatbot.reactive_gesture_flags = stream.readUInt32();
 		chatbot.reactive_gesture_cooldown_s = stream.readFloat();
+	}
+	if(stream.getReadIndex() < max_read_index)
+	{
+		chatbot.greeting_distance = stream.readFloat();
+		chatbot.farewell_distance = stream.readFloat();
+		chatbot.chat_radius = stream.readFloat();
+	}
+	if(stream.getReadIndex() < max_read_index)
+	{
+		chatbot.model_scale = readVec3FromStream<float>(stream);
+		chatbot.ai_model_id = stream.readStringLengthFirst(ChatBot::MAX_AI_MODEL_ID_SIZE);
+		chatbot.ai_personality_preset = stream.readStringLengthFirst(ChatBot::MAX_AI_PRESET_SIZE);
+		chatbot.ai_knowledge = stream.readStringLengthFirst(ChatBot::MAX_AI_KNOWLEDGE_SIZE);
+		chatbot.ai_temperature = stream.readFloat();
+		chatbot.ai_max_tokens = stream.readUInt32();
+		chatbot.audio_source_url = toURLString(stream.readStringLengthFirst(ChatBot::MAX_AUDIO_URL_SIZE));
+		chatbot.audio_volume = stream.readFloat();
+		chatbot.audio_radius = stream.readFloat();
+		chatbot.audio_activation_distance = stream.readFloat();
+		chatbot.audio_cooldown_s = stream.readFloat();
+		chatbot.trigger_flags = stream.readUInt32();
+		chatbot.trigger_keywords = stream.readStringLengthFirst(ChatBot::MAX_TRIGGER_KEYWORDS_SIZE);
+		chatbot.trigger_cooldown_s = stream.readFloat();
+		chatbot.clampAnimationSettings();
 	}
 
 

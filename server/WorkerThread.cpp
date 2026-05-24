@@ -1030,6 +1030,57 @@ static bool userHasObjectCreationPermissions(const WorldObject& ob, const UserID
 }
 
 
+static bool userHasChatBotEditPermissions(const ChatBot& bot, const UserID& user_id, ServerWorldState& connected_world)
+{
+	return user_id.valid() &&
+		((bot.owner_id == user_id) || isGodUser(user_id) || connectedToUsersWorld(user_id, connected_world));
+}
+
+
+static js::AABBox botPlacementAABB(const Vec3d& pos)
+{
+	const Vec4f p = pos.toVec4fPoint();
+	return js::AABBox(p - Vec4f(0.45f, 0.45f, 0.05f, 0.f), p + Vec4f(0.45f, 0.45f, 2.2f, 0.f));
+}
+
+
+static void writeChatBotClientInfoFields(const ChatBot& bot, RandomAccessOutStream& stream)
+{
+	stream.writeStringLengthFirst(bot.name);
+	stream.writeStringLengthFirst(bot.custom_prompt_part);
+	writeAvatarSettingsToStream(bot.avatar_settings, stream);
+	::writeToStream(bot.pos, stream);
+	stream.writeFloat(bot.heading);
+	stream.writeStringLengthFirst(bot.greeting_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.greeting_gesture_URL));
+	stream.writeFloat(bot.greeting_gesture_cooldown_s);
+	stream.writeStringLengthFirst(bot.idle_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.idle_gesture_URL));
+	stream.writeFloat(bot.idle_gesture_interval_s);
+	stream.writeStringLengthFirst(bot.reactive_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.reactive_gesture_URL));
+	stream.writeFloat(bot.reactive_gesture_cooldown_s);
+	stream.writeUInt32(bot.flags);
+	stream.writeFloat(bot.greeting_distance);
+	stream.writeFloat(bot.farewell_distance);
+	stream.writeFloat(bot.chat_radius);
+	::writeToStream(bot.model_scale, stream);
+	stream.writeStringLengthFirst(bot.ai_model_id);
+	stream.writeStringLengthFirst(bot.ai_personality_preset);
+	stream.writeStringLengthFirst(bot.ai_knowledge);
+	stream.writeFloat(bot.ai_temperature);
+	stream.writeUInt32(bot.ai_max_tokens);
+	stream.writeStringLengthFirst(toStdString(bot.audio_source_url));
+	stream.writeFloat(bot.audio_volume);
+	stream.writeFloat(bot.audio_radius);
+	stream.writeFloat(bot.audio_activation_distance);
+	stream.writeFloat(bot.audio_cooldown_s);
+	stream.writeUInt32(bot.trigger_flags);
+	stream.writeStringLengthFirst(bot.trigger_keywords);
+	stream.writeFloat(bot.trigger_cooldown_s);
+}
+
+
 // This is for editing the parcel itself.
 // NOTE: world state mutex should be locked before calling this method.
 static bool userHasParcelWritePermissions(const Parcel& parcel, const UserID& user_id, ServerWorldState& world_state)
@@ -3770,6 +3821,17 @@ void WorkerThread::doRun()
 							const Vec3d bot_pos = ::readVec3FromStream<double>(msg_buffer);
 							const float bot_heading = msg_buffer.readFloat();
 
+							bool have_permissions = false;
+							{
+								::WorldStateLock lock(world_state->mutex);
+								have_permissions = userHasObjectPlacementPermissionsForAABB(botPlacementAABB(bot_pos), bot_pos, client_user_id, *cur_world_state, lock);
+							}
+							if(!have_permissions)
+							{
+								writeErrorMessageToClient(socket, "You do not have permission to create a bot at this position.");
+								break;
+							}
+
 							ChatBotRef chatbot = new ChatBot();
 							{
 								::WorldStateLock lock(world_state->mutex);
@@ -3788,7 +3850,7 @@ void WorkerThread::doRun()
 								cur_world_state->getChatBots(lock)[chatbot->id] = chatbot;
 								cur_world_state->addChatBotAsDBDirty(chatbot, lock);
 
-								AvatarRef avatar = cur_world_state->createAndInsertAvatarForChatBot(world_state.ptr(), chatbot.ptr(), lock);
+								AvatarRef avatar = cur_world_state->createAndInsertAvatarForChatBot(world_state, chatbot.ptr(), lock);
 								chatbot->avatar_uid = avatar->uid;
 								chatbot->avatar = avatar;
 
@@ -3799,6 +3861,7 @@ void WorkerThread::doRun()
 							MessageUtils::initPacket(scratch_packet, Protocol::ChatBotCreated);
 							scratch_packet.writeUInt64(chatbot->id);
 							::writeToStream(chatbot->avatar_uid, scratch_packet);
+							writeChatBotClientInfoFields(*chatbot, scratch_packet);
 							MessageUtils::updatePacketLengthField(scratch_packet);
 							socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
 							socket->flush();
@@ -3815,70 +3878,256 @@ void WorkerThread::doRun()
 								break;
 							}
 
-							ChatBotRef chatbot;
+							const uint64 bot_id = msg_buffer.readUInt64();
+							const std::string name = msg_buffer.readStringLengthFirst(ChatBot::MAX_NAME_SIZE);
+							const std::string custom_prompt_part = msg_buffer.readStringLengthFirst(ChatBot::MAX_CUSTOM_PROMPT_PART_SIZE);
+							AvatarSettings avatar_settings;
+							readAvatarSettingsFromStream(msg_buffer, avatar_settings);
+
+							const std::string greeting_name = msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+							const URLString greeting_url = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+							const float greeting_cooldown = msg_buffer.readFloat();
+
+							const std::string idle_name = msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+							const URLString idle_url = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+							const float idle_interval = msg_buffer.readFloat();
+
+							const std::string reactive_name = msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+							const URLString reactive_url = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+							const float reactive_cooldown = msg_buffer.readFloat();
+							uint32 bot_flags = 0;
+							float greeting_distance = 6.f;
+							float farewell_distance = 10.f;
+							float chat_radius = 8.f;
+							Vec3f model_scale(1.f);
+							std::string ai_model_id;
+							std::string ai_personality_preset;
+							std::string ai_knowledge;
+							float ai_temperature = 0.7f;
+							uint32 ai_max_tokens = 0;
+							URLString audio_source_url;
+							float audio_volume = 1.f;
+							float audio_radius = 10.f;
+							float audio_activation_distance = 12.f;
+							float audio_cooldown_s = 0.f;
+							uint32 trigger_flags = ChatBot::TRIGGER_PROXIMITY_FLAG | ChatBot::TRIGGER_CHAT_FLAG;
+							std::string trigger_keywords;
+							float trigger_cooldown_s = 3.f;
+							if(!msg_buffer.endOfStream())
 							{
-								::WorldStateLock lock(world_state->mutex);
-								const uint64 bot_id = msg_buffer.readUInt64();
-								auto it = cur_world_state->getChatBots(lock).find(bot_id);
-								if(it != cur_world_state->getChatBots(lock).end())
-									chatbot = it->second;
+								bot_flags = msg_buffer.readUInt32();
+								greeting_distance = msg_buffer.readFloat();
+								farewell_distance = msg_buffer.readFloat();
+								chat_radius = msg_buffer.readFloat();
+							}
+							if(!msg_buffer.endOfStream())
+							{
+								model_scale = readVec3FromStream<float>(msg_buffer);
+								ai_model_id = msg_buffer.readStringLengthFirst(ChatBot::MAX_AI_MODEL_ID_SIZE);
+								ai_personality_preset = msg_buffer.readStringLengthFirst(ChatBot::MAX_AI_PRESET_SIZE);
+								ai_knowledge = msg_buffer.readStringLengthFirst(ChatBot::MAX_AI_KNOWLEDGE_SIZE);
+								ai_temperature = msg_buffer.readFloat();
+								ai_max_tokens = msg_buffer.readUInt32();
+								audio_source_url = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_AUDIO_URL_SIZE));
+								audio_volume = msg_buffer.readFloat();
+								audio_radius = msg_buffer.readFloat();
+								audio_activation_distance = msg_buffer.readFloat();
+								audio_cooldown_s = msg_buffer.readFloat();
+								trigger_flags = msg_buffer.readUInt32();
+								trigger_keywords = msg_buffer.readStringLengthFirst(ChatBot::MAX_TRIGGER_KEYWORDS_SIZE);
+								trigger_cooldown_s = msg_buffer.readFloat();
 							}
 
-							if(chatbot.isNull() || chatbot->owner_id != client_user_id)
+							bool updated = false;
 							{
-								writeErrorMessageToClient(socket, "Bot not found or no permission.");
+								::WorldStateLock lock(world_state->mutex);
+								auto it = cur_world_state->getChatBots(lock).find(bot_id);
+								if(it == cur_world_state->getChatBots(lock).end() || !userHasChatBotEditPermissions(*it->second, client_user_id, *cur_world_state))
+								{
+									writeErrorMessageToClient(socket, "Bot not found or no permission.");
+									break;
+								}
+
+								ChatBotRef chatbot = it->second;
+								chatbot->name = name;
+								chatbot->custom_prompt_part = custom_prompt_part;
+								chatbot->avatar_settings = avatar_settings;
+								chatbot->greeting_gesture_name = greeting_name;
+								chatbot->greeting_gesture_URL = greeting_url;
+								chatbot->greeting_gesture_cooldown_s = greeting_cooldown;
+								chatbot->idle_gesture_name = idle_name;
+								chatbot->idle_gesture_URL = idle_url;
+								chatbot->idle_gesture_interval_s = idle_interval;
+								chatbot->reactive_gesture_name = reactive_name;
+								chatbot->reactive_gesture_URL = reactive_url;
+								chatbot->reactive_gesture_cooldown_s = reactive_cooldown;
+								chatbot->flags = bot_flags;
+								chatbot->greeting_distance = greeting_distance;
+								chatbot->farewell_distance = farewell_distance;
+								chatbot->chat_radius = chat_radius;
+								chatbot->model_scale = model_scale;
+								chatbot->ai_model_id = ai_model_id;
+								chatbot->ai_personality_preset = ai_personality_preset;
+								chatbot->ai_knowledge = ai_knowledge;
+								chatbot->ai_temperature = ai_temperature;
+								chatbot->ai_max_tokens = ai_max_tokens;
+								chatbot->audio_source_url = audio_source_url;
+								chatbot->audio_volume = audio_volume;
+								chatbot->audio_radius = audio_radius;
+								chatbot->audio_activation_distance = audio_activation_distance;
+								chatbot->audio_cooldown_s = audio_cooldown_s;
+								chatbot->trigger_flags = trigger_flags;
+								chatbot->trigger_keywords = trigger_keywords;
+								chatbot->trigger_cooldown_s = trigger_cooldown_s;
+								chatbot->clampAnimationSettings();
+
+								if(chatbot->avatar.nonNull())
+								{
+									chatbot->avatar->avatar_settings = chatbot->avatar_settings;
+									chatbot->avatar->name = chatbot->name;
+									chatbot->avatar->other_dirty = true;
+								}
+
+								cur_world_state->addChatBotAsDBDirty(chatbot, lock);
+								world_state->markAsChanged();
+								updated = true;
+							}
+							if(updated)
+								conPrintIfNotFuzzing("Updated chatbot id=" + toString(bot_id));
+							break;
+						}
+					case Protocol::QueryUserBots:
+						{
+							conPrintIfNotFuzzing("QueryUserBots");
+							if(!client_user_id.valid())
+							{
+								writeErrorMessageToClient(socket, "Must be logged in.");
 								break;
 							}
 
-							// Read updated fields
-							chatbot->name              = msg_buffer.readStringLengthFirst(ChatBot::MAX_NAME_SIZE);
-							chatbot->custom_prompt_part = msg_buffer.readStringLengthFirst(ChatBot::MAX_CUSTOM_PROMPT_PART_SIZE);
-							readAvatarSettingsFromStream(msg_buffer, chatbot->avatar_settings);
-
-							chatbot->greeting_gesture_name       = msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
-							chatbot->greeting_gesture_URL        = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
-							chatbot->greeting_gesture_cooldown_s = msg_buffer.readFloat();
-
-							chatbot->idle_gesture_name           = msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
-							chatbot->idle_gesture_URL            = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
-							chatbot->idle_gesture_interval_s     = msg_buffer.readFloat();
-
-							chatbot->reactive_gesture_name       = msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
-							chatbot->reactive_gesture_URL        = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
-							chatbot->reactive_gesture_cooldown_s = msg_buffer.readFloat();
-
-							// Update avatar appearance
-							if(chatbot->avatar.nonNull())
+							std::vector<ChatBotRef> bots;
 							{
-								chatbot->avatar->avatar_settings = chatbot->avatar_settings;
-								chatbot->avatar->name = chatbot->name;
+								::WorldStateLock lock(world_state->mutex);
+								for(auto& it : cur_world_state->getChatBots(lock))
+									if(userHasChatBotEditPermissions(*it.second, client_user_id, *cur_world_state))
+										bots.push_back(it.second);
 							}
+
+							MessageUtils::initPacket(scratch_packet, Protocol::UserBotList);
+							scratch_packet.writeUInt32((uint32)bots.size());
+							for(const ChatBotRef& bot : bots)
+							{
+								scratch_packet.writeUInt64(bot->id);
+								::writeToStream(bot->avatar_uid, scratch_packet);
+								writeChatBotClientInfoFields(*bot, scratch_packet);
+							}
+							MessageUtils::updatePacketLengthField(scratch_packet);
+							socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+							socket->flush();
+							break;
+						}
+					case Protocol::MoveChatBot:
+						{
+							conPrintIfNotFuzzing("MoveChatBot");
+							if(!client_user_id.valid())
+							{
+								writeErrorMessageToClient(socket, "Must be logged in.");
+								break;
+							}
+							if(world_state->isInReadOnlyMode())
+							{
+								writeErrorMessageToClient(socket, "Server is in read-only mode.");
+								break;
+							}
+
+							const uint64 bot_id = msg_buffer.readUInt64();
+							const Vec3d bot_pos = ::readVec3FromStream<double>(msg_buffer);
+							const float bot_heading = msg_buffer.readFloat();
 
 							{
 								::WorldStateLock lock(world_state->mutex);
-								cur_world_state->addChatBotAsDBDirty(chatbot, lock);
+								auto it = cur_world_state->getChatBots(lock).find(bot_id);
+								if(it == cur_world_state->getChatBots(lock).end() || !userHasChatBotEditPermissions(*it->second, client_user_id, *cur_world_state))
+								{
+									writeErrorMessageToClient(socket, "Bot not found or no permission.");
+									break;
+								}
+								if(!userHasObjectPlacementPermissionsForAABB(botPlacementAABB(bot_pos), bot_pos, client_user_id, *cur_world_state, lock))
+								{
+									writeErrorMessageToClient(socket, "You do not have permission to move the bot to this position.");
+									break;
+								}
+
+								ChatBotRef bot = it->second;
+								bot->pos = bot_pos;
+								bot->heading = bot_heading;
+								if(bot->avatar.nonNull())
+								{
+									bot->avatar->pos = bot_pos;
+									bot->avatar->rotation = Vec3f(0, Maths::pi_2<float>(), bot_heading);
+									bot->avatar->transform_dirty = true;
+								}
+								cur_world_state->addChatBotAsDBDirty(bot, lock);
 								world_state->markAsChanged();
 							}
-							conPrintIfNotFuzzing("Updated chatbot id=" + toString(chatbot->id));
 							break;
 						}
 					case Protocol::DeleteChatBot:
 						{
 							conPrintIfNotFuzzing("DeleteChatBot");
 							if(!client_user_id.valid()) { writeErrorMessageToClient(socket, "Must be logged in."); break; }
+							if(world_state->isInReadOnlyMode())
+							{
+								writeErrorMessageToClient(socket, "Server is in read-only mode.");
+								break;
+							}
 
 							const uint64 bot_id = msg_buffer.readUInt64();
 							::WorldStateLock lock(world_state->mutex);
 							auto it = cur_world_state->getChatBots(lock).find(bot_id);
-							if(it != cur_world_state->getChatBots(lock).end() && it->second->owner_id == client_user_id)
+							if(it != cur_world_state->getChatBots(lock).end() && userHasChatBotEditPermissions(*it->second, client_user_id, *cur_world_state))
 							{
 								ChatBotRef bot = it->second;
-								// Remove avatar
 								if(bot->avatar.nonNull())
-									cur_world_state->avatars.erase(bot->avatar_uid);
+								{
+									bot->avatar->state = Avatar::State_Dead;
+									bot->avatar->other_dirty = true;
+								}
+								if(bot->database_key.valid())
+									world_state->db_records_to_delete.insert(bot->database_key);
 								cur_world_state->getChatBots(lock).erase(it);
 								world_state->markAsChanged();
 							}
+							else
+								writeErrorMessageToClient(socket, "Bot not found or no permission.");
+							break;
+						}
+					case Protocol::TestChatBotGesture:
+						{
+							conPrintIfNotFuzzing("TestChatBotGesture");
+							if(!client_user_id.valid())
+							{
+								writeErrorMessageToClient(socket, "Must be logged in.");
+								break;
+							}
+
+							const uint64 bot_id = msg_buffer.readUInt64();
+							const uint32 gesture_slot = msg_buffer.readUInt32();
+
+							::WorldStateLock lock(world_state->mutex);
+							auto it = cur_world_state->getChatBots(lock).find(bot_id);
+							if(it != cur_world_state->getChatBots(lock).end() && userHasChatBotEditPermissions(*it->second, client_user_id, *cur_world_state))
+							{
+								ChatBotRef bot = it->second;
+								if(gesture_slot == 0)
+									bot->queueManualGesturePlayback(bot->greeting_gesture_name, bot->greeting_gesture_URL, bot->greeting_gesture_flags);
+								else if(gesture_slot == 1)
+									bot->queueManualGesturePlayback(bot->idle_gesture_name, bot->idle_gesture_URL, bot->idle_gesture_flags);
+								else
+									bot->queueManualGesturePlayback(bot->reactive_gesture_name, bot->reactive_gesture_URL, bot->reactive_gesture_flags);
+							}
+							else
+								writeErrorMessageToClient(socket, "Bot not found or no permission.");
 							break;
 						}
 					default:

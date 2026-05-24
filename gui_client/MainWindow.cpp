@@ -43,7 +43,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "MeshBuilding.h"
 #include "MiniMap.h"
 #include "GearInventoryUI.h"
-#include "BotSettingsDialog.h"
+#include "BotEditorWidget.h"
 #include "PlayerPhysics.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
@@ -4484,11 +4484,101 @@ void MainWindow::on_actionAddBot_triggered()
 }
 
 
+void MainWindow::updateBotEditorPosition(double x, double y, double z)
+{
+	if(ui->botEditorWidget->isVisible())
+	{
+		ui->botEditorWidget->updatePosition(x, y, z);
+	}
+}
+
+
+void MainWindow::setBotList(const std::vector<UIInterface::BotListEntry>& bots)
+{
+	std::vector<BotEditorWidget::BotListEntry> widget_bots;
+	widget_bots.reserve(bots.size());
+	for(const UIInterface::BotListEntry& bot : bots)
+	{
+		BotEditorWidget::BotListEntry entry;
+		entry.bot_id = bot.bot_id;
+		entry.avatar_uid = bot.avatar_uid;
+		entry.name = bot.name;
+		widget_bots.push_back(entry);
+	}
+	ui->botEditorWidget->setBotList(widget_bots);
+}
+
+
+void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
+	const std::string& name, const std::string& avatar_url, const std::string& prompt,
+	double px, double py, double pz, double heading_deg,
+	const std::string& greeting_name, const std::string& greeting_url, double greeting_cooldown,
+	const std::string& idle_name, const std::string& idle_url, double idle_interval,
+	const std::string& reactive_name, const std::string& reactive_url, double reactive_cooldown,
+	uint32 flags, double greeting_distance, double farewell_distance, double chat_radius,
+	const Vec3f& model_scale,
+	const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, double ai_temperature, uint32 ai_max_tokens,
+	const std::string& audio_url, double audio_volume, double audio_radius, double audio_activation_distance, double audio_cooldown,
+	uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown)
+{
+	ui->botEditorWidget->init(&gui_client);
+
+	// Connect signals once
+	static bool connected = false;
+	if(!connected)
+	{
+		connect(ui->botEditorWidget, &BotEditorWidget::saveClicked,   this, &MainWindow::onBotEditorSave);
+		connect(ui->botEditorWidget, &BotEditorWidget::deleteClicked, this, &MainWindow::onBotEditorDelete);
+		connect(ui->botEditorWidget, &BotEditorWidget::cancelClicked, this, &MainWindow::onBotEditorCancel);
+		connect(ui->botEditorWidget, &BotEditorWidget::botSelected,   this, &MainWindow::onBotEditorBotSelected);
+		connected = true;
+	}
+
+	// Hide other editors, show bot editor
+	ui->objectEditor->hide();
+	ui->parcelEditor->hide();
+
+	// Set dock title to "Редактор ботов"
+	ui->editorDockWidget->setWindowTitle(
+		current_ui_language == RuntimeTranslation::UILanguage::Russian
+		? "Редактор ботов"
+		: "Bot Editor");
+
+	const double heading_deg_val = heading_deg * (180.0 / 3.14159265358979323846);
+	ui->botEditorWidget->setBot(bot_id, avatar_uid, name, avatar_url, prompt,
+		px, py, pz, heading_deg_val,
+		greeting_name, greeting_url, greeting_cooldown,
+		idle_name, idle_url, idle_interval,
+		reactive_name, reactive_url, reactive_cooldown,
+		flags, greeting_distance, farewell_distance, chat_radius,
+		model_scale,
+		ai_model_id, ai_personality_preset, ai_knowledge, ai_temperature, ai_max_tokens,
+		audio_url, audio_volume, audio_radius, audio_activation_distance, audio_cooldown,
+		trigger_flags, trigger_keywords, trigger_cooldown);
+
+	showEditorDockWidget();
+}
+
+
+void MainWindow::hideBotEditor()
+{
+	ui->botEditorWidget->clear(); // hides itself
+	ui->objectEditor->show();
+	ui->editorDockWidget->setWindowTitle(
+		current_ui_language == RuntimeTranslation::UILanguage::Russian ? "Редактор" : "Editor");
+}
+
+
+void MainWindow::onBotEditorSave()   { /* nothing extra needed - GUIClient call is in widget */ }
+void MainWindow::onBotEditorDelete() { hideBotEditor(); }
+void MainWindow::onBotEditorCancel() { hideBotEditor(); }
+void MainWindow::onBotEditorBotSelected(uint64 /*bot_id*/, const UID& avatar_uid) { gui_client.selectBotAvatar(avatar_uid); }
+
+
 void MainWindow::openBotSettingsDialog(uint64 bot_id)  // UIInterface override
 {
-	BotSettingsDialog* dlg = new BotSettingsDialog(this, &gui_client, bot_id);
-	dlg->setAttribute(Qt::WA_DeleteOnClose);
-	dlg->show();
+	(void)bot_id;
+	ui->editorDockWidget->show();
 }
 
 
@@ -6637,4 +6727,3 @@ int main(int argc, char *argv[])
 
 
 #endif // End #ifndef FUZZING
-
