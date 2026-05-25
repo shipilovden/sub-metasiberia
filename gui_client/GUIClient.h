@@ -288,6 +288,7 @@ public:
 	void moveBot(uint64 bot_id, const Vec3d& pos, float heading);
 	void testBotGesture(uint64 bot_id, uint32 gesture_slot);
 	void queryUserBots();
+	void updateBotAudio();
 	void selectBotAvatar(const UID& avatar_uid);
 	void updateBotListUI();
 	void gearItemClicked(const GearItemRef& item);
@@ -980,6 +981,9 @@ public:
 		uint32 trigger_flags = 3;
 		std::string trigger_keywords;
 		float trigger_cooldown = 3.f;
+		// Runtime audio state (client only, not serialised)
+		glare::AudioSourceRef audio_source;
+		std::string loaded_audio_url; // URL of currently loaded audio source
 	};
 	std::map<UID, uint64> avatar_uid_to_bot_id; // Maps chatbot avatar UID → chatbot id (for bot editor)
 	std::map<uint64, BotClientInfo> bot_infos;

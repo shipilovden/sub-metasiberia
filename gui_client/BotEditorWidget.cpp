@@ -589,7 +589,15 @@ void BotEditorWidget::sendUpdateBot()
 {
 	if(!gui_client || bot_id == 0) return;
 	AvatarSettings av;
-	av.model_url = toURLString(avatar_url_edit->text().toStdString());
+	{
+		std::string avatar_url = avatar_url_edit->text().toStdString();
+		if(!avatar_url.empty())
+		{
+			avatar_url = gui_client->uploadLocalFileForBot(avatar_url); // no-op if already sub://
+			avatar_url_edit->setText(QString::fromStdString(avatar_url));
+		}
+		av.model_url = toURLString(avatar_url);
+	}
 	const Vec3f model_scale((float)scale_x_spin->value(), (float)scale_y_spin->value(), (float)scale_z_spin->value());
 	av.pre_ob_to_world_matrix = Matrix4f::scaleMatrix(model_scale.x, model_scale.y, model_scale.z);
 	std::string audio_url = audio_url_edit->text().toStdString();

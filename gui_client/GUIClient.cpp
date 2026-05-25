@@ -8736,6 +8736,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 	updateAvatarGraphics(cur_time, dt, avatar_cam_angles, our_move_impulse_zero);
 
+	updateBotAudio();
 
 	// Set camera controller target transform (used for tracking and fixed-angle camera modes)
 	if(vehicle_controller_inside)
@@ -17336,14 +17337,44 @@ void GUIClient::mousePressed(MouseEvent& e)
 	else if(selected_bot_avatar_uid.valid() && selected_ob.isNull())
 	{
 		grabbed_axis = mouseOverAxisArrowOrRotArc(Vec2f((float)e.cursor_pos.x, (float)e.cursor_pos.y), this->grabbed_point_ws);
-		if(grabbed_axis >= NUM_AXIS_ARROWS) grabbed_axis = -1; // Translation only for bots
+		if(grabbed_axis > NUM_AXIS_ARROWS) grabbed_axis = -1; // Reject rotation arcs; keep 0-2=axis arrows, NUM_AXIS_ARROWS=XY-plane body drag
+
+		// Fallback: if no arrow grabbed, check if we clicked on the bot body → XY-plane drag
+		if(grabbed_axis < 0 && physics_world.nonNull())
+		{
+			const Vec4f ray_origin = cam_controller.getPosition().toVec4fPoint();
+			const Vec4f ray_dir    = getDirForPixelTrace(e.cursor_pos.x, e.cursor_pos.y);
+			RayTraceResult body_res;
+			physics_world->traceRay(ray_origin, ray_dir, 1.0e5f, JPH::BodyID(), body_res);
+			if(body_res.hit_object && body_res.hit_object->userdata_type == 3)
+			{
+				const Avatar* hit_av = static_cast<const Avatar*>(body_res.hit_object->userdata);
+				if(hit_av && hit_av->uid == selected_bot_avatar_uid)
+				{
+					grabbed_axis = NUM_AXIS_ARROWS; // XY-plane (horizontal) drag mode
+					Lock lock(world_state->mutex);
+					auto it = world_state->avatars.find(selected_bot_avatar_uid);
+					if(it != world_state->avatars.end())
+					{
+						const float bot_z = (float)it->second->pos.z;
+						const Planef h_plane(Vec4f(0, 0, bot_z, 1), Vec4f(0, 0, 1, 0));
+						const float t = h_plane.rayIntersect(ray_origin, ray_dir);
+						this->grabbed_point_ws = (t > 0.f) ? (ray_origin + ray_dir * t) : it->second->pos.toVec4fPoint();
+						this->ob_origin_at_grab = it->second->pos.toVec4fPoint();
+					}
+				}
+			}
+		}
 
 		if(grabbed_axis >= 0)
 		{
-			Lock lock(world_state->mutex);
-			auto it = world_state->avatars.find(selected_bot_avatar_uid);
-			if(it != world_state->avatars.end())
-				this->ob_origin_at_grab = it->second->pos.toVec4fPoint();
+			if(grabbed_axis < NUM_AXIS_ARROWS) // Axis arrow grab: set ob_origin_at_grab
+			{
+				Lock lock(world_state->mutex);
+				auto it = world_state->avatars.find(selected_bot_avatar_uid);
+				if(it != world_state->avatars.end())
+					this->ob_origin_at_grab = it->second->pos.toVec4fPoint();
+			}
 			ui_interface->setCamRotationOnMouseDragEnabled(false);
 		}
 	}
@@ -18230,6 +18261,41 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 			if(bot_it != avatar_uid_to_bot_id.end())
 				bot_infos[bot_it->second].pos = Vec3d(new_bot_pos[0], new_bot_pos[1], new_bot_pos[2]);
 			// Update position spinboxes in bot editor
+			if(ui_interface)
+				ui_interface->updateBotEditorPosition(new_bot_pos[0], new_bot_pos[1], new_bot_pos[2]);
+		}
+	}
+	else if(selected_bot_avatar_uid.valid() && selected_ob.isNull() && grabbed_axis == NUM_AXIS_ARROWS) // Bot XY-plane (body-click) drag
+	{
+		const Vec4f ray_origin = cam_controller.getPosition().toVec4fPoint();
+		const Vec4f ray_dir    = getDirForPixelTrace(mouse_event.cursor_pos.x, mouse_event.cursor_pos.y);
+		const float bot_z = ob_origin_at_grab[2];
+		const Planef h_plane(Vec4f(0, 0, bot_z, 1), Vec4f(0, 0, 1, 0));
+		const float t = h_plane.rayIntersect(ray_origin, ray_dir);
+		if(t > 0.f && t < 200.f)
+		{
+			const Vec4f new_pos_on_plane = ray_origin + ray_dir * t;
+			const Vec4f delta            = new_pos_on_plane - grabbed_point_ws;
+			Vec4f new_bot_pos            = ob_origin_at_grab + delta;
+			new_bot_pos[3] = 1.f;
+
+			GLObjectRef bot_gl_ob;
+			{
+				Lock lock(world_state->mutex);
+				auto it = world_state->avatars.find(selected_bot_avatar_uid);
+				if(it != world_state->avatars.end())
+				{
+					it->second->pos = Vec3d(new_bot_pos[0], new_bot_pos[1], new_bot_pos[2]);
+					bot_gl_ob = it->second->graphics.skinned_gl_ob;
+					if(bot_gl_ob.nonNull())
+						bot_gl_ob->ob_to_world_matrix = obToWorldMatrix(*it->second);
+				}
+			}
+			if(bot_gl_ob.nonNull())
+				opengl_engine->updateObjectTransformData(*bot_gl_ob);
+			auto bot_it = avatar_uid_to_bot_id.find(selected_bot_avatar_uid);
+			if(bot_it != avatar_uid_to_bot_id.end())
+				bot_infos[bot_it->second].pos = Vec3d(new_bot_pos[0], new_bot_pos[1], new_bot_pos[2]);
 			if(ui_interface)
 				ui_interface->updateBotEditorPosition(new_bot_pos[0], new_bot_pos[1], new_bot_pos[2]);
 		}
@@ -20519,6 +20585,88 @@ void GUIClient::queryUserBots()
 	MessageUtils::initPacket(scratch_packet, Protocol::QueryUserBots);
 	MessageUtils::updatePacketLengthField(scratch_packet);
 	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::updateBotAudio()
+{
+	if(!audio_engine.isInitialised())
+		return;
+
+	const Vec3d cam_pos = cam_controller.getFirstPersonPosition();
+
+	for(auto& pair : bot_infos)
+	{
+		BotClientInfo& bot = pair.second;
+
+		const bool has_audio  = !bot.audio_url.empty();
+		const bool autoplay   = (bot.flags & 32) != 0; // BOT_AUDIO_AUTOPLAY_FLAG
+
+		if(!has_audio || !autoplay)
+		{
+			if(bot.audio_source.nonNull())
+			{
+				audio_engine.removeSource(bot.audio_source);
+				bot.audio_source = nullptr;
+				bot.loaded_audio_url.clear();
+			}
+			continue;
+		}
+
+		const float dist     = (float)bot.pos.getDist(cam_pos);
+		const bool in_range  = (bot.audio_activation_distance <= 0.f) || (dist < bot.audio_activation_distance);
+
+		if(in_range)
+		{
+			if(bot.audio_source.isNull() || bot.loaded_audio_url != bot.audio_url)
+			{
+				if(bot.audio_source.nonNull())
+				{
+					audio_engine.removeSource(bot.audio_source);
+					bot.audio_source = nullptr;
+					bot.loaded_audio_url.clear();
+				}
+
+				if(resource_manager->isFileForURLPresent(URLString(bot.audio_url)))
+				{
+					glare::AudioEngine::AddSourceFromStreamingSoundFileParams params;
+					params.sound_file_path = resource_manager->pathForURL(URLString(bot.audio_url));
+					params.source_volume   = bot.audio_volume;
+					params.global_time     = world_state->getCurrentGlobalTime();
+					params.looping         = (bot.flags & 8) != 0;  // BOT_AUDIO_LOOP_FLAG
+					params.paused          = false;
+
+					glare::AudioSourceRef src = audio_engine.addSourceFromStreamingSoundFile(params, bot.pos.toVec4fPoint());
+					if(src.nonNull())
+					{
+						src->spatial_type = ((bot.flags & 16) != 0) // BOT_AUDIO_SPATIAL_FLAG
+							? glare::AudioSource::SourceSpatialType_Spatial
+							: glare::AudioSource::SourceSpatialType_NonSpatial;
+						audio_engine.sourcePositionUpdated(*src);
+						audio_engine.sourceSpatialSettingsUpdated(*src);
+						bot.audio_source     = src;
+						bot.loaded_audio_url = bot.audio_url;
+					}
+				}
+				else
+				{
+					DownloadingResourceInfo dl_info;
+					startDownloadingResource(URLString(bot.audio_url), bot.pos.toVec4fPoint(), /*importance_factor=*/1.f, dl_info);
+				}
+			}
+			else if(bot.audio_source.nonNull())
+			{
+				bot.audio_source->pos = bot.pos.toVec4fPoint();
+				audio_engine.sourcePositionUpdated(*bot.audio_source);
+			}
+		}
+		else if(bot.audio_source.nonNull())
+		{
+			audio_engine.removeSource(bot.audio_source);
+			bot.audio_source = nullptr;
+			bot.loaded_audio_url.clear();
+		}
+	}
 }
 
 
