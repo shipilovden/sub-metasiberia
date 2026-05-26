@@ -82,6 +82,26 @@ void LLMThread::doRun()
 			model.api_key_credential_name = "xai_api_key";
 			models.push_back(model);
 		}
+		{
+			AIModel model;
+			model.id_string = "anthropic/claude-opus-4-7";
+			model.api_id_string = "claude-opus-4-7-20250514";
+			model.name = "Claude Opus 4.7";
+			model.description = "Anthropic's most powerful model.";
+			model.api_domain = "api.anthropic.com";
+			model.api_key_credential_name = "anthropic_api_key";
+			models.push_back(model);
+		}
+		{
+			AIModel model;
+			model.id_string = "anthropic/claude-sonnet-4-6";
+			model.api_id_string = "claude-sonnet-4-6-20250514";
+			model.name = "Claude Sonnet 4.6";
+			model.description = "Anthropic's balanced model - high capability with good speed.";
+			model.api_domain = "api.anthropic.com";
+			model.api_key_credential_name = "anthropic_api_key";
+			models.push_back(model);
+		}
 
 		AIModel cur_ai_model;
 		for(size_t i=0; i<models.size(); ++i)
@@ -362,18 +382,28 @@ void LLMThread::trimChatMessageHistory()
 
 Reference<HTTPClient> LLMThread::createHTTPClient(const AIModel& cur_ai_model)
 {
-	const auto res = credentials->creds.find(cur_ai_model.api_key_credential_name);
-	if(res == credentials->creds.end())
-		throw glare::Exception("ERROR: WorkerThread::createHTTPClient(): couldn't find credentials '" + cur_ai_model.api_key_credential_name + "'");
-	const std::string api_key = res->second;
+	std::string api_key;
+	if(!api_key_override.empty())
+	{
+		api_key = api_key_override;
+	}
+	else
+	{
+		const auto res = credentials->creds.find(cur_ai_model.api_key_credential_name);
+		if(res == credentials->creds.end())
+			throw glare::Exception("ERROR: WorkerThread::createHTTPClient(): couldn't find credentials '" + cur_ai_model.api_key_credential_name + "'");
+		api_key = res->second;
+	}
 
-	conPrint("Making new HTTP connection to '" + cur_ai_model.api_domain + "'...");
+	const std::string api_domain = api_endpoint_override.empty() ? cur_ai_model.api_domain : api_endpoint_override;
+
+	conPrint("Making new HTTP connection to '" + api_domain + "'...");
 
 	Reference<HTTPClient> http_client = new HTTPClient();
 	http_client->max_socket_buffer_size = 1024 * 1024; // Can hit the limit with the default 2^16 size, so increase it.
 	http_client->enable_TCP_nodelay = true; // Since we are doing realtime chat, we want to send off messages without delay.
 	
-	if(cur_ai_model.api_domain == "api.anthropic.com")
+	if(cur_ai_model.api_domain == "api.anthropic.com" || api_domain == "api.anthropic.com")
 	{
 		http_client->additional_headers.push_back("x-api-key: " + api_key);
 		http_client->additional_headers.push_back("anthropic-version: 2023-06-01"); // See https://docs.anthropic.com/en/api/versioning
@@ -384,7 +414,7 @@ Reference<HTTPClient> LLMThread::createHTTPClient(const AIModel& cur_ai_model)
 		http_client->additional_headers.push_back("Authorization: Bearer " + api_key);
 	}
 
-	http_client->connectAndEnableKeepAlive("https", cur_ai_model.api_domain, /*port=*/-1);
+	http_client->connectAndEnableKeepAlive("https", api_domain, /*port=*/-1);
 
 	return http_client;
 }

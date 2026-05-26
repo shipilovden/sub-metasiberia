@@ -49,7 +49,8 @@ static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, std::s
 	uint32& greeting_gesture_flags, uint32& idle_gesture_flags, uint32& reactive_gesture_flags,
 	std::string& fallback_message,
 	std::string& surprise_name, std::string& surprise_url, uint32& surprise_flags, float& surprise_cooldown,
-	std::string& acknowledge_name, std::string& acknowledge_url, uint32& acknowledge_flags, float& acknowledge_cooldown)
+	std::string& acknowledge_name, std::string& acknowledge_url, uint32& acknowledge_flags, float& acknowledge_cooldown,
+	uint32& use_action_type, std::string& use_action_param, std::string& api_key, std::string& api_endpoint)
 {
 	name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 	prompt = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
@@ -100,6 +101,13 @@ static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, std::s
 		acknowledge_url      = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 		acknowledge_flags    = msg_buffer.readUInt32();
 		acknowledge_cooldown = msg_buffer.readFloat();
+	}
+	if(!msg_buffer.endOfStream())
+	{
+		use_action_type  = msg_buffer.readUInt32();
+		use_action_param = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		api_key          = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		api_endpoint     = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 	}
 }
 
@@ -1300,7 +1308,8 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 					msg->greeting_gesture_flags, msg->idle_gesture_flags, msg->reactive_gesture_flags,
 					msg->fallback_message,
 					msg->surprise_name, msg->surprise_url, msg->surprise_flags, msg->surprise_cooldown,
-					msg->acknowledge_name, msg->acknowledge_url, msg->acknowledge_flags, msg->acknowledge_cooldown);
+					msg->acknowledge_name, msg->acknowledge_url, msg->acknowledge_flags, msg->acknowledge_cooldown,
+					msg->use_action_type, msg->use_action_param, msg->api_key, msg->api_endpoint);
 			}
 			out_msg_queue->enqueue(msg);
 			break;
@@ -1327,7 +1336,8 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 					info.greeting_gesture_flags, info.idle_gesture_flags, info.reactive_gesture_flags,
 					info.fallback_message,
 					info.surprise_name, info.surprise_url, info.surprise_flags, info.surprise_cooldown,
-					info.acknowledge_name, info.acknowledge_url, info.acknowledge_flags, info.acknowledge_cooldown);
+					info.acknowledge_name, info.acknowledge_url, info.acknowledge_flags, info.acknowledge_cooldown,
+					info.use_action_type, info.use_action_param, info.api_key, info.api_endpoint);
 				msg->bots.push_back(info);
 			}
 			out_msg_queue->enqueue(msg);

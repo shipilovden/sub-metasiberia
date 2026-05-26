@@ -135,7 +135,9 @@ private slots:;
 		uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
 		const std::string& fallback_message,
 		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
-		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown) override;
+		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown,
+		uint32 use_action_type, const std::string& use_action_param,
+		const std::string& api_key, const std::string& api_endpoint) override;
 	virtual void hideBotEditor() override;
 private slots:
 	void onBotEditorSave();

@@ -18,6 +18,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "LuaHTTPRequestManager.h"
 #include "WorldMaintenance.h"
 #include "LLMThread.h"
+#include "ChatBot.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
 #include "../shared/MessageUtils.h"
@@ -773,6 +774,35 @@ int main(int argc, char *argv[])
 							// Execute doOnUserUsedObject event handler in any scripts that are listening for onUserUsedObject for this object
 							if(ob->event_handlers)
 								ob->event_handlers->executeOnUserUsedObjectHandlers(/*avatar_uid=*/used_msg->avatar_uid, ob->uid, world_lock);
+						}
+					}
+					else if(dynamic_cast<UserUsedBotThreadMessage*>(msg.ptr()))
+					{
+						const UserUsedBotThreadMessage* used_msg = static_cast<UserUsedBotThreadMessage*>(msg.ptr());
+
+						WorldStateLock world_lock(server.world_state->mutex);
+
+						// Find user avatar
+						AvatarRef user_avatar;
+						{
+							auto av_it = used_msg->world->getAvatars(world_lock).find(used_msg->user_avatar_uid);
+							if(av_it != used_msg->world->getAvatars(world_lock).end())
+								user_avatar = av_it->second;
+						}
+
+						if(user_avatar.nonNull())
+						{
+							for(auto& bot_it : used_msg->world->getChatBots(world_lock))
+							{
+								ChatBotRef bot = bot_it.second;
+								if(bot->avatar_uid == used_msg->bot_avatar_uid)
+								{
+									ChatBot::EventHandlerResults res = bot->processUserUsedBot(user_avatar, &server, world_lock);
+									if(res.new_llm_thread)
+										server.llm_thread_manager.addThread(res.new_llm_thread);
+									break;
+								}
+							}
 						}
 					}
 					else if(dynamic_cast<UserTouchedObjectThreadMessage*>(msg.ptr()))

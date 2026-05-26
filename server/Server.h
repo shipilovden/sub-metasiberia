@@ -38,6 +38,14 @@ public:
 	UID object_uid;
 };
 
+class UserUsedBotThreadMessage : public ThreadMessage
+{
+public:
+	UID user_avatar_uid;  // UID of the user's avatar
+	UID bot_avatar_uid;   // UID of the bot avatar that was used
+	Reference<ServerWorldState> world;
+};
+
 class UserTouchedObjectThreadMessage : public ThreadMessage
 {
 public:

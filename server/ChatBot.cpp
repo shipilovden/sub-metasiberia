@@ -45,6 +45,7 @@ ChatBot::ChatBot()
 	surprise_gesture_cooldown_s(15.f),
 	acknowledge_gesture_flags(0),
 	acknowledge_gesture_cooldown_s(10.f),
+	use_action_type(USE_ACTION_LLM),
 	greeting_distance(6.f),
 	farewell_distance(10.f),
 	chat_radius(8.f),
@@ -255,6 +256,56 @@ void ChatBot::queueManualGesturePlayback(const std::string& gesture_name, const 
 }
 
 
+ChatBot::EventHandlerResults ChatBot::processUserUsedBot(AvatarRef user_avatar, Server* server, WorldStateLock& lock)
+{
+	EventHandlerResults res;
+	if(isDisabled())
+		return res;
+	if(!BitUtils::isBitSet(trigger_flags, TRIGGER_USE_ACTION_FLAG))
+		return res;
+
+	switch(use_action_type)
+	{
+		case USE_ACTION_LLM:
+		{
+			if(!llm_thread)
+			{
+				this->llm_thread = createLLMThread(server);
+				res.new_llm_thread = this->llm_thread;
+			}
+			SendAIChatPostContent* send_msg = new SendAIChatPostContent();
+			send_msg->message = user_avatar->getUseName() + " interacted with you.";
+			llm_thread->getMessageQueue().enqueue(send_msg);
+			time_since_last_LLM_activity.reset();
+			break;
+		}
+		case USE_ACTION_SAY_TEXT:
+		{
+			if(!use_action_param.empty())
+				sendChatMessage(use_action_param, server, lock);
+			break;
+		}
+		case USE_ACTION_GESTURE:
+		{
+			if(use_action_param == "greeting")
+				playGestureNow(greeting_gesture_name, greeting_gesture_URL, greeting_gesture_flags, server);
+			else if(use_action_param == "idle")
+				playGestureNow(idle_gesture_name, idle_gesture_URL, idle_gesture_flags, server);
+			else if(use_action_param == "reactive")
+				playGestureNow(reactive_gesture_name, reactive_gesture_URL, reactive_gesture_flags, server);
+			else if(use_action_param == "surprise")
+				playGestureNow(surprise_gesture_name, surprise_gesture_URL, surprise_gesture_flags, server);
+			else if(use_action_param == "acknowledge")
+				playGestureNow(acknowledge_gesture_name, acknowledge_gesture_URL, acknowledge_gesture_flags, server);
+			break;
+		}
+		default:
+			break;
+	}
+	return res;
+}
+
+
 bool ChatBot::canTriggerTimer(const Timer& timer, float min_interval_s) const
 {
 	if(min_interval_s <= 0.f)
@@ -338,6 +389,13 @@ void ChatBot::clampAnimationSettings()
 	model_scale.x = myClamp(model_scale.x, 0.05f, 20.f);
 	model_scale.y = myClamp(model_scale.y, 0.05f, 20.f);
 	model_scale.z = myClamp(model_scale.z, 0.05f, 20.f);
+
+	if(use_action_param.size() > MAX_USE_ACTION_PARAM_SIZE)
+		use_action_param.resize(MAX_USE_ACTION_PARAM_SIZE);
+	if(api_key.size() > MAX_API_KEY_SIZE)
+		api_key.resize(MAX_API_KEY_SIZE);
+	if(api_endpoint.size() > MAX_API_ENDPOINT_SIZE)
+		api_endpoint.resize(MAX_API_ENDPOINT_SIZE);
 
 	if(ai_model_id.size() > MAX_AI_MODEL_ID_SIZE)
 		ai_model_id.resize(MAX_AI_MODEL_ID_SIZE);
@@ -454,6 +512,10 @@ void ChatBot::handleLLMChatResponseDone(Server* server, WorldStateLock& world_lo
 	if(!total_llm_response.empty()) // total_llm_response may be empty when doing tool calls.
 	{
 		sendChatMessage(total_llm_response, server, world_lock);
+	}
+	else if(!fallback_message.empty())
+	{
+		sendChatMessage(fallback_message, server, world_lock);
 	}
 
 	total_llm_response.clear();
@@ -845,11 +907,18 @@ Reference<LLMThread> ChatBot::createLLMThread(Server* server)
 	if(!this->ai_knowledge.empty())
 		bot_prompt += "\nBot private knowledge:\n" + this->ai_knowledge + "\n";
 	bot_prompt += this->custom_prompt_part;
+
+	// Template variable substitution
+	bot_prompt = StringUtils::replaceAll(bot_prompt, "{bot_name}", this->name);
+	bot_prompt = StringUtils::replaceAll(bot_prompt, "{world_name}", world ? world->details.name : std::string(""));
+
 	new_llm_thread->base_prompt_json_escaped = web::Escaping::JSONEscape(bot_prompt);
 	new_llm_thread->temperature = this->ai_temperature;
 	new_llm_thread->max_tokens = this->ai_max_tokens;
 	new_llm_thread->tools_json = tools_json;
 	new_llm_thread->chatbot = this;
+	new_llm_thread->api_key_override      = this->api_key;
+	new_llm_thread->api_endpoint_override = this->api_endpoint;
 
 	new_llm_thread->out_msg_queue = &server->message_queue;
 	new_llm_thread->credentials = &server->world_state->server_credentials;
@@ -939,6 +1008,12 @@ void ChatBot::writeToStream(RandomAccessOutStream& stream)
 	stream.writeStringLengthFirst(acknowledge_gesture_URL);
 	stream.writeUInt32(acknowledge_gesture_flags);
 	stream.writeFloat(acknowledge_gesture_cooldown_s);
+
+	// Block 4: use action, per-bot API key/endpoint
+	stream.writeUInt32(use_action_type);
+	stream.writeStringLengthFirst(use_action_param);
+	stream.writeStringLengthFirst(api_key);
+	stream.writeStringLengthFirst(api_endpoint);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)(stream.getWriteIndex() - initial_write_index);
@@ -1041,6 +1116,13 @@ void readChatBotFromStream(RandomAccessInStream& stream, ChatBot& chatbot)
 		chatbot.acknowledge_gesture_URL   = toURLString(stream.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
 		chatbot.acknowledge_gesture_flags = stream.readUInt32();
 		chatbot.acknowledge_gesture_cooldown_s = stream.readFloat();
+	}
+	if(stream.getReadIndex() < max_read_index)
+	{
+		chatbot.use_action_type  = stream.readUInt32();
+		chatbot.use_action_param = stream.readStringLengthFirst(ChatBot::MAX_USE_ACTION_PARAM_SIZE);
+		chatbot.api_key          = stream.readStringLengthFirst(ChatBot::MAX_API_KEY_SIZE);
+		chatbot.api_endpoint     = stream.readStringLengthFirst(ChatBot::MAX_API_ENDPOINT_SIZE);
 	}
 
 

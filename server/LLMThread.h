@@ -164,6 +164,8 @@ public:
 	std::string tools_json;
 	float temperature;
 	uint32 max_tokens; // 0 means provider default.
+	std::string api_key_override;      // If non-empty, overrides server credentials for this bot
+	std::string api_endpoint_override; // If non-empty, use as API domain instead of model default
 
 	LLMChatMessage current_assistant_response; // Accumulated complete response from the LLM
 

@@ -11454,6 +11454,10 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			info.acknowledge_url    = m->acknowledge_url;
 			info.acknowledge_flags  = m->acknowledge_flags;
 			info.acknowledge_cooldown = m->acknowledge_cooldown;
+			info.use_action_type  = m->use_action_type;
+			info.use_action_param = m->use_action_param;
+			info.api_key          = m->api_key;
+			info.api_endpoint     = m->api_endpoint;
 			updateBotListUI();
 			selectBotAvatar(m->avatar_uid);
 		}
@@ -11513,6 +11517,10 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				bot_info.acknowledge_url    = info.acknowledge_url;
 				bot_info.acknowledge_flags  = info.acknowledge_flags;
 				bot_info.acknowledge_cooldown = info.acknowledge_cooldown;
+				bot_info.use_action_type  = info.use_action_type;
+				bot_info.use_action_param = info.use_action_param;
+				bot_info.api_key          = info.api_key;
+				bot_info.api_endpoint     = info.api_endpoint;
 			}
 			updateBotListUI();
 		}
@@ -18047,7 +18055,12 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 			else if(results.hit_object->userdata && results.hit_object->userdata_type == 3) // If we hit an avatar:
 			{
 				const Avatar* avatar = (const Avatar*)results.hit_object->userdata;
-				if(avatar && !avatar->graphics.current_gesture_name.empty())
+				if(avatar && avatar->isChatBotAvatar())
+				{
+					ob_info_ui.showMessage(cursor_is_mouse_cursor ? "Press [E] to interact" : "Press [A] to interact", cursor_gl_coords);
+					show_mouseover_info_ui = true;
+				}
+				else if(avatar && !avatar->graphics.current_gesture_name.empty())
 				{
 					ob_info_ui.showMessage(cursor_is_mouse_cursor ? "Press [E] to join gesture" : "Press [A] to join gesture", cursor_gl_coords);
 					show_mouseover_info_ui = true;
@@ -19913,7 +19926,15 @@ void GUIClient::useActionTriggered(bool use_mouse_cursor)
 			{
 				const Avatar* hit_avatar = (const Avatar*)results.hit_object->userdata;
 
-				if(hit_avatar && !hit_avatar->graphics.current_gesture_name.empty()) // If the avatar is performing a gesture:
+				if(hit_avatar && hit_avatar->isChatBotAvatar() && client_thread.nonNull())
+				{
+					// Send UserUsedBotMessage so the server can trigger the bot's use action
+					MessageUtils::initPacket(scratch_packet, Protocol::UserUsedBotMessage);
+					writeToStream(hit_avatar->uid, scratch_packet);
+					MessageUtils::updatePacketLengthField(scratch_packet);
+					enqueueMessageToSend(*client_thread, scratch_packet);
+				}
+				else if(hit_avatar && !hit_avatar->graphics.current_gesture_name.empty()) // If the avatar is performing a gesture:
 				{
 					// Perform the same gesture on our avatar.
 					performGestureOnOurAvatar(
@@ -20362,7 +20383,9 @@ void GUIClient::selectBotAvatar(const UID& avatar_uid)
 			info.greeting_gesture_flags, info.idle_gesture_flags, info.reactive_gesture_flags,
 			info.fallback_message,
 			info.surprise_name, info.surprise_url, info.surprise_flags, info.surprise_cooldown,
-			info.acknowledge_name, info.acknowledge_url, info.acknowledge_flags, info.acknowledge_cooldown);
+			info.acknowledge_name, info.acknowledge_url, info.acknowledge_flags, info.acknowledge_cooldown,
+			info.use_action_type, info.use_action_param,
+			info.api_key, info.api_endpoint);
 		ui_interface->showEditorDockWidget();
 		ui_interface->setObjectEditorEnabled(false);
 	}
@@ -20394,7 +20417,9 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
 	const std::string& fallback_message,
 	const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, float surprise_cooldown,
-	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, float acknowledge_cooldown)
+	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, float acknowledge_cooldown,
+	uint32 use_action_type, const std::string& use_action_param,
+	const std::string& api_key, const std::string& api_endpoint)
 {
 	BotClientInfo& info = bot_infos[bot_id];
 	AvatarSettings use_avatar_settings = avatar_settings;
@@ -20445,6 +20470,10 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	info.acknowledge_url    = acknowledge_url;
 	info.acknowledge_flags  = acknowledge_flags;
 	info.acknowledge_cooldown = acknowledge_cooldown;
+	info.use_action_type  = use_action_type;
+	info.use_action_param = use_action_param;
+	info.api_key          = api_key;
+	info.api_endpoint     = api_endpoint;
 
 	for(auto& pair : avatar_uid_to_bot_id)
 	{
@@ -20536,6 +20565,10 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	scratch_packet.writeStringLengthFirst(acknowledge_url);
 	scratch_packet.writeUInt32(acknowledge_flags);
 	scratch_packet.writeFloat(acknowledge_cooldown);
+	scratch_packet.writeUInt32(use_action_type);
+	scratch_packet.writeStringLengthFirst(use_action_param);
+	scratch_packet.writeStringLengthFirst(api_key);
+	scratch_packet.writeStringLengthFirst(api_endpoint);
 	MessageUtils::updatePacketLengthField(scratch_packet);
 	enqueueMessageToSend(*client_thread, scratch_packet);
 }

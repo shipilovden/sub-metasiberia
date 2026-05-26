@@ -1091,6 +1091,11 @@ static void writeChatBotClientInfoFields(const ChatBot& bot, RandomAccessOutStre
 	stream.writeStringLengthFirst(toStdString(bot.acknowledge_gesture_URL));
 	stream.writeUInt32(bot.acknowledge_gesture_flags);
 	stream.writeFloat(bot.acknowledge_gesture_cooldown_s);
+	// Block 4: use action, per-bot API key/endpoint
+	stream.writeUInt32(bot.use_action_type);
+	stream.writeStringLengthFirst(bot.use_action_param);
+	stream.writeStringLengthFirst(bot.api_key);
+	stream.writeStringLengthFirst(bot.api_endpoint);
 }
 
 
@@ -3320,6 +3325,20 @@ void WorkerThread::doRun()
 
 							break;
 						}
+					case Protocol::UserUsedBotMessage:
+						{
+							conPrintIfNotFuzzing("Received UserUsedBotMessage msg.");
+
+							const UID bot_avatar_uid = readUIDFromStream(msg_buffer);
+
+							Reference<UserUsedBotThreadMessage> msg = new UserUsedBotThreadMessage();
+							msg->world = cur_world_state;
+							msg->user_avatar_uid = client_avatar_uid;
+							msg->bot_avatar_uid  = bot_avatar_uid;
+							server->enqueueMsg(msg);
+
+							break;
+						}
 					case Protocol::UserTouchedObjectMessage:
 						{
 							conPrintIfNotFuzzing("Received UserTouchedObjectMessage msg.");
@@ -3977,6 +3996,17 @@ void WorkerThread::doRun()
 								acknowledge_flags    = msg_buffer.readUInt32();
 								acknowledge_cooldown = msg_buffer.readFloat();
 							}
+							uint32 use_action_type = ChatBot::USE_ACTION_LLM;
+							std::string use_action_param;
+							std::string api_key;
+							std::string api_endpoint;
+							if(!msg_buffer.endOfStream())
+							{
+								use_action_type  = msg_buffer.readUInt32();
+								use_action_param = msg_buffer.readStringLengthFirst(ChatBot::MAX_USE_ACTION_PARAM_SIZE);
+								api_key          = msg_buffer.readStringLengthFirst(ChatBot::MAX_API_KEY_SIZE);
+								api_endpoint     = msg_buffer.readStringLengthFirst(ChatBot::MAX_API_ENDPOINT_SIZE);
+							}
 
 							bool updated = false;
 							{
@@ -4031,6 +4061,10 @@ void WorkerThread::doRun()
 								chatbot->acknowledge_gesture_URL       = acknowledge_url;
 								chatbot->acknowledge_gesture_flags     = acknowledge_flags;
 								chatbot->acknowledge_gesture_cooldown_s = acknowledge_cooldown;
+								chatbot->use_action_type  = use_action_type;
+								chatbot->use_action_param = use_action_param;
+								chatbot->api_key          = api_key;
+								chatbot->api_endpoint     = api_endpoint;
 								chatbot->clampAnimationSettings();
 
 								if(chatbot->avatar.nonNull())

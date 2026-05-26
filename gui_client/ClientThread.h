@@ -246,6 +246,10 @@ public:
 	std::string acknowledge_url;
 	uint32 acknowledge_flags = 0;
 	float  acknowledge_cooldown = 10.f;
+	uint32 use_action_type = 0;
+	std::string use_action_param;
+	std::string api_key;
+	std::string api_endpoint;
 };
 class UserBotListMessage : public ThreadMessage
 {
@@ -299,6 +303,10 @@ public:
 		std::string acknowledge_url;
 		uint32 acknowledge_flags = 0;
 		float  acknowledge_cooldown = 10.f;
+		uint32 use_action_type = 0;
+		std::string use_action_param;
+		std::string api_key;
+		std::string api_endpoint;
 	};
 	std::vector<BotInfo> bots;
 };

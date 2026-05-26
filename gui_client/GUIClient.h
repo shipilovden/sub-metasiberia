@@ -286,7 +286,9 @@ public:
 		uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
 		const std::string& fallback_message,
 		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, float surprise_cooldown,
-		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, float acknowledge_cooldown);
+		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, float acknowledge_cooldown,
+		uint32 use_action_type, const std::string& use_action_param,
+		const std::string& api_key, const std::string& api_endpoint);
 	void deleteBot(uint64 bot_id);
 	void deleteBotImmediate(uint64 bot_id, const UID& avatar_uid); // Delete bot and remove from scene immediately
 	void moveBot(uint64 bot_id, const Vec3d& pos, float heading);
@@ -997,6 +999,10 @@ public:
 		std::string acknowledge_url;
 		uint32 acknowledge_flags = 0;
 		float  acknowledge_cooldown = 10.f;
+		uint32 use_action_type = 0;
+		std::string use_action_param;
+		std::string api_key;
+		std::string api_endpoint;
 		// Runtime audio state (client only, not serialised)
 		glare::AudioSourceRef audio_source;
 		std::string loaded_audio_url; // URL of currently loaded audio source

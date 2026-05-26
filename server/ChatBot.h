@@ -92,6 +92,9 @@ public:
 	};
 	ThinkResults think(Server* server, WorldStateLock& world_lock);
 
+	// Player pressed E on this bot avatar.
+	[[nodiscard]] EventHandlerResults processUserUsedBot(AvatarRef user_avatar, Server* server, WorldStateLock& lock);
+
 	// Queue a test gesture playback request. Executed in think() on the main server loop.
 	void queueManualGesturePlayback(const std::string& gesture_name, const URLString& gesture_URL, uint32 gesture_flags);
 	void clampAnimationSettings();
@@ -151,6 +154,21 @@ public:
 
 	static const int MAX_FALLBACK_MSG_SIZE = 500;
 	std::string fallback_message;
+
+	// Use action (triggered when player presses E on bot avatar and TRIGGER_USE_ACTION_FLAG is set)
+	static const uint32 USE_ACTION_LLM      = 0; // Trigger LLM response
+	static const uint32 USE_ACTION_SAY_TEXT = 1; // Say fixed text (use_action_param = the text)
+	static const uint32 USE_ACTION_GESTURE  = 2; // Play gesture slot (use_action_param = "greeting"|"idle"|"reactive"|"surprise"|"acknowledge")
+	static const uint32 USE_ACTION_NONE     = 3; // Do nothing
+	static const int MAX_USE_ACTION_PARAM_SIZE = 500;
+	uint32      use_action_type;
+	std::string use_action_param;
+
+	// Per-bot API key/endpoint (override server credentials for this bot)
+	static const int MAX_API_KEY_SIZE      = 200;
+	static const int MAX_API_ENDPOINT_SIZE = 300;
+	std::string api_key;      // Empty = use server credentials
+	std::string api_endpoint; // Empty = use model default
 
 	float greeting_distance;
 	float farewell_distance;

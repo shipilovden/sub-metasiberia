@@ -47,13 +47,14 @@ CyberspaceProtocolVersion
 51: Added optional trailing text_font in WorldObject network serialisation.
 52: Added QueryUserGear, UserGearList, GearItemUpdate and CreateGearItem messages.
 53: Added CreateChatBot, ChatBotCreated, UpdateChatBot, DeleteChatBot, QueryUserBots, UserBotList, MoveChatBot, TestChatBotGesture messages.
+54: Added UserUsedBotMessage; extended bot protocol with use_action_type, use_action_param, api_key, api_endpoint (Block 4).
 */
 namespace Protocol
 {
 
 const uint32 CyberspaceHello = 1357924680;
 
-const uint32 CyberspaceProtocolVersion = 53;
+const uint32 CyberspaceProtocolVersion = 54;
 
 const uint32 ClientProtocolOK		= 10000;
 const uint32 ClientProtocolTooOld	= 10001;
@@ -109,6 +110,7 @@ const uint32 QueryUserBots			= 1504; // Client requests list of chatbots it owns
 const uint32 UserBotList			= 1505; // Server sends back bot_id + avatar_uid pairs.
 const uint32 MoveChatBot			= 1506; // Client moved bot (pos + heading).
 const uint32 TestChatBotGesture		= 1507; // Client asks the server to play one configured bot gesture now.
+const uint32 UserUsedBotMessage		= 1508; // Client pressed E on a chatbot avatar.
 
 
 const uint32 ChatMessageID			= 2000;

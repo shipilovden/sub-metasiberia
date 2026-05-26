@@ -184,6 +184,14 @@ void BotEditorWidget::buildUI()
 		fallback_msg_edit = new QLineEdit(tab);
 		fallback_msg_edit->setPlaceholderText("Сообщение когда LLM недоступен (пусто — молчать)");
 		ai_form->addRow("Фолбэк-ответ:", fallback_msg_edit);
+
+		api_key_edit = new QLineEdit(tab);
+		api_key_edit->setPlaceholderText("API ключ для этого бота (пусто = сервер по умолчанию)");
+		api_key_edit->setEchoMode(QLineEdit::Password);
+		api_endpoint_edit = new QLineEdit(tab);
+		api_endpoint_edit->setPlaceholderText("Endpoint (пусто = по умолчанию провайдера)");
+		ai_form->addRow("API ключ:", api_key_edit);
+		ai_form->addRow("Endpoint:", api_endpoint_edit);
 		vl->addLayout(ai_form);
 
 		llm_note = new QLabel(
@@ -234,6 +242,17 @@ void BotEditorWidget::buildUI()
 		fl->addRow("", trigger_use_cb);
 		fl->addRow("Keywords:", trigger_keywords_edit);
 		fl->addRow("Trigger cooldown (s):", trigger_cooldown_spin);
+
+		fl->addRow(new QLabel("<b>Действие при нажатии E</b>", tab));
+		use_action_combo = new QComboBox(tab);
+		use_action_combo->addItem("Ответ через LLM");          // 0 = USE_ACTION_LLM
+		use_action_combo->addItem("Сказать текст");              // 1 = USE_ACTION_SAY_TEXT
+		use_action_combo->addItem("Воспроизвести жест");         // 2 = USE_ACTION_GESTURE
+		use_action_combo->addItem("Ничего не делать");           // 3 = USE_ACTION_NONE
+		use_action_param_edit = new QLineEdit(tab);
+		use_action_param_edit->setPlaceholderText("Текст / название жеста (greeting, idle, reactive, surprise, acknowledge)");
+		fl->addRow("Тип действия:", use_action_combo);
+		fl->addRow("Параметр:", use_action_param_edit);
 
 		tab_widget->addTab(tab, "Поведение");
 	}
@@ -389,7 +408,9 @@ void BotEditorWidget::setBot(uint64_t bot_id_, const UID& avatar_uid_,
 	uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
 	const std::string& fallback_message,
 	const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
-	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown)
+	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown,
+	uint32 use_action_type, const std::string& use_action_param,
+	const std::string& api_key, const std::string& api_endpoint)
 {
 	bot_id     = bot_id_;
 	avatar_uid = avatar_uid_;
@@ -463,6 +484,11 @@ void BotEditorWidget::setBot(uint64_t bot_id_, const UID& avatar_uid_,
 	acknowledge_cd->setValue(acknowledge_cooldown);
 	acknowledge_loop_cb->setChecked((acknowledge_flags & 2) != 0);
 	acknowledge_head_cb->setChecked((acknowledge_flags & 1) != 0);
+
+	use_action_combo->setCurrentIndex((int)use_action_type);
+	use_action_param_edit->setText(QString::fromStdString(use_action_param));
+	api_key_edit->setText(QString::fromStdString(api_key));
+	api_endpoint_edit->setText(QString::fromStdString(api_endpoint));
 
 	if(bot_list_widget)
 	{
@@ -541,6 +567,10 @@ void BotEditorWidget::clear()
 	acknowledge_cd->setValue(10);
 	acknowledge_loop_cb->setChecked(false);
 	acknowledge_head_cb->setChecked(false);
+	use_action_combo->setCurrentIndex(0);
+	use_action_param_edit->clear();
+	api_key_edit->clear();
+	api_endpoint_edit->clear();
 	{
 		QSignalBlocker bx(pos_x_spin), by(pos_y_spin), bz(pos_z_spin), bh(heading_spin);
 		pos_x_spin->setValue(0);
@@ -711,7 +741,11 @@ void BotEditorWidget::callUpdateBot(const AvatarSettings& av, const std::string&
 		greet_gflags, idle_gflags, react_gflags,
 		fallback_msg_edit->text().toStdString(),
 		surprise_name_edit->text().toStdString(), surprise_url_edit->text().toStdString(), surp_gflags, (float)surprise_cd->value(),
-		acknowledge_name_edit->text().toStdString(), acknowledge_url_edit->text().toStdString(), ack_gflags, (float)acknowledge_cd->value()
+		acknowledge_name_edit->text().toStdString(), acknowledge_url_edit->text().toStdString(), ack_gflags, (float)acknowledge_cd->value(),
+		(uint32)use_action_combo->currentIndex(),
+		use_action_param_edit->text().toStdString(),
+		api_key_edit->text().toStdString(),
+		api_endpoint_edit->text().toStdString()
 	);
 }
 

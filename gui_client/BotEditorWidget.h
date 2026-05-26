@@ -51,7 +51,9 @@ public:
 		uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
 		const std::string& fallback_message,
 		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
-		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown);
+		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown,
+		uint32 use_action_type, const std::string& use_action_param,
+		const std::string& api_key, const std::string& api_endpoint);
 	struct BotListEntry
 	{
 		uint64_t bot_id = 0;
@@ -125,6 +127,8 @@ private:
 	QSpinBox*       ai_max_tokens_spin = nullptr;
 	QLineEdit*      fallback_msg_edit = nullptr;
 	QLabel*         llm_note      = nullptr;
+	QLineEdit*      api_key_edit      = nullptr;
+	QLineEdit*      api_endpoint_edit = nullptr;
 
 	// ── Behaviour tab ─────────────────────────────────────────────────
 	QDoubleSpinBox* greet_dist_spin    = nullptr;  // metres - greet when user within
@@ -140,6 +144,10 @@ private:
 	QCheckBox*      trigger_use_cb       = nullptr;
 	QLineEdit*      trigger_keywords_edit = nullptr;
 	QDoubleSpinBox* trigger_cooldown_spin = nullptr;
+
+	// Use action (E key)
+	QComboBox*      use_action_combo     = nullptr;
+	QLineEdit*      use_action_param_edit = nullptr;
 
 	// ── Animations tab ────────────────────────────────────────────────
 	QLineEdit*      greet_name_edit  = nullptr;
