@@ -41,6 +41,10 @@ ChatBot::ChatBot()
 	idle_gesture_interval_s(30.f),
 	reactive_gesture_flags(0),
 	reactive_gesture_cooldown_s(6.f),
+	surprise_gesture_flags(0),
+	surprise_gesture_cooldown_s(15.f),
+	acknowledge_gesture_flags(0),
+	acknowledge_gesture_cooldown_s(10.f),
 	greeting_distance(6.f),
 	farewell_distance(10.f),
 	chat_radius(8.f),
@@ -925,6 +929,17 @@ void ChatBot::writeToStream(RandomAccessOutStream& stream)
 	stream.writeStringLengthFirst(trigger_keywords);
 	stream.writeFloat(trigger_cooldown_s);
 
+	// Block 3: gesture flags, fallback, extra gesture slots
+	stream.writeStringLengthFirst(fallback_message);
+	stream.writeStringLengthFirst(surprise_gesture_name);
+	stream.writeStringLengthFirst(surprise_gesture_URL);
+	stream.writeUInt32(surprise_gesture_flags);
+	stream.writeFloat(surprise_gesture_cooldown_s);
+	stream.writeStringLengthFirst(acknowledge_gesture_name);
+	stream.writeStringLengthFirst(acknowledge_gesture_URL);
+	stream.writeUInt32(acknowledge_gesture_flags);
+	stream.writeFloat(acknowledge_gesture_cooldown_s);
+
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)(stream.getWriteIndex() - initial_write_index);
 
@@ -1014,6 +1029,18 @@ void readChatBotFromStream(RandomAccessInStream& stream, ChatBot& chatbot)
 		chatbot.trigger_keywords = stream.readStringLengthFirst(ChatBot::MAX_TRIGGER_KEYWORDS_SIZE);
 		chatbot.trigger_cooldown_s = stream.readFloat();
 		chatbot.clampAnimationSettings();
+	}
+	if(stream.getReadIndex() < max_read_index)
+	{
+		chatbot.fallback_message        = stream.readStringLengthFirst(ChatBot::MAX_FALLBACK_MSG_SIZE);
+		chatbot.surprise_gesture_name   = stream.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+		chatbot.surprise_gesture_URL    = toURLString(stream.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+		chatbot.surprise_gesture_flags  = stream.readUInt32();
+		chatbot.surprise_gesture_cooldown_s = stream.readFloat();
+		chatbot.acknowledge_gesture_name  = stream.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+		chatbot.acknowledge_gesture_URL   = toURLString(stream.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+		chatbot.acknowledge_gesture_flags = stream.readUInt32();
+		chatbot.acknowledge_gesture_cooldown_s = stream.readFloat();
 	}
 
 

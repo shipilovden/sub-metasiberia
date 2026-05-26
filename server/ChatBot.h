@@ -138,6 +138,20 @@ public:
 	uint32 reactive_gesture_flags;
 	float reactive_gesture_cooldown_s;
 
+	static const int MAX_EXTRA_GESTURE_NAME_SIZE = 200;
+	std::string surprise_gesture_name;
+	URLString   surprise_gesture_URL;
+	uint32      surprise_gesture_flags;
+	float       surprise_gesture_cooldown_s;
+
+	std::string acknowledge_gesture_name;
+	URLString   acknowledge_gesture_URL;
+	uint32      acknowledge_gesture_flags;
+	float       acknowledge_gesture_cooldown_s;
+
+	static const int MAX_FALLBACK_MSG_SIZE = 500;
+	std::string fallback_message;
+
 	float greeting_distance;
 	float farewell_distance;
 	float chat_radius;

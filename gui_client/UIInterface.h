@@ -185,6 +185,10 @@ public:
 		const Vec3f& model_scale,
 		const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, double ai_temperature, uint32 ai_max_tokens,
 		const std::string& audio_url, double audio_volume, double audio_radius, double audio_activation_distance, double audio_cooldown,
-		uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown) {}
+		uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown,
+		uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
+		const std::string& fallback_message,
+		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
+		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown) {}
 	virtual void hideBotEditor() {}
 };

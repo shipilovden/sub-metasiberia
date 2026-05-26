@@ -282,7 +282,11 @@ public:
 		const Vec3f& model_scale,
 		const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, float ai_temperature, uint32 ai_max_tokens,
 		const std::string& audio_url, float audio_volume, float audio_radius, float audio_activation_distance, float audio_cooldown,
-		uint32 trigger_flags, const std::string& trigger_keywords, float trigger_cooldown);
+		uint32 trigger_flags, const std::string& trigger_keywords, float trigger_cooldown,
+		uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
+		const std::string& fallback_message,
+		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, float surprise_cooldown,
+		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, float acknowledge_cooldown);
 	void deleteBot(uint64 bot_id);
 	void deleteBotImmediate(uint64 bot_id, const UID& avatar_uid); // Delete bot and remove from scene immediately
 	void moveBot(uint64 bot_id, const Vec3d& pos, float heading);
@@ -981,6 +985,18 @@ public:
 		uint32 trigger_flags = 3;
 		std::string trigger_keywords;
 		float trigger_cooldown = 3.f;
+		uint32 greeting_gesture_flags = 0;
+		uint32 idle_gesture_flags = 0;
+		uint32 reactive_gesture_flags = 0;
+		std::string fallback_message;
+		std::string surprise_name;
+		std::string surprise_url;
+		uint32 surprise_flags = 0;
+		float  surprise_cooldown = 15.f;
+		std::string acknowledge_name;
+		std::string acknowledge_url;
+		uint32 acknowledge_flags = 0;
+		float  acknowledge_cooldown = 10.f;
 		// Runtime audio state (client only, not serialised)
 		glare::AudioSourceRef audio_source;
 		std::string loaded_audio_url; // URL of currently loaded audio source

@@ -181,6 +181,9 @@ void BotEditorWidget::buildUI()
 		ai_form->addRow("Temperature:", ai_temperature_spin);
 		ai_form->addRow("Max tokens:", ai_max_tokens_spin);
 		ai_form->addRow("Knowledge:", ai_knowledge_edit);
+		fallback_msg_edit = new QLineEdit(tab);
+		fallback_msg_edit->setPlaceholderText("Сообщение когда LLM недоступен (пусто — молчать)");
+		ai_form->addRow("Фолбэк-ответ:", fallback_msg_edit);
 		vl->addLayout(ai_form);
 
 		llm_note = new QLabel(
@@ -246,10 +249,21 @@ void BotEditorWidget::buildUI()
 			auto* e = new QLineEdit(tab); e->setPlaceholderText(hint); return e;
 		};
 
+		auto flags_row = [&](QCheckBox*& loop_cb, QCheckBox*& head_cb){
+			auto* row = new QHBoxLayout();
+			loop_cb = new QCheckBox("Loop", tab);
+			head_cb = new QCheckBox("Animate head", tab);
+			row->addWidget(loop_cb);
+			row->addWidget(head_cb);
+			row->addStretch();
+			fl->addRow("Flags:", row);
+		};
+
 		section("Приветствие (при приближении)");
 		greet_name_edit = le("e.g. wave");    fl->addRow("Анимация:", greet_name_edit);
 		greet_url_edit  = le("URL .subanim"); fl->addRow("URL:", greet_url_edit);
 		greet_cd = makeSpin(30, 0, 3600, 5, 0); fl->addRow("Пауза (с):", greet_cd);
+		flags_row(greet_loop_cb, greet_head_cb);
 		greet_test_btn = new QPushButton("Test greeting", tab);
 		connect(greet_test_btn, &QPushButton::clicked, this, [this]{ sendUpdateBot(); if(gui_client && bot_id != 0) gui_client->testBotGesture(bot_id, 0); });
 		fl->addRow("", greet_test_btn);
@@ -258,6 +272,7 @@ void BotEditorWidget::buildUI()
 		idle_name_edit = le("e.g. idle");    fl->addRow("Анимация:", idle_name_edit);
 		idle_url_edit  = le("URL .subanim"); fl->addRow("URL:", idle_url_edit);
 		idle_int = makeSpin(20, 0, 3600, 5, 0); fl->addRow("Интервал (с):", idle_int);
+		flags_row(idle_loop_cb, idle_head_cb);
 		idle_test_btn = new QPushButton("Test idle", tab);
 		connect(idle_test_btn, &QPushButton::clicked, this, [this]{ sendUpdateBot(); if(gui_client && bot_id != 0) gui_client->testBotGesture(bot_id, 1); });
 		fl->addRow("", idle_test_btn);
@@ -266,9 +281,28 @@ void BotEditorWidget::buildUI()
 		react_name_edit = le("e.g. nod");    fl->addRow("Анимация:", react_name_edit);
 		react_url_edit  = le("URL .subanim"); fl->addRow("URL:", react_url_edit);
 		react_cd2 = makeSpin(15, 0, 3600, 5, 0); fl->addRow("Пауза (с):", react_cd2);
+		flags_row(react_loop_cb, react_head_cb);
 		react_test_btn = new QPushButton("Test reactive", tab);
 		connect(react_test_btn, &QPushButton::clicked, this, [this]{ sendUpdateBot(); if(gui_client && bot_id != 0) gui_client->testBotGesture(bot_id, 2); });
 		fl->addRow("", react_test_btn);
+
+		section("Удивление (ручной слот)");
+		surprise_name_edit = le("e.g. Surprised");  fl->addRow("Анимация:", surprise_name_edit);
+		surprise_url_edit  = le("URL .subanim");     fl->addRow("URL:", surprise_url_edit);
+		surprise_cd = makeSpin(15, 0, 3600, 5, 0);  fl->addRow("Пауза (с):", surprise_cd);
+		flags_row(surprise_loop_cb, surprise_head_cb);
+		surprise_test_btn = new QPushButton("Test surprise", tab);
+		connect(surprise_test_btn, &QPushButton::clicked, this, [this]{ sendUpdateBot(); if(gui_client && bot_id != 0) gui_client->testBotGesture(bot_id, 3); });
+		fl->addRow("", surprise_test_btn);
+
+		section("Подтверждение / кивок (ручной слот)");
+		acknowledge_name_edit = le("e.g. Nod"); fl->addRow("Анимация:", acknowledge_name_edit);
+		acknowledge_url_edit  = le("URL .subanim"); fl->addRow("URL:", acknowledge_url_edit);
+		acknowledge_cd = makeSpin(10, 0, 3600, 5, 0); fl->addRow("Пауза (с):", acknowledge_cd);
+		flags_row(acknowledge_loop_cb, acknowledge_head_cb);
+		acknowledge_test_btn = new QPushButton("Test acknowledge", tab);
+		connect(acknowledge_test_btn, &QPushButton::clicked, this, [this]{ sendUpdateBot(); if(gui_client && bot_id != 0) gui_client->testBotGesture(bot_id, 4); });
+		fl->addRow("", acknowledge_test_btn);
 
 		tab_widget->addTab(tab, "Анимации");
 	}
@@ -351,7 +385,11 @@ void BotEditorWidget::setBot(uint64_t bot_id_, const UID& avatar_uid_,
 	const Vec3f& model_scale,
 	const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, double ai_temperature, uint32 ai_max_tokens,
 	const std::string& audio_url, double audio_volume, double audio_radius, double audio_activation_distance, double audio_cooldown,
-	uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown)
+	uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown,
+	uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
+	const std::string& fallback_message,
+	const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
+	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown)
 {
 	bot_id     = bot_id_;
 	avatar_uid = avatar_uid_;
@@ -403,6 +441,28 @@ void BotEditorWidget::setBot(uint64_t bot_id_, const UID& avatar_uid_,
 	trigger_use_cb->setChecked((trigger_flags & BOT_TRIGGER_USE_FLAG) != 0);
 	trigger_keywords_edit->setText(QString::fromStdString(trigger_keywords));
 	trigger_cooldown_spin->setValue(trigger_cooldown);
+
+	// gesture flags (FLAG_LOOP=2, FLAG_ANIMATE_HEAD=1)
+	greet_loop_cb->setChecked((greeting_gesture_flags & 2) != 0);
+	greet_head_cb->setChecked((greeting_gesture_flags & 1) != 0);
+	idle_loop_cb->setChecked((idle_gesture_flags & 2) != 0);
+	idle_head_cb->setChecked((idle_gesture_flags & 1) != 0);
+	react_loop_cb->setChecked((reactive_gesture_flags & 2) != 0);
+	react_head_cb->setChecked((reactive_gesture_flags & 1) != 0);
+
+	fallback_msg_edit->setText(QString::fromStdString(fallback_message));
+
+	surprise_name_edit->setText(QString::fromStdString(surprise_name));
+	surprise_url_edit->setText(QString::fromStdString(surprise_url));
+	surprise_cd->setValue(surprise_cooldown);
+	surprise_loop_cb->setChecked((surprise_flags & 2) != 0);
+	surprise_head_cb->setChecked((surprise_flags & 1) != 0);
+
+	acknowledge_name_edit->setText(QString::fromStdString(acknowledge_name));
+	acknowledge_url_edit->setText(QString::fromStdString(acknowledge_url));
+	acknowledge_cd->setValue(acknowledge_cooldown);
+	acknowledge_loop_cb->setChecked((acknowledge_flags & 2) != 0);
+	acknowledge_head_cb->setChecked((acknowledge_flags & 1) != 0);
 
 	if(bot_list_widget)
 	{
@@ -464,6 +524,23 @@ void BotEditorWidget::clear()
 	trigger_use_cb->setChecked(false);
 	trigger_keywords_edit->clear();
 	trigger_cooldown_spin->setValue(3.0);
+	greet_loop_cb->setChecked(false);
+	greet_head_cb->setChecked(false);
+	idle_loop_cb->setChecked(false);
+	idle_head_cb->setChecked(false);
+	react_loop_cb->setChecked(false);
+	react_head_cb->setChecked(false);
+	fallback_msg_edit->clear();
+	surprise_name_edit->clear();
+	surprise_url_edit->clear();
+	surprise_cd->setValue(15);
+	surprise_loop_cb->setChecked(false);
+	surprise_head_cb->setChecked(false);
+	acknowledge_name_edit->clear();
+	acknowledge_url_edit->clear();
+	acknowledge_cd->setValue(10);
+	acknowledge_loop_cb->setChecked(false);
+	acknowledge_head_cb->setChecked(false);
 	{
 		QSignalBlocker bx(pos_x_spin), by(pos_y_spin), bz(pos_z_spin), bh(heading_spin);
 		pos_x_spin->setValue(0);
@@ -567,21 +644,7 @@ void BotEditorWidget::onAvatarURLChanged()
 	if(trigger_keywords_cb->isChecked()) trigger_flags |= BOT_TRIGGER_KEYWORDS_FLAG;
 	if(trigger_gesture_cb->isChecked()) trigger_flags |= BOT_TRIGGER_GESTURE_FLAG;
 	if(trigger_use_cb->isChecked()) trigger_flags |= BOT_TRIGGER_USE_FLAG;
-	// Send partial UpdateChatBot with just the name and avatar_settings
-	gui_client->updateBot(bot_id,
-		name_edit->text().toStdString(),
-		prompt_edit->toPlainText().toStdString(),
-		av,
-		greet_name_edit->text().toStdString(), greet_url_edit->text().toStdString(), (float)greet_cd->value(),
-		idle_name_edit->text().toStdString(),  idle_url_edit->text().toStdString(),  (float)idle_int->value(),
-		react_name_edit->text().toStdString(), react_url_edit->text().toStdString(), (float)react_cd2->value(),
-		flags,
-		(float)greet_dist_spin->value(), (float)farewell_dist_spin->value(), (float)talk_radius_spin->value(),
-		model_scale,
-		ai_model_edit->text().toStdString(), ai_preset_edit->text().toStdString(), ai_knowledge_edit->toPlainText().toStdString(), (float)ai_temperature_spin->value(), (uint32)ai_max_tokens_spin->value(),
-		audio_url, (float)audio_vol_spin->value(), (float)audio_radius_spin->value(), (float)audio_activation_spin->value(), (float)audio_cooldown_spin->value(),
-		trigger_flags, trigger_keywords_edit->text().toStdString(), (float)trigger_cooldown_spin->value()
-	);
+	callUpdateBot(av, audio_url, flags, trigger_flags, model_scale);
 }
 
 
@@ -619,6 +682,19 @@ void BotEditorWidget::sendUpdateBot()
 	if(trigger_keywords_cb->isChecked()) trigger_flags |= BOT_TRIGGER_KEYWORDS_FLAG;
 	if(trigger_gesture_cb->isChecked()) trigger_flags |= BOT_TRIGGER_GESTURE_FLAG;
 	if(trigger_use_cb->isChecked()) trigger_flags |= BOT_TRIGGER_USE_FLAG;
+	callUpdateBot(av, audio_url, flags, trigger_flags, model_scale);
+}
+
+
+void BotEditorWidget::callUpdateBot(const AvatarSettings& av, const std::string& audio_url,
+	uint32 flags, uint32 trigger_flags, const Vec3f& model_scale)
+{
+	const uint32 greet_gflags = (greet_loop_cb->isChecked() ? 2u : 0u) | (greet_head_cb->isChecked() ? 1u : 0u);
+	const uint32 idle_gflags  = (idle_loop_cb->isChecked()  ? 2u : 0u) | (idle_head_cb->isChecked()  ? 1u : 0u);
+	const uint32 react_gflags = (react_loop_cb->isChecked() ? 2u : 0u) | (react_head_cb->isChecked() ? 1u : 0u);
+	const uint32 surp_gflags  = (surprise_loop_cb->isChecked() ? 2u : 0u) | (surprise_head_cb->isChecked() ? 1u : 0u);
+	const uint32 ack_gflags   = (acknowledge_loop_cb->isChecked() ? 2u : 0u) | (acknowledge_head_cb->isChecked() ? 1u : 0u);
+
 	gui_client->updateBot(bot_id,
 		name_edit->text().toStdString(),
 		prompt_edit->toPlainText().toStdString(),
@@ -631,7 +707,11 @@ void BotEditorWidget::sendUpdateBot()
 		model_scale,
 		ai_model_edit->text().toStdString(), ai_preset_edit->text().toStdString(), ai_knowledge_edit->toPlainText().toStdString(), (float)ai_temperature_spin->value(), (uint32)ai_max_tokens_spin->value(),
 		audio_url, (float)audio_vol_spin->value(), (float)audio_radius_spin->value(), (float)audio_activation_spin->value(), (float)audio_cooldown_spin->value(),
-		trigger_flags, trigger_keywords_edit->text().toStdString(), (float)trigger_cooldown_spin->value()
+		trigger_flags, trigger_keywords_edit->text().toStdString(), (float)trigger_cooldown_spin->value(),
+		greet_gflags, idle_gflags, react_gflags,
+		fallback_msg_edit->text().toStdString(),
+		surprise_name_edit->text().toStdString(), surprise_url_edit->text().toStdString(), surp_gflags, (float)surprise_cd->value(),
+		acknowledge_name_edit->text().toStdString(), acknowledge_url_edit->text().toStdString(), ack_gflags, (float)acknowledge_cd->value()
 	);
 }
 

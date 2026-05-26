@@ -1078,6 +1078,19 @@ static void writeChatBotClientInfoFields(const ChatBot& bot, RandomAccessOutStre
 	stream.writeUInt32(bot.trigger_flags);
 	stream.writeStringLengthFirst(bot.trigger_keywords);
 	stream.writeFloat(bot.trigger_cooldown_s);
+	// Block 3: gesture flags, fallback, extra gesture slots
+	stream.writeUInt32(bot.greeting_gesture_flags);
+	stream.writeUInt32(bot.idle_gesture_flags);
+	stream.writeUInt32(bot.reactive_gesture_flags);
+	stream.writeStringLengthFirst(bot.fallback_message);
+	stream.writeStringLengthFirst(bot.surprise_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.surprise_gesture_URL));
+	stream.writeUInt32(bot.surprise_gesture_flags);
+	stream.writeFloat(bot.surprise_gesture_cooldown_s);
+	stream.writeStringLengthFirst(bot.acknowledge_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.acknowledge_gesture_URL));
+	stream.writeUInt32(bot.acknowledge_gesture_flags);
+	stream.writeFloat(bot.acknowledge_gesture_cooldown_s);
 }
 
 
@@ -3937,6 +3950,33 @@ void WorkerThread::doRun()
 								trigger_keywords = msg_buffer.readStringLengthFirst(ChatBot::MAX_TRIGGER_KEYWORDS_SIZE);
 								trigger_cooldown_s = msg_buffer.readFloat();
 							}
+							uint32 greeting_gesture_flags = 0;
+							uint32 idle_gesture_flags = 0;
+							uint32 reactive_gesture_flags = 0;
+							std::string fallback_message;
+							std::string surprise_name;
+							URLString   surprise_url;
+							uint32      surprise_flags = 0;
+							float       surprise_cooldown = 15.f;
+							std::string acknowledge_name;
+							URLString   acknowledge_url;
+							uint32      acknowledge_flags = 0;
+							float       acknowledge_cooldown = 10.f;
+							if(!msg_buffer.endOfStream())
+							{
+								greeting_gesture_flags = msg_buffer.readUInt32();
+								idle_gesture_flags     = msg_buffer.readUInt32();
+								reactive_gesture_flags = msg_buffer.readUInt32();
+								fallback_message  = msg_buffer.readStringLengthFirst(ChatBot::MAX_FALLBACK_MSG_SIZE);
+								surprise_name     = msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+								surprise_url      = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+								surprise_flags    = msg_buffer.readUInt32();
+								surprise_cooldown = msg_buffer.readFloat();
+								acknowledge_name     = msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_NAME_SIZE);
+								acknowledge_url      = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+								acknowledge_flags    = msg_buffer.readUInt32();
+								acknowledge_cooldown = msg_buffer.readFloat();
+							}
 
 							bool updated = false;
 							{
@@ -3979,6 +4019,18 @@ void WorkerThread::doRun()
 								chatbot->trigger_flags = trigger_flags;
 								chatbot->trigger_keywords = trigger_keywords;
 								chatbot->trigger_cooldown_s = trigger_cooldown_s;
+								chatbot->greeting_gesture_flags = greeting_gesture_flags;
+								chatbot->idle_gesture_flags     = idle_gesture_flags;
+								chatbot->reactive_gesture_flags = reactive_gesture_flags;
+								chatbot->fallback_message       = fallback_message;
+								chatbot->surprise_gesture_name      = surprise_name;
+								chatbot->surprise_gesture_URL       = surprise_url;
+								chatbot->surprise_gesture_flags     = surprise_flags;
+								chatbot->surprise_gesture_cooldown_s = surprise_cooldown;
+								chatbot->acknowledge_gesture_name      = acknowledge_name;
+								chatbot->acknowledge_gesture_URL       = acknowledge_url;
+								chatbot->acknowledge_gesture_flags     = acknowledge_flags;
+								chatbot->acknowledge_gesture_cooldown_s = acknowledge_cooldown;
 								chatbot->clampAnimationSettings();
 
 								if(chatbot->avatar.nonNull())
@@ -4123,8 +4175,12 @@ void WorkerThread::doRun()
 									bot->queueManualGesturePlayback(bot->greeting_gesture_name, bot->greeting_gesture_URL, bot->greeting_gesture_flags);
 								else if(gesture_slot == 1)
 									bot->queueManualGesturePlayback(bot->idle_gesture_name, bot->idle_gesture_URL, bot->idle_gesture_flags);
-								else
+								else if(gesture_slot == 2)
 									bot->queueManualGesturePlayback(bot->reactive_gesture_name, bot->reactive_gesture_URL, bot->reactive_gesture_flags);
+								else if(gesture_slot == 3)
+									bot->queueManualGesturePlayback(bot->surprise_gesture_name, bot->surprise_gesture_URL, bot->surprise_gesture_flags);
+								else if(gesture_slot == 4)
+									bot->queueManualGesturePlayback(bot->acknowledge_gesture_name, bot->acknowledge_gesture_URL, bot->acknowledge_gesture_flags);
 							}
 							else
 								writeErrorMessageToClient(socket, "Bot not found or no permission.");

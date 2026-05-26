@@ -45,7 +45,11 @@ static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, std::s
 	Vec3f& model_scale,
 	std::string& ai_model_id, std::string& ai_personality_preset, std::string& ai_knowledge, float& ai_temperature, uint32& ai_max_tokens,
 	std::string& audio_url, float& audio_volume, float& audio_radius, float& audio_activation_distance, float& audio_cooldown,
-	uint32& trigger_flags, std::string& trigger_keywords, float& trigger_cooldown)
+	uint32& trigger_flags, std::string& trigger_keywords, float& trigger_cooldown,
+	uint32& greeting_gesture_flags, uint32& idle_gesture_flags, uint32& reactive_gesture_flags,
+	std::string& fallback_message,
+	std::string& surprise_name, std::string& surprise_url, uint32& surprise_flags, float& surprise_cooldown,
+	std::string& acknowledge_name, std::string& acknowledge_url, uint32& acknowledge_flags, float& acknowledge_cooldown)
 {
 	name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 	prompt = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
@@ -81,6 +85,21 @@ static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, std::s
 		trigger_flags = msg_buffer.readUInt32();
 		trigger_keywords = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 		trigger_cooldown = msg_buffer.readFloat();
+	}
+	if(!msg_buffer.endOfStream())
+	{
+		greeting_gesture_flags = msg_buffer.readUInt32();
+		idle_gesture_flags     = msg_buffer.readUInt32();
+		reactive_gesture_flags = msg_buffer.readUInt32();
+		fallback_message  = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		surprise_name     = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		surprise_url      = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		surprise_flags    = msg_buffer.readUInt32();
+		surprise_cooldown = msg_buffer.readFloat();
+		acknowledge_name     = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		acknowledge_url      = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		acknowledge_flags    = msg_buffer.readUInt32();
+		acknowledge_cooldown = msg_buffer.readFloat();
 	}
 }
 
@@ -1277,7 +1296,11 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 					msg->model_scale,
 					msg->ai_model_id, msg->ai_personality_preset, msg->ai_knowledge, msg->ai_temperature, msg->ai_max_tokens,
 					msg->audio_url, msg->audio_volume, msg->audio_radius, msg->audio_activation_distance, msg->audio_cooldown,
-					msg->trigger_flags, msg->trigger_keywords, msg->trigger_cooldown);
+					msg->trigger_flags, msg->trigger_keywords, msg->trigger_cooldown,
+					msg->greeting_gesture_flags, msg->idle_gesture_flags, msg->reactive_gesture_flags,
+					msg->fallback_message,
+					msg->surprise_name, msg->surprise_url, msg->surprise_flags, msg->surprise_cooldown,
+					msg->acknowledge_name, msg->acknowledge_url, msg->acknowledge_flags, msg->acknowledge_cooldown);
 			}
 			out_msg_queue->enqueue(msg);
 			break;
@@ -1300,7 +1323,11 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 					info.model_scale,
 					info.ai_model_id, info.ai_personality_preset, info.ai_knowledge, info.ai_temperature, info.ai_max_tokens,
 					info.audio_url, info.audio_volume, info.audio_radius, info.audio_activation_distance, info.audio_cooldown,
-					info.trigger_flags, info.trigger_keywords, info.trigger_cooldown);
+					info.trigger_flags, info.trigger_keywords, info.trigger_cooldown,
+					info.greeting_gesture_flags, info.idle_gesture_flags, info.reactive_gesture_flags,
+					info.fallback_message,
+					info.surprise_name, info.surprise_url, info.surprise_flags, info.surprise_cooldown,
+					info.acknowledge_name, info.acknowledge_url, info.acknowledge_flags, info.acknowledge_cooldown);
 				msg->bots.push_back(info);
 			}
 			out_msg_queue->enqueue(msg);

@@ -11442,6 +11442,18 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			info.trigger_flags = m->trigger_flags;
 			info.trigger_keywords = m->trigger_keywords;
 			info.trigger_cooldown = m->trigger_cooldown;
+			info.greeting_gesture_flags = m->greeting_gesture_flags;
+			info.idle_gesture_flags     = m->idle_gesture_flags;
+			info.reactive_gesture_flags = m->reactive_gesture_flags;
+			info.fallback_message   = m->fallback_message;
+			info.surprise_name      = m->surprise_name;
+			info.surprise_url       = m->surprise_url;
+			info.surprise_flags     = m->surprise_flags;
+			info.surprise_cooldown  = m->surprise_cooldown;
+			info.acknowledge_name   = m->acknowledge_name;
+			info.acknowledge_url    = m->acknowledge_url;
+			info.acknowledge_flags  = m->acknowledge_flags;
+			info.acknowledge_cooldown = m->acknowledge_cooldown;
 			updateBotListUI();
 			selectBotAvatar(m->avatar_uid);
 		}
@@ -11489,6 +11501,18 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				bot_info.trigger_flags = info.trigger_flags;
 				bot_info.trigger_keywords = info.trigger_keywords;
 				bot_info.trigger_cooldown = info.trigger_cooldown;
+				bot_info.greeting_gesture_flags = info.greeting_gesture_flags;
+				bot_info.idle_gesture_flags     = info.idle_gesture_flags;
+				bot_info.reactive_gesture_flags = info.reactive_gesture_flags;
+				bot_info.fallback_message   = info.fallback_message;
+				bot_info.surprise_name      = info.surprise_name;
+				bot_info.surprise_url       = info.surprise_url;
+				bot_info.surprise_flags     = info.surprise_flags;
+				bot_info.surprise_cooldown  = info.surprise_cooldown;
+				bot_info.acknowledge_name   = info.acknowledge_name;
+				bot_info.acknowledge_url    = info.acknowledge_url;
+				bot_info.acknowledge_flags  = info.acknowledge_flags;
+				bot_info.acknowledge_cooldown = info.acknowledge_cooldown;
 			}
 			updateBotListUI();
 		}
@@ -20334,7 +20358,11 @@ void GUIClient::selectBotAvatar(const UID& avatar_uid)
 			info.model_scale,
 			info.ai_model_id, info.ai_personality_preset, info.ai_knowledge, info.ai_temperature, info.ai_max_tokens,
 			info.audio_url, info.audio_volume, info.audio_radius, info.audio_activation_distance, info.audio_cooldown,
-			info.trigger_flags, info.trigger_keywords, info.trigger_cooldown);
+			info.trigger_flags, info.trigger_keywords, info.trigger_cooldown,
+			info.greeting_gesture_flags, info.idle_gesture_flags, info.reactive_gesture_flags,
+			info.fallback_message,
+			info.surprise_name, info.surprise_url, info.surprise_flags, info.surprise_cooldown,
+			info.acknowledge_name, info.acknowledge_url, info.acknowledge_flags, info.acknowledge_cooldown);
 		ui_interface->showEditorDockWidget();
 		ui_interface->setObjectEditorEnabled(false);
 	}
@@ -20362,7 +20390,11 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	const Vec3f& model_scale,
 	const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, float ai_temperature, uint32 ai_max_tokens,
 	const std::string& audio_url, float audio_volume, float audio_radius, float audio_activation_distance, float audio_cooldown,
-	uint32 trigger_flags, const std::string& trigger_keywords, float trigger_cooldown)
+	uint32 trigger_flags, const std::string& trigger_keywords, float trigger_cooldown,
+	uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
+	const std::string& fallback_message,
+	const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, float surprise_cooldown,
+	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, float acknowledge_cooldown)
 {
 	BotClientInfo& info = bot_infos[bot_id];
 	AvatarSettings use_avatar_settings = avatar_settings;
@@ -20401,6 +20433,18 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	info.trigger_flags = trigger_flags;
 	info.trigger_keywords = trigger_keywords;
 	info.trigger_cooldown = trigger_cooldown;
+	info.greeting_gesture_flags = greeting_gesture_flags;
+	info.idle_gesture_flags     = idle_gesture_flags;
+	info.reactive_gesture_flags = reactive_gesture_flags;
+	info.fallback_message   = fallback_message;
+	info.surprise_name      = surprise_name;
+	info.surprise_url       = surprise_url;
+	info.surprise_flags     = surprise_flags;
+	info.surprise_cooldown  = surprise_cooldown;
+	info.acknowledge_name   = acknowledge_name;
+	info.acknowledge_url    = acknowledge_url;
+	info.acknowledge_flags  = acknowledge_flags;
+	info.acknowledge_cooldown = acknowledge_cooldown;
 
 	for(auto& pair : avatar_uid_to_bot_id)
 	{
@@ -20480,6 +20524,18 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	scratch_packet.writeUInt32(trigger_flags);
 	scratch_packet.writeStringLengthFirst(trigger_keywords);
 	scratch_packet.writeFloat(trigger_cooldown);
+	scratch_packet.writeUInt32(greeting_gesture_flags);
+	scratch_packet.writeUInt32(idle_gesture_flags);
+	scratch_packet.writeUInt32(reactive_gesture_flags);
+	scratch_packet.writeStringLengthFirst(fallback_message);
+	scratch_packet.writeStringLengthFirst(surprise_name);
+	scratch_packet.writeStringLengthFirst(surprise_url);
+	scratch_packet.writeUInt32(surprise_flags);
+	scratch_packet.writeFloat(surprise_cooldown);
+	scratch_packet.writeStringLengthFirst(acknowledge_name);
+	scratch_packet.writeStringLengthFirst(acknowledge_url);
+	scratch_packet.writeUInt32(acknowledge_flags);
+	scratch_packet.writeFloat(acknowledge_cooldown);
 	MessageUtils::updatePacketLengthField(scratch_packet);
 	enqueueMessageToSend(*client_thread, scratch_packet);
 }

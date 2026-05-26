@@ -4519,7 +4519,11 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 	const Vec3f& model_scale,
 	const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, double ai_temperature, uint32 ai_max_tokens,
 	const std::string& audio_url, double audio_volume, double audio_radius, double audio_activation_distance, double audio_cooldown,
-	uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown)
+	uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown,
+	uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
+	const std::string& fallback_message,
+	const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
+	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown)
 {
 	ui->botEditorWidget->init(&gui_client);
 
@@ -4554,7 +4558,11 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 		model_scale,
 		ai_model_id, ai_personality_preset, ai_knowledge, ai_temperature, ai_max_tokens,
 		audio_url, audio_volume, audio_radius, audio_activation_distance, audio_cooldown,
-		trigger_flags, trigger_keywords, trigger_cooldown);
+		trigger_flags, trigger_keywords, trigger_cooldown,
+		greeting_gesture_flags, idle_gesture_flags, reactive_gesture_flags,
+		fallback_message,
+		surprise_name, surprise_url, surprise_flags, surprise_cooldown,
+		acknowledge_name, acknowledge_url, acknowledge_flags, acknowledge_cooldown);
 
 	showEditorDockWidget();
 }

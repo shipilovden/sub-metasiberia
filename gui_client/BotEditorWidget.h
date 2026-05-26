@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2026 -
 
 #include <QtWidgets/QWidget>
 #include "../shared/UID.h"
+#include "../shared/Avatar.h"
 #include <maths/vec3.h>
 #include <stdint.h>
 #include <string>
@@ -46,7 +47,11 @@ public:
 		const Vec3f& model_scale,
 		const std::string& ai_model_id, const std::string& ai_personality_preset, const std::string& ai_knowledge, double ai_temperature, uint32 ai_max_tokens,
 		const std::string& audio_url, double audio_volume, double audio_radius, double audio_activation_distance, double audio_cooldown,
-		uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown);
+		uint32 trigger_flags, const std::string& trigger_keywords, double trigger_cooldown,
+		uint32 greeting_gesture_flags, uint32 idle_gesture_flags, uint32 reactive_gesture_flags,
+		const std::string& fallback_message,
+		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
+		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown);
 	struct BotListEntry
 	{
 		uint64_t bot_id = 0;
@@ -81,6 +86,8 @@ private slots:
 
 private:
 	void buildUI();
+	void callUpdateBot(const AvatarSettings& av, const std::string& audio_url,
+		uint32 flags, uint32 trigger_flags, const Vec3f& model_scale);
 
 	GUIClient*   gui_client = nullptr;
 	uint64_t     bot_id     = 0;
@@ -116,6 +123,7 @@ private:
 	QPlainTextEdit* ai_knowledge_edit = nullptr;
 	QDoubleSpinBox* ai_temperature_spin = nullptr;
 	QSpinBox*       ai_max_tokens_spin = nullptr;
+	QLineEdit*      fallback_msg_edit = nullptr;
 	QLabel*         llm_note      = nullptr;
 
 	// ── Behaviour tab ─────────────────────────────────────────────────
@@ -137,17 +145,37 @@ private:
 	QLineEdit*      greet_name_edit  = nullptr;
 	QLineEdit*      greet_url_edit   = nullptr;
 	QDoubleSpinBox* greet_cd         = nullptr;
+	QCheckBox*      greet_loop_cb    = nullptr;
+	QCheckBox*      greet_head_cb    = nullptr;
 	QPushButton*    greet_test_btn   = nullptr;
 
 	QLineEdit*      idle_name_edit   = nullptr;
 	QLineEdit*      idle_url_edit    = nullptr;
 	QDoubleSpinBox* idle_int         = nullptr;
+	QCheckBox*      idle_loop_cb     = nullptr;
+	QCheckBox*      idle_head_cb     = nullptr;
 	QPushButton*    idle_test_btn    = nullptr;
 
 	QLineEdit*      react_name_edit  = nullptr;
 	QLineEdit*      react_url_edit   = nullptr;
 	QDoubleSpinBox* react_cd2        = nullptr;
+	QCheckBox*      react_loop_cb    = nullptr;
+	QCheckBox*      react_head_cb    = nullptr;
 	QPushButton*    react_test_btn   = nullptr;
+
+	QLineEdit*      surprise_name_edit  = nullptr;
+	QLineEdit*      surprise_url_edit   = nullptr;
+	QDoubleSpinBox* surprise_cd         = nullptr;
+	QCheckBox*      surprise_loop_cb    = nullptr;
+	QCheckBox*      surprise_head_cb    = nullptr;
+	QPushButton*    surprise_test_btn   = nullptr;
+
+	QLineEdit*      acknowledge_name_edit  = nullptr;
+	QLineEdit*      acknowledge_url_edit   = nullptr;
+	QDoubleSpinBox* acknowledge_cd         = nullptr;
+	QCheckBox*      acknowledge_loop_cb    = nullptr;
+	QCheckBox*      acknowledge_head_cb    = nullptr;
+	QPushButton*    acknowledge_test_btn   = nullptr;
 
 	// ── Audio tab ────────────────────────────────────────────────────
 	QLineEdit*      audio_url_edit   = nullptr;

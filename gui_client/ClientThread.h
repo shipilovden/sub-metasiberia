@@ -234,6 +234,18 @@ public:
 	uint32 trigger_flags = 3;
 	std::string trigger_keywords;
 	float trigger_cooldown = 3.f;
+	uint32 greeting_gesture_flags = 0;
+	uint32 idle_gesture_flags = 0;
+	uint32 reactive_gesture_flags = 0;
+	std::string fallback_message;
+	std::string surprise_name;
+	std::string surprise_url;
+	uint32 surprise_flags = 0;
+	float  surprise_cooldown = 15.f;
+	std::string acknowledge_name;
+	std::string acknowledge_url;
+	uint32 acknowledge_flags = 0;
+	float  acknowledge_cooldown = 10.f;
 };
 class UserBotListMessage : public ThreadMessage
 {
@@ -275,6 +287,18 @@ public:
 		uint32 trigger_flags = 3;
 		std::string trigger_keywords;
 		float trigger_cooldown = 3.f;
+		uint32 greeting_gesture_flags = 0;
+		uint32 idle_gesture_flags = 0;
+		uint32 reactive_gesture_flags = 0;
+		std::string fallback_message;
+		std::string surprise_name;
+		std::string surprise_url;
+		uint32 surprise_flags = 0;
+		float  surprise_cooldown = 15.f;
+		std::string acknowledge_name;
+		std::string acknowledge_url;
+		uint32 acknowledge_flags = 0;
+		float  acknowledge_cooldown = 10.f;
 	};
 	std::vector<BotInfo> bots;
 };
