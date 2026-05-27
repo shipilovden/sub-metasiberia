@@ -99,6 +99,7 @@ ServerAllWorldsState::ServerAllWorldsState()
 	next_sub_eth_transaction_uid = 0;
 	next_screenshot_uid = 0;
 	next_chatbot_uid = 0;
+	next_gear_item_uid = UID(0);
 
 	setWorldState(/*world name=*/"", new ServerWorldState());
 
@@ -165,6 +166,7 @@ static const uint32 SUB_EVENT_CHUNK = 117;
 static const uint32 MIGRATION_VERSION_CHUNK = 118;
 static const uint32 PHOTO_CHUNK = 119;
 static const uint32 CHATBOT_CHUNK = 120;
+static const uint32 GEAR_ITEM_CHUNK = 121;
 static const uint32 EOS_CHUNK = 1000;
 
 
@@ -226,6 +228,7 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 	size_t num_worlds = 0;
 	size_t num_photos = 0;
 	size_t num_chatbots = 0;
+	size_t num_gear_items = 0;
 
 	bool is_pre_database_format = false;
 	{
@@ -439,6 +442,18 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 					chatbot->database_key = database_key;
 					world_states[world_name]->getChatBots(lock)[chatbot->id] = chatbot;
 					num_chatbots++;
+				}
+				else if(chunk == GEAR_ITEM_CHUNK)
+				{
+					// Deserialise GearItem
+					GearItemRef item = new GearItem();
+					readGearItemFromStream(stream, *item);
+
+					next_gear_item_uid = UID(myMax(item->id.value() + 1, next_gear_item_uid.value()));
+
+					item->database_key = database_key;
+					gear_items[item->id] = item;
+					num_gear_items++;
 				}
 				else if(chunk == SUB_ETH_TRANSACTIONS_CHUNK)
 				{
@@ -893,12 +908,12 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 	}
 
 	conPrint("Loaded " + toString(num_obs) + " object(s), " + toString(user_id_to_users.size()) + " user(s), " +
-		toString(num_parcels) + " parcel(s), " + toString(num_resources) + " resource(s), " + toString(num_orders) + " order(s), " + 
-		toString(num_sessions) + " session(s), " + toString(num_auctions) + " auction(s), " + toString(num_screenshots) + " screenshot(s), " + 
-		toString(num_sub_eth_transactions) + " sub eth transaction(s), " + toString(num_tiles_read) + " tiles, " + toString(num_world_settings) + " world settings, " + 
-		toString(num_news_posts) + " news posts, " + toString(num_object_storage_items) + " object storage item(s), " + toString(num_user_secrets) + " user secret(s), " + 
-		toString(num_lod_chunks) + " lod chunk(s), " + toString(num_events) + " event(s), " + toString(num_photos) + " photo(s), " + toString(num_worlds) + " world(s), " + 
-		toString(num_chatbots) + " chatbot(s) in " + timer.elapsedStringNSigFigs(4));
+		toString(num_parcels) + " parcel(s), " + toString(num_resources) + " resource(s), " + toString(num_orders) + " order(s), " +
+		toString(num_sessions) + " session(s), " + toString(num_auctions) + " auction(s), " + toString(num_screenshots) + " screenshot(s), " +
+		toString(num_sub_eth_transactions) + " sub eth transaction(s), " + toString(num_tiles_read) + " tiles, " + toString(num_world_settings) + " world settings, " +
+		toString(num_news_posts) + " news posts, " + toString(num_object_storage_items) + " object storage item(s), " + toString(num_user_secrets) + " user secret(s), " +
+		toString(num_lod_chunks) + " lod chunk(s), " + toString(num_events) + " event(s), " + toString(num_photos) + " photo(s), " + toString(num_worlds) + " world(s), " +
+		toString(num_chatbots) + " chatbot(s), " + toString(num_gear_items) + " gear item(s) in " + timer.elapsedStringNSigFigs(4));
 }
 
 
@@ -937,6 +952,9 @@ void ServerAllWorldsState::addEverythingToDirtySets()
 
 	for(auto it = screenshots.begin(); it != screenshots.end(); ++it)
 		db_dirty_screenshots.insert(it->second);
+
+	for(auto it = gear_items.begin(); it != gear_items.end(); ++it)
+		db_dirty_gear_items.insert(it->second);
 
 	for(auto it = sub_eth_transactions.begin(); it != sub_eth_transactions.end(); ++it)
 		db_dirty_sub_eth_transactions.insert(it->second);
@@ -1347,6 +1365,7 @@ void ServerAllWorldsState::serialiseToDisk(WorldStateLock& lock)
 		size_t num_worlds = 0;
 		size_t num_photos = 0;
 		size_t num_chatbots = 0;
+		size_t num_gear_items = 0;
 
 		// First, delete any records in db_records_to_delete.  (This has the keys of deleted objects etc..)
 		for(auto it = db_records_to_delete.begin(); it != db_records_to_delete.end(); ++it)
@@ -1740,6 +1759,26 @@ void ServerAllWorldsState::serialiseToDisk(WorldStateLock& lock)
 			db_dirty_events.clear();
 		}
 
+		// Write GearItems
+		{
+			for(auto it = db_dirty_gear_items.begin(); it != db_dirty_gear_items.end(); ++it)
+			{
+				GearItem* item = it->ptr();
+				temp_buf.clear();
+				temp_buf.writeUInt32(GEAR_ITEM_CHUNK);
+				item->writeToStream(temp_buf);
+
+				if(!item->database_key.valid())
+					item->database_key = database.allocUnusedKey(); // Get a new key
+
+				database.updateRecord(item->database_key, ArrayRef<uint8>(temp_buf.buf));
+
+				num_gear_items++;
+			}
+
+			db_dirty_gear_items.clear();
+		}
+
 		// Write MAP_TILE_INFO_CHUNK (per-world)
 		for(auto it = map_tile_info_for_world.begin(); it != map_tile_info_for_world.end(); ++it)
 		{
@@ -1872,6 +1911,7 @@ void ServerAllWorldsState::serialiseToDisk(WorldStateLock& lock)
 		if(num_events > 0)                msg += toString(num_events) + " event(s), ";
 		if(num_photos > 0)                msg += toString(num_photos) + " photo(s), ";
 		if(num_chatbots > 0)              msg += toString(num_chatbots) + " chatbot(s), ";
+		if(num_gear_items > 0)            msg += toString(num_gear_items) + " gear item(s), ";
 		removeSuffixInPlace(msg, ", ");
 		msg += " in " + timer.elapsedStringNSigFigs(4);
 		conPrint(msg);
@@ -2001,6 +2041,13 @@ uint64 ServerAllWorldsState::getNextChatBotUID()
 
 	Lock lock(mutex);
 	return next_chatbot_uid++;
+}
+
+
+UID ServerAllWorldsState::getNextGearItemUID()
+{
+	Lock lock(mutex);
+	return next_gear_item_uid++;
 }
 
 

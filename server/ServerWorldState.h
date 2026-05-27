@@ -25,6 +25,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "Screenshot.h"
 #include "Photo.h"
 #include "ChatBot.h"
+#include "../shared/GearItem.h"
 #include "SubEthTransaction.h"
 #include <ThreadSafeRefCounted.h>
 #include <Platform.h>
@@ -336,6 +337,7 @@ public:
 	uint64 getNextEventUID();
 	uint64 getNextPhotoUID();
 	uint64 getNextChatBotUID();
+	UID getNextGearItemUID();
 
 	ObjectStorageItemRef getOrCreateObjectStorageItem(const ObjectStorageKey& key) REQUIRES(mutex); // Throws exception if too many items for object already created.
 	void clearObjectStorageItems() REQUIRES(mutex); // Just for tests
@@ -360,6 +362,7 @@ public:
 	void addUserAsDBDirty(const UserRef user)								REQUIRES(mutex) { db_dirty_users.insert(user); changed = 1; }
 	void addNewsPostAsDBDirty(const NewsPostRef post)						REQUIRES(mutex) { db_dirty_news_posts.insert(post); changed = 1; }
 	void addEventAsDBDirty(const SubEventRef event)							REQUIRES(mutex) { db_dirty_events.insert(event); changed = 1; }
+	void addGearItemAsDBDirty(const GearItemRef item)						REQUIRES(mutex) { db_dirty_gear_items.insert(item); changed = 1; }
 
 	void addEverythingToDirtySets();
 
@@ -388,6 +391,8 @@ public:
 	std::map<uint64, ScreenshotRef> screenshots GUARDED_BY(mutex); // Screenshot id to ScreenshotRef
 
 	std::map<uint64, PhotoRef> photos GUARDED_BY(mutex); // Photo id to PhotoRef
+
+	std::map<UID, GearItemRef> gear_items GUARDED_BY(mutex); // GearItem id to GearItem
 
 	std::map<uint64, SubEthTransactionRef> sub_eth_transactions GUARDED_BY(mutex); // SubEthTransaction id to SubEthTransaction
 
@@ -465,6 +470,7 @@ public:
 	std::unordered_set<ObjectStorageItemRef, ObjectStorageItemRefHash>	db_dirty_object_storage_items	GUARDED_BY(mutex);
 	std::unordered_set<UserSecretRef, UserSecretRefHash>				db_dirty_user_secrets			GUARDED_BY(mutex);
 	std::unordered_set<SubEventRef, SubEventRefHash>					db_dirty_events					GUARDED_BY(mutex);
+	std::unordered_set<GearItemRef, GearItemRefHash>					db_dirty_gear_items				GUARDED_BY(mutex);
 
 	std::unordered_set<DatabaseKey, DatabaseKeyHash>					db_records_to_delete			GUARDED_BY(mutex);
 
@@ -487,6 +493,7 @@ private:
 	uint64 next_sub_eth_transaction_uid GUARDED_BY(mutex);
 	uint64 next_screenshot_uid GUARDED_BY(mutex);
 	uint64 next_chatbot_uid GUARDED_BY(mutex);
+	UID next_gear_item_uid GUARDED_BY(mutex);
 
 	Database database GUARDED_BY(mutex);
 };

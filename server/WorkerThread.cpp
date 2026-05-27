@@ -23,6 +23,7 @@ Copyright Glare Technologies Limited 2018 -
 #include "../shared/FileTypes.h"
 #include "../shared/LuaScriptEvaluator.h"
 #include "../shared/ObjectEventHandlers.h"
+#include "../shared/GearItem.h"
 #include <vec3.h>
 #include <ConPrint.h>
 #include <Clock.h>
@@ -36,6 +37,7 @@ Copyright Glare Technologies Limited 2018 -
 #include <StringUtils.h>
 #include <CryptoRNG.h>
 #include <SocketBufferOutStream.h>
+#include <BufferOutStream.h>
 #include <PlatformUtils.h>
 #include <KillThreadMessage.h>
 #include <Parser.h>
@@ -592,7 +594,7 @@ void WorkerThread::handleScreenshotBotConnection()
 
 			if(screenshot.nonNull()) // If there is a screenshot to take:
 			{
-				if(!screenshot->is_map_tile)
+				if(screenshot->screenshot_type == Screenshot::ScreenshotType_Default)
 				{
 					socket->writeUInt32(Protocol::ScreenShotRequest);
 
@@ -605,7 +607,7 @@ void WorkerThread::handleScreenshotBotConnection()
 					socket->writeInt32(screenshot->width_px);
 					socket->writeInt32(screenshot->highlight_parcel_id);
 				}
-				else
+				else if(screenshot->screenshot_type == Screenshot::ScreenshotType_MapTile)
 				{
 					socket->writeUInt32(Protocol::TileScreenShotRequest);
 
@@ -614,6 +616,24 @@ void WorkerThread::handleScreenshotBotConnection()
 					socket->writeInt32(screenshot->tile_x);
 					socket->writeInt32(screenshot->tile_y);
 					socket->writeInt32(screenshot->tile_z);
+				}
+				else // ScreenshotType_Gear
+				{
+					assert(screenshot->screenshot_type == Screenshot::ScreenshotType_Gear);
+
+					// Serialise GearItem into temp buffer while holding lock; don't hold lock during network write.
+					BufferOutStream gear_buf;
+					{
+						WorldStateLock lock(server->world_state->mutex);
+						auto it = server->world_state->gear_items.find(screenshot->gear_item_id);
+						if(it == server->world_state->gear_items.end())
+							throw glare::Exception("Failed to find gear item with id " + screenshot->gear_item_id.toString());
+						it->second->writeToStream(gear_buf);
+					}
+
+					socket->writeUInt32(Protocol::GearScreenShotRequest);
+					socket->writeInt32(screenshot->width_px);
+					socket->writeData(gear_buf.buf.data(), gear_buf.buf.size());
 				}
 
 				// Read response
@@ -635,7 +655,14 @@ void WorkerThread::handleScreenshotBotConnection()
 					const int NUM_BYTES = 16;
 					uint8 pathdata[NUM_BYTES];
 					CryptoRNG::getRandomBytes(pathdata, NUM_BYTES);
-					const std::string screenshot_filename = "screenshot_" + StringUtils::convertByteArrayToHexString(pathdata, NUM_BYTES) + ".jpg";
+
+					std::string prefix;
+					if(screenshot->screenshot_type == Screenshot::ScreenshotType_MapTile)
+						prefix = "map_tile_";
+					else if(screenshot->screenshot_type == Screenshot::ScreenshotType_Gear)
+						prefix = "gear_";
+
+					const std::string screenshot_filename = prefix + "screenshot_" + StringUtils::convertByteArrayToHexString(pathdata, NUM_BYTES) + ".jpg";
 					const std::string screenshot_path = server->screenshot_dir + "/" + screenshot_filename;
 
 					// Save screenshot to path
@@ -645,16 +672,16 @@ void WorkerThread::handleScreenshotBotConnection()
 					conPrint("Saved to disk at " + screenshot_path);
 
 
-					// Add map tile as a resource too, for access by embedded minimap on client.
-					URLString tile_URL; // Only used for map tiles.
-					if(screenshot->is_map_tile)
+					// Add map tile or gear screenshot as a resource.
+					URLString tile_URL; // Used for map tiles and gear screenshots.
+					if(screenshot->is_map_tile || screenshot->screenshot_type == Screenshot::ScreenshotType_Gear)
 					{
 						// Copy screenshot into resource dir and add as a resource
 						tile_URL = toURLString(screenshot_filename);
 						ResourceRef resource = server->world_state->resource_manager->getOrCreateResourceForURL(tile_URL); // Will create a new Resource ob if not already inserted.
 						const std::string local_abs_path = server->world_state->resource_manager->getLocalAbsPathForResource(*resource);
 
-						FileUtils::copyFile(screenshot_path, local_abs_path); 
+						FileUtils::copyFile(screenshot_path, local_abs_path);
 
 						resource->owner_id = UserID::invalidUserID();
 						resource->setState(Resource::State_Present);
@@ -662,6 +689,22 @@ void WorkerThread::handleScreenshotBotConnection()
 						{
 							Lock lock(server->world_state->mutex);
 							server->world_state->addResourceAsDBDirty(resource);
+						}
+
+						// Update associated gear item preview_image_URL (linear scan; handles cloned gear items sharing the same screenshot).
+						if(screenshot->screenshot_type == Screenshot::ScreenshotType_Gear)
+						{
+							WorldStateLock lock(server->world_state->mutex);
+							const uint64 screenshot_id = screenshot->id;
+							for(auto it = server->world_state->gear_items.begin(); it != server->world_state->gear_items.end(); ++it)
+							{
+								GearItem* gear_item = it->second.ptr();
+								if(gear_item->preview_image_screenshot_id == screenshot_id)
+								{
+									gear_item->preview_image_URL = tile_URL;
+									server->world_state->addGearItemAsDBDirty(it->second);
+								}
+							}
 						}
 					}
 
@@ -671,7 +714,7 @@ void WorkerThread::handleScreenshotBotConnection()
 						// Update screenshot state under the world_state mutex so other threads (webserver, clients) don't race on these fields.
 						screenshot->state = Screenshot::ScreenshotState_done;
 						screenshot->local_path = screenshot_path;
-						if(screenshot->is_map_tile)
+						if(screenshot->is_map_tile || screenshot->screenshot_type == Screenshot::ScreenshotType_Gear)
 							screenshot->URL = tile_URL;
 
 						server->world_state->addScreenshotAsDBDirty(screenshot);

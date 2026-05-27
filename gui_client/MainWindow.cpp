@@ -435,6 +435,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	gui_client(base_dir_path_, appdata_path_, args),
 	run_as_screenshot_slave(false),
 	taking_map_screenshot(false),
+	taking_gear_screenshot(false),
+	screenshot_gear_model_load_started(false),
 	test_screenshot_taking(false),
 	screenshot_target_worldname_set(false),
 	running_destructor(false),
@@ -2310,6 +2312,32 @@ void MainWindow::runScreenshotCode()
 						screenshot_highlight_parcel_id = -1;
 						taking_map_screenshot = true;
 					}
+					else if(command == "takegearsscreenshot")
+					{
+						taking_gear_screenshot = false;
+						screenshot_gear_model_load_started = false;
+						screenshot_gear_item = nullptr;
+						screenshot_gear_world_ob = nullptr;
+
+						// Read GearItem from socket using its self-describing buffer_size
+						const uint32 version     = screenshot_command_socket->readUInt32();
+						const uint32 buffer_size = screenshot_command_socket->readUInt32();
+						if(buffer_size < 8 || buffer_size > 1000000)
+							throw glare::Exception("Invalid GearItem buffer_size: " + toString(buffer_size));
+						std::vector<uint8> gear_buf(buffer_size);
+						std::memcpy(gear_buf.data(),     &version,     sizeof(uint32));
+						std::memcpy(gear_buf.data() + 4, &buffer_size, sizeof(uint32));
+						screenshot_command_socket->readData(gear_buf.data() + 8, buffer_size - 8);
+						BufferInStream gear_stream(ArrayRef<uint8>(gear_buf.data(), gear_buf.size()));
+						screenshot_gear_item = new GearItem();
+						readGearItemFromStream(gear_stream, *screenshot_gear_item);
+
+						screenshot_width_px = screenshot_command_socket->readInt32();
+						screenshot_output_path = screenshot_command_socket->readStringLengthFirst(1000);
+						taking_map_screenshot = false;
+						taking_gear_screenshot = true;
+						screenshot_loading_timer.reset();
+					}
 					else if(command == "quit")
 					{
 						conPrint("Received quit command, exiting...");
@@ -2332,6 +2360,161 @@ void MainWindow::runScreenshotCode()
 	}
 	if(!screenshot_output_path.empty() && gui_client.world_state.nonNull())
 	{
+		if(taking_gear_screenshot)
+		{
+			// --- Gear screenshot path ---
+			// On the first call, create a temp WorldObject for the gear model and trigger loading.
+			if(!screenshot_gear_model_load_started && screenshot_gear_item.nonNull())
+			{
+				screenshot_gear_model_load_started = true;
+
+				screenshot_gear_world_ob = new WorldObject();
+				screenshot_gear_world_ob->uid = UID(100000000);
+				screenshot_gear_world_ob->object_type = WorldObject::ObjectType_Generic;
+				screenshot_gear_world_ob->model_url = screenshot_gear_item->model_url;
+				screenshot_gear_world_ob->materials = screenshot_gear_item->materials;
+				screenshot_gear_world_ob->pos = gui_client.cam_controller.getPosition();
+				screenshot_gear_world_ob->scale = screenshot_gear_item->scale;
+				screenshot_gear_world_ob->angle = 0;
+				screenshot_gear_world_ob->axis = Vec3f(0, 0, 1);
+				screenshot_gear_world_ob->in_proximity = true;
+				screenshot_gear_world_ob->current_lod_level = 0;
+				screenshot_gear_world_ob->max_model_lod_level = 0;
+				screenshot_gear_world_ob->transformChanged();
+
+				WorldStateLock lock(gui_client.world_state->mutex);
+				gui_client.world_state->objects.insert(screenshot_gear_world_ob->uid, screenshot_gear_world_ob);
+				gui_client.loadModelForObject(screenshot_gear_world_ob.ptr(), lock);
+			}
+
+			const size_t num_model_and_tex_tasks = gui_client.load_item_queue.size() + gui_client.model_and_texture_loader_task_manager.getNumUnfinishedTasks() + gui_client.model_loaded_messages_to_process.size();
+
+			if(time_since_last_waiting_msg.elapsed() > 1.0)
+			{
+				conPrint("Waiting for gear model to load for screenshot (loading time: " + screenshot_loading_timer.elapsedStringNSigFigs(3) + ")...");
+				time_since_last_waiting_msg.reset();
+			}
+
+			if(screenshot_loading_timer.elapsed() > 20.0)
+			{
+				conPrint("Took too long while trying to take gear screenshot, returning failure.");
+				screenshot_output_path.clear();
+				time_since_last_screenshot.reset();
+
+				if(screenshot_command_socket.nonNull())
+				{
+					screenshot_command_socket->writeInt32(1);
+					screenshot_command_socket->writeStringLengthFirst("Took too long while trying to take gear screenshot");
+				}
+
+				if(screenshot_gear_world_ob.nonNull())
+				{
+					gui_client.removeAndDeleteGLAndPhysicsObjectsForOb(*screenshot_gear_world_ob);
+					Lock lock(gui_client.world_state->mutex);
+					gui_client.world_state->objects.erase(screenshot_gear_world_ob->uid);
+				}
+
+				screenshot_gear_world_ob = nullptr;
+				screenshot_gear_item = nullptr;
+				taking_gear_screenshot = false;
+				screenshot_gear_model_load_started = false;
+				return;
+			}
+
+			const bool gear_loaded =
+				screenshot_gear_world_ob.nonNull() &&
+				screenshot_gear_world_ob->opengl_engine_ob.nonNull() &&
+				(num_model_and_tex_tasks == 0) &&
+				(gui_client.num_non_net_resources_downloading == 0) &&
+				(gui_client.num_net_resources_downloading == 0) &&
+				(time_since_last_screenshot.elapsed() > 1.0);
+
+			if(gear_loaded)
+			{
+				OpenGLSceneRef gear_scene = new OpenGLScene(*opengl_engine);
+				gear_scene->draw_water = false;
+				gear_scene->background_colour = Colour3f(0.2f);
+				gear_scene->bloom_strength = 0.3f;
+				opengl_engine->addScene(gear_scene);
+
+				OpenGLSceneRef old_scene = opengl_engine->getCurrentScene();
+				opengl_engine->setCurrentScene(gear_scene);
+
+				OpenGLMaterial env_mat;
+				opengl_engine->setEnvMat(env_mat);
+				opengl_engine->setSunDir(normalise(Vec4f(1,-1,1,0)));
+
+				GLObjectRef gear_gl_ob = opengl_engine->allocateObject();
+				gear_gl_ob->mesh_data = screenshot_gear_world_ob->opengl_engine_ob->mesh_data;
+				gear_gl_ob->materials = screenshot_gear_world_ob->opengl_engine_ob->materials;
+				gear_gl_ob->ob_to_world_matrix = Matrix4f::scaleMatrix(screenshot_gear_item->scale.x, screenshot_gear_item->scale.y, screenshot_gear_item->scale.z);
+				opengl_engine->addObject(gear_gl_ob);
+
+				const js::AABBox aabb_ws = gear_gl_ob->aabb_ws;
+				const Vec4f centre = aabb_ws.centroid();
+				const float half_diag = (aabb_ws.max_ - aabb_ws.min_).length() * 0.5f;
+				const float cam_dist = myMax(0.1f, half_diag * 3.0f);
+
+				const Matrix4f world_to_cam =
+					Matrix4f::translationMatrix(0.f, cam_dist, 0.f) *
+					Matrix4f::rotationAroundXAxis(-(1.3f - Maths::pi_2<float>())) *
+					Matrix4f::rotationAroundZAxis(2.0f) *
+					Matrix4f::translationMatrix(-centre);
+
+				opengl_engine->setViewportDims(screenshot_width_px, screenshot_width_px);
+				opengl_engine->setNearDrawDistance(myMax(0.001f, cam_dist * 0.01f));
+				opengl_engine->setMaxDrawDistance(cam_dist * 100.f);
+				opengl_engine->setPerspectiveCameraTransform(world_to_cam, /*sensor_width=*/0.035f, /*lens_sensor_dist=*/0.05f, /*render_aspect_ratio=*/1.0f, /*lens_shift_up=*/0.f, /*lens_shift_right=*/0.f);
+
+				try
+				{
+					opengl_engine->waitForAllBuildingProgramsToBuild();
+					ImageMapUInt8Ref map = opengl_engine->drawToBufferAndReturnImageMap();
+					if(map->hasAlphaChannel())
+						map = map->extract3ChannelImage();
+					JPEGDecoder::save(map, screenshot_output_path, JPEGDecoder::SaveOptions(/*quality=*/95));
+
+					screenshot_output_path.clear();
+					time_since_last_screenshot.reset();
+
+					if(screenshot_command_socket.nonNull())
+					{
+						screenshot_command_socket->writeInt32(0);
+						screenshot_command_socket->writeStringLengthFirst("Success!");
+					}
+				}
+				catch(glare::Exception& e)
+				{
+					conPrint("Exception while saving gear screenshot: " + e.what());
+					screenshot_output_path.clear();
+					time_since_last_screenshot.reset();
+
+					if(screenshot_command_socket.nonNull())
+					{
+						screenshot_command_socket->writeInt32(1);
+						screenshot_command_socket->writeStringLengthFirst("Exception: " + e.what());
+					}
+				}
+
+				opengl_engine->removeObject(gear_gl_ob);
+				opengl_engine->setCurrentScene(old_scene);
+				opengl_engine->removeScene(gear_scene);
+
+				if(screenshot_gear_world_ob.nonNull())
+				{
+					gui_client.removeAndDeleteGLAndPhysicsObjectsForOb(*screenshot_gear_world_ob);
+					Lock lock(gui_client.world_state->mutex);
+					gui_client.world_state->objects.erase(screenshot_gear_world_ob->uid);
+				}
+
+				screenshot_gear_world_ob = nullptr;
+				screenshot_gear_item = nullptr;
+				taking_gear_screenshot = false;
+				screenshot_gear_model_load_started = false;
+			}
+			return;
+		}
+
 		if(!screenshot_output_path.empty()) // If we are in screenshot-taking mode:
 		{
 			// If we were asked to take a map screenshot for a specific world, wait until we are actually in that world.

@@ -396,7 +396,13 @@ public:
 	Vec3d screenshot_camangles;
 	bool screenshot_target_worldname_set;
 	std::string screenshot_target_worldname;
-	
+
+	bool taking_gear_screenshot;
+	bool screenshot_gear_model_load_started;
+	Reference<GearItem> screenshot_gear_item;
+	Reference<WorldObject> screenshot_gear_world_ob;
+	Timer screenshot_loading_timer;
+
 	Timer time_since_last_screenshot;
 	Timer time_since_last_waiting_msg;
 

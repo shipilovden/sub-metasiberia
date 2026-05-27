@@ -424,7 +424,7 @@ std::string sharedAdminHeader(ServerAllWorldsState& world_state, const web::Requ
 
 	page_out += "<p class=\"msb-admin-nav\"><a href=\"/admin\">Main admin page</a><a href=\"/admin_users\">Users</a><a href=\"/admin_parcels\">Parcels</a><a href=\"/admin_world_parcels\">World Parcels</a>";
 	page_out += "<a href=\"/admin_parcel_auctions\">Parcel Auctions</a><a href=\"/admin_orders\">Orders</a><a href=\"/admin_sub_eth_transactions\">Eth Transactions</a><a href=\"/admin_map\">Map</a>";
-	page_out += "<a href=\"/admin_news_posts\">News Posts</a><a href=\"/admin_lod_chunks\">LOD Chunks</a><a href=\"/admin_worlds\">Worlds</a><a href=\"/admin_chatbots\">ChatBots</a></p>";
+	page_out += "<a href=\"/admin_news_posts\">News Posts</a><a href=\"/admin_lod_chunks\">LOD Chunks</a><a href=\"/admin_worlds\">Worlds</a><a href=\"/admin_chatbots\">ChatBots</a><a href=\"/admin_gear\">Gear</a></p>";
 
 	return page_out;
 }
@@ -5361,6 +5361,93 @@ void handleRebuildWorldLODChunks(ServerAllWorldsState& all_worlds_state, const w
 			conPrint("handleRebuildWorldLODChunks error: " + e.what());
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
 	}
+}
+
+
+void renderAdminGearPage(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	std::string page_out = sharedAdminHeader(world_state, request);
+	page_out += "<h2>Gear Items</h2>\n";
+
+	page_out += "<form action=\"/admin_regenerate_gear_screenshots_post\" method=\"post\">";
+	page_out += "<input type=\"submit\" value=\"Regenerate all gear screenshots\" onclick=\"return confirm('Regenerate all gear item preview screenshots?');\">";
+	page_out += "</form><br/>";
+
+	page_out += "<table>";
+	page_out += "<tr><th>ID</th><th>Name</th><th>Creator</th><th>Owner</th><th>Preview</th></tr>";
+
+	{
+		WorldStateLock lock(world_state.mutex);
+		for(auto it = world_state.gear_items.begin(); it != world_state.gear_items.end(); ++it)
+		{
+			const GearItem* item = it->second.ptr();
+			page_out += "<tr>";
+			page_out += "<td>" + item->id.toString() + "</td>";
+			page_out += "<td>" + web::Escaping::HTMLEscape(item->name) + "</td>";
+			page_out += "<td>" + item->creator_id.toString() + "</td>";
+			page_out += "<td>" + item->owner_id.toString() + "</td>";
+			if(!item->preview_image_URL.empty())
+				page_out += "<td><img src=\"/resource/" + web::Escaping::URLEscape(item->preview_image_URL) + "\" style=\"max-width:64px; max-height:64px;\"/></td>";
+			else
+				page_out += "<td>(none)</td>";
+			page_out += "</tr>";
+		}
+	}
+
+	page_out += "</table>";
+	page_out += webServerResponseFooter();
+	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
+}
+
+
+void handleRegenerateMultipleGearScreenshots(ServerAllWorldsState& world_state, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	if(!LoginHandlers::loggedInUserHasAdminPrivs(world_state, request))
+	{
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Access denied sorry.");
+		return;
+	}
+
+	try
+	{
+		WorldStateLock lock(world_state.mutex);
+
+		for(auto it = world_state.gear_items.begin(); it != world_state.gear_items.end(); ++it)
+		{
+			GearItemRef gear_item = it->second;
+
+			// Create a new screenshot request for this gear item.
+			ScreenshotRef shot = new Screenshot();
+			shot->id = world_state.getNextScreenshotUIDUnlocked(lock);
+			shot->screenshot_type = Screenshot::ScreenshotType_Gear;
+			shot->is_map_tile = false;
+			shot->gear_item_id = gear_item->id;
+			shot->width_px = 400;
+			shot->state = Screenshot::ScreenshotState_notdone;
+			shot->created_time = TimeStamp::currentTime();
+
+			gear_item->preview_image_screenshot_id = shot->id;
+			world_state.screenshots[shot->id] = shot;
+
+			world_state.addScreenshotAsDBDirty(shot);
+			world_state.addGearItemAsDBDirty(gear_item);
+		}
+	}
+	catch(glare::Exception& e)
+	{
+		if(!request.fuzzing)
+			conPrint("handleRegenerateMultipleGearScreenshots error: " + e.what());
+		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, "Error: " + e.what());
+		return;
+	}
+
+	web::ResponseUtils::writeRedirectTo(reply_info, "/admin_gear");
 }
 
 
