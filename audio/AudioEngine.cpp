@@ -1146,7 +1146,11 @@ AudioSourceRef AudioEngine::addSourceFromStreamingSoundFile(AddSourceFromStreami
 		if(params.sound_data_source)
 			streamer = new MP3AudioStreamer(params.sound_data_source);
 		else
+		{
+			if(!params.mem_mapped_sound_file && !params.sound_file_path.empty())
+				params.mem_mapped_sound_file = new SharedMemMappedFile(params.sound_file_path);
 			streamer = new MP3AudioStreamer(params.mem_mapped_sound_file);
+		}
 
 		if(!params.paused) // if not paused, we can use the same stream as other sources.
 		{
