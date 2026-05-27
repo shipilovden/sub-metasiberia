@@ -350,7 +350,7 @@ void PhotoModeUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui
 	{
 		GLUIWindow::CreateArgs args;
 		args.title = trPhoto(settings, "Photo Mode Settings");
-		args.background_alpha = 0.6f;
+		args.background_alpha = 0.9f;
 		args.background_colour = Colour3f(0.1f);
 		window = new GLUIWindow(*gl_ui_, opengl_engine_, args);
 		window->debug_name = "photo mode window";

@@ -2090,7 +2090,7 @@ void ServerAllWorldsState::test()
 	try
 	{
 		ServerAllWorldsState state;
-		state.resource_manager = new ResourceManager(temp_dir);
+		state.resource_manager = new ResourceManager(temp_dir, /*resources_db_path (not used on server)=*/"dummy");
 
 		ResourceRef present_resource = state.resource_manager->getOrCreateResourceForURL("present_texture.png");
 		present_resource->setState(Resource::State_Present);

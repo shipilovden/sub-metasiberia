@@ -240,9 +240,12 @@ private:
 	Reference<LLMThread> createLLMThread(Server* server);
 
 	// The response from the LLM is streamed back from the cloud server, however we only want to chat in complete sentences, not in fragments of sentences.  So we will scan the accumulated response for sentence ends.
+	size_t body_start_index; // Index into total_llm_response.  Index at which the first of the current sentences' body starts.  Will be > 0 if after e.g. a [SPEAK] prefix.
 	size_t next_sentence_start_index; // Index into total_llm_response.  Index at which the next sentence starts, e.g. 1 place past end of last sentence.
 	size_t next_sentence_search_pos; // Current search position in total_llm_response for a sentence end.
 	std::string total_llm_response;
+	bool response_has_speak_prefix; // Did the chatbot want to speak this message by emitting the "[SPEAK]" prefix? (as opposed to staying silent for this message)?
+	bool processed_first_response_data; // Have we received at least strlen("[SPEAK]") chars in the response, and looked for "[SPEAK]"?
 
 	Timer sentences_received_timer; // Once we have received a complete sentence from the LLM server, start this timer.  When it has completed, send any queued sentences.
 

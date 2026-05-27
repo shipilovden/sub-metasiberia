@@ -13,8 +13,8 @@ Copyright Glare Technologies Limited 2019 -
 #include <KillThreadMessage.h>
 
 
-SaveResourcesDBThread::SaveResourcesDBThread(const Reference<ResourceManager>& resource_manager_, const std::string& path_)
-:	resource_manager(resource_manager_), path(path_)
+SaveResourcesDBThread::SaveResourcesDBThread(const Reference<ResourceManager>& resource_manager_)
+:	resource_manager(resource_manager_)
 {}
 
 
@@ -36,7 +36,7 @@ void SaveResourcesDBThread::doRun()
 
 				try
 				{
-					resource_manager->saveToDisk(path);
+					resource_manager->saveToDisk();
 				}
 				catch(glare::Exception& e)
 				{

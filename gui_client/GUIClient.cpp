@@ -1100,7 +1100,6 @@ void GUIClient::postConnectInitialise()
 	FileUtils::createDirIfDoesNotExist(resources_dir);
 
 	print("resources_dir: " + resources_dir);
-	resource_manager = new ResourceManager(resources_dir);
 
 	// The user may have changed the resources dir (by changing the custom cache directory) since last time we ran.
 	// In this case, we want to check if each resource is actually present on disk in the current resources dir.
@@ -1109,11 +1108,23 @@ void GUIClient::postConnectInitialise()
 	if(resources_dir_changed)
 		settings->setStringValue("last_resources_dir", resources_dir);
 
-	const std::string resources_db_path = appdata_path + "/resources_db";
+	// --use_temp_resources_db is an option to use an empty, fresh resources database for testing.  Use a different filename for such a database.
+	const bool use_temp_resources = parsed_args.isArgPresent("--use_temp_resources_db");
+
+	const std::string resource_db_filename = use_temp_resources ? "resources_db_temp" : "resources_db";
+
+	const std::string resources_db_path = appdata_path + "/" + resource_db_filename;
+
+	// Start from an empty resource database if using --use_temp_resources_db
+	if(use_temp_resources && FileUtils::fileExists(resources_db_path))
+		FileUtils::deleteFile(resources_db_path);
+
+	resource_manager = new ResourceManager(resources_dir, resources_db_path);
+
 	try
 	{
 		if(FileUtils::fileExists(resources_db_path))
-			resource_manager->loadFromDisk(resources_db_path, /*check_if_resources_exist_on_disk=*/resources_dir_changed);
+			resource_manager->loadFromDisk(/*check_if_resources_exist_on_disk=*/resources_dir_changed);
 	}
 	catch(glare::Exception& e)
 	{
@@ -1122,7 +1133,7 @@ void GUIClient::postConnectInitialise()
 
 #if !defined(EMSCRIPTEN)
 	// With Emscripten we use an ephemeral virtual file system, so no point in saving resource manager state to it.
-	save_resources_db_thread_manager.addThread(new SaveResourcesDBThread(resource_manager, resources_db_path));
+	save_resources_db_thread_manager.addThread(new SaveResourcesDBThread(resource_manager));
 #endif
 
 
@@ -1819,15 +1830,14 @@ GUIClient::~GUIClient()
 	player_physics.shutdown();
 
 	// Save resources DB to disk if it has un-saved changes.
-	const std::string resources_db_path = appdata_path + "/resources_db";
 	try
 	{
 		if(resource_manager->hasChanged())
-			resource_manager->saveToDisk(resources_db_path);
+			resource_manager->saveToDisk();
 	}
 	catch(glare::Exception& e)
 	{
-		conPrint("WARNING: failed to save resources database to '" + resources_db_path + "': " + e.what());
+		conPrint("WARNING: failed to save resources database to '" + resource_manager->getResourcesDBPath() + "': " + e.what());
 	}
 
 #if !defined(EMSCRIPTEN)
@@ -4704,7 +4714,12 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 		bool added_opengl_ob = false;
 
 		WorldObject::GetLODModelURLOptions options(/*get_optimised_mesh=*/this->server_has_optimised_meshes, this->server_opt_mesh_version);
-		const URLString lod_model_url = avatar_is_default_model ? DEFAULT_AVATAR_MODEL_URL : WorldObject::getLODModelURLForLevel(avatar->avatar_settings.model_url, ob_model_lod_level, options);
+		URLString lod_model_url = avatar_is_default_model ? DEFAULT_AVATAR_MODEL_URL : WorldObject::getLODModelURLForLevel(avatar->avatar_settings.model_url, ob_model_lod_level, options);
+		// If the optimised mesh is not available locally, fall back to the original URL so locally-uploaded bot avatars load immediately.
+		if(!avatar_is_default_model && lod_model_url != URLString(avatar->avatar_settings.model_url) &&
+		   !resource_manager->isFileForURLPresent(lod_model_url) &&
+		   resource_manager->isFileForURLPresent(URLString(avatar->avatar_settings.model_url)))
+			lod_model_url = URLString(avatar->avatar_settings.model_url);
 
 		avatar->graphics.loaded_lod_level = ob_lod_level;
 
@@ -5430,6 +5445,8 @@ void GUIClient::updateSelectedObjectPlacementBeamAndGizmos()
 	if(selected_bot_avatar_uid.valid() && selected_ob.isNull())
 	{
 		axis_and_rot_obs_enabled = true; // Keep gizmo active every frame while bot is selected
+		for(int i = 0; i < 3; ++i)
+			rot_handle_lines[i].clear(); // Prevent stale rotation arc hit tests from previous object selection
 
 		Lock lock(world_state->mutex);
 		auto it = world_state->avatars.find(selected_bot_avatar_uid);
@@ -14195,7 +14212,7 @@ void GUIClient::thirdPersonCameraToggled(bool enabled)
 	this->cam_controller.setThirdPersonEnabled(enabled);
 
 	// Add or remove our avatar opengl model.
-	if(this->cam_controller.thirdPersonEnabled()) // If we just enabled third person camera:
+	if(enabled) // If we just enabled third person camera:
 	{
 		this->setThirdPersonCameraPosition(/*dt=*/1/60.f); // Update cam_controller->third_person_cam_position etc.
 
@@ -17366,12 +17383,16 @@ void GUIClient::mousePressed(MouseEvent& e)
 			ui_interface->setCamRotationOnMouseDragEnabled(false);
 		}
 	}
-	else if(selected_bot_avatar_uid.valid() && selected_ob.isNull())
+	else if(selected_ob.isNull())
 	{
-		grabbed_axis = mouseOverAxisArrowOrRotArc(Vec2f((float)e.cursor_pos.x, (float)e.cursor_pos.y), this->grabbed_point_ws);
-		if(grabbed_axis > NUM_AXIS_ARROWS) grabbed_axis = -1; // Reject rotation arcs; keep 0-2=axis arrows, NUM_AXIS_ARROWS=XY-plane body drag
+		// Try axis-arrow grab first if a bot is already selected
+		if(selected_bot_avatar_uid.valid())
+		{
+			grabbed_axis = mouseOverAxisArrowOrRotArc(Vec2f((float)e.cursor_pos.x, (float)e.cursor_pos.y), this->grabbed_point_ws);
+			if(grabbed_axis >= NUM_AXIS_ARROWS) grabbed_axis = -1; // Reject all rotation arcs (values >= NUM_AXIS_ARROWS)
+		}
 
-		// Fallback: if no arrow grabbed, check if we clicked on the bot body → XY-plane drag
+		// Fallback: physics ray trace — works for both selected and unselected bots
 		if(grabbed_axis < 0 && physics_world.nonNull())
 		{
 			const Vec4f ray_origin = cam_controller.getPosition().toVec4fPoint();
@@ -17381,8 +17402,12 @@ void GUIClient::mousePressed(MouseEvent& e)
 			if(body_res.hit_object && body_res.hit_object->userdata_type == 3)
 			{
 				const Avatar* hit_av = static_cast<const Avatar*>(body_res.hit_object->userdata);
-				if(hit_av && hit_av->uid == selected_bot_avatar_uid)
+				if(hit_av && hit_av->isChatBotAvatar())
 				{
+					// Select immediately on press so drag starts right away (no two-click dance)
+					if(hit_av->uid != selected_bot_avatar_uid)
+						selectBotAvatar(hit_av->uid);
+
 					grabbed_axis = NUM_AXIS_ARROWS; // XY-plane (horizontal) drag mode
 					Lock lock(world_state->mutex);
 					auto it = world_state->avatars.find(selected_bot_avatar_uid);
@@ -17963,6 +17988,8 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 		bool show_mouseover_info_ui = false;
 		if(results.hit_object)
 		{
+			const string_view use_action_button = cursor_is_mouse_cursor ? "[E]" : "[A] on gamepad";
+
 			if(results.hit_object->userdata && results.hit_object->userdata_type == 0) // If we hit an object:
 			{
 				WorldObject* ob = static_cast<WorldObject*>(results.hit_object->userdata);
@@ -17999,7 +18026,7 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 							if(ob->isPortal())
 								ob_info_ui.showMessage("Walk through to visit " + trimmed_URL, cursor_gl_coords);
 							else
-								ob_info_ui.showMessage("Press [E] to open " + trimmed_URL, cursor_gl_coords);
+								ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to open " + trimmed_URL, cursor_gl_coords);
 
 							show_mouseover_info_ui = true;
 						}
@@ -18008,7 +18035,13 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 					if((ob->object_type == WorldObject::ObjectType_Seat) && seat_sitting_on.isNull() && vehicle_controller_inside.isNull() &&
 						(server_protocol_version >= 49) && !isAvatarSittingOnSeat(*ob))
 					{
-						ob_info_ui.showMessage(cursor_is_mouse_cursor ? "Press [E] to sit" : "Press [A] on gamepad to sit", cursor_gl_coords);
+						ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to sit", cursor_gl_coords);
+						show_mouseover_info_ui = true;
+					}
+
+					if(ob->isGearItem())
+					{
+						ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to pick up gear item '" + ob->getGearItemName() + "'", cursor_gl_coords);
 						show_mouseover_info_ui = true;
 					}
 
@@ -18020,16 +18053,13 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 						const Vec4f vehicle_up_ws = normalise(obToWorldMatrix(*ob) * vehicle_up_os);
 						const bool upright = dot(vehicle_up_ws, up_z_up) > 0.5f;
 
-						if(upright || !ob->vehicle_script->isRightable())
-							ob_info_ui.showMessage(cursor_is_mouse_cursor ? "Press [E] to enter vehicle" : "Press [A] on gamepad to enter vehicle", cursor_gl_coords);
-						else
-							ob_info_ui.showMessage(cursor_is_mouse_cursor ? "Press [E] to right vehicle" : "Press [A] on gamepad to right vehicle", cursor_gl_coords);
+						ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to " + ((upright || !ob->vehicle_script->isRightable()) ? "enter" : "right") + " vehicle.", cursor_gl_coords);
 						show_mouseover_info_ui = true;
 					}
 
 					if(ob->event_handlers && ob->event_handlers->onUserUsedObject_handlers.nonEmpty())
 					{
-						ob_info_ui.showMessage(cursor_is_mouse_cursor ? "Press [E] to use" : "Press [A] on gamepad to use", cursor_gl_coords);
+						ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to use", cursor_gl_coords);
 						show_mouseover_info_ui = true;
 					}
 
@@ -18057,12 +18087,12 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 				const Avatar* avatar = (const Avatar*)results.hit_object->userdata;
 				if(avatar && avatar->isChatBotAvatar())
 				{
-					ob_info_ui.showMessage(cursor_is_mouse_cursor ? "Press [E] to interact" : "Press [A] to interact", cursor_gl_coords);
+					ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to interact", cursor_gl_coords);
 					show_mouseover_info_ui = true;
 				}
 				else if(avatar && !avatar->graphics.current_gesture_name.empty())
 				{
-					ob_info_ui.showMessage(cursor_is_mouse_cursor ? "Press [E] to join gesture" : "Press [A] to join gesture", cursor_gl_coords);
+					ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to join gesture", cursor_gl_coords);
 					show_mouseover_info_ui = true;
 				}
 			}

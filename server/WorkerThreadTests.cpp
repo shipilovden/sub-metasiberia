@@ -68,7 +68,7 @@ extern "C" int LLVMFuzzerInitialize(int *argc, char ***argv)
 		test_server = new Server();
 
 		test_server->world_state = new ServerAllWorldsState();
-		test_server->world_state->resource_manager = new ResourceManager(server_resource_dir);
+		test_server->world_state->resource_manager = new ResourceManager(server_resource_dir, /*resources_db_path (not used on server)=*/"dummy");
 		test_server->world_state->readFromDisk(test_server_state_dir + "/server_state.bin");
 
 		WorldCreation::createParcelsAndRoads(test_server->world_state);

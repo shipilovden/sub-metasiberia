@@ -55,11 +55,14 @@ void ObInfoUI::think()
 }
 
 
-void ObInfoUI::showMessage(const std::string& message, const Vec2f& gl_coords)
+void ObInfoUI::showMessage(const string_view message, const Vec2f& gl_coords)
 {
 	const Vec2f coords = gl_ui->UICoordsForOpenGLCoords(gl_coords);
 
-	info_text_view->setText(*gl_ui, UTF8Utils::sanitiseUTF8String(message));
+	if(UTF8Utils::isValidUTF8String(message))
+		info_text_view->setText(*gl_ui, std::string(message));
+	else
+		info_text_view->setText(*gl_ui, UTF8Utils::sanitiseUTF8String(std::string(message)));
 
 	info_text_view->setPos(/*botleft=*/coords + Vec2f(-gl_ui->getUIWidthForDevIndepPixelWidth(100), -gl_ui->getUIWidthForDevIndepPixelWidth(50)));
 

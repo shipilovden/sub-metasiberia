@@ -10,6 +10,7 @@ Copyright Glare Technologies Limited 2022 -
 #include <opengl/ui/GLUIButton.h>
 #include <opengl/ui/GLUICallbackHandler.h>
 #include <opengl/ui/GLUITextView.h>
+#include <string_view.h>
 
 
 class GUIClient;
@@ -31,7 +32,7 @@ public:
 
 	void think();
 
-	void showMessage(const std::string& message, const Vec2f& gl_coords);
+	void showMessage(const string_view message, const Vec2f& gl_coords);
 
 	void hideMessage();
 

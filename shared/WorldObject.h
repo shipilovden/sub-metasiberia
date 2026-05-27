@@ -286,7 +286,10 @@ public:
 	static std::string objectTypeString(ObjectType t);
 	static ObjectType objectTypeForString(const std::string& ob_type_string);
 
-	bool isPortal() const { return object_type == ObjectType_Portal; }
+	bool isPortal() const   { return object_type == ObjectType_Portal; }
+	bool isGearItem() const { return object_type == ObjectType_GearItem; }
+
+	const std::string& getGearItemName() const { return target_url; }
 
 	static void test();
 

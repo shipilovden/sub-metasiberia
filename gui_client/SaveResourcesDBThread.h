@@ -21,11 +21,10 @@ has changed.
 class SaveResourcesDBThread : public MessageableThread
 {
 public:
-	SaveResourcesDBThread(const Reference<ResourceManager>& resource_manager_, const std::string& path_);
+	SaveResourcesDBThread(const Reference<ResourceManager>& resource_manager_);
 	virtual ~SaveResourcesDBThread();
 
 	virtual void doRun();
 private:
 	Reference<ResourceManager> resource_manager;
-	const std::string path;
 };

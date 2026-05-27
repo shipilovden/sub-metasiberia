@@ -3874,7 +3874,7 @@ void WorkerThread::doRun()
 								chatbot->pos = bot_pos;
 								chatbot->heading = bot_heading;
 								chatbot->world = cur_world_state.ptr();
-								chatbot->flags = 0;
+								chatbot->flags = ChatBot::AUDIO_AUTOPLAY_FLAG;
 								chatbot->greeting_gesture_cooldown_s = 30.f;
 								chatbot->idle_gesture_interval_s = 20.f;
 								chatbot->reactive_gesture_cooldown_s = 15.f;

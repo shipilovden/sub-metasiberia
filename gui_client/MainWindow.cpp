@@ -6503,6 +6503,7 @@ int main(int argc, char *argv[])
 		syntax["--testscreenshot"] = std::vector<ArgumentParser::ArgumentType>(); // Test screenshot taking
 		syntax["--no_MDI"] = std::vector<ArgumentParser::ArgumentType>(); // Disable MDI in graphics engine
 		syntax["--no_bindless"] = std::vector<ArgumentParser::ArgumentType>(); // Disable bindless textures in graphics engine
+		syntax["--use_temp_resources_db"] = std::vector<ArgumentParser::ArgumentType>(); // Use a temporary, fresh resource database.  For testing.
 		syntax["--vr"] = std::vector<ArgumentParser::ArgumentType>(); // Prefer VR startup when XR is compiled in.
 		syntax["--desktop"] = std::vector<ArgumentParser::ArgumentType>(); // Disable XR startup and stay in desktop mode.
 
