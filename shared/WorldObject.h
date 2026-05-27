@@ -279,9 +279,10 @@ public:
 		ObjectType_Portal = 7, // A portal to another Substrata world or another location in the current world.
 		ObjectType_Seat = 8, // A seat that users can sit on
 		ObjectType_Camera = 9, // A world camera object.
-		ObjectType_CameraScreen = 10 // A world screen that can display a camera stream.
+		ObjectType_CameraScreen = 10, // A world screen that can display a camera stream.
+		ObjectType_GearItem = 11 // A gear/equipment item.
 	};
-	static const uint64 NUM_OBJECT_TYPES = 11;
+	static const uint64 NUM_OBJECT_TYPES = 12;
 
 	static std::string objectTypeString(ObjectType t);
 	static ObjectType objectTypeForString(const std::string& ob_type_string);

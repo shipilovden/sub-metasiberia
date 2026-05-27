@@ -844,6 +844,7 @@ std::string WorldObject::objectTypeString(ObjectType t)
 	case ObjectType_Seat: return "seat";
 	case ObjectType_Camera: return "camera";
 	case ObjectType_CameraScreen: return "camera screen";
+	case ObjectType_GearItem: return "gear item";
 	default: return "Unknown";
 	}
 }
@@ -861,6 +862,7 @@ WorldObject::ObjectType WorldObject::objectTypeForString(const std::string& ob_t
 	if(ob_type_string == "seat") return ObjectType_Seat;
 	if(ob_type_string == "camera") return ObjectType_Camera;
 	if(ob_type_string == "camera screen") return ObjectType_CameraScreen;
+	if(ob_type_string == "gear item") return ObjectType_GearItem;
 	throw glare::Exception("Unknown object type '" + ob_type_string + "'");
 }
 
