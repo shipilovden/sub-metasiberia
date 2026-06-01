@@ -344,8 +344,14 @@ void BotEditorWidget::buildUI()
 		connect(audio_browse, &QPushButton::clicked, this, [this]{
 			QString p = QFileDialog::getOpenFileName(this, "Выбрать аудио", {},
 				"Аудио (*.mp3 *.ogg *.wav *.flac)");
-			if(!p.isEmpty()) audio_url_edit->setText(p);
+			if(!p.isEmpty())
+			{
+				std::string url = p.toStdString();
+				if(gui_client) url = gui_client->uploadLocalFileForBot(url);
+				audio_url_edit->setText(QString::fromStdString(url));
+			}
 		});
+		connect(audio_url_edit, &QLineEdit::editingFinished, this, &BotEditorWidget::sendUpdateBot);
 		url_row->addWidget(audio_url_edit);
 		url_row->addWidget(audio_browse);
 		fl->addRow("Аудио URL:", url_row);
@@ -652,7 +658,15 @@ void BotEditorWidget::onAvatarURLChanged()
 	// Apply avatar URL immediately when editing finished (Enter / Tab)
 	if(!gui_client || bot_id == 0) return;
 	AvatarSettings av;
-	av.model_url = toURLString(avatar_url_edit->text().toStdString());
+	{
+		std::string avatar_url = avatar_url_edit->text().toStdString();
+		if(!avatar_url.empty())
+		{
+			avatar_url = gui_client->uploadLocalFileForBot(avatar_url); // no-op if already sub://
+			avatar_url_edit->setText(QString::fromStdString(avatar_url));
+		}
+		av.model_url = toURLString(avatar_url);
+	}
 	const Vec3f model_scale((float)scale_x_spin->value(), (float)scale_y_spin->value(), (float)scale_z_spin->value());
 	av.pre_ob_to_world_matrix = Matrix4f::scaleMatrix(model_scale.x, model_scale.y, model_scale.z);
 	std::string audio_url = audio_url_edit->text().toStdString();
