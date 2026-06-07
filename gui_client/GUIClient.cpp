@@ -63,6 +63,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../shared/ObjectEventHandlers.h"
 #include "../shared/WorldStateLock.h"
 #include "../server/User.h"
+#include "../server/ChatBot.h"
 #include "../shared/WorldSettings.h"
 #include "../maths/Quat.h"
 #include "../maths/GeometrySampling.h"
@@ -4581,7 +4582,7 @@ void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const R
 
 	// Create gl and physics object now
 	glare::ArenaFrame frame(arena_allocator);
-	avatar->graphics.skinned_gl_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data->gl_meshdata, av_lod_level, avatar->avatar_settings.materials, /*lightmap_url=*/URLString(), 
+	avatar->graphics.skinned_gl_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data->gl_meshdata, av_lod_level, avatar->avatar_settings.materials, /*lightmap_url=*/URLString(),
 		/*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, ob_to_world_matrix);
 
 	mesh_data->meshDataBecameUsed();
@@ -4730,7 +4731,56 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 			const bool is_meshdata_loaded_into_opengl = mesh_data->gl_meshdata->vbo_handle.valid();
 			if(is_meshdata_loaded_into_opengl)
 			{
+				// If avatar has no materials (e.g. after an avatar update), re-assign extracted GLB materials from cache.
+				bool assigned_extracted = false;
+				if(avatar->avatar_settings.materials.empty())
+				{
+					auto mat_it = gltf_extracted_materials_by_url.find(lod_model_url);
+					if(mat_it != gltf_extracted_materials_by_url.end())
+					{
+						avatar->avatar_settings.materials = mat_it->second;
+						assigned_extracted = true;
+					}
+				}
+
 				loadPresentAvatarModel(avatar, ob_lod_level, mesh_data);
+
+				if(assigned_extracted && avatar->graphics.skinned_gl_ob)
+				{
+					const std::vector<WorldMaterialRef>& mats = avatar->avatar_settings.materials;
+					for(size_t mi = 0; mi < std::min(avatar->graphics.skinned_gl_ob->materials.size(), mats.size()); ++mi)
+					{
+						OpenGLMaterial& gl_mat = avatar->graphics.skinned_gl_ob->materials[mi];
+						const WorldMaterial& wm = *mats[mi];
+						if(!wm.colour_texture_url.empty())    gl_mat.tex_path                    = OpenGLTextureKey(toStdString(wm.colour_texture_url));
+						if(!wm.emission_texture_url.empty())  gl_mat.emission_tex_path           = OpenGLTextureKey(toStdString(wm.emission_texture_url));
+						if(!wm.roughness.texture_url.empty()) gl_mat.metallic_roughness_tex_path = OpenGLTextureKey(toStdString(wm.roughness.texture_url));
+						if(!wm.normal_map_url.empty())        gl_mat.normal_map_path             = OpenGLTextureKey(toStdString(wm.normal_map_url));
+					}
+					const float max_dist = avatar->getMaxDistForLODLevel(ob_lod_level);
+					const float importance = our_avatar ? 1.0e4f : 1.0f;
+					for(const WorldMaterialRef& mat : mats)
+					{
+						const URLString tex_urls[] = { mat->colour_texture_url, mat->emission_texture_url, mat->roughness.texture_url, mat->normal_map_url };
+						const bool use_sRGB_flags[] = { true, true, false, false };
+						for(int ti = 0; ti < 4; ++ti)
+						{
+							const URLString& u = tex_urls[ti];
+							if(!u.empty())
+							{
+								ResourceRef res = resource_manager->getExistingResourceForURL(u);
+								if(res.nonNull())
+								{
+									this->loading_texture_URL_to_avatar_UID_map[u].insert(avatar->uid);
+									TextureParams tex_params;
+									tex_params.use_sRGB = use_sRGB_flags[ti];
+									tex_params.allow_compression = false;
+									startLoadingTextureForLocalPath(OpenGLTextureKey(toStdString(u)), res, avatar->pos.toVec4fPoint(), 1.8f, max_dist, importance, tex_params);
+								}
+							}
+						}
+					}
+				}
 
 				added_opengl_ob = true;
 			}
@@ -4754,6 +4804,22 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 					load_model_task->build_physics_ob = false; // Don't build physics object for avatar mesh, as it isn't used, and can be slow to build.
 					load_model_task->worker_allocator = worker_allocator;
 					load_model_task->upload_thread = opengl_upload_thread;
+					// Extract embedded GLB materials when the avatar has no materials assigned (e.g. bot avatars uploaded with custom GLB).
+					// lod_model_url may be a .bmesh when the server has optimised meshes, so also check the original model URL.
+					if(avatar->avatar_settings.materials.empty())
+					{
+						const URLString orig_model_url = URLString(avatar->avatar_settings.model_url);
+						conPrint("Bot GLB texture check: lod_model_url='" + toStdString(lod_model_url) + "' orig_model_url='" + toStdString(orig_model_url) + "'");
+						if(hasExtension(lod_model_url, "glb") || hasExtension(lod_model_url, "vrm") || hasExtension(lod_model_url, "gltf") ||
+						   hasExtension(orig_model_url, "glb") || hasExtension(orig_model_url, "vrm") || hasExtension(orig_model_url, "gltf"))
+						{
+							load_model_task->extract_gltf_materials = true;
+							load_model_task->orig_model_url = orig_model_url;
+							conPrint("Bot GLB texture check: extract_gltf_materials SET");
+						}
+						else
+							conPrint("Bot GLB texture check: extract_gltf_materials NOT set (no .glb extension)");
+					}
 
 					load_item_queue.enqueueItem(/*key=*/lod_model_url, *avatar, load_model_task, max_dist_for_ob_model_lod_level, our_avatar);
 				}
@@ -6116,6 +6182,7 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 
 	// Assign the loaded model to any avatars waiting for this model:
 	auto waiting_av_res = this->loading_model_URL_to_avatar_UID_map.find(lod_model_url);
+	conPrint("handleUploadedMeshData: lod_model_url='" + toStdString(lod_model_url) + "' in avatar map=" + (waiting_av_res != loading_model_URL_to_avatar_UID_map.end() ? "YES(" + toString(waiting_av_res->second.size()) + ")" : "NO"));
 	if(waiting_av_res != this->loading_model_URL_to_avatar_UID_map.end())
 	{
 		const std::set<UID>& waiting_avatars = waiting_av_res->second;
@@ -6127,7 +6194,7 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 			if(res2 != this->world_state->avatars.end())
 			{
 				Avatar* av = res2->second.ptr();
-						
+
 				const bool our_avatar = av->uid == this->client_avatar_uid;
 				const bool should_show_our_avatar_model = our_avatar && this->cam_controller.thirdPersonEnabled() && !isXRActive();
 				if(!our_avatar || should_show_our_avatar_model) // Don't load graphics for our avatar in first-person view.
@@ -6138,11 +6205,68 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 					// If we are using the default avatar, make sure this check doesn't fail due to getLODModelURLForLevel() appending "_optX" suffix.
 					Avatar::GetLODModelURLOptions options(this->server_has_optimised_meshes, this->server_opt_mesh_version);
 					const URLString current_desired_model_LOD_URL = av->getLODModelURLForLevel(av->avatar_settings.model_url, av_lod_level, options);
-					if((current_desired_model_LOD_URL == lod_model_url) || (av->avatar_settings.model_url == DEFAULT_AVATAR_MODEL_URL))
+					conPrint("  avatar uid=" + av->uid.toString() + " desired_url='" + toStdString(current_desired_model_LOD_URL) + "' our_avatar=" + toString(our_avatar) + " mats_empty=" + toString(av->avatar_settings.materials.empty()));
+					if((current_desired_model_LOD_URL == lod_model_url) || (av->avatar_settings.model_url == DEFAULT_AVATAR_MODEL_URL) ||
+					   (URLString(av->avatar_settings.model_url) == lod_model_url)) // fallback: loaded original .glb when optimised bmesh wasn't local
 					{
 						try
 						{
+							// If avatar has no materials (e.g. a bot with a custom GLB), assign extracted GLB materials
+							bool assigned_extracted = false;
+							if(av->avatar_settings.materials.empty())
+							{
+								auto mat_it = gltf_extracted_materials_by_url.find(lod_model_url);
+								if(mat_it != gltf_extracted_materials_by_url.end())
+								{
+									av->avatar_settings.materials = mat_it->second;
+									assigned_extracted = true;
+									conPrint("handleUploadedMeshData: assigned " + toString(mat_it->second.size()) + " extracted GLB materials to avatar " + av->uid.toString());
+								}
+								else
+									conPrint("handleUploadedMeshData: no extracted materials for lod_model_url='" + toStdString(lod_model_url) + "' (map size=" + toString(gltf_extracted_materials_by_url.size()) + ")");
+							}
+
 							loadPresentAvatarModel(av, av_lod_level, the_mesh_data);
+
+							if(assigned_extracted && av->graphics.skinned_gl_ob)
+							{
+								// The extracted textures are local temp files (e.g. .png).
+								// Override the tex_paths on the GL object with the actual local paths (bypassing basis LOD URL conversion).
+								const std::vector<WorldMaterialRef>& mats = av->avatar_settings.materials;
+								for(size_t mi = 0; mi < std::min(av->graphics.skinned_gl_ob->materials.size(), mats.size()); ++mi)
+								{
+									OpenGLMaterial& gl_mat = av->graphics.skinned_gl_ob->materials[mi];
+									const WorldMaterial& wm = *mats[mi];
+									if(!wm.colour_texture_url.empty())    gl_mat.tex_path                    = OpenGLTextureKey(toStdString(wm.colour_texture_url));
+									if(!wm.emission_texture_url.empty())  gl_mat.emission_tex_path           = OpenGLTextureKey(toStdString(wm.emission_texture_url));
+									if(!wm.roughness.texture_url.empty()) gl_mat.metallic_roughness_tex_path = OpenGLTextureKey(toStdString(wm.roughness.texture_url));
+									if(!wm.normal_map_url.empty())        gl_mat.normal_map_path             = OpenGLTextureKey(toStdString(wm.normal_map_url));
+								}
+
+								const float max_dist = av->getMaxDistForLODLevel(av_lod_level);
+								const float importance = our_avatar ? 1.0e4f : 1.0f;
+								for(const WorldMaterialRef& mat : mats)
+								{
+									const URLString tex_urls[] = { mat->colour_texture_url, mat->emission_texture_url, mat->roughness.texture_url, mat->normal_map_url };
+									const bool use_sRGB_flags[] = { true, true, false, false };
+									for(int ti = 0; ti < 4; ++ti)
+									{
+										const URLString& u = tex_urls[ti];
+										if(!u.empty())
+										{
+											ResourceRef res = resource_manager->getExistingResourceForURL(u);
+											if(res.nonNull())
+											{
+												this->loading_texture_URL_to_avatar_UID_map[u].insert(av->uid);
+												TextureParams tex_params;
+												tex_params.use_sRGB = use_sRGB_flags[ti];
+												tex_params.allow_compression = false;
+												startLoadingTextureForLocalPath(OpenGLTextureKey(toStdString(u)), res, av->pos.toVec4fPoint(), 1.8f, max_dist, importance, tex_params);
+											}
+										}
+									}
+								}
+							}
 						}
 						catch(glare::Exception& e)
 						{
@@ -10708,6 +10832,18 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		{
 			ModelLoadedThreadMessage* loaded_msg = checkedDowncastPtr<ModelLoadedThreadMessage>(msg);
 
+			if(!loaded_msg->extracted_gltf_materials.empty())
+			{
+				for(const WorldMaterialRef& mat : loaded_msg->extracted_gltf_materials)
+				{
+					const URLString tex_urls[] = { mat->colour_texture_url, mat->emission_texture_url, mat->roughness.texture_url, mat->normal_map_url };
+					for(const URLString& u : tex_urls)
+						if(!u.empty() && FileUtils::fileExists(toStdString(u)))
+							resource_manager->addExternalResource(u, toStdString(u));
+				}
+				gltf_extracted_materials_by_url[loaded_msg->lod_model_url] = loaded_msg->extracted_gltf_materials;
+			}
+
 			// Route to async upload queue only if geometry fits in the largest upload VBO.
 			// This matches the historical logic used when tuning for large models (e.g. College_glb).
 			if(vbo_pool && (loaded_msg->total_geom_size_B <= vbo_pool->getLargestVBOSize()))
@@ -11475,6 +11611,87 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			info.use_action_param = m->use_action_param;
 			info.api_key          = m->api_key;
 			info.api_endpoint     = m->api_endpoint;
+			// Block 5
+			info.movement_type = m->movement_type;
+			info.walk_speed    = m->walk_speed;
+			info.wander_radius = m->wander_radius;
+			info.waypoints     = m->waypoints;
+			info.use_actions   = m->use_actions;
+			// Block 6
+			info.farewell_gesture_name     = m->farewell_gesture_name;
+			info.farewell_gesture_url      = m->farewell_gesture_url;
+			info.farewell_gesture_flags    = m->farewell_gesture_flags;
+			info.farewell_gesture_cooldown = m->farewell_gesture_cooldown;
+			info.walk_gesture_name         = m->walk_gesture_name;
+			info.walk_gesture_url          = m->walk_gesture_url;
+			info.walk_gesture_flags        = m->walk_gesture_flags;
+			info.talk_gesture_name         = m->talk_gesture_name;
+			info.talk_gesture_url          = m->talk_gesture_url;
+			info.talk_gesture_flags        = m->talk_gesture_flags;
+			info.interaction_gesture_name     = m->interaction_gesture_name;
+			info.interaction_gesture_url      = m->interaction_gesture_url;
+			info.interaction_gesture_flags    = m->interaction_gesture_flags;
+			info.interaction_gesture_cooldown = m->interaction_gesture_cooldown;
+			// Block 7
+			info.audio_min_distance    = m->audio_min_distance;
+			info.audio_start_delay     = m->audio_start_delay;
+			info.greeting_audio_url    = m->greeting_audio_url;
+			info.farewell_audio_url    = m->farewell_audio_url2;
+			info.interaction_audio_url = m->interaction_audio_url;
+			// Blocks 9-12: copy from message if available
+			info.conversation_timeout_s = m->conversation_timeout_s;
+			info.max_llm_calls_per_hour  = m->max_llm_calls_per_hour;
+			info.webhook_url             = m->webhook_url;
+			info.active_hours_start_utc  = m->active_hours_start_utc;
+			info.active_hours_end_utc    = m->active_hours_end_utc;
+			info.scripted_responses      = m->scripted_responses;
+			info.player_whitelist        = m->player_whitelist;
+			info.player_blacklist        = m->player_blacklist;
+			info.tool_functions          = m->tool_functions;
+			info.ai_provider           = m->ai_provider;
+			info.top_p                 = m->top_p;
+			info.top_k                 = m->top_k;
+			info.frequency_penalty     = m->frequency_penalty;
+			info.presence_penalty      = m->presence_penalty;
+			info.max_context_messages  = m->max_context_messages;
+			info.dialog_start_node_id  = m->dialog_start_node_id;
+			info.dialog_nodes          = m->dialog_nodes;
+			info.enable_player_memory   = m->enable_player_memory;
+			info.memory_summary_tokens  = m->memory_summary_tokens;
+			info.content_filter_patterns = m->content_filter_patterns;
+			info.jailbreak_guard        = m->jailbreak_guard;
+			info.max_llm_calls_per_player_per_hour = m->max_llm_calls_per_player_per_hour;
+			info.response_cache_enabled = m->response_cache_enabled;
+			info.response_cache_ttl_s   = m->response_cache_ttl_s;
+			info.fallback_model_id      = m->fallback_model_id;
+			info.fallback_api_key       = m->fallback_api_key;
+			info.fallback_api_endpoint  = m->fallback_api_endpoint;
+			info.llm_max_retries        = m->llm_max_retries;
+			info.stats_conversations_24h = m->stats_conversations_24h;
+			info.stats_llm_calls_total   = m->stats_llm_calls_total;
+
+			// If this is a duplicate operation, immediately send the source settings
+			if(pending_duplicate_source_info.bot_id == 0 && !pending_duplicate_source_info.name.empty())
+			{
+				// Apply source settings to the newly created bot
+				pending_duplicate_source_info.bot_id  = m->bot_id;
+				pending_duplicate_source_info.pos      = info.pos; // Keep new position
+				pending_duplicate_source_info.heading  = info.heading;
+				// Call selectBotAvatar so the editor opens, then showBotEditor will trigger a save
+				BotClientInfo src = pending_duplicate_source_info;
+				src.bot_id  = m->bot_id;
+				src.pos     = info.pos;
+				src.heading = info.heading;
+				src.avatar_uid = m->avatar_uid;
+				bot_infos[m->bot_id] = src;
+				pending_duplicate_source_info = BotClientInfo(); // clear
+				selectBotAvatar(m->avatar_uid);
+				updateBotListUI();
+				if(ui_interface)
+					selectBotAvatar(m->avatar_uid);
+				break;
+			}
+
 			updateBotListUI();
 			selectBotAvatar(m->avatar_uid);
 		}
@@ -11538,8 +11755,110 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				bot_info.use_action_param = info.use_action_param;
 				bot_info.api_key          = info.api_key;
 				bot_info.api_endpoint     = info.api_endpoint;
+				// Block 5
+				bot_info.movement_type = info.movement_type;
+				bot_info.walk_speed    = info.walk_speed;
+				bot_info.wander_radius = info.wander_radius;
+				bot_info.waypoints     = info.waypoints;
+				bot_info.use_actions   = info.use_actions;
+				// Block 6
+				bot_info.farewell_gesture_name     = info.farewell_gesture_name;
+				bot_info.farewell_gesture_url      = info.farewell_gesture_url;
+				bot_info.farewell_gesture_flags    = info.farewell_gesture_flags;
+				bot_info.farewell_gesture_cooldown = info.farewell_gesture_cooldown;
+				bot_info.walk_gesture_name         = info.walk_gesture_name;
+				bot_info.walk_gesture_url          = info.walk_gesture_url;
+				bot_info.walk_gesture_flags        = info.walk_gesture_flags;
+				bot_info.talk_gesture_name         = info.talk_gesture_name;
+				bot_info.talk_gesture_url          = info.talk_gesture_url;
+				bot_info.talk_gesture_flags        = info.talk_gesture_flags;
+				bot_info.interaction_gesture_name     = info.interaction_gesture_name;
+				bot_info.interaction_gesture_url      = info.interaction_gesture_url;
+				bot_info.interaction_gesture_flags    = info.interaction_gesture_flags;
+				bot_info.interaction_gesture_cooldown = info.interaction_gesture_cooldown;
+				// Block 7
+				bot_info.audio_min_distance    = info.audio_min_distance;
+				bot_info.audio_start_delay     = info.audio_start_delay;
+				bot_info.greeting_audio_url    = info.greeting_audio_url;
+				bot_info.farewell_audio_url    = info.farewell_audio_url2;
+				bot_info.interaction_audio_url = info.interaction_audio_url;
+				// Block 9
+				bot_info.conversation_timeout_s = info.conversation_timeout_s;
+				bot_info.max_llm_calls_per_hour  = info.max_llm_calls_per_hour;
+				bot_info.webhook_url             = info.webhook_url;
+				bot_info.active_hours_start_utc  = info.active_hours_start_utc;
+				bot_info.active_hours_end_utc    = info.active_hours_end_utc;
+				bot_info.scripted_responses      = info.scripted_responses;
+				bot_info.player_whitelist        = info.player_whitelist;
+				bot_info.player_blacklist        = info.player_blacklist;
+				bot_info.tool_functions          = info.tool_functions;
+				// Block 10
+				bot_info.ai_provider           = info.ai_provider;
+				bot_info.top_p                 = info.top_p;
+				bot_info.top_k                 = info.top_k;
+				bot_info.frequency_penalty     = info.frequency_penalty;
+				bot_info.presence_penalty      = info.presence_penalty;
+				bot_info.max_context_messages  = info.max_context_messages;
+				bot_info.dialog_start_node_id  = info.dialog_start_node_id;
+				bot_info.dialog_nodes          = info.dialog_nodes;
+				// Block 11
+				bot_info.enable_player_memory   = info.enable_player_memory;
+				bot_info.memory_summary_tokens  = info.memory_summary_tokens;
+				bot_info.content_filter_patterns = info.content_filter_patterns;
+				bot_info.jailbreak_guard        = info.jailbreak_guard;
+				// Block 12
+				bot_info.max_llm_calls_per_player_per_hour = info.max_llm_calls_per_player_per_hour;
+				bot_info.response_cache_enabled = info.response_cache_enabled;
+				bot_info.response_cache_ttl_s   = info.response_cache_ttl_s;
+				bot_info.fallback_model_id      = info.fallback_model_id;
+				bot_info.fallback_api_key       = info.fallback_api_key;
+				bot_info.fallback_api_endpoint  = info.fallback_api_endpoint;
+				bot_info.llm_max_retries        = info.llm_max_retries;
+				bot_info.stats_conversations_24h = info.stats_conversations_24h;
+				bot_info.stats_llm_calls_total   = info.stats_llm_calls_total;
 			}
 			updateBotListUI();
+		}
+		break;
+		case Msg_BotPlayerMemoryListMessage:
+		{
+			const BotPlayerMemoryListMessage* m = checkedDowncastPtr<const BotPlayerMemoryListMessage>(msg);
+			std::vector<std::array<std::string,6>> entries;
+			entries.reserve(m->entries.size());
+			for(const auto& e : m->entries)
+			{
+				char ts_buf[32];
+				const time_t t = (time_t)e.last_seen_unix;
+				struct tm* tm_info = ::gmtime(&t);
+				::strftime(ts_buf, sizeof(ts_buf), "%Y-%m-%d", tm_info);
+				entries.push_back({
+					e.uid_str,
+					std::to_string(e.visit_count),
+					std::to_string(e.reputation),
+					e.quest_state,
+					std::string(ts_buf),
+					e.history_preview
+				});
+			}
+			if(ui_interface)
+				ui_interface->showBotPlayerMemoryList(m->bot_id, entries);
+		}
+		break;
+		case Msg_BotConversationLogMessage:
+		{
+			const BotConversationLogMessage* m = checkedDowncastPtr<const BotConversationLogMessage>(msg);
+			std::vector<std::array<std::string,5>> entries;
+			entries.reserve(m->entries.size());
+			for(const auto& e : m->entries)
+			{
+				char ts_buf[32];
+				const time_t t = (time_t)e.timestamp_unix;
+				struct tm* tm_info = ::gmtime(&t);
+				::strftime(ts_buf, sizeof(ts_buf), "%Y-%m-%d %H:%M", tm_info);
+				entries.push_back({std::string(ts_buf), e.player_name, e.player_uid_str, e.player_message, e.bot_response});
+			}
+			if(ui_interface)
+				ui_interface->showBotConversationLog(m->bot_id, entries);
 		}
 		break;
 		case Msg_SignedUpMessage:
@@ -11990,6 +12309,24 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			LoadModelTaskUploadingUserInfo* user_info = m->user_info.downcastToPtr<LoadModelTaskUploadingUserInfo>();
 			try
 			{
+				conPrint("Msg_GeometryUploadedMessage: lod_model_url='" + toStdString(user_info->lod_model_url) + "' extracted_mats=" + toString(user_info->extracted_gltf_materials.size()));
+				if(!user_info->extracted_gltf_materials.empty())
+				{
+					for(const WorldMaterialRef& mat : user_info->extracted_gltf_materials)
+					{
+						const URLString tex_urls[] = { mat->colour_texture_url, mat->emission_texture_url, mat->roughness.texture_url, mat->normal_map_url };
+						for(const URLString& u : tex_urls)
+						{
+							if(!u.empty())
+								conPrint("  GeomUploaded tex: '" + toStdString(u) + "' exists=" + (FileUtils::fileExists(toStdString(u)) ? "YES" : "NO"));
+							if(!u.empty() && FileUtils::fileExists(toStdString(u)))
+								resource_manager->addExternalResource(u, toStdString(u));
+						}
+					}
+					gltf_extracted_materials_by_url[user_info->lod_model_url] = user_info->extracted_gltf_materials;
+					conPrint("  GeomUploaded: stored in gltf_extracted_materials_by_url, map size=" + toString(gltf_extracted_materials_by_url.size()));
+				}
+
 				opengl_engine->vert_buf_allocator->getOrCreateAndAssignVAOForMesh(*m->meshdata, m->meshdata->vertex_spec);
 
 				// Process the finished upload (assign mesh to objects etc.)
@@ -20415,7 +20752,32 @@ void GUIClient::selectBotAvatar(const UID& avatar_uid)
 			info.surprise_name, info.surprise_url, info.surprise_flags, info.surprise_cooldown,
 			info.acknowledge_name, info.acknowledge_url, info.acknowledge_flags, info.acknowledge_cooldown,
 			info.use_action_type, info.use_action_param,
-			info.api_key, info.api_endpoint);
+			info.api_key, info.api_endpoint,
+			info.movement_type, info.walk_speed, info.wander_radius,
+			info.waypoints, info.use_actions,
+			info.farewell_gesture_name, info.farewell_gesture_url, info.farewell_gesture_flags, info.farewell_gesture_cooldown,
+			info.walk_gesture_name, info.walk_gesture_url, info.walk_gesture_flags,
+			info.talk_gesture_name, info.talk_gesture_url, info.talk_gesture_flags,
+			info.interaction_gesture_name, info.interaction_gesture_url, info.interaction_gesture_flags, info.interaction_gesture_cooldown,
+			info.audio_min_distance, info.audio_start_delay,
+			info.greeting_audio_url, info.farewell_audio_url, info.interaction_audio_url,
+			// Block 9
+			info.conversation_timeout_s, info.max_llm_calls_per_hour, info.webhook_url,
+			info.active_hours_start_utc, info.active_hours_end_utc,
+			info.scripted_responses, info.player_whitelist, info.player_blacklist, info.tool_functions,
+			// Block 10
+			info.ai_provider, info.top_p, info.top_k,
+			info.frequency_penalty, info.presence_penalty, info.max_context_messages,
+			info.dialog_start_node_id, info.dialog_nodes,
+			// Block 11
+			info.enable_player_memory, info.memory_summary_tokens,
+			info.content_filter_patterns, info.jailbreak_guard,
+			// Block 12
+			info.max_llm_calls_per_player_per_hour, info.response_cache_enabled,
+			info.response_cache_ttl_s, info.fallback_model_id,
+			info.fallback_api_key, info.fallback_api_endpoint,
+			info.llm_max_retries,
+			info.stats_conversations_24h, info.stats_llm_calls_total);
 		ui_interface->showEditorDockWidget();
 		ui_interface->setObjectEditorEnabled(false);
 	}
@@ -20449,7 +20811,33 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, float surprise_cooldown,
 	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, float acknowledge_cooldown,
 	uint32 use_action_type, const std::string& use_action_param,
-	const std::string& api_key, const std::string& api_endpoint)
+	const std::string& api_key, const std::string& api_endpoint,
+	uint32 movement_type, float walk_speed, float wander_radius,
+	const std::vector<BotWaypoint>& waypoints, const std::vector<BotUseAction>& use_actions,
+	const std::string& farewell_gesture_name, const std::string& farewell_gesture_url, uint32 farewell_gesture_flags, float farewell_gesture_cooldown,
+	const std::string& walk_gesture_name, const std::string& walk_gesture_url, uint32 walk_gesture_flags,
+	const std::string& talk_gesture_name, const std::string& talk_gesture_url, uint32 talk_gesture_flags,
+	const std::string& interaction_gesture_name, const std::string& interaction_gesture_url, uint32 interaction_gesture_flags, float interaction_gesture_cooldown,
+	float audio_min_distance, float audio_start_delay,
+	const std::string& greeting_audio_url, const std::string& farewell_audio_url, const std::string& interaction_audio_url,
+	// Block 9: advanced settings
+	float conversation_timeout_s, uint32 max_llm_calls_per_hour, const std::string& webhook_url,
+	uint32 active_hours_start_utc, uint32 active_hours_end_utc,
+	const std::vector<BotScriptedResponse>& scripted_responses,
+	const std::vector<std::string>& player_whitelist, const std::vector<std::string>& player_blacklist,
+	const std::vector<BotToolFunctionInfo>& tool_functions,
+	// Block 10: extended AI + dialog
+	uint32 ai_provider, float top_p, uint32 top_k,
+	float frequency_penalty, float presence_penalty, uint32 max_context_messages,
+	uint32 dialog_start_node_id, const std::vector<BotDialogNode>& dialog_nodes,
+	// Block 11: memory + content safety
+	bool enable_player_memory, uint32 memory_summary_tokens,
+	const std::string& content_filter_patterns, bool jailbreak_guard,
+	// Block 12: per-player rate, cache, fallback, retry
+	uint32 max_llm_calls_per_player_per_hour, bool response_cache_enabled,
+	uint32 response_cache_ttl_s, const std::string& fallback_model_id,
+	const std::string& fallback_api_key, const std::string& fallback_api_endpoint,
+	uint32 llm_max_retries)
 {
 	BotClientInfo& info = bot_infos[bot_id];
 	AvatarSettings use_avatar_settings = avatar_settings;
@@ -20504,6 +20892,65 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	info.use_action_param = use_action_param;
 	info.api_key          = api_key;
 	info.api_endpoint     = api_endpoint;
+	// Block 5
+	info.movement_type = movement_type;
+	info.walk_speed    = walk_speed;
+	info.wander_radius = wander_radius;
+	info.waypoints     = waypoints;
+	info.use_actions   = use_actions;
+	// Block 6
+	info.farewell_gesture_name     = farewell_gesture_name;
+	info.farewell_gesture_url      = farewell_gesture_url;
+	info.farewell_gesture_flags    = farewell_gesture_flags;
+	info.farewell_gesture_cooldown = farewell_gesture_cooldown;
+	info.walk_gesture_name         = walk_gesture_name;
+	info.walk_gesture_url          = walk_gesture_url;
+	info.walk_gesture_flags        = walk_gesture_flags;
+	info.talk_gesture_name         = talk_gesture_name;
+	info.talk_gesture_url          = talk_gesture_url;
+	info.talk_gesture_flags        = talk_gesture_flags;
+	info.interaction_gesture_name     = interaction_gesture_name;
+	info.interaction_gesture_url      = interaction_gesture_url;
+	info.interaction_gesture_flags    = interaction_gesture_flags;
+	info.interaction_gesture_cooldown = interaction_gesture_cooldown;
+	// Block 7
+	info.audio_min_distance       = audio_min_distance;
+	info.audio_start_delay        = audio_start_delay;
+	info.greeting_audio_url       = greeting_audio_url;
+	info.farewell_audio_url       = farewell_audio_url;
+	info.interaction_audio_url    = interaction_audio_url;
+	// Block 9
+	info.conversation_timeout_s  = conversation_timeout_s;
+	info.max_llm_calls_per_hour  = max_llm_calls_per_hour;
+	info.webhook_url             = webhook_url;
+	info.active_hours_start_utc  = active_hours_start_utc;
+	info.active_hours_end_utc    = active_hours_end_utc;
+	info.scripted_responses      = scripted_responses;
+	info.player_whitelist        = player_whitelist;
+	info.player_blacklist        = player_blacklist;
+	info.tool_functions          = tool_functions;
+	// Block 10
+	info.ai_provider           = ai_provider;
+	info.top_p                 = top_p;
+	info.top_k                 = top_k;
+	info.frequency_penalty     = frequency_penalty;
+	info.presence_penalty      = presence_penalty;
+	info.max_context_messages  = max_context_messages;
+	info.dialog_start_node_id  = dialog_start_node_id;
+	info.dialog_nodes          = dialog_nodes;
+	// Block 11
+	info.enable_player_memory   = enable_player_memory;
+	info.memory_summary_tokens  = memory_summary_tokens;
+	info.content_filter_patterns = content_filter_patterns;
+	info.jailbreak_guard        = jailbreak_guard;
+	// Block 12
+	info.max_llm_calls_per_player_per_hour = max_llm_calls_per_player_per_hour;
+	info.response_cache_enabled = response_cache_enabled;
+	info.response_cache_ttl_s   = response_cache_ttl_s;
+	info.fallback_model_id      = fallback_model_id;
+	info.fallback_api_key       = fallback_api_key;
+	info.fallback_api_endpoint  = fallback_api_endpoint;
+	info.llm_max_retries        = llm_max_retries;
 
 	for(auto& pair : avatar_uid_to_bot_id)
 	{
@@ -20599,6 +21046,108 @@ void GUIClient::updateBot(uint64 bot_id, const std::string& name, const std::str
 	scratch_packet.writeStringLengthFirst(use_action_param);
 	scratch_packet.writeStringLengthFirst(api_key);
 	scratch_packet.writeStringLengthFirst(api_endpoint);
+	// Block 5: movement, waypoints, use_actions
+	scratch_packet.writeUInt32(movement_type);
+	scratch_packet.writeFloat(walk_speed);
+	scratch_packet.writeFloat(wander_radius);
+	scratch_packet.writeUInt32((uint32)waypoints.size());
+	for(const BotWaypoint& wp : waypoints)
+	{
+		::writeToStream(wp.pos, scratch_packet);
+		scratch_packet.writeFloat(wp.heading_override);
+		scratch_packet.writeFloat(wp.dwell_time_s);
+	}
+	scratch_packet.writeUInt32((uint32)use_actions.size());
+	for(const BotUseAction& ua : use_actions)
+	{
+		scratch_packet.writeUInt32(ua.type);
+		scratch_packet.writeStringLengthFirst(ua.label);
+		scratch_packet.writeStringLengthFirst(ua.param);
+	}
+	// Block 6: extra animation slots
+
+	scratch_packet.writeStringLengthFirst(farewell_gesture_name);
+	scratch_packet.writeStringLengthFirst(farewell_gesture_url);
+	scratch_packet.writeUInt32(farewell_gesture_flags);
+	scratch_packet.writeFloat(farewell_gesture_cooldown);
+	scratch_packet.writeStringLengthFirst(walk_gesture_name);
+	scratch_packet.writeStringLengthFirst(walk_gesture_url);
+	scratch_packet.writeUInt32(walk_gesture_flags);
+	scratch_packet.writeStringLengthFirst(talk_gesture_name);
+	scratch_packet.writeStringLengthFirst(talk_gesture_url);
+	scratch_packet.writeUInt32(talk_gesture_flags);
+	scratch_packet.writeStringLengthFirst(interaction_gesture_name);
+	scratch_packet.writeStringLengthFirst(interaction_gesture_url);
+	scratch_packet.writeUInt32(interaction_gesture_flags);
+	scratch_packet.writeFloat(interaction_gesture_cooldown);
+	// Block 7: extended sound
+	scratch_packet.writeFloat(audio_min_distance);
+	scratch_packet.writeFloat(audio_start_delay);
+	scratch_packet.writeStringLengthFirst(greeting_audio_url);
+	scratch_packet.writeStringLengthFirst(farewell_audio_url);
+	scratch_packet.writeStringLengthFirst(interaction_audio_url);
+	// Block 8: UUID filters for use_actions (sparse)
+	{
+		std::vector<std::pair<uint32, std::string>> uid_rules;
+		for(uint32 i = 0; i < (uint32)use_actions.size(); ++i)
+			if(!use_actions[i].required_avatar_uid.empty())
+				uid_rules.push_back({(uint32)i, use_actions[i].required_avatar_uid});
+		scratch_packet.writeUInt32((uint32)uid_rules.size());
+		for(const auto& r : uid_rules)
+		{
+			scratch_packet.writeUInt32(r.first);
+			scratch_packet.writeStringLengthFirst(r.second);
+		}
+	}
+	// Block 9: advanced settings (must come first before block 10)
+	scratch_packet.writeFloat(conversation_timeout_s);
+	scratch_packet.writeUInt32(max_llm_calls_per_hour);
+	scratch_packet.writeStringLengthFirst(webhook_url);
+	scratch_packet.writeUInt32(active_hours_start_utc);
+	scratch_packet.writeUInt32(active_hours_end_utc);
+	scratch_packet.writeUInt32((uint32)scripted_responses.size());
+	for(const BotScriptedResponse& sr : scripted_responses)
+	{
+		scratch_packet.writeStringLengthFirst(sr.keywords);
+		scratch_packet.writeStringLengthFirst(sr.response_text);
+	}
+	scratch_packet.writeUInt32((uint32)player_whitelist.size());
+	for(const std::string& s : player_whitelist)
+		scratch_packet.writeStringLengthFirst(s);
+	scratch_packet.writeUInt32((uint32)player_blacklist.size());
+	for(const std::string& s : player_blacklist)
+		scratch_packet.writeStringLengthFirst(s);
+	scratch_packet.writeUInt32((uint32)tool_functions.size());
+	for(const BotToolFunctionInfo& tf : tool_functions)
+	{
+		scratch_packet.writeStringLengthFirst(tf.function_name);
+		scratch_packet.writeStringLengthFirst(tf.description);
+		scratch_packet.writeStringLengthFirst(tf.result_content);
+	}
+	// Block 10: extended AI + dialog
+	scratch_packet.writeUInt32(ai_provider);
+	scratch_packet.writeFloat(top_p);
+	scratch_packet.writeUInt32(top_k);
+	scratch_packet.writeFloat(frequency_penalty);
+	scratch_packet.writeFloat(presence_penalty);
+	scratch_packet.writeUInt32(max_context_messages);
+	scratch_packet.writeUInt32(dialog_start_node_id);
+	scratch_packet.writeUInt32((uint32)dialog_nodes.size());
+	for(const BotDialogNode& dn : dialog_nodes)
+		writeBotDialogNodeToStream(dn, scratch_packet);
+	// Block 11: memory + content safety
+	scratch_packet.writeUInt32(enable_player_memory ? 1u : 0u);
+	scratch_packet.writeUInt32(memory_summary_tokens);
+	scratch_packet.writeStringLengthFirst(content_filter_patterns);
+	scratch_packet.writeUInt32(jailbreak_guard ? 1u : 0u);
+	// Block 12: per-player rate, cache, fallback, retry
+	scratch_packet.writeUInt32(max_llm_calls_per_player_per_hour);
+	scratch_packet.writeUInt32(response_cache_enabled ? 1u : 0u);
+	scratch_packet.writeUInt32(response_cache_ttl_s);
+	scratch_packet.writeStringLengthFirst(fallback_model_id);
+	scratch_packet.writeStringLengthFirst(fallback_api_key);
+	scratch_packet.writeStringLengthFirst(fallback_api_endpoint);
+	scratch_packet.writeUInt32(llm_max_retries);
 	MessageUtils::updatePacketLengthField(scratch_packet);
 	enqueueMessageToSend(*client_thread, scratch_packet);
 }
@@ -20704,6 +21253,79 @@ void GUIClient::queryUserBots()
 	MessageUtils::initPacket(scratch_packet, Protocol::QueryUserBots);
 	MessageUtils::updatePacketLengthField(scratch_packet);
 	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::botSendManualMessage(uint64 bot_id, const std::string& text)
+{
+	if(client_thread.isNull() || text.empty()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::BotSendManualMessage);
+	scratch_packet.writeUInt64(bot_id);
+	scratch_packet.writeStringLengthFirst(text);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::requestBotPlayerMemoryList(uint64 bot_id)
+{
+	if(client_thread.isNull()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::GetBotPlayerMemoryList);
+	scratch_packet.writeUInt64(bot_id);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::setBotPlayerMemoryEntry(uint64 bot_id, const std::string& uid_str,
+	int32_t reputation, const std::string& quest_state, bool clear_history)
+{
+	if(client_thread.isNull()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::SetBotPlayerMemoryEntry);
+	scratch_packet.writeUInt64(bot_id);
+	scratch_packet.writeStringLengthFirst(uid_str);
+	scratch_packet.writeInt32(reputation);
+	scratch_packet.writeStringLengthFirst(quest_state);
+	scratch_packet.writeUInt32(clear_history ? 1u : 0u);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::requestBotConversationLog(uint64 bot_id, uint32 max_entries)
+{
+	if(client_thread.isNull()) return;
+	MessageUtils::initPacket(scratch_packet, Protocol::GetBotConversationLog);
+	scratch_packet.writeUInt64(bot_id);
+	scratch_packet.writeUInt32(max_entries);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::teleportToBot(uint64 bot_id)
+{
+	auto it = bot_infos.find(bot_id);
+	if(it == bot_infos.end()) return;
+	// Stand 2m in front of the bot (offset along -Y which is forward in world space)
+	const Vec3d target_pos = it->second.pos + Vec3d(0.0, -2.0, 0.0);
+	cam_controller.setFirstAndThirdPersonPositions(target_pos);
+	player_physics.setEyePosition(target_pos);
+	// Face the bot
+	const double heading = it->second.heading + Maths::pi<double>(); // face bot from in front
+	cam_controller.setAngles(Vec3d(heading, Maths::pi_2<double>(), 0.0));
+}
+
+
+void GUIClient::duplicateBot(uint64 source_bot_id)
+{
+	auto it = bot_infos.find(source_bot_id);
+	if(it == bot_infos.end()) return;
+	// Store source info — will be applied in ChatBotCreated handler
+	pending_duplicate_source_info = it->second;
+	pending_duplicate_source_info.bot_id = 0; // Will be assigned by server
+	const Vec3d new_pos = it->second.pos + Vec3d(2.0, 0, 0); // 2m offset
+	createBot(new_pos, it->second.heading);
 }
 
 

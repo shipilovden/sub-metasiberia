@@ -7,9 +7,11 @@ Copyright Glare Technologies Limited 2023 -
 
 
 #include "../shared/UID.h"
+#include "../server/ChatBot.h"
 #include <graphics/ImageMap.h>
 #include <maths/vec2.h>
 #include <maths/vec3.h>
+#include <array>
 #include <string>
 #include <vector>
 class WorldObject;
@@ -191,6 +193,44 @@ public:
 		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
 		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown,
 		uint32 use_action_type = 0, const std::string& use_action_param = "",
-		const std::string& api_key = "", const std::string& api_endpoint = "") {}
+		const std::string& api_key = "", const std::string& api_endpoint = "",
+		// Block 5
+		uint32 movement_type = 0, double walk_speed = 1.4, double wander_radius = 5.0,
+		const std::vector<BotWaypoint>& waypoints_raw = {},
+		const std::vector<BotUseAction>& use_actions_raw = {},
+		// Block 6
+		const std::string& farewell_gesture_name = "", const std::string& farewell_gesture_url = "",
+		uint32 farewell_gesture_flags = 0, double farewell_gesture_cooldown = 8.0,
+		const std::string& walk_gesture_name = "", const std::string& walk_gesture_url = "", uint32 walk_gesture_flags = 0,
+		const std::string& talk_gesture_name = "", const std::string& talk_gesture_url = "", uint32 talk_gesture_flags = 0,
+		const std::string& interaction_gesture_name = "", const std::string& interaction_gesture_url = "",
+		uint32 interaction_gesture_flags = 0, double interaction_gesture_cooldown = 3.0,
+		// Block 7
+		double audio_min_distance = 1.0, double audio_start_delay = 0.0,
+		const std::string& greeting_audio_url = "", const std::string& farewell_audio_url2 = "",
+		const std::string& interaction_audio_url = "",
+		// Block 9: advanced settings
+		float conversation_timeout_s = 0.f, uint32 max_llm_calls_per_hour = 0,
+		const std::string& webhook_url = "",
+		uint32 active_hours_start_utc = 8, uint32 active_hours_end_utc = 22,
+		const std::vector<BotScriptedResponse>& scripted_responses = {},
+		const std::vector<std::string>& player_whitelist = {},
+		const std::vector<std::string>& player_blacklist = {},
+		const std::vector<BotToolFunctionInfo>& tool_functions = {},
+		// Block 10: extended AI + dialog
+		uint32 ai_provider = 0, float top_p = 0.f, uint32 top_k = 0,
+		float frequency_penalty = 0.f, float presence_penalty = 0.f, uint32 max_context_messages = 0,
+		uint32 dialog_start_node_id = 0, const std::vector<BotDialogNode>& dialog_nodes = {},
+		// Block 11
+		bool enable_player_memory = false, uint32 memory_summary_tokens = 150,
+		const std::string& content_filter_patterns = "", bool jailbreak_guard = true,
+		// Block 12
+		uint32 max_llm_calls_per_player_per_hour = 0, bool response_cache_enabled = false,
+		uint32 response_cache_ttl_s = 300, const std::string& fallback_model_id = "",
+		const std::string& fallback_api_key = "", const std::string& fallback_api_endpoint = "",
+		uint32 llm_max_retries = 0,
+		uint32 stats_conversations_24h = 0, uint32 stats_llm_calls_total = 0) {}
+	virtual void showBotConversationLog(uint64 bot_id, const std::vector<std::array<std::string,5>>& entries) {}
+	virtual void showBotPlayerMemoryList(uint64 bot_id, const std::vector<std::array<std::string,6>>& entries) {}
 	virtual void hideBotEditor() {}
 };

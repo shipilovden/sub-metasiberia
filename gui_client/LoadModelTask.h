@@ -10,6 +10,7 @@ Copyright Glare Technologies Limited 2025 -
 #include "PhysicsObject.h"
 #include "../shared/Resource.h"
 #include "../shared/URLString.h"
+#include "../shared/WorldMaterial.h"
 #include <opengl/OpenGLEngine.h>
 #include <opengl/OpenGLUploadThread.h>
 #include <utils/Task.h>
@@ -43,6 +44,8 @@ public:
 	size_t total_geom_size_B;
 	size_t vert_data_size_B; // in source VBO
 	size_t index_data_size_B; // in source VBO
+
+	std::vector<WorldMaterialRef> extracted_gltf_materials; // Non-empty when extract_gltf_materials was set on the task
 };
 
 
@@ -55,6 +58,8 @@ struct LoadModelTaskUploadingUserInfo : public UploadingUserInfo
 
 	int voxel_subsample_factor; // Computed when loading voxels.
 	uint64 voxel_hash;
+
+	std::vector<WorldMaterialRef> extracted_gltf_materials;
 };
 
 
@@ -96,6 +101,9 @@ public:
 	Matrix4f ob_to_world_matrix; // Used for generating lightmap coords for voxel meshes.
 
 	Reference<LoadedBuffer> loaded_buffer; // For emscripten, load from memory buffer instead of from resource on disk.
+
+	bool extract_gltf_materials; // If true, extract WorldMaterials from GLB/GLTF files and return in the result message
+	URLString orig_model_url; // Original (non-LOD) model URL — may be .glb when lod_model_url is .bmesh
 
 	Reference<OpenGLEngine> opengl_engine;
 	Reference<ResourceManager> resource_manager;

@@ -32,6 +32,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "ScriptedObjectProximityChecker.h"
 #include "../shared/WorldSettings.h"
 #include "../shared/WorldDetails.h"
+#include "../server/ChatBot.h"
 #include "../audio/AudioEngine.h"
 #include "../audio/MicReadThread.h" // For MicReadStatus
 #include "../opengl/TextureLoading.h"
@@ -288,7 +289,43 @@ public:
 		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, float surprise_cooldown,
 		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, float acknowledge_cooldown,
 		uint32 use_action_type, const std::string& use_action_param,
-		const std::string& api_key, const std::string& api_endpoint);
+		const std::string& api_key, const std::string& api_endpoint,
+		// Block 5
+		uint32 movement_type, float walk_speed, float wander_radius,
+		const std::vector<BotWaypoint>& waypoints, const std::vector<BotUseAction>& use_actions,
+		// Block 6
+		const std::string& farewell_gesture_name, const std::string& farewell_gesture_url, uint32 farewell_gesture_flags, float farewell_gesture_cooldown,
+		const std::string& walk_gesture_name, const std::string& walk_gesture_url, uint32 walk_gesture_flags,
+		const std::string& talk_gesture_name, const std::string& talk_gesture_url, uint32 talk_gesture_flags,
+		const std::string& interaction_gesture_name, const std::string& interaction_gesture_url, uint32 interaction_gesture_flags, float interaction_gesture_cooldown,
+		// Block 7
+		float audio_min_distance, float audio_start_delay,
+		const std::string& greeting_audio_url, const std::string& farewell_audio_url, const std::string& interaction_audio_url,
+		// Block 9: advanced settings
+		float conversation_timeout_s = 0.f, uint32 max_llm_calls_per_hour = 0, const std::string& webhook_url = "",
+		uint32 active_hours_start_utc = 8, uint32 active_hours_end_utc = 22,
+		const std::vector<BotScriptedResponse>& scripted_responses = {},
+		const std::vector<std::string>& player_whitelist = {}, const std::vector<std::string>& player_blacklist = {},
+		const std::vector<BotToolFunctionInfo>& tool_functions = {},
+		// Block 10: extended AI + dialog
+		uint32 ai_provider = 0, float top_p = 0.f, uint32 top_k = 0,
+		float frequency_penalty = 0.f, float presence_penalty = 0.f, uint32 max_context_messages = 0,
+		uint32 dialog_start_node_id = 0, const std::vector<BotDialogNode>& dialog_nodes = {},
+		// Block 11: memory + content safety
+		bool enable_player_memory = false, uint32 memory_summary_tokens = 150,
+		const std::string& content_filter_patterns = "", bool jailbreak_guard = true,
+		// Block 12: per-player rate, cache, fallback, retry
+		uint32 max_llm_calls_per_player_per_hour = 0, bool response_cache_enabled = false,
+		uint32 response_cache_ttl_s = 300, const std::string& fallback_model_id = "",
+		const std::string& fallback_api_key = "", const std::string& fallback_api_endpoint = "",
+		uint32 llm_max_retries = 0);
+
+	void requestBotConversationLog(uint64 bot_id, uint32 max_entries = 100);
+	void teleportToBot(uint64 bot_id);
+	void duplicateBot(uint64 source_bot_id);
+	void botSendManualMessage(uint64 bot_id, const std::string& text);
+	void requestBotPlayerMemoryList(uint64 bot_id);
+	void setBotPlayerMemoryEntry(uint64 bot_id, const std::string& uid_str, int32_t reputation, const std::string& quest_state, bool clear_history);
 	void deleteBot(uint64 bot_id);
 	void deleteBotImmediate(uint64 bot_id, const UID& avatar_uid); // Delete bot and remove from scene immediately
 	void moveBot(uint64 bot_id, const Vec3d& pos, float heading);
@@ -872,6 +909,7 @@ public:
 
 	std::map<ModelProcessingKey, std::set<UID>> loading_model_URL_to_world_ob_UID_map;
 	std::unordered_map<URLString, std::set<UID>, URLStringHasher> loading_model_URL_to_avatar_UID_map;
+	std::unordered_map<URLString, std::vector<WorldMaterialRef>, URLStringHasher> gltf_extracted_materials_by_url; // Extracted GLB materials for bot avatars, keyed by lod_model_url
 
 	std::unordered_map<URLString, std::set<UID>, URLStringHasher> loading_texture_URL_to_world_ob_UID_map;
 	std::unordered_map<URLString, std::set<UID>, URLStringHasher> loading_texture_URL_to_avatar_UID_map;
@@ -1003,11 +1041,67 @@ public:
 		std::string use_action_param;
 		std::string api_key;
 		std::string api_endpoint;
+		// Block 5: movement
+		uint32 movement_type  = 0;
+		float  walk_speed     = 1.4f;
+		float  wander_radius  = 5.f;
+		std::vector<BotWaypoint>  waypoints;
+		std::vector<BotUseAction> use_actions;
+		// Block 6: extra animation slots
+		std::string farewell_gesture_name; std::string farewell_gesture_url;
+		uint32 farewell_gesture_flags = 0; float farewell_gesture_cooldown = 8.f;
+		std::string walk_gesture_name; std::string walk_gesture_url;
+		uint32 walk_gesture_flags = 0;
+		std::string talk_gesture_name; std::string talk_gesture_url;
+		uint32 talk_gesture_flags = 0;
+		std::string interaction_gesture_name; std::string interaction_gesture_url;
+		uint32 interaction_gesture_flags = 0; float interaction_gesture_cooldown = 3.f;
+		// Block 7: extended sound
+		float audio_min_distance  = 1.f;
+		float audio_start_delay   = 0.f;
+		std::string greeting_audio_url;
+		std::string farewell_audio_url;
+		std::string interaction_audio_url;
+		// Block 9: advanced settings
+		float    conversation_timeout_s  = 0.f;
+		uint32   max_llm_calls_per_hour  = 0;
+		std::string webhook_url;
+		uint32   active_hours_start_utc  = 8;
+		uint32   active_hours_end_utc    = 22;
+		std::vector<BotScriptedResponse> scripted_responses;
+		std::vector<std::string>         player_whitelist;
+		std::vector<std::string>         player_blacklist;
+		std::vector<BotToolFunctionInfo> tool_functions;
+		// Block 10: extended AI + dialog
+		uint32   ai_provider            = 0;
+		float    top_p                  = 0.f;
+		uint32   top_k                  = 0;
+		float    frequency_penalty      = 0.f;
+		float    presence_penalty       = 0.f;
+		uint32   max_context_messages   = 0;
+		uint32   dialog_start_node_id   = 0;
+		std::vector<BotDialogNode>       dialog_nodes;
+		// Block 11: memory + content safety
+		bool     enable_player_memory   = false;
+		uint32   memory_summary_tokens  = 150;
+		std::string content_filter_patterns;
+		bool     jailbreak_guard        = true;
+		// Block 12: per-player rate, cache, fallback, retry, stats
+		uint32   max_llm_calls_per_player_per_hour = 0;
+		bool     response_cache_enabled = false;
+		uint32   response_cache_ttl_s   = 300;
+		std::string fallback_model_id;
+		std::string fallback_api_key;
+		std::string fallback_api_endpoint;
+		uint32   llm_max_retries        = 0;
+		uint32   stats_conversations_24h = 0;
+		uint32   stats_llm_calls_total   = 0;
 		// Runtime audio state (client only, not serialised)
 		glare::AudioSourceRef audio_source;
 		std::string loaded_audio_url; // URL of currently loaded audio source
 	};
-	std::map<UID, uint64> avatar_uid_to_bot_id; // Maps chatbot avatar UID → chatbot id (for bot editor)
+	std::map<UID, uint64> avatar_uid_to_bot_id;
+	BotClientInfo pending_duplicate_source_info; // Set when duplicateBot() is called; applied on next ChatBotCreated
 	std::map<uint64, BotClientInfo> bot_infos;
 	UID selected_bot_avatar_uid; // Currently selected bot avatar UID (for gizmo)
 	GearItems logged_in_equipped_gear; // Last equipped gear settings received from server in a LoggedInMessage.

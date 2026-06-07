@@ -634,6 +634,12 @@ void MainWindow::initialiseUI()
 		ui->setupUi(this);
 	}
 
+	// Global tooltip style — readable, properly sized, stays visible
+	qApp->setStyleSheet(qApp->styleSheet() +
+		"QToolTip { color: #1a1a1a; background-color: #fffde7; "
+		"border: 1px solid #e6b800; font-size: 9pt; padding: 6px; "
+		"border-radius: 3px; }");
+
 	initialiseLanguageMenu();
 
 	// Keep favorites menu up to date (actions are rebuilt on-demand when the menu opens).
@@ -4708,7 +4714,40 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 	const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
 	const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown,
 	uint32 use_action_type, const std::string& use_action_param,
-	const std::string& api_key, const std::string& api_endpoint)
+	const std::string& api_key, const std::string& api_endpoint,
+	uint32 movement_type, double walk_speed, double wander_radius,
+	const std::vector<BotWaypoint>& waypoints_raw,
+	const std::vector<BotUseAction>& use_actions_raw,
+	const std::string& farewell_gesture_name, const std::string& farewell_gesture_url,
+	uint32 farewell_gesture_flags, double farewell_gesture_cooldown,
+	const std::string& walk_gesture_name, const std::string& walk_gesture_url, uint32 walk_gesture_flags,
+	const std::string& talk_gesture_name, const std::string& talk_gesture_url, uint32 talk_gesture_flags,
+	const std::string& interaction_gesture_name, const std::string& interaction_gesture_url,
+	uint32 interaction_gesture_flags, double interaction_gesture_cooldown,
+	double audio_min_distance, double audio_start_delay,
+	const std::string& greeting_audio_url, const std::string& farewell_audio_url2,
+	const std::string& interaction_audio_url,
+	// Block 9: advanced settings
+	float conversation_timeout_s, uint32 max_llm_calls_per_hour,
+	const std::string& webhook_url,
+	uint32 active_hours_start_utc, uint32 active_hours_end_utc,
+	const std::vector<BotScriptedResponse>& scripted_responses,
+	const std::vector<std::string>& player_whitelist,
+	const std::vector<std::string>& player_blacklist,
+	const std::vector<BotToolFunctionInfo>& tool_functions,
+	// Block 10
+	uint32 ai_provider, float top_p, uint32 top_k,
+	float frequency_penalty, float presence_penalty, uint32 max_context_messages,
+	uint32 dialog_start_node_id, const std::vector<BotDialogNode>& dialog_nodes,
+	// Block 11
+	bool enable_player_memory, uint32 memory_summary_tokens,
+	const std::string& content_filter_patterns, bool jailbreak_guard,
+	// Block 12
+	uint32 max_llm_calls_per_player_per_hour, bool response_cache_enabled,
+	uint32 response_cache_ttl_s, const std::string& fallback_model_id,
+	const std::string& fallback_api_key, const std::string& fallback_api_endpoint,
+	uint32 llm_max_retries,
+	uint32 stats_conversations_24h, uint32 stats_llm_calls_total)
 {
 	ui->botEditorWidget->init(&gui_client);
 
@@ -4749,9 +4788,48 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 		surprise_name, surprise_url, surprise_flags, surprise_cooldown,
 		acknowledge_name, acknowledge_url, acknowledge_flags, acknowledge_cooldown,
 		use_action_type, use_action_param,
-		api_key, api_endpoint);
+		api_key, api_endpoint,
+		movement_type, walk_speed, wander_radius,
+		waypoints_raw, use_actions_raw,
+		farewell_gesture_name, farewell_gesture_url, farewell_gesture_flags, farewell_gesture_cooldown,
+		walk_gesture_name, walk_gesture_url, walk_gesture_flags,
+		talk_gesture_name, talk_gesture_url, talk_gesture_flags,
+		interaction_gesture_name, interaction_gesture_url, interaction_gesture_flags, interaction_gesture_cooldown,
+		audio_min_distance, audio_start_delay,
+		greeting_audio_url, farewell_audio_url2, interaction_audio_url,
+		// Block 9
+		conversation_timeout_s, max_llm_calls_per_hour, webhook_url,
+		active_hours_start_utc, active_hours_end_utc,
+		scripted_responses, player_whitelist, player_blacklist, tool_functions,
+		// Block 10
+		ai_provider, top_p, top_k,
+		frequency_penalty, presence_penalty, max_context_messages,
+		dialog_start_node_id, dialog_nodes,
+		// Block 11
+		enable_player_memory, memory_summary_tokens,
+		content_filter_patterns, jailbreak_guard,
+		// Block 12
+		max_llm_calls_per_player_per_hour, response_cache_enabled,
+		response_cache_ttl_s, fallback_model_id,
+		fallback_api_key, fallback_api_endpoint,
+		llm_max_retries,
+		stats_conversations_24h, stats_llm_calls_total);
 
 	showEditorDockWidget();
+}
+
+
+void MainWindow::showBotPlayerMemoryList(uint64 bot_id, const std::vector<std::array<std::string,6>>& entries)
+{
+	if(ui->botEditorWidget->isVisible())
+		ui->botEditorWidget->showPlayerMemoryList(entries);
+}
+
+
+void MainWindow::showBotConversationLog(uint64 bot_id, const std::vector<std::array<std::string,5>>& entries)
+{
+	if(ui->botEditorWidget->isVisible())
+		ui->botEditorWidget->showConversationLog(entries);
 }
 
 

@@ -47,14 +47,25 @@ void BotSettingsDialog::on_saveButton_clicked()
 		ui->reactiveNameEdit->text().toStdString(),
 		ui->reactiveURLEdit->text().toStdString(),
 		(float)ui->reactiveCooldownSpin->value(),
-		0,
-		6.f,
-		10.f,
-		8.f,
+		/*flags=*/0u, /*greeting_dist=*/6.f, /*farewell_dist=*/10.f, /*chat_radius=*/8.f,
 		Vec3f(1.f),
-		"", "assistant", "", 0.7f, 0,
-		"", 1.f, 10.f, 12.f, 0.f,
-		3u, "", 3.f
+		/*ai_model_id=*/"", /*ai_preset=*/"assistant", /*ai_knowledge=*/"", /*ai_temp=*/0.7f, /*ai_max_tokens=*/0u,
+		/*audio_url=*/"", /*audio_vol=*/1.f, /*audio_radius=*/10.f, /*audio_activation=*/12.f, /*audio_cooldown=*/0.f,
+		/*trigger_flags=*/3u, /*trigger_keywords=*/"", /*trigger_cooldown=*/3.f,
+		/*greet_gesture_flags=*/0u, /*idle_gesture_flags=*/0u, /*react_gesture_flags=*/0u,
+		/*fallback=*/"",
+		/*surprise_name=*/"", /*surprise_url=*/"", /*surprise_flags=*/0u, /*surprise_cooldown=*/15.f,
+		/*ack_name=*/"", /*ack_url=*/"", /*ack_flags=*/0u, /*ack_cooldown=*/10.f,
+		/*use_action_type=*/0u, /*use_action_param=*/"",
+		/*api_key=*/"", /*api_endpoint=*/"",
+		/*movement_type=*/0u, /*walk_speed=*/1.4f, /*wander_radius=*/5.f,
+		/*waypoints=*/{}, /*use_actions=*/{},
+		/*farewell_gesture_name=*/"", /*farewell_gesture_url=*/"", /*farewell_gesture_flags=*/0u, /*farewell_gesture_cooldown=*/8.f,
+		/*walk_gesture_name=*/"", /*walk_gesture_url=*/"", /*walk_gesture_flags=*/0u,
+		/*talk_gesture_name=*/"", /*talk_gesture_url=*/"", /*talk_gesture_flags=*/0u,
+		/*interaction_gesture_name=*/"", /*interaction_gesture_url=*/"", /*interaction_gesture_flags=*/0u, /*interaction_gesture_cooldown=*/3.f,
+		/*audio_min_distance=*/1.f, /*audio_start_delay=*/0.f,
+		/*greeting_audio_url=*/"", /*farewell_audio_url=*/"", /*interaction_audio_url=*/""
 	);
 
 	accept();

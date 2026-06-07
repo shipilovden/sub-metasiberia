@@ -48,13 +48,16 @@ CyberspaceProtocolVersion
 52: Added QueryUserGear, UserGearList, GearItemUpdate and CreateGearItem messages.
 53: Added CreateChatBot, ChatBotCreated, UpdateChatBot, DeleteChatBot, QueryUserBots, UserBotList, MoveChatBot, TestChatBotGesture messages.
 54: Added UserUsedBotMessage; extended bot protocol with use_action_type, use_action_param, api_key, api_endpoint (Block 4).
+55: Bot Block 5: movement_type, walk_speed, wander_radius, waypoints, use_actions list.
+    Bot Block 6: farewell/walk/talk/interaction gesture slots.
+    Bot Block 7: audio_min_distance, audio_start_delay_s, greeting/farewell/interaction audio URLs.
 */
 namespace Protocol
 {
 
 const uint32 CyberspaceHello = 1357924680;
 
-const uint32 CyberspaceProtocolVersion = 54;
+const uint32 CyberspaceProtocolVersion = 61;
 
 const uint32 ClientProtocolOK		= 10000;
 const uint32 ClientProtocolTooOld	= 10001;
@@ -111,6 +114,12 @@ const uint32 UserBotList			= 1505; // Server sends back bot_id + avatar_uid pair
 const uint32 MoveChatBot			= 1506; // Client moved bot (pos + heading).
 const uint32 TestChatBotGesture		= 1507; // Client asks the server to play one configured bot gesture now.
 const uint32 UserUsedBotMessage		= 1508; // Client pressed E on a chatbot avatar.
+const uint32 GetBotConversationLog         = 1510; // Client requests recent conversation log for a bot.
+const uint32 BotConversationLog            = 1511; // Server sends back log entries.
+const uint32 BotSendManualMessage          = 1512; // Admin forces bot to broadcast a message now.
+const uint32 GetBotPlayerMemoryList        = 1513; // Admin requests list of all player memory entries.
+const uint32 BotPlayerMemoryList           = 1514; // Server sends player memory list.
+const uint32 SetBotPlayerMemoryEntry       = 1515; // Admin edits reputation/quest/clears memory for one player.
 
 
 const uint32 ChatMessageID			= 2000;

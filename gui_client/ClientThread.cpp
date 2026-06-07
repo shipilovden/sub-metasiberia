@@ -36,7 +36,7 @@ Copyright Glare Technologies Limited 2024 -
 static const size_t MAX_STRING_LEN = 10000;
 
 
-static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, std::string& name, std::string& prompt, AvatarSettings& avatar_settings,
+static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, uint32 peer_protocol_version, std::string& name, std::string& prompt, AvatarSettings& avatar_settings,
 	Vec3d& pos, float& heading,
 	std::string& greeting_name, std::string& greeting_url, float& greeting_cooldown,
 	std::string& idle_name, std::string& idle_url, float& idle_interval,
@@ -50,7 +50,21 @@ static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, std::s
 	std::string& fallback_message,
 	std::string& surprise_name, std::string& surprise_url, uint32& surprise_flags, float& surprise_cooldown,
 	std::string& acknowledge_name, std::string& acknowledge_url, uint32& acknowledge_flags, float& acknowledge_cooldown,
-	uint32& use_action_type, std::string& use_action_param, std::string& api_key, std::string& api_endpoint)
+	uint32& use_action_type, std::string& use_action_param, std::string& api_key, std::string& api_endpoint,
+	uint32& movement_type, float& walk_speed, float& wander_radius,
+	std::vector<BotWaypoint>& waypoints, std::vector<BotUseAction>& use_actions,
+	std::string& farewell_gesture_name, std::string& farewell_gesture_url, uint32& farewell_gesture_flags, float& farewell_gesture_cooldown,
+	std::string& walk_gesture_name, std::string& walk_gesture_url, uint32& walk_gesture_flags,
+	std::string& talk_gesture_name, std::string& talk_gesture_url, uint32& talk_gesture_flags,
+	std::string& interaction_gesture_name, std::string& interaction_gesture_url, uint32& interaction_gesture_flags, float& interaction_gesture_cooldown,
+	float& audio_min_distance, float& audio_start_delay,
+	std::string& greeting_audio_url, std::string& farewell_audio_url2, std::string& interaction_audio_url,
+	// Block 9 (protocol v57+)
+	float& conversation_timeout_s, uint32& max_llm_calls_per_hour, std::string& webhook_url,
+	uint32& active_hours_start_utc, uint32& active_hours_end_utc,
+	std::vector<BotScriptedResponse>& scripted_responses,
+	std::vector<std::string>& player_whitelist, std::vector<std::string>& player_blacklist,
+	std::vector<BotToolFunctionInfo>& tool_functions)
 {
 	name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 	prompt = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
@@ -109,6 +123,181 @@ static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, std::s
 		api_key          = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 		api_endpoint     = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 	}
+	if(peer_protocol_version >= 55 && !msg_buffer.endOfStream())
+	{
+		// Block 5 — movement + waypoints + multi-use-actions
+		movement_type = msg_buffer.readUInt32();
+		walk_speed    = msg_buffer.readFloat();
+		wander_radius = msg_buffer.readFloat();
+		const uint32 n_wp = msg_buffer.readUInt32();
+		waypoints.resize(n_wp);
+		for(uint32 i = 0; i < n_wp; ++i)
+		{
+			waypoints[i].pos              = readVec3FromStream<double>(msg_buffer);
+			waypoints[i].heading_override = msg_buffer.readFloat();
+			waypoints[i].dwell_time_s     = msg_buffer.readFloat();
+		}
+		const uint32 n_ua = msg_buffer.readUInt32();
+		use_actions.resize(n_ua);
+		for(uint32 i = 0; i < n_ua; ++i)
+		{
+			use_actions[i].type  = msg_buffer.readUInt32();
+			use_actions[i].label = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			use_actions[i].param = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		}
+	}
+	if(peer_protocol_version >= 55 && !msg_buffer.endOfStream())
+	{
+		// Block 6 — extra animation slots
+		farewell_gesture_name     = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		farewell_gesture_url      = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		farewell_gesture_flags    = msg_buffer.readUInt32();
+		farewell_gesture_cooldown = msg_buffer.readFloat();
+		walk_gesture_name         = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		walk_gesture_url          = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		walk_gesture_flags        = msg_buffer.readUInt32();
+		talk_gesture_name         = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		talk_gesture_url          = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		talk_gesture_flags        = msg_buffer.readUInt32();
+		interaction_gesture_name     = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		interaction_gesture_url      = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		interaction_gesture_flags    = msg_buffer.readUInt32();
+		interaction_gesture_cooldown = msg_buffer.readFloat();
+	}
+	if(peer_protocol_version >= 55 && !msg_buffer.endOfStream())
+	{
+		// Block 7 — extended sound settings
+		audio_min_distance    = msg_buffer.readFloat();
+		audio_start_delay     = msg_buffer.readFloat();
+		greeting_audio_url    = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		farewell_audio_url2   = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		interaction_audio_url = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+	}
+	if(peer_protocol_version >= 56 && !msg_buffer.endOfStream())
+	{
+		// Block 8 — UUID filters for use_actions
+		const uint32 n = msg_buffer.readUInt32();
+		for(uint32 i = 0; i < n; ++i)
+		{
+			const uint32 idx = msg_buffer.readUInt32();
+			const std::string uid = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			if(idx < use_actions.size())
+				use_actions[idx].required_avatar_uid = uid;
+		}
+	}
+	if(peer_protocol_version >= 57 && !msg_buffer.endOfStream())
+	{
+		// Block 9 — advanced settings
+		conversation_timeout_s  = msg_buffer.readFloat();
+		max_llm_calls_per_hour  = msg_buffer.readUInt32();
+		webhook_url             = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		active_hours_start_utc  = msg_buffer.readUInt32();
+		active_hours_end_utc    = msg_buffer.readUInt32();
+		const uint32 nsr = myMin(msg_buffer.readUInt32(), (uint32)BotScriptedResponse::MAX_COUNT);
+		scripted_responses.resize(nsr);
+		for(uint32 i = 0; i < nsr; ++i) readBotScriptedResponseFromStream(msg_buffer, scripted_responses[i]);
+		const uint32 nwl = myMin(msg_buffer.readUInt32(), (uint32)ChatBot::MAX_PLAYER_LIST_SIZE);
+		player_whitelist.resize(nwl);
+		for(uint32 i = 0; i < nwl; ++i) player_whitelist[i] = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		const uint32 nbl = myMin(msg_buffer.readUInt32(), (uint32)ChatBot::MAX_PLAYER_LIST_SIZE);
+		player_blacklist.resize(nbl);
+		for(uint32 i = 0; i < nbl; ++i) player_blacklist[i] = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+		const uint32 ntf = myMin(msg_buffer.readUInt32(), 100u);
+		for(uint32 i = 0; i < ntf; ++i)
+		{
+			BotToolFunctionInfo tfi;
+			tfi.function_name  = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			tfi.description    = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			tfi.result_content = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			tool_functions.push_back(tfi);
+		}
+	}
+}
+
+
+// Block 10 parameters — extended AI + dialog tree (v58+)
+struct ChatBotBlock10
+{
+	uint32 ai_provider = 0;
+	float  top_p = 0.f;
+	uint32 top_k = 0;
+	float  frequency_penalty = 0.f;
+	float  presence_penalty  = 0.f;
+	uint32 max_context_messages = 0;
+	uint32 dialog_start_node_id = 0;
+	std::vector<BotDialogNode> dialog_nodes;
+};
+
+static ChatBotBlock10 readChatBotBlock10(RandomAccessInStream& msg_buffer, uint32 peer_protocol_version)
+{
+	ChatBotBlock10 b;
+	if(peer_protocol_version >= 58 && !msg_buffer.endOfStream())
+	{
+		b.ai_provider            = msg_buffer.readUInt32();
+		b.top_p                  = msg_buffer.readFloat();
+		b.top_k                  = msg_buffer.readUInt32();
+		b.frequency_penalty      = msg_buffer.readFloat();
+		b.presence_penalty       = msg_buffer.readFloat();
+		b.max_context_messages   = msg_buffer.readUInt32();
+		b.dialog_start_node_id   = msg_buffer.readUInt32();
+		const uint32 ndn = myMin(msg_buffer.readUInt32(), (uint32)BotDialogNode::MAX_NODES);
+		b.dialog_nodes.resize(ndn);
+		for(uint32 i = 0; i < ndn; ++i) readBotDialogNodeFromStream(msg_buffer, b.dialog_nodes[i]);
+	}
+	return b;
+}
+
+
+struct ChatBotBlock11
+{
+	bool     enable_player_memory  = false;
+	uint32   memory_summary_tokens = 150;
+	std::string content_filter_patterns;
+	bool     jailbreak_guard       = true;
+};
+
+static ChatBotBlock11 readChatBotBlock11(RandomAccessInStream& msg_buffer, uint32 peer_protocol_version)
+{
+	ChatBotBlock11 b;
+	if(peer_protocol_version >= 59 && !msg_buffer.endOfStream())
+	{
+		b.enable_player_memory   = (msg_buffer.readUInt32() != 0);
+		b.memory_summary_tokens  = msg_buffer.readUInt32();
+		b.content_filter_patterns = msg_buffer.readStringLengthFirst(ChatBot::MAX_CONTENT_FILTER_SIZE);
+		b.jailbreak_guard        = (msg_buffer.readUInt32() != 0);
+	}
+	return b;
+}
+
+struct ChatBotBlock12
+{
+	uint32   max_llm_calls_per_player_per_hour = 0;
+	bool     response_cache_enabled = false;
+	uint32   response_cache_ttl_s   = 300;
+	std::string fallback_model_id;
+	std::string fallback_api_key;
+	std::string fallback_api_endpoint;
+	uint32   llm_max_retries        = 0;
+	uint32   stats_conversations_24h = 0;
+	uint32   stats_llm_calls_total   = 0;
+};
+
+static ChatBotBlock12 readChatBotBlock12(RandomAccessInStream& msg_buffer, uint32 peer_protocol_version)
+{
+	ChatBotBlock12 b;
+	if(peer_protocol_version >= 60 && !msg_buffer.endOfStream())
+	{
+		b.max_llm_calls_per_player_per_hour = msg_buffer.readUInt32();
+		b.response_cache_enabled = (msg_buffer.readUInt32() != 0);
+		b.response_cache_ttl_s   = msg_buffer.readUInt32();
+		b.fallback_model_id      = msg_buffer.readStringLengthFirst(ChatBot::MAX_FALLBACK_MODEL_SIZE);
+		b.fallback_api_key       = msg_buffer.readStringLengthFirst(ChatBot::MAX_API_KEY_SIZE);
+		b.fallback_api_endpoint  = msg_buffer.readStringLengthFirst(ChatBot::MAX_FALLBACK_ENDPOINT_SIZE);
+		b.llm_max_retries        = msg_buffer.readUInt32();
+		b.stats_conversations_24h = msg_buffer.readUInt32();
+		b.stats_llm_calls_total   = msg_buffer.readUInt32();
+	}
+	return b;
 }
 
 
@@ -1295,7 +1484,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			msg->avatar_uid = readUIDFromStream(msg_buffer);
 			if(!msg_buffer.endOfStream())
 			{
-				readChatBotClientInfoFields(msg_buffer, msg->name, msg->prompt, msg->avatar_settings,
+				readChatBotClientInfoFields(msg_buffer, peer_protocol_version, msg->name, msg->prompt, msg->avatar_settings,
 					msg->pos, msg->heading,
 					msg->greeting_name, msg->greeting_url, msg->greeting_cooldown,
 					msg->idle_name, msg->idle_url, msg->idle_interval,
@@ -1309,7 +1498,42 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 					msg->fallback_message,
 					msg->surprise_name, msg->surprise_url, msg->surprise_flags, msg->surprise_cooldown,
 					msg->acknowledge_name, msg->acknowledge_url, msg->acknowledge_flags, msg->acknowledge_cooldown,
-					msg->use_action_type, msg->use_action_param, msg->api_key, msg->api_endpoint);
+					msg->use_action_type, msg->use_action_param, msg->api_key, msg->api_endpoint,
+					msg->movement_type, msg->walk_speed, msg->wander_radius,
+					msg->waypoints, msg->use_actions,
+					msg->farewell_gesture_name, msg->farewell_gesture_url, msg->farewell_gesture_flags, msg->farewell_gesture_cooldown,
+					msg->walk_gesture_name, msg->walk_gesture_url, msg->walk_gesture_flags,
+					msg->talk_gesture_name, msg->talk_gesture_url, msg->talk_gesture_flags,
+					msg->interaction_gesture_name, msg->interaction_gesture_url, msg->interaction_gesture_flags, msg->interaction_gesture_cooldown,
+					msg->audio_min_distance, msg->audio_start_delay,
+					msg->greeting_audio_url, msg->farewell_audio_url2, msg->interaction_audio_url,
+					msg->conversation_timeout_s, msg->max_llm_calls_per_hour, msg->webhook_url,
+					msg->active_hours_start_utc, msg->active_hours_end_utc,
+					msg->scripted_responses, msg->player_whitelist, msg->player_blacklist, msg->tool_functions);
+				const ChatBotBlock10 b10 = readChatBotBlock10(msg_buffer, peer_protocol_version);
+				msg->ai_provider          = b10.ai_provider;
+				msg->top_p                = b10.top_p;
+				msg->top_k                = b10.top_k;
+				msg->frequency_penalty    = b10.frequency_penalty;
+				msg->presence_penalty     = b10.presence_penalty;
+				msg->max_context_messages = b10.max_context_messages;
+				msg->dialog_start_node_id = b10.dialog_start_node_id;
+				msg->dialog_nodes         = b10.dialog_nodes;
+				const ChatBotBlock11 b11 = readChatBotBlock11(msg_buffer, peer_protocol_version);
+				msg->enable_player_memory   = b11.enable_player_memory;
+				msg->memory_summary_tokens  = b11.memory_summary_tokens;
+				msg->content_filter_patterns = b11.content_filter_patterns;
+				msg->jailbreak_guard        = b11.jailbreak_guard;
+				const ChatBotBlock12 b12 = readChatBotBlock12(msg_buffer, peer_protocol_version);
+				msg->max_llm_calls_per_player_per_hour = b12.max_llm_calls_per_player_per_hour;
+				msg->response_cache_enabled = b12.response_cache_enabled;
+				msg->response_cache_ttl_s   = b12.response_cache_ttl_s;
+				msg->fallback_model_id      = b12.fallback_model_id;
+				msg->fallback_api_key       = b12.fallback_api_key;
+				msg->fallback_api_endpoint  = b12.fallback_api_endpoint;
+				msg->llm_max_retries        = b12.llm_max_retries;
+				msg->stats_conversations_24h = b12.stats_conversations_24h;
+				msg->stats_llm_calls_total   = b12.stats_llm_calls_total;
 			}
 			out_msg_queue->enqueue(msg);
 			break;
@@ -1323,7 +1547,7 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 				UserBotListMessage::BotInfo info;
 				info.bot_id    = msg_buffer.readUInt64();
 				info.avatar_uid = readUIDFromStream(msg_buffer);
-				readChatBotClientInfoFields(msg_buffer, info.name, info.prompt, info.avatar_settings,
+				readChatBotClientInfoFields(msg_buffer, peer_protocol_version, info.name, info.prompt, info.avatar_settings,
 					info.pos, info.heading,
 					info.greeting_name, info.greeting_url, info.greeting_cooldown,
 					info.idle_name, info.idle_url, info.idle_interval,
@@ -1337,8 +1561,82 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 					info.fallback_message,
 					info.surprise_name, info.surprise_url, info.surprise_flags, info.surprise_cooldown,
 					info.acknowledge_name, info.acknowledge_url, info.acknowledge_flags, info.acknowledge_cooldown,
-					info.use_action_type, info.use_action_param, info.api_key, info.api_endpoint);
+					info.use_action_type, info.use_action_param, info.api_key, info.api_endpoint,
+					info.movement_type, info.walk_speed, info.wander_radius,
+					info.waypoints, info.use_actions,
+					info.farewell_gesture_name, info.farewell_gesture_url, info.farewell_gesture_flags, info.farewell_gesture_cooldown,
+					info.walk_gesture_name, info.walk_gesture_url, info.walk_gesture_flags,
+					info.talk_gesture_name, info.talk_gesture_url, info.talk_gesture_flags,
+					info.interaction_gesture_name, info.interaction_gesture_url, info.interaction_gesture_flags, info.interaction_gesture_cooldown,
+					info.audio_min_distance, info.audio_start_delay,
+					info.greeting_audio_url, info.farewell_audio_url2, info.interaction_audio_url,
+					info.conversation_timeout_s, info.max_llm_calls_per_hour, info.webhook_url,
+					info.active_hours_start_utc, info.active_hours_end_utc,
+					info.scripted_responses, info.player_whitelist, info.player_blacklist, info.tool_functions);
+				const ChatBotBlock10 b10 = readChatBotBlock10(msg_buffer, peer_protocol_version);
+				info.ai_provider          = b10.ai_provider;
+				info.top_p                = b10.top_p;
+				info.top_k                = b10.top_k;
+				info.frequency_penalty    = b10.frequency_penalty;
+				info.presence_penalty     = b10.presence_penalty;
+				info.max_context_messages = b10.max_context_messages;
+				info.dialog_start_node_id = b10.dialog_start_node_id;
+				info.dialog_nodes         = b10.dialog_nodes;
+				const ChatBotBlock11 b11 = readChatBotBlock11(msg_buffer, peer_protocol_version);
+				info.enable_player_memory   = b11.enable_player_memory;
+				info.memory_summary_tokens  = b11.memory_summary_tokens;
+				info.content_filter_patterns = b11.content_filter_patterns;
+				info.jailbreak_guard        = b11.jailbreak_guard;
+				const ChatBotBlock12 b12 = readChatBotBlock12(msg_buffer, peer_protocol_version);
+				info.max_llm_calls_per_player_per_hour = b12.max_llm_calls_per_player_per_hour;
+				info.response_cache_enabled = b12.response_cache_enabled;
+				info.response_cache_ttl_s   = b12.response_cache_ttl_s;
+				info.fallback_model_id      = b12.fallback_model_id;
+				info.fallback_api_key       = b12.fallback_api_key;
+				info.fallback_api_endpoint  = b12.fallback_api_endpoint;
+				info.llm_max_retries        = b12.llm_max_retries;
+				info.stats_conversations_24h = b12.stats_conversations_24h;
+				info.stats_llm_calls_total   = b12.stats_llm_calls_total;
 				msg->bots.push_back(info);
+			}
+			out_msg_queue->enqueue(msg);
+			break;
+		}
+	case Protocol::BotPlayerMemoryList:
+		{
+			Reference<BotPlayerMemoryListMessage> msg = new BotPlayerMemoryListMessage();
+			msg->bot_id = msg_buffer.readUInt64();
+			const uint32 n = myMin(msg_buffer.readUInt32(), 1000u);
+			msg->entries.reserve(n);
+			for(uint32 i = 0; i < n; ++i)
+			{
+				BotPlayerMemoryListMessage::PlayerEntry e;
+				e.uid_str         = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+				e.visit_count     = msg_buffer.readUInt32();
+				e.reputation      = msg_buffer.readInt32();
+				e.quest_state     = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+				e.last_seen_unix  = msg_buffer.readUInt64();
+				e.history_preview = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+				msg->entries.push_back(e);
+			}
+			out_msg_queue->enqueue(msg);
+			break;
+		}
+	case Protocol::BotConversationLog:
+		{
+			Reference<BotConversationLogMessage> msg = new BotConversationLogMessage();
+			msg->bot_id = msg_buffer.readUInt64();
+			const uint32 n = myMin(msg_buffer.readUInt32(), 200u);
+			msg->entries.reserve(n);
+			for(uint32 i = 0; i < n; ++i)
+			{
+				BotConversationLogMessage::Entry e;
+				e.timestamp_unix  = msg_buffer.readUInt64();
+				e.player_name     = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+				e.player_uid_str  = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+				e.player_message  = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+				e.bot_response    = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+				msg->entries.push_back(e);
 			}
 			out_msg_queue->enqueue(msg);
 			break;

@@ -2047,7 +2047,9 @@ uint64 ServerAllWorldsState::getNextChatBotUID()
 UID ServerAllWorldsState::getNextGearItemUID()
 {
 	Lock lock(mutex);
-	return next_gear_item_uid++;
+	const UID next = next_gear_item_uid;
+	next_gear_item_uid = UID(next_gear_item_uid.value() + 1);
+	return next;
 }
 
 

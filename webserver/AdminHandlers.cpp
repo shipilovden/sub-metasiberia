@@ -5393,7 +5393,7 @@ void renderAdminGearPage(ServerAllWorldsState& world_state, const web::RequestIn
 			page_out += "<td>" + item->creator_id.toString() + "</td>";
 			page_out += "<td>" + item->owner_id.toString() + "</td>";
 			if(!item->preview_image_URL.empty())
-				page_out += "<td><img src=\"/resource/" + web::Escaping::URLEscape(item->preview_image_URL) + "\" style=\"max-width:64px; max-height:64px;\"/></td>";
+				page_out += "<td><img src=\"/resource/" + web::Escaping::URLEscape(toStdString(item->preview_image_URL)) + "\" style=\"max-width:64px; max-height:64px;\"/></td>";
 			else
 				page_out += "<td>(none)</td>";
 			page_out += "</tr>";
@@ -5401,7 +5401,7 @@ void renderAdminGearPage(ServerAllWorldsState& world_state, const web::RequestIn
 	}
 
 	page_out += "</table>";
-	page_out += webServerResponseFooter();
+	page_out += WebServerResponseUtils::standardFooter(request, false);
 	web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, page_out);
 }
 

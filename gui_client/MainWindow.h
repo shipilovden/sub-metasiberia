@@ -137,7 +137,42 @@ private slots:;
 		const std::string& surprise_name, const std::string& surprise_url, uint32 surprise_flags, double surprise_cooldown,
 		const std::string& acknowledge_name, const std::string& acknowledge_url, uint32 acknowledge_flags, double acknowledge_cooldown,
 		uint32 use_action_type, const std::string& use_action_param,
-		const std::string& api_key, const std::string& api_endpoint) override;
+		const std::string& api_key, const std::string& api_endpoint,
+		uint32 movement_type, double walk_speed, double wander_radius,
+		const std::vector<BotWaypoint>& waypoints_raw,
+		const std::vector<BotUseAction>& use_actions_raw,
+		const std::string& farewell_gesture_name, const std::string& farewell_gesture_url,
+		uint32 farewell_gesture_flags, double farewell_gesture_cooldown,
+		const std::string& walk_gesture_name, const std::string& walk_gesture_url, uint32 walk_gesture_flags,
+		const std::string& talk_gesture_name, const std::string& talk_gesture_url, uint32 talk_gesture_flags,
+		const std::string& interaction_gesture_name, const std::string& interaction_gesture_url,
+		uint32 interaction_gesture_flags, double interaction_gesture_cooldown,
+		double audio_min_distance, double audio_start_delay,
+		const std::string& greeting_audio_url, const std::string& farewell_audio_url2,
+		const std::string& interaction_audio_url,
+		// Block 9: advanced settings
+		float conversation_timeout_s, uint32 max_llm_calls_per_hour,
+		const std::string& webhook_url,
+		uint32 active_hours_start_utc, uint32 active_hours_end_utc,
+		const std::vector<BotScriptedResponse>& scripted_responses,
+		const std::vector<std::string>& player_whitelist,
+		const std::vector<std::string>& player_blacklist,
+		const std::vector<BotToolFunctionInfo>& tool_functions,
+		// Block 10
+		uint32 ai_provider, float top_p, uint32 top_k,
+		float frequency_penalty, float presence_penalty, uint32 max_context_messages,
+		uint32 dialog_start_node_id, const std::vector<BotDialogNode>& dialog_nodes,
+		// Block 11
+		bool enable_player_memory, uint32 memory_summary_tokens,
+		const std::string& content_filter_patterns, bool jailbreak_guard,
+		// Block 12
+		uint32 max_llm_calls_per_player_per_hour, bool response_cache_enabled,
+		uint32 response_cache_ttl_s, const std::string& fallback_model_id,
+		const std::string& fallback_api_key, const std::string& fallback_api_endpoint,
+		uint32 llm_max_retries,
+		uint32 stats_conversations_24h, uint32 stats_llm_calls_total) override;
+	virtual void showBotConversationLog(uint64 bot_id, const std::vector<std::array<std::string,5>>& entries) override;
+	virtual void showBotPlayerMemoryList(uint64 bot_id, const std::vector<std::array<std::string,6>>& entries) override;
 	virtual void hideBotEditor() override;
 private slots:
 	void onBotEditorSave();

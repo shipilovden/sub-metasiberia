@@ -1139,6 +1139,119 @@ static void writeChatBotClientInfoFields(const ChatBot& bot, RandomAccessOutStre
 	stream.writeStringLengthFirst(bot.use_action_param);
 	stream.writeStringLengthFirst(bot.api_key);
 	stream.writeStringLengthFirst(bot.api_endpoint);
+	// Block 5: movement, waypoints, use_actions list
+	stream.writeUInt32(bot.movement_type);
+	stream.writeFloat(bot.walk_speed);
+	stream.writeFloat(bot.wander_radius);
+	const uint32 n_wp = (uint32)myMin((size_t)ChatBot::MAX_WAYPOINTS, bot.waypoints.size());
+	stream.writeUInt32(n_wp);
+	for(uint32 i = 0; i < n_wp; ++i)
+	{
+		::writeToStream(bot.waypoints[i].pos, stream);
+		stream.writeFloat(bot.waypoints[i].heading_override);
+		stream.writeFloat(bot.waypoints[i].dwell_time_s);
+	}
+	const uint32 n_ua = (uint32)myMin((size_t)ChatBot::MAX_USE_ACTIONS, bot.use_actions.size());
+	stream.writeUInt32(n_ua);
+	for(uint32 i = 0; i < n_ua; ++i)
+	{
+		stream.writeUInt32(bot.use_actions[i].type);
+		stream.writeStringLengthFirst(bot.use_actions[i].label);
+		stream.writeStringLengthFirst(bot.use_actions[i].param);
+	}
+	// Block 6: extra animation slots
+	stream.writeStringLengthFirst(bot.farewell_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.farewell_gesture_URL));
+	stream.writeUInt32(bot.farewell_gesture_flags);
+	stream.writeFloat(bot.farewell_gesture_cooldown_s);
+	stream.writeStringLengthFirst(bot.walk_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.walk_gesture_URL));
+	stream.writeUInt32(bot.walk_gesture_flags);
+	stream.writeStringLengthFirst(bot.talk_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.talk_gesture_URL));
+	stream.writeUInt32(bot.talk_gesture_flags);
+	stream.writeStringLengthFirst(bot.interaction_gesture_name);
+	stream.writeStringLengthFirst(toStdString(bot.interaction_gesture_URL));
+	stream.writeUInt32(bot.interaction_gesture_flags);
+	stream.writeFloat(bot.interaction_gesture_cooldown_s);
+	// Block 7: extended sound
+	stream.writeFloat(bot.audio_min_distance);
+	stream.writeFloat(bot.audio_start_delay_s);
+	stream.writeStringLengthFirst(toStdString(bot.greeting_audio_url));
+	stream.writeStringLengthFirst(toStdString(bot.farewell_audio_url));
+	stream.writeStringLengthFirst(toStdString(bot.interaction_audio_url));
+	// Block 8: UUID filters for use_actions (sparse)
+	{
+		std::vector<std::pair<uint32, std::string>> uid_rules;
+		for(uint32 i = 0; i < (uint32)bot.use_actions.size(); ++i)
+			if(!bot.use_actions[i].required_avatar_uid.empty())
+				uid_rules.push_back({i, bot.use_actions[i].required_avatar_uid});
+		stream.writeUInt32((uint32)uid_rules.size());
+		for(const auto& r : uid_rules)
+		{
+			stream.writeUInt32(r.first);
+			stream.writeStringLengthFirst(r.second);
+		}
+	}
+	// Block 9: advanced settings
+	stream.writeFloat(bot.conversation_timeout_s);
+	stream.writeUInt32(bot.max_llm_calls_per_hour);
+	stream.writeStringLengthFirst(bot.webhook_url);
+	stream.writeUInt32(bot.active_hours_start_utc);
+	stream.writeUInt32(bot.active_hours_end_utc);
+	{
+		const uint32 n = (uint32)myMin((size_t)BotScriptedResponse::MAX_COUNT, bot.scripted_responses.size());
+		stream.writeUInt32(n);
+		for(uint32 i = 0; i < n; ++i) writeBotScriptedResponseToStream(bot.scripted_responses[i], stream);
+	}
+	{
+		const uint32 n = (uint32)myMin((size_t)ChatBot::MAX_PLAYER_LIST_SIZE, bot.player_whitelist.size());
+		stream.writeUInt32(n);
+		for(uint32 i = 0; i < n; ++i) stream.writeStringLengthFirst(bot.player_whitelist[i]);
+	}
+	{
+		const uint32 n = (uint32)myMin((size_t)ChatBot::MAX_PLAYER_LIST_SIZE, bot.player_blacklist.size());
+		stream.writeUInt32(n);
+		for(uint32 i = 0; i < n; ++i) stream.writeStringLengthFirst(bot.player_blacklist[i]);
+	}
+	// Tool functions
+	{
+		stream.writeUInt32((uint32)bot.info_tool_functions.size());
+		for(const auto& it : bot.info_tool_functions)
+		{
+			stream.writeStringLengthFirst(it.second->function_name);
+			stream.writeStringLengthFirst(it.second->description);
+			stream.writeStringLengthFirst(it.second->result_content);
+		}
+	}
+	// Block 10: extended AI parameters + dialog tree
+	stream.writeUInt32(bot.ai_provider);
+	stream.writeFloat(bot.top_p);
+	stream.writeUInt32(bot.top_k);
+	stream.writeFloat(bot.frequency_penalty);
+	stream.writeFloat(bot.presence_penalty);
+	stream.writeUInt32(bot.max_context_messages);
+	stream.writeUInt32(bot.dialog_start_node_id);
+	{
+		const uint32 n = (uint32)myMin((size_t)BotDialogNode::MAX_NODES, bot.dialog_nodes.size());
+		stream.writeUInt32(n);
+		for(uint32 i = 0; i < n; ++i) writeBotDialogNodeToStream(bot.dialog_nodes[i], stream);
+	}
+	// Block 11: player memory config + content safety
+	stream.writeUInt32(bot.enable_player_memory ? 1u : 0u);
+	stream.writeUInt32(bot.memory_summary_tokens);
+	stream.writeStringLengthFirst(bot.content_filter_patterns);
+	stream.writeUInt32(bot.jailbreak_guard ? 1u : 0u);
+	// Block 12 (sent as part of bot info): per-player rate, cache, fallback, retry, stats
+	stream.writeUInt32(bot.max_llm_calls_per_player_per_hour);
+	stream.writeUInt32(bot.response_cache_enabled ? 1u : 0u);
+	stream.writeUInt32(bot.response_cache_ttl_s);
+	stream.writeStringLengthFirst(bot.fallback_model_id);
+	stream.writeStringLengthFirst(bot.fallback_api_key);
+	stream.writeStringLengthFirst(bot.fallback_api_endpoint);
+	stream.writeUInt32(bot.llm_max_retries);
+	stream.writeUInt32(bot.stats_conversations_24h);
+	stream.writeUInt32(bot.stats_llm_calls_total);
 }
 
 
@@ -4051,6 +4164,171 @@ void WorkerThread::doRun()
 								api_endpoint     = msg_buffer.readStringLengthFirst(ChatBot::MAX_API_ENDPOINT_SIZE);
 							}
 
+							// Block 5: movement, waypoints, use_actions list
+							uint32 movement_type = ChatBot::MOVEMENT_TYPE_STATIONARY;
+							float  walk_speed    = 1.4f;
+							float  wander_radius = 5.f;
+							std::vector<BotWaypoint> waypoints;
+							std::vector<BotUseAction> use_actions;
+							if(!msg_buffer.endOfStream())
+							{
+								movement_type = msg_buffer.readUInt32();
+								walk_speed    = msg_buffer.readFloat();
+								wander_radius = msg_buffer.readFloat();
+								const uint32 n_waypoints = myMin(msg_buffer.readUInt32(), (uint32)ChatBot::MAX_WAYPOINTS);
+								waypoints.resize(n_waypoints);
+								for(uint32 i = 0; i < n_waypoints; ++i)
+									readBotWaypointFromStream(msg_buffer, waypoints[i]);
+								const uint32 n_actions = myMin(msg_buffer.readUInt32(), (uint32)ChatBot::MAX_USE_ACTIONS);
+								use_actions.resize(n_actions);
+								for(uint32 i = 0; i < n_actions; ++i)
+									readBotUseActionFromStream(msg_buffer, use_actions[i]);
+							}
+
+							// Block 6: extra animation slots
+							std::string farewell_gesture_name; URLString farewell_gesture_URL;
+							uint32 farewell_gesture_flags = 0; float farewell_gesture_cooldown_s = 8.f;
+							std::string walk_gesture_name; URLString walk_gesture_URL; uint32 walk_gesture_flags = 0;
+							std::string talk_gesture_name; URLString talk_gesture_URL; uint32 talk_gesture_flags = 0;
+							std::string interaction_gesture_name; URLString interaction_gesture_URL;
+							uint32 interaction_gesture_flags = 0; float interaction_gesture_cooldown_s = 3.f;
+							if(!msg_buffer.endOfStream())
+							{
+								farewell_gesture_name      = msg_buffer.readStringLengthFirst(ChatBot::MAX_EXTRA_GESTURE_NAME_SIZE);
+								farewell_gesture_URL       = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+								farewell_gesture_flags     = msg_buffer.readUInt32();
+								farewell_gesture_cooldown_s = msg_buffer.readFloat();
+								walk_gesture_name          = msg_buffer.readStringLengthFirst(ChatBot::MAX_EXTRA_GESTURE_NAME_SIZE);
+								walk_gesture_URL           = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+								walk_gesture_flags         = msg_buffer.readUInt32();
+								talk_gesture_name          = msg_buffer.readStringLengthFirst(ChatBot::MAX_EXTRA_GESTURE_NAME_SIZE);
+								talk_gesture_URL           = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+								talk_gesture_flags         = msg_buffer.readUInt32();
+								interaction_gesture_name      = msg_buffer.readStringLengthFirst(ChatBot::MAX_EXTRA_GESTURE_NAME_SIZE);
+								interaction_gesture_URL       = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_GESTURE_URL_SIZE));
+								interaction_gesture_flags     = msg_buffer.readUInt32();
+								interaction_gesture_cooldown_s = msg_buffer.readFloat();
+							}
+
+							// Block 7: extended sound settings
+							float     audio_min_distance     = 1.f;
+							float     audio_start_delay_s    = 0.f;
+							URLString greeting_audio_url;
+							URLString farewell_audio_url;
+							URLString interaction_audio_url;
+							if(!msg_buffer.endOfStream())
+							{
+								audio_min_distance     = msg_buffer.readFloat();
+								audio_start_delay_s    = msg_buffer.readFloat();
+								greeting_audio_url     = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_AUDIO_URL_SIZE));
+								farewell_audio_url     = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_AUDIO_URL_SIZE));
+								interaction_audio_url  = toURLString(msg_buffer.readStringLengthFirst(ChatBot::MAX_AUDIO_URL_SIZE));
+							}
+							// Block 8: UUID filters for use_actions
+							if(!msg_buffer.endOfStream())
+							{
+								const uint32 n = myMin(msg_buffer.readUInt32(), (uint32)ChatBot::MAX_USE_ACTIONS);
+								for(uint32 i = 0; i < n; ++i)
+								{
+									const uint32 idx = msg_buffer.readUInt32();
+									const std::string uid = msg_buffer.readStringLengthFirst(BotUseAction::MAX_REQUIRED_UID_SIZE);
+									if(idx < use_actions.size())
+										use_actions[idx].required_avatar_uid = uid;
+								}
+							}
+							// Block 9: advanced settings
+							float conversation_timeout_s = 0.f;
+							uint32 max_llm_calls_per_hour = 0;
+							std::string webhook_url;
+							uint32 active_hours_start_utc = 8;
+							uint32 active_hours_end_utc   = 22;
+							std::vector<BotScriptedResponse> scripted_responses;
+							std::vector<std::string> player_whitelist;
+							std::vector<std::string> player_blacklist;
+							std::vector<BotToolFunctionInfo> tool_functions;
+							if(!msg_buffer.endOfStream())
+							{
+								conversation_timeout_s = msg_buffer.readFloat();
+								max_llm_calls_per_hour = msg_buffer.readUInt32();
+								webhook_url = msg_buffer.readStringLengthFirst(ChatBot::MAX_WEBHOOK_URL_SIZE);
+								active_hours_start_utc = msg_buffer.readUInt32();
+								active_hours_end_utc   = msg_buffer.readUInt32();
+								const uint32 nsr = myMin(msg_buffer.readUInt32(), (uint32)BotScriptedResponse::MAX_COUNT);
+								scripted_responses.resize(nsr);
+								for(uint32 i = 0; i < nsr; ++i) readBotScriptedResponseFromStream(msg_buffer, scripted_responses[i]);
+								const uint32 nwl = myMin(msg_buffer.readUInt32(), (uint32)ChatBot::MAX_PLAYER_LIST_SIZE);
+								player_whitelist.resize(nwl);
+								for(uint32 i = 0; i < nwl; ++i) player_whitelist[i] = msg_buffer.readStringLengthFirst(ChatBot::MAX_PLAYER_LIST_ENTRY_SIZE);
+								const uint32 nbl = myMin(msg_buffer.readUInt32(), (uint32)ChatBot::MAX_PLAYER_LIST_SIZE);
+								player_blacklist.resize(nbl);
+								for(uint32 i = 0; i < nbl; ++i) player_blacklist[i] = msg_buffer.readStringLengthFirst(ChatBot::MAX_PLAYER_LIST_ENTRY_SIZE);
+								const uint32 ntf = myMin(msg_buffer.readUInt32(), 100u);
+								for(uint32 i = 0; i < ntf; ++i)
+								{
+									BotToolFunctionInfo tfi;
+									tfi.function_name  = msg_buffer.readStringLengthFirst(ChatBotToolFunction::MAX_FUNCTION_NAME_SIZE);
+									tfi.description    = msg_buffer.readStringLengthFirst(ChatBotToolFunction::MAX_DESCRIPTION_NAME_SIZE);
+									tfi.result_content = msg_buffer.readStringLengthFirst(ChatBotToolFunction::MAX_RESULT_CONTENT_SIZE);
+									tool_functions.push_back(tfi);
+								}
+							}
+							// Block 10: extended AI parameters + dialog tree
+							uint32 block10_ai_provider = 0;
+							float  block10_top_p = 0.f;
+							uint32 block10_top_k = 0;
+							float  block10_freq_penalty = 0.f;
+							float  block10_pres_penalty = 0.f;
+							uint32 block10_max_ctx = 0;
+							uint32 block10_dialog_start_node_id = 0;
+							std::vector<BotDialogNode> block10_dialog_nodes;
+							bool   msg_buffer_block10_read = false;
+							if(!msg_buffer.endOfStream())
+							{
+								block10_ai_provider           = msg_buffer.readUInt32();
+								block10_top_p                 = msg_buffer.readFloat();
+								block10_top_k                 = msg_buffer.readUInt32();
+								block10_freq_penalty          = msg_buffer.readFloat();
+								block10_pres_penalty          = msg_buffer.readFloat();
+								block10_max_ctx               = msg_buffer.readUInt32();
+								block10_dialog_start_node_id  = msg_buffer.readUInt32();
+								const uint32 ndn = myMin(msg_buffer.readUInt32(), (uint32)BotDialogNode::MAX_NODES);
+								block10_dialog_nodes.resize(ndn);
+								for(uint32 i = 0; i < ndn; ++i) readBotDialogNodeFromStream(msg_buffer, block10_dialog_nodes[i]);
+								msg_buffer_block10_read = true;
+							}
+							// Block 11: player memory config + content safety
+							bool     block11_enable_memory   = false;
+							uint32   block11_memory_tokens   = 150;
+							std::string block11_filter_patterns;
+							bool     block11_jailbreak_guard = true;
+							bool     msg_buffer_block11_read = false;
+							if(!msg_buffer.endOfStream())
+							{
+								block11_enable_memory   = (msg_buffer.readUInt32() != 0);
+								block11_memory_tokens   = msg_buffer.readUInt32();
+								block11_filter_patterns = msg_buffer.readStringLengthFirst(ChatBot::MAX_CONTENT_FILTER_SIZE);
+								block11_jailbreak_guard = (msg_buffer.readUInt32() != 0);
+								msg_buffer_block11_read = true;
+							}
+							// Block 12: per-player rate, cache, fallback, retry
+							uint32 b12_player_rate = 0;
+							bool   b12_cache_en = false;
+							uint32 b12_cache_ttl = 300;
+							std::string b12_fallback_model, b12_fallback_key, b12_fallback_ep;
+							uint32 b12_retries = 0;
+							bool msg_buffer_block12_read = false;
+							if(!msg_buffer.endOfStream())
+							{
+								b12_player_rate    = msg_buffer.readUInt32();
+								b12_cache_en       = (msg_buffer.readUInt32() != 0);
+								b12_cache_ttl      = msg_buffer.readUInt32();
+								b12_fallback_model = msg_buffer.readStringLengthFirst(ChatBot::MAX_FALLBACK_MODEL_SIZE);
+								b12_fallback_key   = msg_buffer.readStringLengthFirst(ChatBot::MAX_API_KEY_SIZE);
+								b12_fallback_ep    = msg_buffer.readStringLengthFirst(ChatBot::MAX_FALLBACK_ENDPOINT_SIZE);
+								b12_retries        = msg_buffer.readUInt32();
+								msg_buffer_block12_read = true;
+							}
+
 							bool updated = false;
 							{
 								::WorldStateLock lock(world_state->mutex);
@@ -4108,7 +4386,81 @@ void WorkerThread::doRun()
 								chatbot->use_action_param = use_action_param;
 								chatbot->api_key          = api_key;
 								chatbot->api_endpoint     = api_endpoint;
+								// Block 5
+								chatbot->movement_type = movement_type;
+								chatbot->walk_speed    = walk_speed;
+								chatbot->wander_radius = wander_radius;
+								chatbot->waypoints     = waypoints;
+								chatbot->use_actions   = use_actions;
+								// Block 6
+								chatbot->farewell_gesture_name         = farewell_gesture_name;
+								chatbot->farewell_gesture_URL          = farewell_gesture_URL;
+								chatbot->farewell_gesture_flags        = farewell_gesture_flags;
+								chatbot->farewell_gesture_cooldown_s   = farewell_gesture_cooldown_s;
+								chatbot->walk_gesture_name             = walk_gesture_name;
+								chatbot->walk_gesture_URL              = walk_gesture_URL;
+								chatbot->walk_gesture_flags            = walk_gesture_flags;
+								chatbot->talk_gesture_name             = talk_gesture_name;
+								chatbot->talk_gesture_URL              = talk_gesture_URL;
+								chatbot->talk_gesture_flags            = talk_gesture_flags;
+								chatbot->interaction_gesture_name      = interaction_gesture_name;
+								chatbot->interaction_gesture_URL       = interaction_gesture_URL;
+								chatbot->interaction_gesture_flags     = interaction_gesture_flags;
+								chatbot->interaction_gesture_cooldown_s = interaction_gesture_cooldown_s;
+								// Block 7
+								chatbot->audio_min_distance    = audio_min_distance;
+								chatbot->audio_start_delay_s   = audio_start_delay_s;
+								chatbot->greeting_audio_url    = greeting_audio_url;
+								chatbot->farewell_audio_url    = farewell_audio_url;
+								chatbot->interaction_audio_url = interaction_audio_url;
 								chatbot->clampAnimationSettings();
+								// Block 9
+								chatbot->conversation_timeout_s = conversation_timeout_s;
+								chatbot->max_llm_calls_per_hour = max_llm_calls_per_hour;
+								chatbot->webhook_url            = webhook_url;
+								chatbot->active_hours_start_utc = active_hours_start_utc;
+								chatbot->active_hours_end_utc   = active_hours_end_utc;
+								chatbot->scripted_responses     = scripted_responses;
+								chatbot->player_whitelist       = player_whitelist;
+								chatbot->player_blacklist       = player_blacklist;
+								chatbot->info_tool_functions.clear();
+								for(const auto& tfi : tool_functions)
+								{
+									Reference<ChatBotToolFunction> tf = new ChatBotToolFunction();
+									tf->function_name  = tfi.function_name;
+									tf->description    = tfi.description;
+									tf->result_content = tfi.result_content;
+									chatbot->info_tool_functions[tf->function_name] = tf;
+								}
+								// Block 10: extended AI + dialog
+								if(msg_buffer_block10_read)
+								{
+									chatbot->ai_provider          = block10_ai_provider;
+									chatbot->top_p                = block10_top_p;
+									chatbot->top_k                = block10_top_k;
+									chatbot->frequency_penalty    = block10_freq_penalty;
+									chatbot->presence_penalty     = block10_pres_penalty;
+									chatbot->max_context_messages = block10_max_ctx;
+									chatbot->dialog_start_node_id = block10_dialog_start_node_id;
+									chatbot->dialog_nodes         = block10_dialog_nodes;
+								}
+								if(msg_buffer_block11_read)
+								{
+									chatbot->enable_player_memory   = block11_enable_memory;
+									chatbot->memory_summary_tokens  = block11_memory_tokens;
+									chatbot->content_filter_patterns = block11_filter_patterns;
+									chatbot->jailbreak_guard        = block11_jailbreak_guard;
+								}
+								if(msg_buffer_block12_read)
+								{
+									chatbot->max_llm_calls_per_player_per_hour = b12_player_rate;
+									chatbot->response_cache_enabled = b12_cache_en;
+									chatbot->response_cache_ttl_s   = b12_cache_ttl;
+									chatbot->fallback_model_id      = b12_fallback_model;
+									chatbot->fallback_api_key       = b12_fallback_key;
+									chatbot->fallback_api_endpoint  = b12_fallback_ep;
+									chatbot->llm_max_retries        = b12_retries;
+								}
 
 								if(chatbot->avatar.nonNull())
 								{
@@ -4261,6 +4613,125 @@ void WorkerThread::doRun()
 							}
 							else
 								writeErrorMessageToClient(socket, "Bot not found or no permission.");
+							break;
+						}
+					case Protocol::GetBotConversationLog:
+						{
+							conPrintIfNotFuzzing("GetBotConversationLog");
+							if(!client_user_id.valid())
+							{
+								writeErrorMessageToClient(socket, "Must be logged in.");
+								break;
+							}
+							const uint64 bot_id = msg_buffer.readUInt64();
+							const uint32 max_entries = myMin(msg_buffer.readUInt32(), 200u);
+
+							::WorldStateLock lock(world_state->mutex);
+							auto it = cur_world_state->getChatBots(lock).find(bot_id);
+							if(it == cur_world_state->getChatBots(lock).end() || !userHasChatBotEditPermissions(*it->second, client_user_id, *cur_world_state))
+							{
+								writeErrorMessageToClient(socket, "Bot not found or no permission.");
+								break;
+							}
+							const ChatBot& bot = *it->second;
+							SocketBufferOutStream resp_packet(SocketBufferOutStream::DontUseNetworkByteOrder);
+							MessageUtils::initPacket(resp_packet, Protocol::BotConversationLog);
+							resp_packet.writeUInt64(bot_id);
+							const uint32 n = (uint32)myMin((size_t)max_entries, bot.conversation_log.size());
+							resp_packet.writeUInt32(n);
+							const size_t start = bot.conversation_log.size() > n ? bot.conversation_log.size() - n : 0;
+							for(size_t i = start; i < bot.conversation_log.size(); ++i)
+							{
+								const ChatBot::ConversationLogEntry& e = bot.conversation_log[i];
+								resp_packet.writeUInt64((uint64)e.timestamp.time);
+								resp_packet.writeStringLengthFirst(e.player_name);
+								resp_packet.writeStringLengthFirst(e.player_uid_str);
+								resp_packet.writeStringLengthFirst(e.player_message);
+								resp_packet.writeStringLengthFirst(e.bot_response);
+							}
+							MessageUtils::updatePacketLengthField(resp_packet);
+							socket->writeData(resp_packet.buf.data(), resp_packet.buf.size());
+							break;
+						}
+					case Protocol::BotSendManualMessage:
+						{
+							conPrintIfNotFuzzing("BotSendManualMessage");
+							if(!client_user_id.valid()) { writeErrorMessageToClient(socket, "Must be logged in."); break; }
+							const uint64 bot_id = msg_buffer.readUInt64();
+							const std::string message_text = msg_buffer.readStringLengthFirst(2000);
+							::WorldStateLock lock(world_state->mutex);
+							auto it = cur_world_state->getChatBots(lock).find(bot_id);
+							if(it != cur_world_state->getChatBots(lock).end() && userHasChatBotEditPermissions(*it->second, client_user_id, *cur_world_state))
+							{
+								// Broadcast the message as if it came from the bot
+								SocketBufferOutStream chat_packet(SocketBufferOutStream::DontUseNetworkByteOrder);
+								MessageUtils::initPacket(chat_packet, Protocol::ChatMessageID);
+								chat_packet.writeStringLengthFirst(it->second->name + ": " + message_text);
+								MessageUtils::updatePacketLengthField(chat_packet);
+								server->enqueuePacketToBroadcastForWorld(chat_packet, cur_world_state.ptr());
+								it->second->addToConversationLog("[ADMIN]", "admin", message_text, "");
+							}
+							else writeErrorMessageToClient(socket, "Bot not found or no permission.");
+							break;
+						}
+					case Protocol::GetBotPlayerMemoryList:
+						{
+							conPrintIfNotFuzzing("GetBotPlayerMemoryList");
+							if(!client_user_id.valid()) { writeErrorMessageToClient(socket, "Must be logged in."); break; }
+							const uint64 bot_id = msg_buffer.readUInt64();
+							::WorldStateLock lock(world_state->mutex);
+							auto it = cur_world_state->getChatBots(lock).find(bot_id);
+							if(it == cur_world_state->getChatBots(lock).end() || !userHasChatBotEditPermissions(*it->second, client_user_id, *cur_world_state))
+							{
+								writeErrorMessageToClient(socket, "Bot not found or no permission.");
+								break;
+							}
+							const ChatBot& bot = *it->second;
+							SocketBufferOutStream resp(SocketBufferOutStream::DontUseNetworkByteOrder);
+							MessageUtils::initPacket(resp, Protocol::BotPlayerMemoryList);
+							resp.writeUInt64(bot_id);
+							resp.writeUInt32((uint32)bot.player_memories.size());
+							for(const auto& pair : bot.player_memories)
+							{
+								const ChatBot::PlayerMemory& m = pair.second;
+								resp.writeStringLengthFirst(pair.first.toString());
+								resp.writeUInt32(m.visit_count);
+								resp.writeInt32(m.reputation);
+								resp.writeStringLengthFirst(m.quest_state);
+								resp.writeUInt64((uint64)m.last_seen.time);
+								resp.writeStringLengthFirst(m.history.substr(0, 500)); // Preview
+							}
+							MessageUtils::updatePacketLengthField(resp);
+							socket->writeData(resp.buf.data(), resp.buf.size());
+							break;
+						}
+					case Protocol::SetBotPlayerMemoryEntry:
+						{
+							conPrintIfNotFuzzing("SetBotPlayerMemoryEntry");
+							if(!client_user_id.valid()) { writeErrorMessageToClient(socket, "Must be logged in."); break; }
+							const uint64 bot_id       = msg_buffer.readUInt64();
+							const std::string uid_str = msg_buffer.readStringLengthFirst(128);
+							const int32_t reputation  = msg_buffer.readInt32();
+							const std::string quest   = msg_buffer.readStringLengthFirst(ChatBot::PlayerMemory::MAX_QUEST_STATE_SIZE);
+							const bool clear_history  = (msg_buffer.readUInt32() != 0);
+							::WorldStateLock lock(world_state->mutex);
+							auto it = cur_world_state->getChatBots(lock).find(bot_id);
+							if(it != cur_world_state->getChatBots(lock).end() && userHasChatBotEditPermissions(*it->second, client_user_id, *cur_world_state))
+							{
+								// Find entry by UID string
+								for(auto& mp : it->second->player_memories)
+								{
+									if(mp.first.toString() == uid_str)
+									{
+										mp.second.reputation  = (int32_t)myClamp((int)reputation, -100, 100);
+										mp.second.quest_state = quest;
+										if(clear_history) mp.second.history.clear();
+										break;
+									}
+								}
+								cur_world_state->addChatBotAsDBDirty(it->second, lock);
+							}
+							else writeErrorMessageToClient(socket, "Bot not found or no permission.");
 							break;
 						}
 					default:

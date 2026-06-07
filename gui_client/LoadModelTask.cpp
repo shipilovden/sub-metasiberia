@@ -19,6 +19,8 @@ Copyright Glare Technologies Limited 2025 -
 #include <utils/UniqueRef.h>
 #include <utils/MemMappedFile.h>
 #include <graphics/FormatDecoderSubVox.h>
+#include <graphics/FormatDecoderGLTF.h>
+#include <graphics/SRGBUtils.h>
 #include <tracy/Tracy.hpp>
 
 
@@ -26,7 +28,8 @@ LoadModelTask::LoadModelTask()
 :	build_physics_ob(true),
 	build_dynamic_physics_ob(false),
 	model_lod_level(-1),
-	need_lightmap_uvs(false)
+	need_lightmap_uvs(false),
+	extract_gltf_materials(false)
 {}
 
 
@@ -137,6 +140,57 @@ void LoadModelTask::run(size_t thread_index)
 				}
 			}
 
+			// Extract WorldMaterials from GLB/GLTF when requested (for bot avatars etc.)
+			std::vector<WorldMaterialRef> extracted_materials;
+			if(extract_gltf_materials && !compressed_voxels && !lod_model_url.empty())
+			{
+				// lod_model_url may be a .bmesh (optimised mesh); fall back to orig_model_url to find the original GLB
+				std::string extr_path = resource_manager->getLocalAbsPathForResource(*this->resource);
+				conPrint("LoadModelTask extract: lod_model_url='" + toStdString(lod_model_url) + "' extr_path='" + extr_path + "' orig_model_url='" + toStdString(orig_model_url) + "'");
+				if(!hasExtension(extr_path, "glb") && !hasExtension(extr_path, "vrm") && !orig_model_url.empty())
+				{
+					ResourceRef orig_res = resource_manager->getExistingResourceForURL(orig_model_url);
+					if(orig_res.nonNull())
+					{
+						extr_path = resource_manager->getLocalAbsPathForResource(*orig_res);
+						conPrint("LoadModelTask extract: using orig GLB extr_path='" + extr_path + "' exists=" + (FileUtils::fileExists(extr_path) ? "true" : "false"));
+					}
+					else
+						conPrint("LoadModelTask extract: orig_res is NULL for URL '" + toStdString(orig_model_url) + "'");
+				}
+				if(hasExtension(extr_path, "glb") || hasExtension(extr_path, "vrm"))
+				{
+					try
+					{
+						UniqueRef<MemMappedFile> extr_file(new MemMappedFile(extr_path));
+						GLTFLoadedData gltf_data;
+						FormatDecoderGLTF::loadGLBFileFromData(extr_file->fileData(), extr_file->fileSize(),
+							FileUtils::getDirectory(extr_path), /*write_images_to_disk=*/true, gltf_data);
+						conPrint("LoadModelTask extract: GLTFLoadedData has " + toString(gltf_data.materials.materials.size()) + " materials");
+
+						const size_t n = gltf_data.materials.materials.size();
+						extracted_materials.resize(n);
+						for(size_t i = 0; i < n; ++i)
+						{
+							extracted_materials[i] = new WorldMaterial();
+							const GLTFResultMaterial& m = gltf_data.materials.materials[i];
+							extracted_materials[i]->colour_rgb            = toNonLinearSRGB(m.colour_factor);
+							extracted_materials[i]->colour_texture_url    = m.diffuse_map.path;
+							extracted_materials[i]->roughness.texture_url = m.metallic_roughness_map.path;
+							extracted_materials[i]->roughness.val         = m.roughness;
+							extracted_materials[i]->metallic_fraction.val = m.metallic;
+							extracted_materials[i]->emission_texture_url  = m.emissive_map.path;
+							extracted_materials[i]->emission_rgb          = toNonLinearSRGB(m.emissive_factor);
+							extracted_materials[i]->normal_map_url        = m.normal_map.path;
+							extracted_materials[i]->opacity.val           = m.alpha;
+							extracted_materials[i]->tex_matrix            = Matrix2f(1, 0, 0, -1);
+							extracted_materials[i]->flags                 = m.double_sided ? WorldMaterial::DOUBLE_SIDED_FLAG : 0;
+							if(i == 0) conPrint("LoadModelTask extract: mat[0] colour_texture_url='" + toStdString(extracted_materials[0]->colour_texture_url) + "'");
+						}
+					}
+					catch(glare::Exception& e) { conPrint("LoadModelTask extract: EXCEPTION: " + e.what()); }
+				}
+			}
 
 			ArrayRef<uint8> vert_data, index_data;
 			gl_meshdata->getVertAndIndexArrayRefs(vert_data, index_data);
@@ -160,6 +214,7 @@ void LoadModelTask::run(size_t thread_index)
 				user_info->built_dynamic_physics_ob = this->build_dynamic_physics_ob;
 				user_info->voxel_subsample_factor = subsample_factor;
 				user_info->voxel_hash = voxel_hash;
+				user_info->extracted_gltf_materials = extracted_materials;
 
 				upload_msg->user_info = user_info;
 
@@ -185,6 +240,7 @@ void LoadModelTask::run(size_t thread_index)
 				msg->total_geom_size_B = total_geom_size_B;
 				msg->vert_data_size_B = vert_data.size();
 				msg->index_data_size_B = index_data.size();
+				msg->extracted_gltf_materials = extracted_materials;
 
 				// Null out references to gl_meshdata and jolt shape here, before we pass to another thread.
 				// This is important for gl_meshdata, since the main thread may set gl_meshdata->individual_vao, which could then be destroyed on this thread, which is invalid.
