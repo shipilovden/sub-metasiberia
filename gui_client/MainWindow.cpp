@@ -948,6 +948,7 @@ void MainWindow::initialiseUI()
 
 	ui->objectEditor->setControlsEnabled(false);
 	ui->parcelEditor->hide();
+	ui->botEditorWidget->hide();
 
 	refreshMapDockText();
 	updateMapDockState();
@@ -1834,6 +1835,7 @@ bool MainWindow::posAndRot3DControlsEnabled()
 void MainWindow::showObjectEditor()
 {
 	ui->parcelEditor->hide();
+	ui->botEditorWidget->hide();
 	ui->objectEditor->show();
 }
 
@@ -4815,6 +4817,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 		llm_max_retries,
 		stats_conversations_24h, stats_llm_calls_total);
 
+	ui->objectEditor->hide();
+	ui->parcelEditor->hide();
 	showEditorDockWidget();
 }
 
