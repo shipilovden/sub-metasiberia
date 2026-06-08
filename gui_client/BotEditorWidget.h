@@ -292,6 +292,7 @@ private:
 	QPushButton*    dc_remove_btn            = nullptr;
 	QSpinBox*       dialog_start_spin        = nullptr;
 	std::vector<BotDialogNode> m_dialog_nodes; // In-memory dialog tree state
+	int m_prev_dialog_node_row = -1; // Tracks previous selection to save choices on switch
 
 	// ── Block 12 controls ────────────────────────────────────────────
 	QSpinBox*       player_rate_spin          = nullptr;

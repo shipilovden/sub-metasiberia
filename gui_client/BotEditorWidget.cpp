@@ -1567,6 +1567,7 @@ void BotEditorWidget::setBot(uint64_t bot_id_, const UID& avatar_uid_,
 
 	// Dialog tree
 	m_dialog_nodes = dialog_nodes_in;
+	m_prev_dialog_node_row = -1;
 	dialog_start_spin->setValue((int)dialog_start_node_id_in);
 	{
 		QSignalBlocker b(dialog_nodes_table);
@@ -1741,6 +1742,7 @@ void BotEditorWidget::clear()
 	react_to_bots_cb->setChecked(false);
 	use_dialog_cb->setChecked(false);
 	m_dialog_nodes.clear();
+	m_prev_dialog_node_row = -1;
 	dialog_nodes_table->setRowCount(0);
 	dialog_choices_table->setRowCount(0);
 	dialog_start_spin->setValue(0);
@@ -2271,14 +2273,35 @@ void BotEditorWidget::onDialogNodeRemove()
 
 void BotEditorWidget::onDialogNodeSelectionChanged()
 {
-	// Save choices from previous node
-	// (choices table reflects what was last saved via onDialogChoiceAdd/Remove)
-	// Now load choices for the newly selected node
 	const int row = dialog_nodes_table->currentRow();
+
+	// Save choices from the previously selected node back into m_dialog_nodes
+	if(m_prev_dialog_node_row >= 0 && m_prev_dialog_node_row < (int)m_dialog_nodes.size())
+	{
+		BotDialogNode& prev = m_dialog_nodes[(size_t)m_prev_dialog_node_row];
+		prev.choices.clear();
+		for(int cr = 0; cr < dialog_choices_table->rowCount(); ++cr)
+		{
+			BotDialogChoice c;
+			auto* ki = dialog_choices_table->item(cr, 0);
+			auto* li = dialog_choices_table->item(cr, 1);
+			auto* ni = dialog_choices_table->item(cr, 2);
+			c.keywords     = ki ? ki->text().toStdString() : "";
+			c.label        = li ? li->text().toStdString() : "";
+			const int next = ni ? ni->text().toInt() : -1;
+			c.next_node_id = (next < 0) ? BotDialogChoice::END_DIALOG : (uint32)next;
+			prev.choices.push_back(c);
+		}
+		// Sync bot_text for previous node too
+		auto* ti = dialog_nodes_table->item(m_prev_dialog_node_row, 1);
+		if(ti) prev.bot_text = ti->text().toStdString();
+	}
+
+	m_prev_dialog_node_row = row;
 	dialog_choices_table->setRowCount(0);
 	if(row < 0 || row >= (int)m_dialog_nodes.size()) return;
 
-	// Also sync bot_text from table cell back to m_dialog_nodes
+	// Sync bot_text from table for all nodes
 	for(int r = 0; r < dialog_nodes_table->rowCount() && r < (int)m_dialog_nodes.size(); ++r)
 	{
 		auto* it = dialog_nodes_table->item(r, 1);
@@ -2447,7 +2470,13 @@ void BotEditorWidget::onExportJson()
 	if(path.isEmpty()) return;
 
 	QJsonObject o;
+	// Identity
 	o["name"]               = name_edit ? name_edit->text() : "";
+	o["avatar_url"]         = avatar_url_edit ? avatar_url_edit->text() : "";
+	o["scale_x"]            = scale_x_spin ? scale_x_spin->value() : 1.0;
+	o["scale_y"]            = scale_y_spin ? scale_y_spin->value() : 1.0;
+	o["scale_z"]            = scale_z_spin ? scale_z_spin->value() : 1.0;
+	// AI / Prompt
 	o["prompt"]             = prompt_edit ? prompt_edit->toPlainText() : "";
 	o["ai_model_id"]        = ai_model_edit ? ai_model_edit->text() : "";
 	o["ai_personality"]     = ai_preset_edit ? ai_preset_edit->text() : "";
@@ -2455,19 +2484,146 @@ void BotEditorWidget::onExportJson()
 	o["ai_max_tokens"]      = ai_max_tokens_spin ? ai_max_tokens_spin->value() : 0;
 	o["ai_knowledge"]       = ai_knowledge_edit ? ai_knowledge_edit->toPlainText() : "";
 	o["fallback_message"]   = fallback_msg_edit ? fallback_msg_edit->text() : "";
-	o["api_key"]            = api_key_edit ? api_key_edit->text() : "";
 	o["api_endpoint"]       = api_endpoint_edit ? api_endpoint_edit->text() : "";
+	// Behaviour
 	o["greeting_distance"]  = greet_dist_spin ? greet_dist_spin->value() : 6.0;
 	o["farewell_distance"]  = farewell_dist_spin ? farewell_dist_spin->value() : 10.0;
 	o["chat_radius"]        = talk_radius_spin ? talk_radius_spin->value() : 8.0;
+	o["movement_type"]      = movement_type_combo ? movement_type_combo->currentIndex() : 0;
+	o["walk_speed"]         = walk_speed_spin ? walk_speed_spin->value() : 1.4;
+	o["wander_radius"]      = wander_radius_spin ? wander_radius_spin->value() : 5.0;
+	// Animations (9 slots)
+	{
+		QJsonArray anim_arr;
+		const char* slotNames[] = { "greeting","idle","reactive","surprise","acknowledge","farewell","walk","talk","interaction" };
+		for(int s = 0; s < NUM_ANIM_SLOTS; ++s)
+		{
+			QJsonObject sl;
+			sl["slot"]  = slotNames[s];
+			sl["name"]  = anim_slots[s].name_edit ? anim_slots[s].name_edit->text() : "";
+			sl["url"]   = anim_slots[s].url_edit  ? anim_slots[s].url_edit->text()  : "";
+			sl["cd"]    = (anim_slots[s].cd_spin && SLOT_HAS_CD[s]) ? anim_slots[s].cd_spin->value() : 0.0;
+			sl["loop"]  = anim_slots[s].loop_cb ? anim_slots[s].loop_cb->isChecked() : false;
+			anim_arr.append(sl);
+		}
+		o["anim_slots"] = anim_arr;
+	}
+	// Audio
+	o["audio_url"]              = audio_url_edit ? audio_url_edit->text() : "";
+	o["audio_volume"]           = audio_vol_spin ? audio_vol_spin->value() : 1.0;
+	o["audio_radius"]           = audio_radius_spin ? audio_radius_spin->value() : 10.0;
+	o["audio_min_distance"]     = audio_min_dist_spin ? audio_min_dist_spin->value() : 1.0;
+	o["audio_start_delay"]      = audio_start_delay_spin ? audio_start_delay_spin->value() : 0.0;
+	o["greeting_audio_url"]     = greeting_audio_url_edit ? greeting_audio_url_edit->text() : "";
+	o["farewell_audio_url"]     = farewell_audio_url_edit ? farewell_audio_url_edit->text() : "";
+	o["interaction_audio_url"]  = interaction_audio_url_edit ? interaction_audio_url_edit->text() : "";
+	// Advanced (block 9)
+	o["conv_timeout_s"]         = conv_timeout_spin ? conv_timeout_spin->value() : 0.0;
+	o["max_llm_calls_hour"]     = max_llm_calls_spin ? max_llm_calls_spin->value() : 0;
+	o["webhook_url"]            = webhook_url_edit ? webhook_url_edit->text() : "";
+	o["active_hours_start"]     = active_hours_start_spin ? active_hours_start_spin->value() : 8;
+	o["active_hours_end"]       = active_hours_end_spin ? active_hours_end_spin->value() : 22;
+	// Scripted responses
+	{
+		QJsonArray arr;
+		for(int r = 0; r < scripted_resp_table->rowCount(); ++r)
+		{
+			QJsonObject sr;
+			auto* k = scripted_resp_table->item(r, 0);
+			auto* t = scripted_resp_table->item(r, 1);
+			sr["keywords"] = k ? k->text() : "";
+			sr["response"] = t ? t->text() : "";
+			arr.append(sr);
+		}
+		o["scripted_responses"] = arr;
+	}
+	// Whitelist / blacklist
+	{
+		QJsonArray wl, bl;
+		for(int r = 0; r < whitelist_table->rowCount(); ++r)
+			if(auto* it = whitelist_table->item(r, 0)) wl.append(it->text());
+		for(int r = 0; r < blacklist_table->rowCount(); ++r)
+			if(auto* it = blacklist_table->item(r, 0)) bl.append(it->text());
+		o["player_whitelist"] = wl;
+		o["player_blacklist"] = bl;
+	}
+	// Tool functions
+	{
+		QJsonArray arr;
+		for(int r = 0; r < tool_func_table->rowCount(); ++r)
+		{
+			QJsonObject tf;
+			auto* a = tool_func_table->item(r, 0);
+			auto* b = tool_func_table->item(r, 1);
+			auto* c = tool_func_table->item(r, 2);
+			tf["name"]        = a ? a->text() : "";
+			tf["description"] = b ? b->text() : "";
+			tf["result"]      = c ? c->text() : "";
+			arr.append(tf);
+		}
+		o["tool_functions"] = arr;
+	}
+	// Extended AI (block 10)
+	o["ai_provider"]        = ai_provider_combo ? ai_provider_combo->currentIndex() : 0;
+	o["top_p"]              = top_p_spin ? top_p_spin->value() : 0.0;
+	o["top_k"]              = top_k_spin ? top_k_spin->value() : 0;
+	o["freq_penalty"]       = freq_penalty_spin ? freq_penalty_spin->value() : 0.0;
+	o["pres_penalty"]       = pres_penalty_spin ? pres_penalty_spin->value() : 0.0;
+	o["max_ctx_msgs"]       = max_ctx_msgs_spin ? max_ctx_msgs_spin->value() : 0;
+	o["dialog_start_node"]  = dialog_start_spin ? dialog_start_spin->value() : 0;
+	// Dialog tree — sync current node choices first
+	if(m_prev_dialog_node_row >= 0 && m_prev_dialog_node_row < (int)m_dialog_nodes.size())
+	{
+		BotDialogNode& prev = m_dialog_nodes[(size_t)m_prev_dialog_node_row];
+		prev.choices.clear();
+		for(int cr = 0; cr < dialog_choices_table->rowCount(); ++cr)
+		{
+			BotDialogChoice c;
+			auto* ki = dialog_choices_table->item(cr, 0);
+			auto* li = dialog_choices_table->item(cr, 1);
+			auto* ni = dialog_choices_table->item(cr, 2);
+			c.keywords = ki ? ki->text().toStdString() : "";
+			c.label    = li ? li->text().toStdString() : "";
+			const int nxt = ni ? ni->text().toInt() : -1;
+			c.next_node_id = (nxt < 0) ? BotDialogChoice::END_DIALOG : (uint32)nxt;
+			prev.choices.push_back(c);
+		}
+	}
+	{
+		QJsonArray dnodes;
+		for(const auto& n : m_dialog_nodes)
+		{
+			QJsonObject dn;
+			dn["node_id"]   = (int)n.node_id;
+			dn["bot_text"]  = QString::fromStdString(n.bot_text);
+			dn["action_type"] = (int)n.action_type;
+			dn["action_param"] = QString::fromStdString(n.action_param);
+			QJsonArray choices;
+			for(const auto& c : n.choices)
+			{
+				QJsonObject ch;
+				ch["keywords"]     = QString::fromStdString(c.keywords);
+				ch["label"]        = QString::fromStdString(c.label);
+				ch["next_node_id"] = (c.next_node_id == BotDialogChoice::END_DIALOG) ? -1 : (int)c.next_node_id;
+				choices.append(ch);
+			}
+			dn["choices"] = choices;
+			dnodes.append(dn);
+		}
+		o["dialog_nodes"] = dnodes;
+	}
+	// Memory / Safety (block 11)
 	o["enable_memory"]      = memory_enable_cb ? memory_enable_cb->isChecked() : false;
+	o["memory_tokens"]      = memory_tokens_spin ? memory_tokens_spin->value() : 150;
 	o["jailbreak_guard"]    = jailbreak_guard_cb ? jailbreak_guard_cb->isChecked() : true;
 	o["content_filter"]     = filter_patterns_edit ? filter_patterns_edit->toPlainText() : "";
-	o["fallback_model"]     = fallback_model_edit ? fallback_model_edit->text() : "";
-	o["fallback_endpoint"]  = fallback_ep_edit ? fallback_ep_edit->text() : "";
+	// Block 12
+	o["player_rate_limit"]  = player_rate_spin ? player_rate_spin->value() : 0;
 	o["cache_enabled"]      = cache_enable_cb ? cache_enable_cb->isChecked() : false;
 	o["cache_ttl_s"]        = cache_ttl_spin ? cache_ttl_spin->value() : 300;
-	o["player_rate_limit"]  = player_rate_spin ? player_rate_spin->value() : 0;
+	o["fallback_model"]     = fallback_model_edit ? fallback_model_edit->text() : "";
+	o["fallback_endpoint"]  = fallback_ep_edit ? fallback_ep_edit->text() : "";
+	o["llm_retries"]        = retries_spin ? retries_spin->value() : 0;
 
 	QFile f(path);
 	if(f.open(QIODevice::WriteOnly))
@@ -2486,16 +2642,29 @@ void BotEditorWidget::onImportJson()
 
 	QFile f(path);
 	if(!f.open(QIODevice::ReadOnly)) return;
-	const QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
-	if(o.isEmpty()) { QMessageBox::warning(this, "Импорт", "Невалидный JSON файл."); return; }
+	QJsonParseError err;
+	const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+	if(doc.isNull() || !doc.isObject())
+	{
+		QMessageBox::warning(this, "Импорт", "Невалидный JSON файл:\n" + err.errorString());
+		return;
+	}
+	const QJsonObject o = doc.object();
 
-	auto setStr = [&](QLineEdit* w, const char* k){ if(w && o.contains(k)) w->setText(o[k].toString()); };
-	auto setTxt = [&](QPlainTextEdit* w, const char* k){ if(w && o.contains(k)) w->setPlainText(o[k].toString()); };
-	auto setDbl = [&](QDoubleSpinBox* w, const char* k){ if(w && o.contains(k)) w->setValue(o[k].toDouble()); };
-	auto setInt = [&](QSpinBox* w, const char* k){ if(w && o.contains(k)) w->setValue(o[k].toInt()); };
-	auto setBool = [&](QCheckBox* w, const char* k){ if(w && o.contains(k)) w->setChecked(o[k].toBool()); };
+	auto setStr  = [&](QLineEdit* w, const char* k)      { if(w && o.contains(k)) w->setText(o[k].toString()); };
+	auto setTxt  = [&](QPlainTextEdit* w, const char* k) { if(w && o.contains(k)) w->setPlainText(o[k].toString()); };
+	auto setDbl  = [&](QDoubleSpinBox* w, const char* k) { if(w && o.contains(k)) w->setValue(o[k].toDouble()); };
+	auto setInt  = [&](QSpinBox* w, const char* k)       { if(w && o.contains(k)) w->setValue(o[k].toInt()); };
+	auto setBool = [&](QCheckBox* w, const char* k)      { if(w && o.contains(k)) w->setChecked(o[k].toBool()); };
+	auto setCmb  = [&](QComboBox* w, const char* k)      { if(w && o.contains(k)) w->setCurrentIndex(o[k].toInt()); };
 
+	// Identity
 	setStr(name_edit,          "name");
+	setStr(avatar_url_edit,    "avatar_url");
+	setDbl(scale_x_spin,       "scale_x");
+	setDbl(scale_y_spin,       "scale_y");
+	setDbl(scale_z_spin,       "scale_z");
+	// AI / Prompt
 	setTxt(prompt_edit,        "prompt");
 	setStr(ai_model_edit,      "ai_model_id");
 	setStr(ai_preset_edit,     "ai_personality");
@@ -2503,19 +2672,155 @@ void BotEditorWidget::onImportJson()
 	setInt(ai_max_tokens_spin, "ai_max_tokens");
 	setTxt(ai_knowledge_edit,  "ai_knowledge");
 	setStr(fallback_msg_edit,  "fallback_message");
-	setStr(api_key_edit,       "api_key");
 	setStr(api_endpoint_edit,  "api_endpoint");
+	// Behaviour
 	setDbl(greet_dist_spin,    "greeting_distance");
 	setDbl(farewell_dist_spin, "farewell_distance");
 	setDbl(talk_radius_spin,   "chat_radius");
-	setBool(memory_enable_cb,  "enable_memory");
-	setBool(jailbreak_guard_cb,"jailbreak_guard");
+	setCmb(movement_type_combo,"movement_type");
+	setDbl(walk_speed_spin,    "walk_speed");
+	setDbl(wander_radius_spin, "wander_radius");
+	// Animations
+	if(o.contains("anim_slots") && o["anim_slots"].isArray())
+	{
+		const char* slotNames[] = { "greeting","idle","reactive","surprise","acknowledge","farewell","walk","talk","interaction" };
+		const QJsonArray arr = o["anim_slots"].toArray();
+		for(const auto& v : arr)
+		{
+			const QJsonObject sl = v.toObject();
+			const QString sname = sl["slot"].toString();
+			for(int s = 0; s < NUM_ANIM_SLOTS; ++s)
+			{
+				if(sname == slotNames[s])
+				{
+					if(anim_slots[s].name_edit) anim_slots[s].name_edit->setText(sl["name"].toString());
+					if(anim_slots[s].url_edit)  anim_slots[s].url_edit->setText(sl["url"].toString());
+					if(anim_slots[s].cd_spin && SLOT_HAS_CD[s]) anim_slots[s].cd_spin->setValue(sl["cd"].toDouble());
+					if(anim_slots[s].loop_cb) anim_slots[s].loop_cb->setChecked(sl["loop"].toBool());
+					break;
+				}
+			}
+		}
+	}
+	// Audio
+	setStr(audio_url_edit,           "audio_url");
+	setDbl(audio_vol_spin,           "audio_volume");
+	setDbl(audio_radius_spin,        "audio_radius");
+	setDbl(audio_min_dist_spin,      "audio_min_distance");
+	setDbl(audio_start_delay_spin,   "audio_start_delay");
+	setStr(greeting_audio_url_edit,  "greeting_audio_url");
+	setStr(farewell_audio_url_edit,  "farewell_audio_url");
+	setStr(interaction_audio_url_edit,"interaction_audio_url");
+	// Advanced (block 9)
+	setDbl(conv_timeout_spin,        "conv_timeout_s");
+	setInt(max_llm_calls_spin,       "max_llm_calls_hour");
+	setStr(webhook_url_edit,         "webhook_url");
+	setInt(active_hours_start_spin,  "active_hours_start");
+	setInt(active_hours_end_spin,    "active_hours_end");
+	// Scripted responses
+	if(o.contains("scripted_responses") && o["scripted_responses"].isArray())
+	{
+		scripted_resp_table->setRowCount(0);
+		for(const auto& v : o["scripted_responses"].toArray())
+		{
+			const QJsonObject sr = v.toObject();
+			const int r = scripted_resp_table->rowCount();
+			scripted_resp_table->insertRow(r);
+			scripted_resp_table->setItem(r, 0, new QTableWidgetItem(sr["keywords"].toString()));
+			scripted_resp_table->setItem(r, 1, new QTableWidgetItem(sr["response"].toString()));
+		}
+	}
+	// Whitelist / blacklist
+	if(o.contains("player_whitelist") && o["player_whitelist"].isArray())
+	{
+		whitelist_table->setRowCount(0);
+		for(const auto& v : o["player_whitelist"].toArray())
+		{
+			const int r = whitelist_table->rowCount();
+			whitelist_table->insertRow(r);
+			whitelist_table->setItem(r, 0, new QTableWidgetItem(v.toString()));
+		}
+	}
+	if(o.contains("player_blacklist") && o["player_blacklist"].isArray())
+	{
+		blacklist_table->setRowCount(0);
+		for(const auto& v : o["player_blacklist"].toArray())
+		{
+			const int r = blacklist_table->rowCount();
+			blacklist_table->insertRow(r);
+			blacklist_table->setItem(r, 0, new QTableWidgetItem(v.toString()));
+		}
+	}
+	// Tool functions
+	if(o.contains("tool_functions") && o["tool_functions"].isArray())
+	{
+		tool_func_table->setRowCount(0);
+		for(const auto& v : o["tool_functions"].toArray())
+		{
+			const QJsonObject tf = v.toObject();
+			const int r = tool_func_table->rowCount();
+			tool_func_table->insertRow(r);
+			tool_func_table->setItem(r, 0, new QTableWidgetItem(tf["name"].toString()));
+			tool_func_table->setItem(r, 1, new QTableWidgetItem(tf["description"].toString()));
+			tool_func_table->setItem(r, 2, new QTableWidgetItem(tf["result"].toString()));
+		}
+	}
+	// Extended AI (block 10)
+	setCmb(ai_provider_combo,  "ai_provider");
+	setDbl(top_p_spin,         "top_p");
+	setInt(top_k_spin,         "top_k");
+	setDbl(freq_penalty_spin,  "freq_penalty");
+	setDbl(pres_penalty_spin,  "pres_penalty");
+	setInt(max_ctx_msgs_spin,  "max_ctx_msgs");
+	setInt(dialog_start_spin,  "dialog_start_node");
+	// Dialog tree
+	if(o.contains("dialog_nodes") && o["dialog_nodes"].isArray())
+	{
+		m_dialog_nodes.clear();
+		m_prev_dialog_node_row = -1;
+		dialog_nodes_table->setRowCount(0);
+		dialog_choices_table->setRowCount(0);
+		for(const auto& v : o["dialog_nodes"].toArray())
+		{
+			const QJsonObject dn = v.toObject();
+			BotDialogNode n;
+			n.node_id     = (uint32)dn["node_id"].toInt();
+			n.bot_text    = dn["bot_text"].toString().toStdString();
+			n.action_type = (uint32)dn["action_type"].toInt();
+			n.action_param = dn["action_param"].toString().toStdString();
+			if(dn.contains("choices") && dn["choices"].isArray())
+			{
+				for(const auto& cv : dn["choices"].toArray())
+				{
+					const QJsonObject ch = cv.toObject();
+					BotDialogChoice c;
+					c.keywords     = ch["keywords"].toString().toStdString();
+					c.label        = ch["label"].toString().toStdString();
+					const int nxt  = ch["next_node_id"].toInt(-1);
+					c.next_node_id = (nxt < 0) ? BotDialogChoice::END_DIALOG : (uint32)nxt;
+					n.choices.push_back(c);
+				}
+			}
+			m_dialog_nodes.push_back(n);
+			const int r = dialog_nodes_table->rowCount();
+			dialog_nodes_table->insertRow(r);
+			dialog_nodes_table->setItem(r, 0, new QTableWidgetItem(QString::number(n.node_id)));
+			dialog_nodes_table->setItem(r, 1, new QTableWidgetItem(QString::fromStdString(n.bot_text)));
+			dialog_nodes_table->setItem(r, 2, new QTableWidgetItem(""));
+		}
+	}
+	// Memory / Safety (block 11)
+	setBool(memory_enable_cb,   "enable_memory");
+	setInt(memory_tokens_spin,  "memory_tokens");
+	setBool(jailbreak_guard_cb, "jailbreak_guard");
 	setTxt(filter_patterns_edit,"content_filter");
-	setStr(fallback_model_edit,"fallback_model");
-	setStr(fallback_ep_edit,   "fallback_endpoint");
-	setBool(cache_enable_cb,   "cache_enabled");
-	setInt(cache_ttl_spin,     "cache_ttl_s");
-	setInt(player_rate_spin,   "player_rate_limit");
+	// Block 12
+	setInt(player_rate_spin,    "player_rate_limit");
+	setBool(cache_enable_cb,    "cache_enabled");
+	setInt(cache_ttl_spin,      "cache_ttl_s");
+	setStr(fallback_model_edit, "fallback_model");
+	setStr(fallback_ep_edit,    "fallback_endpoint");
+	setInt(retries_spin,        "llm_retries");
 
 	QMessageBox::information(this, "Импорт", "Конфигурация загружена. Нажмите «Сохранить» для применения.");
 }
