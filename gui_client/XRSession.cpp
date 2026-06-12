@@ -1562,7 +1562,11 @@ static bool createViewSwapchains(XRRuntimeProbeResult& result, State& state)
 		for(size_t z=0; z<view_swapchain.images.size(); ++z)
 		{
 			FrameBufferRef framebuffer = new FrameBuffer();
-			framebuffer->attachTextureName(GL_TEXTURE_2D, view_swapchain.images[z].image, view_swapchain.width, view_swapchain.height, GL_COLOR_ATTACHMENT0);
+			// OpenXR owns the swapchain textures, so we only have raw GL texture names; FrameBuffer::attachTexture() needs an OpenGLTexture, so attach directly.
+			framebuffer->bindForDrawing();
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, view_swapchain.images[z].image, /*mipmap level=*/0);
+			framebuffer->xres = view_swapchain.width;
+			framebuffer->yres = view_swapchain.height;
 			framebuffer->attachRenderBuffer(*view_swapchain.depth_renderbuffer, GL_DEPTH_ATTACHMENT);
 			if(!framebuffer->isComplete())
 			{
