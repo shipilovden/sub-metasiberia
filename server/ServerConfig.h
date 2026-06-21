@@ -12,7 +12,7 @@ Copyright Glare Technologies Limited 2026 -
 class ServerConfig
 {
 public:
-	ServerConfig() : allow_light_mapper_bot_full_perms(false), update_parcel_sales(false), do_lua_http_request_rate_limiting(true), enable_LOD_chunking(true), enable_registration(true) {}
+	ServerConfig() : web_http_port(80), web_https_port(443), allow_light_mapper_bot_full_perms(false), update_parcel_sales(false), do_lua_http_request_rate_limiting(true), enable_LOD_chunking(true), enable_registration(true) {}
 	
 	std::string webserver_fragments_dir; // empty string = use default.
 	std::string webserver_public_files_dir; // empty string = use default.
@@ -29,6 +29,9 @@ public:
 	// (Used for Let's Encrypt without stopping the server.)
 	// Challenge files are expected at: <letsencrypt_webroot_dir>/.well-known/acme-challenge/<token>
 	std::string letsencrypt_webroot_dir;
+
+	int web_http_port;  // Web HTTP listener port. Defaults to 80.
+	int web_https_port; // Web HTTPS listener port. Defaults to 443.
 	
 	bool allow_light_mapper_bot_full_perms; // Allow lightmapper bot (User account with name "lightmapperbot" to have full write permissions.
 

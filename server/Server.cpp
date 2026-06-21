@@ -266,6 +266,8 @@ static ServerConfig parseServerConfig(const std::string& config_path)
 	config.tls_private_key_path					= XMLParseUtils::parseStringWithDefault(root_elem, "tls_private_key_path", /*default val=*/"");
 	config.canonical_web_hostname				= XMLParseUtils::parseStringWithDefault(root_elem, "canonical_web_hostname", /*default val=*/"");
 	config.letsencrypt_webroot_dir				= XMLParseUtils::parseStringWithDefault(root_elem, "letsencrypt_webroot_dir", /*default val=*/"");
+	config.web_http_port						= XMLParseUtils::parseIntWithDefault(root_elem, "web_http_port", /*default val=*/80);
+	config.web_https_port						= XMLParseUtils::parseIntWithDefault(root_elem, "web_https_port", /*default val=*/443);
 	config.allow_light_mapper_bot_full_perms	= XMLParseUtils::parseBoolWithDefault(root_elem, "allow_light_mapper_bot_full_perms", /*default val=*/false);
 	config.update_parcel_sales					= XMLParseUtils::parseBoolWithDefault(root_elem, "update_parcel_sales", /*default val=*/false);
 	config.do_lua_http_request_rate_limiting	= XMLParseUtils::parseBoolWithDefault(root_elem, "do_lua_http_request_rate_limiting", /*default val=*/true);
@@ -574,8 +576,8 @@ int main(int argc, char *argv[])
 		shared_request_handler->dev_mode = dev_mode;
 
 		ThreadManager web_thread_manager;
-		web_thread_manager.addThread(new web::WebListenerThread(80,  shared_request_handler.getPointer(), NULL));
-		web_thread_manager.addThread(new web::WebListenerThread(443, shared_request_handler.getPointer(), web_tls_configuration));
+		web_thread_manager.addThread(new web::WebListenerThread(server_config.web_http_port,  shared_request_handler.getPointer(), NULL));
+		web_thread_manager.addThread(new web::WebListenerThread(server_config.web_https_port, shared_request_handler.getPointer(), web_tls_configuration));
 
 
 		web_thread_manager.addThread(new WebDataFileWatcherThread(web_data_store));
