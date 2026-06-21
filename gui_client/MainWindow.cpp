@@ -505,7 +505,7 @@ static std::string computeWindowTitle()
 
 static std::string canonicalHostForMetasiberia(const std::string& host)
 {
-	if(host == "89.104.70.23")
+	if(host == "87.103.196.229" || host == "185.182.110.184" || host == "89.104.70.23")
 		return "vr.metasiberia.com";
 
 	return host;

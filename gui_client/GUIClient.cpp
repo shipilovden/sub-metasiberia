@@ -444,6 +444,83 @@ static std::string xrGetViveFocus3ControllerModelPath(bool right_hand)
 }
 
 
+static std::string xrGetQuest2ControllerModelPath(bool right_hand)
+{
+	const std::string file_name = right_hand ? "oculus_quest2_controller_right.obj" : "oculus_quest2_controller_left.obj";
+	const std::string side_dir  = right_hand ? "right" : "left";
+
+	std::vector<std::string> candidate_paths;
+	// Locally-staged copy of the SteamVR Oculus Quest 2 render models (independent of a SteamVR install).
+	candidate_paths.push_back("C:/programming/substrata_xr_assets/quest2_controllers/" + side_dir + "/" + file_name);
+	// Fall back to the models shipped with SteamVR if present.
+	const std::string steamvr_dir = right_hand ? "oculus_quest2_controller_right" : "oculus_quest2_controller_left";
+	candidate_paths.push_back("C:/Program Files (x86)/Steam/steamapps/common/SteamVR/resources/rendermodels/" + steamvr_dir + "/" + file_name);
+
+	return xrFindFirstExistingModelPath(candidate_paths);
+}
+
+
+// Tunable correction mapping the OpenXR grip pose to the Quest 2 render-model origin.
+// The SteamVR Oculus render-model origin does not coincide with the OpenXR grip pose, so the model needs a
+// rotation + translation to sit naturally in the hand. The parameters are loaded from a small text file so they can be
+// tuned in-headset without rebuilding: C:/programming/substrata_xr_assets/quest2_controller_transform.txt
+// Format (one "key value" per line): pitch <deg>, yaw <deg>, roll <deg>, tx <m>, ty <m>, tz <m>
+// Axes are the engine-space grip basis: X = right, Y = forward, Z = up.
+static float g_quest2_model_pitch_deg = -45.f;
+static float g_quest2_model_yaw_deg   = 0.f;
+static float g_quest2_model_roll_deg  = 0.f;
+static Vec3f g_quest2_model_translation(0.f, 0.f, 0.f);
+static float g_quest2_model_world_up_metres = 0.f; // Pure world-space vertical lift of the controller model.
+
+static void loadQuest2ControllerTransformParamsFromFile()
+{
+	const std::string path = "C:/programming/substrata_xr_assets/quest2_controller_transform.txt";
+	try
+	{
+		if(!FileUtils::fileExists(path))
+			return;
+		const std::string contents = FileUtils::readEntireFileTextMode(path);
+		const std::vector<std::string> lines = ::split(contents, '\n');
+		for(size_t i=0; i<lines.size(); ++i)
+		{
+			std::string line = ::stripHeadAndTailWhitespace(lines[i]);
+			if(line.empty() || line[0] == '#')
+				continue;
+			// Allow "key value" or "key=value".
+			for(size_t c=0; c<line.size(); ++c)
+				if(line[c] == '=') line[c] = ' ';
+			const std::vector<std::string> toks = ::split(line, ' ');
+			std::vector<std::string> parts;
+			for(size_t t=0; t<toks.size(); ++t)
+				if(!toks[t].empty()) parts.push_back(toks[t]);
+			if(parts.size() < 2)
+				continue;
+			const std::string key = ::toLowerCase(parts[0]);
+			const float val = ::stringToFloat(parts[1]);
+			if(key == "pitch")     g_quest2_model_pitch_deg = val;
+			else if(key == "yaw")  g_quest2_model_yaw_deg   = val;
+			else if(key == "roll") g_quest2_model_roll_deg  = val;
+			else if(key == "tx")   g_quest2_model_translation.x = val;
+			else if(key == "ty")   g_quest2_model_translation.y = val;
+			else if(key == "tz")   g_quest2_model_translation.z = val;
+			else if(key == "world_up") g_quest2_model_world_up_metres = val;
+		}
+	}
+	catch(glare::Exception&)
+	{}
+}
+
+static Matrix4f xrGetQuest2ControllerModelToGripTransform(bool right_hand)
+{
+	(void)right_hand;
+	const Matrix4f rot =
+		Matrix4f::rotationAroundZAxis(::degreeToRad(g_quest2_model_roll_deg)) *
+		Matrix4f::rotationAroundYAxis(::degreeToRad(g_quest2_model_yaw_deg)) *
+		Matrix4f::rotationAroundXAxis(::degreeToRad(g_quest2_model_pitch_deg));
+	return Matrix4f::translationMatrix(g_quest2_model_translation.x, g_quest2_model_translation.y, g_quest2_model_translation.z) * rot;
+}
+
+
 static Matrix4f xrMakeControllerRenderModelComponentTransform(const Vec4f& origin_obj_space, const Vec3f& rotate_xyz_deg)
 {
 	// ModelLoading rotates OBJ coordinates into the engine's z-up basis with +90 deg about X.
@@ -514,8 +591,24 @@ static Matrix4f xrGetViveFocus3ControllerModelToAimTransform(bool right_hand)
 }
 
 
-static bool buildXRControllerModelToWorldTransform(const XRHandInputState& hand_state, bool use_focus3_render_model, bool right_hand, Matrix4f& model_to_world_out)
+static bool buildXRControllerModelToWorldTransform(const XRHandInputState& hand_state, bool use_focus3_render_model, bool use_quest2_render_model, bool right_hand, Matrix4f& model_to_world_out)
 {
+	if(use_quest2_render_model)
+	{
+		if(xrTrackedPoseHasWorldTransform(hand_state.grip_pose))
+		{
+			Matrix4f m = hand_state.grip_pose.object_to_world_matrix * xrGetQuest2ControllerModelToGripTransform(right_hand);
+			// Add a pure world-space vertical lift (independent of controller orientation) so the model can be raised to
+			// match the height of the system controllers. Tunable via 'world_up' in the transform file.
+			Vec4f pos = m.getColumn(3);
+			pos[2] += g_quest2_model_world_up_metres;
+			m.setColumn(3, pos);
+			model_to_world_out = m;
+			return true;
+		}
+		return false;
+	}
+
 	if(use_focus3_render_model)
 	{
 		if(xrTrackedPoseHasWorldTransform(hand_state.grip_pose))
@@ -550,9 +643,9 @@ static bool buildXRControllerModelToWorldTransform(const XRHandInputState& hand_
 }
 
 
-static bool buildXRControllerVisualTransform(const XRHandInputState& hand_state, bool use_focus3_render_model, bool right_hand, Matrix4f& ob_to_world_out)
+static bool buildXRControllerVisualTransform(const XRHandInputState& hand_state, bool use_focus3_render_model, bool use_quest2_render_model, bool right_hand, Matrix4f& ob_to_world_out)
 {
-        return buildXRControllerModelToWorldTransform(hand_state, use_focus3_render_model, right_hand, ob_to_world_out);
+        return buildXRControllerModelToWorldTransform(hand_state, use_focus3_render_model, use_quest2_render_model, right_hand, ob_to_world_out);
 }
 
 
@@ -561,7 +654,7 @@ static bool buildXRHandGuideRootToWorldTransform(const XRHandInputState& hand_st
         if(use_focus3_controller_anchors)
         {
                 Matrix4f model_to_world;
-                if(buildXRControllerModelToWorldTransform(hand_state, /*use_focus3_render_model=*/true, right_hand, model_to_world))
+                if(buildXRControllerModelToWorldTransform(hand_state, /*use_focus3_render_model=*/true, /*use_quest2_render_model=*/false, right_hand, model_to_world))
                 {
                         hand_root_to_world_out = model_to_world * xrGetViveFocus3ControllerHandModelToModelTransform(right_hand);
                         return true;
@@ -671,7 +764,7 @@ static bool buildXRTeleportRayFromController(const XRHandInputState& hand_state,
         if(use_focus3_controller_anchors)
         {
 		Matrix4f model_to_world;
-		if(buildXRControllerModelToWorldTransform(hand_state, /*use_focus3_render_model=*/true, right_hand, model_to_world))
+		if(buildXRControllerModelToWorldTransform(hand_state, /*use_focus3_render_model=*/true, /*use_quest2_render_model=*/false, right_hand, model_to_world))
 		{
                         // Use the vendor "tip" anchor for the beam origin so the ray visibly exits from the ring/front of the held controller,
                         // while keeping the OpenXR aim anchor for beam direction.
@@ -759,6 +852,9 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	xr_right_hand_vis_in_engine(false),
 	xr_focus3_controller_render_models_attempted(false),
 	xr_focus3_controller_render_models_loaded(false),
+	xr_quest2_controller_render_models_attempted(false),
+	xr_quest2_controller_render_models_loaded(false),
+	xr_screenshot_combo_was_down(false),
 	xr_teleport_beam_in_engine(false),
 	xr_teleport_marker_in_engine(false),
 	xr_teleport_active(false),
@@ -1285,6 +1381,9 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 		xr_session = new XRSession();
 		xr_session->initialiseForCurrentOpenGLContext();
 		xr_runtime_probe_result = xr_session->getLastResult();
+		// getLastResult() is refreshed every frame and only carries system_name from the initial probe, so capture the
+		// system name once here for stable HMD-type detection (e.g. choosing Quest vs VIVE controller render models).
+		xr_system_name = xr_runtime_probe_result.system_name;
 		xr_mirror_view = xr_session->getMirrorView();
 		xr_head_pose_state = xr_session->getHeadPoseState();
 		xr_raw_head_pose_state = xr_session->getRawHeadPoseState();
@@ -1636,7 +1735,17 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 		xr_teleport_marker->setSingleMaterial(material);
 	}
 
-	tryUpgradeXRControllerVisualsToViveFocus3RenderModels();
+	{
+		const bool is_oculus_system =
+			(xr_system_name.find("oculus") != std::string::npos) ||
+			(xr_system_name.find("Oculus") != std::string::npos) ||
+			(xr_system_name.find("Quest")  != std::string::npos);
+		logAndConPrintMessage("XR controller render-model selection: system='" + xr_system_name + "', oculus=" + (is_oculus_system ? "true" : "false"));
+		if(is_oculus_system)
+			tryUpgradeXRControllerVisualsToQuest2RenderModels();
+		if(!xr_quest2_controller_render_models_loaded)
+			tryUpgradeXRControllerVisualsToViveFocus3RenderModels();
+	}
 
 	{
 		// Make ob_denied_move_marker
@@ -2174,6 +2283,9 @@ void GUIClient::shutdown()
 	xr_right_hand_vis_in_engine = false;
 	xr_focus3_controller_render_models_attempted = false;
 	xr_focus3_controller_render_models_loaded = false;
+	xr_quest2_controller_render_models_attempted = false;
+	xr_quest2_controller_render_models_loaded = false;
+	xr_screenshot_combo_was_down = false;
 	xr_left_controller_last_transform = Matrix4f::identity();
 	xr_right_controller_last_transform = Matrix4f::identity();
 	xr_left_controller_last_valid_time = -1.0;
@@ -3118,7 +3230,7 @@ static Reference<OpenGLTexture> getBestTextureLOD(const WorldMaterial& world_mat
 
 static std::string canonicalHostForMetasiberiaInGUIClient(const std::string& host)
 {
-	if(host == "89.104.70.23")
+	if(host == "87.103.196.229" || host == "185.182.110.184" || host == "89.104.70.23")
 		return "vr.metasiberia.com";
 
 	return host;
@@ -7462,6 +7574,33 @@ void GUIClient::tryUpgradeXRControllerVisualsToViveFocus3RenderModels()
 		if(left_results.gl_ob.isNull() || right_results.gl_ob.isNull())
 			throw glare::Exception("Controller render model load returned a null GL object.");
 
+		// makeGLObjectForModelFile only sets each material's tex_path and relies on the world texture-streaming system
+		// to load it later. These controller models are added directly (outside that system), so their albedo texture
+		// is loaded opportunistically and then evicted, which shows up as the model flickering between textured and
+		// untextured. Load the albedo texture explicitly and hold it on the material so it stays resident.
+		const auto load_albedo_textures = [this](const Reference<GLObject>& gl_ob)
+		{
+			for(size_t i=0; i<gl_ob->materials.size(); ++i)
+			{
+				OpenGLMaterial& mat = gl_ob->materials[i];
+				if(!mat.tex_path.empty() && mat.albedo_texture.isNull())
+				{
+					// mat.tex_path is an arena-allocated string (OpenGLTextureKey), so convert to std::string for getTexture().
+					const std::string tex_path_str(mat.tex_path.c_str(), mat.tex_path.size());
+					try
+					{
+						mat.albedo_texture = opengl_engine->getTexture(tex_path_str);
+					}
+					catch(glare::Exception& e)
+					{
+						logAndConPrintMessage("Could not preload XR controller albedo texture '" + tex_path_str + "': " + e.what());
+					}
+				}
+			}
+		};
+		load_albedo_textures(left_results.gl_ob);
+		load_albedo_textures(right_results.gl_ob);
+
 		hideXRControllerVisuals();
 
 		left_results.gl_ob->always_visible = true;
@@ -7486,6 +7625,119 @@ void GUIClient::tryUpgradeXRControllerVisualsToViveFocus3RenderModels()
 }
 
 
+void GUIClient::tryUpgradeXRControllerVisualsToQuest2RenderModels()
+{
+	if(xr_quest2_controller_render_models_loaded || xr_quest2_controller_render_models_attempted)
+		return;
+
+	if(opengl_engine.isNull())
+		return;
+
+	xr_quest2_controller_render_models_attempted = true;
+
+	loadQuest2ControllerTransformParamsFromFile(); // Pick up any in-headset-tuned grip-to-model offset.
+
+	const std::string left_model_path  = xrGetQuest2ControllerModelPath(/*right_hand=*/false);
+	const std::string right_model_path = xrGetQuest2ControllerModelPath(/*right_hand=*/true);
+	if(left_model_path.empty() || right_model_path.empty())
+	{
+		logAndConPrintMessage("Quest 2 controller render-model files were not found locally, so XR controller visuals will stay on the built-in fallback proxies.");
+		return;
+	}
+
+	try
+	{
+		ModelLoading::MakeGLObjectResults left_results;
+		ModelLoading::MakeGLObjectResults right_results;
+
+		ModelLoading::makeGLObjectForModelFile(*opengl_engine, *opengl_engine->vert_buf_allocator, /*allocator=*/nullptr, left_model_path, /*do_opengl_stuff=*/true, left_results);
+		ModelLoading::makeGLObjectForModelFile(*opengl_engine, *opengl_engine->vert_buf_allocator, /*allocator=*/nullptr, right_model_path, /*do_opengl_stuff=*/true, right_results);
+
+		if(left_results.gl_ob.isNull() || right_results.gl_ob.isNull())
+			throw glare::Exception("Controller render model load returned a null GL object.");
+
+		// makeGLObjectForModelFile only sets each material's tex_path and relies on the world texture-streaming system
+		// to load it later. These controller models are added directly (outside that system), so their albedo texture
+		// is loaded opportunistically and then evicted, which shows up as the model flickering between textured and
+		// untextured. Load the albedo texture explicitly and hold it on the material so it stays resident.
+		const auto load_albedo_textures = [this](const Reference<GLObject>& gl_ob)
+		{
+			for(size_t i=0; i<gl_ob->materials.size(); ++i)
+			{
+				OpenGLMaterial& mat = gl_ob->materials[i];
+				if(!mat.tex_path.empty() && mat.albedo_texture.isNull())
+				{
+					// mat.tex_path is an arena-allocated string (OpenGLTextureKey), so convert to std::string for getTexture().
+					const std::string tex_path_str(mat.tex_path.c_str(), mat.tex_path.size());
+					try
+					{
+						mat.albedo_texture = opengl_engine->getTexture(tex_path_str);
+					}
+					catch(glare::Exception& e)
+					{
+						logAndConPrintMessage("Could not preload XR controller albedo texture '" + tex_path_str + "': " + e.what());
+					}
+				}
+			}
+		};
+		load_albedo_textures(left_results.gl_ob);
+		load_albedo_textures(right_results.gl_ob);
+
+		hideXRControllerVisuals();
+
+		left_results.gl_ob->always_visible = true;
+		right_results.gl_ob->always_visible = true;
+
+		xr_left_controller_vis = left_results.gl_ob;
+		xr_right_controller_vis = right_results.gl_ob;
+		xr_left_controller_last_transform = Matrix4f::identity();
+		xr_right_controller_last_transform = Matrix4f::identity();
+		xr_left_controller_last_valid_time = -1.0;
+		xr_right_controller_last_valid_time = -1.0;
+		xr_quest2_controller_render_models_loaded = true;
+
+		logAndConPrintMessage(
+			"Loaded app-side Oculus Quest 2 XR controller render models from '" + left_model_path + "' and '" + right_model_path + "'.");
+	}
+	catch(glare::Exception& e)
+	{
+		logAndConPrintMessage("Failed to load Quest 2 XR controller render models: " + e.what());
+	}
+}
+
+
+void GUIClient::takeXRScreenshot()
+{
+	if(opengl_engine.isNull())
+		return;
+
+	try
+	{
+		const std::string dir = "C:/programming/substrata/vr_screenshots";
+
+		// Find the next free filename.
+		std::string path;
+		for(int i=1; i<100000; ++i)
+		{
+			path = dir + "/vr_shot_" + ::leftPad(::toString(i), '0', 4) + ".png";
+			if(!FileUtils::fileExists(path))
+				break;
+		}
+
+		ImageMapUInt8Ref map = opengl_engine->drawToBufferAndReturnImageMap();
+		if(map->hasAlphaChannel())
+			map = map->extract3ChannelImage();
+
+		PNGDecoder::write(*map, path);
+		logAndConPrintMessage("Saved XR screenshot to " + path);
+	}
+	catch(glare::Exception& e)
+	{
+		logAndConPrintMessage("Failed to save XR screenshot: " + e.what());
+	}
+}
+
+
 void GUIClient::updateXRControllerVisuals()
 {
 	const bool xr_visuals_allowed =
@@ -7498,7 +7750,16 @@ void GUIClient::updateXRControllerVisuals()
 		return;
 	}
 
-	tryUpgradeXRControllerVisualsToViveFocus3RenderModels();
+	// Prefer Quest 2 render models when running on an oculus system (e.g. Quest via ALVR); otherwise fall back to the
+	// VIVE Focus 3 models. Whichever loads first wins, since both populate the same controller visual objects.
+	const bool is_oculus_system =
+		(xr_system_name.find("oculus") != std::string::npos) ||
+		(xr_system_name.find("Oculus") != std::string::npos) ||
+		(xr_system_name.find("Quest")  != std::string::npos);
+	if(is_oculus_system)
+		tryUpgradeXRControllerVisualsToQuest2RenderModels();
+	if(!xr_quest2_controller_render_models_loaded)
+		tryUpgradeXRControllerVisualsToViveFocus3RenderModels();
 
 	const double cur_time = Clock::getTimeSinceInit();
 
@@ -7508,7 +7769,7 @@ void GUIClient::updateXRControllerVisuals()
 			return;
 
 		Matrix4f controller_transform;
-		const bool have_live_pose = buildXRControllerVisualTransform(hand_state, xr_focus3_controller_render_models_loaded, right_hand, controller_transform);
+		const bool have_live_pose = buildXRControllerVisualTransform(hand_state, xr_focus3_controller_render_models_loaded, xr_quest2_controller_render_models_loaded, right_hand, controller_transform);
 		if(have_live_pose)
 		{
 			last_transform = controller_transform;
@@ -7547,6 +7808,25 @@ void GUIClient::updateXRControllerVisuals()
 
 void GUIClient::updateXRHandGuideVisuals()
 {
+        // When full Quest 2 controller render models are shown, the untextured hand-guide proxy parts overlap them and
+        // z-fight (visible as flickering that changes with view angle), so hide the hand guide entirely in that case.
+        if(xr_quest2_controller_render_models_loaded)
+        {
+                const auto hide_hand_vis = [this](std::vector<Reference<GLObject> >& vis_parts, bool& in_engine)
+                {
+                        if(in_engine)
+                        {
+                                for(size_t i=0; i<vis_parts.size(); ++i)
+                                        if(vis_parts[i].nonNull())
+                                                opengl_engine->removeObject(vis_parts[i]);
+                                in_engine = false;
+                        }
+                };
+                hide_hand_vis(xr_left_hand_vis_parts, xr_left_hand_vis_in_engine);
+                hide_hand_vis(xr_right_hand_vis_parts, xr_right_hand_vis_in_engine);
+                return;
+        }
+
         const auto update_hand_vis = [this](const XRHandInputState& hand_state, std::vector<Reference<GLObject> >& vis_parts, bool& in_engine, bool right_hand)
         {
                 if(vis_parts.size() < XR_HAND_GUIDE_PART_COUNT)
@@ -13098,6 +13378,14 @@ void GUIClient::renderXRFrame(float near_draw_dist, float max_draw_dist)
 		xr_last_live_head_pose_time = Clock::getTimeSinceInit();
 	updateXRControllerVisuals();
 	appendXRTraceSample();
+
+	// Screenshot gesture: click both thumbsticks at the same time to save a screenshot to the local VR screenshots folder.
+	{
+		const bool combo_down = xr_left_hand_state.move2d_clicked && xr_right_hand_state.move2d_clicked;
+		if(combo_down && !xr_screenshot_combo_was_down)
+			takeXRScreenshot();
+		xr_screenshot_combo_was_down = combo_down;
+	}
 
 	static bool xr_logged_hand_input_bindings = false;
 	if(!xr_logged_hand_input_bindings &&

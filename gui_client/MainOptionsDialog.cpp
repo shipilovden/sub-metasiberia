@@ -166,6 +166,8 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 	this->customCacheDirFileSelectWidget->setEnabled(use_custom_cache_dir);
 
 	QString start_location_url = settings->value(startLocationURLKey()).toString();
+	start_location_url.replace("sub://87.103.196.229", "sub://vr.metasiberia.com");
+	start_location_url.replace("sub://185.182.110.184", "sub://vr.metasiberia.com");
 	start_location_url.replace("sub://89.104.70.23", "sub://vr.metasiberia.com");
 	this->startLocationURLLineEdit->setText(start_location_url);
 
@@ -220,6 +222,8 @@ void MainOptionsDialog::accepted()
 	settings->setValue(customCacheDirKey(),							this->customCacheDirFileSelectWidget->filename());
 
 	QString start_location_url = this->startLocationURLLineEdit->text();
+	start_location_url.replace("sub://87.103.196.229", "sub://vr.metasiberia.com");
+	start_location_url.replace("sub://185.182.110.184", "sub://vr.metasiberia.com");
 	start_location_url.replace("sub://89.104.70.23", "sub://vr.metasiberia.com");
 	settings->setValue(startLocationURLKey(), start_location_url);
 	settings->setValue(xrLaunchModeKey(), this->xrLaunchModeComboBox->currentData().toString());

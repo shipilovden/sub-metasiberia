@@ -205,9 +205,17 @@ static void clampRecommendedSwapchainSizeForRuntime(const XRRuntimeProbeResult& 
 		return;
 
 	const uint32_t max_dim = myMax(width, height);
+
+	// ALVR/Quest (system "oculus") reports as SteamVR/OpenXR too, but ALVR already sizes the eye buffers from its own
+	// PC-side resolution setting; clamping them down to the VIVE-tuned limit only throws away resolution that ALVR
+	// allocated, which softens the image and biases LOD selection toward lower detail. Use a higher cap for oculus
+	// systems so ALVR's chosen resolution passes through, while keeping the conservative VIVE Business Streaming limit.
+	const bool is_oculus_system = (result.system_name.find("oculus") != std::string::npos) ||
+		(result.system_name.find("Oculus") != std::string::npos) ||
+		(result.system_name.find("Quest")  != std::string::npos);
 	// VIVE Business Streaming + SteamVR can recommend eye sizes that are a bit too ambitious for stable head-turn latency.
 	// Clamp more aggressively so the compositor has enough headroom and doesn't expose black reprojection edges on quick turns.
-	static const uint32_t steamvr_safe_max_dim = 2000u;
+	const uint32_t steamvr_safe_max_dim = is_oculus_system ? 3200u : 2000u;
 	if(max_dim <= steamvr_safe_max_dim)
 		return;
 

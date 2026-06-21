@@ -505,6 +505,8 @@ public:
 	void updateXRControllerVisuals();
 	void updateXRHandGuideVisuals();
 	void tryUpgradeXRControllerVisualsToViveFocus3RenderModels();
+	void tryUpgradeXRControllerVisualsToQuest2RenderModels();
+	void takeXRScreenshot(); // Render the current view and save it to the local VR screenshots folder.
 	void updateXRTeleportLocomotion();
 	void hideXRControllerVisuals();
 	void hideXRTeleportVisuals();
@@ -738,6 +740,7 @@ public:
 	double last_fps;
 	XRSession* xr_session;
 	XRRuntimeProbeResult xr_runtime_probe_result;
+	std::string xr_system_name; // Captured once at XR bootstrap (getLastResult() loses system_name after the first frame).
 	XRMirrorView xr_mirror_view;
 	XRTrackedPoseState xr_head_pose_state;
 	XRTrackedPoseState xr_raw_head_pose_state;
@@ -1127,6 +1130,9 @@ public:
 	bool xr_right_hand_vis_in_engine;
 	bool xr_focus3_controller_render_models_attempted;
 	bool xr_focus3_controller_render_models_loaded;
+	bool xr_quest2_controller_render_models_attempted;
+	bool xr_quest2_controller_render_models_loaded;
+	bool xr_screenshot_combo_was_down; // Edge-detect both-thumbstick-click screenshot combo.
 	Reference<GLObject> xr_teleport_beam;
 	bool xr_teleport_beam_in_engine;
 	Reference<GLObject> xr_teleport_marker;
