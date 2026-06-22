@@ -10,15 +10,30 @@ function getQueryParam(name) {
 const worldParam = getQueryParam('world').trim();
 const isRootWorld = (worldParam === '' || worldParam.toLowerCase() === 'root');
 
-let mymap = L.map('mapid', { crs: L.CRS.Simple }).setView([0.0, 0.0], 4);
+// Keep the web map on a single native tile pyramid level.  The screenshot
+// renderer captures each zoom independently, and mixing native zoom levels
+// produces visible seams because LOD, water and lighting differ per capture.
+const nativeTileZoom = 6;
+const tileVersion = '20260622-native6-metasiberia';
+const mapBounds = L.latLngBounds([[-16.0, -32.0], [28.0, 36.0]]);
 
-// Allow "super zoom" (overzoom) without generating extra tiles on the server.
-const minNativeZoom = 0;
-const maxNativeZoom = 6;
+let mymap = L.map('mapid', {
+    crs: L.CRS.Simple,
+    attributionControl: false,
+    maxBounds: mapBounds.pad(0.25),
+    maxBoundsViscosity: 0.65,
+}).setView([0.0, 0.0], 4);
+
+L.control.attribution({
+    prefix: '<a href="https://metasiberia.com/" target="_blank" rel="noopener noreferrer">Metasiberia</a>'
+}).addTo(mymap);
+
+// Allow browser zooming without changing the native tile source.
+const minNativeZoom = nativeTileZoom;
+const maxNativeZoom = nativeTileZoom;
 const minZoom = 0;
 const maxZoom = 10;
 
-const tileVersion = '20260622-map-refresh';
 const tileUrl = isRootWorld
     ? ('/tile?x={x}&y={y}&z={z}&v=' + tileVersion)
     : ('/tile?world=' + encodeURIComponent(worldParam) + '&x={x}&y={y}&z={z}&v=' + tileVersion);
@@ -29,6 +44,7 @@ const tileLayer = L.tileLayer(tileUrl, {
     maxZoom: maxZoom,
     minNativeZoom: minNativeZoom,
     maxNativeZoom: maxNativeZoom,
+    bounds: mapBounds,
     noWrap: true,
 });
 
@@ -68,7 +84,7 @@ const HIGHLIGHTED_COL = '#ef9518';
 // method that we will use to update the control based on feature properties passed
 info.update = function (props) {
     this._div.innerHTML =
-        "<span class=\"map-col-mradmin\">&#9632;</span> Owned by Substrata<br/>" +
+        "<span class=\"map-col-mradmin\">&#9632;</span> Owned by Metasiberia<br/>" +
         "<span class=\"map-col-other\">&#9632;</span> Owned by other<br/>" +
         "<span class=\"map-col-for-auction\">&#9632;</span> Currently at auction";
 
