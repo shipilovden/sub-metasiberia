@@ -23,6 +23,7 @@ Copyright Glare Technologies Limited 2025 -
 #include <IndigoXMLDoc.h>
 #include <XMLParseUtils.h>
 #include <tls.h>
+#include <cstdlib>
 
 
 struct ScreenshotBotConfig
@@ -247,7 +248,7 @@ int main(int argc, char* argv[])
 
 							time_since_last_shot_request.reset();
 
-							if(process == NULL)
+							if(to_gui_socket.isNull())
 							{
 								bool connected_to_existing_gui = false;
 
@@ -306,6 +307,8 @@ int main(int argc, char* argv[])
 							bool got_result = false;
 							std::string from_gui_error_msg;
 							int result = 0;
+							Timer time_waiting_for_gui_result;
+							const double max_gui_wait_time_s = (request_type == Protocol::TileScreenShotRequest) ? 90.0 : 180.0;
 							while(!got_result)
 							{
 								if(to_gui_socket->readable(1.0))
@@ -313,6 +316,26 @@ int main(int argc, char* argv[])
 									result = to_gui_socket->readInt32(); // 0 = success
 									from_gui_error_msg = to_gui_socket->readStringLengthFirst(10000);
 									conPrint("Received result " + toString(result) + " from GUI process.");
+									got_result = true;
+								}
+								else if(time_waiting_for_gui_result.elapsed() > max_gui_wait_time_s)
+								{
+									result = 1;
+									from_gui_error_msg = "Timed out waiting for GUI screenshot result after " + doubleToStringNDecimalPlaces(max_gui_wait_time_s, 1) + " s";
+									conPrint(from_gui_error_msg);
+
+									if(to_gui_socket.nonNull())
+									{
+										to_gui_socket->ungracefulShutdown();
+										to_gui_socket = NULL;
+									}
+
+#if !defined(_WIN32)
+									conPrint("Terminating stale screenshotslave GUI process after timeout.");
+									const int kill_result = std::system("pkill -TERM -f 'gui_client.*--screenshotslave' >/dev/null 2>&1 || true");
+									(void)kill_result;
+#endif
+
 									got_result = true;
 								}
 

@@ -15,6 +15,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "../shared/ResourceManager.h"
 #include "../shared/ImageDecoding.h"
 #include <graphics/SRGBUtils.h>
+#include <utils/Clock.h>
 #include <utils/RuntimeCheck.h>
 #include <tracy/Tracy.hpp>
 
@@ -40,6 +41,7 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 :	gui_client(NULL),
 	last_requested_campos(Vec3d(-1000000)),
 	last_requested_tile_z(-1000),
+	next_tile_refresh_query_time(0.0),
 	map_width_ws(500.f),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder),
 	visible(true),
@@ -281,10 +283,12 @@ void MiniMap::think()
 
 	if((gui_client->connection_state == GUIClient::ServerConnectionState_Connected) && (gui_client->server_protocol_version >= 39)) // QueryMapTiles message was introduced in protocol version 39.
 	{
+		const double now = Clock::getTimeSinceInit();
+		const bool force_refresh_query = now >= next_tile_refresh_query_time;
 		const int tile_z = getTileZForMapWidthWS(map_width_ws);
 		const float tile_w_ws = getTileWidthWSForTileZ(tile_z);
 
-		if((campos.getDist(last_requested_campos) > 300.0) || (tile_z != last_requested_tile_z))
+		if((campos.getDist(last_requested_campos) > 300.0) || (tile_z != last_requested_tile_z) || force_refresh_query)
 		{
 			// Send request to server to get map tile image URLs, for any nearby tiles that we have not already done a request to the server for.
 			{
@@ -303,7 +307,7 @@ void MiniMap::think()
 					// Walk out zoom levels and query those tiles as well, in case we don't have a tile at this level and we need to use the zoomed-out tile
 					while(tile_coords.z >= 0)
 					{
-						if(queried_tile_coords.count(tile_coords) == 0) // If we haven't queried this tile yet:
+						if(force_refresh_query || queried_tile_coords.count(tile_coords) == 0) // If we haven't queried this tile yet, or are refreshing known URLs:
 						{
 							query_indices.push_back(tile_coords);
 							queried_tile_coords.insert(tile_coords); // Mark tile as queried
@@ -330,6 +334,8 @@ void MiniMap::think()
 
 			last_requested_campos = campos;
 			last_requested_tile_z = tile_z;
+			if(force_refresh_query)
+				next_tile_refresh_query_time = now + 10.0;
 		}
 	}
 
@@ -626,11 +632,11 @@ void MiniMap::handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMe
 	for(size_t i=0; i<msg.tile_indices.size(); ++i)
 	{
 		Vec3i indices = msg.tile_indices[i];
-		
+		const URLString& URL = msg.tile_URLS[i];
+
 		auto res = tile_infos.find(indices);
 		if(res == tile_infos.end())
 		{
-			const URLString& URL = msg.tile_URLS[i];
 			MapTileInfo info;
 			info.image_URL = URL;
 			tile_infos[indices] = info;
@@ -664,7 +670,30 @@ void MiniMap::handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMe
 		}
 		else
 		{
-			// Update map tile info URL?
+			MapTileInfo& info = res->second;
+			if(!URL.empty() && URL != info.image_URL && ImageDecoding::hasSupportedImageExtension(URL))
+			{
+				info.image_URL = URL;
+
+				const Vec3d tile_pos(0.0); // TEMP HACK could use tile position in world space? or cam position?
+
+				TextureParams tex_params;
+				tex_params.wrapping = OpenGLTexture::Wrapping_Clamp;
+				tex_params.allow_compression = false;
+				tex_params.filtering = OpenGLTexture::Filtering_Bilinear;
+				tex_params.use_mipmaps = false;
+
+				DownloadingResourceInfo downloading_info;
+				downloading_info.texture_params = tex_params;
+				downloading_info.pos = tile_pos;
+				downloading_info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(tile_w_ws, /*importance_factor=*/1.f);
+				downloading_info.used_by_other = true;
+
+				gui_client->startDownloadingResource(URL, tile_pos.toVec4fPoint(), tile_w_ws, downloading_info);
+				gui_client->startLoadingTextureIfPresent(URL, tile_pos.toVec4fPoint(), tile_w_ws, /*max task dist=*/1.0e10f, /*importance factor=*/1.f, tex_params);
+
+				loading_texture_URL_to_tile_indices_map[URL] = indices;
+			}
 		}
 	}
 

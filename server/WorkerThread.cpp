@@ -3912,13 +3912,20 @@ void WorkerThread::doRun()
 									if(res != map_tile_info.info.end())
 									{
 										const TileInfo& tile_info = res->second;
-										if(tile_info.cur_tile_screenshot.nonNull())
+										if(tile_info.cur_tile_screenshot.nonNull() && tile_info.cur_tile_screenshot->state == Screenshot::ScreenshotState_done)
 										{
 											result_URLs[i] = tile_info.cur_tile_screenshot->URL;
 										}
-										else if(tile_info.prev_tile_screenshot.nonNull())
+										else if(tile_info.cur_tile_screenshot.isNull() && tile_info.prev_tile_screenshot.nonNull() && tile_info.prev_tile_screenshot->state == Screenshot::ScreenshotState_done)
 										{
 											result_URLs[i] = tile_info.prev_tile_screenshot->URL;
+										}
+										else if(tile_info.cur_tile_screenshot.nonNull() && tile_info.cur_tile_screenshot->state == Screenshot::ScreenshotState_notdone)
+										{
+											PendingMapTileScreenshot pending;
+											pending.world_name = world_name;
+											pending.tile_coords = v;
+											world_state->pending_map_tile_screenshots.push_front(pending);
 										}
 
 										// conPrint("QueryMapTiles: Found result_URLs[i]: " + result_URLs[i]);
@@ -3943,7 +3950,7 @@ void WorkerThread::doRun()
 										PendingMapTileScreenshot pending;
 										pending.world_name = world_name;
 										pending.tile_coords = v;
-										world_state->pending_map_tile_screenshots.push_back(pending);
+										world_state->pending_map_tile_screenshots.push_front(pending);
 									}
 								}
 							}

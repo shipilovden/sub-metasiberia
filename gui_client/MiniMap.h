@@ -99,6 +99,7 @@ private:
 
 	Vec3d last_requested_campos;
 	int last_requested_tile_z;
+	double next_tile_refresh_query_time;
 
 	float map_width_ws;
 

@@ -179,6 +179,41 @@ body {
 	max-width: 3000px; /*override max-width: 1000px in body*/
 	/*max-width: 100%;*/
 	overflow-x: hidden; /*prevents horizontal scroll bar by allowing the body to be under the vertical scroll bar*/
+	min-height: calc(100vh - 20px);
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	margin-bottom: 0;
+}
+
+.root-body #login {
+	align-self: flex-end;
+	flex: 0 0 auto;
+	order: 1;
+}
+
+.root-body .msb-root-hero,
+.root-body .msb-root-hero-links,
+.root-body .root-rest-of-body {
+	flex: 0 0 auto;
+	order: 10;
+}
+
+.root-body .msb-root-photo-filmstrip-wrap {
+	flex: 0 0 auto;
+	order: 90;
+	margin-top: auto;
+}
+
+.root-body > hr {
+	width: 100%;
+	flex: 0 0 auto;
+	order: 100;
+}
+
+.root-body > .footer {
+	flex: 0 0 auto;
+	order: 110;
 }
 
 .root-rest-of-body {

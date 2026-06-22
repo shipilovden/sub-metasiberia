@@ -152,7 +152,7 @@ void handleMapTileRequest(ServerAllWorldsState& world_state, WebDataStore& datas
 				PendingMapTileScreenshot pending;
 				pending.world_name = world_name;
 				pending.tile_coords = v;
-				world_state.pending_map_tile_screenshots.push_back(pending);
+				world_state.pending_map_tile_screenshots.push_front(pending);
 
 				// Tile isn't ready yet.
 				throw glare::Exception("Map tile screenshot not done.");
@@ -161,10 +161,19 @@ void handleMapTileRequest(ServerAllWorldsState& world_state, WebDataStore& datas
 			const TileInfo& info = res->second;
 			if(info.cur_tile_screenshot.nonNull() && info.cur_tile_screenshot->state == Screenshot::ScreenshotState_done)
 				local_path = info.cur_tile_screenshot->local_path;
-			else if(info.prev_tile_screenshot.nonNull() && info.prev_tile_screenshot->state == Screenshot::ScreenshotState_done)
+			else if(info.cur_tile_screenshot.isNull() && info.prev_tile_screenshot.nonNull() && info.prev_tile_screenshot->state == Screenshot::ScreenshotState_done)
 				local_path = info.prev_tile_screenshot->local_path;
 			else
+			{
+				if(info.cur_tile_screenshot.nonNull() && info.cur_tile_screenshot->state == Screenshot::ScreenshotState_notdone)
+				{
+					PendingMapTileScreenshot pending;
+					pending.world_name = world_name;
+					pending.tile_coords = v;
+					world_state.pending_map_tile_screenshots.push_front(pending);
+				}
 				throw glare::Exception("Map tile screenshot not done.");
+			}
 		} // end lock scope
 
 

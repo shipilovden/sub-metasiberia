@@ -101,13 +101,14 @@ const std::string standardHeader(ServerAllWorldsState& world_state, const web::R
 const std::string standardFooter(const web::RequestInfo& request_info, bool include_email_link, const std::string& extra_html)
 {
 	std::string page_out;
+
+	if(!extra_html.empty())
+		page_out += extra_html + "\n";
+
 	page_out +=
 		"	<hr/>																						\n"
 		"	<div class=\"footer\"><a href=\"https://t.me/metasiberia_channel\" target=\"_blank\" rel=\"noopener noreferrer\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\" target=\"_blank\" rel=\"noopener noreferrer\">VK</a> | <a href=\"https://github.com/shipilovden/sub-metasiberia\" target=\"_blank\" rel=\"noopener noreferrer\">Github</a></div>	\n"
 		"	<div class=\"footer\"><a href=\"/faq\" target=\"_blank\" rel=\"noopener noreferrer\">F.A.Q.</a> | <a href=\"/terms\" target=\"_blank\" rel=\"noopener noreferrer\">Terms of use</a> | <a href=\"/map\" target=\"_blank\" rel=\"noopener noreferrer\">Map</a></div>				\n";
-
-	if(!extra_html.empty())
-		page_out += extra_html + "\n";
 
 	page_out +=
 		"	</body>																						\n"
@@ -304,7 +305,7 @@ const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID hi
 
 	page += var_js;
 
-	page += "<script src=\"/files/map.js\"></script>";
+	page += "<script src=\"/files/map.js?v=20260622-map-refresh\"></script>";
 
 	return page;
 }

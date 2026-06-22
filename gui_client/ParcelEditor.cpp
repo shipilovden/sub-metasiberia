@@ -82,7 +82,6 @@ static bool tryParseUserIDToken(const std::string& token, UserID& user_id_out)
 
 ParcelEditor::ParcelEditor(QWidget *parent)
 :	QWidget(parent),
-	have_last_set_parcel(false),
 	can_edit_basic_fields(false),
 	can_edit_owner_and_geometry(false),
 	can_edit_member_lists(false),
@@ -214,8 +213,6 @@ ParcelEditor::~ParcelEditor()
 
 void ParcelEditor::setFromParcel(const Parcel& parcel)
 {
-	last_set_parcel = parcel;
-	have_last_set_parcel = true;
 	rebuildKnownUserRefMaps(parcel);
 
 	this->IDLabel->setText(QtUtils::toQString(parcel.id.toString()));

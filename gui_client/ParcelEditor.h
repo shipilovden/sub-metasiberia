@@ -47,8 +47,6 @@ protected:
 	std::string nameForUserID(const UserID& user_id) const;
 
 	std::string current_server_url;
-	Parcel last_set_parcel;
-	bool have_last_set_parcel;
 	bool can_edit_basic_fields;
 	bool can_edit_owner_and_geometry;
 	bool can_edit_member_lists;

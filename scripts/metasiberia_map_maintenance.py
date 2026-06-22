@@ -51,6 +51,12 @@ def write_json_atomic(path: Path, payload: Dict) -> None:
 
 
 def parse_counts(html: str) -> Tuple[int, int, int]:
+	grouped_counts = re.findall(r"Tiles:</b>\s*([0-9]+)\s*,\s*<b>done:</b>\s*([0-9]+)", html)
+	if grouped_counts:
+		total = sum(int(total_s) for total_s, _ in grouped_counts)
+		done = sum(int(done_s) for _, done_s in grouped_counts)
+		return done, max(total - done, 0), total
+
 	done = html.count("state: Done")
 	not_done = html.count("state: Not done")
 	return done, not_done, done + not_done
@@ -304,4 +310,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-
