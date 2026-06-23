@@ -305,7 +305,7 @@ const std::string getMapEmbedCode(ServerAllWorldsState& world_state, ParcelID hi
 
 	page += var_js;
 
-	page += "<script src=\"/files/map.js?v=20260622-fallback-metasiberia\"></script>";
+	page += "<script src=\"/files/map.js?v=20260623-stable2-metasiberia\"></script>";
 
 	return page;
 }
