@@ -308,7 +308,7 @@ int main(int argc, char* argv[])
 							std::string from_gui_error_msg;
 							int result = 0;
 							Timer time_waiting_for_gui_result;
-							const double max_gui_wait_time_s = (request_type == Protocol::TileScreenShotRequest) ? 90.0 : 180.0;
+							const double max_gui_wait_time_s = (request_type == Protocol::TileScreenShotRequest) ? 300.0 : 180.0;
 							while(!got_result)
 							{
 								if(to_gui_socket->readable(1.0))

@@ -4803,24 +4803,52 @@ void handleRegenMapTilesPost(ServerAllWorldsState& world_state, const web::Reque
 
 			WorldStateLock lock(world_state.mutex);
 
+			world_state.pending_map_tile_screenshots.clear();
+
 			// Mark all tile screenshots as not done (for all worlds), and enqueue them so the screenshot bot can regenerate.
 			for(auto it_world = world_state.map_tile_info_for_world.begin(); it_world != world_state.map_tile_info_for_world.end(); ++it_world)
 			{
 				const std::string& world_name = it_world->first;
 				MapTileInfo& map_tile_info = it_world->second;
+				std::vector<PendingMapTileScreenshot> pending_for_world;
 
 				for(auto it = map_tile_info.info.begin(); it != map_tile_info.info.end(); ++it)
 				{
 					const Vec3<int> key = it->first;
 					TileInfo& tile_info = it->second;
-					if(tile_info.cur_tile_screenshot.nonNull())
-						tile_info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
+					if(tile_info.cur_tile_screenshot.nonNull() && tile_info.cur_tile_screenshot->state == Screenshot::ScreenshotState_done)
+					{
+						if(key.z <= 2)
+							tile_info.prev_tile_screenshot = tile_info.cur_tile_screenshot;
+						else
+							tile_info.prev_tile_screenshot = nullptr;
+					}
+
+					tile_info.cur_tile_screenshot = new Screenshot();
+					tile_info.cur_tile_screenshot->id = world_state.getNextScreenshotUIDUnlocked(lock);
+					tile_info.cur_tile_screenshot->created_time = TimeStamp::currentTime();
+					tile_info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
+					tile_info.cur_tile_screenshot->screenshot_type = Screenshot::ScreenshotType_MapTile;
+					tile_info.cur_tile_screenshot->is_map_tile = true;
+					tile_info.cur_tile_screenshot->tile_x = key.x;
+					tile_info.cur_tile_screenshot->tile_y = key.y;
+					tile_info.cur_tile_screenshot->tile_z = key.z;
 
 					PendingMapTileScreenshot pending;
 					pending.world_name = world_name;
 					pending.tile_coords = key;
-					world_state.pending_map_tile_screenshots.push_back(pending);
+					pending_for_world.push_back(pending);
 				}
+
+				std::sort(pending_for_world.begin(), pending_for_world.end(), [](const PendingMapTileScreenshot& a, const PendingMapTileScreenshot& b) {
+					if(a.tile_coords.z != b.tile_coords.z)
+						return a.tile_coords.z < b.tile_coords.z;
+					if(a.tile_coords.x != b.tile_coords.x)
+						return a.tile_coords.x < b.tile_coords.x;
+					return a.tile_coords.y < b.tile_coords.y;
+				});
+				for(size_t i=0; i<pending_for_world.size(); ++i)
+					world_state.pending_map_tile_screenshots.push_back(pending_for_world[i]);
 
 				map_tile_info.db_dirty = true;
 			}
@@ -4856,20 +4884,32 @@ void handleRecreateMapTilesPost(ServerAllWorldsState& world_state, const web::Re
 
 			WorldStateLock lock(world_state.mutex);
 
+			world_state.pending_map_tile_screenshots.clear();
+
 			for(auto it_world = world_state.map_tile_info_for_world.begin(); it_world != world_state.map_tile_info_for_world.end(); ++it_world)
 			{
 				const std::string& world_name = it_world->first;
 				MapTileInfo& map_tile_info = it_world->second;
+				std::vector<PendingMapTileScreenshot> pending_for_world;
 
 				for(auto it = map_tile_info.info.begin(); it != map_tile_info.info.end(); ++it)
 				{
 					const Vec3<int> key = it->first;
 					TileInfo& tile_info = it->second;
 
+					if(tile_info.cur_tile_screenshot.nonNull() && tile_info.cur_tile_screenshot->state == Screenshot::ScreenshotState_done)
+					{
+						if(key.z <= 2)
+							tile_info.prev_tile_screenshot = tile_info.cur_tile_screenshot;
+						else
+							tile_info.prev_tile_screenshot = nullptr;
+					}
+
 					tile_info.cur_tile_screenshot = new Screenshot();
 					tile_info.cur_tile_screenshot->id = world_state.getNextScreenshotUIDUnlocked(lock);
 					tile_info.cur_tile_screenshot->created_time = TimeStamp::currentTime();
 					tile_info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
+					tile_info.cur_tile_screenshot->screenshot_type = Screenshot::ScreenshotType_MapTile;
 					tile_info.cur_tile_screenshot->is_map_tile = true;
 					tile_info.cur_tile_screenshot->tile_x = key.x;
 					tile_info.cur_tile_screenshot->tile_y = key.y;
@@ -4878,8 +4918,18 @@ void handleRecreateMapTilesPost(ServerAllWorldsState& world_state, const web::Re
 					PendingMapTileScreenshot pending;
 					pending.world_name = world_name;
 					pending.tile_coords = key;
-					world_state.pending_map_tile_screenshots.push_back(pending);
+					pending_for_world.push_back(pending);
 				}
+
+				std::sort(pending_for_world.begin(), pending_for_world.end(), [](const PendingMapTileScreenshot& a, const PendingMapTileScreenshot& b) {
+					if(a.tile_coords.z != b.tile_coords.z)
+						return a.tile_coords.z < b.tile_coords.z;
+					if(a.tile_coords.x != b.tile_coords.x)
+						return a.tile_coords.x < b.tile_coords.x;
+					return a.tile_coords.y < b.tile_coords.y;
+				});
+				for(size_t i=0; i<pending_for_world.size(); ++i)
+					world_state.pending_map_tile_screenshots.push_back(pending_for_world[i]);
 
 				map_tile_info.db_dirty = true;
 			}

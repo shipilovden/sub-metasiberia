@@ -140,6 +140,7 @@ void handleMapTileRequest(ServerAllWorldsState& world_state, WebDataStore& datas
 				info.cur_tile_screenshot->id = world_state.getNextScreenshotUIDUnlocked(lock);
 				info.cur_tile_screenshot->created_time = TimeStamp::currentTime();
 				info.cur_tile_screenshot->state = Screenshot::ScreenshotState_notdone;
+				info.cur_tile_screenshot->screenshot_type = Screenshot::ScreenshotType_MapTile;
 				info.cur_tile_screenshot->is_map_tile = true;
 				info.cur_tile_screenshot->tile_x = x;
 				info.cur_tile_screenshot->tile_y = y;
@@ -152,7 +153,7 @@ void handleMapTileRequest(ServerAllWorldsState& world_state, WebDataStore& datas
 				PendingMapTileScreenshot pending;
 				pending.world_name = world_name;
 				pending.tile_coords = v;
-				world_state.pending_map_tile_screenshots.push_front(pending);
+				world_state.pending_map_tile_screenshots.push_back(pending);
 
 				// Tile isn't ready yet.
 				throw glare::Exception("Map tile screenshot not done.");
@@ -161,7 +162,7 @@ void handleMapTileRequest(ServerAllWorldsState& world_state, WebDataStore& datas
 			const TileInfo& info = res->second;
 			if(info.cur_tile_screenshot.nonNull() && info.cur_tile_screenshot->state == Screenshot::ScreenshotState_done)
 				local_path = info.cur_tile_screenshot->local_path;
-			else if(info.cur_tile_screenshot.isNull() && info.prev_tile_screenshot.nonNull() && info.prev_tile_screenshot->state == Screenshot::ScreenshotState_done)
+			else if(info.prev_tile_screenshot.nonNull() && info.prev_tile_screenshot->state == Screenshot::ScreenshotState_done)
 				local_path = info.prev_tile_screenshot->local_path;
 			else
 			{
@@ -170,7 +171,7 @@ void handleMapTileRequest(ServerAllWorldsState& world_state, WebDataStore& datas
 					PendingMapTileScreenshot pending;
 					pending.world_name = world_name;
 					pending.tile_coords = v;
-					world_state.pending_map_tile_screenshots.push_front(pending);
+					world_state.pending_map_tile_screenshots.push_back(pending);
 				}
 				throw glare::Exception("Map tile screenshot not done.");
 			}
@@ -193,7 +194,13 @@ void handleMapTileRequest(ServerAllWorldsState& world_state, WebDataStore& datas
 	}
 	catch(glare::Exception& e)
 	{
-		web::ResponseUtils::writeHTTPNotFoundHeaderAndData(reply_info, "Error: " + e.what());
+		if(request.getURLParam("optional") == "1")
+		{
+			web::ResponseUtils::writeRawString(reply_info, "HTTP/1.1 204 No Content\r\n");
+			web::ResponseUtils::writeRawString(reply_info, "Content-Length: 0\r\n\r\n");
+		}
+		else
+			web::ResponseUtils::writeHTTPNotFoundHeaderAndData(reply_info, "Error: " + e.what());
 	}
 }
 

@@ -2571,18 +2571,14 @@ void MainWindow::runScreenshotCode()
 			(gui_client.num_non_net_resources_downloading == 0) &&
 			(gui_client.num_net_resources_downloading == 0) &&
 			(gui_client.terrain_system && gui_client.terrain_system->isTerrainFullyBuilt());
-		const bool map_screenshot_waited_long_enough = map_screenshot && (screenshot_loading_timer.elapsed() > 12.0);
 		const bool loaded_all =
 			(time_since_last_screenshot.elapsed() > 3.0) && // Bit of a hack to allow time for the shadow mapping to render properly
 			(num_obs > 0 || total_timer.elapsed() >= 15.0) && // Wait until we have downloaded some objects from the server, or (if the world is empty) X seconds have elapsed.
 			(total_timer.elapsed() >= 4.0) && // Bit of a hack to allow time for the shadow mapping to render properly, also for the initial object query responses to arrive
-			(loaded_all_resources || map_screenshot_waited_long_enough);
+			loaded_all_resources;
 
 		if(loaded_all)
 		{
-			if(map_screenshot_waited_long_enough && !loaded_all_resources)
-				conPrint("Map screenshot wait timeout reached; taking tile with unfinished loading tasks.");
-
 			conPrint("Setting up for screenshot...");
 
 			ui->editorDockWidget->hide();

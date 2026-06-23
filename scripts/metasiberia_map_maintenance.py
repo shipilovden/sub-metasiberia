@@ -12,7 +12,6 @@ import glob
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -24,15 +23,21 @@ import ssl
 
 
 BASE_URL = os.environ.get("METASIBERIA_BASE_URL", "https://vr.metasiberia.com").rstrip("/")
+HOST_HEADER = os.environ.get("METASIBERIA_HOST_HEADER", "")
 STATE_BIN = Path(os.environ.get("METASIBERIA_STATE_BIN", "/root/cyberspace_server_state/server_state.bin"))
 PUBLIC_DIR = Path(os.environ.get("METASIBERIA_PUBLIC_DIR", "/root/cyberspace_server_state/webserver_public_files"))
 PROGRESS_CSV = Path(os.environ.get("METASIBERIA_MAP_PROGRESS_CSV", "/var/log/metasiberia-map-progress.csv"))
 REFRESH_LOG = Path(os.environ.get("METASIBERIA_MAP_REFRESH_LOG", "/var/log/metasiberia-map-refresh.log"))
+ADMIN_TOKEN_CACHE = Path(os.environ.get("METASIBERIA_ADMIN_TOKEN_CACHE", "/var/lib/metasiberia-map/admin_site_b"))
 MAP_PROGRESS_JSON = PUBLIC_DIR / "map_progress.json"
 MAP_REFRESH_STATUS_JSON = PUBLIC_DIR / "map_refresh_status.json"
 MAX_PROGRESS_LINES = int(os.environ.get("METASIBERIA_MAP_PROGRESS_MAX_LINES", "5000"))
 PUBLIC_PROGRESS_POINTS = int(os.environ.get("METASIBERIA_MAP_PROGRESS_PUBLIC_POINTS", "288"))
 TMP_CLEAN_SECONDS = int(os.environ.get("METASIBERIA_TMP_CLEAN_SECONDS", "86400"))
+STATE_SCAN_CHUNK_SIZE = int(os.environ.get("METASIBERIA_STATE_SCAN_CHUNK_SIZE", str(64 * 1024 * 1024)))
+USER_WEB_SESSION_ADMIN_PATTERN = b"\x69\x00\x00\x00\x01\x00\x00\x00\x18\x00\x00\x00"
+ADMIN_USER_ID_BYTES = b"\x00\x00\x00\x00"
+SESSION_TOKEN_RE = re.compile(rb"[A-Za-z0-9+/]{22}==")
 
 
 def now_iso() -> str:
@@ -64,13 +69,16 @@ def parse_counts(html: str) -> Tuple[int, int, int]:
 
 def fetch_url(path: str, token: str, method: str = "GET", timeout_s: int = 15) -> Tuple[int, str, str]:
 	url = BASE_URL + path
+	headers = {
+		"Cookie": f"site-b={token}",
+		"User-Agent": "metasiberia-map-maintenance/1.0",
+	}
+	if HOST_HEADER:
+		headers["Host"] = HOST_HEADER
 	req = Request(
 		url=url,
 		method=method,
-		headers={
-			"Cookie": f"site-b={token}",
-			"User-Agent": "metasiberia-map-maintenance/1.0",
-		},
+		headers=headers,
 	)
 	ctx = ssl._create_unverified_context()
 	with urlopen(req, context=ctx, timeout=timeout_s) as resp:
@@ -81,25 +89,65 @@ def fetch_url(path: str, token: str, method: str = "GET", timeout_s: int = 15) -
 def extract_candidate_tokens(state_bin: Path) -> List[str]:
 	if not state_bin.is_file():
 		return []
+	tokens = set()
 	try:
-		out = subprocess.check_output(
-			["strings", "-n", "8", str(state_bin)],
-			text=True,
-			errors="ignore",
-		)
+		overlap = len(USER_WEB_SESSION_ADMIN_PATTERN) + 24 + 4
+		with state_bin.open("rb") as f:
+			carry = b""
+			while True:
+				data = f.read(STATE_SCAN_CHUNK_SIZE)
+				if not data:
+					break
+				buf = carry + data
+				pos = 0
+				while True:
+					i = buf.find(USER_WEB_SESSION_ADMIN_PATTERN, pos)
+					if i < 0:
+						break
+					token_start = i + len(USER_WEB_SESSION_ADMIN_PATTERN)
+					token = buf[token_start:token_start + 24]
+					user_id = buf[token_start + 24:token_start + 28]
+					if user_id == ADMIN_USER_ID_BYTES and SESSION_TOKEN_RE.fullmatch(token):
+						tokens.add(token.decode("ascii"))
+					pos = i + 1
+				carry = buf[-overlap:]
 	except Exception:
 		return []
-	return sorted(set(re.findall(r"[A-Za-z0-9+/]{22}==", out)))
+	return sorted(tokens)
+
+
+def cache_admin_token(token: str) -> None:
+	try:
+		ensure_parent_dir(ADMIN_TOKEN_CACHE)
+		tmp_path = ADMIN_TOKEN_CACHE.with_suffix(ADMIN_TOKEN_CACHE.suffix + ".tmp")
+		tmp_path.write_text(token, encoding="ascii")
+		os.chmod(tmp_path, 0o600)
+		os.replace(tmp_path, ADMIN_TOKEN_CACHE)
+		os.chmod(ADMIN_TOKEN_CACHE, 0o600)
+	except Exception:
+		pass
+
+
+def token_has_admin_access(token: str) -> bool:
+	try:
+		_, _, body = fetch_url("/admin_map", token, method="GET", timeout_s=5)
+	except Exception:
+		return False
+	return ("/admin_regen_map_tiles_post" in body) and ("Access denied" not in body)
 
 
 def find_admin_token() -> Optional[str]:
+	try:
+		token = ADMIN_TOKEN_CACHE.read_text(encoding="ascii").strip()
+		if token and token_has_admin_access(token):
+			return token
+	except Exception:
+		pass
+
 	candidates = extract_candidate_tokens(STATE_BIN)
 	for token in candidates:
-		try:
-			_, _, body = fetch_url("/admin_map", token, method="GET", timeout_s=5)
-		except Exception:
-			continue
-		if "You are logged in as" in body and ("Admin" in body or "Админ" in body):
+		if token_has_admin_access(token):
+			cache_admin_token(token)
 			return token
 	return None
 
