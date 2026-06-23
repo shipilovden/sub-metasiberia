@@ -21,6 +21,7 @@ Copyright Glare Technologies Limited 2021 -
 #include "PhotoHandlers.h"
 #include "ChatBotHandlers.h"
 #include "SubEventHandlers.h"
+#include <networking/HTTPClient.h>
 #if USE_GLARE_PARCEL_AUCTION_CODE
 #include <webserver/PayPalHandlers.h>
 #include <webserver/CoinbaseHandlers.h>
@@ -39,6 +40,7 @@ Copyright Glare Technologies Limited 2021 -
 #include <Exception.h>
 #include <Lock.h>
 #include <WebSocket.h>
+#include <vector>
 
 
 WebServerRequestHandler::WebServerRequestHandler()
@@ -66,6 +68,70 @@ WebServerRequestHandler::~WebServerRequestHandler()
 			return false;
 	return true;
 }*/
+
+
+static void handleOSMTileRequest(const WebDataStore& data_store, const web::RequestInfo& request, web::ReplyInfo& reply_info)
+{
+	try
+	{
+		Parser parser(request.path);
+		if(!parser.parseString("/osm_tile/"))
+			throw glare::Exception("Invalid OSM tile path.");
+
+		uint32 z, x, y;
+		if(!parser.parseUnsignedInt(z) || !parser.parseChar('/') ||
+			!parser.parseUnsignedInt(x) || !parser.parseChar('/') ||
+			!parser.parseUnsignedInt(y) || !parser.parseString(".png") ||
+			!parser.eof())
+			throw glare::Exception("Invalid OSM tile path.");
+
+		if(z > 19)
+			throw glare::Exception("Invalid OSM zoom.");
+
+		const uint32 n = 1u << z;
+		if(x >= n || y >= n)
+			throw glare::Exception("Invalid OSM tile coords.");
+
+		const std::string state_dir = FileUtils::getDirectory(data_store.public_files_dir);
+		if(state_dir.empty())
+			throw glare::Exception("Invalid public files dir.");
+
+		const std::string cache_dir = state_dir + "/osm_tile_cache";
+		const std::string local_path = cache_dir + "/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png";
+
+		if(FileUtils::fileExists(local_path))
+		{
+			MemMappedFile file(local_path);
+			web::ResponseUtils::writeHTTPOKHeaderAndDataWithCacheMaxAge(reply_info, file.fileData(), file.fileSize(), "image/png", 3600 * 24 * 30);
+			return;
+		}
+
+		const std::string upstream_url = "https://tile.openstreetmap.org/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png";
+
+		HTTPClient client;
+		client.user_agent = "Metasiberia/0.0.21 (https://metasiberia.com/; vr.metasiberia.com map world)";
+		client.additional_headers.push_back("Accept: image/png,image/*;q=0.8,*/*;q=0.5");
+		client.max_data_size = 4 * 1024 * 1024;
+		client.max_socket_buffer_size = 4 * 1024 * 1024;
+
+		std::vector<uint8> data;
+		const HTTPClient::ResponseInfo response = client.downloadFile(upstream_url, data);
+		if(response.response_code != 200)
+			throw glare::Exception("OSM tile upstream HTTP " + toString(response.response_code) + " " + response.response_message);
+		if(data.empty())
+			throw glare::Exception("OSM tile upstream returned empty response.");
+
+		FileUtils::createDirsForPath(local_path);
+		FileUtils::writeEntireFileAtomically(local_path, (const char*)data.data(), data.size());
+
+		web::ResponseUtils::writeHTTPOKHeaderAndDataWithCacheMaxAge(reply_info, data.data(), data.size(), "image/png", 3600 * 24 * 30);
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("handleOSMTileRequest error for '" + request.path + "': " + e.what());
+		web::ResponseUtils::writeHTTPNotFoundHeaderAndData(reply_info, "Error: " + e.what());
+	}
+}
 
 
 void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web::ReplyInfo& reply_info)
@@ -807,6 +873,10 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 		else if(request.path == "/tile")
 		{
 			ScreenshotHandlers::handleMapTileRequest(*world_state, *data_store, request, reply_info);
+		}
+		else if(::hasPrefix(request.path, "/osm_tile/"))
+		{
+			handleOSMTileRequest(*data_store, request, reply_info);
 		}
 		else if(::hasPrefix(request.path, "/news_post/")) // News post ID follows
 		{

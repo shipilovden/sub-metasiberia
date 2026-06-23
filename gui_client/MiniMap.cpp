@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "IncludeOpenGL.h"
 #include "GUIClient.h"
 #include "ClientThread.h"
+#include "MapWorldUtils.h"
 #include <settings/SettingsStore.h>
 #include "../shared/Protocol.h"
 #include "../shared/MessageUtils.h"
@@ -200,7 +201,7 @@ MiniMap::~MiniMap()
 }
 
 
-static int getTileZForMapWidthWS(float map_width_ws)
+static int getServerTileZForMapWidthWS(float map_width_ws)
 {
 	/*
 	Lets say we want ~= 2 tiles to span the map (tiles are 256 pixels wide):
@@ -219,9 +220,37 @@ static int getTileZForMapWidthWS(float map_width_ws)
 
 
 // See updateMapTiles() in server.cpp
-static float getTileWidthWSForTileZ(int tile_z)
+static float getServerTileWidthWSForTileZ(int tile_z)
 {
 	return 5120.f / (1 << tile_z);
+}
+
+
+static int getTileZForMapWidthWS(float map_width_ws, bool use_real_map_world_tiles)
+{
+	return use_real_map_world_tiles ? MapWorldUtils::getOSMTileZForMapWidthWS(map_width_ws) : getServerTileZForMapWidthWS(map_width_ws);
+}
+
+
+static float getTileWidthWSForTileZ(int tile_z, bool use_real_map_world_tiles)
+{
+	return use_real_map_world_tiles ? MapWorldUtils::getOSMTileWidthWSForTileZ(tile_z) : getServerTileWidthWSForTileZ(tile_z);
+}
+
+
+static int getTileXForWorldPos(const Vec3d& pos, int tile_z, bool use_real_map_world_tiles)
+{
+	return use_real_map_world_tiles ?
+		MapWorldUtils::getOSMTileXForLocalX(pos.x, tile_z) :
+		Maths::floorToInt((float)pos.x / getServerTileWidthWSForTileZ(tile_z));
+}
+
+
+static int getTileYForWorldPos(const Vec3d& pos, int tile_z, bool use_real_map_world_tiles)
+{
+	return use_real_map_world_tiles ?
+		MapWorldUtils::getOSMTileYForLocalY(pos.y, tile_z) :
+		Maths::floorToInt((float)pos.y / getServerTileWidthWSForTileZ(tile_z));
 }
 
 
@@ -280,20 +309,22 @@ void MiniMap::think()
 		return;
 
 	const Vec3d campos = gui_client->cam_controller.getFirstPersonPosition();
+	const bool use_real_map_world_tiles = gui_client->isMetasiberiaMapWorld();
 
-	if((gui_client->connection_state == GUIClient::ServerConnectionState_Connected) && (gui_client->server_protocol_version >= 39)) // QueryMapTiles message was introduced in protocol version 39.
+	if(!use_real_map_world_tiles &&
+		(gui_client->connection_state == GUIClient::ServerConnectionState_Connected) &&
+		(gui_client->server_protocol_version >= 39)) // QueryMapTiles message was introduced in protocol version 39.
 	{
 		const double now = Clock::getTimeSinceInit();
 		const bool force_refresh_query = now >= next_tile_refresh_query_time;
-		const int tile_z = getTileZForMapWidthWS(map_width_ws);
-		const float tile_w_ws = getTileWidthWSForTileZ(tile_z);
+		const int tile_z = getTileZForMapWidthWS(map_width_ws, use_real_map_world_tiles);
 
 		if((campos.getDist(last_requested_campos) > 300.0) || (tile_z != last_requested_tile_z) || force_refresh_query)
 		{
 			// Send request to server to get map tile image URLs, for any nearby tiles that we have not already done a request to the server for.
 			{
-				const int new_centre_x = Maths::floorToInt((float)campos.x / tile_w_ws);
-				const int new_centre_y = Maths::floorToInt((float)campos.y / tile_w_ws);
+				const int new_centre_x = getTileXForWorldPos(campos, tile_z, use_real_map_world_tiles);
+				const int new_centre_y = getTileYForWorldPos(campos, tile_z, use_real_map_world_tiles);
 
 				const int query_rad = 2; // Query 'radius'
 				std::vector<Vec3i> query_indices;
@@ -378,8 +409,9 @@ void MiniMap::setTileOverlayObjectTransforms()
 	const int wrapped_x0     = Maths::intMod(x0,     TILE_GRID_RES); // x0 mod TILE_GRID_RES                        [Using euclidean modulo]
 	const int wrapped_y0     = Maths::intMod(y0,     TILE_GRID_RES); // y0 mod TILE_GRID_RES                        [Using euclidean modulo]
 
-	const int tile_z = getTileZForMapWidthWS(map_width_ws);
-	const float tile_w_ws = getTileWidthWSForTileZ(tile_z);
+	const bool use_real_map_world_tiles = gui_client->isMetasiberiaMapWorld();
+	const int tile_z = getTileZForMapWidthWS(map_width_ws, use_real_map_world_tiles);
+	const float tile_w_ws = getTileWidthWSForTileZ(tile_z, use_real_map_world_tiles);
 
 	for(int j=0; j<TILE_GRID_RES; ++j)
 	for(int i=0; i<TILE_GRID_RES; ++i)
@@ -388,7 +420,14 @@ void MiniMap::setTileOverlayObjectTransforms()
 		const int x = x0 + i - wrapped_x0 + ((i >= wrapped_x0) ? 0 : TILE_GRID_RES);
 		const int y = y0 + j - wrapped_y0 + ((j >= wrapped_y0) ? 0 : TILE_GRID_RES);
 
-		tiles.elem(i, j).ob->ob_to_world_matrix = world_to_overlay_space_matrix * ::translationMulScaleMatrix(Vec4f(x * tile_w_ws, y * tile_w_ws, 0, 0), tile_w_ws, tile_w_ws, 1);
+		if(use_real_map_world_tiles)
+		{
+			const Vec2d tile_centre = MapWorldUtils::getOSMTileCentreLocalCoords(x, y, tile_z);
+			tiles.elem(i, j).ob->ob_to_world_matrix = world_to_overlay_space_matrix * ::translationMulScaleMatrix(
+				Vec4f((float)(tile_centre.x - tile_w_ws * 0.5f), (float)(tile_centre.y - tile_w_ws * 0.5f), 0, 0), tile_w_ws, tile_w_ws, 1);
+		}
+		else
+			tiles.elem(i, j).ob->ob_to_world_matrix = world_to_overlay_space_matrix * ::translationMulScaleMatrix(Vec4f(x * tile_w_ws, y * tile_w_ws, 0, 0), tile_w_ws, tile_w_ws, 1);
 	}
 }
 
@@ -414,11 +453,12 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 
 	const Vec3d campos = gui_client->cam_controller.getFirstPersonPosition();
 
-	const int tile_z = getTileZForMapWidthWS(map_width_ws);
-	const float tile_w_ws = getTileWidthWSForTileZ(tile_z);
+	const bool use_real_map_world_tiles = gui_client->isMetasiberiaMapWorld();
+	const int tile_z = getTileZForMapWidthWS(map_width_ws, use_real_map_world_tiles);
+	const float tile_w_ws = getTileWidthWSForTileZ(tile_z, use_real_map_world_tiles);
 
-	const int new_centre_x = Maths::floorToInt((float)campos.x / tile_w_ws);
-	const int new_centre_y = Maths::floorToInt((float)campos.y / tile_w_ws);
+	const int new_centre_x = getTileXForWorldPos(campos, tile_z, use_real_map_world_tiles);
+	const int new_centre_y = getTileYForWorldPos(campos, tile_z, use_real_map_world_tiles);
 	
 	// Update tree info and imposters
 	if(new_centre_x != last_centre_x || new_centre_y != last_centre_y)
@@ -470,7 +510,41 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 				float scale = 1;
 				for(int z = tile_z; z >= 0 && !found_image; --z)
 				{
-					auto res = tile_infos.find(Vec3i(tile_x, tile_y, z));
+					const Vec3i candidate_indices(tile_x, tile_y, z);
+					if(use_real_map_world_tiles && MapWorldUtils::isValidOSMTileCoord(tile_x, tile_y, z))
+					{
+						const URLString candidate_URL = MapWorldUtils::makeOSMTileURL(gui_client->server_hostname, tile_x, tile_y, z);
+						if(!candidate_URL.empty())
+						{
+							tile_infos[candidate_indices].image_URL = candidate_URL;
+
+							ResourceRef resource = gui_client->resource_manager->getExistingResourceForURL(candidate_URL);
+							if(resource.isNull() || resource->getState() == Resource::State_NotPresent)
+							{
+								TextureParams tex_params;
+								tex_params.wrapping = OpenGLTexture::Wrapping_Clamp;
+								tex_params.allow_compression = false;
+								tex_params.filtering = OpenGLTexture::Filtering_Bilinear;
+								tex_params.use_mipmaps = false;
+
+								const Vec2d tile_centre = MapWorldUtils::getOSMTileCentreLocalCoords(tile_x, tile_y, z);
+								const Vec3d tile_pos(tile_centre.x, tile_centre.y, 0.0);
+
+								DownloadingResourceInfo downloading_info;
+								downloading_info.texture_params = tex_params;
+								downloading_info.pos = tile_pos;
+								downloading_info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(tile_w_ws, /*importance_factor=*/1.f);
+								downloading_info.used_by_other = true;
+								downloading_info.net_download_priority = 100 - z;
+
+								gui_client->startDownloadingResource(candidate_URL, tile_pos.toVec4fPoint(), tile_w_ws, downloading_info);
+								gui_client->startLoadingTextureIfPresent(candidate_URL, tile_pos.toVec4fPoint(), tile_w_ws, /*max task dist=*/1.0e10f, /*importance factor=*/1.f, tex_params);
+								loading_texture_URL_to_tile_indices_map[candidate_URL] = candidate_indices;
+							}
+						}
+					}
+
+					auto res = tile_infos.find(candidate_indices);
 					if(res != tile_infos.end())
 					{
 						const MapTileInfo& info = res->second;
@@ -511,7 +585,7 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 								}
 							}
 
-							found_image = true; // We have found a tile image, break loop
+							found_image = !use_real_map_world_tiles || (resource.nonNull() && resource->getState() == Resource::State_Present); // If real-map tile is still downloading, try a parent tile for now.
 						}
 					}
 					
@@ -622,12 +696,15 @@ void MiniMap::handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMe
 	if(gl_ui.isNull())
 		return;
 
+	if(gui_client->isMetasiberiaMapWorld())
+		return;
+
 	// conPrint("MiniMap::handleMapTilesResultReceivedMessage");
 
 	runtimeCheck(msg.tile_indices.size() == msg.tile_URLS.size());
 
-	const int tile_z = getTileZForMapWidthWS(map_width_ws);
-	const float tile_w_ws = getTileWidthWSForTileZ(tile_z);
+	const int tile_z = getTileZForMapWidthWS(map_width_ws, /*use_real_map_world_tiles=*/false);
+	const float tile_w_ws = getTileWidthWSForTileZ(tile_z, /*use_real_map_world_tiles=*/false);
 
 	for(size_t i=0; i<msg.tile_indices.size(); ++i)
 	{
@@ -715,6 +792,7 @@ void MiniMap::handleUploadedTexture(const OpenGLTextureKey& path, const URLStrin
 	auto res = loading_texture_URL_to_tile_indices_map.find(URL);
 	if(res != loading_texture_URL_to_tile_indices_map.end())
 	{
+		bool updated_visible_tile = false;
 		const Vec3i indices = res->second;
 
 		const int x0     = last_centre_x  - TILE_GRID_RES/2; // unwrapped grid x coordinate of lower left grid cell in square grid around new camera position
@@ -722,7 +800,8 @@ void MiniMap::handleUploadedTexture(const OpenGLTextureKey& path, const URLStrin
 		const int wrapped_x0     = Maths::intMod(x0,     TILE_GRID_RES); // x0 mod TILE_GRID_RES                        [Using euclidean modulo]
 		const int wrapped_y0     = Maths::intMod(y0,     TILE_GRID_RES); // y0 mod TILE_GRID_RES                        [Using euclidean modulo]
 	
-		const int tile_z = getTileZForMapWidthWS(map_width_ws);
+		const bool use_real_map_world_tiles = gui_client->isMetasiberiaMapWorld();
+		const int tile_z = getTileZForMapWidthWS(map_width_ws, use_real_map_world_tiles);
 
 		// Iterate over wrapped coordinates
 		MapTile* const tiles_data = tiles.getData();
@@ -739,7 +818,18 @@ void MiniMap::handleUploadedTexture(const OpenGLTextureKey& path, const URLStrin
 
 			const Vec3i tile_indices(x, y, tile_z);
 			if((tile_indices == indices) && tile.ob)
+			{
 				tile.ob->material.albedo_texture = opengl_tex;
+				updated_visible_tile = true;
+			}
+		}
+
+		if(!updated_visible_tile)
+		{
+			last_centre_x = -10000;
+			last_centre_y = -10000;
+			checkUpdateTilesForCurCamPosition();
+			setTileOverlayObjectTransforms();
 		}
 	}
 }
@@ -1074,11 +1164,12 @@ void MiniMap::mouseWheelEventOccurred(GLUICallbackMouseWheelEvent& event)
 	//conPrint("MiniMap::mouseWheelEventOccurred, angle_delta_y: " + toString(event.wheel_event->angle_delta_y));
 	event.accepted = true;
 
-	const int last_tile_z = getTileZForMapWidthWS(map_width_ws);
+	const bool use_real_map_world_tiles = gui_client->isMetasiberiaMapWorld();
+	const int last_tile_z = getTileZForMapWidthWS(map_width_ws, use_real_map_world_tiles);
 
 	map_width_ws = myClamp(map_width_ws * (1.0f - event.wheel_event->angle_delta.y * 0.016f), 80.f, 10000.f);
 
-	const int new_tile_z = getTileZForMapWidthWS(map_width_ws);
+	const int new_tile_z = getTileZForMapWidthWS(map_width_ws, use_real_map_world_tiles);
 	if(new_tile_z != last_tile_z)
 	{
 		// Force reassignment of tile textures, now that tile_z changed

@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2026 -
 #include "ClientThread.h"
 #include "GUIClient.h"
 #include "LoadItemQueue.h"
+#include "MapWorldUtils.h"
 #include "../shared/ImageDecoding.h"
 #include "../shared/MessageUtils.h"
 #include "../shared/Protocol.h"
@@ -37,17 +38,13 @@ static const MapWorldLayerSpec MAP_WORLD_LAYER_SPECS[] =
 	{11, 5, 0.02f, true },
 	{13, 7, 0.04f, false},
 	{15, 7, 0.06f, false},
-	{17, 5, 0.08f, false}
+	{17, 5, 0.08f, false},
+	{19, 5, 0.10f, false}
 };
 
 
 static const int MAX_TILE_QUERY_COUNT = 900;
 static const char* const MAP_WORLD_TILE_PLACEHOLDER_TEX_KEY = "__metasiberia_map_world_tile_placeholder__";
-static const double MAP_WORLD_CENTRE_LAT_DEG = 53.691717;
-static const double MAP_WORLD_CENTRE_LON_DEG = 87.432949;
-static const double WEB_MERCATOR_EARTH_RADIUS_M = 6378137.0;
-static const double PI = NICKMATHS_PI;
-static const double WEB_MERCATOR_HALF_EXTENT_M = PI * WEB_MERCATOR_EARTH_RADIUS_M;
 
 
 static float getPlaceholderAlpha(const MapWorldTileLayer& layer)
@@ -67,54 +64,12 @@ static TextureParams makeMapTileTextureParams()
 }
 
 
-static Vec2d getMapWorldCentreMercatorMetres()
-{
-	const double lat_rad = MAP_WORLD_CENTRE_LAT_DEG * PI / 180.0;
-	const double lon_rad = MAP_WORLD_CENTRE_LON_DEG * PI / 180.0;
-	return Vec2d(
-		WEB_MERCATOR_EARTH_RADIUS_M * lon_rad,
-		WEB_MERCATOR_EARTH_RADIUS_M * std::log(std::tan(PI * 0.25 + lat_rad * 0.5))
-	);
-}
-
-
-static bool isValidOSMTileCoord(int tile_x, int tile_y, int tile_z)
-{
-	if(tile_z < 0 || tile_z > 19)
-		return false;
-
-	const int n = 1 << tile_z;
-	return tile_x >= 0 && tile_x < n && tile_y >= 0 && tile_y < n;
-}
-
-
-static URLString makeOSMTileURL(int tile_x, int tile_y, int tile_z)
-{
-	if(!isValidOSMTileCoord(tile_x, tile_y, tile_z))
-		return URLString();
-
-	return URLString("https://tile.openstreetmap.org/" + toString(tile_z) + "/" + toString(tile_x) + "/" + toString(tile_y) + ".png");
-}
-
-
-static Vec2d getTileCentreLocalCoords(int tile_x, int tile_y, int tile_z)
-{
-	const double tile_width_m = 2.0 * WEB_MERCATOR_HALF_EXTENT_M / (double)(1 << tile_z);
-	const Vec2d centre_mercator = getMapWorldCentreMercatorMetres();
-	const double tile_min_merc_x = -WEB_MERCATOR_HALF_EXTENT_M + (double)tile_x * tile_width_m;
-	const double tile_max_merc_y =  WEB_MERCATOR_HALF_EXTENT_M - (double)tile_y * tile_width_m;
-
-	return Vec2d(
-		tile_min_merc_x - centre_mercator.x + tile_width_m * 0.5,
-		tile_max_merc_y - centre_mercator.y - tile_width_m * 0.5
-	);
-}
 }
 
 
 float MapWorldLayer::getTileWidthWSForTileZ(int tile_z)
 {
-	return (float)(2.0 * WEB_MERCATOR_HALF_EXTENT_M / (double)(1 << tile_z));
+	return MapWorldUtils::getOSMTileWidthWSForTileZ(tile_z);
 }
 
 
@@ -212,16 +167,12 @@ void MapWorldLayer::think()
 
 	const Vec3d camera_pos = gui_client->cam_controller.getFirstPersonPosition();
 	const double current_time = Clock::getTimeSinceInit();
-	const Vec2d centre_mercator = getMapWorldCentreMercatorMetres();
-	const double camera_merc_x = centre_mercator.x + camera_pos.x;
-	const double camera_merc_y = centre_mercator.y + camera_pos.y;
 
 	for(size_t layer_i = 0; layer_i < tile_layers.size(); ++layer_i)
 	{
 		MapWorldTileLayer& layer = tile_layers[layer_i];
-		const float tile_width_ws = getTileWidthWSForTileZ(layer.tile_z);
-		const int centre_tile_x = Maths::floorToInt((float)((camera_merc_x + WEB_MERCATOR_HALF_EXTENT_M) / tile_width_ws));
-		const int centre_tile_y = Maths::floorToInt((float)((WEB_MERCATOR_HALF_EXTENT_M - camera_merc_y) / tile_width_ws));
+		const int centre_tile_x = MapWorldUtils::getOSMTileXForLocalX(camera_pos.x, layer.tile_z);
+		const int centre_tile_y = MapWorldUtils::getOSMTileYForLocalY(camera_pos.y, layer.tile_z);
 		const bool centre_changed = (centre_tile_x != layer.last_centre_tile_x) || (centre_tile_y != layer.last_centre_tile_y);
 
 		if(centre_changed)
@@ -245,14 +196,14 @@ void MapWorldLayer::think()
 		for(size_t i = 0; i < query_indices.size(); ++i)
 		{
 			const Vec3i indices = query_indices[i];
-			const URLString URL = makeOSMTileURL(indices.x, indices.y, indices.z);
+			const URLString URL = MapWorldUtils::makeOSMTileURL(gui_client->server_hostname, indices.x, indices.y, indices.z);
 			if(URL.empty())
 				continue;
 
 			tile_infos[indices].image_URL = URL;
 
 			const float tile_width_ws = getTileWidthWSForTileZ(indices.z);
-			const Vec2d tile_centre = getTileCentreLocalCoords(indices.x, indices.y, indices.z);
+			const Vec2d tile_centre = MapWorldUtils::getOSMTileCentreLocalCoords(indices.x, indices.y, indices.z);
 			const Vec4f tile_centre_ws((float)tile_centre.x, (float)tile_centre.y, 0.f, 1.f);
 
 			DownloadingResourceInfo downloading_info;
@@ -343,9 +294,9 @@ void MapWorldLayer::collectTileQueriesForLayer(const MapWorldTileLayer& layer, i
 			if((int)query_indices.size() >= MAX_TILE_QUERY_COUNT)
 				return;
 
-			if(isValidOSMTileCoord(tile_coords.x, tile_coords.y, tile_coords.z))
+			if(MapWorldUtils::isValidOSMTileCoord(tile_coords.x, tile_coords.y, tile_coords.z))
 			{
-				const URLString URL = makeOSMTileURL(tile_coords.x, tile_coords.y, tile_coords.z);
+				const URLString URL = MapWorldUtils::makeOSMTileURL(gui_client->server_hostname, tile_coords.x, tile_coords.y, tile_coords.z);
 				tile_infos[tile_coords].image_URL = URL;
 
 				ResourceRef resource = gui_client->resource_manager->getExistingResourceForURL(URL);
@@ -402,7 +353,7 @@ void MapWorldLayer::refreshVisibleTileGrid(MapWorldTileLayer& layer, bool force_
 
 void MapWorldLayer::updateTile(MapWorldTileLayer& layer, MapWorldTile& tile, int tile_x, int tile_y, float tile_width_ws)
 {
-	const Vec2d tile_centre = getTileCentreLocalCoords(tile_x, tile_y, layer.tile_z);
+	const Vec2d tile_centre = MapWorldUtils::getOSMTileCentreLocalCoords(tile_x, tile_y, layer.tile_z);
 	const Vec4f tile_centre_ws((float)tile_centre.x, (float)tile_centre.y, layer.z_offset_m, 1.f);
 
 	tile.tile_x = tile_x;
@@ -445,7 +396,7 @@ void MapWorldLayer::assignBestAvailableTexture(MapWorldTileLayer& layer, MapWorl
 		return;
 
 	const TextureParams tex_params = makeMapTileTextureParams();
-	const Vec2d tile_centre = getTileCentreLocalCoords(tile.tile_x, tile.tile_y, layer.tile_z);
+	const Vec2d tile_centre = MapWorldUtils::getOSMTileCentreLocalCoords(tile.tile_x, tile.tile_y, layer.tile_z);
 	const Vec4f tile_centre_ws((float)tile_centre.x, (float)tile_centre.y, layer.z_offset_m, 1.f);
 
 	URLString selected_URL;
@@ -463,9 +414,9 @@ void MapWorldLayer::assignBestAvailableTexture(MapWorldTileLayer& layer, MapWorl
 
 	for(int z = layer.tile_z; z >= 0; --z)
 	{
-		if(isValidOSMTileCoord(query_tile_x, query_tile_y, z))
+		if(MapWorldUtils::isValidOSMTileCoord(query_tile_x, query_tile_y, z))
 		{
-			const URLString candidate_URL = makeOSMTileURL(query_tile_x, query_tile_y, z);
+			const URLString candidate_URL = MapWorldUtils::makeOSMTileURL(gui_client->server_hostname, query_tile_x, query_tile_y, z);
 			ResourceRef resource = gui_client->resource_manager->getExistingResourceForURL(candidate_URL);
 			if(resource.nonNull() && (resource->getState() == Resource::State_Present))
 			{

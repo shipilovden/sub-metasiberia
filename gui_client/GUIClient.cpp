@@ -3230,7 +3230,8 @@ static Reference<OpenGLTexture> getBestTextureLOD(const WorldMaterial& world_mat
 
 static std::string canonicalHostForMetasiberiaInGUIClient(const std::string& host)
 {
-	if(host == "87.103.196.229" || host == "185.182.110.184" || host == "89.104.70.23")
+	if(host == "87.103.196.229" || host == "185.182.110.184" || host == "89.104.70.23" ||
+		host == "176.197.223.42" || host == "192.168.0.30")
 		return "vr.metasiberia.com";
 
 	return host;
