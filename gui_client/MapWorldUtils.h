@@ -50,7 +50,7 @@ namespace MapWorldUtils
 			return URLString();
 
 		const std::string host = server_hostname.empty() ? "vr.metasiberia.com" : server_hostname;
-		return URLString("https://" + host + "/osm_tile/" + toString(tile_z) + "/" + toString(tile_x) + "/" + toString(tile_y) + ".png");
+		return URLString("https://" + host + "/osm_tile/" + toString(tile_z) + "/" + toString(tile_x) + "/" + toString(tile_y) + ".png?v=carto_v1");
 	}
 
 

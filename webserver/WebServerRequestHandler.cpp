@@ -40,6 +40,7 @@ Copyright Glare Technologies Limited 2021 -
 #include <Exception.h>
 #include <Lock.h>
 #include <WebSocket.h>
+#include <cstdlib>
 #include <vector>
 
 
@@ -70,6 +71,34 @@ WebServerRequestHandler::~WebServerRequestHandler()
 }*/
 
 
+static std::string getEnvStringOrDefault(const char* name, const std::string& default_value)
+{
+	const char* value = std::getenv(name);
+	return (value && value[0]) ? std::string(value) : default_value;
+}
+
+
+static std::string stripTrailingSlash(std::string s)
+{
+	while(!s.empty() && s.back() == '/')
+		s.pop_back();
+	return s;
+}
+
+
+static bool isSafeMapTileCacheNamespace(const std::string& s)
+{
+	if(s.empty())
+		return false;
+
+	for(size_t i=0; i<s.size(); ++i)
+		if(!(::isAlphaNumeric(s[i]) || s[i] == '_' || s[i] == '-' || s[i] == '.'))
+			return false;
+
+	return true;
+}
+
+
 static void handleOSMTileRequest(const WebDataStore& data_store, const web::RequestInfo& request, web::ReplyInfo& reply_info)
 {
 	try
@@ -81,8 +110,9 @@ static void handleOSMTileRequest(const WebDataStore& data_store, const web::Requ
 		uint32 z, x, y;
 		if(!parser.parseUnsignedInt(z) || !parser.parseChar('/') ||
 			!parser.parseUnsignedInt(x) || !parser.parseChar('/') ||
-			!parser.parseUnsignedInt(y) || !parser.parseString(".png") ||
-			!parser.eof())
+			!parser.parseUnsignedInt(y) || !parser.parseString(".png"))
+			throw glare::Exception("Invalid OSM tile path.");
+		if(!parser.eof() && !parser.parseChar('?'))
 			throw glare::Exception("Invalid OSM tile path.");
 
 		if(z > 19)
@@ -96,7 +126,11 @@ static void handleOSMTileRequest(const WebDataStore& data_store, const web::Requ
 		if(state_dir.empty())
 			throw glare::Exception("Invalid public files dir.");
 
-		const std::string cache_dir = state_dir + "/osm_tile_cache";
+		const std::string cache_namespace = getEnvStringOrDefault("METASIBERIA_MAP_TILE_CACHE_NAMESPACE", "carto_voyager_v1");
+		if(!isSafeMapTileCacheNamespace(cache_namespace))
+			throw glare::Exception("Invalid map tile cache namespace.");
+
+		const std::string cache_dir = state_dir + "/osm_tile_cache/" + cache_namespace;
 		const std::string local_path = cache_dir + "/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png";
 
 		if(FileUtils::fileExists(local_path))
@@ -106,10 +140,11 @@ static void handleOSMTileRequest(const WebDataStore& data_store, const web::Requ
 			return;
 		}
 
-		const std::string upstream_url = "https://tile.openstreetmap.org/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png";
+		const std::string upstream_base_url = stripTrailingSlash(getEnvStringOrDefault("METASIBERIA_MAP_TILE_BASE_URL", "https://a.basemaps.cartocdn.com/rastertiles/voyager"));
+		const std::string upstream_url = upstream_base_url + "/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png";
 
 		HTTPClient client;
-		client.user_agent = "Metasiberia/0.0.21 (https://metasiberia.com/; vr.metasiberia.com map world)";
+		client.user_agent = "Metasiberia/0.0.21 (https://metasiberia.com/; contact: https://metasiberia.com/)";
 		client.additional_headers.push_back("Accept: image/png,image/*;q=0.8,*/*;q=0.5");
 		client.max_data_size = 4 * 1024 * 1024;
 		client.max_socket_buffer_size = 4 * 1024 * 1024;
@@ -121,7 +156,7 @@ static void handleOSMTileRequest(const WebDataStore& data_store, const web::Requ
 		if(data.empty())
 			throw glare::Exception("OSM tile upstream returned empty response.");
 
-		FileUtils::createDirsForPath(local_path);
+		FileUtils::createDirsForPath(FileUtils::getDirectory(local_path) + "/");
 		FileUtils::writeEntireFileAtomically(local_path, (const char*)data.data(), data.size());
 
 		web::ResponseUtils::writeHTTPOKHeaderAndDataWithCacheMaxAge(reply_info, data.data(), data.size(), "image/png", 3600 * 24 * 30);
