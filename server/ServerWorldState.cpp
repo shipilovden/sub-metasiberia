@@ -866,6 +866,7 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 
 
 	doMigrations(lock);
+	ensureMetasiberiaServiceWorlds(lock);
 
 	denormaliseData();
 
@@ -1202,6 +1203,25 @@ void ServerAllWorldsState::doMigrations(WorldStateLock& lock)
 		this->migration_version_info.migration_version = 4;
 		this->migration_version_info.db_dirty = true;
 		this->changed = 1;
+	}
+}
+
+
+void ServerAllWorldsState::ensureMetasiberiaServiceWorlds(WorldStateLock& /*lock*/)
+{
+	if(world_states.count("map") == 0)
+	{
+		ServerWorldStateRef world = new ServerWorldState();
+		world->details.created_time = TimeStamp::currentTime();
+		world->details.owner_id = UserID(0);
+		world->details.name = "map";
+		world->details.description = "Metasiberia real map service world";
+		world->db_dirty = true;
+
+		setWorldState(/*world name=*/world->details.name, world);
+		this->changed = 1;
+
+		conPrint("Created missing Metasiberia service world 'map'.");
 	}
 }
 

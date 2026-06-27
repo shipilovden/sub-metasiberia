@@ -317,6 +317,7 @@ public:
 	void serialiseToDisk(WorldStateLock& lock) REQUIRES(mutex); // Write any changed data (objects in dirty set) to disk.  Mutex should be held already.
 	void denormaliseData(); // Build/update cached/denormalised fields like creator_name.
 	void doMigrations(WorldStateLock& lock) REQUIRES(mutex);
+	void ensureMetasiberiaServiceWorlds(WorldStateLock& lock) REQUIRES(mutex);
 	size_t reconcileResourcePresenceWithDisk() REQUIRES(mutex);
 
 	// Removes sensitive information from the database, such as user passwords, email addresses, billing information, web sessions etc.

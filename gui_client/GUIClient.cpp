@@ -16898,7 +16898,10 @@ void GUIClient::visitSubURL(const std::string& URL, bool push_prev_URL_on_nav_st
 	else
 		this->url_parcel_uid = -1;
 
-	const bool change_to_different_world_msg_supported = server_protocol_version >= 44; // ChangeToDifferentWorld message was added in protocol version 44.
+	const bool change_to_different_world_msg_supported =
+		(connection_state == ServerConnectionState_Connected) &&
+		client_thread.nonNull() &&
+		(server_protocol_version >= 44); // ChangeToDifferentWorld message was added in protocol version 44.
 
 	if((hostname != this->server_hostname) || ((worldname != this->server_worldname) && !change_to_different_world_msg_supported))
 	{
