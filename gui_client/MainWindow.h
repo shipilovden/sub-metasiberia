@@ -310,6 +310,8 @@ private:
 	void refreshTranslatedUiText();
 	void configureEditAddSubmenu();
 	void refreshEditMenuActionIcons();
+	void configureMainToolbarButtons();
+	void applyMainChromeThemeStylesheet();
 	void updateMenuTooltips();
 	void refreshMapDockText();
 	void updateMapDockState();

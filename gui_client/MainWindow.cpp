@@ -452,6 +452,31 @@ static void applyNativeWindowCaptionTheme(QWidget* widget, const QtThemeColors* 
 		(void)setDwmWindowAttribute(hwnd, DWMWA_TEXT_COLOR, &DWM_COLOR_DEFAULT, sizeof(DWM_COLOR_DEFAULT));
 	}
 }
+
+
+static void applyNativeWindowCaptionThemeDeferred(QWidget* owner, const QtThemeColors* theme)
+{
+	QtThemeColors theme_copy;
+	const bool has_theme = theme != nullptr;
+	if(has_theme)
+		theme_copy = *theme;
+
+	const auto apply_to_windows = [has_theme, theme_copy]()
+	{
+		const QtThemeColors* use_theme = has_theme ? &theme_copy : nullptr;
+		const QList<QWidget*> top_level_widgets = QApplication::topLevelWidgets();
+		for(QWidget* widget : top_level_widgets)
+			if(widget && widget->isWindow())
+				applyNativeWindowCaptionTheme(widget, use_theme);
+	};
+
+	apply_to_windows();
+	if(owner)
+	{
+		QTimer::singleShot(0, owner, apply_to_windows);
+		QTimer::singleShot(250, owner, apply_to_windows);
+	}
+}
 #endif
 
 
@@ -1843,13 +1868,8 @@ void MainWindow::initialiseUI()
 		ui->setupUi(this);
 	}
 
-	// Global tooltip style — readable, properly sized, stays visible
-	qApp->setStyleSheet(qApp->styleSheet() +
-		"QToolTip { color: #1a1a1a; background-color: #fffde7; "
-		"border: 1px solid #e6b800; font-size: 9pt; padding: 6px; "
-		"border-radius: 3px; }");
-
 	initialiseLanguageMenu();
+	configureEditAddSubmenu();
 
 	// Keep favorites menu up to date (actions are rebuilt on-demand when the menu opens).
 	if(ui->menuGo_to_Favorites)
@@ -2053,6 +2073,8 @@ void MainWindow::initialiseUI()
 	// Make it so the toolbar can't be hidden, as it's confusing for users when it disappears.
 	ui->toolBar->toggleViewAction()->setEnabled(false);
 	ui->toolBar->setVisible(true); // Toolbar should always be visible.  Somehow it can be made invisible with the 'right' mainwindow/windowState setting.
+	configureMainToolbarButtons();
+	applyMainChromeThemeStylesheet();
 
 
 	ui->worldSettingsWidget->init(this);
@@ -2311,6 +2333,7 @@ void MainWindow::initialiseThemesMenu()
 	if(saved_theme.empty())
 	{
 		default_theme_action->setChecked(true);
+		applyDefaultQtTheme(/*persist_setting=*/false);
 		return;
 	}
 
@@ -2341,9 +2364,11 @@ bool MainWindow::applyNamedQtTheme(const std::string& theme_name, bool persist_s
 	}
 
 	applyQtThemePalette(theme_colours);
+	configureMainToolbarButtons();
+	applyMainChromeThemeStylesheet();
 	applyChatThemeStylesheet();
 #if defined(_WIN32)
-	applyNativeWindowCaptionTheme(this, &theme_colours);
+	applyNativeWindowCaptionThemeDeferred(this, &theme_colours);
 #endif
 	if(persist_setting && settings)
 		settings->setValue(QT_THEME_SETTINGS_KEY, QtUtils::toQString(theme_name));
@@ -2363,9 +2388,11 @@ void MainWindow::applyDefaultQtTheme(bool persist_setting)
 	}
 
 	QApplication::setPalette(QPalette());
+	configureMainToolbarButtons();
+	applyMainChromeThemeStylesheet();
 	applyChatThemeStylesheet();
 #if defined(_WIN32)
-	applyNativeWindowCaptionTheme(this, nullptr);
+	applyNativeWindowCaptionThemeDeferred(this, nullptr);
 #endif
 
 	if(persist_setting && settings)
@@ -2483,6 +2510,8 @@ void MainWindow::refreshTranslatedUiText()
 		initialiseThemesMenu();
 
 	configureEditAddSubmenu();
+	configureMainToolbarButtons();
+	applyMainChromeThemeStylesheet();
 
 	if(ui->environmentDockWidget && ui->environmentDockWidget->toggleViewAction())
 	{
@@ -2590,6 +2619,152 @@ void MainWindow::refreshEditMenuActionIcons()
 		setMenuActionGlyphIcon(ui->actionBake_Lightmaps_fast_for_all_objects_in_parcel, QString::fromUtf8("◌"));
 	if(ui->actionBake_lightmaps_high_quality_for_all_objects_in_parcel)
 		setMenuActionGlyphIcon(ui->actionBake_lightmaps_high_quality_for_all_objects_in_parcel, QString::fromUtf8("◎"));
+}
+
+
+void MainWindow::configureMainToolbarButtons()
+{
+	if(!ui || !ui->toolBar)
+		return;
+
+	refreshEditMenuActionIcons();
+
+	const QList<QAction*> add_toolbar_actions = {
+		ui->actionAddObject,
+		ui->actionAdd_Video,
+		ui->actionAddHypercard,
+		ui->actionAdd_Web_View,
+		ui->actionAdd_Voxels
+	};
+
+	for(QAction* action : add_toolbar_actions)
+	{
+		if(action && ui->toolBar->actions().contains(action))
+			ui->toolBar->removeAction(action);
+	}
+
+	QAction* insert_before = ui->toolBar->actions().isEmpty() ? NULL : ui->toolBar->actions().first();
+	for(QAction* action : add_toolbar_actions)
+	{
+		if(!action)
+			continue;
+
+		if(insert_before)
+			ui->toolBar->insertAction(insert_before, action);
+		else
+			ui->toolBar->addAction(action);
+
+		QString tooltip = action->text();
+		tooltip.remove('&');
+		action->setToolTip(tooltip);
+		action->setStatusTip(tooltip);
+	}
+
+	ui->toolBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+	ui->toolBar->setIconSize(QSize(18, 18));
+	ui->toolBar->setMovable(false);
+	ui->toolBar->setFloatable(false);
+
+	for(QAction* action : add_toolbar_actions)
+	{
+		if(!action)
+			continue;
+
+		if(QToolButton* button = qobject_cast<QToolButton*>(ui->toolBar->widgetForAction(action)))
+		{
+			button->setAutoRaise(false);
+			button->setFixedSize(28, 28);
+			button->setIconSize(QSize(18, 18));
+			button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+		}
+	}
+
+	if(url_widget)
+	{
+		const int button_w = 28;
+		url_widget->backPushButton->setFixedSize(button_w, button_w);
+		url_widget->backPushButton->setIconSize(QSize(18, 18));
+		url_widget->browserPushButton->setFixedSize(button_w, button_w);
+		url_widget->browserPushButton->setIconSize(QSize(18, 18));
+		url_widget->favoritePushButton->setFixedSize(button_w, button_w);
+	}
+}
+
+
+void MainWindow::applyMainChromeThemeStylesheet()
+{
+	if(!ui)
+		return;
+
+	const QPalette palette = QApplication::palette();
+	const QColor window = palette.color(QPalette::Window);
+	const QColor base = palette.color(QPalette::Base);
+	const QColor alternate_base = palette.color(QPalette::AlternateBase);
+	const QColor text = palette.color(QPalette::WindowText);
+	const QColor button = palette.color(QPalette::Button);
+	const QColor border = palette.color(QPalette::Mid);
+	const QColor highlight = palette.color(QPalette::Highlight);
+	const QColor highlighted_text = palette.color(QPalette::HighlightedText);
+	const bool dark_theme = text.lightness() > window.lightness();
+	const QColor hover = dark_theme ? window.lighter(132) : window.darker(104);
+	const QColor pressed = dark_theme ? window.lighter(152) : window.darker(110);
+	const QColor menu_background = dark_theme ? base : window;
+	const QColor tooltip_background = dark_theme ? alternate_base : QColor(255, 253, 231);
+
+	const auto css = [](const QColor& colour) { return colour.name(QColor::HexRgb); };
+
+	const QString menu_bar_style = QString(
+		"QMenuBar#menubar { background: %1; color: %2; border: none; border-bottom: 1px solid %3; spacing: 2px; }"
+		"QMenuBar#menubar::item { background: transparent; color: %2; padding: 3px 8px; border-radius: 3px; }"
+		"QMenuBar#menubar::item:selected { background: %4; color: %2; }"
+		"QMenuBar#menubar::item:pressed { background: %5; color: %6; }")
+		.arg(css(window), css(text), css(border), css(hover), css(highlight), css(highlighted_text));
+
+	const QString menu_style = QString(
+		"QMenu { background: %1; color: %2; border: 1px solid %3; padding: 5px; }"
+		"QMenu::item { padding: 6px 28px 6px 26px; border-radius: 4px; }"
+		"QMenu::item:selected { background: %4; color: %5; }"
+		"QMenu::item:disabled { color: %6; }"
+		"QMenu::separator { height: 1px; background: %3; margin: 5px 4px; }"
+		"QMenu::right-arrow { width: 8px; height: 8px; }")
+		.arg(css(menu_background), css(text), css(border), css(highlight), css(highlighted_text), css(palette.color(QPalette::Disabled, QPalette::Text)));
+
+	const QString toolbar_style = QString(
+		"QToolBar#toolBar { background: %1; border: none; border-bottom: 1px solid %3; spacing: 4px; padding: 3px 6px; }"
+		"QToolBar#toolBar QToolButton, QToolBar#toolBar QPushButton { background: %7; color: %2; border: 1px solid %3; border-radius: 4px; padding: 0px; min-width: 28px; min-height: 28px; max-width: 28px; max-height: 28px; }"
+		"QToolBar#toolBar QToolButton:hover, QToolBar#toolBar QPushButton:hover { background: %4; border-color: %5; }"
+		"QToolBar#toolBar QToolButton:pressed, QToolBar#toolBar QPushButton:pressed { background: %6; }"
+		"QToolBar#toolBar QLineEdit { background: %8; color: %2; border: 1px solid %3; border-radius: 4px; padding: 2px 6px; selection-background-color: %5; selection-color: %9; }"
+		"QToolBar#toolBar QLabel { color: %2; }")
+		.arg(css(window), css(text), css(border), css(hover), css(highlight), css(pressed), css(button), css(base), css(highlighted_text));
+
+	const QString main_style = QString(
+		"QMainWindow#MainWindow { background: %1; color: %2; }"
+		"QDockWidget { background: %1; color: %2; }"
+		"QDockWidget::title { background: %1; color: %2; border-bottom: 1px solid %3; padding: 3px 6px; text-align: left; }"
+		"QStatusBar { background: %1; color: %2; border-top: 1px solid %3; }")
+		.arg(css(window), css(text), css(border));
+
+	const QString tooltip_style = QString(
+		"QToolTip { color: %1; background-color: %2; border: 1px solid %3; font-size: 9pt; padding: 6px; border-radius: 3px; }")
+		.arg(css(text), css(tooltip_background), css(border));
+
+	setStyleSheet(main_style);
+	qApp->setStyleSheet(tooltip_style);
+
+	if(ui->menubar)
+	{
+		ui->menubar->setStyleSheet(menu_bar_style);
+		const QList<QMenu*> menus = ui->menubar->findChildren<QMenu*>();
+		for(QMenu* menu : menus)
+			if(menu)
+				menu->setStyleSheet(menu_style);
+	}
+
+	if(ui->toolBar)
+		ui->toolBar->setStyleSheet(toolbar_style);
+	if(ui->statusbar)
+		ui->statusbar->setStyleSheet(main_style);
 }
 
 

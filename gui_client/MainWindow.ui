@@ -216,8 +216,8 @@
    <addaction name="actionAddObject"/>
    <addaction name="actionAdd_Video"/>
    <addaction name="actionAddHypercard"/>
-   <addaction name="actionAdd_Voxels"/>
    <addaction name="actionAdd_Web_View"/>
+   <addaction name="actionAdd_Voxels"/>
   </widget>
   <widget class="QDockWidget" name="chatDockWidget">
    <property name="sizePolicy">
