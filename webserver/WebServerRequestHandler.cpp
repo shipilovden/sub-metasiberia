@@ -99,21 +99,78 @@ static bool isSafeMapTileCacheNamespace(const std::string& s)
 }
 
 
+static const char* const DEFAULT_MAP_TILE_CACHE_NAMESPACE = "metasiberia_raster_v4";
+
+
+static void parseOSMTilePath(const std::string& path, std::string& cache_namespace_out, uint32& z_out, uint32& x_out, uint32& y_out)
+{
+	Parser parser(path);
+	if(!parser.parseString("/osm_tile/"))
+		throw glare::Exception("Invalid OSM tile path.");
+
+	const size_t tile_z_pos = parser.currentPos();
+	if(parser.parseUnsignedInt(z_out))
+	{
+		cache_namespace_out = getEnvStringOrDefault("METASIBERIA_MAP_TILE_CACHE_NAMESPACE", DEFAULT_MAP_TILE_CACHE_NAMESPACE);
+	}
+	else
+	{
+		parser.setCurrentPos(tile_z_pos);
+		string_view namespace_view;
+		if(!parser.parseToChar('/', namespace_view) || !parser.parseChar('/'))
+			throw glare::Exception("Invalid OSM tile path.");
+
+		cache_namespace_out = std::string(namespace_view.data(), namespace_view.size());
+		if(!isSafeMapTileCacheNamespace(cache_namespace_out))
+			throw glare::Exception("Invalid map tile cache namespace.");
+
+		if(!parser.parseUnsignedInt(z_out))
+			throw glare::Exception("Invalid OSM tile path.");
+	}
+
+	if(!parser.parseChar('/') ||
+		!parser.parseUnsignedInt(x_out) || !parser.parseChar('/') ||
+		!parser.parseUnsignedInt(y_out) || !parser.parseString(".png"))
+		throw glare::Exception("Invalid OSM tile path.");
+	if(!parser.eof() && !parser.parseChar('?'))
+		throw glare::Exception("Invalid OSM tile path.");
+
+	if(!isSafeMapTileCacheNamespace(cache_namespace_out))
+		throw glare::Exception("Invalid map tile cache namespace.");
+}
+
+
+static std::string makeOSMTileUpstreamURL(uint32 z, uint32 x, uint32 y)
+{
+	const std::string maptiler_key = getEnvStringOrDefault("METASIBERIA_MAPTILER_API_KEY", "");
+	std::string URL_template = getEnvStringOrDefault("METASIBERIA_MAP_TILE_URL_TEMPLATE", "");
+	if(URL_template.empty() && !maptiler_key.empty())
+		URL_template = "https://api.maptiler.com/maps/outdoor-v4/256/{z}/{x}/{y}.png?key={key}";
+
+	if(!URL_template.empty())
+	{
+		if(URL_template.find("{key}") != std::string::npos && maptiler_key.empty())
+			throw glare::Exception("METASIBERIA_MAP_TILE_URL_TEMPLATE uses {key}, but METASIBERIA_MAPTILER_API_KEY is empty.");
+
+		std::string upstream_url = StringUtils::replaceAll(URL_template, "{z}", toString(z));
+		upstream_url = StringUtils::replaceAll(upstream_url, "{x}", toString(x));
+		upstream_url = StringUtils::replaceAll(upstream_url, "{y}", toString(y));
+		upstream_url = StringUtils::replaceAll(upstream_url, "{key}", maptiler_key);
+		return upstream_url;
+	}
+
+	const std::string upstream_base_url = stripTrailingSlash(getEnvStringOrDefault("METASIBERIA_MAP_TILE_BASE_URL", "https://a.basemaps.cartocdn.com/rastertiles/voyager"));
+	return upstream_base_url + "/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png";
+}
+
+
 static void handleOSMTileRequest(const WebDataStore& data_store, const web::RequestInfo& request, web::ReplyInfo& reply_info)
 {
 	try
 	{
-		Parser parser(request.path);
-		if(!parser.parseString("/osm_tile/"))
-			throw glare::Exception("Invalid OSM tile path.");
-
 		uint32 z, x, y;
-		if(!parser.parseUnsignedInt(z) || !parser.parseChar('/') ||
-			!parser.parseUnsignedInt(x) || !parser.parseChar('/') ||
-			!parser.parseUnsignedInt(y) || !parser.parseString(".png"))
-			throw glare::Exception("Invalid OSM tile path.");
-		if(!parser.eof() && !parser.parseChar('?'))
-			throw glare::Exception("Invalid OSM tile path.");
+		std::string cache_namespace;
+		parseOSMTilePath(request.path, cache_namespace, z, x, y);
 
 		if(z > 19)
 			throw glare::Exception("Invalid OSM zoom.");
@@ -126,10 +183,6 @@ static void handleOSMTileRequest(const WebDataStore& data_store, const web::Requ
 		if(state_dir.empty())
 			throw glare::Exception("Invalid public files dir.");
 
-		const std::string cache_namespace = getEnvStringOrDefault("METASIBERIA_MAP_TILE_CACHE_NAMESPACE", "carto_voyager_v1");
-		if(!isSafeMapTileCacheNamespace(cache_namespace))
-			throw glare::Exception("Invalid map tile cache namespace.");
-
 		const std::string cache_dir = state_dir + "/osm_tile_cache/" + cache_namespace;
 		const std::string local_path = cache_dir + "/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png";
 
@@ -140,8 +193,7 @@ static void handleOSMTileRequest(const WebDataStore& data_store, const web::Requ
 			return;
 		}
 
-		const std::string upstream_base_url = stripTrailingSlash(getEnvStringOrDefault("METASIBERIA_MAP_TILE_BASE_URL", "https://a.basemaps.cartocdn.com/rastertiles/voyager"));
-		const std::string upstream_url = upstream_base_url + "/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png";
+		const std::string upstream_url = makeOSMTileUpstreamURL(z, x, y);
 
 		HTTPClient client;
 		client.user_agent = "Metasiberia/0.0.21 (https://metasiberia.com/; contact: https://metasiberia.com/)";

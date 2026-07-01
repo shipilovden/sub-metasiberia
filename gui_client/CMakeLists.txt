@@ -1214,10 +1214,11 @@ ${settings}
 )
 
 if(MSVC)
-	# RuntimeTranslation.cpp contains Russian literals that are decoded with QString::fromUtf8().
-	# Force UTF-8 source + execution charset for this TU to avoid CP1251->UTF8 mojibake ("����").
+	# These translation/UI files contain Russian literals. Force UTF-8 source + execution
+	# charset to avoid CP1251->UTF8 mojibake.
 	set_source_files_properties(
 		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.cpp
 		PROPERTIES COMPILE_OPTIONS "/utf-8"
 	)
 endif()

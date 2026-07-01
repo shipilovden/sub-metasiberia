@@ -15,6 +15,7 @@ Copyright Glare Technologies Limited 2024 -
 
 URLParseResults::URLParseResults()
 :	x(0), y(0), z(0),
+	lat(0), lon(0),
 	heading(90.0),
 	parcel_uid(0),
 	sun_vert_angle(45),
@@ -24,6 +25,9 @@ URLParseResults::URLParseResults()
 	parsed_x(false),
 	parsed_y(false),
 	parsed_z(false),
+	parsed_lat(false),
+	parsed_lon(false),
+	parsed_map_query(false),
 	parsed_heading(false),
 	parsed_parcel_uid(false)
 {}
@@ -109,7 +113,23 @@ void URLParser::processQueryKeyValues(const std::map<std::string, std::string>& 
 		res.z = stringToDouble(query_keyvalues.find("z")->second);
 		res.parsed_z = true;
 	}
-	
+
+	if(query_keyvalues.count("lat"))
+	{
+		res.lat = stringToDouble(query_keyvalues.find("lat")->second);
+		res.parsed_lat = true;
+	}
+	if(query_keyvalues.count("lon"))
+	{
+		res.lon = stringToDouble(query_keyvalues.find("lon")->second);
+		res.parsed_lon = true;
+	}
+	if(query_keyvalues.count("q"))
+	{
+		res.map_query = query_keyvalues.find("q")->second;
+		res.parsed_map_query = true;
+	}
+
 	if(query_keyvalues.count("world"))
 		res.worldname = query_keyvalues.find("world")->second; // An alternative way of specifying the world/user name
 

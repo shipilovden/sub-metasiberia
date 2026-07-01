@@ -16,6 +16,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <vector>
 class WorldObject;
 class Parcel;
+class MapTilesResultReceivedMessage;
 
 
 /*=====================================================================
@@ -33,6 +34,7 @@ public:
 	virtual bool isShowParcelsEnabled() const = 0;
 
 	virtual void updateOnlineUsersList() = 0;
+	virtual void handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMessage& msg) { (void)msg; }
 
 	virtual void showHTMLMessageBox(const std::string& title, const std::string& msg) = 0;
 	virtual void showPlainTextMessageBox(const std::string& title, const std::string& msg) = 0;

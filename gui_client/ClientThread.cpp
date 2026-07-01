@@ -1406,6 +1406,23 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			out_msg_queue->enqueue(new ChatMessage(name, msg, sender_avatar_uid));
 			break;
 		}
+	case Protocol::PrivateChatMessageID:
+		{
+			const std::string sender_name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			const std::string recipient_name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			const std::string msg = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+
+			UID sender_avatar_uid;
+			if(!msg_buffer.endOfStream())
+				sender_avatar_uid = readUIDFromStream(msg_buffer);
+
+			bool outgoing_private_message = false;
+			if(!msg_buffer.endOfStream())
+				outgoing_private_message = msg_buffer.readUInt32() != 0;
+
+			out_msg_queue->enqueue(new ChatMessage(sender_name, recipient_name, msg, sender_avatar_uid, outgoing_private_message));
+			break;
+		}
 	case Protocol::UserSelectedObject:
 		{
 			//conPrint("Received UserSelectedObject msg.");

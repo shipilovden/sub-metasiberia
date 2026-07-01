@@ -16,7 +16,9 @@ struct URLParseResults
 
 	std::string hostname;
 	std::string worldname;
+	std::string map_query;
 	double x, y, z;
+	double lat, lon;
 	double heading; // [0, 360].  0 = looking along x axis.  90 = looking along y axis
 	int parcel_uid;
 
@@ -27,6 +29,9 @@ struct URLParseResults
 	bool parsed_x;
 	bool parsed_y;
 	bool parsed_z;
+	bool parsed_lat;
+	bool parsed_lon;
+	bool parsed_map_query;
 	bool parsed_heading;
 	bool parsed_parcel_uid;
 };

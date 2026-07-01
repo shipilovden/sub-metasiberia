@@ -56,7 +56,7 @@
          <item row="3" column="0" colspan="2">
           <widget class="QLabel" name="createReadyPlayerMeLabel">
            <property name="text">
-            <string>Create ReadyPlayerme avatars at XXX</string>
+            <string>Create avatar avatars.metasiberia</string>
            </property>
            <property name="wordWrap">
             <bool>true</bool>
@@ -78,94 +78,6 @@
          <set>QDialogButtonBox::Apply|QDialogButtonBox::Close</set>
         </property>
        </widget>
-      </item>
-     </layout>
-    </widget>
-    <widget class="QWidget" name="vroidTab">
-     <attribute name="title">
-      <string>VRoid</string>
-     </attribute>
-     <layout class="QVBoxLayout" name="vroidTabLayout">
-      <item>
-       <widget class="QLabel" name="vroidStatusLabel">
-        <property name="text">
-         <string>VRoid: not logged in</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="vroidButtonsLayout">
-        <item>
-         <widget class="QPushButton" name="vroidLoginButton">
-          <property name="text">
-           <string>Login</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="vroidFetchModelsButton">
-          <property name="text">
-           <string>Fetch models</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="vroidLogoutButton">
-          <property name="text">
-           <string>Logout</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="vroidHorizontalSpacer">
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <widget class="QListWidget" name="vroidModelsListWidget"/>
-      </item>
-      <item>
-       <widget class="QLabel" name="vroidInfoLabel">
-        <property name="text">
-         <string>VRoid workflow: log in, fetch models, then download VRM/GLB in browser and select it on the Avatar tab.</string>
-        </property>
-        <property name="wordWrap">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="vroidLinksLabel">
-        <property name="text">
-         <string>&lt;a href=&quot;https://hub.vroid.com/&quot;&gt;Open VRoid Hub&lt;/a&gt;</string>
-        </property>
-        <property name="openExternalLinks">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="vroidSpacer">
-        <property name="orientation">
-         <enum>Qt::Vertical</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>20</width>
-          <height>40</height>
-         </size>
-        </property>
-       </spacer>
       </item>
      </layout>
     </widget>

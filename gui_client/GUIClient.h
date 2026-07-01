@@ -274,6 +274,7 @@ public:
 	void convertSelectedObjectToGearItem();
 	void createBot(const Vec3d& pos, float heading);
 	std::string uploadLocalFileForBot(const std::string& local_abs_path); // Copy local file to resources dir and return sub:// URL
+	std::string prepareAndUploadChatAttachment(const std::string& local_abs_path); // Copy local file to resources dir, enqueue upload, and return resource URL.
 	void updateBot(uint64 bot_id, const std::string& name, const std::string& prompt,
 		const AvatarSettings& avatar_settings,
 		const std::string& greeting_name, const std::string& greeting_url, float greeting_cooldown,
@@ -342,6 +343,7 @@ public:
 	void removeFloatingChatMessageForAvatar(const UID& avatar_uid);
 	void removeAllFloatingChatMessages();
 	bool isMetasiberiaMapWorld() const;
+	bool usesEmbeddedMapDock() const;
 	void recordRecentEmojiUsage(const std::string& emoji);
 public:
 	void rotateObject(WorldObjectRef ob, const Vec4f& axis, float angle);
@@ -421,6 +423,7 @@ public:
 
 	int mouseOverAxisArrowOrRotArc(const Vec2f& pixel_coords, Vec4f& closest_seg_point_ws_out); // Returns closest axis arrow or -1 if no close.
 	void sendChatMessage(const std::string& message);
+	void sendPrivateChatMessage(const std::string& recipient_name, const UID& recipient_avatar_uid, const std::string& message);
 	void sendEmojiChatMessage(const std::string& emoji);
 
 	// If the object was not in a parcel with write permissions at all, returns false.

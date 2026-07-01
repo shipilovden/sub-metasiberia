@@ -14,6 +14,11 @@ Copyright Glare Technologies Limited 2024 -
 #include <utils/Timer.h>
 #include <utils/ComObHandle.h>
 #include <utils/SocketBufferOutStream.h>
+#include <QtCore/QPoint>
+#include <QtCore/QDateTime>
+#include <QtCore/QJsonArray>
+#include <QtCore/QMap>
+#include <QtCore/QStringList>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QDockWidget>
 #include <string>
@@ -29,6 +34,14 @@ class QMimeData;
 class QMenu;
 class QDialog;
 class QTabWidget;
+class QComboBox;
+class QLineEdit;
+class QScrollArea;
+class QTabBar;
+class QSplitter;
+class QVBoxLayout;
+class QToolButton;
+class QFrame;
 class QActionGroup;
 struct ID3D11Device;
 struct IMFDXGIDeviceManager;
@@ -249,6 +262,44 @@ private:
 	virtual bool eventFilter(QObject* obj, QEvent* event) override;
 	void rebuildChatEmojiPopupContents();
 	void sendChatOrEmojiMessage(const std::string& message);
+	void setupChatPlayerControls();
+	void refreshChatPlayerControls();
+	void rebuildChatUserRows();
+	void rebuildPrivateDialogRows(const QString& filter);
+	void refreshPrivateChatUnreadCount();
+	void rebuildChatGroupRows();
+	void createChatGroup();
+	void showChatGroupSettings(const QString& group_id);
+	void appendChatMessageWidget(const QString& html, bool private_message);
+	void appendLocalChatMessage(const QString& html, bool private_message, bool remember_in_history = true);
+	void appendLocalChatAttachmentMessage(const QStringList& selected_filenames);
+	QString chatHistoryFilePath() const;
+	void loadChatHistoryFromDisk();
+	void saveChatHistoryToDisk() const;
+	void rememberChatHistoryEntry(const QString& html, bool private_message);
+	void clearChatMessageWidgets();
+	void clearPersistentChatHistory();
+	void applyChatMessageDisplaySettings();
+	void applyChatThemeStylesheet();
+	void updateChatMessageVisibility();
+	void updateChatTabText();
+	void updatePrivateChatTabText();
+	void setChatSettingsVisible(bool visible);
+	void updateChatLayoutForCurrentTab();
+	void addReactionToChatMessage(QFrame* message_row, const QString& reaction);
+	void showChatMessageContextMenu(QFrame* message_row, const QString& plain_text, QToolButton* anchor_button);
+	void deleteChatMessageRow(QFrame* message_row, bool delete_for_everyone);
+	std::string selectedChatRecipientName() const;
+	UID selectedChatRecipientUID() const;
+	void startPrivateChatWithUser(UID avatar_uid);
+	void openPrivateChatDialog(const QString& peer_name, UID peer_uid = UID::invalidUID());
+	void notePrivateChatDialogFromPlainText(const QString& plain_text, bool incoming_message, bool count_unread);
+	void showChatUserProfile(UID avatar_uid);
+	void showChatUserContextMenu(UID avatar_uid, const QPoint& global_pos);
+	void showChatAttachmentMenu();
+	void showChatMoreSendMenu();
+	void sendPrivateChatMessageToSelectedUser();
+	void teleportNearSelectedChatUser();
 	void startMainTimer();
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
@@ -257,6 +308,8 @@ private:
 	void initialiseLanguageMenu();
 	void applyUILanguage(RuntimeTranslation::UILanguage language, bool persist_setting);
 	void refreshTranslatedUiText();
+	void configureEditAddSubmenu();
+	void refreshEditMenuActionIcons();
 	void updateMenuTooltips();
 	void refreshMapDockText();
 	void updateMapDockState();
@@ -282,6 +335,7 @@ public:
 	virtual void clearChatMessages() override;
 	virtual bool isShowParcelsEnabled() const override;
 	virtual void updateOnlineUsersList() override; // Works off world state avatars.
+	virtual void handleMapTilesResultReceivedMessage(const MapTilesResultReceivedMessage& msg) override;
 	virtual void showHTMLMessageBox(const std::string& title, const std::string& msg) override;
 	virtual void showPlainTextMessageBox(const std::string& title, const std::string& msg) override;
 
@@ -445,11 +499,65 @@ public:
 	QSettings* settings;
 	Reference<QSettingsStore> settings_store;
 
+	struct ChatPrivateDialogState
+	{
+		QString peer_key;
+		QString peer_display_name;
+		QString last_message;
+		QDateTime last_time;
+		int unread_count = 0;
+		UID peer_uid = UID::invalidUID();
+	};
+
+	struct ChatGroupState
+	{
+		QString id;
+		QString name;
+		QString description;
+		QStringList members;
+		bool notifications_enabled = true;
+		bool invite_only = true;
+	};
+
 	UserDetailsWidget* user_details;
 	URLWidget* url_widget;
 	UpdateManager* update_manager;
 	QDialog* chat_emoji_popup;
 	QTabWidget* chat_emoji_tab_widget;
+	QComboBox* chat_user_combo;
+	QToolButton* chat_private_button;
+	QToolButton* chat_goto_user_button;
+	QTabBar* chat_tabs_bar;
+	QVBoxLayout* chat_users_list_layout;
+	QLineEdit* chat_player_search_edit;
+	QLabel* chat_online_count_label;
+	QScrollArea* chat_messages_scroll_area;
+	QVBoxLayout* chat_messages_list_layout;
+	QWidget* chat_users_panel;
+	QWidget* chat_main_panel;
+	QWidget* chat_input_panel;
+	QSplitter* chat_body_splitter;
+	QWidget* chat_messages_page;
+	QWidget* chat_groups_page;
+	QVBoxLayout* chat_groups_list_layout;
+	QWidget* chat_settings_page;
+	bool chat_notifications_enabled;
+	bool chat_show_timestamps;
+	bool chat_compact_message_view;
+	bool chat_network_private_messages_enabled;
+	bool chat_showing_private_messages;
+	bool chat_private_conversation_open;
+	bool chat_switching_to_private_conversation;
+	int chat_message_counter;
+	int chat_unread_count;
+	int chat_private_unread_count;
+	QStringList chat_pending_attachment_echoes;
+	bool chat_loading_history;
+	QJsonArray chat_history_entries;
+	QMap<QString, ChatPrivateDialogState> chat_private_dialogs;
+	QMap<QString, ChatGroupState> chat_groups;
+	UID chat_private_recipient_uid;
+	std::string chat_private_recipient_name;
 	QActionGroup* theme_action_group;
 	QActionGroup* language_action_group;
 	RuntimeTranslation::RuntimeTranslator* runtime_translator;
@@ -504,5 +612,5 @@ public:
 	QDockWidget* avatar_dock_widget;
 	AvatarSettingsWidget* avatar_settings_widget;
 	QDockWidget* map_dock_widget;
-	QLabel* map_dock_label;
+	QWidget* map_dock_map_widget;
 };

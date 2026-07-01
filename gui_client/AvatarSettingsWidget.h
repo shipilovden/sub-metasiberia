@@ -16,7 +16,6 @@ class GUIClient;
 class AnimationManager;
 class ResourceManager;
 class TextureServer;
-class VRoidAuthFlow;
 namespace Indigo { class Mesh; }
 struct GLObject;
 
@@ -57,9 +56,6 @@ protected:
 private:
 	void loadModelIntoPreview(const std::string& local_path, bool show_error_dialogs);
 	void retranslateDynamicUi();
-	void setVRoidStatusSourceText(const QString& status_source_text);
-	QString translateVRoidAuthFlowText(const QString& source_text) const;
-	QString translateVRoidAuthFlowText(const char* source_text) const;
 
 	std::string base_dir_path;
 	QSettings* settings;
@@ -70,11 +66,9 @@ private:
 
 	Reference<TextureServer> texture_server;
 	Reference<GLObject> preview_gl_ob;
-	VRoidAuthFlow* vroid_auth_flow;
 
 	bool done_initial_load;
 	QTimer tick_timer;
-	QString last_vroid_status_source_text;
 
 public:
 	// Last successfully loaded model data (used for Apply).

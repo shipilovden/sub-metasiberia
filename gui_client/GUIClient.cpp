@@ -40,6 +40,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
 #include "MapWorldLayer.h"
+#include "MapWorldUtils.h"
 #include "Scripting.h"
 #include "HoverCarPhysics.h"
 #include "BikePhysics.h"
@@ -316,7 +317,7 @@ static XRLaunchModeDecision chooseXRLaunchMode(const ArgumentParser& parsed_args
 
 	decision.mode = XRLaunchMode::Auto;
 	decision.source = "default";
-	decision.detail = "XR launch mode defaulted to automatic startup with desktop fallback.";
+	decision.detail = "XR launch mode defaulted to desktop-safe auto; pass --vr to start VR.";
 	return decision;
 }
 
@@ -1375,7 +1376,7 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	logMessage("[XR] launch mode: " + xrLaunchModeToString(xr_launch_mode_decision.mode) + " (" + xr_launch_mode_decision.source + ")");
 	logMessage("[XR] " + xr_launch_mode_decision.detail);
 
-	const bool should_attempt_xr_startup = (xr_launch_mode_decision.mode != XRLaunchMode::Desktop);
+	const bool should_attempt_xr_startup = (xr_launch_mode_decision.mode == XRLaunchMode::VR);
 	if(should_attempt_xr_startup)
 	{
 		xr_session = new XRSession();
@@ -2435,6 +2436,146 @@ static void enqueueMessageToSend(ClientThread& client_thread, SocketBufferOutStr
 }
 
 
+static int metasiberiaChatHexValue(char c)
+{
+	if(c >= '0' && c <= '9') return c - '0';
+	if(c >= 'A' && c <= 'F') return 10 + c - 'A';
+	if(c >= 'a' && c <= 'f') return 10 + c - 'a';
+	return -1;
+}
+
+
+static bool metasiberiaChatPercentDecode(const std::string& s, std::string& decoded_out)
+{
+	decoded_out.clear();
+	decoded_out.reserve(s.size());
+	for(size_t i=0; i<s.size(); ++i)
+	{
+		if(s[i] == '%')
+		{
+			if(i + 2 >= s.size())
+				return false;
+			const int hi = metasiberiaChatHexValue(s[i + 1]);
+			const int lo = metasiberiaChatHexValue(s[i + 2]);
+			if(hi < 0 || lo < 0)
+				return false;
+			decoded_out.push_back((char)((hi << 4) | lo));
+			i += 2;
+		}
+		else
+			decoded_out.push_back(s[i]);
+	}
+	return true;
+}
+
+
+static bool parseMetasiberiaPrivateChatMessage(const std::string& message, std::string& recipient_name_out, std::string& body_out)
+{
+	const std::string prefix = "[[ms_pm_v1|to=";
+	if(!hasPrefix(message, prefix))
+		return false;
+
+	const size_t end_pos = message.find("]]", prefix.size());
+	if(end_pos == std::string::npos)
+		return false;
+
+	if(!metasiberiaChatPercentDecode(message.substr(prefix.size(), end_pos - prefix.size()), recipient_name_out))
+		return false;
+
+	body_out = message.substr(end_pos + 2);
+	return true;
+}
+
+
+static bool parseMetasiberiaChatAttachmentMarkerPayload(const std::string& payload, URLString& resource_url_out)
+{
+	const std::string url_prefix = "url=";
+	if(!hasPrefix(payload, url_prefix))
+		return false;
+
+	const size_t url_end = payload.find('|', url_prefix.size());
+	const std::string encoded_url = payload.substr(url_prefix.size(), url_end == std::string::npos ? std::string::npos : url_end - url_prefix.size());
+	std::string decoded_url;
+	if(!metasiberiaChatPercentDecode(encoded_url, decoded_url))
+		return false;
+
+	const URLString resource_url(decoded_url);
+	if(!ResourceManager::isValidURL(resource_url))
+		return false;
+
+	resource_url_out = resource_url;
+	return true;
+}
+
+
+static std::vector<URLString> getMetasiberiaChatAttachmentURLs(const std::string& message)
+{
+	std::vector<URLString> urls;
+	const std::string prefix = "[[ms_file_v1|";
+	size_t pos = 0;
+	while((pos = message.find(prefix, pos)) != std::string::npos)
+	{
+		const size_t payload_start = pos + prefix.size();
+		const size_t end_pos = message.find("]]", payload_start);
+		if(end_pos == std::string::npos)
+			break;
+
+		URLString resource_url;
+		if(parseMetasiberiaChatAttachmentMarkerPayload(message.substr(payload_start, end_pos - payload_start), resource_url))
+			urls.push_back(resource_url);
+
+		pos = end_pos + 2;
+	}
+	return urls;
+}
+
+
+static std::string removeMetasiberiaChatAttachmentMarkers(const std::string& message, const std::string& replacement)
+{
+	std::string result = message;
+	const std::string prefix = "[[ms_file_v1|";
+	size_t pos = 0;
+	while((pos = result.find(prefix, pos)) != std::string::npos)
+	{
+		const size_t end_pos = result.find("]]", pos + prefix.size());
+		if(end_pos == std::string::npos)
+			break;
+
+		result.replace(pos, end_pos + 2 - pos, replacement);
+		pos += replacement.size();
+	}
+	return result;
+}
+
+
+static void startChatAttachmentDownloadsForMessage(GUIClient& gui_client, const std::string& message)
+{
+	const std::vector<URLString> urls = getMetasiberiaChatAttachmentURLs(message);
+	for(const URLString& url : urls)
+	{
+		if(gui_client.resource_manager.isNull())
+			continue;
+
+		try
+		{
+			if(gui_client.resource_manager->isFileForURLPresent(url))
+				continue;
+
+			DownloadingResourceInfo info;
+			info.used_by_other = true;
+			info.pos = gui_client.cam_controller.getPosition();
+			info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(1.f, /*importance_factor=*/1.f);
+			info.net_download_priority = 80;
+			gui_client.startDownloadingResource(url, gui_client.cam_controller.getPosition().toVec4fPoint(), 1.f, info);
+		}
+		catch(glare::Exception& e)
+		{
+			conPrint("Could not queue chat attachment download for '" + toStdString(url) + "': " + e.what());
+		}
+	}
+}
+
+
 void GUIClient::sendChatMessage(const std::string& message)
 {
 	//conPrint("GUIClient::sendChatMessage()");
@@ -2448,6 +2589,24 @@ void GUIClient::sendChatMessage(const std::string& message)
 		// Make message packet and enqueue to send
 		MessageUtils::initPacket(scratch_packet, Protocol::ChatMessageID);
 		scratch_packet.writeStringLengthFirst(message);
+
+		enqueueMessageToSend(*client_thread, scratch_packet);
+	}
+}
+
+
+void GUIClient::sendPrivateChatMessage(const std::string& recipient_name, const UID& recipient_avatar_uid, const std::string& message)
+{
+	if(this->connection_state == ServerConnectionState_NotConnected)
+	{
+		showErrorNotification("Нельзя отправить личное сообщение без подключения к серверу.");
+	}
+	else
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::PrivateChatMessageID);
+		scratch_packet.writeStringLengthFirst(recipient_name);
+		scratch_packet.writeStringLengthFirst(message);
+		writeToStream(recipient_avatar_uid, scratch_packet);
 
 		enqueueMessageToSend(*client_thread, scratch_packet);
 	}
@@ -3235,6 +3394,25 @@ static std::string canonicalHostForMetasiberiaInGUIClient(const std::string& hos
 		return "vr.metasiberia.com";
 
 	return host;
+}
+
+
+static bool isMetasiberiaMapURL(const URLParseResults& parse_res)
+{
+	return (canonicalHostForMetasiberiaInGUIClient(parse_res.hostname) == "vr.metasiberia.com") && (parse_res.worldname == "map");
+}
+
+
+static void applyMapLatLonURLPositionIfPresent(const URLParseResults& parse_res, Vec3d& pos_in_out)
+{
+	if(isMetasiberiaMapURL(parse_res) && parse_res.parsed_lat && parse_res.parsed_lon)
+	{
+		const Vec2d map_pos = MapWorldUtils::latLonToLocalCoords(parse_res.lat, parse_res.lon);
+		pos_in_out.x = map_pos.x;
+		pos_in_out.y = map_pos.y;
+		if(!parse_res.parsed_z)
+			pos_in_out.z = PlayerPhysics::getEyeHeight();
+	}
 }
 
 
@@ -6367,14 +6545,14 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 										const URLString& u = tex_urls[ti];
 										if(!u.empty())
 										{
-											ResourceRef res = resource_manager->getExistingResourceForURL(u);
-											if(res.nonNull())
+											ResourceRef tex_resource = resource_manager->getExistingResourceForURL(u);
+											if(tex_resource.nonNull())
 											{
 												this->loading_texture_URL_to_avatar_UID_map[u].insert(av->uid);
 												TextureParams tex_params;
 												tex_params.use_sRGB = use_sRGB_flags[ti];
 												tex_params.allow_compression = false;
-												startLoadingTextureForLocalPath(OpenGLTextureKey(toStdString(u)), res, av->pos.toVec4fPoint(), 1.8f, max_dist, importance, tex_params);
+												startLoadingTextureForLocalPath(OpenGLTextureKey(toStdString(u)), tex_resource, av->pos.toVec4fPoint(), 1.8f, max_dist, importance, tex_params);
 											}
 										}
 									}
@@ -11671,6 +11849,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				// Look up sending avatar name colour.  TODO: could do this with sending avatar UID, would be faster + simpler.
 				Colour3f col(0.8f);
 				std::string use_avatar_name = m->name;
+				std::string our_avatar_name = logged_in_user_name;
 				{
 					Lock lock(this->world_state->mutex);
 
@@ -11680,19 +11859,66 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						use_avatar_name = res->second->getUseName();
 						col = res->second->name_colour;
 					}
+					auto our_res = this->world_state->avatars.find(client_avatar_uid);
+					if(our_res != this->world_state->avatars.end())
+						our_avatar_name = our_res->second->getUseName();
 				}
 
-				ui_interface->appendChatMessage(
-					"<p><span style=\"color:rgb(" + toString(col.r * 255) + ", " + toString(col.g * 255) + ", " + toString(col.b * 255) + ")\">" + web::Escaping::HTMLEscape(use_avatar_name) + "</span>: " +
-					web::Escaping::HTMLEscape(m->msg) + "</p>");
+				std::string private_recipient_name;
+				std::string private_message_body;
+				if(!m->private_message && parseMetasiberiaPrivateChatMessage(m->msg, private_recipient_name, private_message_body))
+				{
+					const bool outgoing_private_message =
+						(m->sender_avatar_uid == client_avatar_uid) ||
+						StringUtils::equalCaseInsensitive(use_avatar_name, logged_in_user_name) ||
+						StringUtils::equalCaseInsensitive(m->name, logged_in_user_name);
+					const bool incoming_private_message =
+						StringUtils::equalCaseInsensitive(private_recipient_name, logged_in_user_name) ||
+						StringUtils::equalCaseInsensitive(private_recipient_name, our_avatar_name);
 
-				chat_ui.appendMessage(use_avatar_name, col, ": " + m->msg);
+					if(outgoing_private_message || incoming_private_message)
+					{
+						startChatAttachmentDownloadsForMessage(*this, private_message_body);
 
-				spawnFloatingChatMessageForAvatar(m->sender_avatar_uid, m->msg, cur_time);
+						const std::string private_label = outgoing_private_message ? ("Private to " + private_recipient_name) : ("Private from " + m->name);
+						ui_interface->appendChatMessage(
+							"<p><span style=\"color:#7c3aed; font-weight:600;\">" + web::Escaping::HTMLEscape(private_label) + "</span>: " +
+							web::Escaping::HTMLEscape(private_message_body) + "</p>");
+						if(incoming_private_message && audio_engine.isInitialised() && (settings.isNull() || settings->getBoolValue("chat/sound_enabled", true)))
+							audio_engine.playOneShotSound(resources_dir_path + "/sounds/ms_chat_zvuk.mp3", cam_controller.getPosition().toVec4fPoint());
+					}
+
+					break;
+				}
+
+				if(m->private_message)
+				{
+					startChatAttachmentDownloadsForMessage(*this, m->msg);
+					const std::string private_label = m->outgoing_private_message ? ("Лично для " + m->recipient_name) : ("Лично от " + m->name);
+					ui_interface->appendChatMessage(
+						"<p><span style=\"color:#7c3aed; font-weight:600;\">" + web::Escaping::HTMLEscape(private_label) + "</span>: " +
+						web::Escaping::HTMLEscape(m->msg) + "</p>");
+					if(!m->outgoing_private_message && audio_engine.isInitialised() && (settings.isNull() || settings->getBoolValue("chat/sound_enabled", true)))
+						audio_engine.playOneShotSound(resources_dir_path + "/sounds/ms_chat_zvuk.mp3", cam_controller.getPosition().toVec4fPoint());
+				}
+				else
+				{
+					startChatAttachmentDownloadsForMessage(*this, m->msg);
+					const std::string overlay_message = removeMetasiberiaChatAttachmentMarkers(m->msg, "[file]");
+					ui_interface->appendChatMessage(
+						"<p><span style=\"color:rgb(" + toString(col.r * 255) + ", " + toString(col.g * 255) + ", " + toString(col.b * 255) + ")\">" + web::Escaping::HTMLEscape(use_avatar_name) + "</span>: " +
+						web::Escaping::HTMLEscape(m->msg) + "</p>");
+
+					chat_ui.appendMessage(use_avatar_name, col, ": " + overlay_message);
+
+					spawnFloatingChatMessageForAvatar(m->sender_avatar_uid, overlay_message, cur_time);
+					if(m->sender_avatar_uid != client_avatar_uid && audio_engine.isInitialised() && (settings.isNull() || settings->getBoolValue("chat/sound_enabled", true)))
+						audio_engine.playOneShotSound(resources_dir_path + "/sounds/ms_chat_zvuk.mp3", cam_controller.getPosition().toVec4fPoint());
+				}
 
 
 				// Execute any onChatMessage event handlers.
-				if(m->sender_avatar_uid.valid())
+				if(!m->private_message && m->sender_avatar_uid.valid())
 				{
 					WorldStateLock lock(world_state->mutex);
 					
@@ -11703,7 +11929,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						WorldObject* ob = objects_data[i].ptr();
 						if(ob->event_handlers && ob->event_handlers->onChatMessage_handlers.nonEmpty())
 						{
-							ob->event_handlers->executeOnChatMessageHandlers(m->sender_avatar_uid, m->msg, lock);
+							ob->event_handlers->executeOnChatMessageHandlers(m->sender_avatar_uid, removeMetasiberiaChatAttachmentMarkers(m->msg, "[file]"), lock);
 						}
 					}
 				}
@@ -12240,6 +12466,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 			if(map_world_layer)
 				this->map_world_layer->handleMapTilesResultReceivedMessage(*m);
+
+			if(ui_interface)
+				ui_interface->handleMapTilesResultReceivedMessage(*m);
 		}
 		break;
 		case Msg_UserSelectedObjectMessage:
@@ -12332,6 +12561,16 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						// Iterate over objects and see if they were using a placeholder model for this resource.
 						Lock lock(this->world_state->mutex);
 						bool need_resource = false;
+						bool chat_attachment_resource = false;
+						auto existing_download_info = this->URL_to_downloading_info.find(m->URL);
+						if(existing_download_info != this->URL_to_downloading_info.end() && existing_download_info->second.used_by_other)
+						{
+							downloading_info = existing_download_info->second;
+							centroid_ws = downloading_info.pos.toVec4fPoint();
+							aabb_ws_longest_len = 1.f;
+							need_resource = true;
+							chat_attachment_resource = true;
+						}
 						for(auto it = this->world_state->objects.valuesBegin(); it != this->world_state->objects.valuesEnd(); ++it)
 						{
 							WorldObject* ob = it.getValue().ptr();
@@ -12406,7 +12645,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						const bool valid_extension = FileTypes::hasSupportedExtension(m->URL);
 						// conPrint("need_resource: " + boolToString(need_resource) + " valid_extension: " + boolToString(valid_extension));
 
-						if(need_resource && valid_extension)// && !shouldStreamResourceViaHTTP(m->URL))
+						if(need_resource && (valid_extension || chat_attachment_resource))// && !shouldStreamResourceViaHTTP(m->URL))
 						{
 							// conPrint("Need resource, downloading: " + toStdString(m->URL));
 
@@ -16930,9 +17169,11 @@ void GUIClient::visitSubURL(const std::string& URL, bool push_prev_URL_on_nav_st
 	}
 	else
 	{
+		Vec3d visit_pos(parse_res.x, parse_res.y, parse_res.z);
+		applyMapLatLonURLPositionIfPresent(parse_res, visit_pos);
 		this->cam_controller.setAngles(Vec3d(/*heading=*/::degreeToRad(parse_res.heading), /*pitch=*/Maths::pi_2<double>(), /*roll=*/0));
-		this->cam_controller.setFirstAndThirdPersonPositions(Vec3d(parse_res.x, parse_res.y, parse_res.z));
-		this->player_physics.setEyePosition(Vec3d(parse_res.x, parse_res.y, parse_res.z));
+		this->cam_controller.setFirstAndThirdPersonPositions(visit_pos);
+		this->player_physics.setEyePosition(visit_pos);
 	}
 
 	// Enable materialise effect on our avatar
@@ -17238,6 +17479,7 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 		spawn_pos.y = parse_res.y;
 	if(parse_res.parsed_z)
 		spawn_pos.z = parse_res.z;
+	applyMapLatLonURLPositionIfPresent(parse_res, spawn_pos);
 
 	//-------------------------------- Do disconnect process --------------------------------
 	disconnectFromServerAndClearAllObjects();
@@ -17352,6 +17594,7 @@ void GUIClient::changeToDifferentWorld(const URLParseResults& parse_res)
 		spawn_pos.y = parse_res.y;
 	if(parse_res.parsed_z)
 		spawn_pos.z = parse_res.z;
+	applyMapLatLonURLPositionIfPresent(parse_res, spawn_pos);
 
 
 	clearAllObjects();
@@ -17499,6 +17742,15 @@ void GUIClient::checkCreateManagersAndMinimap()
 bool GUIClient::isMetasiberiaMapWorld() const
 {
 	return (canonicalHostForMetasiberiaInGUIClient(this->server_hostname) == "vr.metasiberia.com") && (this->server_worldname == "map");
+}
+
+
+bool GUIClient::usesEmbeddedMapDock() const
+{
+	if(canonicalHostForMetasiberiaInGUIClient(this->server_hostname) != "vr.metasiberia.com")
+		return false;
+
+	return this->server_worldname.empty() || this->server_worldname == "map";
 }
 
 
@@ -17884,7 +18136,10 @@ void GUIClient::mousePressed(MouseEvent& e)
 	if(gl_ui.nonNull())
 	{
 		gl_ui->handleMousePress(e);
-		chat_ui.handleMousePress(e);
+		if(!e.accepted)
+			chat_ui.handleMousePress(e);
+		if(!e.accepted && minimap)
+			minimap->handleMousePress(e);
 		if(e.accepted)
 		{
 			ui_interface->setCamRotationOnMouseDragEnabled(false); // If the user clicked on a UI widget, we don't want click+mouse dragging to move the camera.
@@ -18174,6 +18429,8 @@ void GUIClient::mouseReleased(MouseEvent& e)
 	if(gl_ui.nonNull())
 	{
 		gl_ui->handleMouseRelease(e);
+		if(!e.accepted && minimap)
+			minimap->handleMouseRelease(e);
 		if(e.accepted)
 			return;
 	}
@@ -18758,15 +19015,15 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 	if(gl_ui.nonNull())
 	{
 		const bool accepted = gl_ui->handleMouseMoved(mouse_event);
-		if(accepted)
+		chat_ui.handleMouseMoved(mouse_event);
+		if(minimap)
+			minimap->handleMouseMoved(mouse_event);
+
+		if(accepted || mouse_event.accepted)
 		{
 			mouse_event.accepted = true;
 			return;
 		}
-
-		chat_ui.handleMouseMoved(mouse_event);
-		if(minimap)
-			minimap->handleMouseMoved(mouse_event);
 	}
 
 	if(!ui_interface->isCursorHidden() && !isXRActive())
@@ -21084,6 +21341,45 @@ std::string GUIClient::uploadLocalFileForBot(const std::string& local_abs_path)
 	const uint64 hash = FileChecksum::fileChecksum(local_abs_path);
 	const URLString url = ResourceManager::URLForPathAndHash(local_abs_path, hash);
 	resource_manager->copyLocalFileToResourceDir(local_abs_path, url);
+	return toStdString(url);
+}
+
+
+std::string GUIClient::prepareAndUploadChatAttachment(const std::string& local_abs_path)
+{
+	if(this->connection_state == ServerConnectionState_NotConnected)
+	{
+		showErrorNotification("Can't upload a chat attachment when not connected to server.");
+		return std::string();
+	}
+
+	if(!resource_manager || !FileUtils::fileExists(local_abs_path))
+		return std::string();
+
+	const uint64 hash = FileChecksum::fileChecksum(local_abs_path);
+	const std::string filename = FileUtils::getFilename(local_abs_path);
+	const std::string extension = ::getExtension(filename).empty() ? "bin" : ::getExtension(filename);
+	const URLString url = ResourceManager::URLForNameAndExtensionAndHash("chat_" + removeDotAndExtension(filename), extension, hash);
+	resource_manager->copyLocalFileToResourceDir(local_abs_path, url);
+	const std::string resource_path = resource_manager->pathForURL(url);
+
+	const std::string username = ui_interface->getUsernameForDomain(server_hostname);
+	const std::string password = ui_interface->getDecryptedPasswordForDomain(server_hostname);
+
+	this->num_resources_uploading++;
+#if EMSCRIPTEN
+	const size_t max_num_upload_threads = 1;
+#else
+	const size_t max_num_upload_threads = 4;
+#endif
+	if(resource_upload_thread_manager.getNumThreads() == 0)
+	{
+		for(size_t q=0; q<max_num_upload_threads; ++q)
+			resource_upload_thread_manager.addThread(new UploadResourceThread(&this->msg_queue, &upload_queue, server_hostname, server_port, username, password, this->client_tls_config,
+				&this->num_resources_uploading));
+	}
+
+	upload_queue.enqueue(new ResourceToUpload(resource_path, url));
 	return toStdString(url);
 }
 

@@ -121,7 +121,10 @@ bool ImageDecoding::isSupportedImageExtension(string_view extension)
 
 bool ImageDecoding::hasSupportedImageExtension(string_view path)
 {
-	const string_view extension = getExtensionStringView(path);
+	const size_t query_pos = path.find('?');
+	const size_t fragment_pos = path.find('#');
+	const size_t path_len_without_query = myMin(query_pos == string_view::npos ? path.size() : query_pos, fragment_pos == string_view::npos ? path.size() : fragment_pos);
+	const string_view extension = getExtensionStringView(string_view(path.data(), path_len_without_query));
 
 	return isSupportedImageExtension(extension);
 }

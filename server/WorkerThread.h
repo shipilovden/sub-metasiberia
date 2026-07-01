@@ -7,6 +7,8 @@ Copyright Glare Technologies Limited 2018 -
 
 
 #include "../shared/URLString.h"
+#include "../shared/UserID.h"
+#include "../shared/UID.h"
 #include <RequestInfo.h>
 #include <MessageableThread.h>
 #include <Platform.h>
@@ -43,6 +45,9 @@ public:
 
 	void enqueueDataToSend(const SocketBufferOutStream& packet); // threadsafe
 	void enqueueDataToSend(const ArrayRef<uint8> data); // threadsafe
+	std::string getRoutingUserName() const;
+	UserID getRoutingUserID() const;
+	UID getRoutingAvatarUID() const;
 
 	web::RequestInfo websocket_request_info; // If the client connected via a websocket, this the HTTP request data.  Is used for accessing the login cookie.
 
@@ -55,6 +60,7 @@ private:
 	void conPrintIfNotFuzzing(const std::string& msg);
 	void sendPerWorldInitialDataToClient(ServerAllWorldsState* world_state, uint32 client_protocol_version);
 	void enqueuePacketToBroadcast(const SocketBufferOutStream& packet_buffer);
+	void setRoutingClientInfo(const UserID& user_id, const std::string& user_name, const UID& avatar_uid);
 
 	Reference<SocketInterface> socket;
 	Server* server;
@@ -72,6 +78,11 @@ private:
 public:
 	bool fuzzing; // Are we currently doing fuzz-testing?
 private:
+	mutable Mutex routing_client_info_mutex;
+	UserID routing_client_user_id;
+	std::string routing_client_user_name;
+	UID routing_client_avatar_uid;
+
 	bool write_trace; // Should we write a record of network traffic to disk for fuzz seeding?
 
 	glare::AtomicInt should_quit;

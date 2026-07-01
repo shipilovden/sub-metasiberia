@@ -21,16 +21,49 @@ namespace MapWorldUtils
 	static const double WEB_MERCATOR_EARTH_RADIUS_M = 6378137.0;
 	static const double PI = NICKMATHS_PI;
 	static const double WEB_MERCATOR_HALF_EXTENT_M = PI * WEB_MERCATOR_EARTH_RADIUS_M;
+	static const double WEB_MERCATOR_MAX_LAT_DEG = 85.05112878;
+	static const char* const MAP_TILE_CACHE_NAMESPACE = "metasiberia_raster_v4";
 
 
-	inline Vec2d getMapWorldCentreMercatorMetres()
+	inline double clampLatitudeForWebMercator(double lat_deg)
 	{
-		const double lat_rad = MAP_WORLD_CENTRE_LAT_DEG * PI / 180.0;
-		const double lon_rad = MAP_WORLD_CENTRE_LON_DEG * PI / 180.0;
+		return myClamp(lat_deg, -WEB_MERCATOR_MAX_LAT_DEG, WEB_MERCATOR_MAX_LAT_DEG);
+	}
+
+
+	inline Vec2d latLonToMercatorMetres(double lat_deg, double lon_deg)
+	{
+		const double lat_rad = clampLatitudeForWebMercator(lat_deg) * PI / 180.0;
+		const double lon_rad = lon_deg * PI / 180.0;
 		return Vec2d(
 			WEB_MERCATOR_EARTH_RADIUS_M * lon_rad,
 			WEB_MERCATOR_EARTH_RADIUS_M * std::log(std::tan(PI * 0.25 + lat_rad * 0.5))
 		);
+	}
+
+
+	inline void mercatorMetresToLatLon(const Vec2d& mercator_m, double& lat_deg_out, double& lon_deg_out)
+	{
+		lon_deg_out = mercator_m.x / WEB_MERCATOR_EARTH_RADIUS_M * 180.0 / PI;
+		lat_deg_out = (2.0 * std::atan(std::exp(mercator_m.y / WEB_MERCATOR_EARTH_RADIUS_M)) - PI * 0.5) * 180.0 / PI;
+	}
+
+
+	inline Vec2d getMapWorldCentreMercatorMetres()
+	{
+		return latLonToMercatorMetres(MAP_WORLD_CENTRE_LAT_DEG, MAP_WORLD_CENTRE_LON_DEG);
+	}
+
+
+	inline Vec2d latLonToLocalCoords(double lat_deg, double lon_deg)
+	{
+		return latLonToMercatorMetres(lat_deg, lon_deg) - getMapWorldCentreMercatorMetres();
+	}
+
+
+	inline void localCoordsToLatLon(double local_x, double local_y, double& lat_deg_out, double& lon_deg_out)
+	{
+		mercatorMetresToLatLon(getMapWorldCentreMercatorMetres() + Vec2d(local_x, local_y), lat_deg_out, lon_deg_out);
 	}
 
 
@@ -50,7 +83,7 @@ namespace MapWorldUtils
 			return URLString();
 
 		const std::string host = server_hostname.empty() ? "vr.metasiberia.com" : server_hostname;
-		return URLString("https://" + host + "/osm_tile/" + toString(tile_z) + "/" + toString(tile_x) + "/" + toString(tile_y) + ".png?v=carto_v1");
+		return URLString("https://" + host + "/osm_tile/" + MAP_TILE_CACHE_NAMESPACE + "/" + toString(tile_z) + "/" + toString(tile_x) + "/" + toString(tile_y) + ".png");
 	}
 
 

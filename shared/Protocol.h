@@ -51,13 +51,14 @@ CyberspaceProtocolVersion
 55: Bot Block 5: movement_type, walk_speed, wander_radius, waypoints, use_actions list.
     Bot Block 6: farewell/walk/talk/interaction gesture slots.
     Bot Block 7: audio_min_distance, audio_start_delay_s, greeting/farewell/interaction audio URLs.
+62: Added PrivateChatMessageID.
 */
 namespace Protocol
 {
 
 const uint32 CyberspaceHello = 1357924680;
 
-const uint32 CyberspaceProtocolVersion = 61;
+const uint32 CyberspaceProtocolVersion = 62;
 
 const uint32 ClientProtocolOK		= 10000;
 const uint32 ClientProtocolTooOld	= 10001;
@@ -123,6 +124,7 @@ const uint32 SetBotPlayerMemoryEntry       = 1515; // Admin edits reputation/que
 
 
 const uint32 ChatMessageID			= 2000;
+const uint32 PrivateChatMessageID	= 2001;
 
 const uint32 ObjectCreated			= 3000;
 const uint32 ObjectDestroyed		= 3001;

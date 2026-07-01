@@ -130,6 +130,7 @@ public:
 	// Enqueues packet to all WorkerThreads connected to the given world.
 	// Thread-safe, can be called from any thread.
 	void enqueuePacketToBroadcastForWorld(const SocketBufferOutStream& packet_buffer, ServerWorldState* world);
+	bool enqueuePrivateChatPacketForWorld(const SocketBufferOutStream& recipient_packet, const SocketBufferOutStream& sender_packet, ServerWorldState* world, WorkerThread* sender, const std::string& recipient_name, const UID& recipient_avatar_uid);
 
 	// Enqueues packet to all WorkerThreads.
 	// Thread-safe, can be called from any thread.

@@ -3,7 +3,8 @@ param(
     [string]$KeyPath = "$env:USERPROFILE\.ssh\metasiberia_backup_ed25519",
     [string]$DestinationRoot = "E:\MetasiberiaBackups",
     [int]$KeepStateArchives = 3,
-    [int]$KeepServiceArchives = 14
+    [int]$KeepServiceArchives = 14,
+    [int64]$MaxStateArchiveGB = 35
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,7 +46,8 @@ function Invoke-Remote {
 function Copy-RemoteFile {
     param(
         [string]$RemotePath,
-        [string]$LocalDirectory
+        [string]$LocalDirectory,
+        [int64]$MaxBytes = 0
     )
 
     if ([string]::IsNullOrWhiteSpace($RemotePath)) {
@@ -54,9 +56,13 @@ function Copy-RemoteFile {
 
     $fileName = Split-Path $RemotePath -Leaf
     $destPath = Join-Path $LocalDirectory $fileName
-    $remoteSize = Invoke-Remote "stat -c %s '$RemotePath'"
+    $remoteSize = [int64](Invoke-Remote "stat -c %s '$RemotePath'")
 
-    if ((Test-Path $destPath) -and ((Get-Item $destPath).Length -eq [int64]$remoteSize)) {
+    if (($MaxBytes -gt 0) -and ($remoteSize -gt $MaxBytes)) {
+        throw "Remote archive is too large for automatic pull: $RemotePath is $remoteSize bytes, limit is $MaxBytes bytes. Check backup contents on the server before downloading."
+    }
+
+    if ((Test-Path $destPath) -and ((Get-Item $destPath).Length -eq $remoteSize)) {
         Write-Log "Already present: $destPath ($remoteSize bytes)"
         return
     }
@@ -71,7 +77,7 @@ function Copy-RemoteFile {
     }
 
     $localSize = (Get-Item $tmpPath).Length
-    if ($localSize -ne [int64]$remoteSize) {
+    if ($localSize -ne $remoteSize) {
         Remove-Item -LiteralPath $tmpPath -Force -ErrorAction SilentlyContinue
         throw "Size mismatch for ${RemotePath}: remote=$remoteSize local=$localSize"
     }
@@ -98,7 +104,8 @@ function Keep-Newest {
 Write-Log "Starting Metasiberia backup pull from $Server"
 
 $latestStateArchive = Invoke-Remote "find /srv/metasiberia/data/backups -maxdepth 1 -type f -name 'metasiberia-server_cyberspace_server_state_*.tar.gz' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-"
-Copy-RemoteFile -RemotePath $latestStateArchive -LocalDirectory $stateDir
+$maxStateArchiveBytes = $MaxStateArchiveGB * 1024 * 1024 * 1024
+Copy-RemoteFile -RemotePath $latestStateArchive -LocalDirectory $stateDir -MaxBytes $maxStateArchiveBytes
 
 $serviceArchives = Invoke-Remote "find /srv/metasiberia/data/backups/services -maxdepth 1 -type f -name 'metasiberia-services_*.tar.gz' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -3 | cut -d' ' -f2- || true"
 if (-not [string]::IsNullOrWhiteSpace($serviceArchives)) {

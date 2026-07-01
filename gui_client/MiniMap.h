@@ -56,6 +56,8 @@ public:
 	void updateMarkerForAvatar(Avatar* avatar, const Vec3d& avatar_pos);
 	void removeMarkerForAvatar(Avatar* avatar);
 
+	void handleMousePress(MouseEvent& mouse_event);
+	void handleMouseRelease(MouseEvent& mouse_event);
 	void handleMouseMoved(MouseEvent& mouse_event);
 
 	//virtual bool doHandleMouseMoved(const Vec2f& coords) override;
@@ -73,9 +75,14 @@ private:
 	void updateWidgetPositions();
 	void setTileOverlayObjectTransforms();
 	Vec2f mapUICoordsForWorldSpacePos(const Vec3d& pos);
+	Rect2f computeMiniMapContentRect() const;
+	Rect2f computeFullscreenAvailableRect() const;
+	Vec2f computeMiniMapBotLeft() const;
 	Vec2f computeMiniMapDims() const;
-	float computeMiniMapWidth();
-	float computeMiniMapTopMargin();
+	float computeMiniMapWidth() const;
+	float computeMiniMapTopMargin() const;
+	bool isInFullscreenResizeHandle(const Vec2f& ui_coords) const;
+	void updateFullscreenResizeDrag(const Vec2f& ui_coords);
 
 	GUIClient* gui_client;
 	GLUIRef gl_ui;
@@ -87,9 +94,16 @@ private:
 	bool expanded;
 	bool visible;
 	bool fullscreen;
+	bool last_is_metasiberia_map_world;
 	GLUIButtonRef collapse_button;
 	GLUIButtonRef expand_button;
 	GLUIButtonRef fullscreen_button;
+	GLUIImageRef resize_handle_image;
+	bool fullscreen_resize_drag_active;
+	bool fullscreen_has_user_dims;
+	Vec2f fullscreen_resize_drag_start_ui;
+	Vec2f fullscreen_resize_start_dims;
+	Vec2f fullscreen_user_dims;
 
 	Array2D<MapTile> tiles;
 	int last_centre_x, last_centre_y;

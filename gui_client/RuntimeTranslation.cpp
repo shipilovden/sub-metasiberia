@@ -48,6 +48,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Lightmaps", "Лайтмапы");
 	add("MainWindow", "Bake Lightmaps (fast) for all objects in parcel", "Запечь лайтмапы (быстро) для всех объектов участка");
 	add("MainWindow", "Bake lightmaps (high quality) for all objects in parcel", "Запечь лайтмапы (высокое качество) для всех объектов участка");
+	add("MainWindow", "Add", "Добавить");
 
 	// Toolbar / actions
 	add("MainWindow", "Add Model / Image", "Добавить модель / изображение");
@@ -359,16 +360,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("AvatarSettingsWidget", "Model:", "Модель:");
 	add("AvatarSettingsWidget", "Preview animation", "Анимация предпросмотра");
 	add("AvatarSettingsWidget", "Avatar", "Аватар");
-	add("AvatarSettingsWidget", "VRoid: not logged in", "VRoid: вход не выполнен");
-	add("AvatarSettingsWidget", "Login", "Войти");
-	add("AvatarSettingsWidget", "Fetch models", "Получить модели");
-	add("AvatarSettingsWidget", "Logout", "Выйти");
-	add("AvatarSettingsWidget", "VRoid workflow: log in, fetch models, then download VRM/GLB in browser and select it on the Avatar tab.",
-		"Процесс VRoid: войдите, получите список моделей, затем скачайте VRM/GLB в браузере и выберите файл на вкладке «Аватар».");
-	add("AvatarSettingsWidget", "<a href=\"https://hub.vroid.com/\">Open VRoid Hub</a>", "<a href=\"https://hub.vroid.com/\">Открыть VRoid Hub</a>");
-	add("AvatarSettingsWidget", "VRoid", "VRoid");
-	add("AvatarSettingsWidget", "Create a ReadyPlayerMe avatar", "Создать аватар ReadyPlayerMe");
-	add("AvatarSettingsWidget", "Create a AvaturnMe avatar", "Создать аватар AvaturnMe");
+	add("AvatarSettingsWidget", "Create avatar avatars.metasiberia", "Создать аватар avatars.metasiberia");
 	add("AvatarSettingsWidget", "After creating, download and select in file browser above.",
 		"После создания скачайте файл и выберите его в браузере файлов выше.");
 
@@ -376,7 +368,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("AvatarSettingsDialog", "Your name:", "Ваше имя:");
 	add("AvatarSettingsDialog", "Model:", "Модель:");
 	add("AvatarSettingsDialog", "Preview animation", "Анимация предпросмотра");
-	add("AvatarSettingsDialog", "Create ReadyPlayerme avatars at XXX", "Создайте аватары ReadyPlayerMe на XXX");
+	add("AvatarSettingsDialog", "Create avatar avatars.metasiberia", "Создать аватар avatars.metasiberia");
 
 	// VRoid auth status/error strings shown in Avatar settings.
 	add("VRoidAuthFlow", "VRoid: waiting for browser login...", "VRoid: ожидание входа в браузере...");

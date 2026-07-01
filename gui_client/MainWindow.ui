@@ -286,7 +286,7 @@
            <item>
             <widget class="QPushButton" name="chatPushButton">
              <property name="text">
-              <string>Chat</string>
+              <string>⏎</string>
              </property>
             </widget>
            </item>

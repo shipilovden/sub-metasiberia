@@ -27,7 +27,7 @@ static const float arrow_width_px = 22;
 
 static const float clip_border_width_px = 6;
 
-static const int TILE_GRID_RES = 5; // There will be a TILE_GRID_RES x TILE_GRID_RES grid of tiles centered on the camera
+static const int TILE_GRID_RES = 7; // There will be a TILE_GRID_RES x TILE_GRID_RES grid of tiles centered on the camera
 
 // -1 is near clip plane, +1 is the far clip plane.
 static const float MINIMAP_Z = 0.3f;
@@ -46,11 +46,19 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 	map_width_ws(500.f),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder),
 	visible(true),
-	fullscreen(false)
+	fullscreen(false),
+	last_is_metasiberia_map_world(false),
+	fullscreen_resize_drag_active(false),
+	fullscreen_has_user_dims(false),
+	fullscreen_resize_drag_start_ui(0.f),
+	fullscreen_resize_start_dims(0.f),
+	fullscreen_user_dims(0.f)
 {
 	opengl_engine = opengl_engine_;
 	gui_client = gui_client_;
 	gl_ui = gl_ui_;
+	if(gui_client_->isMetasiberiaMapWorld())
+		map_width_ws = 6000.f;
 
 #if EMSCRIPTEN
 	const bool default_minimap_expanded = false; // On small mobile screens, make collapsed by default.
@@ -58,6 +66,7 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 	const bool default_minimap_expanded = true;
 #endif
 	expanded = gui_client_->getSettingsStore()->getBoolValue("setting/show_minimap", /*default_value=*/default_minimap_expanded);
+	last_is_metasiberia_map_world = gui_client_->isMetasiberiaMapWorld();
 	
 	// Create minimap (background) image.  Will be mostly covered by tiles, but keep for the sizing logic and mouse handler.
 	const Vec2f minimap_dims = computeMiniMapDims();
@@ -105,6 +114,13 @@ MiniMap::MiniMap(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_client_
 		expand_button->setVisible(false);
 		gl_ui->addWidget(expand_button);
 	}
+
+	resize_handle_image = new GLUIImage(*gl_ui, opengl_engine, "", /*tooltip=*/"Resize map", ARROW_IMAGE_Z - 0.01f);
+	resize_handle_image->setColour(Colour3f(0.55f));
+	resize_handle_image->setAlpha(0.9f);
+	resize_handle_image->setMouseOverColour(Colour3f(0.75f));
+	resize_handle_image->setVisible(false);
+	gl_ui->addWidget(resize_handle_image);
 
 
 	{
@@ -194,6 +210,12 @@ MiniMap::~MiniMap()
 			gl_ui->removeWidget(expand_button);
 			expand_button = NULL;
 		}
+
+		if(resize_handle_image.nonNull())
+		{
+			gl_ui->removeWidget(resize_handle_image);
+			resize_handle_image = NULL;
+		}
 	}
 
 	gl_ui = NULL;
@@ -266,20 +288,24 @@ void MiniMap::setWidgetVisibility()
 {
 	if(gl_ui)
 	{
-		this->expand_button->setVisible(visible && !expanded);
-		this->collapse_button->setVisible(visible && expanded);
-		this->fullscreen_button->setVisible(visible && expanded);
+		const bool use_embedded_map_dock = gui_client && gui_client->usesEmbeddedMapDock();
+		const bool show_expanded_overlay = visible && expanded && !use_embedded_map_dock;
 
-		minimap_image->setVisible(expanded && visible);
+		this->expand_button->setVisible(visible && !expanded && !use_embedded_map_dock);
+		this->collapse_button->setVisible(show_expanded_overlay);
+		this->fullscreen_button->setVisible(show_expanded_overlay);
+
+		minimap_image->setVisible(show_expanded_overlay);
+		resize_handle_image->setVisible(show_expanded_overlay && fullscreen);
 
 		for(int j=0; j<TILE_GRID_RES; ++j)
 		for(int i=0; i<TILE_GRID_RES; ++i)
 		{
 			MapTile& tile = tiles.elem(i, j);
-			tile.ob->draw = expanded && visible;
+			tile.ob->draw = show_expanded_overlay;
 		}
 
-		arrow_image->setVisible(expanded && visible);
+		arrow_image->setVisible(show_expanded_overlay);
 
 		// Set visibility of avatar markers
 		if(gui_client->world_state.nonNull())
@@ -288,10 +314,10 @@ void MiniMap::setWidgetVisibility()
 			for(auto it = gui_client->world_state->avatars.begin(); it != gui_client->world_state->avatars.end(); ++it)
 			{
 				if(it->second->minimap_marker.nonNull())
-					it->second->minimap_marker->setVisible(expanded && visible);
+					it->second->minimap_marker->setVisible(show_expanded_overlay);
 
 				if(it->second->minimap_marker_arrow.nonNull())
-					it->second->minimap_marker_arrow->setVisible(expanded && visible);
+					it->second->minimap_marker_arrow->setVisible(show_expanded_overlay);
 			}
 		}
 	}
@@ -305,11 +331,28 @@ void MiniMap::think()
 	if(gl_ui.isNull())
 		return;
 
+	const bool use_real_map_world_tiles = gui_client->isMetasiberiaMapWorld();
+	if(use_real_map_world_tiles != last_is_metasiberia_map_world)
+	{
+		fullscreen = false;
+		fullscreen_resize_drag_active = false;
+		last_centre_x = -1000000;
+		last_centre_y = -1000000;
+		updateWidgetPositions();
+		setWidgetVisibility();
+	}
+	last_is_metasiberia_map_world = use_real_map_world_tiles;
+
+	if(use_real_map_world_tiles)
+	{
+		setWidgetVisibility();
+		return;
+	}
+
 	if(minimap_image.nonNull() && !minimap_image->isVisible()) // If map is hidden, don't do any work.
 		return;
 
 	const Vec3d campos = gui_client->cam_controller.getFirstPersonPosition();
-	const bool use_real_map_world_tiles = gui_client->isMetasiberiaMapWorld();
 
 	if(!use_real_map_world_tiles &&
 		(gui_client->connection_state == GUIClient::ServerConnectionState_Connected) &&
@@ -381,7 +424,7 @@ void MiniMap::think()
 	const float heading = (float)gui_client->cam_controller.getAngles().x;
 
 	const float arrow_width = gl_ui->getUIWidthForDevIndepPixelWidth(arrow_width_px);
-	const Rect2f map_rect = minimap_image->rect;
+	const Rect2f map_rect = computeMiniMapContentRect();
 	const Vec2f map_centre_ui = (map_rect.getMin() + map_rect.getMax()) * 0.5f;
 	arrow_image->setTransform(map_centre_ui - Vec2f(arrow_width * 0.5f),
 		/*dims=*/Vec2f(arrow_width),
@@ -399,10 +442,15 @@ void MiniMap::setTileOverlayObjectTransforms()
 
 	const Vec3d campos = gui_client->cam_controller.getFirstPersonPosition();
 
-	const Rect2f minimap_gl_rect = gl_ui->OpenGLRectCoordsForUICoords(minimap_image->rect);
-	Matrix4f world_to_overlay_space_matrix = Matrix4f::translationMatrix(minimap_gl_rect.getMin().x, minimap_gl_rect.getMax().y, MINIMAP_TILE_Z) * 
-		Matrix4f::scaleMatrix(minimap_gl_rect.getWidths().x * 1.f/map_width_ws, minimap_gl_rect.getWidths().y * 1.f/map_width_ws, 1) * 
-		Matrix4f::translationMatrix((float)-campos.x + map_width_ws/2.f, (float)-campos.y - map_width_ws/2.f, 0);
+	const Rect2f minimap_gl_rect = gl_ui->OpenGLRectCoordsForUICoords(computeMiniMapContentRect());
+	const Vec2f minimap_gl_dims = minimap_gl_rect.getWidths();
+	const Vec2f minimap_gl_centre = (minimap_gl_rect.getMin() + minimap_gl_rect.getMax()) * 0.5f;
+	const float ui_scale_x = minimap_gl_dims.x / map_width_ws;
+	const float ui_scale_y = minimap_gl_dims.y / map_width_ws;
+	Matrix4f world_to_overlay_space_matrix =
+		Matrix4f::translationMatrix(minimap_gl_centre.x, minimap_gl_centre.y, MINIMAP_TILE_Z) *
+		Matrix4f::scaleMatrix(ui_scale_x, ui_scale_y, 1) *
+		Matrix4f::translationMatrix((float)-campos.x, (float)-campos.y, 0);
 
 	const int x0     = last_centre_x  - TILE_GRID_RES/2; // unwrapped grid x coordinate of lower left grid cell in square grid around new camera position
 	const int y0     = last_centre_y  - TILE_GRID_RES/2;
@@ -535,7 +583,7 @@ void MiniMap::checkUpdateTilesForCurCamPosition()
 								downloading_info.pos = tile_pos;
 								downloading_info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(tile_w_ws, /*importance_factor=*/1.f);
 								downloading_info.used_by_other = true;
-								downloading_info.net_download_priority = 100 - z;
+								downloading_info.net_download_priority = 400 - z;
 
 								gui_client->startDownloadingResource(candidate_URL, tile_pos.toVec4fPoint(), tile_w_ws, downloading_info);
 								gui_client->startLoadingTextureIfPresent(candidate_URL, tile_pos.toVec4fPoint(), tile_w_ws, /*max task dist=*/1.0e10f, /*importance factor=*/1.f, tex_params);
@@ -845,6 +893,60 @@ void MiniMap::viewportResized(int w, int h)
 static const float button_spacing_px = 10;
 static const float button_w_px = 20;
 static const float button_h_px = 50;
+static const float fullscreen_margin_px = 10;
+static const float fullscreen_bottom_reserved_px = 100;
+static const float fullscreen_min_w_px = 360;
+static const float fullscreen_min_h_px = 260;
+static const float fullscreen_resize_handle_px = 18;
+
+
+void MiniMap::handleMousePress(MouseEvent& mouse_event)
+{
+	if(mouse_event.accepted || gl_ui.isNull() || !visible || !expanded || (gui_client && gui_client->usesEmbeddedMapDock()))
+		return;
+
+	const Vec2f ui_coords = gl_ui->UICoordsForOpenGLCoords(mouse_event.gl_coords);
+
+	if(fullscreen && isInFullscreenResizeHandle(ui_coords))
+	{
+		fullscreen_resize_drag_active = true;
+		fullscreen_resize_drag_start_ui = ui_coords;
+		fullscreen_resize_start_dims = computeMiniMapDims();
+		fullscreen_user_dims = fullscreen_resize_start_dims;
+		fullscreen_has_user_dims = true;
+		mouse_event.accepted = true;
+		return;
+	}
+
+	if(minimap_image.nonNull() && minimap_image->rect.inOpenRectangle(ui_coords))
+		mouse_event.accepted = true;
+}
+
+
+void MiniMap::handleMouseRelease(MouseEvent& mouse_event)
+{
+	if(gl_ui.isNull())
+		return;
+
+	if(gui_client && gui_client->usesEmbeddedMapDock())
+		return;
+
+	if(fullscreen_resize_drag_active)
+	{
+		fullscreen_resize_drag_active = false;
+		mouse_event.accepted = true;
+		return;
+	}
+
+	const Vec2f ui_coords = gl_ui->UICoordsForOpenGLCoords(mouse_event.gl_coords);
+	if(visible &&
+		((minimap_image.nonNull() && minimap_image->isVisible() && minimap_image->rect.inOpenRectangle(ui_coords)) ||
+		(collapse_button.nonNull() && collapse_button->isVisible() && collapse_button->rect.inOpenRectangle(ui_coords)) ||
+		(fullscreen_button.nonNull() && fullscreen_button->isVisible() && fullscreen_button->rect.inOpenRectangle(ui_coords)) ||
+		(expand_button.nonNull() && expand_button->isVisible() && expand_button->rect.inOpenRectangle(ui_coords)) ||
+		(resize_handle_image.nonNull() && resize_handle_image->isVisible() && resize_handle_image->rect.inOpenRectangle(ui_coords))))
+		mouse_event.accepted = true;
+}
 
 
 void MiniMap::handleMouseMoved(MouseEvent& mouse_event)
@@ -852,9 +954,20 @@ void MiniMap::handleMouseMoved(MouseEvent& mouse_event)
 	if(gl_ui.isNull())
 		return;
 
-	// We keep the minimap controls visible (per UX request).
-	// Hover-based hiding makes it look like the fullscreen button "doesn't exist".
-	(void)mouse_event;
+	if(gui_client && gui_client->usesEmbeddedMapDock())
+		return;
+
+	const Vec2f ui_coords = gl_ui->UICoordsForOpenGLCoords(mouse_event.gl_coords);
+
+	if(fullscreen_resize_drag_active)
+	{
+		updateFullscreenResizeDrag(ui_coords);
+		mouse_event.accepted = true;
+		return;
+	}
+
+	if(visible && expanded && minimap_image.nonNull() && minimap_image->rect.inOpenRectangle(ui_coords))
+		mouse_event.accepted = true;
 }
 
 
@@ -865,12 +978,7 @@ void MiniMap::updateWidgetPositions()
 		if(minimap_image)
 		{
 			const Vec2f minimap_dims = computeMiniMapDims();
-			const float y_margin = computeMiniMapTopMargin();
-
-			const Vec2f minimap_botleft = fullscreen ?
-				Vec2f(-1.f + x_margin, -gl_ui->getViewportMinMaxY() + x_margin) :
-				// Top-right corner in normal mode.
-				Vec2f(1 - minimap_dims.x - x_margin, gl_ui->getViewportMinMaxY() - minimap_dims.y - y_margin);
+			const Vec2f minimap_botleft = computeMiniMapBotLeft();
 
 			minimap_image->setPosAndDims(minimap_botleft, minimap_dims);
 			minimap_image->setZ(BACKGROUND_IMAGE_Z);
@@ -906,6 +1014,14 @@ void MiniMap::updateWidgetPositions()
 				Vec2f(button_w, button_h)
 			);
 
+			//---------------------------- Update resize handle ----------------------------
+			const float resize_handle_w = gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_resize_handle_px);
+			resize_handle_image->setPosAndDims(
+				Vec2f(minimap_botleft.x + minimap_dims.x - resize_handle_w, minimap_botleft.y),
+				Vec2f(resize_handle_w)
+			);
+			resize_handle_image->setVisible(visible && expanded && fullscreen);
+
 			//---------------------------- Update expand_button ----------------------------
 			const float expand_button_w_px = 36;
 			const float expand_button_w = gl_ui->getUIWidthForDevIndepPixelWidth(expand_button_w_px);
@@ -915,9 +1031,10 @@ void MiniMap::updateWidgetPositions()
 
 			//---------------------------- Update tile clip regions ----------------------------
 			const float clip_border_width = gl_ui->getUIWidthForDevIndepPixelWidth(clip_border_width_px);
+			const Rect2f map_content_rect = computeMiniMapContentRect();
 			for(int y=0; y<TILE_GRID_RES; ++y)
 			for(int x=0; x<TILE_GRID_RES; ++x)
-				tiles.elem(x, y).ob->clip_region = gl_ui->OpenGLRectCoordsForUICoords(Rect2f(minimap_image->rect.getMin() + Vec2f(clip_border_width), minimap_image->rect.getMax() - Vec2f(clip_border_width)));
+				tiles.elem(x, y).ob->clip_region = gl_ui->OpenGLRectCoordsForUICoords(Rect2f(map_content_rect.getMin() + Vec2f(clip_border_width), map_content_rect.getMax() - Vec2f(clip_border_width)));
 		}
 	}
 }
@@ -929,8 +1046,7 @@ Vec2f MiniMap::mapUICoordsForWorldSpacePos(const Vec3d& pos)
 
 	const Vec2f cam_to_pos_xy_ws((float)cam_to_pos_ws.x, (float)cam_to_pos_ws.y);
 
-	// Use the actual minimap rect so fullscreen/normal modes behave consistently.
-	const Rect2f map_rect = minimap_image->rect;
+	const Rect2f map_rect = computeMiniMapContentRect();
 	const Vec2f map_dims_ui = map_rect.getWidths();
 	const Vec2f map_centre_ui = (map_rect.getMin() + map_rect.getMax()) * 0.5f;
 	return map_centre_ui + Vec2f(
@@ -940,13 +1056,51 @@ Vec2f MiniMap::mapUICoordsForWorldSpacePos(const Vec3d& pos)
 }
 
 
+Rect2f MiniMap::computeMiniMapContentRect() const
+{
+	return minimap_image.nonNull() ? minimap_image->rect : Rect2f(Vec2f(0.f), Vec2f(0.f));
+}
+
+
+Rect2f MiniMap::computeFullscreenAvailableRect() const
+{
+	const float side_margin = gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_margin_px);
+	const float top_margin = gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_margin_px);
+	const float bottom_reserved = gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_bottom_reserved_px);
+	const float viewport_max_y = gl_ui->getViewportMinMaxY();
+
+	return Rect2f(
+		Vec2f(-1.f + side_margin, -viewport_max_y + bottom_reserved),
+		Vec2f( 1.f - side_margin,  viewport_max_y - top_margin)
+	);
+}
+
+
+Vec2f MiniMap::computeMiniMapBotLeft() const
+{
+	const Vec2f minimap_dims = computeMiniMapDims();
+
+	if(fullscreen)
+		return computeFullscreenAvailableRect().getMin();
+
+	return Vec2f(1 - minimap_dims.x - x_margin, gl_ui->getViewportMinMaxY() - minimap_dims.y - computeMiniMapTopMargin());
+}
+
+
 Vec2f MiniMap::computeMiniMapDims() const
 {
 	if(fullscreen)
 	{
-		const float max_w = myClamp(2.f - 2 * x_margin, 0.f, 2.f);
-		const float max_h = myClamp(2.f * gl_ui->getViewportMinMaxY() - 2 * x_margin, 0.f, 2.f * gl_ui->getViewportMinMaxY());
-		return Vec2f(max_w, max_h);
+		const Vec2f max_dims = computeFullscreenAvailableRect().getWidths();
+		if(!fullscreen_has_user_dims)
+			return max_dims;
+
+		const float min_w = myMin(gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_min_w_px), max_dims.x);
+		const float min_h = myMin(gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_min_h_px), max_dims.y);
+		return Vec2f(
+			myClamp(fullscreen_user_dims.x, min_w, max_dims.x),
+			myClamp(fullscreen_user_dims.y, min_h, max_dims.y)
+		);
 	}
 
 	const float minimap_width = myClamp(gl_ui->getUIWidthForDevIndepPixelWidth(250), 0.f, 2.f);
@@ -954,14 +1108,17 @@ Vec2f MiniMap::computeMiniMapDims() const
 }
 
 
-float MiniMap::computeMiniMapWidth()
+float MiniMap::computeMiniMapWidth() const
 {
 	if(fullscreen)
 	{
 		// UI coords are in [-1, 1] for X and [-viewportMaxY, viewportMaxY] for Y.
 		// So the full available size is 2 in X and 2*viewportMaxY in Y.
-		const float max_w = 2.f - 2 * x_margin;
-		const float max_h = 2.f * gl_ui->getViewportMinMaxY() - 2 * x_margin;
+		const float side_margin = gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_margin_px);
+		const float top_margin = gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_margin_px);
+		const float bottom_reserved = gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_bottom_reserved_px);
+		const float max_w = 2.f - 2 * side_margin;
+		const float max_h = 2.f * gl_ui->getViewportMinMaxY() - top_margin - bottom_reserved;
 		return myClamp(myMin(max_w, max_h), 0.f, 2.f);
 	}
 
@@ -969,10 +1126,34 @@ float MiniMap::computeMiniMapWidth()
 }
 
 
-float MiniMap::computeMiniMapTopMargin()
+bool MiniMap::isInFullscreenResizeHandle(const Vec2f& ui_coords) const
+{
+	return fullscreen && resize_handle_image.nonNull() && resize_handle_image->rect.inOpenRectangle(ui_coords);
+}
+
+
+void MiniMap::updateFullscreenResizeDrag(const Vec2f& ui_coords)
+{
+	const Vec2f max_dims = computeFullscreenAvailableRect().getWidths();
+	const float min_w = myMin(gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_min_w_px), max_dims.x);
+	const float min_h = myMin(gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_min_h_px), max_dims.y);
+	const Vec2f delta = ui_coords - fullscreen_resize_drag_start_ui;
+
+	fullscreen_user_dims = Vec2f(
+		myClamp(fullscreen_resize_start_dims.x + delta.x, min_w, max_dims.x),
+		myClamp(fullscreen_resize_start_dims.y + delta.y, min_h, max_dims.y)
+	);
+	fullscreen_has_user_dims = true;
+
+	updateWidgetPositions();
+	setTileOverlayObjectTransforms();
+}
+
+
+float MiniMap::computeMiniMapTopMargin() const
 {
 	if(fullscreen)
-		return x_margin;
+		return gl_ui->getUIWidthForDevIndepPixelWidth(fullscreen_margin_px);
 
 	if(computeMiniMapWidth() > 0.8f) // If minimap extends sufficiently far across screen (will be case for narrow screens such as on phones)
 		return gl_ui->getUIWidthForDevIndepPixelWidth(60); // lower map so does not cover login/signup buttons.
@@ -994,7 +1175,7 @@ void MiniMap::updateMarkerForAvatar(Avatar* avatar, const Vec3d& avatar_pos)
 
 	// Clamp marker to screen.
 	const float in_map_margin_w = 0.02f;
-	const Rect2f map_rect = minimap_image->rect;
+	const Rect2f map_rect = computeMiniMapContentRect();
 	const float map_min_x = map_rect.getMin().x + in_map_margin_w;
 	const float map_max_x = map_rect.getMax().x - in_map_margin_w;
 	const float map_min_y = map_rect.getMin().y + in_map_margin_w;
@@ -1127,34 +1308,44 @@ void MiniMap::removeMarkerForAvatar(Avatar* avatar)
 
 void MiniMap::eventOccurred(GLUICallbackEvent& event)
 {
+	if(gui_client && gui_client->usesEmbeddedMapDock())
+		return;
+
 	if(event.widget == this->collapse_button.ptr())
 	{
 		assert(expanded);
 		expanded = false;
 		fullscreen = false;
+		fullscreen_resize_drag_active = false;
 	}
 	else if(event.widget == this->fullscreen_button.ptr())
 	{
 		assert(expanded);
 		fullscreen = !fullscreen;
+		fullscreen_resize_drag_active = false;
 	}
 	else if(event.widget == this->expand_button.ptr())
 	{
 		assert(!expanded);
 		expanded = true;
 		fullscreen = false;
+		fullscreen_resize_drag_active = false;
 	}
 
 	updateWidgetPositions();
 	setWidgetVisibility();
 
 	gui_client->getSettingsStore()->setBoolValue("setting/show_minimap", expanded);
+	event.accepted = true;
 }
 
 
 void MiniMap::mouseWheelEventOccurred(GLUICallbackMouseWheelEvent& event)
 {
 	if(gl_ui.isNull())
+		return;
+
+	if(gui_client && gui_client->usesEmbeddedMapDock())
 		return;
 
 	if(minimap_image && !minimap_image->isVisible()) // If map is hidden, don't do any work.
@@ -1176,7 +1367,7 @@ void MiniMap::mouseWheelEventOccurred(GLUICallbackMouseWheelEvent& event)
 		last_centre_x = -10000;
 		last_centre_y = -10000;
 		checkUpdateTilesForCurCamPosition();
-
-		setTileOverlayObjectTransforms();
 	}
+
+	setTileOverlayObjectTransforms();
 }

@@ -1571,6 +1571,63 @@ void Server::enqueuePacketToBroadcastForWorld(const SocketBufferOutStream& packe
 }
 
 
+bool Server::enqueuePrivateChatPacketForWorld(const SocketBufferOutStream& recipient_packet, const SocketBufferOutStream& sender_packet, ServerWorldState* world, WorkerThread* sender, const std::string& recipient_name, const UID& recipient_avatar_uid)
+{
+	bool sent = false;
+	std::map<UID, std::string> avatar_names;
+	std::map<UID, std::string> avatar_use_names;
+
+	if(world && this->world_state.nonNull())
+	{
+		WorldStateLock world_lock(this->world_state->mutex);
+		const auto& avatars = world->getAvatars(world_lock);
+		for(auto i = avatars.begin(); i != avatars.end(); ++i)
+		{
+			if(i->second.nonNull())
+			{
+				avatar_names[i->first] = i->second->name;
+				avatar_use_names[i->first] = i->second->getUseName();
+			}
+		}
+	}
+
+	Lock lock(worker_thread_manager.getMutex());
+	for(auto i = worker_thread_manager.getThreads().begin(); i != worker_thread_manager.getThreads().end(); ++i)
+	{
+		assert(dynamic_cast<WorkerThread*>(i->ptr()));
+		WorkerThread* worker_thread = static_cast<WorkerThread*>(i->ptr());
+
+		if(worker_thread->cur_world_state.ptr() != world)
+			continue;
+
+		const UID avatar_uid = worker_thread->getRoutingAvatarUID();
+		bool is_recipient = recipient_avatar_uid.valid() && (avatar_uid == recipient_avatar_uid);
+
+		if(!is_recipient)
+			is_recipient = StringUtils::equalCaseInsensitive(worker_thread->getRoutingUserName(), recipient_name);
+
+		auto avatar_name_res = avatar_names.find(avatar_uid);
+		if(!is_recipient && avatar_name_res != avatar_names.end())
+			is_recipient = StringUtils::equalCaseInsensitive(avatar_name_res->second, recipient_name);
+
+		auto avatar_use_name_res = avatar_use_names.find(avatar_uid);
+		if(!is_recipient && avatar_use_name_res != avatar_use_names.end())
+			is_recipient = StringUtils::equalCaseInsensitive(avatar_use_name_res->second, recipient_name);
+
+		if(is_recipient)
+		{
+			worker_thread->enqueueDataToSend(recipient_packet);
+			sent = true;
+		}
+	}
+
+	if(sent && sender)
+		sender->enqueueDataToSend(sender_packet);
+
+	return sent;
+}
+
+
 
 void Server::clientDisconnected(WorkerThread* worker_thread)
 {

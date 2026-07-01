@@ -75,6 +75,8 @@ WorkerThread::WorkerThread(const Reference<SocketInterface>& socket_, Server* se
 	server(server_),
 	scratch_packet(SocketBufferOutStream::DontUseNetworkByteOrder),
 	fuzzing(false),
+	routing_client_user_id(UserID::invalidUserID()),
+	routing_client_avatar_uid(0),
 	write_trace(false),
 	is_websocket_connection(is_websocket_connection_)
 {
@@ -87,6 +89,36 @@ WorkerThread::WorkerThread(const Reference<SocketInterface>& socket_, Server* se
 
 WorkerThread::~WorkerThread()
 {
+}
+
+
+void WorkerThread::setRoutingClientInfo(const UserID& user_id, const std::string& user_name, const UID& avatar_uid)
+{
+	Lock lock(routing_client_info_mutex);
+	routing_client_user_id = user_id;
+	routing_client_user_name = user_name;
+	routing_client_avatar_uid = avatar_uid;
+}
+
+
+std::string WorkerThread::getRoutingUserName() const
+{
+	Lock lock(routing_client_info_mutex);
+	return routing_client_user_name;
+}
+
+
+UserID WorkerThread::getRoutingUserID() const
+{
+	Lock lock(routing_client_info_mutex);
+	return routing_client_user_id;
+}
+
+
+UID WorkerThread::getRoutingAvatarUID() const
+{
+	Lock lock(routing_client_info_mutex);
+	return routing_client_avatar_uid;
 }
 
 
@@ -267,7 +299,8 @@ void WorkerThread::handleResourceUploadConnection()
 			}
 		}
 
-		const bool valid_extension = FileTypes::hasSupportedExtension(URL);
+		const bool chat_attachment_upload = hasPrefix(URL, "chat_");
+		const bool valid_extension = FileTypes::hasSupportedExtension(URL) || chat_attachment_upload;
 		if(!valid_extension)
 		{
 			socket->writeUInt32(Protocol::InvalidFileType); // Note that this is not a framed message.
@@ -1646,6 +1679,7 @@ void WorkerThread::doRun()
 
 			// Write avatar UID assigned to the connected client.
 			client_avatar_uid = world_state->getNextAvatarUID();
+			setRoutingClientInfo(client_user_id, client_user_name, client_avatar_uid);
 			writeToStream(client_avatar_uid, *socket);
 
 			// If the client connected via a websocket, they can be logged in with a session cookie.
@@ -1663,6 +1697,7 @@ void WorkerThread::doRun()
 					client_gesture_settings = cookie_logged_in_user->gesture_settings;
 				}
 			}
+			setRoutingClientInfo(client_user_id, client_user_name, client_avatar_uid);
 
 			if(client_user_id.valid())
 			{
@@ -3394,6 +3429,55 @@ void WorkerThread::doRun()
 							}
 							break;
 						}
+					case Protocol::PrivateChatMessageID:
+						{
+							const std::string recipient_name = stripHeadAndTailWhitespace(msg_buffer.readStringLengthFirst(MAX_STRING_LEN));
+							const std::string msg = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+							UID recipient_avatar_uid = UID::invalidUID();
+							if(!msg_buffer.endOfStream())
+								recipient_avatar_uid = readUIDFromStream(msg_buffer);
+
+							if(!client_user_id.valid())
+							{
+								writeErrorMessageToClient(socket, "Для личных сообщений нужно войти в аккаунт.");
+							}
+							else if(recipient_name.empty())
+							{
+								writeErrorMessageToClient(socket, "Не указан получатель личного сообщения.");
+							}
+							else if(stripHeadAndTailWhitespace(msg).empty())
+							{
+								writeErrorMessageToClient(socket, "Личное сообщение пустое.");
+							}
+							else
+							{
+								SocketBufferOutStream recipient_packet(SocketBufferOutStream::DontUseNetworkByteOrder);
+								MessageUtils::initPacket(recipient_packet, Protocol::PrivateChatMessageID);
+								recipient_packet.writeStringLengthFirst(client_user_name);
+								recipient_packet.writeStringLengthFirst(recipient_name);
+								recipient_packet.writeStringLengthFirst(msg);
+								writeToStream(client_avatar_uid, recipient_packet);
+								recipient_packet.writeUInt32(0); // incoming for recipient
+								MessageUtils::updatePacketLengthField(recipient_packet);
+
+								SocketBufferOutStream sender_packet(SocketBufferOutStream::DontUseNetworkByteOrder);
+								MessageUtils::initPacket(sender_packet, Protocol::PrivateChatMessageID);
+								sender_packet.writeStringLengthFirst(client_user_name);
+								sender_packet.writeStringLengthFirst(recipient_name);
+								sender_packet.writeStringLengthFirst(msg);
+								writeToStream(client_avatar_uid, sender_packet);
+								sender_packet.writeUInt32(1); // outgoing copy for sender
+								MessageUtils::updatePacketLengthField(sender_packet);
+
+								const bool sent = server->enqueuePrivateChatPacketForWorld(recipient_packet, sender_packet, cur_world_state.ptr(), this, recipient_name, recipient_avatar_uid);
+								if(!sent)
+								{
+									conPrint("PrivateChatMessageID: recipient not found. sender='" + client_user_name + "', recipient='" + recipient_name + "', recipient_avatar_uid=" + recipient_avatar_uid.toString());
+									writeErrorMessageToClient(socket, "Получатель личного сообщения не онлайн в этом мире.");
+								}
+							}
+							break;
+						}
 					case Protocol::UserMovedNearToAvatar:
 						{
 							const UID avatar_uid = readUIDFromStream(msg_buffer); // avatar the user moved nearby to.
@@ -3617,6 +3701,7 @@ void WorkerThread::doRun()
 										client_user_avatar_settings = user->avatar_settings;
 										client_user_flags = user->flags;
 										client_gesture_settings = user->gesture_settings;
+										setRoutingClientInfo(client_user_id, client_user_name, client_avatar_uid);
 
 										logged_in = true;
 									}
@@ -3663,6 +3748,7 @@ void WorkerThread::doRun()
 							client_user_id = UserID::invalidUserID(); // Mark the client as not logged in.
 							client_user_name = "";
 							client_user_flags = 0;
+							setRoutingClientInfo(client_user_id, client_user_name, client_avatar_uid);
 
 							// Send logged-out message to client
 							MessageUtils::initPacket(scratch_packet, Protocol::LoggedOutMessageID);
@@ -3728,6 +3814,7 @@ void WorkerThread::doRun()
 												client_user_name = new_user->name;
 												client_user_avatar_settings = new_user->avatar_settings;
 												client_user_flags = new_user->flags;
+												setRoutingClientInfo(client_user_id, client_user_name, client_avatar_uid);
 
 												world_state->addPersonalWorldForUser(new_user, lock);
 

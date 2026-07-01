@@ -30,7 +30,8 @@ struct MapWorldTile
 	: tile_x(std::numeric_limits<int>::min()),
 	  tile_y(std::numeric_limits<int>::min()),
 	  tile_z(std::numeric_limits<int>::min()),
-	  in_engine(false)
+	  in_engine(false),
+	  has_loaded_texture(false)
 	{}
 
 	Reference<GLObject> gl_ob;
@@ -39,6 +40,7 @@ struct MapWorldTile
 	int tile_y;
 	int tile_z;
 	bool in_engine;
+	bool has_loaded_texture;
 };
 
 
@@ -49,6 +51,7 @@ struct MapWorldTileLayer
 	  grid_res(0),
 	  z_offset_m(0.f),
 	  show_placeholder_while_loading(false),
+	  allow_parent_fallback(false),
 	  last_centre_tile_x(std::numeric_limits<int>::min()),
 	  last_centre_tile_y(std::numeric_limits<int>::min())
 	{}
@@ -57,6 +60,7 @@ struct MapWorldTileLayer
 	int grid_res;
 	float z_offset_m;
 	bool show_placeholder_while_loading;
+	bool allow_parent_fallback;
 	Array2D<MapWorldTile> tiles;
 	int last_centre_tile_x;
 	int last_centre_tile_y;

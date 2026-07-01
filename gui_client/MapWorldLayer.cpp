@@ -19,6 +19,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <opengl/OpenGLEngine.h>
 #include <utils/Clock.h>
 #include <utils/StringUtils.h>
+#include <algorithm>
 #include <cmath>
 
 
@@ -30,21 +31,40 @@ struct MapWorldLayerSpec
 	int grid_res;
 	float z_offset_m;
 	bool show_placeholder_while_loading;
+	bool allow_parent_fallback;
 };
 
 
 static const MapWorldLayerSpec MAP_WORLD_LAYER_SPECS[] =
 {
-	{11, 5, 0.02f, true },
-	{13, 7, 0.04f, false},
-	{15, 7, 0.06f, false},
-	{17, 5, 0.08f, false},
-	{19, 5, 0.10f, false}
+	// Keep a local tiled carpet under the player. Parent fallback lets coarse loaded
+	// tiles fill detailed cells while exact nearby tiles are still arriving.
+	{11, 5, 0.02f, true,  true},
+	{13, 7, 0.06f, false, true},
+	{15, 7, 0.10f, false, true},
+	{17, 7, 0.14f, false, true},
+	{19, 5, 0.18f, false, true}
 };
 
 
 static const int MAX_TILE_QUERY_COUNT = 900;
 static const char* const MAP_WORLD_TILE_PLACEHOLDER_TEX_KEY = "__metasiberia_map_world_tile_placeholder__";
+static const float MAP_TILE_EMISSION_SCALE = 0.028f;
+
+
+static bool appendUniqueTileQuery(const Vec3i& tile_coords, std::vector<Vec3i>& query_indices)
+{
+	if((int)query_indices.size() >= MAX_TILE_QUERY_COUNT)
+		return false;
+
+	if(std::find(query_indices.begin(), query_indices.end(), tile_coords) == query_indices.end())
+	{
+		query_indices.push_back(tile_coords);
+		return true;
+	}
+
+	return true;
+}
 
 
 static float getPlaceholderAlpha(const MapWorldTileLayer& layer)
@@ -61,6 +81,18 @@ static TextureParams makeMapTileTextureParams()
 	params.filtering = OpenGLTexture::Filtering_Bilinear;
 	params.wrapping = OpenGLTexture::Wrapping_Clamp;
 	return params;
+}
+
+
+static int mapTileDownloadPriority(int tile_z)
+{
+	return 400 + tile_z;
+}
+
+
+static bool isMapWorldTileURL(const URLString& URL)
+{
+	return toStdString(URL).find("/osm_tile/") != std::string::npos;
 }
 
 
@@ -103,6 +135,7 @@ MapWorldLayer::MapWorldLayer(const Reference<OpenGLEngine>& opengl_engine_, GUIC
 		layer.grid_res = MAP_WORLD_LAYER_SPECS[layer_i].grid_res;
 		layer.z_offset_m = MAP_WORLD_LAYER_SPECS[layer_i].z_offset_m;
 		layer.show_placeholder_while_loading = MAP_WORLD_LAYER_SPECS[layer_i].show_placeholder_while_loading;
+		layer.allow_parent_fallback = MAP_WORLD_LAYER_SPECS[layer_i].allow_parent_fallback;
 		layer.tiles.resize(layer.grid_res, layer.grid_res);
 
 		for(int y = 0; y < layer.grid_res; ++y)
@@ -114,10 +147,14 @@ MapWorldLayer::MapWorldLayer(const Reference<OpenGLEngine>& opengl_engine_, GUIC
 			tile.gl_ob->materials.resize(1);
 			tile.gl_ob->materials[0].albedo_linear_rgb = toLinearSRGB(Colour3f(1.f));
 			tile.gl_ob->materials[0].albedo_texture = tile_placeholder_tex;
+			tile.gl_ob->materials[0].emission_linear_rgb = Colour3f(1.f);
+			tile.gl_ob->materials[0].emission_texture = tile_placeholder_tex;
+			tile.gl_ob->materials[0].emission_scale = MAP_TILE_EMISSION_SCALE;
 			tile.gl_ob->materials[0].roughness = 1.f;
 			tile.gl_ob->materials[0].fresnel_scale = 0.f;
+			tile.gl_ob->materials[0].simple_double_sided = true;
 			tile.gl_ob->materials[0].cast_shadows = false;
-			tile.gl_ob->materials[0].alpha_blend = true;
+			tile.gl_ob->materials[0].alpha_blend = !layer.show_placeholder_while_loading;
 			tile.gl_ob->materials[0].alpha = getPlaceholderAlpha(layer);
 			tile.gl_ob->materials[0].tex_matrix = Matrix2f(1, 0, 0, -1);
 			tile.gl_ob->materials[0].tex_translation = Vec2f(0, 1);
@@ -211,7 +248,7 @@ void MapWorldLayer::think()
 			downloading_info.pos = Vec3d(tile_centre.x, tile_centre.y, 0.0);
 			downloading_info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(tile_width_ws, /*importance_factor=*/1.f);
 			downloading_info.used_by_other = true;
-			downloading_info.net_download_priority = 100 - indices.z;
+			downloading_info.net_download_priority = mapTileDownloadPriority(indices.z);
 
 			gui_client->startDownloadingResource(URL, tile_centre_ws, tile_width_ws, downloading_info);
 			gui_client->startLoadingTextureIfPresent(URL, tile_centre_ws, tile_width_ws,
@@ -229,9 +266,13 @@ void MapWorldLayer::handleMapTilesResultReceivedMessage(const MapTilesResultRece
 
 void MapWorldLayer::handleUploadedTexture(const OpenGLTextureKey& /*path*/, const URLString& URL, const Reference<OpenGLTexture>& opengl_tex)
 {
+	if(!isMapWorldTileURL(URL))
+		return;
+
 	for(size_t layer_i = 0; layer_i < tile_layers.size(); ++layer_i)
 	{
 		MapWorldTileLayer& layer = tile_layers[layer_i];
+		bool updated_layer_tile = false;
 		for(int y = 0; y < layer.grid_res; ++y)
 		for(int x = 0; x < layer.grid_res; ++x)
 		{
@@ -239,15 +280,24 @@ void MapWorldLayer::handleUploadedTexture(const OpenGLTextureKey& /*path*/, cons
 			if(tile.image_URL == URL && tile.gl_ob.nonNull())
 			{
 				OpenGLMaterial& material = tile.gl_ob->materials[0];
-				if(material.albedo_texture != opengl_tex || material.alpha != 1.f)
+				if(material.albedo_texture != opengl_tex || material.alpha != 1.f || !tile.has_loaded_texture)
 				{
 					material.albedo_texture = opengl_tex;
+					material.emission_texture = opengl_tex;
+					material.emission_linear_rgb = Colour3f(1.f);
+					material.emission_scale = MAP_TILE_EMISSION_SCALE;
+					material.alpha_blend = false;
 					material.alpha = 1.f;
+					tile.has_loaded_texture = true;
 					if(tile.in_engine)
 						opengl_engine->objectMaterialsUpdated(*tile.gl_ob);
 				}
+				updated_layer_tile = true;
 			}
 		}
+
+		if(!updated_layer_tile)
+			refreshVisibleTileGrid(layer, /*force_full_refresh=*/false);
 	}
 }
 
@@ -284,42 +334,56 @@ void MapWorldLayer::setLayerVisible(bool visible)
 void MapWorldLayer::collectTileQueriesForLayer(const MapWorldTileLayer& layer, int centre_tile_x, int centre_tile_y, double current_time, std::vector<Vec3i>& query_indices)
 {
 	const int query_rad = layer.grid_res / 2;
+	const int min_query_z = layer.allow_parent_fallback ? 0 : layer.tile_z;
 
-	for(int x = centre_tile_x - query_rad; x <= centre_tile_x + query_rad; ++x)
-	for(int y = centre_tile_y - query_rad; y <= centre_tile_y + query_rad; ++y)
+	for(int z = layer.tile_z; z >= min_query_z; --z)
 	{
-		Vec3i tile_coords(x, y, layer.tile_z);
-		while(tile_coords.z >= 0)
+		for(int radius = 0; radius <= query_rad; ++radius)
+		for(int dy = -radius; dy <= radius; ++dy)
+		for(int dx = -radius; dx <= radius; ++dx)
 		{
+			const int abs_dx = dx < 0 ? -dx : dx;
+			const int abs_dy = dy < 0 ? -dy : dy;
+			if(myMax(abs_dx, abs_dy) != radius)
+				continue;
+
+			Vec3i tile_coords(centre_tile_x + dx, centre_tile_y + dy, layer.tile_z);
+			while(tile_coords.z > z)
+			{
+				tile_coords.x = Maths::divideByTwoRoundedDown(tile_coords.x);
+				tile_coords.y = Maths::divideByTwoRoundedDown(tile_coords.y);
+				tile_coords.z--;
+			}
+
 			if((int)query_indices.size() >= MAX_TILE_QUERY_COUNT)
 				return;
 
-			if(MapWorldUtils::isValidOSMTileCoord(tile_coords.x, tile_coords.y, tile_coords.z))
-			{
-				const URLString URL = MapWorldUtils::makeOSMTileURL(gui_client->server_hostname, tile_coords.x, tile_coords.y, tile_coords.z);
-				tile_infos[tile_coords].image_URL = URL;
+			if(!MapWorldUtils::isValidOSMTileCoord(tile_coords.x, tile_coords.y, tile_coords.z))
+				continue;
 
-				ResourceRef resource = gui_client->resource_manager->getExistingResourceForURL(URL);
-				const bool resource_present = resource.nonNull() && (resource->getState() == Resource::State_Present);
-				if(resource_present)
+			const URLString URL = MapWorldUtils::makeOSMTileURL(gui_client->server_hostname, tile_coords.x, tile_coords.y, tile_coords.z);
+			tile_infos[tile_coords].image_URL = URL;
+
+			ResourceRef resource = gui_client->resource_manager->getExistingResourceForURL(URL);
+			const bool resource_present = resource.nonNull() && (resource->getState() == Resource::State_Present);
+			if(resource_present)
+			{
+				next_tile_query_time.erase(tile_coords);
+			}
+			else
+			{
+				auto next_query_res = next_tile_query_time.find(tile_coords);
+				if(next_query_res == next_tile_query_time.end() || current_time >= next_query_res->second)
 				{
-					next_tile_query_time.erase(tile_coords);
-				}
-				else
-				{
-					auto next_query_res = next_tile_query_time.find(tile_coords);
-					if(next_query_res == next_tile_query_time.end() || current_time >= next_query_res->second)
+					if(appendUniqueTileQuery(tile_coords, query_indices))
 					{
-						query_indices.push_back(tile_coords);
 						const double retry_interval_s = (tile_coords.z <= 13) ? 0.35 : 0.75;
 						next_tile_query_time[tile_coords] = current_time + retry_interval_s;
 					}
+					else
+						return;
 				}
 			}
-
-			tile_coords.x = Maths::divideByTwoRoundedDown(tile_coords.x);
-			tile_coords.y = Maths::divideByTwoRoundedDown(tile_coords.y);
-			tile_coords.z--;
 		}
 	}
 }
@@ -360,6 +424,7 @@ void MapWorldLayer::updateTile(MapWorldTileLayer& layer, MapWorldTile& tile, int
 	tile.tile_y = tile_y;
 	tile.tile_z = layer.tile_z;
 	tile.image_URL = URLString();
+	tile.has_loaded_texture = false;
 	tile.gl_ob->ob_to_world_matrix =
 		Matrix4f::translationMatrix(tile_centre_ws) *
 		Matrix4f::scaleMatrix(tile_width_ws, tile_width_ws, 1.f) *
@@ -384,9 +449,14 @@ void MapWorldLayer::applyPlaceholderToTile(const MapWorldTileLayer& layer, MapWo
 
 	OpenGLMaterial& material = tile.gl_ob->materials[0];
 	material.albedo_texture = tile_placeholder_tex;
+	material.emission_texture = tile_placeholder_tex;
+	material.emission_linear_rgb = Colour3f(1.f);
+	material.emission_scale = MAP_TILE_EMISSION_SCALE;
+	material.alpha_blend = !layer.show_placeholder_while_loading;
 	material.alpha = getPlaceholderAlpha(layer);
 	material.tex_matrix = Matrix2f(1, 0, 0, -1);
 	material.tex_translation = Vec2f(0, 1);
+	tile.has_loaded_texture = false;
 }
 
 
@@ -412,7 +482,8 @@ void MapWorldLayer::assignBestAvailableTexture(MapWorldTileLayer& layer, MapWorl
 	Vec2f lower_left_coords(0.f);
 	float tex_scale = 1.f;
 
-	for(int z = layer.tile_z; z >= 0; --z)
+	const int min_query_z = layer.allow_parent_fallback ? 0 : layer.tile_z;
+	for(int z = layer.tile_z; z >= min_query_z; --z)
 	{
 		if(MapWorldUtils::isValidOSMTileCoord(query_tile_x, query_tile_y, z))
 		{
@@ -488,10 +559,15 @@ void MapWorldLayer::assignBestAvailableTexture(MapWorldTileLayer& layer, MapWorl
 		const Reference<OpenGLTexture> loaded_tex = opengl_engine->getTextureIfLoaded(local_abs_tex_path);
 		if(loaded_tex.nonNull())
 		{
-			if(selected_URL_changed || material.albedo_texture != loaded_tex || material.alpha != 1.f)
+			if(selected_URL_changed || material.albedo_texture != loaded_tex || material.alpha != 1.f || !tile.has_loaded_texture)
 			{
 				material.albedo_texture = loaded_tex;
+				material.emission_texture = loaded_tex;
+				material.emission_linear_rgb = Colour3f(1.f);
+				material.emission_scale = MAP_TILE_EMISSION_SCALE;
+				material.alpha_blend = false;
 				material.alpha = 1.f;
+				tile.has_loaded_texture = true;
 				if(tile.in_engine)
 					opengl_engine->objectMaterialsUpdated(*tile.gl_ob);
 			}
@@ -506,7 +582,7 @@ void MapWorldLayer::assignBestAvailableTexture(MapWorldTileLayer& layer, MapWorl
 		downloading_info.pos = Vec3d(tile_centre.x, tile_centre.y, layer.z_offset_m);
 		downloading_info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(tile_width_ws, /*importance_factor=*/1.f);
 		downloading_info.used_by_other = true;
-		downloading_info.net_download_priority = 100 - layer.tile_z;
+		downloading_info.net_download_priority = mapTileDownloadPriority(layer.tile_z);
 		gui_client->startDownloadingResource(use_URL, tile_centre_ws, tile_width_ws, downloading_info);
 	}
 

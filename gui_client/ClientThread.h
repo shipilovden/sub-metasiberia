@@ -37,9 +37,12 @@ struct ZSTD_DCtx_s;
 class ChatMessage : public ThreadMessage
 {
 public:
-	ChatMessage(const std::string& name_, const std::string& msg_, UID sender_avatar_uid_) : ThreadMessage(Msg_ChatMessage), name(name_), msg(msg_), sender_avatar_uid(sender_avatar_uid_) {}
-	std::string name, msg;
+	ChatMessage(const std::string& name_, const std::string& msg_, UID sender_avatar_uid_) : ThreadMessage(Msg_ChatMessage), name(name_), msg(msg_), sender_avatar_uid(sender_avatar_uid_), private_message(false), outgoing_private_message(false) {}
+	ChatMessage(const std::string& name_, const std::string& recipient_name_, const std::string& msg_, UID sender_avatar_uid_, bool outgoing_private_message_) : ThreadMessage(Msg_ChatMessage), name(name_), recipient_name(recipient_name_), msg(msg_), sender_avatar_uid(sender_avatar_uid_), private_message(true), outgoing_private_message(outgoing_private_message_) {}
+	std::string name, recipient_name, msg;
 	UID sender_avatar_uid;
+	bool private_message;
+	bool outgoing_private_message;
 };
 
 
