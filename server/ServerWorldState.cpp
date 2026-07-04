@@ -1834,6 +1834,14 @@ void ServerAllWorldsState::serialiseToDisk(WorldStateLock& lock)
 			if(!map_tile_info.database_key.valid())
 				map_tile_info.database_key = database.allocUnusedKey(); // Get a new key
 
+			// MAP_TILE_INFO grows gradually as map screenshots are rendered.  Give the
+			// append-only DB record plenty of spare capacity so a few new tiles do not
+			// append a fresh multi-MB record on every save.
+			const size_t map_tile_record_granularity = 32 * 1024 * 1024;
+			const size_t padded_size = Maths::roundUpToMultipleOfPowerOf2(myMax(temp_buf.buf.size(), map_tile_record_granularity), map_tile_record_granularity);
+			if(padded_size > temp_buf.buf.size())
+				temp_buf.buf.resize(padded_size, 0);
+
 			database.updateRecord(map_tile_info.database_key, ArrayRef<uint8>(temp_buf.buf.data(), temp_buf.buf.size()));
 
 			map_tile_info.db_dirty = false;

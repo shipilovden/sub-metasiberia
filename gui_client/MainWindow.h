@@ -478,6 +478,7 @@ public:
 	std::string screenshot_output_path;
 	bool run_as_screenshot_slave;
 	Reference<MySocket> screenshot_command_socket;
+	Reference<MySocket> screenshot_command_listener;
 	bool taking_map_screenshot;
 	bool test_screenshot_taking;
 	int screenshot_highlight_parcel_id;

@@ -331,7 +331,7 @@ void MiniMap::think()
 	if(gl_ui.isNull())
 		return;
 
-	const bool use_real_map_world_tiles = gui_client->isMetasiberiaMapWorld();
+	const bool use_real_map_world_tiles = gui_client->usesEmbeddedMapDock();
 	if(use_real_map_world_tiles != last_is_metasiberia_map_world)
 	{
 		fullscreen = false;
@@ -342,12 +342,6 @@ void MiniMap::think()
 		setWidgetVisibility();
 	}
 	last_is_metasiberia_map_world = use_real_map_world_tiles;
-
-	if(use_real_map_world_tiles)
-	{
-		setWidgetVisibility();
-		return;
-	}
 
 	if(minimap_image.nonNull() && !minimap_image->isVisible()) // If map is hidden, don't do any work.
 		return;

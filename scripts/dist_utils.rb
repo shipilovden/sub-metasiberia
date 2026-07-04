@@ -43,6 +43,14 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 		FileUtils.cp("#{lib_path}/#{dll_file}.dll", target_dir, :verbose => true) if !copy_debug
 		FileUtils.cp("#{lib_path}/#{dll_file}d.dll", target_dir, :verbose => true) if copy_debug
 	end
+
+	# Optional Qt SVG support for toolbar/menu SVG icons.
+	svg_dll_path = copy_debug ? "#{lib_path}/Qt5Svgd.dll" : "#{lib_path}/Qt5Svg.dll"
+	if File.exist?(svg_dll_path)
+		FileUtils.cp(svg_dll_path, target_dir, :verbose => true)
+	else
+		STDERR.puts "Warning: Qt SVG DLL not found: #{svg_dll_path}"
+	end
 	
 	# Imageformats
 	imageformats_dir = "#{plugins_path}/imageformats"
@@ -51,7 +59,7 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	FileUtils.mkdir_p(imageformats_target_dir, :verbose => true)
 	
 	# Keep extended image support in AddObjectDialog working in packaged builds.
-	image_formats = ["qjpeg", "qgif", "qtga", "qtiff", "qwbmp", "qwebp"]
+	image_formats = ["qjpeg", "qgif", "qtga", "qtiff", "qwbmp", "qwebp", "qsvg"]
 
 	image_formats.each do |format|
 		src_path = copy_debug ? "#{imageformats_dir}/#{format}d.dll" : "#{imageformats_dir}/#{format}.dll"

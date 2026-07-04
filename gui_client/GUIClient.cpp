@@ -17747,10 +17747,7 @@ bool GUIClient::isMetasiberiaMapWorld() const
 
 bool GUIClient::usesEmbeddedMapDock() const
 {
-	if(canonicalHostForMetasiberiaInGUIClient(this->server_hostname) != "vr.metasiberia.com")
-		return false;
-
-	return this->server_worldname.empty() || this->server_worldname == "map";
+	return canonicalHostForMetasiberiaInGUIClient(this->server_hostname) == "vr.metasiberia.com";
 }
 
 

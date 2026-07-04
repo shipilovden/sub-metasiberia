@@ -123,6 +123,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QToolButton>
+#include <QtWidgets/QToolTip>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QStyleFactory>
@@ -586,6 +587,7 @@ protected:
 			painter.drawText(rect(), Qt::AlignCenter, tr("Загрузка карты..."));
 		}
 
+		drawAvatarDots(painter);
 		drawAvatarMarker(painter);
 		drawHUD(painter);
 		updateInputControlVisibility();
@@ -624,6 +626,7 @@ protected:
 	{
 		if(!dragging)
 		{
+			updateAvatarHoverTooltip(event);
 			QWidget::mouseMoveEvent(event);
 			return;
 		}
@@ -652,6 +655,12 @@ protected:
 		}
 
 		QWidget::mouseReleaseEvent(event);
+	}
+
+	void leaveEvent(QEvent* event) override
+	{
+		QToolTip::hideText();
+		QWidget::leaveEvent(event);
 	}
 
 	void resizeEvent(QResizeEvent*) override
@@ -1309,9 +1318,13 @@ private:
 	void drawAvatarMarker(QPainter& painter)
 	{
 		// Keep the player marker locked to the map viewport; dragging moves the map underneath it.
+		const Vec3d forward = gui_client ? gui_client->cam_controller.getForwardsVec() : Vec3d(0, 1, 0);
+		const double forward_len_xy = std::sqrt(forward.x * forward.x + forward.y * forward.y);
+		const double marker_rotation_deg = (forward_len_xy > 1.0e-6) ? std::atan2(forward.x, forward.y) * 180.0 / 3.14159265358979323846 : 0.0;
+
 		painter.save();
 		painter.translate(width() * 0.5, height() * 0.5);
-		painter.rotate(current_heading_rad * 180.0 / 3.14159265358979323846);
+		painter.rotate(marker_rotation_deg);
 
 		QPolygonF arrow;
 		arrow << QPointF(0, -12) << QPointF(7, 9) << QPointF(0, 5) << QPointF(-7, 9);
@@ -1319,6 +1332,93 @@ private:
 		painter.setBrush(QColor(34, 100, 210));
 		painter.drawPolygon(arrow);
 		painter.restore();
+	}
+
+	void drawAvatarDots(QPainter& painter)
+	{
+		if(!gui_client || gui_client->world_state.isNull())
+			return;
+
+		const double scale_px_per_m = pixelsPerWorldMetre();
+		if(scale_px_per_m <= 0.0)
+			return;
+
+		Lock lock(gui_client->world_state->mutex);
+		for(auto it = gui_client->world_state->avatars.begin(); it != gui_client->world_state->avatars.end(); ++it)
+		{
+			const AvatarRef& avatar = it->second;
+			if(avatar.isNull() || avatar->uid == gui_client->client_avatar_uid)
+				continue;
+
+			const double x = width()  * 0.5 + (avatar->pos.x - current_pos.x) * scale_px_per_m;
+			const double y = height() * 0.5 - (avatar->pos.y - current_pos.y) * scale_px_per_m;
+			if(x < -8.0 || x > width() + 8.0 || y < -8.0 || y > height() + 8.0)
+				continue;
+
+			const bool is_bot = avatar->isChatBotAvatar();
+			painter.setPen(QPen(QColor(28, 32, 38, 210), 1));
+			painter.setBrush(is_bot ? QColor(255, 255, 255) : QColor(230, 38, 38));
+			painter.drawEllipse(QPointF(x, y), is_bot ? 4.2 : 4.6, is_bot ? 4.2 : 4.6);
+		}
+	}
+
+	QPointF avatarMapPoint(const Vec3d& avatar_pos) const
+	{
+		const double scale_px_per_m = pixelsPerWorldMetre();
+		return QPointF(
+			width()  * 0.5 + (avatar_pos.x - current_pos.x) * scale_px_per_m,
+			height() * 0.5 - (avatar_pos.y - current_pos.y) * scale_px_per_m);
+	}
+
+	bool avatarNameAtMapPoint(const QPoint& pos, QString& name_out) const
+	{
+		if(!gui_client || gui_client->world_state.isNull())
+			return false;
+
+		const double scale_px_per_m = pixelsPerWorldMetre();
+		if(scale_px_per_m <= 0.0)
+			return false;
+
+		const QPointF cursor_pos(pos);
+		const double hit_radius_px = 9.0;
+		double best_dist2 = hit_radius_px * hit_radius_px;
+		bool found = false;
+
+		Lock lock(gui_client->world_state->mutex);
+		for(auto it = gui_client->world_state->avatars.begin(); it != gui_client->world_state->avatars.end(); ++it)
+		{
+			const AvatarRef& avatar = it->second;
+			if(avatar.isNull() || avatar->uid == gui_client->client_avatar_uid)
+				continue;
+
+			const QPointF avatar_pos = avatarMapPoint(avatar->pos);
+			const double dx = avatar_pos.x() - cursor_pos.x();
+			const double dy = avatar_pos.y() - cursor_pos.y();
+			const double dist2 = dx * dx + dy * dy;
+			if(dist2 <= best_dist2)
+			{
+				best_dist2 = dist2;
+				name_out = QtUtils::toQString(avatar->getUseName());
+				found = true;
+			}
+		}
+
+		return found;
+	}
+
+	void updateAvatarHoverTooltip(QMouseEvent* event)
+	{
+		if(!active)
+		{
+			QToolTip::hideText();
+			return;
+		}
+
+		QString avatar_name;
+		if(avatarNameAtMapPoint(event->pos(), avatar_name))
+			QToolTip::showText(event->globalPos(), avatar_name, this);
+		else
+			QToolTip::hideText();
 	}
 
 	void drawHUD(QPainter& painter)
@@ -1583,6 +1683,15 @@ static std::string canonicaliseMetasiberiaSubURLHost(const std::string& url)
 
 	const std::string tail = (host_end == std::string::npos) ? std::string() : url.substr(host_end);
 	return std::string("sub://") + canonical_host + port_suffix + tail;
+}
+
+
+static std::string makeMetasiberiaWorldSubURL(const std::string& host, const std::string& world_name)
+{
+	std::string URL = "sub://" + canonicalHostForMetasiberia(host.empty() ? std::string("vr.metasiberia.com") : host) + "/";
+	if(!world_name.empty())
+		URL += web::Escaping::URLEscape(world_name);
+	return URL;
 }
 
 
@@ -2239,10 +2348,10 @@ void MainWindow::initialiseUI()
 	if(run_as_screenshot_slave)
 	{
 		conPrint("Waiting for screenshot command connection...");
-		MySocketRef listener = new MySocket();
-		listener->bindAndListen(34534);
+		screenshot_command_listener = new MySocket();
+		screenshot_command_listener->bindAndListen(34534);
 
-		screenshot_command_socket = listener->acceptConnection(); // Blocks
+		screenshot_command_socket = screenshot_command_listener->acceptConnection(); // Blocks for the initial controller.
 		screenshot_command_socket->setUseNetworkByteOrder(false);
 		conPrint("Got screenshot command connection.");
 	}
@@ -2628,6 +2737,24 @@ void MainWindow::configureMainToolbarButtons()
 		return;
 
 	refreshEditMenuActionIcons();
+
+	const auto set_svg_icon = [this](QAction* action, const std::string& filename)
+	{
+		if(!action)
+			return;
+
+		QString icon_path = QtUtils::toQString(base_dir_path + "/data/resources/buttons/" + filename);
+		if(!QFile::exists(icon_path))
+			icon_path = QtUtils::toQString(base_dir_path + "/resources/buttons/" + filename);
+		if(QFile::exists(icon_path))
+			action->setIcon(QIcon(icon_path));
+	};
+
+	set_svg_icon(ui->actionAddObject, "add_model_image.svg");
+	set_svg_icon(ui->actionAdd_Video, "add_video.svg");
+	set_svg_icon(ui->actionAddHypercard, "add_hypercard.svg");
+	set_svg_icon(ui->actionAdd_Web_View, "add_web_view.svg");
+	set_svg_icon(ui->actionAdd_Voxels, "add_voxels.svg");
 
 	const QList<QAction*> add_toolbar_actions = {
 		ui->actionAddObject,
@@ -6270,6 +6397,19 @@ void MainWindow::runScreenshotCode()
 		{
 			try
 			{
+				if(run_as_screenshot_slave && screenshot_command_socket.isNull())
+				{
+					if(screenshot_command_listener.nonNull() && screenshot_command_listener->readable(/*timeout (s)=*/0.0))
+					{
+						conPrint("Accepting new screenshot command connection...");
+						screenshot_command_socket = screenshot_command_listener->acceptConnection();
+						screenshot_command_socket->setUseNetworkByteOrder(false);
+						conPrint("Got screenshot command connection.");
+					}
+					else
+						return;
+				}
+
 				if(test_screenshot_taking || screenshot_command_socket->readable(/*timeout (s)=*/0.01))
 				{
 					conPrint("Reading command from screenshot_command_socket etc...");
@@ -6421,12 +6561,17 @@ void MainWindow::runScreenshotCode()
 			}
 			catch(glare::Exception& e)
 			{
-				conPrint("Excep while reading screenshot command from screenshot_command_socket: " + e.what() + ", exiting!");
+				conPrint("Excep while reading screenshot command from screenshot_command_socket: " + e.what() + ", waiting for next connection.");
+				if(screenshot_command_socket.nonNull())
+				{
+					screenshot_command_socket->ungracefulShutdown();
+					screenshot_command_socket = NULL;
+				}
 				//QMessageBox msgBox;
 				//msgBox.setWindowTitle("Error");
 				//msgBox.setText(QtUtils::toQString("Excep while reading screenshot command from screenshot_command_socket: " + e.what()));
 				//msgBox.exec();
-				exit(1);
+				return;
 			}
 		}
 	}
@@ -8403,12 +8548,7 @@ void MainWindow::on_actionThird_Person_Camera_triggered()
 
 void MainWindow::on_actionGoToMainWorld_triggered()
 {
-	URLParseResults parse_results;
-	std::string hostname = gui_client.server_hostname.empty() ? std::string("vr.metasiberia.com") : gui_client.server_hostname;
-	hostname = canonicalHostForMetasiberia(hostname);
-	parse_results.hostname = hostname;
-
-	gui_client.connectToServer(parse_results);
+	visitSubURL(makeMetasiberiaWorldSubURL(gui_client.server_hostname, /*world_name=*/""));
 }
 
 
@@ -8416,11 +8556,7 @@ void MainWindow::on_actionGoToPersonalWorld_triggered()
 {
 	if(gui_client.logged_in_user_name != "")
 	{
-		URLParseResults parse_results;
-		parse_results.hostname = canonicalHostForMetasiberia(gui_client.server_hostname);
-		parse_results.worldname = gui_client.logged_in_user_name;
-
-		gui_client.connectToServer(parse_results);
+		visitSubURL(makeMetasiberiaWorldSubURL(gui_client.server_hostname, gui_client.logged_in_user_name));
 	}
 	else
 	{
@@ -8434,11 +8570,7 @@ void MainWindow::on_actionGoToPersonalWorld_triggered()
 
 void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 {
-	URLParseResults parse_results;
-	parse_results.hostname = canonicalHostForMetasiberia(gui_client.server_hostname);
-	parse_results.worldname = "cryptovoxels";
-
-	gui_client.connectToServer(parse_results);
+	visitSubURL(makeMetasiberiaWorldSubURL(gui_client.server_hostname, "cryptovoxels"));
 }
 
 

@@ -337,6 +337,8 @@ int main(int argc, char *argv[])
 		syntax["--enable_dev_mode"] = std::vector<ArgumentParser::ArgumentType>();
 		syntax["--test"] = std::vector<ArgumentParser::ArgumentType>();
 		syntax["--save_sanitised_database"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // One string arg
+		syntax["--compact_database_in_place"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // One string arg
+		syntax["--dump_objects_near"] = std::vector<ArgumentParser::ArgumentType>(4, ArgumentParser::ArgumentType_string); // db path, x, y, radius
 		syntax["--db_path"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // One string arg: path to database file on disk
 		syntax["--do_not_load_resources"] = std::vector<ArgumentParser::ArgumentType>();
 
@@ -444,6 +446,18 @@ int main(int argc, char *argv[])
 			return 0;
 		}
 
+		// Removes old append-only records without making a full-size copy first.  This is
+		// intended for emergency compaction of very large database files.
+		if(parsed_args.isArgPresent("--compact_database_in_place"))
+		{
+			const std::string db_path = parsed_args.getArgStringValue("--compact_database_in_place");
+			Database db;
+			const size_t ignored_tail_bytes = db.removeOldRecordsOnDiskBestEffort(db_path);
+			if(ignored_tail_bytes > 0)
+				conPrint("Compacted database while ignoring " + toString(ignored_tail_bytes) + " bytes of trailing corrupt data.");
+			return 0;
+		}
+
 
 #if defined(_WIN32) || defined(OSX)
 		server.screenshot_dir = server_state_dir + "/screenshots"; // Dir generated screenshots will be saved to.
@@ -460,7 +474,9 @@ int main(int argc, char *argv[])
 		FileUtils::createDirIfDoesNotExist(server.photo_dir);
 
 		std::string server_state_path;
-		if(parsed_args.isArgPresent("--db_path"))
+		if(parsed_args.isArgPresent("--dump_objects_near"))
+			server_state_path = parsed_args.getArgStringValue("--dump_objects_near", 0);
+		else if(parsed_args.isArgPresent("--db_path"))
 			server_state_path = parsed_args.getArgStringValue("--db_path");
 		else
 			server_state_path = server_state_dir + "/server_state.bin"; // If --db_path is not on command line, use default path.
@@ -469,6 +485,50 @@ int main(int argc, char *argv[])
 			server.world_state->readFromDisk(server_state_path);
 		else
 			server.world_state->createNewDatabase(server_state_path);
+
+		if(parsed_args.isArgPresent("--dump_objects_near"))
+		{
+			const double centre_x = stringToDouble(parsed_args.getArgStringValue("--dump_objects_near", 1));
+			const double centre_y = stringToDouble(parsed_args.getArgStringValue("--dump_objects_near", 2));
+			const double radius = stringToDouble(parsed_args.getArgStringValue("--dump_objects_near", 3));
+			const double radius2 = radius * radius;
+
+			WorldStateLock lock(server.world_state->mutex);
+			size_t num_found = 0;
+			for(auto world_it = server.world_state->world_states.begin(); world_it != server.world_state->world_states.end(); ++world_it)
+			{
+				ServerWorldState* world = world_it->second.ptr();
+				for(auto ob_it = world->getObjects(lock).begin(); ob_it != world->getObjects(lock).end(); ++ob_it)
+				{
+					const WorldObject* ob = ob_it->second.ptr();
+					const double dx = ob->pos.x - centre_x;
+					const double dy = ob->pos.y - centre_y;
+					const double dist2 = dx * dx + dy * dy;
+					if(dist2 <= radius2)
+					{
+						std::string content_preview = ob->content;
+						for(size_t i = 0; i < content_preview.size(); ++i)
+							if(content_preview[i] == '\n' || content_preview[i] == '\r' || content_preview[i] == '\t')
+								content_preview[i] = ' ';
+						conPrint(
+							"NEAR_OBJECT dist=" + doubleToStringNDecimalPlaces(std::sqrt(dist2), 3) +
+							" world='" + world_it->first + "'" +
+							" uid=" + ob->uid.toString() +
+							" type=" + WorldObject::objectTypeString(ob->object_type) +
+							" pos=(" + doubleToStringNDecimalPlaces(ob->pos.x, 3) + "," + doubleToStringNDecimalPlaces(ob->pos.y, 3) + "," + doubleToStringNDecimalPlaces(ob->pos.z, 3) + ")" +
+							" scale=(" + doubleToStringNDecimalPlaces(ob->scale.x, 3) + "," + doubleToStringNDecimalPlaces(ob->scale.y, 3) + "," + doubleToStringNDecimalPlaces(ob->scale.z, 3) + ")" +
+							" model='" + toStdString(ob->model_url) + "'" +
+							" target='" + ob->target_url + "'" +
+							" content='" + content_preview.substr(0, 160) + "'"
+						);
+						num_found++;
+					}
+				}
+			}
+
+			conPrint("NEAR_OBJECT_COUNT " + toString(num_found));
+			return 0;
+		}
 
 		if(parsed_args.isArgPresent("--do_not_load_resources"))
 		{

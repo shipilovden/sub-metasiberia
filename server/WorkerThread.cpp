@@ -728,6 +728,7 @@ void WorkerThread::handleScreenshotBotConnection()
 
 					// Add map tile or gear screenshot as a resource.
 					URLString tile_URL; // Used for map tiles and gear screenshots.
+					std::string persisted_screenshot_path = screenshot_path;
 					if(screenshot->is_map_tile || screenshot->screenshot_type == Screenshot::ScreenshotType_Gear)
 					{
 						// Copy screenshot into resource dir and add as a resource
@@ -736,6 +737,18 @@ void WorkerThread::handleScreenshotBotConnection()
 						const std::string local_abs_path = server->world_state->resource_manager->getLocalAbsPathForResource(*resource);
 
 						FileUtils::copyFile(screenshot_path, local_abs_path);
+						if(screenshot->is_map_tile)
+						{
+							persisted_screenshot_path = local_abs_path;
+							try
+							{
+								FileUtils::deleteFile(screenshot_path);
+							}
+							catch(glare::Exception& e)
+							{
+								conPrint("Could not delete temporary map tile screenshot '" + screenshot_path + "': " + e.what());
+							}
+						}
 
 						resource->owner_id = UserID::invalidUserID();
 						resource->setState(Resource::State_Present);
@@ -767,7 +780,7 @@ void WorkerThread::handleScreenshotBotConnection()
 
 						// Update screenshot state under the world_state mutex so other threads (webserver, clients) don't race on these fields.
 						screenshot->state = Screenshot::ScreenshotState_done;
-						screenshot->local_path = screenshot_path;
+						screenshot->local_path = persisted_screenshot_path;
 						if(screenshot->is_map_tile || screenshot->screenshot_type == Screenshot::ScreenshotType_Gear)
 							screenshot->URL = tile_URL;
 

@@ -251,23 +251,45 @@ int main(int argc, char* argv[])
 							if(to_gui_socket.isNull())
 							{
 								bool connected_to_existing_gui = false;
+								std::string existing_gui_connect_error;
 
 #if !defined(_WIN32)
 								// On Linux, prefer connecting to an already running screenshotslave GUI process
 								// (for example, managed by systemd), to avoid repeatedly spawning child GUI processes.
-								try
+								Timer wait_for_existing_gui_timer;
+								int gui_connect_attempt = 0;
+								while(wait_for_existing_gui_timer.elapsed() < 60.0)
 								{
-									to_gui_socket = new MySocket("localhost", 34534);
-									to_gui_socket->setUseNetworkByteOrder(false);
-									connected_to_existing_gui = true;
-									conPrint("Connected to existing Substrata GUI process via socket.");
+									gui_connect_attempt++;
+									try
+									{
+										to_gui_socket = new MySocket("localhost", 34534);
+										to_gui_socket->setUseNetworkByteOrder(false);
+										connected_to_existing_gui = true;
+										conPrint("Connected to existing Substrata GUI process via socket.");
+										break;
+									}
+									catch(glare::Exception& e)
+									{
+										existing_gui_connect_error = e.what();
+										if(gui_connect_attempt == 1 || (gui_connect_attempt % 5) == 0)
+											conPrint("Could not connect to screenshotslave GUI process yet: " + existing_gui_connect_error + " waiting to try again...");
+										PlatformUtils::Sleep(1000);
+									}
 								}
-								catch(glare::Exception&)
-								{}
 #endif
 
 								if(!connected_to_existing_gui)
 								{
+#if !defined(_WIN32)
+									conPrint(
+										"Could not connect to the screenshotslave GUI process on localhost:34534 after waiting: " +
+										existing_gui_connect_error +
+										". Sending failure response to server and keeping the game-server connection open.");
+									socket->writeUInt32(12341234); // Just write some value != Protocol::ScreenShotSucceeded
+									time_since_last_shot_request.reset();
+									continue;
+#else
 									// Command a gui_client process to take the screenshot
 									const std::string gui_client_path = config.substrata_client_path;
 
@@ -298,6 +320,7 @@ int main(int argc, char* argv[])
 									}
 
 									conPrint("Connected to Substrata GUI process via socket.");
+#endif
 								}
 							}
 
@@ -367,6 +390,15 @@ int main(int argc, char* argv[])
 								socket->writeUInt64(screenshot_data.length());
 								socket->writeData(screenshot_data.data(), screenshot_data.length());
 								conPrint("Sent screenshot to server.");
+
+								try
+								{
+									FileUtils::deleteFile(screenshot_path);
+								}
+								catch(glare::Exception& e)
+								{
+									conPrint("Could not delete temporary screenshot file '" + screenshot_path + "': " + e.what());
+								}
 							}
 							else
 							{
