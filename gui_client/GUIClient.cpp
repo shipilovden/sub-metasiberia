@@ -121,7 +121,9 @@ Copyright Glare Technologies Limited 2024 -
 #include <BugSplat.h>
 #endif
 #include <clocale>
+#include <algorithm>
 #include <cmath>
+#include <set>
 #include <exception>
 #if defined(EMSCRIPTEN)
 #include <emscripten/emscripten.h>
@@ -903,6 +905,20 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	frame_num(0),
 	next_lod_changes_begin_i(0),
 	axis_and_rot_obs_enabled(false),
+	particle_emitter_shape_vis_gl_ob(NULL),
+	particle_emitter_direction_vis_gl_ob(NULL),
+	particle_emitter_radius_handle_vis_gl_ob(NULL),
+	particle_emitter_direction_handle_vis_gl_ob(NULL),
+	particle_emitter_spread_handle_vis_gl_ob(NULL),
+	particle_emitter_attractor_radius_handle_vis_gl_ob(NULL),
+	particle_emitter_radius_handle_pos_ws(0, 0, 0, 1),
+	particle_emitter_direction_handle_pos_ws(0, 0, 0, 1),
+	particle_emitter_spread_handle_pos_ws(0, 0, 0, 1),
+	particle_emitter_attractor_radius_handle_pos_ws(0, 0, 0, 1),
+	particle_emitter_radius_at_grab(0.f),
+	particle_emitter_spread_at_grab(0.f),
+	particle_emitter_attractor_radius_at_grab(0.f),
+	particle_emitter_shape_vis_shape(-1),
 	last_vehicle_renewal_msg_time(-1),
 	stack_allocator(/*size (B)=*/22 * 1024 * 1024), // Used for the Jolt physics temp allocator also.
 	arena_allocator(/*size (B)=*/4 * 1024 * 1024), // Used for WorldObject::appendDependencyURLs() etc.
@@ -1497,7 +1513,7 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	// For emscripten, wait until we connect to server.
 	terrain_decal_manager = new TerrainDecalManager(this->base_dir_path, /*async_tex_loader=*/async_texture_loader.ptr(), opengl_engine.ptr());
 
-	particle_manager = new ParticleManager(this->base_dir_path, /*async_tex_loader=*/async_texture_loader.ptr(), opengl_engine.ptr(), physics_world.ptr(), terrain_decal_manager.ptr());
+	particle_manager = new ParticleManager(this->base_dir_path, resource_manager.ptr(), /*async_tex_loader=*/async_texture_loader.ptr(), opengl_engine.ptr(), physics_world.ptr(), terrain_decal_manager.ptr());
 #endif
 
 
@@ -2303,6 +2319,21 @@ void GUIClient::shutdown()
 	ob_denied_move_markers.clear();
 	aabb_os_vis_gl_ob = NULL;
 	aabb_ws_vis_gl_ob = NULL;
+	particle_emitter_shape_vis_gl_ob = NULL;
+	particle_emitter_direction_vis_gl_ob = NULL;
+	particle_emitter_radius_handle_vis_gl_ob = NULL;
+	particle_emitter_direction_handle_vis_gl_ob = NULL;
+	particle_emitter_spread_handle_vis_gl_ob = NULL;
+	particle_emitter_attractor_radius_handle_vis_gl_ob = NULL;
+	particle_emitter_radius_handle_pos_ws = Vec4f(0, 0, 0, 1);
+	particle_emitter_direction_handle_pos_ws = Vec4f(0, 0, 0, 1);
+	particle_emitter_spread_handle_pos_ws = Vec4f(0, 0, 0, 1);
+	particle_emitter_attractor_radius_handle_pos_ws = Vec4f(0, 0, 0, 1);
+	particle_emitter_radius_at_grab = 0.f;
+	particle_emitter_spread_at_grab = 0.f;
+	particle_emitter_attractor_radius_at_grab = 0.f;
+	particle_emitter_shape_vis_shape = -1;
+	particle_emitter_runtime_paused.clear();
 	selected_ob_vis_gl_obs.clear();
 	for(int i=0; i<NUM_AXIS_ARROWS; ++i)
 		axis_arrow_objects[i] = NULL;
@@ -5645,6 +5676,402 @@ static float safeATan2(float y, float x)
 static const Vec4f basis_vectors[6] = { Vec4f(0,1,0,0), Vec4f(0,0,1,0), Vec4f(0,0,1,0), Vec4f(1,0,0,0), Vec4f(1,0,0,0), Vec4f(0,1,0,0) };
 
 
+static Vec4f safeNormaliseOr(const Vec4f& v, const Vec4f& fallback)
+{
+	return (v.length2() > 1.0e-8f) ? normalise(v) : fallback;
+}
+
+
+static Vec4f particleEmitterBaseDirectionWS(const ParticleEmitterSettings& emitter_settings, const Matrix4f& ob_to_world)
+{
+	const Vec4f world_up(0, 0, 1, 0);
+	if(emitter_settings.direction == ParticleEmitterSettings::Direction_Forward)
+		return safeNormaliseOr(ob_to_world * Vec4f(0, 1, 0, 0), world_up);
+	else if(emitter_settings.direction == ParticleEmitterSettings::Direction_Down)
+		return world_up * -1.f;
+	else if(emitter_settings.direction == ParticleEmitterSettings::Direction_Custom)
+		return safeNormaliseOr(Vec4f(emitter_settings.custom_dir_x, emitter_settings.custom_dir_y, emitter_settings.custom_dir_z, 0.f), world_up);
+	else
+		return world_up;
+}
+
+
+static void particleEmitterBasisWS(const Vec4f& shape_dir, Vec4f& tangent_a_out, Vec4f& tangent_b_out)
+{
+	const Vec4f world_up(0, 0, 1, 0);
+	const Vec4f world_x(1, 0, 0, 0);
+
+	tangent_a_out = crossProduct(shape_dir, world_up);
+	if(tangent_a_out.length2() < 1.0e-8f)
+		tangent_a_out = crossProduct(shape_dir, world_x);
+	tangent_a_out = safeNormaliseOr(tangent_a_out, Vec4f(0, 1, 0, 0));
+	tangent_b_out = safeNormaliseOr(crossProduct(tangent_a_out, shape_dir), Vec4f(1, 0, 0, 0));
+}
+
+
+static OpenGLMaterial particleEmitterGizmoMaterial(const ParticleEmitterSettings& emitter_settings, const float alpha)
+{
+	OpenGLMaterial material;
+	material.albedo_linear_rgb = toLinearSRGB(emitter_settings.colour);
+	material.transparent = alpha < 1.f;
+	material.alpha_blend = alpha < 1.f;
+	material.alpha = alpha;
+	material.simple_double_sided = true;
+	return material;
+}
+
+
+static Particle::Curve particleCurveFromEmitterCurve(const ParticleEmitterSettings::Curve curve)
+{
+	switch(curve)
+	{
+	case ParticleEmitterSettings::Curve_Linear:     return Particle::Curve_Linear;
+	case ParticleEmitterSettings::Curve_EaseIn:     return Particle::Curve_EaseIn;
+	case ParticleEmitterSettings::Curve_EaseOut:    return Particle::Curve_EaseOut;
+	case ParticleEmitterSettings::Curve_SmoothStep: return Particle::Curve_SmoothStep;
+	case ParticleEmitterSettings::Curve_Custom:     return Particle::Curve_Custom;
+	}
+	return Particle::Curve_Linear;
+}
+
+
+static float evaluateParticleEmitterCurve(const ParticleEmitterSettings::Curve curve, const float t_, const float custom_mid = 0.5f)
+{
+	const float t = myClamp(t_, 0.f, 1.f);
+	switch(curve)
+	{
+	case ParticleEmitterSettings::Curve_Linear:     return t;
+	case ParticleEmitterSettings::Curve_EaseIn:     return t * t;
+	case ParticleEmitterSettings::Curve_EaseOut:    return 1.f - (1.f - t) * (1.f - t);
+	case ParticleEmitterSettings::Curve_SmoothStep: return t * t * (3.f - 2.f * t);
+	case ParticleEmitterSettings::Curve_Custom:
+	{
+		const float mid = myClamp(custom_mid, 0.f, 1.f);
+		return (t < 0.5f) ? 2.f * mid * t : mid + (1.f - mid) * (2.f * t - 1.f);
+	}
+	}
+	return t;
+}
+
+
+static std::string defaultParticleSpriteForKind(const ParticleEmitterSettings::ParticleKind kind)
+{
+	switch(kind)
+	{
+	case ParticleEmitterSettings::ParticleKind_Spark:     return "builtin:spark";
+	case ParticleEmitterSettings::ParticleKind_Streak:    return "builtin:streak";
+	case ParticleEmitterSettings::ParticleKind_Star:      return "builtin:star";
+	case ParticleEmitterSettings::ParticleKind_Ring:      return "builtin:ring";
+	case ParticleEmitterSettings::ParticleKind_Nebula:    return "builtin:nebula";
+	case ParticleEmitterSettings::ParticleKind_Flame:     return "builtin:flame";
+	case ParticleEmitterSettings::ParticleKind_Snowflake: return "builtin:snowflake";
+	case ParticleEmitterSettings::ParticleKind_SoftDisc:  return "builtin:soft_disc";
+	case ParticleEmitterSettings::ParticleKind_Smoke:
+	case ParticleEmitterSettings::ParticleKind_Foam:
+		break;
+	}
+	return std::string();
+}
+
+
+static Particle::ParticleType particleTypeForEmitterKind(const ParticleEmitterSettings::ParticleKind kind)
+{
+	switch(kind)
+	{
+	case ParticleEmitterSettings::ParticleKind_Smoke:
+	case ParticleEmitterSettings::ParticleKind_Nebula:
+		return Particle::ParticleType_Smoke;
+	case ParticleEmitterSettings::ParticleKind_Foam:
+	case ParticleEmitterSettings::ParticleKind_Spark:
+	case ParticleEmitterSettings::ParticleKind_Streak:
+	case ParticleEmitterSettings::ParticleKind_Star:
+	case ParticleEmitterSettings::ParticleKind_Ring:
+	case ParticleEmitterSettings::ParticleKind_Flame:
+	case ParticleEmitterSettings::ParticleKind_Snowflake:
+	case ParticleEmitterSettings::ParticleKind_SoftDisc:
+		return Particle::ParticleType_Foam;
+	}
+	return Particle::ParticleType_Smoke;
+}
+
+
+static bool particleSpritePathLooksLikePackagedPath(const std::string& path)
+{
+	return !path.empty() && (path[0] == '/' || hasPrefix(path, "resources/") || hasPrefix(path, "gl_data/"));
+}
+
+
+static bool particleSpritePathLooksLikeRemoteURL(const std::string& path)
+{
+	return hasPrefix(path, "http://") || hasPrefix(path, "https://") || hasPrefix(path, "sub://");
+}
+
+
+static bool particleSpritePathLooksLikeResourceURL(const std::string& path)
+{
+	return
+		!path.empty() &&
+		!particleSpritePathLooksLikePackagedPath(path) &&
+		!particleSpritePathLooksLikeRemoteURL(path) &&
+		!FileUtils::isPathAbsolute(path) &&
+		ImageDecoding::hasSupportedImageExtension(path);
+}
+
+
+void GUIClient::clearSelectedParticleEmitterGizmo()
+{
+	checkRemoveObAndSetRefToNull(opengl_engine, particle_emitter_shape_vis_gl_ob);
+	checkRemoveObAndSetRefToNull(opengl_engine, particle_emitter_direction_vis_gl_ob);
+	checkRemoveObAndSetRefToNull(opengl_engine, particle_emitter_radius_handle_vis_gl_ob);
+	checkRemoveObAndSetRefToNull(opengl_engine, particle_emitter_direction_handle_vis_gl_ob);
+	checkRemoveObAndSetRefToNull(opengl_engine, particle_emitter_spread_handle_vis_gl_ob);
+	checkRemoveObAndSetRefToNull(opengl_engine, particle_emitter_attractor_radius_handle_vis_gl_ob);
+	particle_emitter_radius_handle_pos_ws = Vec4f(0, 0, 0, 1);
+	particle_emitter_direction_handle_pos_ws = Vec4f(0, 0, 0, 1);
+	particle_emitter_spread_handle_pos_ws = Vec4f(0, 0, 0, 1);
+	particle_emitter_attractor_radius_handle_pos_ws = Vec4f(0, 0, 0, 1);
+	particle_emitter_shape_vis_shape = -1;
+}
+
+
+void GUIClient::triggerSelectedParticleEmitterBurst()
+{
+	if(selected_ob.nonNull() && ParticleEmitterSettings::isParticleEmitterContent(selected_ob->content))
+	{
+		const ParticleEmitterSettings emitter_settings = ParticleEmitterSettings::fromContent(selected_ob->content);
+		const int preview_burst_count = myMax(emitter_settings.burst_count, myMin(emitter_settings.max_spawn_per_frame, 96));
+		triggerParticleEmitterBurst(selected_ob->uid, myMax(preview_burst_count, 1));
+	}
+}
+
+
+void GUIClient::clearSelectedParticleEmitterParticles()
+{
+	if(selected_ob.nonNull() && ParticleEmitterSettings::isParticleEmitterContent(selected_ob->content))
+		clearParticleEmitterParticles(selected_ob->uid);
+}
+
+
+void GUIClient::triggerParticleEmitterBurst(UID emitter_uid, int burst_count)
+{
+	if(emitter_uid.valid())
+		particle_emitter_manual_bursts[emitter_uid] += myMax(burst_count, 1);
+}
+
+
+void GUIClient::clearParticleEmitterParticles(UID emitter_uid)
+{
+	if(!emitter_uid.valid())
+		return;
+
+	if(particle_manager.nonNull())
+		particle_manager->clearParticlesForEmitter(emitter_uid);
+	particle_emitter_accumulators.erase(emitter_uid);
+	particle_emitter_burst_accumulators.erase(emitter_uid);
+	particle_emitter_manual_bursts.erase(emitter_uid);
+}
+
+
+void GUIClient::setParticleEmitterRuntimePaused(UID emitter_uid, bool paused)
+{
+	if(!emitter_uid.valid())
+		return;
+
+	if(paused)
+		particle_emitter_runtime_paused.insert(emitter_uid);
+	else
+		particle_emitter_runtime_paused.erase(emitter_uid);
+}
+
+
+size_t GUIClient::getSelectedParticleEmitterParticleCount() const
+{
+	if(selected_ob.nonNull() && ParticleEmitterSettings::isParticleEmitterContent(selected_ob->content) && particle_manager.nonNull())
+		return particle_manager->getNumParticlesForEmitter(selected_ob->uid);
+	return 0;
+}
+
+
+size_t GUIClient::getTotalParticleCount() const
+{
+	return particle_manager.nonNull() ? particle_manager->getNumParticles() : 0;
+}
+
+
+void GUIClient::updateSelectedParticleEmitterGizmo()
+{
+	if(selected_ob.isNull() || !ParticleEmitterSettings::isParticleEmitterContent(selected_ob->content))
+	{
+		clearSelectedParticleEmitterGizmo();
+		return;
+	}
+
+	const ParticleEmitterSettings emitter_settings = ParticleEmitterSettings::fromContent(selected_ob->content);
+	const Matrix4f ob_to_world = obToWorldMatrix(*selected_ob);
+	const Vec4f emitter_pos = selected_ob->pos.toVec4fPoint();
+	const Vec4f base_dir = particleEmitterBaseDirectionWS(emitter_settings, ob_to_world);
+	const Vec4f shape_dir = (emitter_settings.direction == ParticleEmitterSettings::Direction_Random) ? Vec4f(0, 0, 1, 0) : base_dir;
+	Vec4f tangent_a, tangent_b;
+	particleEmitterBasisWS(shape_dir, tangent_a, tangent_b);
+
+	const int shape_i = (int)emitter_settings.shape;
+	if(particle_emitter_shape_vis_gl_ob.isNull() || particle_emitter_shape_vis_shape != shape_i)
+	{
+		checkRemoveObAndSetRefToNull(opengl_engine, particle_emitter_shape_vis_gl_ob);
+		const Colour4f marker_col(emitter_settings.colour.r, emitter_settings.colour.g, emitter_settings.colour.b, 0.04f);
+
+		if(emitter_settings.shape == ParticleEmitterSettings::Shape_Point)
+			particle_emitter_shape_vis_gl_ob = opengl_engine->makeSphereObject(1.f, marker_col);
+		else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Disc || emitter_settings.shape == ParticleEmitterSettings::Shape_Ring || emitter_settings.shape == ParticleEmitterSettings::Shape_Cylinder || emitter_settings.shape == ParticleEmitterSettings::Shape_Cone)
+			particle_emitter_shape_vis_gl_ob = opengl_engine->makeCylinderObject(1.f, marker_col);
+		else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Sphere || emitter_settings.shape == ParticleEmitterSettings::Shape_Hemisphere)
+			particle_emitter_shape_vis_gl_ob = opengl_engine->makeSphereObject(1.f, marker_col);
+		else
+			particle_emitter_shape_vis_gl_ob = opengl_engine->makeCuboidEdgeAABBObject(Vec4f(0, 0, 0, 1), Vec4f(1, 1, 1, 1), Colour4f(emitter_settings.colour.r, emitter_settings.colour.g, emitter_settings.colour.b, 0.16f), 0.035f);
+
+		particle_emitter_shape_vis_gl_ob->always_visible = false;
+		opengl_engine->addObject(particle_emitter_shape_vis_gl_ob);
+		particle_emitter_shape_vis_shape = shape_i;
+	}
+
+	if(particle_emitter_direction_vis_gl_ob.isNull())
+	{
+		particle_emitter_direction_vis_gl_ob = opengl_engine->makeArrowObject(Vec4f(0, 0, 0, 1), Vec4f(1, 0, 0, 1), Colour4f(emitter_settings.colour.r, emitter_settings.colour.g, emitter_settings.colour.b, 0.85f), 1.f);
+		particle_emitter_direction_vis_gl_ob->always_visible = true;
+		opengl_engine->addObject(particle_emitter_direction_vis_gl_ob);
+	}
+	if(particle_emitter_radius_handle_vis_gl_ob.isNull())
+	{
+		particle_emitter_radius_handle_vis_gl_ob = opengl_engine->makeSphereObject(1.f, Colour4f(1.f, 1.f, 1.f, 0.92f));
+		particle_emitter_radius_handle_vis_gl_ob->always_visible = true;
+		opengl_engine->addObject(particle_emitter_radius_handle_vis_gl_ob);
+	}
+	if(particle_emitter_direction_handle_vis_gl_ob.isNull())
+	{
+		particle_emitter_direction_handle_vis_gl_ob = opengl_engine->makeSphereObject(1.f, Colour4f(0.22f, 0.78f, 1.f, 0.94f));
+		particle_emitter_direction_handle_vis_gl_ob->always_visible = true;
+		opengl_engine->addObject(particle_emitter_direction_handle_vis_gl_ob);
+	}
+	if(particle_emitter_spread_handle_vis_gl_ob.isNull())
+	{
+		particle_emitter_spread_handle_vis_gl_ob = opengl_engine->makeSphereObject(1.f, Colour4f(1.f, 0.62f, 0.16f, 0.94f));
+		particle_emitter_spread_handle_vis_gl_ob->always_visible = true;
+		opengl_engine->addObject(particle_emitter_spread_handle_vis_gl_ob);
+	}
+	if(particle_emitter_attractor_radius_handle_vis_gl_ob.isNull())
+	{
+		particle_emitter_attractor_radius_handle_vis_gl_ob = opengl_engine->makeSphereObject(1.f, Colour4f(0.62f, 0.34f, 1.f, 0.94f));
+		particle_emitter_attractor_radius_handle_vis_gl_ob->always_visible = true;
+		opengl_engine->addObject(particle_emitter_attractor_radius_handle_vis_gl_ob);
+	}
+
+	const OpenGLMaterial shape_material = particleEmitterGizmoMaterial(emitter_settings, emitter_settings.shape == ParticleEmitterSettings::Shape_Box ? 0.12f : 0.035f);
+	particle_emitter_shape_vis_gl_ob->setSingleMaterial(shape_material);
+	opengl_engine->objectMaterialsUpdated(*particle_emitter_shape_vis_gl_ob);
+
+	const OpenGLMaterial arrow_material = particleEmitterGizmoMaterial(emitter_settings, emitter_settings.direction == ParticleEmitterSettings::Direction_Random ? 0.42f : 0.85f);
+	particle_emitter_direction_vis_gl_ob->setSingleMaterial(arrow_material);
+	opengl_engine->objectMaterialsUpdated(*particle_emitter_direction_vis_gl_ob);
+
+	OpenGLMaterial handle_material = particleEmitterGizmoMaterial(emitter_settings, 0.58f);
+	handle_material.albedo_linear_rgb = Colour3f(1.f, 1.f, 1.f);
+	particle_emitter_radius_handle_vis_gl_ob->setSingleMaterial(handle_material);
+	opengl_engine->objectMaterialsUpdated(*particle_emitter_radius_handle_vis_gl_ob);
+
+	OpenGLMaterial direction_handle_material = particleEmitterGizmoMaterial(emitter_settings, 0.68f);
+	direction_handle_material.albedo_linear_rgb = Colour3f(0.22f, 0.78f, 1.f);
+	particle_emitter_direction_handle_vis_gl_ob->setSingleMaterial(direction_handle_material);
+	opengl_engine->objectMaterialsUpdated(*particle_emitter_direction_handle_vis_gl_ob);
+
+	OpenGLMaterial spread_handle_material = particleEmitterGizmoMaterial(emitter_settings, 0.68f);
+	spread_handle_material.albedo_linear_rgb = Colour3f(1.f, 0.62f, 0.16f);
+	particle_emitter_spread_handle_vis_gl_ob->setSingleMaterial(spread_handle_material);
+	opengl_engine->objectMaterialsUpdated(*particle_emitter_spread_handle_vis_gl_ob);
+
+	OpenGLMaterial attractor_handle_material = particleEmitterGizmoMaterial(emitter_settings, 0.68f);
+	attractor_handle_material.albedo_linear_rgb = Colour3f(0.62f, 0.34f, 1.f);
+	particle_emitter_attractor_radius_handle_vis_gl_ob->setSingleMaterial(attractor_handle_material);
+	opengl_engine->objectMaterialsUpdated(*particle_emitter_attractor_radius_handle_vis_gl_ob);
+
+	const float radius = myMax(emitter_settings.emitter_radius, 0.04f);
+	if(emitter_settings.shape == ParticleEmitterSettings::Shape_Point)
+	{
+		particle_emitter_shape_vis_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(emitter_pos) * Matrix4f::uniformScaleMatrix(myMax(radius, 0.08f));
+	}
+	else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Disc || emitter_settings.shape == ParticleEmitterSettings::Shape_Ring)
+	{
+		const float thickness = myMax(0.035f, radius * 0.05f);
+		Matrix4f m;
+		m.setColumn(0, tangent_a * radius);
+		m.setColumn(1, tangent_b * radius);
+		m.setColumn(2, shape_dir * thickness);
+		m.setColumn(3, emitter_pos - shape_dir * (thickness * 0.5f));
+		particle_emitter_shape_vis_gl_ob->ob_to_world_matrix = m;
+	}
+	else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Cylinder || emitter_settings.shape == ParticleEmitterSettings::Shape_Cone)
+	{
+		Matrix4f m;
+		m.setColumn(0, tangent_a * radius);
+		m.setColumn(1, tangent_b * radius);
+		m.setColumn(2, shape_dir * (2.f * radius));
+		m.setColumn(3, emitter_pos - shape_dir * radius);
+		particle_emitter_shape_vis_gl_ob->ob_to_world_matrix = m;
+	}
+	else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Sphere || emitter_settings.shape == ParticleEmitterSettings::Shape_Hemisphere)
+	{
+		particle_emitter_shape_vis_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(emitter_pos) * Matrix4f::uniformScaleMatrix(radius);
+	}
+	else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Line)
+	{
+		Matrix4f m;
+		m.setColumn(0, tangent_a * (2.f * radius));
+		m.setColumn(1, tangent_b * myMax(0.035f, radius * 0.04f));
+		m.setColumn(2, shape_dir * myMax(0.035f, radius * 0.04f));
+		m.setColumn(3, emitter_pos - tangent_a * radius - tangent_b * myMax(0.0175f, radius * 0.02f) - shape_dir * myMax(0.0175f, radius * 0.02f));
+		particle_emitter_shape_vis_gl_ob->ob_to_world_matrix = m;
+	}
+	else
+	{
+		Matrix4f m;
+		m.setColumn(0, tangent_a * (2.f * radius));
+		m.setColumn(1, tangent_b * (2.f * radius));
+		m.setColumn(2, shape_dir * (2.f * radius));
+		m.setColumn(3, emitter_pos - tangent_a * radius - tangent_b * radius - shape_dir * radius);
+		particle_emitter_shape_vis_gl_ob->ob_to_world_matrix = m;
+	}
+
+	const float arrow_len = myMax(radius * 1.6f, 0.55f);
+	const Vec4f arrow_dir = emitter_settings.direction == ParticleEmitterSettings::Direction_Random ? Vec4f(0, 0, 1, 0) : base_dir;
+	particle_emitter_direction_vis_gl_ob->ob_to_world_matrix = OpenGLEngine::arrowObjectTransform(emitter_pos, emitter_pos + arrow_dir * arrow_len, myMax(0.04f, arrow_len * 0.08f));
+
+	particle_emitter_radius_handle_pos_ws = emitter_pos + tangent_a * radius;
+	const float handle_scale = myMax(0.04f, (particle_emitter_radius_handle_pos_ws - cam_controller.getPosition().toVec4fPoint()).length() * 0.007f);
+	particle_emitter_radius_handle_vis_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(particle_emitter_radius_handle_pos_ws) * Matrix4f::uniformScaleMatrix(handle_scale);
+
+	particle_emitter_direction_handle_pos_ws = emitter_pos + arrow_dir * arrow_len;
+	const float direction_handle_scale = myMax(0.045f, (particle_emitter_direction_handle_pos_ws - cam_controller.getPosition().toVec4fPoint()).length() * 0.007f);
+	particle_emitter_direction_handle_vis_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(particle_emitter_direction_handle_pos_ws) * Matrix4f::uniformScaleMatrix(direction_handle_scale);
+
+	const float spread_angle = degreeToRad(myClamp(emitter_settings.spread_deg, 0.f, 180.f));
+	const Vec4f spread_dir = safeNormaliseOr(arrow_dir * std::cos(spread_angle) + tangent_a * std::sin(spread_angle), arrow_dir);
+	particle_emitter_spread_handle_pos_ws = emitter_pos + spread_dir * arrow_len;
+	const float spread_handle_scale = myMax(0.045f, (particle_emitter_spread_handle_pos_ws - cam_controller.getPosition().toVec4fPoint()).length() * 0.007f);
+	particle_emitter_spread_handle_vis_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(particle_emitter_spread_handle_pos_ws) * Matrix4f::uniformScaleMatrix(spread_handle_scale);
+
+	const float field_radius = myMax(emitter_settings.attractor_radius, 0.08f);
+	particle_emitter_attractor_radius_handle_pos_ws = emitter_pos + tangent_b * field_radius;
+	const float attractor_handle_scale = myMax(0.045f, (particle_emitter_attractor_radius_handle_pos_ws - cam_controller.getPosition().toVec4fPoint()).length() * 0.007f);
+	particle_emitter_attractor_radius_handle_vis_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(particle_emitter_attractor_radius_handle_pos_ws) * Matrix4f::uniformScaleMatrix(attractor_handle_scale);
+
+	opengl_engine->updateObjectTransformData(*particle_emitter_shape_vis_gl_ob);
+	opengl_engine->updateObjectTransformData(*particle_emitter_direction_vis_gl_ob);
+	opengl_engine->updateObjectTransformData(*particle_emitter_radius_handle_vis_gl_ob);
+	opengl_engine->updateObjectTransformData(*particle_emitter_direction_handle_vis_gl_ob);
+	opengl_engine->updateObjectTransformData(*particle_emitter_spread_handle_vis_gl_ob);
+	opengl_engine->updateObjectTransformData(*particle_emitter_attractor_radius_handle_vis_gl_ob);
+}
+
+
 // Update object placement beam - a beam that goes from the object to what's below it.
 // Also updates axis arrows and rotation arc handles.
 // Also updates preview AABB for decal objects.
@@ -5729,7 +6156,7 @@ void GUIClient::updateSelectedObjectPlacementBeamAndGizmos()
 
 				// Position the rotation arc so its oriented towards the camera, unless the user is currently holding and dragging the arc.
 				float angle = to_cam_angle;
-				if(grabbed_axis >= NUM_AXIS_ARROWS)
+				if(grabbed_axis >= NUM_AXIS_ARROWS && grabbed_axis < PARTICLE_RADIUS_HANDLE_AXIS)
 				{
 					int grabbed_rot_axis = grabbed_axis - NUM_AXIS_ARROWS;
 					if(i == grabbed_rot_axis)
@@ -5761,6 +6188,8 @@ void GUIClient::updateSelectedObjectPlacementBeamAndGizmos()
 					opengl_engine->updateObjectTransformData(*rot_handle_arc_objects[i]);
 			}
 		}
+
+		updateSelectedParticleEmitterGizmo();
 	}
 	else if(selected_parcel.nonNull() && this->logged_in_user_id.valid() && isGodUser(this->logged_in_user_id) && axis_and_rot_obs_enabled)
 	{
@@ -8238,6 +8667,337 @@ bool GUIClient::onlyLoadMostImportantObjectsDefaultValue()
 }
 
 
+void GUIClient::updateParticleEmitters(const double dt)
+{
+	if(!this->world_state || this->particle_manager.isNull() || dt <= 0.0)
+		return;
+
+	struct EmitterSnapshot
+	{
+		UID uid;
+		Vec3d pos;
+		Matrix4f ob_to_world;
+		ParticleEmitterSettings settings;
+	};
+
+	std::vector<EmitterSnapshot> emitters;
+	std::set<UID> live_emitter_uids;
+
+	{
+		WorldStateLock lock(this->world_state->mutex);
+
+		for(auto it = this->world_state->objects.valuesBegin(); it != this->world_state->objects.valuesEnd(); ++it)
+		{
+			WorldObject* const ob = it.getValue().ptr();
+			if(!ob || ob->object_type != WorldObject::ObjectType_Generic || !ParticleEmitterSettings::isParticleEmitterContent(ob->content))
+				continue;
+
+			ParticleEmitterSettings emitter_settings;
+			const auto cached_content_it = particle_emitter_content_cache.find(ob->uid);
+			if(cached_content_it == particle_emitter_content_cache.end() || cached_content_it->second != ob->content)
+			{
+				emitter_settings = ParticleEmitterSettings::fromContent(ob->content);
+				particle_emitter_content_cache[ob->uid] = ob->content;
+				particle_emitter_settings_cache[ob->uid] = emitter_settings;
+			}
+			else
+			{
+				const auto settings_it = particle_emitter_settings_cache.find(ob->uid);
+				emitter_settings = (settings_it != particle_emitter_settings_cache.end()) ? settings_it->second : ParticleEmitterSettings::fromContent(ob->content);
+			}
+
+			EmitterSnapshot snapshot;
+			snapshot.uid = ob->uid;
+			snapshot.pos = ob->pos;
+			snapshot.ob_to_world = obToWorldMatrix(*ob);
+			snapshot.settings = emitter_settings;
+			emitters.push_back(snapshot);
+			live_emitter_uids.insert(ob->uid);
+		}
+	}
+
+	for(auto it = particle_emitter_accumulators.begin(); it != particle_emitter_accumulators.end();)
+	{
+		if(live_emitter_uids.find(it->first) == live_emitter_uids.end())
+			it = particle_emitter_accumulators.erase(it);
+		else
+			++it;
+	}
+	for(auto it = particle_emitter_burst_accumulators.begin(); it != particle_emitter_burst_accumulators.end();)
+	{
+		if(live_emitter_uids.find(it->first) == live_emitter_uids.end())
+			it = particle_emitter_burst_accumulators.erase(it);
+		else
+			++it;
+	}
+	for(auto it = particle_emitter_manual_bursts.begin(); it != particle_emitter_manual_bursts.end();)
+	{
+		if(live_emitter_uids.find(it->first) == live_emitter_uids.end())
+			it = particle_emitter_manual_bursts.erase(it);
+		else
+			++it;
+	}
+	for(auto it = particle_emitter_runtime_paused.begin(); it != particle_emitter_runtime_paused.end();)
+	{
+		if(live_emitter_uids.find(*it) == live_emitter_uids.end())
+			it = particle_emitter_runtime_paused.erase(it);
+		else
+			++it;
+	}
+	for(auto it = particle_emitter_content_cache.begin(); it != particle_emitter_content_cache.end();)
+	{
+		if(live_emitter_uids.find(it->first) == live_emitter_uids.end())
+			it = particle_emitter_content_cache.erase(it);
+		else
+			++it;
+	}
+	for(auto it = particle_emitter_settings_cache.begin(); it != particle_emitter_settings_cache.end();)
+	{
+		if(live_emitter_uids.find(it->first) == live_emitter_uids.end())
+			it = particle_emitter_settings_cache.erase(it);
+		else
+			++it;
+	}
+
+	const Vec4f world_up(0, 0, 1, 0);
+	const Vec4f world_x(1, 0, 0, 0);
+	const Vec4f camera_pos_ws = cam_controller.getPosition().toVec4fPoint();
+	const float two_pi = Maths::get2Pi<float>();
+	const auto random_unit_vec = [this, two_pi]()
+	{
+		const float z = -1.f + 2.f * rng.unitRandom();
+		const float theta = rng.unitRandom() * two_pi;
+		const float r = std::sqrt(myMax(0.f, 1.f - z * z));
+		return Vec4f(r * std::cos(theta), r * std::sin(theta), z, 0);
+	};
+
+	for(size_t i=0; i<emitters.size(); ++i)
+	{
+		const EmitterSnapshot& emitter = emitters[i];
+		const ParticleEmitterSettings& emitter_settings = emitter.settings;
+		int manual_burst_count = 0;
+		{
+			auto manual_it = particle_emitter_manual_bursts.find(emitter.uid);
+			if(manual_it != particle_emitter_manual_bursts.end())
+			{
+				manual_burst_count = manual_it->second;
+				particle_emitter_manual_bursts.erase(manual_it);
+			}
+		}
+
+		if(emitter_settings.opacity <= 0.f)
+			continue;
+		const bool runtime_paused = particle_emitter_runtime_paused.find(emitter.uid) != particle_emitter_runtime_paused.end();
+		const bool automatic_emission_enabled = emitter_settings.enabled && !runtime_paused;
+		if(!automatic_emission_enabled && manual_burst_count <= 0)
+			continue;
+		if(emitter_settings.rate_per_sec <= 0.f && !emitter_settings.burst_enabled && manual_burst_count <= 0)
+			continue;
+		if(emitter_settings.max_spawn_distance > 0.f && (emitter.pos.toVec4fPoint() - camera_pos_ws).length2() > Maths::square(emitter_settings.max_spawn_distance))
+			continue;
+
+		int num_to_spawn = manual_burst_count;
+		if(automatic_emission_enabled && emitter_settings.rate_per_sec > 0.f)
+		{
+			double& accumulator = particle_emitter_accumulators[emitter.uid];
+			accumulator += emitter_settings.rate_per_sec * dt;
+			num_to_spawn += (int)accumulator;
+			accumulator -= (int)accumulator;
+		}
+
+		if(automatic_emission_enabled && emitter_settings.burst_enabled && emitter_settings.burst_count > 0)
+		{
+			const double interval = myMax((double)emitter_settings.burst_interval_s, 0.05);
+			auto burst_it = particle_emitter_burst_accumulators.find(emitter.uid);
+			if(burst_it == particle_emitter_burst_accumulators.end())
+				burst_it = particle_emitter_burst_accumulators.insert(std::make_pair(emitter.uid, interval)).first;
+
+			burst_it->second += dt;
+			const int burst_events = (int)(burst_it->second / interval);
+			if(burst_events > 0)
+			{
+				num_to_spawn += burst_events * emitter_settings.burst_count;
+				burst_it->second -= burst_events * interval;
+			}
+		}
+
+		if(num_to_spawn <= 0)
+			continue;
+		num_to_spawn = myMin(num_to_spawn, emitter_settings.max_spawn_per_frame);
+
+		const size_t live_particles_for_emitter = particle_manager->getNumParticlesForEmitter(emitter.uid);
+		if(live_particles_for_emitter >= (size_t)emitter_settings.max_particles)
+			continue;
+		num_to_spawn = myMin(num_to_spawn, emitter_settings.max_particles - (int)live_particles_for_emitter);
+		const int manual_particles_to_spawn = myMin(manual_burst_count, num_to_spawn);
+
+		const std::string effective_sprite_path = emitter_settings.sprite_path.empty() ? defaultParticleSpriteForKind(emitter_settings.kind) : emitter_settings.sprite_path;
+		if(particleSpritePathLooksLikeResourceURL(effective_sprite_path) && resource_manager.nonNull() && !resource_manager->isFileForURLPresent(toURLString(effective_sprite_path)))
+		{
+			DownloadingResourceInfo info;
+			info.used_by_other = true;
+			info.build_physics_ob = false;
+			info.pos = emitter.pos;
+			info.size_factor = 1.f;
+			info.texture_params.wrapping = OpenGLTexture::Wrapping_Clamp;
+			startDownloadingResource(toURLString(effective_sprite_path), emitter.pos.toVec4fPoint(), myMax(emitter_settings.emitter_radius, 1.f), info);
+		}
+
+		const Reference<OpenGLTexture> custom_sprite_texture = particle_manager->getOrLoadCustomSpriteTexture(effective_sprite_path);
+
+		Vec4f base_dir = particleEmitterBaseDirectionWS(emitter_settings, emitter.ob_to_world);
+
+		const Vec4f emitter_shape_dir = (emitter_settings.direction == ParticleEmitterSettings::Direction_Random) ? world_up : base_dir;
+		Vec4f tangent_a = crossProduct(emitter_shape_dir, world_up);
+		if(tangent_a.length2() < 1.0e-8f)
+			tangent_a = crossProduct(emitter_shape_dir, world_x);
+		tangent_a = normalise(tangent_a);
+		Vec4f tangent_b = normalise(crossProduct(tangent_a, emitter_shape_dir));
+
+		for(int z=0; z<num_to_spawn; ++z)
+		{
+			Vec4f spawn_offset(0, 0, 0, 0);
+			if(emitter_settings.shape == ParticleEmitterSettings::Shape_Disc)
+			{
+				const float disk_theta = rng.unitRandom() * two_pi;
+				const float disk_r = emitter_settings.emitter_radius * std::sqrt(rng.unitRandom());
+				spawn_offset = (tangent_a * std::cos(disk_theta) + tangent_b * std::sin(disk_theta)) * disk_r;
+			}
+			else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Ring)
+			{
+				const float ring_theta = rng.unitRandom() * two_pi;
+				const float ring_r = emitter_settings.emitter_radius * myMax(0.05f, 1.f + 0.08f * (-1.f + 2.f * rng.unitRandom()));
+				spawn_offset = (tangent_a * std::cos(ring_theta) + tangent_b * std::sin(ring_theta)) * ring_r;
+			}
+			else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Sphere)
+			{
+				spawn_offset = random_unit_vec() * (emitter_settings.emitter_radius * std::pow(rng.unitRandom(), 1.f / 3.f));
+			}
+			else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Hemisphere)
+			{
+				Vec4f hemi_dir = random_unit_vec();
+				if(dot(hemi_dir, emitter_shape_dir) < 0.f)
+					hemi_dir = hemi_dir * -1.f;
+				spawn_offset = hemi_dir * (emitter_settings.emitter_radius * std::pow(rng.unitRandom(), 1.f / 3.f));
+			}
+			else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Box)
+			{
+				spawn_offset =
+					tangent_a * ((-1.f + 2.f * rng.unitRandom()) * emitter_settings.emitter_radius) +
+					tangent_b * ((-1.f + 2.f * rng.unitRandom()) * emitter_settings.emitter_radius) +
+					emitter_shape_dir * ((-1.f + 2.f * rng.unitRandom()) * emitter_settings.emitter_radius);
+			}
+			else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Cylinder)
+			{
+				const float disk_theta = rng.unitRandom() * two_pi;
+				const float disk_r = emitter_settings.emitter_radius * std::sqrt(rng.unitRandom());
+				spawn_offset =
+					(tangent_a * std::cos(disk_theta) + tangent_b * std::sin(disk_theta)) * disk_r +
+					emitter_shape_dir * ((-1.f + 2.f * rng.unitRandom()) * emitter_settings.emitter_radius);
+			}
+			else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Cone)
+			{
+				const float h01 = rng.unitRandom();
+				const float cone_theta = rng.unitRandom() * two_pi;
+				const float cone_r = emitter_settings.emitter_radius * h01 * std::sqrt(rng.unitRandom());
+				spawn_offset =
+					emitter_shape_dir * ((h01 - 0.5f) * 2.f * emitter_settings.emitter_radius) +
+					(tangent_a * std::cos(cone_theta) + tangent_b * std::sin(cone_theta)) * cone_r;
+			}
+			else if(emitter_settings.shape == ParticleEmitterSettings::Shape_Line)
+			{
+				spawn_offset = tangent_a * ((-1.f + 2.f * rng.unitRandom()) * emitter_settings.emitter_radius);
+			}
+
+			Vec4f particle_base_dir = base_dir;
+			if(emitter_settings.direction == ParticleEmitterSettings::Direction_Random)
+				particle_base_dir = random_unit_vec();
+
+			Vec4f dir_tangent_a = crossProduct(particle_base_dir, world_up);
+			if(dir_tangent_a.length2() < 1.0e-8f)
+				dir_tangent_a = crossProduct(particle_base_dir, world_x);
+			dir_tangent_a = normalise(dir_tangent_a);
+			const Vec4f dir_tangent_b = normalise(crossProduct(dir_tangent_a, particle_base_dir));
+
+			const float cone_theta = rng.unitRandom() * two_pi;
+			const float cone_angle = degreeToRad(emitter_settings.spread_deg) * std::sqrt(rng.unitRandom());
+			const Vec4f cone_side = dir_tangent_a * std::cos(cone_theta) + dir_tangent_b * std::sin(cone_theta);
+			Vec4f dir = particle_base_dir * std::cos(cone_angle) + cone_side * std::sin(cone_angle);
+			if(dir.length2() > 1.0e-8f)
+				dir = normalise(dir);
+			else
+				dir = particle_base_dir;
+
+			const float lifetime_s = myMax(emitter_settings.lifetime_s, 0.05f);
+			const float speed_mult = myMax(0.f, 1.f + emitter_settings.speed_jitter * (-1.f + 2.f * rng.unitRandom()));
+			const float size_mult = myMax(0.01f, 1.f + emitter_settings.size_jitter * (-1.f + 2.f * rng.unitRandom()));
+			const float opacity_mult = myMax(0.f, 1.f + emitter_settings.opacity_jitter * (-1.f + 2.f * rng.unitRandom()));
+			const float particle_opacity = myClamp(emitter_settings.opacity * opacity_mult, 0.f, 1.f);
+
+			Particle particle;
+			particle.pos = emitter.pos.toVec4fPoint() + spawn_offset;
+			particle.vel = dir * (emitter_settings.speed * speed_mult);
+			particle.colour = emitter_settings.colour;
+			particle.area = myMax(emitter_settings.drag_area, 0.f);
+			particle.mass = myMax(emitter_settings.mass, 1.0e-9f);
+			particle.restitution = emitter_settings.restitution;
+			particle.emitter_uid = emitter.uid;
+			particle.custom_sprite_texture = custom_sprite_texture;
+			particle.additive_glow = emitter_settings.render_mode == ParticleEmitterSettings::RenderMode_AdditiveGlow;
+			particle.glow_strength = emitter_settings.glow_strength;
+			particle.use_lifetime_curve = true;
+			particle.age_s = 0.f;
+			particle.lifetime_s = lifetime_s;
+			particle.start_width = emitter_settings.start_width * size_mult;
+			particle.end_width = emitter_settings.end_width * size_mult;
+			particle.width = particle.start_width;
+			particle.start_opacity = particle_opacity;
+			particle.end_opacity = myClamp(emitter_settings.end_opacity * opacity_mult, 0.f, 1.f);
+			particle.cur_opacity = particle.start_opacity;
+			particle.size_curve = particleCurveFromEmitterCurve(emitter_settings.size_curve);
+			particle.size_curve_mid = emitter_settings.size_curve_mid;
+			particle.opacity_curve = particleCurveFromEmitterCurve(emitter_settings.opacity_curve);
+			particle.opacity_curve_mid = emitter_settings.opacity_curve_mid;
+			particle.theta = degreeToRad(emitter_settings.rotation_deg + emitter_settings.rotation_jitter_deg * (-1.f + 2.f * rng.unitRandom()));
+			particle.theta_speed = degreeToRad(emitter_settings.spin_deg_per_sec + emitter_settings.spin_jitter_deg_per_sec * (-1.f + 2.f * rng.unitRandom()));
+			particle.gravity_scale = emitter_settings.gravity_scale;
+			particle.turbulence_strength = emitter_settings.turbulence_strength;
+			particle.wind_accel = Vec4f(emitter_settings.wind_accel_x, emitter_settings.wind_accel_y, emitter_settings.wind_accel_z, 0.f);
+			particle.force_centre = emitter.pos.toVec4fPoint();
+			particle.vortex_strength = emitter_settings.vortex_strength;
+			particle.attractor_strength = emitter_settings.attractor_strength;
+			particle.attractor_radius = emitter_settings.attractor_radius;
+			particle.black_hole_mode = emitter_settings.black_hole_mode;
+			particle.event_horizon_radius = emitter_settings.event_horizon_radius;
+			particle.radial_accel = emitter_settings.radial_accel;
+			particle.linear_damping = emitter_settings.linear_damping;
+			particle.buoyancy_lift = emitter_settings.buoyancy_lift;
+			particle.collision_friction = emitter_settings.collision_friction;
+			particle.collide_surfaces = emitter_settings.collide_surfaces;
+			particle.die_when_hit_surface = emitter_settings.die_when_hit_surface;
+			particle.particle_type = particleTypeForEmitterKind(emitter_settings.kind);
+
+			if(z < manual_particles_to_spawn)
+			{
+				const float age_t = 0.04f + 0.86f * rng.unitRandom();
+				const float preview_age_s = age_t * lifetime_s;
+				const bool orbital_preview = emitter_settings.black_hole_mode || std::fabs(emitter_settings.vortex_strength) > 1.5f || emitter_settings.shape == ParticleEmitterSettings::Shape_Ring;
+				const float path_scale = orbital_preview ? 0.28f : 1.0f;
+				particle.age_s = preview_age_s;
+				particle.pos += particle.vel * (preview_age_s * path_scale);
+
+				const float size_curve_v = evaluateParticleEmitterCurve(emitter_settings.size_curve, age_t, emitter_settings.size_curve_mid);
+				const float opacity_t = evaluateParticleEmitterCurve(emitter_settings.opacity_curve, age_t, emitter_settings.opacity_curve_mid);
+				particle.width = Maths::lerp(particle.start_width, particle.end_width, size_curve_v);
+				particle.cur_opacity = Maths::lerp(particle.start_opacity, particle.end_opacity, opacity_t);
+			}
+
+			this->particle_manager->addParticle(particle);
+		}
+	}
+}
+
+
 void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 {
 	ZoneScoped; // Tracy profiler
@@ -10018,7 +10778,10 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	if(terrain_decal_manager.nonNull())
 		terrain_decal_manager->think((float)dt);
 	if(particle_manager.nonNull())
+	{
+		updateParticleEmitters(dt);
 		particle_manager->think((float)dt);
+	}
 
 	if(opengl_engine.nonNull())
 	{
@@ -16133,6 +16896,19 @@ void GUIClient::objectEdited()
 
 		//ui->objectEditor->toObject(*this->selected_ob); // Sets changed_flags on object as well.
 		ui_interface->objectEditorToObject(*this->selected_ob); // Sets changed_flags on object as well.
+
+		if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content))
+		{
+			ParticleEmitterSettings emitter_settings = ParticleEmitterSettings::fromContent(this->selected_ob->content);
+			const std::string prepared_sprite_path = prepareAndUploadParticleSprite(emitter_settings.sprite_path);
+			if(prepared_sprite_path != emitter_settings.sprite_path)
+			{
+				emitter_settings.sprite_path = prepared_sprite_path;
+				this->selected_ob->content = ParticleEmitterSettings::serialiseToContent(emitter_settings);
+				BitUtils::setBit(this->selected_ob->changed_flags, WorldObject::CONTENT_CHANGED);
+				ui_interface->startObEditorTimerIfNotActive();
+			}
+		}
 			
 		this->selected_ob->last_modified_time = TimeStamp::currentTime(); // Gets set on server as well, this is just for updating the local display.
 		ui_interface->objectLastModifiedUpdated(*this->selected_ob);
@@ -17728,7 +18504,7 @@ void GUIClient::checkCreateManagersAndMinimap()
 			terrain_decal_manager = new TerrainDecalManager(this->base_dir_path, async_texture_loader.ptr(), opengl_engine.ptr());
 		
 		if(!particle_manager)
-			particle_manager = new ParticleManager(this->base_dir_path, async_texture_loader.ptr(), opengl_engine.ptr(), physics_world.ptr(), terrain_decal_manager.ptr());
+			particle_manager = new ParticleManager(this->base_dir_path, resource_manager.ptr(), async_texture_loader.ptr(), opengl_engine.ptr(), physics_world.ptr(), terrain_decal_manager.ptr());
 
 		if(!minimap)
 			minimap = new MiniMap(opengl_engine, /*gui_client_=*/this, gl_ui);
@@ -18126,6 +18902,35 @@ int GUIClient::mouseOverAxisArrowOrRotArc(const Vec2f& pixel_coords, Vec4f& clos
 }
 
 
+bool GUIClient::mouseOverParticleEmitterHandle(const Vec2f& pixel_coords, const GLObjectRef& handle_ob, const Vec4f& handle_pos_ws, Vec4f& closest_handle_pos_ws_out)
+{
+	if(selected_ob.isNull() || !ParticleEmitterSettings::isParticleEmitterContent(selected_ob->content) || handle_ob.isNull())
+		return false;
+
+	Vec2f handle_pixelpos;
+	if(!getPixelForPoint(handle_pos_ws, handle_pixelpos))
+		return false;
+
+	const float d = (handle_pixelpos - pixel_coords).length();
+	const float cam_dist = myMax(0.1f, (handle_pos_ws - cam_controller.getPosition().toVec4fPoint()).length());
+	const float gl_w = (float)opengl_engine->getMainViewPortWidth();
+	const float approx_radius_px = 0.018f * gl_w / cam_dist;
+	if(d < myMax(14.f, approx_radius_px))
+	{
+		closest_handle_pos_ws_out = handle_pos_ws;
+		return true;
+	}
+
+	return false;
+}
+
+
+bool GUIClient::mouseOverParticleEmitterRadiusHandle(const Vec2f& pixel_coords, Vec4f& closest_handle_pos_ws_out)
+{
+	return mouseOverParticleEmitterHandle(pixel_coords, particle_emitter_radius_handle_vis_gl_ob, particle_emitter_radius_handle_pos_ws, closest_handle_pos_ws_out);
+}
+
+
 void GUIClient::mousePressed(MouseEvent& e)
 {
 	// conPrint("GUIClient::mousePressed");
@@ -18196,7 +19001,32 @@ void GUIClient::mousePressed(MouseEvent& e)
 		//if(!mouse_trace_hit_selected_ob)
 		if(have_edit_permissions) // The axis arrows and rotation arcs are only visible if we have object modification permissions.
 		{
-			grabbed_axis = mouseOverAxisArrowOrRotArc(Vec2f((float)e.cursor_pos.x, (float)e.cursor_pos.y), /*closest_seg_point_ws_out=*/this->grabbed_point_ws);
+			const Vec2f mouse_pixel((float)e.cursor_pos.x, (float)e.cursor_pos.y);
+			if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content) &&
+				mouseOverParticleEmitterHandle(mouse_pixel, particle_emitter_direction_handle_vis_gl_ob, particle_emitter_direction_handle_pos_ws, /*closest_handle_pos_ws_out=*/this->grabbed_point_ws))
+			{
+				grabbed_axis = PARTICLE_DIRECTION_HANDLE_AXIS;
+			}
+			else if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content) &&
+				mouseOverParticleEmitterHandle(mouse_pixel, particle_emitter_spread_handle_vis_gl_ob, particle_emitter_spread_handle_pos_ws, /*closest_handle_pos_ws_out=*/this->grabbed_point_ws))
+			{
+				grabbed_axis = PARTICLE_SPREAD_HANDLE_AXIS;
+				particle_emitter_spread_at_grab = ParticleEmitterSettings::fromContent(this->selected_ob->content).spread_deg;
+			}
+			else if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content) &&
+				mouseOverParticleEmitterHandle(mouse_pixel, particle_emitter_attractor_radius_handle_vis_gl_ob, particle_emitter_attractor_radius_handle_pos_ws, /*closest_handle_pos_ws_out=*/this->grabbed_point_ws))
+			{
+				grabbed_axis = PARTICLE_ATTRACTOR_RADIUS_HANDLE_AXIS;
+				particle_emitter_attractor_radius_at_grab = ParticleEmitterSettings::fromContent(this->selected_ob->content).attractor_radius;
+			}
+			else if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content) &&
+				mouseOverParticleEmitterRadiusHandle(mouse_pixel, /*closest_handle_pos_ws_out=*/this->grabbed_point_ws))
+			{
+				grabbed_axis = PARTICLE_RADIUS_HANDLE_AXIS;
+				particle_emitter_radius_at_grab = ParticleEmitterSettings::fromContent(this->selected_ob->content).emitter_radius;
+			}
+			else
+				grabbed_axis = mouseOverAxisArrowOrRotArc(Vec2f((float)e.cursor_pos.x, (float)e.cursor_pos.y), /*closest_seg_point_ws_out=*/this->grabbed_point_ws);
 
 			if(grabbed_axis >= 0) // If we grabbed an arrow or rotation arc:
 			{
@@ -18215,7 +19045,7 @@ void GUIClient::mousePressed(MouseEvent& e)
 				undo_buffer.startWorldObjectEdit(*this->selected_ob);
 			}
 
-			if(grabbed_axis >= NUM_AXIS_ARROWS) // If we grabbed a rotation arc:
+			if(grabbed_axis >= NUM_AXIS_ARROWS && grabbed_axis < PARTICLE_RADIUS_HANDLE_AXIS) // If we grabbed a rotation arc:
 			{
 				const Vec4f arc_centre = this->selected_ob->opengl_engine_ob->ob_to_world_matrix.getColumn(3);
 
@@ -18435,10 +19265,17 @@ void GUIClient::mouseReleased(MouseEvent& e)
 	// If we were dragging an object along a movement axis, we have released the mouse button and hence finished the movement.  un-grab the axis.
 	if(grabbed_axis != -1 && selected_ob.nonNull())
 	{
+		const bool was_particle_handle_drag =
+			grabbed_axis == PARTICLE_RADIUS_HANDLE_AXIS ||
+			grabbed_axis == PARTICLE_DIRECTION_HANDLE_AXIS ||
+			grabbed_axis == PARTICLE_SPREAD_HANDLE_AXIS ||
+			grabbed_axis == PARTICLE_ATTRACTOR_RADIUS_HANDLE_AXIS;
 		undo_buffer.finishWorldObjectEdit(*selected_ob);
 		grabbed_axis = -1;
 		have_selected_ob_transform_rollback = false;
 		selected_ob_transform_rollback_uid = UID::invalidUID();
+		if(was_particle_handle_drag)
+			ui_interface->setObjectEditorFromOb(*selected_ob, ui_interface->getSelectedMatIndex(), /*ob in editing user's world=*/connectedToUsersWorldOrGodUser());
 	}
 	else if(grabbed_axis != -1 && selected_parcel.nonNull())
 	{
@@ -19027,7 +19864,95 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 		updateInfoUIForMousePosition(mouse_event.cursor_pos, mouse_event.gl_coords, &mouse_event, /*cursor_is_mouse_cursor=*/true);
 
 
-	if(selected_ob.nonNull() && grabbed_axis >= 0 && grabbed_axis < NUM_AXIS_ARROWS)
+	if(selected_ob.nonNull() &&
+		(grabbed_axis == PARTICLE_RADIUS_HANDLE_AXIS || grabbed_axis == PARTICLE_DIRECTION_HANDLE_AXIS || grabbed_axis == PARTICLE_SPREAD_HANDLE_AXIS || grabbed_axis == PARTICLE_ATTRACTOR_RADIUS_HANDLE_AXIS) &&
+		ParticleEmitterSettings::isParticleEmitterContent(selected_ob->content))
+	{
+		const Vec4f ray_origin = cam_controller.getPosition().toVec4fPoint();
+		const Vec4f ray_dir = getDirForPixelTrace(mouse_event.cursor_pos.x, mouse_event.cursor_pos.y);
+		const Vec4f emitter_pos = selected_ob->pos.toVec4fPoint();
+		const Planef drag_plane(emitter_pos, -cam_controller.getForwardsVec().toVec4fVector());
+		const float t = drag_plane.rayIntersect(ray_origin, ray_dir);
+		if(t > 0.f && t < 1000.f)
+		{
+			Vec4f hit = ray_origin + ray_dir * t;
+			ParticleEmitterSettings emitter_settings = ParticleEmitterSettings::fromContent(selected_ob->content);
+
+			bool changed = false;
+			if(grabbed_axis == PARTICLE_RADIUS_HANDLE_AXIS)
+			{
+				Vec4f radius_vec = hit - emitter_pos;
+				radius_vec[3] = 0.f;
+				const float new_radius = myClamp(radius_vec.length(), 0.f, 100.f);
+				if(std::fabs(emitter_settings.emitter_radius - new_radius) > 0.001f)
+				{
+					emitter_settings.emitter_radius = new_radius;
+					changed = true;
+				}
+			}
+			else if(grabbed_axis == PARTICLE_DIRECTION_HANDLE_AXIS)
+			{
+				Vec4f dir_vec = hit - emitter_pos;
+				dir_vec[3] = 0.f;
+				if(dir_vec.length2() > 1.0e-8f)
+				{
+					const Vec4f dir = normalise(dir_vec);
+					if(emitter_settings.direction != ParticleEmitterSettings::Direction_Custom ||
+						std::fabs(emitter_settings.custom_dir_x - dir[0]) > 0.001f ||
+						std::fabs(emitter_settings.custom_dir_y - dir[1]) > 0.001f ||
+						std::fabs(emitter_settings.custom_dir_z - dir[2]) > 0.001f)
+					{
+						emitter_settings.direction = ParticleEmitterSettings::Direction_Custom;
+						emitter_settings.custom_dir_x = dir[0];
+						emitter_settings.custom_dir_y = dir[1];
+						emitter_settings.custom_dir_z = dir[2];
+						changed = true;
+					}
+				}
+			}
+			else if(grabbed_axis == PARTICLE_SPREAD_HANDLE_AXIS)
+			{
+				Vec4f spread_vec = hit - emitter_pos;
+				spread_vec[3] = 0.f;
+				if(spread_vec.length2() > 1.0e-8f)
+				{
+					const Vec4f drag_dir = normalise(spread_vec);
+					const Vec4f base_dir = particleEmitterBaseDirectionWS(emitter_settings, obToWorldMatrix(*selected_ob));
+					const float new_spread_deg = myClamp(radToDegree(std::acos(myClamp(dot(base_dir, drag_dir), -1.f, 1.f))), 0.f, 180.f);
+					if(std::fabs(emitter_settings.spread_deg - new_spread_deg) > 0.05f)
+					{
+						emitter_settings.spread_deg = new_spread_deg;
+						changed = true;
+					}
+				}
+			}
+			else if(grabbed_axis == PARTICLE_ATTRACTOR_RADIUS_HANDLE_AXIS)
+			{
+				Vec4f radius_vec = hit - emitter_pos;
+				radius_vec[3] = 0.f;
+				const float new_radius = myClamp(radius_vec.length(), 0.f, 100.f);
+				if(std::fabs(emitter_settings.attractor_radius - new_radius) > 0.001f)
+				{
+					emitter_settings.attractor_radius = new_radius;
+					changed = true;
+				}
+			}
+
+			if(changed)
+			{
+				selected_ob->content = ParticleEmitterSettings::serialiseToContent(emitter_settings);
+				BitUtils::setBit(selected_ob->changed_flags, WorldObject::CONTENT_CHANGED);
+				selected_ob->last_modified_time = TimeStamp::currentTime();
+				ui_interface->objectLastModifiedUpdated(*selected_ob);
+				ui_interface->startObEditorTimerIfNotActive();
+
+				Lock lock(world_state->mutex);
+				selected_ob->from_local_other_dirty = true;
+				world_state->dirty_from_local_objects.insert(selected_ob);
+			}
+		}
+	}
+	else if(selected_ob.nonNull() && grabbed_axis >= 0 && grabbed_axis < NUM_AXIS_ARROWS)
 	{
 		// If we have have grabbed an axis and are moving it:
 		//conPrint("Grabbed axis " + toString(grabbed_axis));
@@ -19712,6 +20637,7 @@ void GUIClient::deselectObject()
 		// Remove visualisation objects
 		checkRemoveObAndSetRefToNull(opengl_engine, this->aabb_os_vis_gl_ob);
 		checkRemoveObAndSetRefToNull(opengl_engine, this->aabb_ws_vis_gl_ob);
+		clearSelectedParticleEmitterGizmo();
 
 		for(size_t i=0; i<selected_ob_vis_gl_obs.size(); ++i)
 			opengl_engine->removeObject(this->selected_ob_vis_gl_obs[i]);
@@ -21338,6 +22264,66 @@ std::string GUIClient::uploadLocalFileForBot(const std::string& local_abs_path)
 	const uint64 hash = FileChecksum::fileChecksum(local_abs_path);
 	const URLString url = ResourceManager::URLForPathAndHash(local_abs_path, hash);
 	resource_manager->copyLocalFileToResourceDir(local_abs_path, url);
+	return toStdString(url);
+}
+
+
+std::string GUIClient::prepareAndUploadParticleSprite(const std::string& sprite_path)
+{
+	std::string normalised_path = sprite_path;
+	std::replace(normalised_path.begin(), normalised_path.end(), '\\', '/');
+	normalised_path = stripHeadAndTailWhitespace(normalised_path);
+
+	if(normalised_path.empty() || !resource_manager)
+		return sprite_path;
+
+	std::string local_abs_path;
+	if(FileUtils::fileExists(normalised_path))
+		local_abs_path = normalised_path;
+	else if(!normalised_path.empty() && normalised_path[0] == '/')
+	{
+		const std::string packaged_path = base_dir_path + "/data" + normalised_path;
+		if(FileUtils::fileExists(packaged_path))
+			local_abs_path = packaged_path;
+	}
+	else if(hasPrefix(normalised_path, "resources/") || hasPrefix(normalised_path, "gl_data/"))
+	{
+		const std::string packaged_path = base_dir_path + "/data/" + normalised_path;
+		if(FileUtils::fileExists(packaged_path))
+			local_abs_path = packaged_path;
+	}
+
+	if(local_abs_path.empty())
+		return normalised_path;
+
+	const uint64 hash = FileChecksum::fileChecksum(local_abs_path);
+	const std::string filename = FileUtils::getFilename(local_abs_path);
+	const std::string extension = ::getExtension(filename).empty() ? "png" : ::getExtension(filename);
+	const URLString url = ResourceManager::URLForNameAndExtensionAndHash("particle_" + removeDotAndExtension(filename), extension, hash);
+	resource_manager->copyLocalFileToResourceDir(local_abs_path, url);
+
+	if(this->connection_state != ServerConnectionState_NotConnected)
+	{
+		const std::string resource_path = resource_manager->pathForURL(url);
+		const std::string username = ui_interface->getUsernameForDomain(server_hostname);
+		const std::string password = ui_interface->getDecryptedPasswordForDomain(server_hostname);
+
+		this->num_resources_uploading++;
+#if EMSCRIPTEN
+		const size_t max_num_upload_threads = 1;
+#else
+		const size_t max_num_upload_threads = 4;
+#endif
+		if(resource_upload_thread_manager.getNumThreads() == 0)
+		{
+			for(size_t q=0; q<max_num_upload_threads; ++q)
+				resource_upload_thread_manager.addThread(new UploadResourceThread(&this->msg_queue, &upload_queue, server_hostname, server_port, username, password, this->client_tls_config,
+					&this->num_resources_uploading));
+		}
+
+		upload_queue.enqueue(new ResourceToUpload(resource_path, url));
+	}
+
 	return toStdString(url);
 }
 

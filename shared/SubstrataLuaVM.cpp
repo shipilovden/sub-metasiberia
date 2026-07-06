@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2024 -
 #if GUI_CLIENT
 #include "../gui_client/PlayerPhysics.h"
 #include "../gui_client/GUIClient.h"
+#include "../gui_client/ParticleEmitterSettings.h"
 #include "../gui_client/VehiclePhysics.h"
 #elif SERVER
 #include "../server/Server.h"
@@ -73,6 +74,14 @@ enum StringAtomEnum
 	Atom_isPlayingAudio,
 	Atom_startPlayingAnimation,
 	Atom_getAnimationIndex,
+	Atom_start,
+	Atom_stop,
+	Atom_burst,
+	Atom_clearParticles,
+	Atom_particleStart,
+	Atom_particleStop,
+	Atom_particleBurst,
+	Atom_particleClear,
 
 	// WorldMaterial
 	Atom_colour,
@@ -141,6 +150,14 @@ static StringAtom string_atoms[] =
 	StringAtom({"isPlayingAudio",			Atom_isPlayingAudio,			}),
 	StringAtom({"startPlayingAnimation",	Atom_startPlayingAnimation,		}),
 	StringAtom({"getAnimationIndex",		Atom_getAnimationIndex,			}),
+	StringAtom({"start",					Atom_start,						}),
+	StringAtom({"stop",						Atom_stop,						}),
+	StringAtom({"burst",					Atom_burst,						}),
+	StringAtom({"clearParticles",			Atom_clearParticles,			}),
+	StringAtom({"particleStart",			Atom_particleStart,				}),
+	StringAtom({"particleStop",				Atom_particleStop,				}),
+	StringAtom({"particleBurst",			Atom_particleBurst,				}),
+	StringAtom({"particleClear",			Atom_particleClear,				}),
 
 	// WorldMaterial
 	StringAtom({"colour",					Atom_colour,					}),
@@ -1208,6 +1225,107 @@ static int getAnimationIndex(lua_State* state)
 }
 
 
+#if GUI_CLIENT
+static bool getParticleEmitterObjectFromLuaArg(lua_State* state, WorldObject*& ob_out)
+{
+	ob_out = NULL;
+	const UID ob_uid((uint64)LuaUtils::getTableNumberField(state, /*table index=*/1, "uid"));
+
+	LuaScript* script = (LuaScript*)lua_getthreaddata(state);
+	LuaScriptEvaluator* script_evaluator = (LuaScriptEvaluator*)script->userdata;
+	WorldObject* ob = getWorldObjectForUID(script_evaluator, ob_uid);
+	if(!ParticleEmitterSettings::isParticleEmitterContent(ob->content))
+		return false;
+
+	ob_out = ob;
+	return true;
+}
+#endif
+
+
+static int particleEmitterStart(lua_State* state)
+{
+	checkNumArgs(state, /*num_args_required=*/1);
+
+	bool ok = false;
+#if GUI_CLIENT
+	WorldObject* ob = NULL;
+	ok = getParticleEmitterObjectFromLuaArg(state, ob);
+	if(ok)
+	{
+		SubstrataLuaVM* sub_lua_vm = (SubstrataLuaVM*)lua_callbacks(state)->userdata;
+		sub_lua_vm->gui_client->setParticleEmitterRuntimePaused(ob->uid, false);
+	}
+#endif
+	lua_pushboolean(state, ok ? 1 : 0);
+	return 1;
+}
+
+
+static int particleEmitterStop(lua_State* state)
+{
+	checkNumArgs(state, /*num_args_required=*/1);
+
+	bool ok = false;
+#if GUI_CLIENT
+	WorldObject* ob = NULL;
+	ok = getParticleEmitterObjectFromLuaArg(state, ob);
+	if(ok)
+	{
+		SubstrataLuaVM* sub_lua_vm = (SubstrataLuaVM*)lua_callbacks(state)->userdata;
+		sub_lua_vm->gui_client->setParticleEmitterRuntimePaused(ob->uid, true);
+	}
+#endif
+	lua_pushboolean(state, ok ? 1 : 0);
+	return 1;
+}
+
+
+static int particleEmitterBurst(lua_State* state)
+{
+	const int num_args = lua_gettop(state);
+	if(num_args < 1 || num_args > 2)
+		throw glare::Exception("burst(): Expected 1 or 2 arguments" + errorContextString(state));
+
+	bool ok = false;
+#if GUI_CLIENT
+	WorldObject* ob = NULL;
+	ok = getParticleEmitterObjectFromLuaArg(state, ob);
+	if(ok)
+	{
+		ParticleEmitterSettings settings = ParticleEmitterSettings::fromContent(ob->content);
+		int burst_count = myMax(settings.burst_count, 1);
+		if(num_args >= 2)
+			burst_count = myClamp((int)LuaUtils::getDoubleArg(state, /*index=*/2), 1, 512);
+
+		SubstrataLuaVM* sub_lua_vm = (SubstrataLuaVM*)lua_callbacks(state)->userdata;
+		sub_lua_vm->gui_client->triggerParticleEmitterBurst(ob->uid, burst_count);
+	}
+#endif
+	lua_pushboolean(state, ok ? 1 : 0);
+	return 1;
+}
+
+
+static int particleEmitterClear(lua_State* state)
+{
+	checkNumArgs(state, /*num_args_required=*/1);
+
+	bool ok = false;
+#if GUI_CLIENT
+	WorldObject* ob = NULL;
+	ok = getParticleEmitterObjectFromLuaArg(state, ob);
+	if(ok)
+	{
+		SubstrataLuaVM* sub_lua_vm = (SubstrataLuaVM*)lua_callbacks(state)->userdata;
+		sub_lua_vm->gui_client->clearParticleEmitterParticles(ob->uid);
+	}
+#endif
+	lua_pushboolean(state, ok ? 1 : 0);
+	return 1;
+}
+
+
 // C++ implementation of __index for WorldObject class. Used when a WorldObject table field is read from.
 static int worldObjectClassIndexMetaMethod(lua_State* state)
 {
@@ -1328,6 +1446,38 @@ static int worldObjectClassIndexMetaMethod(lua_State* state)
 	case Atom_getAnimationIndex:
 		assert(stringEqual(key_str, "getAnimationIndex"));
 		lua_pushcfunction(state, getAnimationIndex, "getAnimationIndex");
+		break;
+	case Atom_start:
+		assert(stringEqual(key_str, "start"));
+		lua_pushcfunction(state, particleEmitterStart, "start");
+		break;
+	case Atom_stop:
+		assert(stringEqual(key_str, "stop"));
+		lua_pushcfunction(state, particleEmitterStop, "stop");
+		break;
+	case Atom_burst:
+		assert(stringEqual(key_str, "burst"));
+		lua_pushcfunction(state, particleEmitterBurst, "burst");
+		break;
+	case Atom_clearParticles:
+		assert(stringEqual(key_str, "clearParticles"));
+		lua_pushcfunction(state, particleEmitterClear, "clearParticles");
+		break;
+	case Atom_particleStart:
+		assert(stringEqual(key_str, "particleStart"));
+		lua_pushcfunction(state, particleEmitterStart, "particleStart");
+		break;
+	case Atom_particleStop:
+		assert(stringEqual(key_str, "particleStop"));
+		lua_pushcfunction(state, particleEmitterStop, "particleStop");
+		break;
+	case Atom_particleBurst:
+		assert(stringEqual(key_str, "particleBurst"));
+		lua_pushcfunction(state, particleEmitterBurst, "particleBurst");
+		break;
+	case Atom_particleClear:
+		assert(stringEqual(key_str, "particleClear"));
+		lua_pushcfunction(state, particleEmitterClear, "particleClear");
 		break;
 	case Atom_audio_loop:
 		assert(stringEqual(key_str, "audio_loop"));

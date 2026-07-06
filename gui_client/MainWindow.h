@@ -88,6 +88,7 @@ private slots:;
 	void on_actionAdd_Video_triggered();
 	void on_actionAdd_Audio_Source_triggered();
 	void on_actionAdd_Decal_triggered();
+	void on_actionAdd_Particles_triggered();
 	void on_actionCopy_Object_triggered();
 	void on_actionPaste_Object_triggered();
 	void on_actionCloneObject_triggered();
@@ -232,6 +233,8 @@ private slots:
 	void objectTransformEditedSlot();
 	void objectEditedSlot();
 	void scriptChangedFromEditorSlot();
+	void particleBurstNowSlot();
+	void particleClearParticlesSlot();
 	void parcelEditedSlot();
 	void worldSettingsChangedSlot();
 	void environmentSettingChangedSlot();

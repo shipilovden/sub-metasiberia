@@ -18,6 +18,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "HeadUpDisplayUI.h"
 #include "PhotoModeUI.h"
 #include "ChatUI.h"
+#include "ParticleEmitterSettings.h"
 #include "webcam/WebcamCapture.h"
 #include "DownloadingResourceQueue.h"
 #include "LoadItemQueue.h"
@@ -58,6 +59,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <networking/IPAddress.h>
 #include <string>
 #include <map>
+#include <set>
 #include <unordered_set>
 #include <deque>
 #include <fstream>
@@ -274,6 +276,7 @@ public:
 	void convertSelectedObjectToGearItem();
 	void createBot(const Vec3d& pos, float heading);
 	std::string uploadLocalFileForBot(const std::string& local_abs_path); // Copy local file to resources dir and return sub:// URL
+	std::string prepareAndUploadParticleSprite(const std::string& sprite_path); // Convert a local particle sprite path to a shared resource URL and enqueue upload.
 	std::string prepareAndUploadChatAttachment(const std::string& local_abs_path); // Copy local file to resources dir, enqueue upload, and return resource URL.
 	void updateBot(uint64 bot_id, const std::string& name, const std::string& prompt,
 		const AvatarSettings& avatar_settings,
@@ -422,6 +425,8 @@ public:
 	void checkForAudioRangeChanges();
 
 	int mouseOverAxisArrowOrRotArc(const Vec2f& pixel_coords, Vec4f& closest_seg_point_ws_out); // Returns closest axis arrow or -1 if no close.
+	bool mouseOverParticleEmitterHandle(const Vec2f& pixel_coords, const GLObjectRef& handle_ob, const Vec4f& handle_pos_ws, Vec4f& closest_handle_pos_ws_out);
+	bool mouseOverParticleEmitterRadiusHandle(const Vec2f& pixel_coords, Vec4f& closest_handle_pos_ws_out);
 	void sendChatMessage(const std::string& message);
 	void sendPrivateChatMessage(const std::string& recipient_name, const UID& recipient_avatar_uid, const std::string& message);
 	void sendEmojiChatMessage(const std::string& emoji);
@@ -550,6 +555,16 @@ public:
 	int getEffectiveLODLevel(const WorldObject* ob, const Vec3d& campos) const;
 	void tryResolvePendingCameraPairCreateForObject(WorldObject* created_ob, WorldStateLock& world_state_lock);
 	void tryAutoLinkUnboundCameraScreen(WorldObject* maybe_screen_ob, WorldStateLock& world_state_lock);
+	void updateParticleEmitters(double dt);
+	void updateSelectedParticleEmitterGizmo();
+	void clearSelectedParticleEmitterGizmo();
+	void triggerSelectedParticleEmitterBurst();
+	void clearSelectedParticleEmitterParticles();
+	void triggerParticleEmitterBurst(UID emitter_uid, int burst_count);
+	void clearParticleEmitterParticles(UID emitter_uid);
+	void setParticleEmitterRuntimePaused(UID emitter_uid, bool paused);
+	size_t getSelectedParticleEmitterParticleCount() const;
+	size_t getTotalParticleCount() const;
 
 	//----------------------- LuaScriptOutputHandler interface -----------------------
 	virtual void printFromLuaScript(LuaScript* script, const char* s, size_t len) override;
@@ -697,8 +712,26 @@ public:
 	GLObjectRef aabb_os_vis_gl_ob; // Used for visualising the object-space AABB of the selected object.
 	GLObjectRef aabb_ws_vis_gl_ob; // Used for visualising the world-space AABB of the selected object.
 	std::vector<GLObjectRef> selected_ob_vis_gl_obs; // Used for visualising paths for path-controlled objects.
+	GLObjectRef particle_emitter_shape_vis_gl_ob;
+	GLObjectRef particle_emitter_direction_vis_gl_ob;
+	GLObjectRef particle_emitter_radius_handle_vis_gl_ob;
+	GLObjectRef particle_emitter_direction_handle_vis_gl_ob;
+	GLObjectRef particle_emitter_spread_handle_vis_gl_ob;
+	GLObjectRef particle_emitter_attractor_radius_handle_vis_gl_ob;
+	Vec4f particle_emitter_radius_handle_pos_ws;
+	Vec4f particle_emitter_direction_handle_pos_ws;
+	Vec4f particle_emitter_spread_handle_pos_ws;
+	Vec4f particle_emitter_attractor_radius_handle_pos_ws;
+	float particle_emitter_radius_at_grab;
+	float particle_emitter_spread_at_grab;
+	float particle_emitter_attractor_radius_at_grab;
+	int particle_emitter_shape_vis_shape;
 
 	static const int NUM_AXIS_ARROWS = 3;
+	static const int PARTICLE_RADIUS_HANDLE_AXIS = NUM_AXIS_ARROWS + 3;
+	static const int PARTICLE_DIRECTION_HANDLE_AXIS = NUM_AXIS_ARROWS + 4;
+	static const int PARTICLE_SPREAD_HANDLE_AXIS = NUM_AXIS_ARROWS + 5;
+	static const int PARTICLE_ATTRACTOR_RADIUS_HANDLE_AXIS = NUM_AXIS_ARROWS + 6;
 	LineSegment4f axis_arrow_segments[NUM_AXIS_ARROWS];
 	GLObjectRef axis_arrow_objects[NUM_AXIS_ARROWS]; // For ob placement
 
@@ -827,6 +860,12 @@ public:
 	struct tls_config* client_tls_config;
 
 	PCG32 rng;
+	std::map<UID, double> particle_emitter_accumulators;
+	std::map<UID, double> particle_emitter_burst_accumulators;
+	std::map<UID, int> particle_emitter_manual_bursts;
+	std::set<UID> particle_emitter_runtime_paused;
+	std::map<UID, std::string> particle_emitter_content_cache;
+	std::map<UID, ParticleEmitterSettings> particle_emitter_settings_cache;
 
 	glare::AudioEngine audio_engine;
 	UndoBuffer undo_buffer;

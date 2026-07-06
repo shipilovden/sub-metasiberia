@@ -11,6 +11,10 @@ Copyright Glare Technologies Limited 2024 -
 #include "WorldStateLock.h"
 #include "WorldObject.h"
 #include "../server/LuaHTTPRequestManager.h" // For LuaHTTPRequestResult
+#if GUI_CLIENT
+#include "../gui_client/GUIClient.h"
+#include "../gui_client/ParticleEmitterSettings.h"
+#endif
 #include <utils/Exception.h>
 #include <utils/ConPrint.h>
 #include <utils/StringUtils.h>
@@ -40,7 +44,96 @@ private:
 };
 
 
-LuaScriptEvaluator::LuaScriptEvaluator(const Reference<SubstrataLuaVM>& substrata_lua_vm_, LuaScriptOutputHandler* script_output_handler_, 
+#if GUI_CLIENT
+static bool getCurrentParticleEmitter(lua_State* state, LuaScriptEvaluator*& script_evaluator_out, WorldObject*& ob_out)
+{
+	script_evaluator_out = NULL;
+	ob_out = NULL;
+	LuaScript* script = (LuaScript*)lua_getthreaddata(state);
+	LuaScriptEvaluator* script_evaluator = (LuaScriptEvaluator*)script->userdata;
+	WorldObject* ob = script_evaluator->world_object;
+	if(!ob || !ParticleEmitterSettings::isParticleEmitterContent(ob->content))
+		return false;
+
+	script_evaluator_out = script_evaluator;
+	ob_out = ob;
+	return true;
+}
+#endif
+
+
+static int emitterAPIStart(lua_State* state)
+{
+	bool ok = false;
+#if GUI_CLIENT
+	LuaScriptEvaluator* script_evaluator = NULL;
+	WorldObject* ob = NULL;
+	ok = getCurrentParticleEmitter(state, script_evaluator, ob);
+	if(ok)
+		script_evaluator->substrata_lua_vm->gui_client->setParticleEmitterRuntimePaused(ob->uid, false);
+#endif
+	lua_pushboolean(state, ok ? 1 : 0);
+	return 1;
+}
+
+
+static int emitterAPIStop(lua_State* state)
+{
+	bool ok = false;
+#if GUI_CLIENT
+	LuaScriptEvaluator* script_evaluator = NULL;
+	WorldObject* ob = NULL;
+	ok = getCurrentParticleEmitter(state, script_evaluator, ob);
+	if(ok)
+		script_evaluator->substrata_lua_vm->gui_client->setParticleEmitterRuntimePaused(ob->uid, true);
+#endif
+	lua_pushboolean(state, ok ? 1 : 0);
+	return 1;
+}
+
+
+static int emitterAPIBurst(lua_State* state)
+{
+	bool ok = false;
+#if GUI_CLIENT
+	LuaScriptEvaluator* script_evaluator = NULL;
+	WorldObject* ob = NULL;
+	ok = getCurrentParticleEmitter(state, script_evaluator, ob);
+	if(ok)
+	{
+		ParticleEmitterSettings settings = ParticleEmitterSettings::fromContent(ob->content);
+		int burst_count = myMax(settings.burst_count, 1);
+		const int num_args = lua_gettop(state);
+		int count_arg_index = 1;
+		if(num_args >= 1 && lua_type(state, 1) == LUA_TTABLE)
+			count_arg_index = 2;
+		if(num_args >= count_arg_index)
+			burst_count = myClamp((int)LuaUtils::getDoubleArg(state, count_arg_index), 1, 512);
+
+		script_evaluator->substrata_lua_vm->gui_client->triggerParticleEmitterBurst(ob->uid, burst_count);
+	}
+#endif
+	lua_pushboolean(state, ok ? 1 : 0);
+	return 1;
+}
+
+
+static int emitterAPIClear(lua_State* state)
+{
+	bool ok = false;
+#if GUI_CLIENT
+	LuaScriptEvaluator* script_evaluator = NULL;
+	WorldObject* ob = NULL;
+	ok = getCurrentParticleEmitter(state, script_evaluator, ob);
+	if(ok)
+		script_evaluator->substrata_lua_vm->gui_client->clearParticleEmitterParticles(ob->uid);
+#endif
+	lua_pushboolean(state, ok ? 1 : 0);
+	return 1;
+}
+
+
+LuaScriptEvaluator::LuaScriptEvaluator(const Reference<SubstrataLuaVM>& substrata_lua_vm_, LuaScriptOutputHandler* script_output_handler_,
 	const std::string& script_src, WorldObject* world_object_,
 #if SERVER
 		ServerWorldState* world_state_, // The world that the object belongs to.
@@ -71,6 +164,14 @@ LuaScriptEvaluator::LuaScriptEvaluator(const Reference<SubstrataLuaVM>& substrat
 	// Set 'this_object' global variable
 	pushWorldObjectTableOntoStack(world_object->uid);
 	lua_setglobal(lua_script->thread_state, "this_object");
+
+	lua_createtable(lua_script->thread_state, /*num array elems=*/0, /*num non-array elems=*/5);
+	LuaUtils::setCFunctionAsTableField(lua_script->thread_state, emitterAPIStart, "emitter.start", "start");
+	LuaUtils::setCFunctionAsTableField(lua_script->thread_state, emitterAPIStop, "emitter.stop", "stop");
+	LuaUtils::setCFunctionAsTableField(lua_script->thread_state, emitterAPIBurst, "emitter.burst", "burst");
+	LuaUtils::setCFunctionAsTableField(lua_script->thread_state, emitterAPIClear, "emitter.clear", "clear");
+	LuaUtils::setCFunctionAsTableField(lua_script->thread_state, emitterAPIClear, "emitter.clearParticles", "clearParticles");
+	lua_setglobal(lua_script->thread_state, "emitter");
 
 	// Set 'IS_SERVER' global variable.
 #if SERVER

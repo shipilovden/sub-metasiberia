@@ -48,6 +48,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "GearInventoryUI.h"
 #include "BotEditorWidget.h"
 #include "PlayerPhysics.h"
+#include "ParticleEmitterSettings.h"
 #include "../qt/FlowLayout.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
@@ -2045,6 +2046,7 @@ void MainWindow::initialiseUI()
 	map_dock_widget = new QDockWidget(tr("Map"), this);
 	map_dock_widget->setObjectName("mapDockWidget");
 	map_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	map_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 	map_dock_map_widget = new MetasiberiaMapDockWidget(&gui_client, map_dock_widget);
 	map_dock_widget->setWidget(map_dock_map_widget);
 	map_dock_widget->resize(360, 420);
@@ -2089,6 +2091,13 @@ void MainWindow::initialiseUI()
 	ui->glWidget->setBaseDir(base_dir_path, /*print output=*/this, settings);
 	ui->objectEditor->base_dir_path = base_dir_path;
 	ui->objectEditor->settings = settings;
+	ui->editorDockWidget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	ui->editorDockWidget->setMinimumWidth(360);
+	ui->scrollArea->setWidgetResizable(true);
+	ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	ui->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	ui->objectEditor->setMinimumWidth(340);
+	ui->objectEditor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
 	// Add a spacer to right-align the UserDetailsWidget (see http://www.setnode.com/blog/right-aligning-a-button-in-a-qtoolbar/)
 	QWidget* spacer = new QWidget();
@@ -2263,6 +2272,8 @@ void MainWindow::initialiseUI()
 	connect(ui->objectEditor, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
 	connect(ui->objectEditor, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
 	connect(ui->objectEditor, SIGNAL(scriptChangedFromEditorSignal()), this, SLOT(scriptChangedFromEditorSlot()));
+	connect(ui->objectEditor, SIGNAL(particleBurstNowSignal()), this, SLOT(particleBurstNowSlot()));
+	connect(ui->objectEditor, SIGNAL(particleClearParticlesSignal()), this, SLOT(particleClearParticlesSlot()));
 	connect(ui->objectEditor, SIGNAL(bakeObjectLightmap()), this, SLOT(bakeObjectLightmapSlot()));
 	connect(ui->objectEditor, SIGNAL(bakeObjectLightmapHighQual()), this, SLOT(bakeObjectLightmapHighQualSlot()));
 	connect(ui->objectEditor, SIGNAL(removeLightmapSignal()), this, SLOT(removeLightmapSignalSlot()));
@@ -2652,6 +2663,7 @@ void MainWindow::configureEditAddSubmenu()
 		ui->actionAddHypercard,
 		ui->actionAdd_Text,
 		ui->actionAdd_Spotlight,
+		ui->actionAdd_Particles,
 		ui->actionAdd_Camera,
 		ui->actionAdd_Seat,
 		ui->actionAdd_Audio_Source,
@@ -2702,6 +2714,7 @@ void MainWindow::refreshEditMenuActionIcons()
 	setMenuActionGlyphIcon(ui->actionAddObject, QString::fromUtf8("□"));
 	setMenuActionGlyphIcon(ui->actionAddHypercard, QString::fromUtf8("▣"));
 	setMenuActionGlyphIcon(ui->actionAdd_Text, QStringLiteral("T"));
+	setMenuActionGlyphIcon(ui->actionAdd_Particles, QString::fromUtf8("*"));
 	setMenuActionGlyphIcon(ui->actionAdd_Spotlight, QString::fromUtf8("⌁"));
 	setMenuActionGlyphIcon(ui->actionAdd_Camera, QString::fromUtf8("◉"));
 	setMenuActionGlyphIcon(ui->actionAdd_Seat, QString::fromUtf8("╚"));
@@ -2917,12 +2930,7 @@ void MainWindow::updateMapDockState()
 
 	if(!map_world_active && map_dock_widget->isVisible())
 		map_dock_widget->hide();
-	else if(map_world_active && !map_dock_widget->isVisible())
-	{
-		dockMetasiberiaMapLikeChat(this, map_dock_widget, ui->chatDockWidget);
-		map_dock_widget->show();
-	}
-	else if(map_world_active && (map_dock_widget->isFloating() || dockWidgetArea(map_dock_widget) != Qt::RightDockWidgetArea))
+	else if(map_world_active && map_dock_widget->isVisible() && (map_dock_widget->isFloating() || dockWidgetArea(map_dock_widget) != Qt::RightDockWidgetArea))
 		dockMetasiberiaMapLikeChat(this, map_dock_widget, ui->chatDockWidget);
 
 	if(MetasiberiaMapDockWidget* map_widget = dynamic_cast<MetasiberiaMapDockWidget*>(map_dock_map_widget))
@@ -3410,6 +3418,12 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 {
 	ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
 	ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
+
+	const bool is_particle_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
+	const bool is_portal_editor = ob.object_type == WorldObject::ObjectType_Portal;
+	ui->editorDockWidget->setWindowTitle(is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor")));
+	if(ui->editorDockWidget->toggleViewAction())
+		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }
 
 
@@ -6195,6 +6209,7 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	mouse_cursor_state.alt_key_down = alt_key_down;
 	mouse_cursor_state.ctrl_key_down = ctrl_key_down;
 	gui_client.timerEvent(mouse_cursor_state);
+	ui->objectEditor->setParticleDiagnostics(gui_client.getSelectedParticleEmitterParticleCount(), gui_client.getTotalParticleCount());
 
 	// Update webcam dock (Qt).
 	// Legacy path only (simple UI).  If WebcamWindow is active, it owns its own preview.
@@ -7932,6 +7947,70 @@ void MainWindow::on_actionAdd_Decal_triggered()
 
 
 	showInfoNotification("Decal Object created.");
+
+	// Deselect any currently selected object
+	gui_client.deselectObject();
+}
+
+
+void MainWindow::on_actionAdd_Particles_triggered()
+{
+	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 2.0f - Vec3d(0, 0, 0.25);
+
+	// Check permissions
+	bool ob_pos_in_parcel;
+	const bool have_creation_perms = gui_client.haveParcelObjectCreatePermissions(ob_pos, ob_pos_in_parcel);
+	if(!have_creation_perms)
+	{
+		if(ob_pos_in_parcel)
+			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
+		else
+			showErrorNotification("You can only create particles in a parcel that you have write permissions for.");
+		return;
+	}
+
+	URLString unit_cube_mesh_URL = "unit_cube_bmesh_7263660735544605926.bmesh";
+	if(!gui_client.resource_manager->isFileForURLPresent(unit_cube_mesh_URL))
+	{
+		Reference<Indigo::Mesh> indigo_mesh = MeshBuilding::makeUnitCubeIndigoMesh();
+		BatchedMeshRef mesh = BatchedMesh::buildFromIndigoMesh(*indigo_mesh);
+		const std::string bmesh_disk_path = PlatformUtils::getTempDirPath() + "/unit_cube.bmesh";
+		mesh->writeToFile(bmesh_disk_path);
+		unit_cube_mesh_URL = gui_client.resource_manager->copyLocalFileToResourceDirAndReturnURL(bmesh_disk_path);
+		assert(unit_cube_mesh_URL == "unit_cube_bmesh_7263660735544605926.bmesh");
+	}
+
+	WorldObjectRef new_world_object = new WorldObject();
+	new_world_object->uid = UID(0); // Will be set by server
+	new_world_object->object_type = WorldObject::ObjectType_Generic;
+	new_world_object->pos = ob_pos;
+	new_world_object->axis = Vec3f(0, 0, 1);
+	new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>());
+	new_world_object->scale = Vec3f(0.25f);
+	new_world_object->max_model_lod_level = 0;
+	new_world_object->model_url = unit_cube_mesh_URL;
+	new_world_object->content = ParticleEmitterSettings::serialiseToContent(ParticleEmitterSettings::defaultSmoke());
+	new_world_object->script = "-- Particle emitter script\n-- emitter.start()\n-- emitter.stop()\n-- emitter.burst(32)\n-- emitter.clearParticles()\n";
+	BitUtils::zeroBit(new_world_object->flags, WorldObject::COLLIDABLE_FLAG);
+
+	new_world_object->materials.resize(1);
+	new_world_object->materials[0] = new WorldMaterial();
+	new_world_object->materials[0]->colour_rgb = Colour3f(0.12f, 0.55f, 1.0f);
+	new_world_object->materials[0]->emission_rgb = Colour3f(0.1f, 0.45f, 0.9f);
+	new_world_object->materials[0]->emission_lum_flux_or_lum = 120.f;
+	new_world_object->materials[0]->opacity = ScalarVal(0.38f);
+	new_world_object->materials[0]->flags = WorldMaterial::DOUBLE_SIDED_FLAG;
+	new_world_object->setAABBOS(gui_client.image_cube_shape.getAABBOS());
+
+	// Send CreateObject message to server
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
+
+		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	}
+
+	showInfoNotification("Added particles.");
 
 	// Deselect any currently selected object
 	gui_client.deselectObject();
@@ -9840,6 +9919,19 @@ void MainWindow::scriptChangedFromEditorSlot()
 		BitUtils::setBit(gui_client.selected_ob->changed_flags, WorldObject::SCRIPT_CHANGED);
 
 	objectEditedSlot();
+}
+
+
+void MainWindow::particleBurstNowSlot()
+{
+	objectEditedSlot();
+	gui_client.triggerSelectedParticleEmitterBurst();
+}
+
+
+void MainWindow::particleClearParticlesSlot()
+{
+	gui_client.clearSelectedParticleEmitterParticles();
 }
 
 

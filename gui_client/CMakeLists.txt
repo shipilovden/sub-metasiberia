@@ -248,6 +248,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/ObjectPathController.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/ObjectPathController.h
 ${CMAKE_SOURCE_DIR}/gui_client/ParticleManager.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/ParticleManager.h
+${CMAKE_SOURCE_DIR}/gui_client/ParticleEmitterSettings.cpp
+${CMAKE_SOURCE_DIR}/gui_client/ParticleEmitterSettings.h
 ${CMAKE_SOURCE_DIR}/gui_client/PhysicsObject.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/PhysicsObject.h
 ${CMAKE_SOURCE_DIR}/gui_client/PhysicsWorld.cpp
