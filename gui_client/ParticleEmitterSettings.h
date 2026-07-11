@@ -102,6 +102,10 @@ struct ParticleEmitterSettings
 	float opacity_curve_mid;
 	float opacity_jitter;
 	Colour3f colour;
+	Colour3f start_colour;
+	Colour3f end_colour;
+	float colour_jitter;
+	float trail_length;
 	float glow_strength;
 	float rotation_deg;
 	float rotation_jitter_deg;
@@ -129,4 +133,14 @@ struct ParticleEmitterSettings
 	float collision_friction;
 	bool collide_surfaces;
 	bool die_when_hit_surface;
+	bool audio_enabled;
+	std::string audio_url;
+	bool audio_loop;
+	bool audio_spatial;
+	float audio_volume;
+	float audio_activation_distance;
+	float audio_min_distance;
+	float audio_max_distance;
+	float audio_fade_in_s;
+	float audio_fade_out_s;
 };

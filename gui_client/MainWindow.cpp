@@ -49,6 +49,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "BotEditorWidget.h"
 #include "PlayerPhysics.h"
 #include "ParticleEmitterSettings.h"
+#include "ScientificObjectEditor.h"
+#include "ScientificObjectSettings.h"
 #include "../qt/FlowLayout.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
@@ -1577,6 +1579,9 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	,avatar_settings_widget(NULL)
 	,map_dock_widget(NULL)
 	,map_dock_map_widget(NULL)
+	,scientific_object_editor(NULL)
+	,action_add_scientific_object(NULL)
+	,active_editor_kind(ActiveEditor_Object)
 	//game_controller(NULL)
 {
 	ZoneScoped; // Tracy profiler
@@ -1978,6 +1983,10 @@ void MainWindow::initialiseUI()
 		ui->setupUi(this);
 	}
 
+	action_add_scientific_object = new QAction(this);
+	action_add_scientific_object->setObjectName(QStringLiteral("actionAddScientificObject"));
+	connect(action_add_scientific_object, SIGNAL(triggered(bool)), this, SLOT(on_actionAddScientificObject_triggered()));
+
 	initialiseLanguageMenu();
 	configureEditAddSubmenu();
 
@@ -2094,10 +2103,16 @@ void MainWindow::initialiseUI()
 	ui->editorDockWidget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 	ui->editorDockWidget->setMinimumWidth(360);
 	ui->scrollArea->setWidgetResizable(true);
-	ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 	ui->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 	ui->objectEditor->setMinimumWidth(340);
 	ui->objectEditor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	scientific_object_editor = new ScientificObjectEditor(ui->scrollAreaWidgetContents);
+	scientific_object_editor->setObjectName(QStringLiteral("scientificObjectEditor"));
+	scientific_object_editor->setMinimumWidth(360);
+	scientific_object_editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	ui->verticalLayout_4->addWidget(scientific_object_editor);
+	scientific_object_editor->hide();
 
 	// Add a spacer to right-align the UserDetailsWidget (see http://www.setnode.com/blog/right-aligning-a-button-in-a-qtoolbar/)
 	QWidget* spacer = new QWidget();
@@ -2198,6 +2213,7 @@ void MainWindow::initialiseUI()
 	ui->worldSettingsWidget->init(this);
 
 	ui->objectEditor->init();
+	scientific_object_editor->init(settings);
 
 	ui->diagnosticsWidget->init(settings);
 	connect(ui->diagnosticsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(diagnosticsWidgetChanged()));
@@ -2279,6 +2295,10 @@ void MainWindow::initialiseUI()
 	connect(ui->objectEditor, SIGNAL(removeLightmapSignal()), this, SLOT(removeLightmapSignalSlot()));
 	connect(ui->objectEditor, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
 	connect(ui->objectEditor, SIGNAL(openServerScriptLogSignal()), this, SLOT(openServerScriptLogSlot()));
+	connect(scientific_object_editor, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
+	connect(scientific_object_editor, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
+	connect(scientific_object_editor, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
+	connect(scientific_object_editor, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
 	connect(ui->parcelEditor, SIGNAL(parcelChanged()), this, SLOT(parcelEditedSlot()));
 	connect(ui->worldSettingsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(worldSettingsChangedSlot()));
 	connect(user_details, SIGNAL(logInClicked()), this, SLOT(on_actionLogIn_triggered()));
@@ -2299,6 +2319,8 @@ void MainWindow::initialiseUI()
 	connect(ui->materialBrowserDockWidgetContents, SIGNAL(materialSelected(const std::string&)), this, SLOT(materialSelectedInBrowser(const std::string&)));
 
 	ui->objectEditor->setControlsEnabled(false);
+	scientific_object_editor->setControlsEnabled(false);
+	scientific_object_editor->hide();
 	ui->parcelEditor->hide();
 	ui->botEditorWidget->hide();
 
@@ -2657,6 +2679,12 @@ void MainWindow::configureEditAddSubmenu()
 	}
 
 	add_menu->setTitle(tr("Add"));
+	if(action_add_scientific_object)
+	{
+		action_add_scientific_object->setText(tr("Add Scientific Object"));
+		action_add_scientific_object->setToolTip(tr("Add Scientific Object"));
+		action_add_scientific_object->setStatusTip(tr("Add Scientific Object"));
+	}
 
 	const QList<QAction*> add_actions = {
 		ui->actionAddObject,
@@ -2664,6 +2692,7 @@ void MainWindow::configureEditAddSubmenu()
 		ui->actionAdd_Text,
 		ui->actionAdd_Spotlight,
 		ui->actionAdd_Particles,
+		action_add_scientific_object,
 		ui->actionAdd_Camera,
 		ui->actionAdd_Seat,
 		ui->actionAdd_Audio_Source,
@@ -2715,6 +2744,7 @@ void MainWindow::refreshEditMenuActionIcons()
 	setMenuActionGlyphIcon(ui->actionAddHypercard, QString::fromUtf8("▣"));
 	setMenuActionGlyphIcon(ui->actionAdd_Text, QStringLiteral("T"));
 	setMenuActionGlyphIcon(ui->actionAdd_Particles, QString::fromUtf8("*"));
+	setMenuActionGlyphIcon(action_add_scientific_object, QString::fromUtf8("⚛"));
 	setMenuActionGlyphIcon(ui->actionAdd_Spotlight, QString::fromUtf8("⌁"));
 	setMenuActionGlyphIcon(ui->actionAdd_Camera, QString::fromUtf8("◉"));
 	setMenuActionGlyphIcon(ui->actionAdd_Seat, QString::fromUtf8("╚"));
@@ -3379,13 +3409,19 @@ bool MainWindow::showLodChunksVisEnabled()
 
 void MainWindow::writeTransformMembersToObject(WorldObject& ob)
 {
-	ui->objectEditor->writeTransformMembersToObject(ob);
+	if(ScientificObjectSettings::isScientificObjectContent(ob.content) && scientific_object_editor)
+		scientific_object_editor->writeTransformMembersToObject(ob);
+	else
+		ui->objectEditor->writeTransformMembersToObject(ob);
 }
 
 
 void MainWindow::objectLastModifiedUpdated(const WorldObject& ob)
 {
-	 ui->objectEditor->objectLastModifiedUpdated(ob);
+	if(ScientificObjectSettings::isScientificObjectContent(ob.content) && scientific_object_editor)
+		scientific_object_editor->objectLastModifiedUpdated(ob);
+	else
+		ui->objectEditor->objectLastModifiedUpdated(ob);
 }
 
 
@@ -3409,19 +3445,35 @@ void MainWindow::showEditorDockWidget()
 
 void MainWindow::setObjectEditorControlsEditable(bool editable)
 {
-	ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
-	ui->objectEditor->setControlsEditable(editable);
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+		scientific_object_editor->setControlsEditable(editable);
+	else
+	{
+		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
+		ui->objectEditor->setControlsEditable(editable);
+	}
 }
 
 
 void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_index, bool ob_in_editing_users_world)
 {
-	ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
-	ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
-
+	const bool is_scientific_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ScientificObjectSettings::isScientificObjectContent(ob.content);
 	const bool is_particle_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
 	const bool is_portal_editor = ob.object_type == WorldObject::ObjectType_Portal;
-	ui->editorDockWidget->setWindowTitle(is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor")));
+
+	if(is_scientific_editor && scientific_object_editor)
+	{
+		active_editor_kind = ActiveEditor_Scientific;
+		scientific_object_editor->setFromObject(ob, ob_in_editing_users_world);
+	}
+	else
+	{
+		active_editor_kind = ActiveEditor_Object;
+		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
+		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
+	}
+
+	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))));
 	if(ui->editorDockWidget->toggleViewAction())
 		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }
@@ -3429,42 +3481,59 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 
 int MainWindow::getSelectedMatIndex()
 {
+	if(active_editor_kind == ActiveEditor_Scientific)
+		return 0;
 	return ui->objectEditor->getSelectedMatIndex();
 }
 
 
 void MainWindow::objectEditorToObject(WorldObject& ob)
 {
-	ui->objectEditor->toObject(ob); // Sets changed_flags on object as well.
+	if((active_editor_kind == ActiveEditor_Scientific || ScientificObjectSettings::isScientificObjectContent(ob.content)) && scientific_object_editor)
+		scientific_object_editor->toObject(ob);
+	else
+		ui->objectEditor->toObject(ob); // Sets changed_flags on object as well.
 }
 
 
 void MainWindow::objectEditorObjectPickedUp()
 {
-	ui->objectEditor->objectPickedUp();
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+		scientific_object_editor->objectPickedUp();
+	else
+		ui->objectEditor->objectPickedUp();
 }
 
 
 void MainWindow::objectEditorObjectDropped()
 {
-	 ui->objectEditor->objectDropped();
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+		scientific_object_editor->objectDropped();
+	else
+		ui->objectEditor->objectDropped();
 }
 
 
 bool MainWindow::snapToGridCheckBoxChecked()
 {
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+		return scientific_object_editor->snapToGridChecked();
 	return ui->objectEditor->snapToGridCheckBox->isChecked();
 }
 
 
 double MainWindow::gridSpacing()
 {
-	return  ui->objectEditor->gridSpacingDoubleSpinBox->value();
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+		return scientific_object_editor->gridSpacing();
+	return ui->objectEditor->gridSpacingDoubleSpinBox->value();
 }
 
 
 bool MainWindow::posAndRot3DControlsEnabled()
 {
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+		return scientific_object_editor->posAndRot3DControlsEnabled();
 	return ui->objectEditor->posAndRot3DControlsEnabled();
 }
 
@@ -3473,13 +3542,26 @@ void MainWindow::showObjectEditor()
 {
 	ui->parcelEditor->hide();
 	ui->botEditorWidget->hide();
-	ui->objectEditor->show();
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+	{
+		ui->objectEditor->hide();
+		scientific_object_editor->show();
+	}
+	else
+	{
+		if(scientific_object_editor)
+			scientific_object_editor->hide();
+		ui->objectEditor->show();
+	}
 }
 
 
 void MainWindow::setObjectEditorEnabled(bool enabled)
 {
-	ui->objectEditor->setEnabled(enabled);
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+		scientific_object_editor->setControlsEnabled(enabled);
+	else
+		ui->objectEditor->setEnabled(enabled);
 }
 
 
@@ -8017,6 +8099,91 @@ void MainWindow::on_actionAdd_Particles_triggered()
 }
 
 
+void MainWindow::on_actionAddScientificObject_triggered()
+{
+	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 2.0f - Vec3d(0, 0, 0.25);
+
+	bool ob_pos_in_parcel;
+	const bool have_creation_perms = gui_client.haveParcelObjectCreatePermissions(ob_pos, ob_pos_in_parcel);
+	if(!have_creation_perms)
+	{
+		if(ob_pos_in_parcel)
+			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
+		else
+			showErrorNotification("You can only create scientific objects in a parcel that you have write permissions for.");
+		return;
+	}
+
+	URLString unit_cube_mesh_URL = "unit_cube_bmesh_7263660735544605926.bmesh";
+	if(!gui_client.resource_manager->isFileForURLPresent(unit_cube_mesh_URL))
+	{
+		Reference<Indigo::Mesh> indigo_mesh = MeshBuilding::makeUnitCubeIndigoMesh();
+		BatchedMeshRef mesh = BatchedMesh::buildFromIndigoMesh(*indigo_mesh);
+		const std::string bmesh_disk_path = PlatformUtils::getTempDirPath() + "/unit_cube.bmesh";
+		mesh->writeToFile(bmesh_disk_path);
+		unit_cube_mesh_URL = gui_client.resource_manager->copyLocalFileToResourceDirAndReturnURL(bmesh_disk_path);
+		assert(unit_cube_mesh_URL == "unit_cube_bmesh_7263660735544605926.bmesh");
+	}
+
+	ScientificObjectSettings scientific_settings = ScientificObjectSettings::defaultObject();
+	scientific_settings.name = "Scientific Object";
+	scientific_settings.scientific_type = "custom";
+	scientific_settings.source = "manual";
+	scientific_settings.load_status = "idle";
+	scientific_settings.load_status_message = "Scientific data has not been loaded yet.";
+	scientific_settings.data_origin = "user";
+	scientific_settings.collision_enabled = false;
+	scientific_settings.solid = false;
+	scientific_settings.trigger = false;
+	scientific_settings.selectable = true;
+	scientific_settings.movable = true;
+	scientific_settings.gravity_enabled = false;
+	scientific_settings.physics_motion_type = "static";
+	scientific_settings.physics_shape = "mesh";
+	scientific_settings.collision_layer = "scientific_visual";
+	scientific_settings.description = "Universal scientific object. Import data, choose an online source, write code or generate code from a natural-language request.";
+	scientific_settings.data_summary = "Scientific data has not been loaded yet. Use File, URL, Online Database, Code or Prompt source modes.";
+
+	WorldObjectRef new_world_object = new WorldObject();
+	new_world_object->uid = UID(0);
+	new_world_object->object_type = WorldObject::ObjectType_Generic;
+	new_world_object->pos = ob_pos;
+	new_world_object->axis = Vec3f(0, 0, 1);
+	new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>());
+	new_world_object->scale = Vec3f(0.5f);
+	new_world_object->max_model_lod_level = 0;
+	new_world_object->model_url = unit_cube_mesh_URL;
+	new_world_object->content = ScientificObjectSettings::serialiseToContent(scientific_settings);
+	new_world_object->script = "-- Scientific object script placeholder\n-- Future adapters can update this object from Python/JS/Lua-generated data.\n";
+	new_world_object->setCollidable(false);
+	new_world_object->setDynamic(false);
+	new_world_object->setIsSensor(false);
+	new_world_object->flags &= ~(WorldObject::AUDIO_AUTOPLAY | WorldObject::AUDIO_LOOP);
+	new_world_object->mass = scientific_settings.physics_mass;
+	new_world_object->friction = scientific_settings.physics_friction;
+	new_world_object->restitution = scientific_settings.physics_restitution;
+
+	new_world_object->materials.resize(1);
+	new_world_object->materials[0] = new WorldMaterial();
+	new_world_object->materials[0]->name = "Scientific Object Preview";
+	new_world_object->materials[0]->colour_rgb = scientific_settings.display_colour;
+	new_world_object->materials[0]->emission_rgb = Colour3f(0.03f, 0.12f, 0.18f);
+	new_world_object->materials[0]->opacity = ScalarVal(0.58f);
+	new_world_object->materials[0]->roughness = ScalarVal(0.35f);
+	new_world_object->materials[0]->flags = WorldMaterial::DOUBLE_SIDED_FLAG;
+	new_world_object->setAABBOS(gui_client.image_cube_shape.getAABBOS());
+
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
+		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	}
+
+	showInfoNotification("Added scientific object. Editor will open when the server confirms creation.");
+	gui_client.deselectObject();
+}
+
+
 void MainWindow::on_actionAdd_Voxels_triggered()
 {
 	// Offset down by 0.25 to allow for centering with voxel width of 0.5.
@@ -9075,6 +9242,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 	// Hide other editors, show bot editor
 	ui->objectEditor->hide();
 	ui->parcelEditor->hide();
+	if(scientific_object_editor)
+		scientific_object_editor->hide();
 
 	// Set dock title to "Редактор ботов"
 	ui->editorDockWidget->setWindowTitle(
@@ -9127,6 +9296,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 
 	ui->objectEditor->hide();
 	ui->parcelEditor->hide();
+	if(scientific_object_editor)
+		scientific_object_editor->hide();
 	showEditorDockWidget();
 }
 
@@ -9148,6 +9319,9 @@ void MainWindow::showBotConversationLog(uint64 bot_id, const std::vector<std::ar
 void MainWindow::hideBotEditor()
 {
 	ui->botEditorWidget->clear(); // hides itself
+	if(scientific_object_editor)
+		scientific_object_editor->hide();
+	active_editor_kind = ActiveEditor_Object;
 	ui->objectEditor->show();
 	ui->editorDockWidget->setWindowTitle(
 		current_ui_language == RuntimeTranslation::UILanguage::Russian ? "Редактор" : "Editor");
@@ -10041,9 +10215,13 @@ void MainWindow::removeLightmapSignalSlot()
 
 void MainWindow::posAndRot3DControlsToggledSlot()
 {
-	gui_client.posAndRot3DControlsToggled(ui->objectEditor->posAndRot3DControlsEnabled());
+	const bool enabled = posAndRot3DControlsEnabled();
+	gui_client.posAndRot3DControlsToggled(enabled);
 	
-	settings->setValue("objectEditor/show3DControlsCheckBoxChecked", ui->objectEditor->posAndRot3DControlsEnabled());
+	if(active_editor_kind == ActiveEditor_Scientific)
+		settings->setValue("scientificObjectEditor/show3DControls", enabled);
+	else
+		settings->setValue("objectEditor/show3DControlsCheckBoxChecked", enabled);
 }
 
 
@@ -10149,6 +10327,21 @@ void MainWindow::glWidgetMousePressed(QMouseEvent* e)
 {
 	if(!opengl_engine)
 		return;
+
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor && gui_client.selected_ob.nonNull() && gui_client.selected_ob->physics_object.nonNull() &&
+		(e->button() == Qt::LeftButton || e->button() == Qt::RightButton))
+	{
+		const Vec2i pixel_pos = Vec2i(e->pos().x(), e->pos().y()) * ui->glWidget->devicePixelRatio();
+		const Vec4f origin_ws = gui_client.cam_controller.getPosition().toVec4fPoint();
+		const Vec4f dir_ws = gui_client.getDirForPixelTrace(pixel_pos.x, pixel_pos.y);
+		const Matrix4f world_to_ob = gui_client.selected_ob->physics_object->getWorldToObMatrix();
+		if(scientific_object_editor->handleSceneRay(world_to_ob * origin_ws, world_to_ob * dir_ws, e->button() == Qt::RightButton, (e->modifiers() & Qt::ControlModifier) != 0, e->globalPos()))
+		{
+			setCamRotationOnMouseDragEnabled(false);
+			e->accept();
+			return;
+		}
+	}
 
 	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
 
@@ -10265,6 +10458,8 @@ void MainWindow::setHelpInfoLabel(const std::string& text)
 void MainWindow::showParcelEditor()
 {
 	ui->objectEditor->hide();
+	if(scientific_object_editor)
+		scientific_object_editor->hide();
 	ui->parcelEditor->show();
 }
 
@@ -10425,7 +10620,12 @@ void MainWindow::glWidgetMouseMoved(QMouseEvent* e)
 void MainWindow::updateObjectEditorObTransformSlot()
 {
 	if(gui_client.selected_ob.nonNull())
-		ui->objectEditor->setTransformFromObject(*gui_client.selected_ob);
+	{
+		if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+			scientific_object_editor->setTransformFromObject(*gui_client.selected_ob);
+		else
+			ui->objectEditor->setTransformFromObject(*gui_client.selected_ob);
+	}
 }
 
 
@@ -11157,11 +11357,21 @@ int main(int argc, char *argv[])
 		syntax["--use_temp_resources_db"] = std::vector<ArgumentParser::ArgumentType>(); // Use a temporary, fresh resource database.  For testing.
 		syntax["--vr"] = std::vector<ArgumentParser::ArgumentType>(); // Prefer VR startup when XR is compiled in.
 		syntax["--desktop"] = std::vector<ArgumentParser::ArgumentType>(); // Disable XR startup and stay in desktop mode.
+		syntax["--scientific_pubchem_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run a narrow PubChem HTTPS smoke check and write a JSON report.
+		syntax["--scientific_pubchem_apply_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run PubChem UI selection/apply smoke and write a JSON report.
+		syntax["--scientific_molecule_info_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run molecule labels/selection/measurement/Russian-search smoke.
 
 		if(args.size() == 3 && args[1] == "-NSDocumentRevisionsDebugMode")
 			args.resize(1); // This is some XCode debugging rubbish, remove it
 
 		ArgumentParser parsed_args(args, syntax);
+
+		if(parsed_args.isArgPresent("--scientific_pubchem_smoke"))
+			return ScientificObjectEditor::runPubChemSmokeCheck(QtUtils::toQString(parsed_args.getArgStringValue("--scientific_pubchem_smoke")));
+		if(parsed_args.isArgPresent("--scientific_pubchem_apply_smoke"))
+			return ScientificObjectEditor::runPubChemApplySmokeCheck(QtUtils::toQString(parsed_args.getArgStringValue("--scientific_pubchem_apply_smoke")));
+		if(parsed_args.isArgPresent("--scientific_molecule_info_smoke"))
+			return ScientificObjectEditor::runMoleculeInformationSmokeCheck(QtUtils::toQString(parsed_args.getArgStringValue("--scientific_molecule_info_smoke")));
 
 		if(parsed_args.isArgPresent("--test"))
 		{

@@ -56,6 +56,13 @@ static float smoothPulse(const float dist, const float centre, const float width
 	return myClamp(1.f - x, 0.f, 1.f);
 }
 
+
+static float smoothStepLocal(const float edge0, const float edge1, const float x_)
+{
+	const float x = myClamp((x_ - edge0) / myMax(edge1 - edge0, 1.0e-6f), 0.f, 1.f);
+	return x * x * (3.f - 2.f * x);
+}
+
 } // anonymous namespace
 
 
@@ -317,10 +324,37 @@ Reference<OpenGLTexture> ParticleManager::getOrCreateBuiltinSpriteTexture(const 
 			}
 			else if(name == "flame")
 			{
-				const float vertical = myClamp(1.f - (v * 1.08f), 0.f, 1.f);
-				const float waist = std::exp(-(px * px) * (5.f + 9.f * v));
-				a = myClamp(waist * std::pow(vertical, 0.45f) * (r < 0.98f ? 1.f : 0.f), 0.f, 1.f);
-				rr = 1.f; gg = 0.24f + 0.58f * vertical; bb = 0.04f + 0.08f * vertical;
+				const float y01 = 1.f - v;
+				const float lower = smoothStepLocal(0.03f, 0.16f, y01);
+				const float upper = 1.f - smoothStepLocal(0.78f, 1.0f, y01);
+				const float axis = px - 0.11f * std::sin(8.5f * y01 + 0.8f) - 0.035f * std::sin(27.f * y01);
+				const float body_width = 0.045f + 0.22f * std::sin(myClamp(y01, 0.f, 1.f) * Maths::pi<float>()) * (1.f - 0.28f * y01);
+				const float inner_width = body_width * (0.36f + 0.20f * (1.f - y01));
+				const float body = std::exp(-(axis * axis) / myMax(body_width * body_width, 0.0015f)) * lower * upper;
+				const float core = std::exp(-(axis * axis) / myMax(inner_width * inner_width, 0.0008f)) * smoothStepLocal(0.04f, 0.23f, y01) * (1.f - smoothStepLocal(0.50f, 0.88f, y01));
+				const float left_tongue_axis = px + 0.18f + 0.06f * std::sin(15.f * y01);
+				const float right_tongue_axis = px - 0.16f - 0.05f * std::sin(13.f * y01 + 1.4f);
+				const float centre_tongue_axis = px - 0.04f * std::sin(20.f * y01);
+				const float tongues =
+					0.58f * std::exp(-(left_tongue_axis * left_tongue_axis) * 58.f) * smoothStepLocal(0.20f, 0.58f, y01) * (1.f - smoothStepLocal(0.70f, 0.96f, y01)) +
+					0.64f * std::exp(-(right_tongue_axis * right_tongue_axis) * 50.f) * smoothStepLocal(0.30f, 0.72f, y01) * (1.f - smoothStepLocal(0.84f, 1.0f, y01)) +
+					0.42f * std::exp(-(centre_tongue_axis * centre_tongue_axis) * 75.f) * smoothStepLocal(0.42f, 0.82f, y01) * (1.f - smoothStepLocal(0.92f, 1.0f, y01));
+				const float cutouts = 0.18f * std::exp(-((px + 0.06f) * (px + 0.06f) + (y01 - 0.58f) * (y01 - 0.58f) * 3.2f) * 32.f);
+				const float ragged = 0.72f + 0.28f * std::sin(38.f * y01 + 11.f * px) * std::sin(21.f * y01 - 15.f * px);
+				a = myClamp(std::pow(myClamp((body + tongues) * ragged - cutouts, 0.f, 1.f), 1.35f), 0.f, 1.f);
+				const float heat = myClamp(core + body * 0.42f, 0.f, 1.f);
+				rr = 1.f;
+				gg = myClamp(0.10f + 0.86f * heat + 0.26f * y01, 0.f, 1.f);
+				bb = myClamp(0.01f + 0.18f * core, 0.f, 1.f);
+			}
+			else if(name == "rain_streak")
+			{
+				const float slant_x = px + py * 0.18f;
+				const float line = std::exp(-slant_x * slant_x * 760.f);
+				const float length_fade = std::pow(myClamp(1.f - std::fabs(py) * 0.72f, 0.f, 1.f), 0.42f);
+				const float head = std::exp(-((py + 0.62f) * (py + 0.62f) + slant_x * slant_x * 5.f) * 28.f);
+				a = myClamp(line * length_fade * 0.92f + head * 0.38f, 0.f, 1.f);
+				rr = 0.62f; gg = 0.82f; bb = 1.f;
 			}
 			else if(name == "foam")
 			{
@@ -338,10 +372,22 @@ Reference<OpenGLTexture> ParticleManager::getOrCreateBuiltinSpriteTexture(const 
 			}
 			else if(name == "comet")
 			{
-				const float head = std::exp(-((px - 0.36f) * (px - 0.36f) + py * py) * 22.f);
-				const float tail = std::exp(-myMax(0.f, px + 0.18f) * 0.8f) * std::exp(-py * py * (10.f + 8.f * myClamp(px + 1.f, 0.f, 1.f)));
-				a = myClamp(head + tail * (px < 0.42f ? 0.82f : 0.f), 0.f, 1.f);
-				rr = 0.78f + 0.22f * head; gg = 0.92f; bb = 1.f;
+				const float head_x = 0.58f;
+				const float distance_from_head = myMax(0.f, head_x - px);
+				const float tail_t = myClamp(distance_from_head / 1.58f, 0.f, 1.f);
+				const float tail_mask = smoothStepLocal(-0.96f, head_x - 0.04f, px) * (1.f - smoothStepLocal(head_x - 0.03f, head_x + 0.16f, px));
+				const float tail_width = 0.018f + 0.19f * std::pow(tail_t, 1.35f);
+				const float dust_width = 0.07f + 0.34f * std::pow(tail_t, 1.2f);
+				const float waviness = std::sin(9.5f * px + 1.7f) * 0.022f * tail_t;
+				const float head = std::exp(-((px - head_x) * (px - head_x) * 120.f + py * py * 110.f));
+				const float coma = std::exp(-((px - (head_x - 0.06f)) * (px - (head_x - 0.06f)) * 28.f + py * py * 34.f));
+				const float ion = std::exp(-((py - waviness) * (py - waviness)) / myMax(tail_width * tail_width, 0.0003f)) * std::exp(-distance_from_head * 0.75f) * tail_mask;
+				const float dust = std::exp(-(py * py) / myMax(dust_width * dust_width, 0.002f)) * std::exp(-distance_from_head * 1.25f) * tail_mask;
+				const float split = std::exp(-((std::fabs(py) - dust_width * 0.58f) * (std::fabs(py) - dust_width * 0.58f)) / myMax((dust_width * 0.28f) * (dust_width * 0.28f), 0.001f)) * std::exp(-distance_from_head * 1.05f) * tail_mask;
+				a = myClamp(head * 1.0f + coma * 0.46f + ion * 0.54f + dust * 0.22f + split * 0.16f, 0.f, 1.f);
+				rr = myClamp(0.52f + 0.45f * head + 0.18f * dust, 0.f, 1.f);
+				gg = myClamp(0.76f + 0.22f * head + 0.12f * ion, 0.f, 1.f);
+				bb = 1.f;
 			}
 			else if(name == "galaxy")
 			{
@@ -467,13 +513,13 @@ void ParticleManager::addParticle(const Particle& particle_)
 	ob->mesh_data = opengl_engine->getSpriteQuadMeshData();
 	ob->materials.resize(1);
 	const float glow = particle_.additive_glow ? particle_.glow_strength : 1.f;
-	ob->materials[0].albedo_linear_rgb = Colour3f(particle_.colour.r * glow, particle_.colour.g * glow, particle_.colour.b * glow);
+	ob->materials[0].albedo_linear_rgb = particle_.colour;
 	ob->materials[0].alpha = particle_.cur_opacity;
 	ob->materials[0].participating_media = true;
 	ob->materials[0].alpha_blend = false;
 	ob->materials[0].transparent = false;
 	ob->materials[0].allow_alpha_test = false;
-	ob->materials[0].emission_linear_rgb = particle_.additive_glow ? Colour3f(glow) : Colour3f(0.7f);
+	ob->materials[0].emission_linear_rgb = particle_.additive_glow ? particle_.colour : Colour3f(0.7f);
 	ob->materials[0].emission_scale = particle_.additive_glow ? myMax(1.f, glow) : 1.f;
 	ob->materials[0].cast_shadows = false;
 	ob->materials[0].simple_double_sided = true;
@@ -685,7 +731,16 @@ void ParticleManager::think(const float dt)
 			const float t = myClamp(particle.age_s / lifetime, 0.f, 1.f);
 			particle.width = Maths::lerp(particle.start_width, particle.end_width, evaluateParticleCurve(particle.size_curve, t, particle.size_curve_mid));
 			particle.cur_opacity = Maths::lerp(particle.start_opacity, particle.end_opacity, evaluateParticleCurve(particle.opacity_curve, t, particle.opacity_curve_mid));
+			particle.colour = Colour3f(
+				Maths::lerp(particle.start_colour.r, particle.end_colour.r, t),
+				Maths::lerp(particle.start_colour.g, particle.end_colour.g, t),
+				Maths::lerp(particle.start_colour.b, particle.end_colour.b, t)
+			);
 
+			const float glow = particle.additive_glow ? particle.glow_strength : 1.f;
+			particle.gl_ob->materials[0].albedo_linear_rgb = particle.colour;
+			particle.gl_ob->materials[0].emission_linear_rgb = particle.additive_glow ? particle.colour : Colour3f(0.7f);
+			particle.gl_ob->materials[0].emission_scale = particle.additive_glow ? myMax(1.f, glow) : 1.f;
 			particle.gl_ob->materials[0].alpha = particle.cur_opacity;
 			opengl_engine->updateAllMaterialDataOnGPU(*particle.gl_ob);
 		}

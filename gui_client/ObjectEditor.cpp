@@ -644,6 +644,25 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	particleSpritePathLineEdit(NULL),
 	particleSpriteBrowsePushButton(NULL),
 	particleSpriteClearPushButton(NULL),
+	particleAudioEnabledCheckBox(NULL),
+	particleAudioURLLabel(NULL),
+	particleAudioURLLineEdit(NULL),
+	particleAudioBrowsePushButton(NULL),
+	particleAudioClearPushButton(NULL),
+	particleAudioLoopCheckBox(NULL),
+	particleAudioSpatialCheckBox(NULL),
+	particleAudioVolumeLabel(NULL),
+	particleAudioVolumeSpinBox(NULL),
+	particleAudioActivationDistanceLabel(NULL),
+	particleAudioActivationDistanceSpinBox(NULL),
+	particleAudioMinDistanceLabel(NULL),
+	particleAudioMinDistanceSpinBox(NULL),
+	particleAudioMaxDistanceLabel(NULL),
+	particleAudioMaxDistanceSpinBox(NULL),
+	particleAudioFadeInLabel(NULL),
+	particleAudioFadeInSpinBox(NULL),
+	particleAudioFadeOutLabel(NULL),
+	particleAudioFadeOutSpinBox(NULL),
 	particleRateLabel(NULL),
 	particleRateSpinBox(NULL),
 	particleFrameCapLabel(NULL),
@@ -680,6 +699,12 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	particleOpacityJitterSpinBox(NULL),
 	particleColourLabel(NULL),
 	particleColourPushButton(NULL),
+	particleEndColourLabel(NULL),
+	particleEndColourPushButton(NULL),
+	particleColourJitterLabel(NULL),
+	particleColourJitterSpinBox(NULL),
+	particleTrailLengthLabel(NULL),
+	particleTrailLengthSpinBox(NULL),
 	particleGlowStrengthLabel(NULL),
 	particleGlowStrengthSpinBox(NULL),
 	particleRotationLabel(NULL),
@@ -735,7 +760,8 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	particleCollideSurfacesCheckBox(NULL),
 	particleDieOnSurfaceCheckBox(NULL),
 	spotlight_col(0.85f),
-	particle_col(0.82f)
+	particle_col(0.82f),
+	particle_end_col(0.42f)
 {
 	setupUi(this);
 
@@ -1397,6 +1423,39 @@ void ObjectEditor::createParticleEditorUI()
 		return control;
 	};
 
+	this->particleAudioEnabledCheckBox = new QCheckBox(this->particleGroupBox);
+	grid->addWidget(this->particleAudioEnabledCheckBox, row++, 0, 1, 2);
+
+	this->particleAudioURLLabel = new QLabel(this->particleGroupBox);
+	this->particleAudioURLLineEdit = new QLineEdit(this->particleGroupBox);
+	this->particleAudioBrowsePushButton = new QPushButton(this->particleGroupBox);
+	this->particleAudioClearPushButton = new QPushButton(this->particleGroupBox);
+	this->particleAudioBrowsePushButton->setFixedWidth(34);
+	this->particleAudioClearPushButton->setMinimumWidth(64);
+	QHBoxLayout* particle_audio_layout = new QHBoxLayout();
+	particle_audio_layout->setContentsMargins(0, 0, 0, 0);
+	particle_audio_layout->addWidget(this->particleAudioURLLineEdit, 1);
+	particle_audio_layout->addWidget(this->particleAudioBrowsePushButton);
+	particle_audio_layout->addWidget(this->particleAudioClearPushButton);
+	grid->addWidget(this->particleAudioURLLabel, row, 0);
+	grid->addLayout(particle_audio_layout, row++, 1);
+
+	this->particleAudioLoopCheckBox = new QCheckBox(this->particleGroupBox);
+	this->particleAudioSpatialCheckBox = new QCheckBox(this->particleGroupBox);
+	QHBoxLayout* particle_audio_flags_layout = new QHBoxLayout();
+	particle_audio_flags_layout->setContentsMargins(0, 0, 0, 0);
+	particle_audio_flags_layout->addWidget(this->particleAudioLoopCheckBox);
+	particle_audio_flags_layout->addWidget(this->particleAudioSpatialCheckBox);
+	particle_audio_flags_layout->addStretch(1);
+	grid->addLayout(particle_audio_flags_layout, row++, 0, 1, 2);
+
+	this->particleAudioVolumeSpinBox = add_real_control(this->particleAudioVolumeLabel, "Sound Volume", 0.0, 10.0, 0.05, 0.0, 2.0, 200, "");
+	this->particleAudioActivationDistanceSpinBox = add_real_control(this->particleAudioActivationDistanceLabel, "Sound Activation Distance", 0.0, 1000.0, 0.5, 0.0, 100.0, 200, " m");
+	this->particleAudioMinDistanceSpinBox = add_real_control(this->particleAudioMinDistanceLabel, "Sound Near Distance", 0.1, 100.0, 0.1, 0.1, 20.0, 200, " m");
+	this->particleAudioMaxDistanceSpinBox = add_real_control(this->particleAudioMaxDistanceLabel, "Sound Radius", 1.0, 1000.0, 0.5, 1.0, 120.0, 238, " m");
+	this->particleAudioFadeInSpinBox = add_real_control(this->particleAudioFadeInLabel, "Sound Fade In", 0.0, 30.0, 0.05, 0.0, 5.0, 100, " s");
+	this->particleAudioFadeOutSpinBox = add_real_control(this->particleAudioFadeOutLabel, "Sound Fade Out", 0.0, 30.0, 0.05, 0.0, 5.0, 100, " s");
+
 	this->particleRateSpinBox        = add_real_control(this->particleRateLabel,        "Emission Rate",   0.0,   400.0, 1.0,      0.0,    100.0, 200, " /s");
 	this->particleFrameCapSpinBox    = add_real_control(this->particleFrameCapLabel,    "Frame Cap",       1.0,   256.0, 1.0,      1.0,    128.0, 127, "");
 	this->particleMaxParticlesSpinBox = add_real_control(this->particleMaxParticlesLabel, "Max Particles",  1.0,  2048.0, 1.0,     1.0,    512.0, 511, "");
@@ -1431,6 +1490,13 @@ void ObjectEditor::createParticleEditorUI()
 	this->particleColourPushButton->setFixedWidth(42);
 	grid->addWidget(this->particleColourLabel, row, 0);
 	grid->addWidget(this->particleColourPushButton, row++, 1, Qt::AlignLeft);
+	this->particleEndColourLabel = new QLabel(this->particleGroupBox);
+	this->particleEndColourPushButton = new QPushButton(this->particleGroupBox);
+	this->particleEndColourPushButton->setFixedWidth(42);
+	grid->addWidget(this->particleEndColourLabel, row, 0);
+	grid->addWidget(this->particleEndColourPushButton, row++, 1, Qt::AlignLeft);
+	this->particleColourJitterSpinBox = add_real_control(this->particleColourJitterLabel, "Colour Jitter", 0.0, 1.0, 0.05, 0.0, 1.0, 100, "");
+	this->particleTrailLengthSpinBox = add_real_control(this->particleTrailLengthLabel, "Trail Length", 0.0, 100.0, 0.05, 0.0, 10.0, 200, " m");
 	this->particleGlowStrengthSpinBox = add_real_control(this->particleGlowStrengthLabel, "Glow Strength", 0.2, 8.0, 0.1, 0.2, 5.0, 160, "");
 	this->particleRotationSpinBox = add_real_control(this->particleRotationLabel, "Initial Rotation", -360.0, 360.0, 1.0, -180.0, 180.0, 360, " deg");
 	this->particleRotationJitterSpinBox = add_real_control(this->particleRotationJitterLabel, "Rotation Jitter", 0.0, 360.0, 1.0, 0.0, 360.0, 360, " deg");
@@ -1499,7 +1565,14 @@ void ObjectEditor::createParticleEditorUI()
 	connect(this->particleSpritePathLineEdit, SIGNAL(textChanged(QString)), this, SLOT(updateParticlePreviewThumbnail()));
 	connect(this->particleSpriteBrowsePushButton, SIGNAL(clicked(bool)), this, SLOT(browseParticleSprite()));
 	connect(this->particleSpriteClearPushButton, SIGNAL(clicked(bool)), this, SLOT(clearParticleSprite()));
+	connect(this->particleAudioEnabledCheckBox, SIGNAL(toggled(bool)), this, SIGNAL(objectChanged()));
+	connect(this->particleAudioURLLineEdit, SIGNAL(textChanged(QString)), this, SIGNAL(objectChanged()));
+	connect(this->particleAudioBrowsePushButton, SIGNAL(clicked(bool)), this, SLOT(browseParticleAudio()));
+	connect(this->particleAudioClearPushButton, SIGNAL(clicked(bool)), this, SLOT(clearParticleAudio()));
+	connect(this->particleAudioLoopCheckBox, SIGNAL(toggled(bool)), this, SIGNAL(objectChanged()));
+	connect(this->particleAudioSpatialCheckBox, SIGNAL(toggled(bool)), this, SIGNAL(objectChanged()));
 	connect(this->particleColourPushButton, SIGNAL(clicked(bool)), this, SLOT(on_particleColourPushButton_clicked(bool)));
+	connect(this->particleEndColourPushButton, SIGNAL(clicked(bool)), this, SLOT(on_particleEndColourPushButton_clicked(bool)));
 	connect(this->particleBurstEnabledCheckBox, SIGNAL(toggled(bool)), this, SIGNAL(objectChanged()));
 	connect(this->particleBurstEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(updateParticlePreviewThumbnail()));
 	connect(this->particleBurstNowPushButton, SIGNAL(clicked(bool)), this, SIGNAL(particleBurstNowSignal()));
@@ -1612,6 +1685,18 @@ void ObjectEditor::retranslateDynamicParticleUI()
 	this->particleSpritePathLabel->setText(tr_particle("Sprite Texture"));
 	this->particleSpriteBrowsePushButton->setText(tr_particle("..."));
 	this->particleSpriteClearPushButton->setText(tr_particle("Clear"));
+	this->particleAudioEnabledCheckBox->setText(tr_particle("Enable particle sound"));
+	this->particleAudioURLLabel->setText(tr_particle("Sound File"));
+	this->particleAudioBrowsePushButton->setText(tr_particle("..."));
+	this->particleAudioClearPushButton->setText(tr_particle("Clear"));
+	this->particleAudioLoopCheckBox->setText(tr_particle("Loop sound"));
+	this->particleAudioSpatialCheckBox->setText(tr_particle("3D spatial sound"));
+	this->particleAudioVolumeLabel->setText(tr_particle("Sound Volume"));
+	this->particleAudioActivationDistanceLabel->setText(tr_particle("Sound Activation Distance"));
+	this->particleAudioMinDistanceLabel->setText(tr_particle("Sound Near Distance"));
+	this->particleAudioMaxDistanceLabel->setText(tr_particle("Sound Radius"));
+	this->particleAudioFadeInLabel->setText(tr_particle("Sound Fade In"));
+	this->particleAudioFadeOutLabel->setText(tr_particle("Sound Fade Out"));
 	this->particleRateLabel->setText(tr_particle("Emission Rate"));
 	this->particleFrameCapLabel->setText(tr_particle("Frame Cap"));
 	this->particleMaxParticlesLabel->setText(tr_particle("Max Particles"));
@@ -1629,7 +1714,10 @@ void ObjectEditor::retranslateDynamicParticleUI()
 	this->particleEndOpacityLabel->setText(tr_particle("End Opacity"));
 	this->particleOpacityCurveLabel->setText(tr_particle("Opacity Curve"));
 	this->particleOpacityJitterLabel->setText(tr_particle("Opacity Jitter"));
-	this->particleColourLabel->setText(tr_particle("Colour"));
+	this->particleColourLabel->setText(tr_particle("Birth Colour"));
+	this->particleEndColourLabel->setText(tr_particle("Death Colour"));
+	this->particleColourJitterLabel->setText(tr_particle("Colour Jitter"));
+	this->particleTrailLengthLabel->setText(tr_particle("Trail Length"));
 	this->particleGlowStrengthLabel->setText(tr_particle("Glow Strength"));
 	this->particleRotationLabel->setText(tr_particle("Initial Rotation"));
 	this->particleRotationJitterLabel->setText(tr_particle("Rotation Jitter"));
@@ -1669,6 +1757,12 @@ void ObjectEditor::retranslateDynamicParticleUI()
 	this->particleLifetimeSpinBox->setSuffix(tr_particle(" s"));
 	this->particleStartWidthSpinBox->setSuffix(tr_particle(" m"));
 	this->particleEndWidthSpinBox->setSuffix(tr_particle(" m"));
+	this->particleTrailLengthSpinBox->setSuffix(tr_particle(" m"));
+	this->particleAudioActivationDistanceSpinBox->setSuffix(tr_particle(" m"));
+	this->particleAudioMinDistanceSpinBox->setSuffix(tr_particle(" m"));
+	this->particleAudioMaxDistanceSpinBox->setSuffix(tr_particle(" m"));
+	this->particleAudioFadeInSpinBox->setSuffix(tr_particle(" s"));
+	this->particleAudioFadeOutSpinBox->setSuffix(tr_particle(" s"));
 	this->particleRotationSpinBox->setSuffix(tr_particle(" deg"));
 	this->particleRotationJitterSpinBox->setSuffix(tr_particle(" deg"));
 	this->particleSpinSpinBox->setSuffix(tr_particle(" deg/s"));
@@ -1712,6 +1806,18 @@ void ObjectEditor::retranslateDynamicParticleUI()
 	set_pair_tooltip(this->particleSpritePathLabel, this->particleSpritePathLineEdit, "Use a custom sprite path or shared resource URL. Leave empty to use the particle type default.");
 	set_tooltip(this->particleSpriteBrowsePushButton, "Select a local image to use as the particle sprite.");
 	set_tooltip(this->particleSpriteClearPushButton, "Clear the custom sprite and return to the selected built-in/default sprite.");
+	set_tooltip(this->particleAudioEnabledCheckBox, "Attach looping or one-shot sound to this particle emitter.");
+	set_pair_tooltip(this->particleAudioURLLabel, this->particleAudioURLLineEdit, "Audio resource URL or local MP3/WAV file. Local files are uploaded when the object is saved.");
+	set_tooltip(this->particleAudioBrowsePushButton, "Select a local audio file for this particle effect.");
+	set_tooltip(this->particleAudioClearPushButton, "Remove sound from this particle effect.");
+	set_tooltip(this->particleAudioLoopCheckBox, "Loop the sound while the emitter is active and the listener is inside the activation distance.");
+	set_tooltip(this->particleAudioSpatialCheckBox, "Use 3D spatial audio positioned at the emitter. Turn off for non-spatial ambience.");
+	set_pair_tooltip(this->particleAudioVolumeLabel, this->particleAudioVolumeSpinBox, "Base sound volume before distance attenuation.");
+	set_pair_tooltip(this->particleAudioActivationDistanceLabel, this->particleAudioActivationDistanceSpinBox, "Distance from the player where the sound source is created and starts playing.");
+	set_pair_tooltip(this->particleAudioMinDistanceLabel, this->particleAudioMinDistanceSpinBox, "Distance where spatial sound is still full volume before rolloff begins.");
+	set_pair_tooltip(this->particleAudioMaxDistanceLabel, this->particleAudioMaxDistanceSpinBox, "Maximum audible radius used by the 3D distance model.");
+	set_pair_tooltip(this->particleAudioFadeInLabel, this->particleAudioFadeInSpinBox, "Soft unmute time when entering the activation distance.");
+	set_pair_tooltip(this->particleAudioFadeOutLabel, this->particleAudioFadeOutSpinBox, "Soft mute time when leaving the activation distance.");
 	set_pair_tooltip(this->particleRateLabel, this->particleRateSpinBox, "Particles emitted per second while the emitter is active.");
 	set_pair_tooltip(this->particleFrameCapLabel, this->particleFrameCapSpinBox, "Maximum particles that may spawn in one frame to avoid spikes.");
 	set_pair_tooltip(this->particleMaxParticlesLabel, this->particleMaxParticlesSpinBox, "Maximum live particles kept by this emitter.");
@@ -1729,7 +1835,10 @@ void ObjectEditor::retranslateDynamicParticleUI()
 	set_pair_tooltip(this->particleEndOpacityLabel, this->particleEndOpacitySpinBox, "Particle opacity at the end of its lifetime.");
 	set_pair_tooltip(this->particleOpacityCurveLabel, this->particleOpacityCurveWidget, "Edit how opacity changes over particle lifetime.");
 	set_pair_tooltip(this->particleOpacityJitterLabel, this->particleOpacityJitterSpinBox, "Random variation applied to particle opacity.");
-	set_pair_tooltip(this->particleColourLabel, this->particleColourPushButton, "Base tint colour for emitted particles.");
+	set_pair_tooltip(this->particleColourLabel, this->particleColourPushButton, "Particle tint at birth. Fire should start white-yellow, engines should start white-cyan.");
+	set_pair_tooltip(this->particleEndColourLabel, this->particleEndColourPushButton, "Particle tint at death. Use red/grey for cooling fire, deep blue for ion trails, or transparent-looking dark colours for smoke.");
+	set_pair_tooltip(this->particleColourJitterLabel, this->particleColourJitterSpinBox, "Random brightness variation applied to birth and death colours.");
+	set_pair_tooltip(this->particleTrailLengthLabel, this->particleTrailLengthSpinBox, "Initial distance used to distribute particles along a visible trail, useful for comets, meteors, rain streaks and thrusters.");
 	set_pair_tooltip(this->particleGlowStrengthLabel, this->particleGlowStrengthSpinBox, "Brightness multiplier for additive/glowing particles.");
 	set_pair_tooltip(this->particleRotationLabel, this->particleRotationSpinBox, "Initial sprite rotation in degrees.");
 	set_pair_tooltip(this->particleRotationJitterLabel, this->particleRotationJitterSpinBox, "Random variation applied to initial sprite rotation.");
@@ -1843,6 +1952,19 @@ void ObjectEditor::setParticleControlsFromSettings(const ParticleEmitterSettings
 		const int index = this->particleSpriteLibraryComboBox->findData(QtUtils::toQString(emitter_settings.sprite_path));
 		this->particleSpriteLibraryComboBox->setCurrentIndex(index >= 0 ? index : 0);
 	}
+	SignalBlocker::setChecked(this->particleAudioEnabledCheckBox, emitter_settings.audio_enabled);
+	{
+		QSignalBlocker blocker(this->particleAudioURLLineEdit);
+		this->particleAudioURLLineEdit->setText(QtUtils::toQString(emitter_settings.audio_url));
+	}
+	SignalBlocker::setChecked(this->particleAudioLoopCheckBox, emitter_settings.audio_loop);
+	SignalBlocker::setChecked(this->particleAudioSpatialCheckBox, emitter_settings.audio_spatial);
+	SignalBlocker::setValue(this->particleAudioVolumeSpinBox, emitter_settings.audio_volume);
+	SignalBlocker::setValue(this->particleAudioActivationDistanceSpinBox, emitter_settings.audio_activation_distance);
+	SignalBlocker::setValue(this->particleAudioMinDistanceSpinBox, emitter_settings.audio_min_distance);
+	SignalBlocker::setValue(this->particleAudioMaxDistanceSpinBox, emitter_settings.audio_max_distance);
+	SignalBlocker::setValue(this->particleAudioFadeInSpinBox, emitter_settings.audio_fade_in_s);
+	SignalBlocker::setValue(this->particleAudioFadeOutSpinBox, emitter_settings.audio_fade_out_s);
 	SignalBlocker::setValue(this->particleRateSpinBox, emitter_settings.rate_per_sec);
 	SignalBlocker::setValue(this->particleFrameCapSpinBox, emitter_settings.max_spawn_per_frame);
 	SignalBlocker::setValue(this->particleMaxParticlesSpinBox, emitter_settings.max_particles);
@@ -1860,6 +1982,8 @@ void ObjectEditor::setParticleControlsFromSettings(const ParticleEmitterSettings
 	SignalBlocker::setValue(this->particleEndOpacitySpinBox, emitter_settings.end_opacity);
 	this->particleOpacityCurveWidget->setCurve(emitter_settings.opacity_curve, emitter_settings.opacity_curve_mid);
 	SignalBlocker::setValue(this->particleOpacityJitterSpinBox, emitter_settings.opacity_jitter);
+	SignalBlocker::setValue(this->particleColourJitterSpinBox, emitter_settings.colour_jitter);
+	SignalBlocker::setValue(this->particleTrailLengthSpinBox, emitter_settings.trail_length);
 	SignalBlocker::setValue(this->particleGlowStrengthSpinBox, emitter_settings.glow_strength);
 	SignalBlocker::setValue(this->particleRotationSpinBox, emitter_settings.rotation_deg);
 	SignalBlocker::setValue(this->particleRotationJitterSpinBox, emitter_settings.rotation_jitter_deg);
@@ -1888,7 +2012,8 @@ void ObjectEditor::setParticleControlsFromSettings(const ParticleEmitterSettings
 	SignalBlocker::setChecked(this->particleCollideSurfacesCheckBox, emitter_settings.collide_surfaces);
 	SignalBlocker::setChecked(this->particleDieOnSurfaceCheckBox, emitter_settings.die_when_hit_surface);
 
-	this->particle_col = emitter_settings.colour;
+	this->particle_col = emitter_settings.start_colour;
+	this->particle_end_col = emitter_settings.end_colour;
 	updateParticleColourButton();
 	updateParticlePreviewThumbnail();
 }
@@ -1919,6 +2044,16 @@ ParticleEmitterSettings ObjectEditor::particleControlsToSettings() const
 	const QString render_mode = this->particleRenderModeComboBox->currentData().toString();
 	emitter_settings.render_mode = (render_mode == QStringLiteral("additive_glow")) ? ParticleEmitterSettings::RenderMode_AdditiveGlow : ParticleEmitterSettings::RenderMode_Soft;
 	emitter_settings.sprite_path = QtUtils::toStdString(this->particleSpritePathLineEdit->text().trimmed());
+	emitter_settings.audio_enabled = this->particleAudioEnabledCheckBox->isChecked();
+	emitter_settings.audio_url = QtUtils::toStdString(this->particleAudioURLLineEdit->text().trimmed());
+	emitter_settings.audio_loop = this->particleAudioLoopCheckBox->isChecked();
+	emitter_settings.audio_spatial = this->particleAudioSpatialCheckBox->isChecked();
+	emitter_settings.audio_volume = (float)this->particleAudioVolumeSpinBox->value();
+	emitter_settings.audio_activation_distance = (float)this->particleAudioActivationDistanceSpinBox->value();
+	emitter_settings.audio_min_distance = (float)this->particleAudioMinDistanceSpinBox->value();
+	emitter_settings.audio_max_distance = (float)this->particleAudioMaxDistanceSpinBox->value();
+	emitter_settings.audio_fade_in_s = (float)this->particleAudioFadeInSpinBox->value();
+	emitter_settings.audio_fade_out_s = (float)this->particleAudioFadeOutSpinBox->value();
 	emitter_settings.rate_per_sec = (float)this->particleRateSpinBox->value();
 	emitter_settings.max_spawn_per_frame = (int)std::round(this->particleFrameCapSpinBox->value());
 	emitter_settings.max_particles = (int)std::round(this->particleMaxParticlesSpinBox->value());
@@ -1939,6 +2074,10 @@ ParticleEmitterSettings ObjectEditor::particleControlsToSettings() const
 	emitter_settings.opacity_curve_mid = this->particleOpacityCurveWidget->currentCustomMid();
 	emitter_settings.opacity_jitter = (float)this->particleOpacityJitterSpinBox->value();
 	emitter_settings.colour = this->particle_col;
+	emitter_settings.start_colour = this->particle_col;
+	emitter_settings.end_colour = this->particle_end_col;
+	emitter_settings.colour_jitter = (float)this->particleColourJitterSpinBox->value();
+	emitter_settings.trail_length = (float)this->particleTrailLengthSpinBox->value();
 	emitter_settings.glow_strength = (float)this->particleGlowStrengthSpinBox->value();
 	emitter_settings.rotation_deg = (float)this->particleRotationSpinBox->value();
 	emitter_settings.rotation_jitter_deg = (float)this->particleRotationJitterSpinBox->value();
@@ -2941,6 +3080,18 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->particleSpritePathLineEdit->setReadOnly(!editable);
 	this->particleSpriteBrowsePushButton->setEnabled(editable);
 	this->particleSpriteClearPushButton->setEnabled(editable);
+	this->particleAudioEnabledCheckBox->setEnabled(editable);
+	this->particleAudioURLLineEdit->setReadOnly(!editable);
+	this->particleAudioBrowsePushButton->setEnabled(editable);
+	this->particleAudioClearPushButton->setEnabled(editable);
+	this->particleAudioLoopCheckBox->setEnabled(editable);
+	this->particleAudioSpatialCheckBox->setEnabled(editable);
+	this->particleAudioVolumeSpinBox->setReadOnly(!editable);
+	this->particleAudioActivationDistanceSpinBox->setReadOnly(!editable);
+	this->particleAudioMinDistanceSpinBox->setReadOnly(!editable);
+	this->particleAudioMaxDistanceSpinBox->setReadOnly(!editable);
+	this->particleAudioFadeInSpinBox->setReadOnly(!editable);
+	this->particleAudioFadeOutSpinBox->setReadOnly(!editable);
 	this->particleRateSpinBox->setReadOnly(!editable);
 	this->particleFrameCapSpinBox->setReadOnly(!editable);
 	this->particleMaxParticlesSpinBox->setReadOnly(!editable);
@@ -2959,6 +3110,9 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->particleOpacityCurveWidget->setEnabled(editable);
 	this->particleOpacityJitterSpinBox->setReadOnly(!editable);
 	this->particleColourPushButton->setEnabled(editable);
+	this->particleEndColourPushButton->setEnabled(editable);
+	this->particleColourJitterSpinBox->setReadOnly(!editable);
+	this->particleTrailLengthSpinBox->setReadOnly(!editable);
 	this->particleGlowStrengthSpinBox->setReadOnly(!editable);
 	this->particleRotationSpinBox->setReadOnly(!editable);
 	this->particleRotationJitterSpinBox->setReadOnly(!editable);
@@ -3603,18 +3757,25 @@ void ObjectEditor::updateSpotlightColourButton()
 void ObjectEditor::updateParticleColourButton()
 {
 	const int COLOUR_BUTTON_W = 30;
-	QImage image(COLOUR_BUTTON_W, COLOUR_BUTTON_W, QImage::Format_RGB32);
-	image.fill(QColor(qRgba(
-		(int)(this->particle_col.r * 255),
-		(int)(this->particle_col.g * 255),
-		(int)(this->particle_col.b * 255),
-		255
-	)));
-	QIcon icon;
-	QPixmap pixmap = QPixmap::fromImage(image);
-	icon.addPixmap(pixmap);
-	this->particleColourPushButton->setIcon(icon);
-	this->particleColourPushButton->setIconSize(QSize(COLOUR_BUTTON_W, COLOUR_BUTTON_W));
+	auto set_button_icon = [COLOUR_BUTTON_W](QPushButton* button, const Colour3f& colour)
+	{
+		if(!button)
+			return;
+		QImage image(COLOUR_BUTTON_W, COLOUR_BUTTON_W, QImage::Format_RGB32);
+		image.fill(QColor(qRgba(
+			(int)(colour.r * 255),
+			(int)(colour.g * 255),
+			(int)(colour.b * 255),
+			255
+		)));
+		QIcon icon;
+		QPixmap pixmap = QPixmap::fromImage(image);
+		icon.addPixmap(pixmap);
+		button->setIcon(icon);
+		button->setIconSize(QSize(COLOUR_BUTTON_W, COLOUR_BUTTON_W));
+	};
+	set_button_icon(this->particleColourPushButton, this->particle_col);
+	set_button_icon(this->particleEndColourPushButton, this->particle_end_col);
 }
 
 
@@ -3662,6 +3823,33 @@ void ObjectEditor::on_particleColourPushButton_clicked(bool checked)
 		this->particle_col.r = new_col.red()   / 255.f;
 		this->particle_col.g = new_col.green() / 255.f;
 		this->particle_col.b = new_col.blue()  / 255.f;
+
+		updateParticleColourButton();
+		updateParticlePreviewThumbnail();
+
+		emit objectChanged();
+	}
+}
+
+
+void ObjectEditor::on_particleEndColourPushButton_clicked(bool checked)
+{
+	const QColor initial_col(qRgba(
+		(int)(particle_end_col.r * 255),
+		(int)(particle_end_col.g * 255),
+		(int)(particle_end_col.b * 255),
+		255
+	));
+
+	QColorDialog d(initial_col, this);
+	const int res = d.exec();
+	if(res == QDialog::Accepted)
+	{
+		const QColor new_col = d.currentColor();
+
+		this->particle_end_col.r = new_col.red()   / 255.f;
+		this->particle_end_col.g = new_col.green() / 255.f;
+		this->particle_end_col.b = new_col.blue()  / 255.f;
 
 		updateParticleColourButton();
 		updateParticlePreviewThumbnail();
@@ -3728,21 +3916,21 @@ void ObjectEditor::showParticleHelp()
 		QStringLiteral("<li>") + tr_particle("Press Burst Now to verify visibility, then tune Emission Rate, Start Size, End Size, Lifetime and Opacity.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_particle("Use Save to store your own local preset after the effect looks right.") + QStringLiteral("</li></ol>") +
 		QStringLiteral("<h3>") + tr_particle("Cinematic recipes") + QStringLiteral("</h3><ul>") +
-		QStringLiteral("<li>") + tr_particle("Campfire: press Fire, keep the emitter radius small, use Up direction, high glow, short lifetime, warm orange colour, then place an Embers emitter slightly above it.") + QStringLiteral("</li>") +
+		QStringLiteral("<li>") + tr_particle("Campfire: press Fire, keep the emitter radius small, use Up direction, short lifetime, Birth Colour white/yellow, Death Colour red/dark, then place an Embers emitter slightly above it.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_particle("Explosion flash: press Supernova, lower Lifetime, increase Radial Force, use Additive Glow, then press Burst Now instead of relying on continuous emission.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_particle("Magic pickup: press Magic Dust or Fireflies, use Sphere shape, low speed, soft glow, mild Vortex and no gravity.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_particle("Storm rain: press Rain, use Box shape above the area, Down direction, high speed, Collide with surfaces and Die on first hit.") + QStringLiteral("</li></ul>") +
 		QStringLiteral("<h3>") + tr_particle("Realistic smoke") + QStringLiteral("</h3><p>") +
 		tr_particle("Use Smoke, Steam or Smoke Wisp. Keep speed low, lifetime long, end size large, opacity fading to zero, Soft Smoke render mode, slight Turbulence, negative Gravity Scale or Buoyancy Lift.") + QStringLiteral("</p>") +
 		QStringLiteral("<h3>") + tr_particle("Realistic fire") + QStringLiteral("</h3><p>") +
-		tr_particle("Use Fire or Embers. Use Additive Glow, Flame or Flare sprites, upward direction, short lifetime, high glow, orange colour, turbulence and small emitter radius. Add Sparks as a second emitter for hotter fire.") + QStringLiteral("</p>") +
+		tr_particle("Use Fire or Embers. Good fire is a lifetime gradient: white/yellow Birth Colour, red/dark Death Colour, short Lifetime, modest End Size, Additive Glow, Flame sprite, upward direction, turbulence and small emitter radius. Add Sparks as a second emitter for hotter fire.") + QStringLiteral("</p>") +
 		QStringLiteral("<h3>") + tr_particle("Space effects") + QStringLiteral("</h3><p>") +
 		tr_particle("Use Nebula, Starfield, Black Hole, Gravity Well, Comet Tail, Galaxy Spiral, Supernova, Pulsar Beam, Solar Wind, Cosmic Dust or Wormhole. Most space effects want Sphere or Ring shape, Random direction, zero gravity, Additive Glow, Vortex and Attractor radius.") + QStringLiteral("</p>") +
 		QStringLiteral("<h3>") + tr_particle("Space cookbook") + QStringLiteral("</h3><ul>") +
 		QStringLiteral("<li>") + tr_particle("Black hole: press Black Hole, use Ring or Sphere, enable Black Hole mode, increase Attractor Strength and Event Horizon, keep End Opacity near zero, add Galaxy Spiral nearby for an accretion disc.") + QStringLiteral("</li>") +
-		QStringLiteral("<li>") + tr_particle("Comet: press Comet Tail, point the emitter opposite the travel direction, use Streak sprite, long lifetime, low gravity and moderate turbulence.") + QStringLiteral("</li>") +
+		QStringLiteral("<li>") + tr_particle("Comet: press Comet Tail, point the emitter opposite the travel direction, use long Trail Length, pale Birth Colour, blue Death Colour, long Lifetime, low gravity and moderate turbulence.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_particle("Wormhole: press Wormhole, use Ring shape, high Vortex, Additive Glow, Spiral sprite and enough Max Particles for a continuous tunnel.") + QStringLiteral("</li>") +
-		QStringLiteral("<li>") + tr_particle("Spaceship engine: press Ion Thruster, use Custom direction, Cone shape, Beam sprite, high speed, short lifetime and blue/cyan glow.") + QStringLiteral("</li>") +
+		QStringLiteral("<li>") + tr_particle("Spaceship engine: press Ion Thruster, use Custom direction, Cone shape, Beam sprite, high speed, short Lifetime, long Trail Length, white/cyan Birth Colour and deep blue Death Colour.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_particle("Deep nebula: press Nebula or Cosmic Dust, use Sphere, very low speed, long lifetime, low opacity, large end size, no collisions and soft coloured glow.") + QStringLiteral("</li></ul>") +
 		QStringLiteral("<h3>") + tr_particle("Physics and collisions") + QStringLiteral("</h3><p>") +
 		tr_particle("Use Wind for directional drift, Vortex for orbiting motion, Attractor for gravity wells, Radial Force for explosions, Damping for slowing particles, and Collision Friction/Bounce for sparks, meteors and rain.") + QStringLiteral("</p>") +
@@ -3938,6 +4126,43 @@ void ObjectEditor::clearParticleSprite()
 }
 
 
+void ObjectEditor::browseParticleAudio()
+{
+	const QString data_dir = QtUtils::toQString(this->base_dir_path + "/data");
+	const QString start_dir = QDir(data_dir + QStringLiteral("/resources/sounds")).exists() ? data_dir + QStringLiteral("/resources/sounds") : data_dir;
+	const QString filename = QFileDialog::getOpenFileName(
+		this,
+		QCoreApplication::translate("ObjectEditor", "Select Particle Sound"),
+		start_dir,
+		QCoreApplication::translate("ObjectEditor", "Audio (*.mp3 *.wav);;All files (*.*)")
+	);
+
+	if(filename.isEmpty())
+		return;
+
+	QString path = filename;
+	if(!data_dir.isEmpty())
+	{
+		const QString rel = QDir(data_dir).relativeFilePath(filename).replace(QStringLiteral("\\"), QStringLiteral("/"));
+		if(!rel.startsWith(QStringLiteral("../")) && !QDir::isAbsolutePath(rel))
+			path = QStringLiteral("/") + rel;
+	}
+	path.replace(QStringLiteral("\\"), QStringLiteral("/"));
+
+	this->particleAudioURLLineEdit->setText(path);
+	SignalBlocker::setChecked(this->particleAudioEnabledCheckBox, true);
+	emit objectChanged();
+}
+
+
+void ObjectEditor::clearParticleAudio()
+{
+	this->particleAudioURLLineEdit->clear();
+	SignalBlocker::setChecked(this->particleAudioEnabledCheckBox, false);
+	emit objectChanged();
+}
+
+
 void ObjectEditor::particleSpriteLibraryChanged(int index)
 {
 	if(index < 0 || !this->particleSpriteLibraryComboBox || !this->particleSpritePathLineEdit)
@@ -3979,12 +4204,6 @@ void ObjectEditor::updateParticlePreviewThumbnail()
 	for(int y=0; y<H; y += 24)
 		p.drawLine(0, y, W, y);
 
-	const QColor base_col(
-		(int)myClamp(s.colour.r * 255.f, 0.f, 255.f),
-		(int)myClamp(s.colour.g * 255.f, 0.f, 255.f),
-		(int)myClamp(s.colour.b * 255.f, 0.f, 255.f)
-	);
-
 	if(s.black_hole_mode)
 	{
 		const QPointF c(W * 0.52, H * 0.5);
@@ -4013,8 +4232,20 @@ void ObjectEditor::updateParticlePreviewThumbnail()
 		const float flow = s.direction == ParticleEmitterSettings::Direction_Down ? 1.f : -1.f;
 		const float y = H * 0.55f + flow * (H * 0.28f) * t + std::sin((float)i * 1.7f) * myMin(12.f, s.turbulence_strength * 2.2f);
 		const float radius = myClamp(width * 10.f, 2.0f, 18.0f);
-		QColor col = base_col;
+		QColor col(
+			(int)myClamp(Maths::lerp(s.start_colour.r, s.end_colour.r, t) * 255.f, 0.f, 255.f),
+			(int)myClamp(Maths::lerp(s.start_colour.g, s.end_colour.g, t) * 255.f, 0.f, 255.f),
+			(int)myClamp(Maths::lerp(s.start_colour.b, s.end_colour.b, t) * 255.f, 0.f, 255.f)
+		);
 		col.setAlpha((int)myClamp(alpha * 220.f, 0.f, 245.f));
+		if(s.trail_length > 0.f && i > 0)
+		{
+			QColor trail_col = col;
+			trail_col.setAlpha((int)myClamp(alpha * 90.f, 0.f, 160.f));
+			p.setPen(QPen(trail_col, myClamp(radius * 0.65f, 1.0f, 8.0f), Qt::SolidLine, Qt::RoundCap));
+			const float tail_x = x - myMin(48.f, s.trail_length * 10.f);
+			p.drawLine(QPointF(tail_x, y), QPointF(x, y));
+		}
 		if(s.render_mode == ParticleEmitterSettings::RenderMode_AdditiveGlow)
 		{
 			QRadialGradient glow(QPointF(x, y), radius * 1.8f);

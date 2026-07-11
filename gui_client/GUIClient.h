@@ -277,6 +277,7 @@ public:
 	void createBot(const Vec3d& pos, float heading);
 	std::string uploadLocalFileForBot(const std::string& local_abs_path); // Copy local file to resources dir and return sub:// URL
 	std::string prepareAndUploadParticleSprite(const std::string& sprite_path); // Convert a local particle sprite path to a shared resource URL and enqueue upload.
+	std::string prepareAndUploadParticleAudio(const std::string& audio_path); // Convert a local particle audio path to a shared resource URL and enqueue upload.
 	std::string prepareAndUploadChatAttachment(const std::string& local_abs_path); // Copy local file to resources dir, enqueue upload, and return resource URL.
 	void updateBot(uint64 bot_id, const std::string& name, const std::string& prompt,
 		const AvatarSettings& avatar_settings,
@@ -712,6 +713,7 @@ public:
 	GLObjectRef aabb_os_vis_gl_ob; // Used for visualising the object-space AABB of the selected object.
 	GLObjectRef aabb_ws_vis_gl_ob; // Used for visualising the world-space AABB of the selected object.
 	std::vector<GLObjectRef> selected_ob_vis_gl_obs; // Used for visualising paths for path-controlled objects.
+	std::vector<GLObjectRef> scientific_molecule_label_gl_obs; // Persistent molecule labels; not cleared by object deselection.
 	GLObjectRef particle_emitter_shape_vis_gl_ob;
 	GLObjectRef particle_emitter_direction_vis_gl_ob;
 	GLObjectRef particle_emitter_radius_handle_vis_gl_ob;
@@ -866,6 +868,15 @@ public:
 	std::set<UID> particle_emitter_runtime_paused;
 	std::map<UID, std::string> particle_emitter_content_cache;
 	std::map<UID, ParticleEmitterSettings> particle_emitter_settings_cache;
+	struct ParticleEmitterAudioState
+	{
+		ParticleEmitterAudioState() : in_activation_range(false) {}
+
+		glare::AudioSourceRef source;
+		std::string loaded_audio_url;
+		bool in_activation_range;
+	};
+	std::map<UID, ParticleEmitterAudioState> particle_emitter_audio_states;
 
 	glare::AudioEngine audio_engine;
 	UndoBuffer undo_buffer;

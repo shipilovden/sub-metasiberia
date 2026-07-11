@@ -42,6 +42,7 @@ class QSplitter;
 class QVBoxLayout;
 class QToolButton;
 class QFrame;
+class QAction;
 class QActionGroup;
 struct ID3D11Device;
 struct IMFDXGIDeviceManager;
@@ -51,6 +52,7 @@ class MiniDmpSender;
 class UpdateManager;
 class WebcamWindow;
 class AvatarSettingsWidget;
+class ScientificObjectEditor;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -89,6 +91,7 @@ private slots:;
 	void on_actionAdd_Audio_Source_triggered();
 	void on_actionAdd_Decal_triggered();
 	void on_actionAdd_Particles_triggered();
+	void on_actionAddScientificObject_triggered();
 	void on_actionCopy_Object_triggered();
 	void on_actionPaste_Object_triggered();
 	void on_actionCloneObject_triggered();
@@ -619,4 +622,12 @@ public:
 	AvatarSettingsWidget* avatar_settings_widget;
 	QDockWidget* map_dock_widget;
 	QWidget* map_dock_map_widget;
+	ScientificObjectEditor* scientific_object_editor;
+	QAction* action_add_scientific_object;
+	enum ActiveEditorKind
+	{
+		ActiveEditor_Object,
+		ActiveEditor_Scientific
+	};
+	ActiveEditorKind active_editor_kind;
 };

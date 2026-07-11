@@ -1,5 +1,7 @@
 # Функция выбора шрифтов для текстовых объектов
 
+> **Устаревший ранний документ (проверено 2026-07-10):** ручной путь `C:\programming\fonts.rar` и первоначальные шаги ниже не являются текущим setup. Историю реализации сохраняет `FONT_SELECTION_IMPLEMENTATION.md`; актуальное runtime поведение нужно подтверждать по `ObjectEditor`, `WorldObject` protocol/version gates и packaged `data/resources/fonts`.
+
 ## Описание
 Добавлена возможность выбора различных шрифтов для текстовых объектов (ObjectType_Text) в редакторе объектов Metasiberia.
 

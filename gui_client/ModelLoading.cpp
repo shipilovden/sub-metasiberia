@@ -557,16 +557,21 @@ void ModelLoading::makeGLObjectForModelFile(
 
 		checkValidAndSanitiseMesh(*mesh);
 
-		// Convert model coordinates to z up
-		for(size_t i=0; i<mesh->vert_positions.size(); ++i)
-			mesh->vert_positions[i] = Indigo::Vec3f(mesh->vert_positions[i].x, -mesh->vert_positions[i].z, mesh->vert_positions[i].y);
+		const bool metasiberia_scientific_molecule_obj = hasPrefix(FileUtils::getFilename(model_path), "metasiberia_scientific_molecule_");
 
-		// Also normalise normals to avoid problems encoding into GL_INT_2_10_10_10_REV format.
-		for(size_t i=0; i<mesh->vert_normals.size(); ++i)
-			mesh->vert_normals[i] = normalise(Indigo::Vec3f(mesh->vert_normals[i].x, -mesh->vert_normals[i].z, mesh->vert_normals[i].y));
+		if(!metasiberia_scientific_molecule_obj)
+		{
+			// Convert model coordinates to z up
+			for(size_t i=0; i<mesh->vert_positions.size(); ++i)
+				mesh->vert_positions[i] = Indigo::Vec3f(mesh->vert_positions[i].x, -mesh->vert_positions[i].z, mesh->vert_positions[i].y);
 
-		// Automatically scale object down until it is < x m across
-		scaleMesh(*mesh);
+			// Also normalise normals to avoid problems encoding into GL_INT_2_10_10_10_REV format.
+			for(size_t i=0; i<mesh->vert_normals.size(); ++i)
+				mesh->vert_normals[i] = normalise(Indigo::Vec3f(mesh->vert_normals[i].x, -mesh->vert_normals[i].z, mesh->vert_normals[i].y));
+
+			// Automatically scale object down until it is < x m across
+			scaleMesh(*mesh);
+		}
 
 		// Now that vertices have been modified, recompute AABB
 		mesh->endOfModel();

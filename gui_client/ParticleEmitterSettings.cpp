@@ -264,6 +264,8 @@ void clampSettings(ParticleEmitterSettings& s)
 {
 	if(s.sprite_path.size() > 4096)
 		s.sprite_path.resize(4096);
+	if(s.audio_url.size() > 4096)
+		s.audio_url.resize(4096);
 	s.rate_per_sec       = (float)clampDouble(s.rate_per_sec,       0.0,   400.0);
 	s.max_spawn_per_frame = clampInt(s.max_spawn_per_frame,         1,     256);
 	s.max_particles      = clampInt(s.max_particles,                1,    2048);
@@ -290,6 +292,8 @@ void clampSettings(ParticleEmitterSettings& s)
 	s.end_opacity        = (float)clampDouble(s.end_opacity,        0.0,   1.0);
 	s.opacity_curve_mid  = (float)clampDouble(s.opacity_curve_mid,  0.0,     1.0);
 	s.opacity_jitter     = (float)clampDouble(s.opacity_jitter,     0.0,     1.0);
+	s.colour_jitter      = (float)clampDouble(s.colour_jitter,      0.0,     1.0);
+	s.trail_length       = (float)clampDouble(s.trail_length,       0.0,   100.0);
 	s.glow_strength      = (float)clampDouble(s.glow_strength,      0.2,   8.0);
 	s.rotation_deg       = (float)clampDouble(s.rotation_deg,    -360.0,  360.0);
 	s.rotation_jitter_deg = (float)clampDouble(s.rotation_jitter_deg, 0.0, 360.0);
@@ -313,9 +317,26 @@ void clampSettings(ParticleEmitterSettings& s)
 	s.mass               = (float)clampDouble(s.mass,               1.0e-9, 10.0);
 	s.restitution        = (float)clampDouble(s.restitution,        0.0,   1.0);
 	s.collision_friction = (float)clampDouble(s.collision_friction, 0.0,   1.0);
+	s.audio_volume       = (float)clampDouble(s.audio_volume,       0.0,  10.0);
+	s.audio_activation_distance = (float)clampDouble(s.audio_activation_distance, 0.0, 1000.0);
+	s.audio_min_distance = (float)clampDouble(s.audio_min_distance,  0.1, 100.0);
+	s.audio_max_distance = (float)clampDouble(s.audio_max_distance,  1.0, 1000.0);
+	s.audio_fade_in_s    = (float)clampDouble(s.audio_fade_in_s,    0.0,  30.0);
+	s.audio_fade_out_s   = (float)clampDouble(s.audio_fade_out_s,   0.0,  30.0);
+	if(s.audio_max_distance < s.audio_min_distance + 0.01f)
+		s.audio_max_distance = s.audio_min_distance + 0.01f;
+	if(s.audio_activation_distance <= 0.f)
+		s.audio_activation_distance = s.audio_max_distance;
 	s.colour.r           = (float)clampDouble(s.colour.r,           0.0,   1.0);
 	s.colour.g           = (float)clampDouble(s.colour.g,           0.0,   1.0);
 	s.colour.b           = (float)clampDouble(s.colour.b,           0.0,   1.0);
+	s.start_colour.r     = (float)clampDouble(s.start_colour.r,     0.0,   1.0);
+	s.start_colour.g     = (float)clampDouble(s.start_colour.g,     0.0,   1.0);
+	s.start_colour.b     = (float)clampDouble(s.start_colour.b,     0.0,   1.0);
+	s.end_colour.r       = (float)clampDouble(s.end_colour.r,       0.0,   1.0);
+	s.end_colour.g       = (float)clampDouble(s.end_colour.g,       0.0,   1.0);
+	s.end_colour.b       = (float)clampDouble(s.end_colour.b,       0.0,   1.0);
+	s.colour = s.start_colour;
 }
 
 
@@ -384,6 +405,25 @@ void makePresetImmediatelyVisible(ParticleEmitterSettings& s)
 	}
 }
 
+
+bool coloursNearlyEqual(const Colour3f& a, const Colour3f& b)
+{
+	return std::fabs(a.r - b.r) < 1.0e-5f && std::fabs(a.g - b.g) < 1.0e-5f && std::fabs(a.b - b.b) < 1.0e-5f;
+}
+
+
+void inheritLegacyColourIfNeeded(ParticleEmitterSettings& s)
+{
+	const ParticleEmitterSettings defaults;
+	if(coloursNearlyEqual(s.start_colour, defaults.start_colour) && coloursNearlyEqual(s.end_colour, defaults.end_colour) && !coloursNearlyEqual(s.colour, defaults.colour))
+	{
+		s.start_colour = s.colour;
+		s.end_colour = s.colour;
+	}
+
+	s.colour = s.start_colour;
+}
+
 } // anonymous namespace
 
 
@@ -418,6 +458,10 @@ ParticleEmitterSettings::ParticleEmitterSettings()
 	opacity_curve_mid(0.5f),
 	opacity_jitter(0.15f),
 	colour(0.82f, 0.82f, 0.82f),
+	start_colour(0.82f, 0.82f, 0.82f),
+	end_colour(0.42f, 0.42f, 0.42f),
+	colour_jitter(0.05f),
+	trail_length(0.f),
 	glow_strength(1.8f),
 	rotation_deg(0.f),
 	rotation_jitter_deg(360.f),
@@ -444,7 +488,17 @@ ParticleEmitterSettings::ParticleEmitterSettings()
 	restitution(0.2f),
 	collision_friction(0.15f),
 	collide_surfaces(false),
-	die_when_hit_surface(false)
+	die_when_hit_surface(false),
+	audio_enabled(false),
+	audio_url(""),
+	audio_loop(true),
+	audio_spatial(true),
+	audio_volume(1.0f),
+	audio_activation_distance(35.f),
+	audio_min_distance(1.0f),
+	audio_max_distance(45.f),
+	audio_fade_in_s(0.25f),
+	audio_fade_out_s(0.35f)
 {
 }
 
@@ -537,34 +591,38 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.sprite_path = "builtin:flame";
 		settings.direction = Direction_Up;
 		settings.shape = Shape_Cone;
-		settings.rate_per_sec = 180.f;
-		settings.max_spawn_per_frame = 256;
-		settings.max_particles = 1200;
-		settings.emitter_radius = 0.16f;
-		settings.speed = 2.0f;
-		settings.speed_jitter = 0.45f;
-		settings.spread_deg = 30.f;
-		settings.turbulence_strength = 2.0f;
-		settings.lifetime_s = 1.65f;
-		settings.start_width = 0.34f;
-		settings.end_width = 1.25f;
+		settings.rate_per_sec = 72.f;
+		settings.max_spawn_per_frame = 96;
+		settings.max_particles = 360;
+		settings.emitter_radius = 0.055f;
+		settings.speed = 1.18f;
+		settings.speed_jitter = 0.68f;
+		settings.spread_deg = 13.f;
+		settings.turbulence_strength = 4.2f;
+		settings.lifetime_s = 0.58f;
+		settings.start_width = 0.09f;
+		settings.end_width = 0.32f;
 		settings.size_curve = Curve_EaseOut;
 		settings.size_jitter = 0.45f;
-		settings.opacity = 1.0f;
+		settings.opacity = 0.76f;
 		settings.end_opacity = 0.0f;
 		settings.opacity_curve = Curve_EaseIn;
-		settings.opacity_jitter = 0.2f;
-		settings.colour = Colour3f(1.0f, 0.42f, 0.08f);
+		settings.opacity_jitter = 0.34f;
+		settings.colour = Colour3f(1.0f, 0.86f, 0.18f);
+		settings.start_colour = Colour3f(1.0f, 0.92f, 0.32f);
+		settings.end_colour = Colour3f(0.82f, 0.12f, 0.03f);
+		settings.colour_jitter = 0.24f;
+		settings.trail_length = 0.04f;
 		settings.render_mode = RenderMode_AdditiveGlow;
-		settings.glow_strength = 7.5f;
-		settings.rotation_jitter_deg = 360.f;
-		settings.spin_deg_per_sec = 35.f;
-		settings.spin_jitter_deg_per_sec = 90.f;
+		settings.glow_strength = 2.55f;
+		settings.rotation_jitter_deg = 14.f;
+		settings.spin_deg_per_sec = 0.f;
+		settings.spin_jitter_deg_per_sec = 10.f;
 		settings.burst_enabled = true;
-		settings.burst_count = 220;
-		settings.burst_interval_s = 0.12f;
-		settings.gravity_scale = -0.22f;
-		settings.buoyancy_lift = 0.18f;
+		settings.burst_count = 40;
+		settings.burst_interval_s = 0.18f;
+		settings.gravity_scale = -0.48f;
+		settings.buoyancy_lift = 0.32f;
 		settings.drag_area = 2.5e-4f;
 		settings.collide_surfaces = false;
 	}
@@ -620,6 +678,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.opacity_curve = Curve_EaseIn;
 		settings.opacity_jitter = 0.25f;
 		settings.colour = Colour3f(1.0f, 0.65f, 0.14f);
+		settings.start_colour = Colour3f(1.0f, 0.92f, 0.34f);
+		settings.end_colour = Colour3f(0.78f, 0.16f, 0.04f);
+		settings.colour_jitter = 0.22f;
+		settings.trail_length = 0.75f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 4.0f;
 		settings.spin_jitter_deg_per_sec = 240.f;
@@ -691,6 +753,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.opacity_curve = Curve_EaseIn;
 		settings.opacity_jitter = 0.3f;
 		settings.colour = Colour3f(1.0f, 0.42f, 0.08f);
+		settings.start_colour = Colour3f(1.0f, 0.78f, 0.18f);
+		settings.end_colour = Colour3f(0.44f, 0.07f, 0.02f);
+		settings.colour_jitter = 0.32f;
+		settings.trail_length = 0.55f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 3.5f;
 		settings.spin_jitter_deg_per_sec = 220.f;
@@ -701,25 +767,34 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 	else if(preset_name == "rain")
 	{
 		settings.kind = ParticleKind_Streak;
-		settings.sprite_path = "builtin:streak";
+		settings.sprite_path = "builtin:rain_streak";
 		settings.direction = Direction_Down;
 		settings.shape = Shape_Box;
-		settings.rate_per_sec = 90.f;
-		settings.max_spawn_per_frame = 128;
-		settings.max_particles = 700;
+		settings.rate_per_sec = 170.f;
+		settings.max_spawn_per_frame = 220;
+		settings.max_particles = 1200;
 		settings.emitter_radius = 6.0f;
-		settings.speed = 8.5f;
-		settings.speed_jitter = 0.2f;
-		settings.spread_deg = 5.f;
+		settings.speed = 15.0f;
+		settings.speed_jitter = 0.16f;
+		settings.spread_deg = 2.f;
 		settings.turbulence_strength = 0.08f;
-		settings.lifetime_s = 1.8f;
-		settings.start_width = 0.025f;
-		settings.end_width = 0.035f;
-		settings.opacity = 0.55f;
+		settings.lifetime_s = 1.05f;
+		settings.start_width = 0.20f;
+		settings.end_width = 0.12f;
+		settings.opacity = 0.72f;
+		settings.end_opacity = 0.18f;
 		settings.opacity_curve = Curve_Linear;
-		settings.colour = Colour3f(0.62f, 0.78f, 1.0f);
-		settings.wind_accel_x = 0.35f;
-		settings.gravity_scale = 0.28f;
+		settings.colour = Colour3f(0.68f, 0.86f, 1.0f);
+		settings.start_colour = Colour3f(0.86f, 0.96f, 1.0f);
+		settings.end_colour = Colour3f(0.34f, 0.56f, 0.92f);
+		settings.colour_jitter = 0.12f;
+		settings.trail_length = 2.8f;
+		settings.render_mode = RenderMode_Soft;
+		settings.glow_strength = 1.0f;
+		settings.rotation_deg = -12.f;
+		settings.rotation_jitter_deg = 5.f;
+		settings.wind_accel_x = 0.75f;
+		settings.gravity_scale = 0.35f;
 		settings.drag_area = 1.0e-5f;
 		settings.collide_surfaces = true;
 		settings.die_when_hit_surface = true;
@@ -745,6 +820,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.end_opacity = 0.06f;
 		settings.opacity_curve = Curve_EaseIn;
 		settings.colour = Colour3f(0.28f, 0.82f, 1.0f);
+		settings.start_colour = Colour3f(0.82f, 1.0f, 1.0f);
+		settings.end_colour = Colour3f(0.12f, 0.18f, 1.0f);
+		settings.colour_jitter = 0.18f;
+		settings.trail_length = 0.45f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 4.8f;
 		settings.spin_deg_per_sec = 80.f;
@@ -843,6 +922,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.end_opacity = 0.0f;
 		settings.opacity_curve = Curve_EaseIn;
 		settings.colour = Colour3f(1.0f, 1.0f, 1.0f);
+		settings.start_colour = Colour3f(1.0f, 0.74f, 0.22f);
+		settings.end_colour = Colour3f(0.08f, 0.10f, 0.20f);
+		settings.colour_jitter = 0.12f;
+		settings.trail_length = 1.4f;
 		settings.render_mode = RenderMode_Soft;
 		settings.glow_strength = 1.0f;
 		settings.spin_deg_per_sec = 260.f;
@@ -913,6 +996,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.opacity = 0.92f;
 		settings.opacity_curve = Curve_EaseIn;
 		settings.colour = Colour3f(1.0f, 0.62f, 0.22f);
+		settings.start_colour = Colour3f(1.0f, 0.90f, 0.46f);
+		settings.end_colour = Colour3f(0.38f, 0.12f, 0.04f);
+		settings.colour_jitter = 0.18f;
+		settings.trail_length = 4.5f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 5.5f;
 		settings.gravity_scale = 0.08f;
@@ -943,6 +1030,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.opacity_curve = Curve_EaseIn;
 		settings.opacity_jitter = 0.12f;
 		settings.colour = Colour3f(0.28f, 0.72f, 1.0f);
+		settings.start_colour = Colour3f(0.92f, 1.0f, 1.0f);
+		settings.end_colour = Colour3f(0.20f, 0.46f, 1.0f);
+		settings.colour_jitter = 0.08f;
+		settings.trail_length = 0.55f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 6.5f;
 		settings.spin_jitter_deg_per_sec = 720.f;
@@ -987,32 +1078,36 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.custom_dir_y = 0.12f;
 		settings.custom_dir_z = 0.36f;
 		settings.shape = Shape_Point;
-		settings.rate_per_sec = 140.f;
-		settings.max_spawn_per_frame = 256;
-		settings.max_particles = 1300;
-		settings.emitter_radius = 0.05f;
-		settings.speed = 4.6f;
-		settings.speed_jitter = 0.45f;
-		settings.spread_deg = 12.f;
-		settings.turbulence_strength = 0.35f;
-		settings.lifetime_s = 6.2f;
-		settings.start_width = 0.34f;
-		settings.end_width = 2.6f;
+		settings.rate_per_sec = 95.f;
+		settings.max_spawn_per_frame = 160;
+		settings.max_particles = 1200;
+		settings.emitter_radius = 0.025f;
+		settings.speed = 3.2f;
+		settings.speed_jitter = 0.24f;
+		settings.spread_deg = 4.f;
+		settings.turbulence_strength = 0.09f;
+		settings.lifetime_s = 7.2f;
+		settings.start_width = 0.08f;
+		settings.end_width = 0.62f;
 		settings.size_curve = Curve_EaseOut;
-		settings.size_jitter = 0.55f;
-		settings.opacity = 0.88f;
+		settings.size_jitter = 0.28f;
+		settings.opacity = 0.58f;
 		settings.end_opacity = 0.0f;
 		settings.opacity_curve = Curve_EaseOut;
-		settings.opacity_jitter = 0.25f;
+		settings.opacity_jitter = 0.18f;
 		settings.colour = Colour3f(0.72f, 0.9f, 1.0f);
+		settings.start_colour = Colour3f(1.0f, 0.98f, 0.88f);
+		settings.end_colour = Colour3f(0.18f, 0.44f, 1.0f);
+		settings.colour_jitter = 0.18f;
+		settings.trail_length = 12.0f;
 		settings.render_mode = RenderMode_AdditiveGlow;
-		settings.glow_strength = 6.5f;
+		settings.glow_strength = 3.2f;
 		settings.burst_enabled = true;
-		settings.burst_count = 240;
-		settings.burst_interval_s = 0.35f;
-		settings.wind_accel_x = -0.24f;
+		settings.burst_count = 96;
+		settings.burst_interval_s = 0.28f;
+		settings.wind_accel_x = -0.06f;
 		settings.gravity_scale = 0.f;
-		settings.drag_area = 6.0e-5f;
+		settings.drag_area = 0.f;
 		settings.collide_surfaces = false;
 	}
 	else if(preset_name == "galaxy_spiral")
@@ -1039,6 +1134,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.opacity_curve = Curve_SmoothStep;
 		settings.opacity_jitter = 0.35f;
 		settings.colour = Colour3f(0.72f, 0.56f, 1.0f);
+		settings.start_colour = Colour3f(0.92f, 0.78f, 1.0f);
+		settings.end_colour = Colour3f(0.18f, 0.62f, 1.0f);
+		settings.colour_jitter = 0.34f;
+		settings.trail_length = 0.9f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 5.2f;
 		settings.spin_deg_per_sec = 12.f;
@@ -1077,6 +1176,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.opacity_curve = Curve_EaseIn;
 		settings.opacity_jitter = 0.18f;
 		settings.colour = Colour3f(1.0f, 0.72f, 0.32f);
+		settings.start_colour = Colour3f(1.0f, 1.0f, 0.78f);
+		settings.end_colour = Colour3f(0.42f, 0.18f, 1.0f);
+		settings.colour_jitter = 0.30f;
+		settings.trail_length = 1.3f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 7.0f;
 		settings.burst_enabled = true;
@@ -1112,6 +1215,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.end_opacity = 0.08f;
 		settings.opacity_curve = Curve_EaseIn;
 		settings.colour = Colour3f(0.34f, 0.78f, 1.0f);
+		settings.start_colour = Colour3f(0.88f, 1.0f, 1.0f);
+		settings.end_colour = Colour3f(0.12f, 0.34f, 1.0f);
+		settings.colour_jitter = 0.08f;
+		settings.trail_length = 2.2f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 6.2f;
 		settings.burst_enabled = true;
@@ -1147,6 +1254,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.opacity_curve = Curve_EaseOut;
 		settings.opacity_jitter = 0.45f;
 		settings.colour = Colour3f(1.0f, 0.82f, 0.38f);
+		settings.start_colour = Colour3f(1.0f, 0.92f, 0.54f);
+		settings.end_colour = Colour3f(0.30f, 0.72f, 1.0f);
+		settings.colour_jitter = 0.26f;
+		settings.trail_length = 3.5f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 2.8f;
 		settings.wind_accel_x = 0.32f;
@@ -1206,6 +1317,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.end_opacity = 0.02f;
 		settings.opacity_curve = Curve_EaseIn;
 		settings.colour = Colour3f(0.58f, 0.32f, 1.0f);
+		settings.start_colour = Colour3f(0.90f, 0.66f, 1.0f);
+		settings.end_colour = Colour3f(0.18f, 0.50f, 1.0f);
+		settings.colour_jitter = 0.26f;
+		settings.trail_length = 1.1f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 7.0f;
 		settings.spin_deg_per_sec = 170.f;
@@ -1236,16 +1351,20 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.turbulence_strength = 0.16f;
 		settings.lifetime_s = 1.6f;
 		settings.start_width = 0.07f;
-		settings.end_width = 0.55f;
+		settings.end_width = 0.34f;
 		settings.size_curve = Curve_EaseOut;
 		settings.opacity = 0.85f;
 		settings.end_opacity = 0.0f;
 		settings.opacity_curve = Curve_EaseOut;
-		settings.colour = Colour3f(0.36f, 0.72f, 1.0f);
+		settings.colour = Colour3f(0.76f, 0.96f, 1.0f);
+		settings.start_colour = Colour3f(0.92f, 1.0f, 1.0f);
+		settings.end_colour = Colour3f(0.10f, 0.32f, 1.0f);
+		settings.colour_jitter = 0.10f;
+		settings.trail_length = 2.0f;
 		settings.render_mode = RenderMode_AdditiveGlow;
-		settings.glow_strength = 5.8f;
+		settings.glow_strength = 5.0f;
 		settings.gravity_scale = 0.f;
-		settings.drag_area = 2.0e-5f;
+		settings.drag_area = 1.0e-5f;
 		settings.collide_surfaces = false;
 	}
 	else if(preset_name == "aurora_curtain")
@@ -1300,6 +1419,10 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.opacity_curve = Curve_SmoothStep;
 		settings.opacity_jitter = 0.2f;
 		settings.colour = Colour3f(0.28f, 0.88f, 1.0f);
+		settings.start_colour = Colour3f(0.68f, 1.0f, 0.76f);
+		settings.end_colour = Colour3f(0.12f, 0.42f, 0.98f);
+		settings.colour_jitter = 0.16f;
+		settings.trail_length = 0.25f;
 		settings.render_mode = RenderMode_AdditiveGlow;
 		settings.glow_strength = 3.8f;
 		settings.vortex_strength = 1.4f;
@@ -1314,6 +1437,7 @@ ParticleEmitterSettings ParticleEmitterSettings::presetSettings(const std::strin
 		settings.preset_name = "smoke";
 	}
 
+	inheritLegacyColourIfNeeded(settings);
 	makePresetImmediatelyVisible(settings);
 	clampSettings(settings);
 	return settings;
@@ -1374,6 +1498,10 @@ ParticleEmitterSettings ParticleEmitterSettings::fromContent(const std::string& 
 		settings.opacity_curve_mid = (float)root.getChildDoubleValueWithDefaultVal(parser, "opacity_curve_mid", settings.opacity_curve_mid);
 		settings.opacity_jitter = (float)root.getChildDoubleValueWithDefaultVal(parser, "opacity_jitter", settings.opacity_jitter);
 		settings.colour = colourFromHex(root.getChildStringValueWithDefaultVal(parser, "colour", colourToHex(settings.colour)), settings.colour);
+		settings.start_colour = colourFromHex(root.getChildStringValueWithDefaultVal(parser, "start_colour", colourToHex(settings.colour)), settings.colour);
+		settings.end_colour = colourFromHex(root.getChildStringValueWithDefaultVal(parser, "end_colour", colourToHex(settings.start_colour)), settings.start_colour);
+		settings.colour_jitter = (float)root.getChildDoubleValueWithDefaultVal(parser, "colour_jitter", settings.colour_jitter);
+		settings.trail_length = (float)root.getChildDoubleValueWithDefaultVal(parser, "trail_length", settings.trail_length);
 		settings.glow_strength = (float)root.getChildDoubleValueWithDefaultVal(parser, "glow_strength", settings.glow_strength);
 		settings.rotation_deg = (float)root.getChildDoubleValueWithDefaultVal(parser, "rotation_deg", settings.rotation_deg);
 		settings.rotation_jitter_deg = (float)root.getChildDoubleValueWithDefaultVal(parser, "rotation_jitter_deg", settings.rotation_jitter_deg);
@@ -1401,6 +1529,16 @@ ParticleEmitterSettings ParticleEmitterSettings::fromContent(const std::string& 
 		settings.collision_friction = (float)root.getChildDoubleValueWithDefaultVal(parser, "collision_friction", settings.collision_friction);
 		settings.collide_surfaces = root.getChildBoolValueWithDefaultVal(parser, "collide_surfaces", settings.collide_surfaces);
 		settings.die_when_hit_surface = root.getChildBoolValueWithDefaultVal(parser, "die_when_hit_surface", settings.die_when_hit_surface);
+		settings.audio_enabled = root.getChildBoolValueWithDefaultVal(parser, "audio_enabled", settings.audio_enabled);
+		settings.audio_url = root.getChildStringValueWithDefaultVal(parser, "audio_url", settings.audio_url);
+		settings.audio_loop = root.getChildBoolValueWithDefaultVal(parser, "audio_loop", settings.audio_loop);
+		settings.audio_spatial = root.getChildBoolValueWithDefaultVal(parser, "audio_spatial", settings.audio_spatial);
+		settings.audio_volume = (float)root.getChildDoubleValueWithDefaultVal(parser, "audio_volume", settings.audio_volume);
+		settings.audio_activation_distance = (float)root.getChildDoubleValueWithDefaultVal(parser, "audio_activation_distance", settings.audio_activation_distance);
+		settings.audio_min_distance = (float)root.getChildDoubleValueWithDefaultVal(parser, "audio_min_distance", settings.audio_min_distance);
+		settings.audio_max_distance = (float)root.getChildDoubleValueWithDefaultVal(parser, "audio_max_distance", settings.audio_max_distance);
+		settings.audio_fade_in_s = (float)root.getChildDoubleValueWithDefaultVal(parser, "audio_fade_in_s", settings.audio_fade_in_s);
+		settings.audio_fade_out_s = (float)root.getChildDoubleValueWithDefaultVal(parser, "audio_fade_out_s", settings.audio_fade_out_s);
 	}
 	catch(...)
 	{
@@ -1453,6 +1591,10 @@ std::string ParticleEmitterSettings::serialiseToContent(const ParticleEmitterSet
 	s << "  \"opacity_curve_mid\": " << settings.opacity_curve_mid << ",\n";
 	s << "  \"opacity_jitter\": " << settings.opacity_jitter << ",\n";
 	s << "  \"colour\": \"" << colourToHex(settings.colour) << "\",\n";
+	s << "  \"start_colour\": \"" << colourToHex(settings.start_colour) << "\",\n";
+	s << "  \"end_colour\": \"" << colourToHex(settings.end_colour) << "\",\n";
+	s << "  \"colour_jitter\": " << settings.colour_jitter << ",\n";
+	s << "  \"trail_length\": " << settings.trail_length << ",\n";
 	s << "  \"glow_strength\": " << settings.glow_strength << ",\n";
 	s << "  \"rotation_deg\": " << settings.rotation_deg << ",\n";
 	s << "  \"rotation_jitter_deg\": " << settings.rotation_jitter_deg << ",\n";
@@ -1479,7 +1621,17 @@ std::string ParticleEmitterSettings::serialiseToContent(const ParticleEmitterSet
 	s << "  \"restitution\": " << settings.restitution << ",\n";
 	s << "  \"collision_friction\": " << settings.collision_friction << ",\n";
 	s << "  \"collide_surfaces\": " << (settings.collide_surfaces ? "true" : "false") << ",\n";
-	s << "  \"die_when_hit_surface\": " << (settings.die_when_hit_surface ? "true" : "false") << "\n";
+	s << "  \"die_when_hit_surface\": " << (settings.die_when_hit_surface ? "true" : "false") << ",\n";
+	s << "  \"audio_enabled\": " << (settings.audio_enabled ? "true" : "false") << ",\n";
+	s << "  \"audio_url\": \"" << jsonEscape(settings.audio_url) << "\",\n";
+	s << "  \"audio_loop\": " << (settings.audio_loop ? "true" : "false") << ",\n";
+	s << "  \"audio_spatial\": " << (settings.audio_spatial ? "true" : "false") << ",\n";
+	s << "  \"audio_volume\": " << settings.audio_volume << ",\n";
+	s << "  \"audio_activation_distance\": " << settings.audio_activation_distance << ",\n";
+	s << "  \"audio_min_distance\": " << settings.audio_min_distance << ",\n";
+	s << "  \"audio_max_distance\": " << settings.audio_max_distance << ",\n";
+	s << "  \"audio_fade_in_s\": " << settings.audio_fade_in_s << ",\n";
+	s << "  \"audio_fade_out_s\": " << settings.audio_fade_out_s << "\n";
 	s << "}\n";
 	return s.str();
 }

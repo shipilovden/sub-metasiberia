@@ -1,5 +1,7 @@
 # Функция выбора шрифтов - ГОТОВО К ИСПОЛЬЗОВАНИЮ
 
+> **Статус проверки 2026-07-10:** это накопительный журнал реализации, а не доказательство release readiness каждого перечисленного path. Отсутствующие `fonts.rar`/`qt6_build.ps1` и противоречивые ранние TODO считать историческими; current implementation сверять по коду и target build.
+
 ## Обновление 2026-03-19
 
 - 2026-03-25 runtime fix: `GUIClient::createGLAndPhysicsObsForText()` now resolves `WorldObject::text_font` to an actual font file in `data/resources/fonts` and rebuilds 3D text with the selected font immediately, instead of always rendering with the default `gl_ui->getFonts()` set.
@@ -125,10 +127,9 @@ C:\programming\substrata\
 
 ## ⚙️ Шаги для сборки:
 
-### Windows (Qt5/Qt6):
+### Windows (канонический Qt5 wrapper):
 ```powershell
-# Через qt_build.ps1 или qt6_build.ps1
-.\qt_build.ps1  # или .\qt6_build.ps1
+powershell -ExecutionPolicy Bypass -File C:\programming\qt_build.ps1 -Configs RelWithDebInfo -XR Off
 ```
 
 ### CMake:

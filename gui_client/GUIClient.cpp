@@ -39,6 +39,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "BrowserVidPlayer.h"
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
+#include "ScientificObjectSettings.h"
 #include "MapWorldLayer.h"
 #include "MapWorldUtils.h"
 #include "Scripting.h"
@@ -122,8 +123,11 @@ Copyright Glare Technologies Limited 2024 -
 #endif
 #include <clocale>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <set>
+#include <sstream>
+#include <unordered_set>
 #include <exception>
 #if defined(EMSCRIPTEN)
 #include <emscripten/emscripten.h>
@@ -2335,6 +2339,7 @@ void GUIClient::shutdown()
 	particle_emitter_shape_vis_shape = -1;
 	particle_emitter_runtime_paused.clear();
 	selected_ob_vis_gl_obs.clear();
+	scientific_molecule_label_gl_obs.clear();
 	for(int i=0; i<NUM_AXIS_ARROWS; ++i)
 		axis_arrow_objects[i] = NULL;
 	for(int i=0; i<3; ++i)
@@ -5818,6 +5823,24 @@ static bool particleSpritePathLooksLikeResourceURL(const std::string& path)
 }
 
 
+static void configureParticleAudioSource(const ParticleEmitterSettings& emitter_settings, const Vec4f& emitter_pos, glare::AudioSource& source)
+{
+	source.pos = emitter_pos;
+	source.volume = emitter_settings.audio_volume;
+	source.spatial_type = emitter_settings.audio_spatial ? glare::AudioSource::SourceSpatialType_Spatial : glare::AudioSource::SourceSpatialType_NonSpatial;
+	source.use_custom_distance_model = emitter_settings.audio_spatial;
+	source.use_linear_distance_rolloff = false;
+	source.min_distance_m = myMax(0.1f, emitter_settings.audio_min_distance);
+	source.max_distance_m = myMax(source.min_distance_m + 0.01f, emitter_settings.audio_max_distance);
+	source.max_distance_for_culling = source.max_distance_m;
+	source.rot = Quatf::identity();
+	source.use_custom_directionality = false;
+	source.directivity_alpha = 0.f;
+	source.directivity_order = 1.f;
+	source.spread_degrees = 360.f;
+}
+
+
 void GUIClient::clearSelectedParticleEmitterGizmo()
 {
 	checkRemoveObAndSetRefToNull(opengl_engine, particle_emitter_shape_vis_gl_ob);
@@ -6577,6 +6600,9 @@ void GUIClient::doMoveAndRotateObject(WorldObjectRef ob, const Vec3d& new_ob_pos
 			opengl_engine->setLightPos(light, new_ob_pos.toVec4fPoint());
 		}
 	}
+
+	if(this->selected_ob.nonNull() && this->selected_ob->uid == ob->uid && ScientificObjectSettings::isScientificObjectContent(ob->content))
+		createPathControlledPathVisObjects(*ob);
 }
 
 
@@ -8758,10 +8784,22 @@ void GUIClient::updateParticleEmitters(const double dt)
 		else
 			++it;
 	}
+	for(auto it = particle_emitter_audio_states.begin(); it != particle_emitter_audio_states.end();)
+	{
+		if(live_emitter_uids.find(it->first) == live_emitter_uids.end())
+		{
+			if(it->second.source.nonNull())
+				audio_engine.removeSource(it->second.source);
+			it = particle_emitter_audio_states.erase(it);
+		}
+		else
+			++it;
+	}
 
 	const Vec4f world_up(0, 0, 1, 0);
 	const Vec4f world_x(1, 0, 0, 0);
 	const Vec4f camera_pos_ws = cam_controller.getPosition().toVec4fPoint();
+	const double cur_global_time = world_state.nonNull() ? this->world_state->getCurrentGlobalTime() : 0.0;
 	const float two_pi = Maths::get2Pi<float>();
 	const auto random_unit_vec = [this, two_pi]()
 	{
@@ -8785,9 +8823,160 @@ void GUIClient::updateParticleEmitters(const double dt)
 			}
 		}
 
+		const bool runtime_paused = particle_emitter_runtime_paused.find(emitter.uid) != particle_emitter_runtime_paused.end();
+		const Vec4f emitter_pos_ws = emitter.pos.toVec4fPoint();
+
+		auto audio_state_it = particle_emitter_audio_states.find(emitter.uid);
+		if(audio_state_it != particle_emitter_audio_states.end() && audio_state_it->second.loaded_audio_url != emitter_settings.audio_url)
+		{
+			if(audio_state_it->second.source.nonNull())
+				audio_engine.removeSource(audio_state_it->second.source);
+			particle_emitter_audio_states.erase(audio_state_it);
+			audio_state_it = particle_emitter_audio_states.end();
+		}
+
+		const float audio_activation_distance = myMax(0.f, emitter_settings.audio_activation_distance);
+		const float effective_audio_activation_distance = (audio_activation_distance > 0.f) ? audio_activation_distance : emitter_settings.audio_max_distance;
+		const bool audio_in_activation_range = (emitter_pos_ws - camera_pos_ws).length2() <= Maths::square(effective_audio_activation_distance);
+		const bool audio_should_be_active =
+			emitter_settings.enabled &&
+			!runtime_paused &&
+			emitter_settings.audio_enabled &&
+			!emitter_settings.audio_url.empty() &&
+			audio_engine.isInitialised() &&
+			audio_in_activation_range;
+
+		if(!audio_should_be_active)
+		{
+			if(audio_state_it != particle_emitter_audio_states.end())
+			{
+				if(!emitter_settings.enabled || runtime_paused || !emitter_settings.audio_enabled || emitter_settings.audio_url.empty() || !audio_engine.isInitialised())
+				{
+					if(audio_state_it->second.source.nonNull())
+						audio_engine.removeSource(audio_state_it->second.source);
+					particle_emitter_audio_states.erase(audio_state_it);
+				}
+				else if(audio_state_it->second.source.nonNull() && audio_state_it->second.in_activation_range)
+				{
+					if(emitter_settings.audio_fade_out_s <= 0.f)
+						audio_state_it->second.source->setMuteVolumeFactorImmediately(0.f);
+					else
+						audio_state_it->second.source->startMuting(cur_global_time, emitter_settings.audio_fade_out_s);
+					audio_engine.sourceVolumeUpdated(*audio_state_it->second.source);
+					audio_state_it->second.in_activation_range = false;
+				}
+			}
+		}
+		else
+		{
+			ParticleEmitterAudioState& audio_state = particle_emitter_audio_states[emitter.uid];
+			bool created_or_recreated_source = false;
+			if(audio_state.source.isNull() || audio_state.loaded_audio_url != emitter_settings.audio_url)
+			{
+				if(audio_state.source.nonNull())
+					audio_engine.removeSource(audio_state.source);
+				audio_state.source = NULL;
+				audio_state.loaded_audio_url = emitter_settings.audio_url;
+				audio_state.in_activation_range = false;
+
+				try
+				{
+					std::string audio_file_path = emitter_settings.audio_url;
+					if(!FileUtils::fileExists(audio_file_path) && resource_manager.nonNull())
+					{
+						const URLString audio_url = toURLString(emitter_settings.audio_url);
+						if(!resource_manager->isFileForURLPresent(audio_url))
+						{
+							DownloadingResourceInfo info;
+							info.used_by_other = true;
+							info.build_physics_ob = false;
+							info.pos = emitter.pos;
+							info.size_factor = 1.f;
+							startDownloadingResource(audio_url, emitter_pos_ws, myMax(effective_audio_activation_distance, 1.f), info);
+						}
+						else
+						{
+							audio_file_path = resource_manager->pathForURL(audio_url);
+						}
+					}
+
+					if(FileUtils::fileExists(audio_file_path) && FileTypes::hasAudioFileExtension(audio_file_path))
+					{
+						if(hasExtension(audio_file_path, "mp3"))
+						{
+							glare::AudioEngine::AddSourceFromStreamingSoundFileParams params;
+							params.sound_file_path = audio_file_path;
+							params.source_volume = emitter_settings.audio_volume;
+							params.global_time = cur_global_time;
+							params.looping = emitter_settings.audio_loop;
+							params.paused = false;
+							audio_state.source = audio_engine.addSourceFromStreamingSoundFile(params, emitter_pos_ws);
+						}
+						else
+						{
+							glare::SoundFileRef sound_file = audio_engine.getOrLoadSoundFile(audio_file_path);
+							if(sound_file.nonNull() && sound_file->buf->buffer.size() > 0)
+							{
+								audio_state.source = new glare::AudioSource();
+								audio_state.source->type = glare::AudioSource::SourceType_NonStreaming;
+								audio_state.source->looping = emitter_settings.audio_loop;
+								audio_state.source->paused = false;
+								audio_state.source->remove_on_finish = !emitter_settings.audio_loop;
+								audio_state.source->shared_buffer = sound_file->buf;
+								audio_state.source->sampling_rate = sound_file->sample_rate;
+								audio_state.source->volume = emitter_settings.audio_volume;
+								if(emitter_settings.audio_loop)
+								{
+									const double audio_len_s = sound_file->buf->buffer.size() / (double)sound_file->sample_rate;
+									const double source_time_offset = (audio_len_s > 0.0) ? Maths::doubleMod(cur_global_time, audio_len_s) : 0.0;
+									audio_state.source->cur_read_i = Maths::intMod((int)(source_time_offset * sound_file->sample_rate), (int)sound_file->buf->buffer.size());
+								}
+								audio_engine.addSource(audio_state.source);
+							}
+						}
+
+						if(audio_state.source.nonNull())
+						{
+							audio_state.source->debugname = emitter_settings.audio_url;
+							if(emitter_settings.audio_fade_in_s > 0.f)
+							{
+								audio_state.source->startMuting(cur_global_time, 0.0);
+								audio_state.source->updateCurrentMuteVolumeFactor(cur_global_time + 0.001);
+								audio_state.source->startUnmuting(cur_global_time, emitter_settings.audio_fade_in_s);
+							}
+							else
+								audio_state.source->setMuteVolumeFactorImmediately(1.f);
+							created_or_recreated_source = true;
+						}
+					}
+				}
+				catch(glare::Exception& e)
+				{
+					print("Error while loading particle audio '" + emitter_settings.audio_url + "': " + e.what());
+				}
+			}
+
+			if(audio_state.source.nonNull())
+			{
+				configureParticleAudioSource(emitter_settings, emitter_pos_ws, *audio_state.source);
+				audio_engine.sourcePositionUpdated(*audio_state.source);
+				audio_engine.sourceSpatialSettingsUpdated(*audio_state.source);
+				audio_engine.sourceVolumeUpdated(*audio_state.source);
+
+				if(!audio_state.in_activation_range && !created_or_recreated_source)
+				{
+					if(emitter_settings.audio_fade_in_s <= 0.f)
+						audio_state.source->setMuteVolumeFactorImmediately(1.f);
+					else
+						audio_state.source->startUnmuting(cur_global_time, emitter_settings.audio_fade_in_s);
+					audio_engine.sourceVolumeUpdated(*audio_state.source);
+				}
+				audio_state.in_activation_range = true;
+			}
+		}
+
 		if(emitter_settings.opacity <= 0.f)
 			continue;
-		const bool runtime_paused = particle_emitter_runtime_paused.find(emitter.uid) != particle_emitter_runtime_paused.end();
 		const bool automatic_emission_enabled = emitter_settings.enabled && !runtime_paused;
 		if(!automatic_emission_enabled && manual_burst_count <= 0)
 			continue;
@@ -8933,11 +9122,18 @@ void GUIClient::updateParticleEmitters(const double dt)
 			const float size_mult = myMax(0.01f, 1.f + emitter_settings.size_jitter * (-1.f + 2.f * rng.unitRandom()));
 			const float opacity_mult = myMax(0.f, 1.f + emitter_settings.opacity_jitter * (-1.f + 2.f * rng.unitRandom()));
 			const float particle_opacity = myClamp(emitter_settings.opacity * opacity_mult, 0.f, 1.f);
+			const auto jitter_colour = [this, &emitter_settings](const Colour3f& c)
+			{
+				const float mult = myMax(0.f, 1.f + emitter_settings.colour_jitter * (-1.f + 2.f * rng.unitRandom()));
+				return Colour3f(myClamp(c.r * mult, 0.f, 1.f), myClamp(c.g * mult, 0.f, 1.f), myClamp(c.b * mult, 0.f, 1.f));
+			};
 
 			Particle particle;
 			particle.pos = emitter.pos.toVec4fPoint() + spawn_offset;
 			particle.vel = dir * (emitter_settings.speed * speed_mult);
-			particle.colour = emitter_settings.colour;
+			particle.start_colour = jitter_colour(emitter_settings.start_colour);
+			particle.end_colour = jitter_colour(emitter_settings.end_colour);
+			particle.colour = particle.start_colour;
 			particle.area = myMax(emitter_settings.drag_area, 0.f);
 			particle.mass = myMax(emitter_settings.mass, 1.0e-9f);
 			particle.restitution = emitter_settings.restitution;
@@ -8958,6 +9154,7 @@ void GUIClient::updateParticleEmitters(const double dt)
 			particle.size_curve_mid = emitter_settings.size_curve_mid;
 			particle.opacity_curve = particleCurveFromEmitterCurve(emitter_settings.opacity_curve);
 			particle.opacity_curve_mid = emitter_settings.opacity_curve_mid;
+			particle.trail_length = emitter_settings.trail_length;
 			particle.theta = degreeToRad(emitter_settings.rotation_deg + emitter_settings.rotation_jitter_deg * (-1.f + 2.f * rng.unitRandom()));
 			particle.theta_speed = degreeToRad(emitter_settings.spin_deg_per_sec + emitter_settings.spin_jitter_deg_per_sec * (-1.f + 2.f * rng.unitRandom()));
 			particle.gravity_scale = emitter_settings.gravity_scale;
@@ -8977,6 +9174,23 @@ void GUIClient::updateParticleEmitters(const double dt)
 			particle.die_when_hit_surface = emitter_settings.die_when_hit_surface;
 			particle.particle_type = particleTypeForEmitterKind(emitter_settings.kind);
 
+			if(emitter_settings.trail_length > 0.f)
+			{
+				const float trail_t = rng.unitRandom();
+				particle.pos -= dir * (emitter_settings.trail_length * trail_t);
+				const float trail_age_t = myClamp(trail_t * 0.70f, 0.f, 0.86f);
+				particle.age_s = myMax(particle.age_s, trail_age_t * lifetime_s);
+				const float size_curve_v = evaluateParticleEmitterCurve(emitter_settings.size_curve, trail_age_t, emitter_settings.size_curve_mid);
+				const float opacity_t = evaluateParticleEmitterCurve(emitter_settings.opacity_curve, trail_age_t, emitter_settings.opacity_curve_mid);
+				particle.width = Maths::lerp(particle.start_width, particle.end_width, size_curve_v);
+				particle.cur_opacity = Maths::lerp(particle.start_opacity, particle.end_opacity, opacity_t);
+				particle.colour = Colour3f(
+					Maths::lerp(particle.start_colour.r, particle.end_colour.r, trail_age_t),
+					Maths::lerp(particle.start_colour.g, particle.end_colour.g, trail_age_t),
+					Maths::lerp(particle.start_colour.b, particle.end_colour.b, trail_age_t)
+				);
+			}
+
 			if(z < manual_particles_to_spawn)
 			{
 				const float age_t = 0.04f + 0.86f * rng.unitRandom();
@@ -8990,6 +9204,11 @@ void GUIClient::updateParticleEmitters(const double dt)
 				const float opacity_t = evaluateParticleEmitterCurve(emitter_settings.opacity_curve, age_t, emitter_settings.opacity_curve_mid);
 				particle.width = Maths::lerp(particle.start_width, particle.end_width, size_curve_v);
 				particle.cur_opacity = Maths::lerp(particle.start_opacity, particle.end_opacity, opacity_t);
+				particle.colour = Colour3f(
+					Maths::lerp(particle.start_colour.r, particle.end_colour.r, age_t),
+					Maths::lerp(particle.start_colour.g, particle.end_colour.g, age_t),
+					Maths::lerp(particle.start_colour.b, particle.end_colour.b, age_t)
+				);
 			}
 
 			this->particle_manager->addParticle(particle);
@@ -16869,6 +17088,9 @@ void GUIClient::objectTransformEdited()
 			this->audio_engine.sourceSpatialSettingsUpdated(*this->selected_ob->audio_source);
 		}
 
+		if(ScientificObjectSettings::isScientificObjectContent(this->selected_ob->content))
+			createPathControlledPathVisObjects(*this->selected_ob);
+
 		if(this->terrain_system.nonNull() && ::hasPrefix(selected_ob->content, "biome:"))
 			this->terrain_system->invalidateVegetationMap(selected_ob->getAABBWS());
 	}
@@ -16900,10 +17122,21 @@ void GUIClient::objectEdited()
 		if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content))
 		{
 			ParticleEmitterSettings emitter_settings = ParticleEmitterSettings::fromContent(this->selected_ob->content);
+			bool particle_content_changed = false;
 			const std::string prepared_sprite_path = prepareAndUploadParticleSprite(emitter_settings.sprite_path);
 			if(prepared_sprite_path != emitter_settings.sprite_path)
 			{
 				emitter_settings.sprite_path = prepared_sprite_path;
+				particle_content_changed = true;
+			}
+			const std::string prepared_audio_url = prepareAndUploadParticleAudio(emitter_settings.audio_url);
+			if(prepared_audio_url != emitter_settings.audio_url)
+			{
+				emitter_settings.audio_url = prepared_audio_url;
+				particle_content_changed = true;
+			}
+			if(particle_content_changed)
+			{
 				this->selected_ob->content = ParticleEmitterSettings::serialiseToContent(emitter_settings);
 				BitUtils::setBit(this->selected_ob->changed_flags, WorldObject::CONTENT_CHANGED);
 				ui_interface->startObEditorTimerIfNotActive();
@@ -17616,6 +17849,8 @@ void GUIClient::objectEdited()
 			this->selected_ob->audio_source->volume = this->selected_ob->audio_volume;
 			this->audio_engine.sourceVolumeUpdated(*this->selected_ob->audio_source);
 		}
+
+		createPathControlledPathVisObjects(*this->selected_ob);
 
 		if(this->terrain_system.nonNull() && ::hasPrefix(selected_ob->content, "biome:"))
 			this->terrain_system->invalidateVegetationMap(selected_ob->getAABBWS());
@@ -20315,6 +20550,9 @@ void GUIClient::rotateObject(WorldObjectRef ob, const Vec4f& axis, float angle)
 		if(this->terrain_system.nonNull() && ::hasPrefix(selected_ob->content, "biome:"))
 			this->terrain_system->invalidateVegetationMap(selected_ob->getAABBWS());
 
+		if(this->selected_ob.nonNull() && this->selected_ob->uid == ob->uid && ScientificObjectSettings::isScientificObjectContent(ob->content))
+			createPathControlledPathVisObjects(*ob);
+
 		// Trigger sending update-lightmap update flag message later.
 		//ob->flags |= WorldObject::LIGHTMAP_NEEDS_COMPUTING_FLAG;
 		//objs_with_lightmap_rebuild_needed.insert(ob);
@@ -20361,6 +20599,258 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 	for(size_t i=0; i<selected_ob_vis_gl_obs.size(); ++i)
 		opengl_engine->removeObject(this->selected_ob_vis_gl_obs[i]);
 	selected_ob_vis_gl_obs.clear();
+	for(size_t i=0; i<scientific_molecule_label_gl_obs.size(); ++i)
+		opengl_engine->removeObject(this->scientific_molecule_label_gl_obs[i]);
+	scientific_molecule_label_gl_obs.clear();
+
+	struct ScientificOverlayAtom
+	{
+		int source_id;
+		std::string element;
+		Vec3f pos;
+		int formal_charge;
+		std::string custom_attribute;
+	};
+
+	struct ScientificOverlayBond
+	{
+		int atom_a;
+		int atom_b;
+		int order;
+	};
+
+	auto parse_scientific_atoms = [](const std::string& atom_table)
+	{
+		std::vector<ScientificOverlayAtom> atoms;
+		std::stringstream lines(atom_table);
+		std::string line;
+		while(std::getline(lines, line))
+		{
+			std::stringstream ss(line);
+			ScientificOverlayAtom atom;
+			atom.formal_charge = 0;
+			if(!(ss >> atom.source_id >> atom.element >> atom.pos.x >> atom.pos.y >> atom.pos.z))
+				continue;
+			ss >> atom.formal_charge;
+			std::getline(ss, atom.custom_attribute);
+			while(!atom.custom_attribute.empty() && std::isspace((unsigned char)atom.custom_attribute.front()))
+				atom.custom_attribute.erase(atom.custom_attribute.begin());
+			atoms.push_back(atom);
+		}
+		return atoms;
+	};
+
+	auto parse_selected_atom_ids = [](const std::string& selected_atoms)
+	{
+		std::unordered_set<int> ids;
+		std::stringstream ss(selected_atoms);
+		std::string item;
+		while(std::getline(ss, item, ','))
+		{
+			std::stringstream item_stream(item);
+			int id = 0;
+			if(item_stream >> id)
+				ids.insert(id);
+		}
+		return ids;
+	};
+
+	auto parse_scientific_bonds = [](const std::string& bond_table, const std::vector<ScientificOverlayAtom>& atoms)
+	{
+		auto atom_index_for_source_id = [&atoms](int source_id)
+		{
+			for(size_t i=0; i<atoms.size(); ++i)
+				if(atoms[i].source_id == source_id)
+					return (int)i;
+			return -1;
+		};
+
+		std::vector<ScientificOverlayBond> bonds;
+		std::stringstream lines(bond_table);
+		std::string line;
+		while(std::getline(lines, line))
+		{
+			for(size_t i=0; i<line.size(); ++i)
+				if(line[i] == '-')
+					line[i] = ' ';
+			std::stringstream ss(line);
+			int source_a = 0;
+			int source_b = 0;
+			if(!(ss >> source_a >> source_b))
+				continue;
+			std::string order_token;
+			ss >> order_token;
+			ScientificOverlayBond bond;
+			bond.atom_a = atom_index_for_source_id(source_a);
+			bond.atom_b = atom_index_for_source_id(source_b);
+			bond.order = (order_token == "double" || order_token == "2") ? 2 : ((order_token == "triple" || order_token == "3") ? 3 : 1);
+			if(bond.atom_a >= 0 && bond.atom_b >= 0 && bond.atom_a != bond.atom_b)
+				bonds.push_back(bond);
+		}
+		return bonds;
+	};
+
+	auto scientific_atom_label = [](const ScientificObjectSettings& settings, const ScientificOverlayAtom& atom)
+	{
+		if(settings.label_mode == "atom_number")
+			return toString(atom.source_id);
+		if(settings.label_mode == "element_number")
+			return atom.element + toString(atom.source_id);
+		if(settings.label_mode == "formal_charge")
+			return toString(atom.formal_charge);
+		if(settings.label_mode == "custom_attribute")
+			return atom.custom_attribute.empty() ? std::string("Нет данных") : atom.custom_attribute;
+		return atom.element;
+	};
+
+	if(ScientificObjectSettings::isScientificObjectContent(ob.content))
+	{
+		std::string parse_error;
+		const ScientificObjectSettings scientific_settings = ScientificObjectSettings::fromContent(ob.content, &parse_error);
+		if(parse_error.empty() && scientific_settings.scientific_type == "molecule")
+		{
+			std::vector<ScientificOverlayAtom> atoms = parse_scientific_atoms(scientific_settings.atom_table);
+			if(!scientific_settings.show_hydrogen)
+				atoms.erase(std::remove_if(atoms.begin(), atoms.end(), [](const ScientificOverlayAtom& atom) { return atom.element == "H"; }), atoms.end());
+			if(!atoms.empty())
+			{
+				const std::vector<ScientificOverlayBond> bonds = parse_scientific_bonds(scientific_settings.bond_table, atoms);
+				Vec3f center(0.f);
+				for(size_t i=0; i<atoms.size(); ++i)
+					center += atoms[i].pos;
+				center *= 1.f / (float)atoms.size();
+
+				const Matrix4f ob_to_world = obToWorldMatrix(ob);
+				const float coord_scale = myMax(0.01f, scientific_settings.object_scale) * 0.75f;
+				const float atom_highlight_radius = myClamp((scientific_settings.visualization_mode == "space_fill" ? 0.48f : 0.30f) * scientific_settings.atom_radius, 0.05f, 3.0f) * myMax(0.1f, ob.scale.x);
+				const std::unordered_set<int> selected_ids = parse_selected_atom_ids(scientific_settings.selected_atom_indices);
+
+				auto molecule_atom_os_for_world_overlay = [&center, coord_scale](const Vec3f& sdf_pos)
+				{
+					// Scientific molecule meshes are first written as OBJ and then loaded through
+					// ModelLoading::makeGLObjectForModelFile(), which converts OBJ y-up coordinates
+					// to the engine z-up space as (x, -z, y).  Keep every runtime overlay on the exact
+					// same atom->object-space mapping as the visible mesh: selection, bonds, labels,
+					// measurements and molecule title must never use separate coordinate guesses.
+					const Vec3f obj_pos = (sdf_pos - center) * coord_scale;
+					return Vec3f(obj_pos.x, -obj_pos.z, obj_pos.y);
+				};
+				auto atom_world_pos = [&ob_to_world, &molecule_atom_os_for_world_overlay](const ScientificOverlayAtom& atom)
+				{
+					const Vec3f atom_pos_os = molecule_atom_os_for_world_overlay(atom.pos);
+					return ob_to_world * Vec4f(atom_pos_os.x, atom_pos_os.y, atom_pos_os.z, 1.f);
+				};
+
+				if(!selected_ids.empty())
+				{
+					for(size_t i=0; i<atoms.size(); ++i)
+					{
+						if(selected_ids.find(atoms[i].source_id) == selected_ids.end())
+							continue;
+						const Vec4f atom_pos_ws = atom_world_pos(atoms[i]);
+						GLObjectRef highlight_ob = opengl_engine->makeSphereObject(1.f, Colour4f(1.0f, 0.84f, 0.04f, 0.58f));
+						highlight_ob->ob_to_world_matrix = Matrix4f::translationMatrix(atom_pos_ws) * Matrix4f::uniformScaleMatrix(atom_highlight_radius);
+						opengl_engine->addObject(highlight_ob);
+						opengl_engine->selectObject(highlight_ob);
+						selected_ob_vis_gl_obs.push_back(highlight_ob);
+					}
+				}
+
+				if(scientific_settings.selected_bond_index >= 0 && scientific_settings.selected_bond_index < (int)bonds.size())
+				{
+					const ScientificOverlayBond& bond = bonds[(size_t)scientific_settings.selected_bond_index];
+					const Vec4f a_ws = atom_world_pos(atoms[(size_t)bond.atom_a]);
+					const Vec4f b_ws = atom_world_pos(atoms[(size_t)bond.atom_b]);
+					const float bond_len = a_ws.getDist(b_ws);
+					if(bond_len > 1.0e-5f)
+					{
+						GLObjectRef bond_highlight_ob = opengl_engine->makeCylinderObject(1.f, Colour4f(1.0f, 0.84f, 0.04f, 0.72f));
+						bond_highlight_ob->ob_to_world_matrix = Matrix4f::translationMatrix(a_ws) *
+							Matrix4f::constructFromVectorStatic(normalise(b_ws - a_ws)) *
+							Matrix4f::scaleMatrix(myMax(0.035f, atom_highlight_radius * 0.16f), myMax(0.035f, atom_highlight_radius * 0.16f), bond_len);
+						opengl_engine->addObject(bond_highlight_ob);
+						opengl_engine->selectObject(bond_highlight_ob);
+						selected_ob_vis_gl_obs.push_back(bond_highlight_ob);
+					}
+				}
+
+				if((scientific_settings.show_labels && scientific_settings.label_max_count > 0) || scientific_settings.show_molecule_title)
+				{
+					const int font_size_px = 42;
+					const float label_scale = myClamp(scientific_settings.label_scale, 0.35f, 2.25f) * 0.16f * myMax(0.15f, ob.scale.x);
+					const float title_scale = myClamp(scientific_settings.molecule_title_scale, 0.05f, 20.f) * 0.16f * myMax(0.15f, ob.scale.x);
+					const Vec4f camera_right = cam_controller.getRightVec().toVec4fVector();
+					const Vec4f camera_up(0.f, 0.f, 1.f, 0.f);
+					const Vec4f camera_forward = cam_controller.getForwardsVec().toVec4fVector();
+					auto add_world_text_label = [&](const std::string& text, const Vec4f& pos_ws, float use_label_scale)
+					{
+						const std::string use_text = UTF8Utils::sanitiseUTF8String(text);
+						if(use_text.empty())
+							return;
+						std::vector<GLUIText::CharPositionInfo> char_positions_font_coords;
+						Rect2f rect_os;
+						OpenGLTextureRef atlas_texture;
+						Reference<OpenGLMeshRenderData> meshdata = GLUIText::makeMeshDataForText(opengl_engine, gl_ui->font_char_text_cache.ptr(), gl_ui->getFonts(), gl_ui->getEmojiFonts(), use_text,
+							font_size_px, 1.f / font_size_px, true, this->stack_allocator, rect_os, atlas_texture, char_positions_font_coords);
+
+						Matrix4f label_to_world = Matrix4f::identity();
+						label_to_world.setColumn(0, camera_right * use_label_scale);
+						label_to_world.setColumn(1, camera_up * use_label_scale);
+						label_to_world.setColumn(2, camera_forward * -use_label_scale);
+						const Vec2f label_center_os = (rect_os.getMin() + rect_os.getMax()) * 0.5f;
+						label_to_world.setColumn(3, pos_ws - camera_right * (label_center_os.x * use_label_scale) - camera_up * (label_center_os.y * use_label_scale));
+
+						GLObjectRef text_ob = opengl_engine->allocateObject();
+						text_ob->ob_to_world_matrix = label_to_world;
+						text_ob->mesh_data = meshdata;
+						text_ob->materials.resize(1);
+						text_ob->materials[0].alpha_blend = true;
+						text_ob->materials[0].sdf_text = true;
+						text_ob->materials[0].transmission_texture = atlas_texture;
+						text_ob->materials[0].albedo_linear_rgb = toLinearSRGB(scientific_settings.label_colour);
+						text_ob->materials[0].fresnel_scale = 0.f;
+						opengl_engine->addObject(text_ob);
+						scientific_molecule_label_gl_obs.push_back(text_ob);
+					};
+
+					if(scientific_settings.show_labels && scientific_settings.label_max_count > 0)
+					{
+						const int label_count = myMin((int)atoms.size(), scientific_settings.label_max_count);
+						for(int i=0; i<label_count; ++i)
+						{
+							const Vec4f atom_pos_ws = atom_world_pos(atoms[(size_t)i]);
+							add_world_text_label(scientific_atom_label(scientific_settings, atoms[(size_t)i]), atom_pos_ws + camera_up * (atom_highlight_radius * 1.05f + label_scale * 0.75f), label_scale);
+						}
+					}
+
+					if(scientific_settings.show_molecule_title)
+					{
+						Vec4f min_ws(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), 1.f);
+						Vec4f max_ws(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), 1.f);
+						float max_z_ws = -std::numeric_limits<float>::max();
+						for(size_t i=0; i<atoms.size(); ++i)
+						{
+							const Vec4f pos_ws = atom_world_pos(atoms[i]);
+							min_ws[0] = myMin(min_ws[0], pos_ws[0]);
+							min_ws[1] = myMin(min_ws[1], pos_ws[1]);
+							min_ws[2] = myMin(min_ws[2], pos_ws[2]);
+							max_ws[0] = myMax(max_ws[0], pos_ws[0]);
+							max_ws[1] = myMax(max_ws[1], pos_ws[1]);
+							max_ws[2] = myMax(max_ws[2], pos_ws[2]);
+							max_z_ws = myMax(max_z_ws, pos_ws[2]);
+						}
+						Vec4f title_anchor_ws = (min_ws + max_ws) * 0.5f;
+						title_anchor_ws[3] = 1.f;
+						title_anchor_ws[2] = max_z_ws;
+						std::string title = scientific_settings.molecule_title.empty() ? scientific_settings.name : scientific_settings.molecule_title;
+						if(title.empty())
+							title = "Molecule";
+						add_world_text_label(title, title_anchor_ws + camera_up * (atom_highlight_radius * 1.75f + title_scale * 0.90f), title_scale);
+					}
+				}
+			}
+		}
+	}
 
 	{
 		ObjectPathController* path_controller = getPathControllerForOb(ob);
@@ -22300,6 +22790,68 @@ std::string GUIClient::prepareAndUploadParticleSprite(const std::string& sprite_
 	const std::string filename = FileUtils::getFilename(local_abs_path);
 	const std::string extension = ::getExtension(filename).empty() ? "png" : ::getExtension(filename);
 	const URLString url = ResourceManager::URLForNameAndExtensionAndHash("particle_" + removeDotAndExtension(filename), extension, hash);
+	resource_manager->copyLocalFileToResourceDir(local_abs_path, url);
+
+	if(this->connection_state != ServerConnectionState_NotConnected)
+	{
+		const std::string resource_path = resource_manager->pathForURL(url);
+		const std::string username = ui_interface->getUsernameForDomain(server_hostname);
+		const std::string password = ui_interface->getDecryptedPasswordForDomain(server_hostname);
+
+		this->num_resources_uploading++;
+#if EMSCRIPTEN
+		const size_t max_num_upload_threads = 1;
+#else
+		const size_t max_num_upload_threads = 4;
+#endif
+		if(resource_upload_thread_manager.getNumThreads() == 0)
+		{
+			for(size_t q=0; q<max_num_upload_threads; ++q)
+				resource_upload_thread_manager.addThread(new UploadResourceThread(&this->msg_queue, &upload_queue, server_hostname, server_port, username, password, this->client_tls_config,
+					&this->num_resources_uploading));
+		}
+
+		upload_queue.enqueue(new ResourceToUpload(resource_path, url));
+	}
+
+	return toStdString(url);
+}
+
+
+std::string GUIClient::prepareAndUploadParticleAudio(const std::string& audio_path)
+{
+	std::string normalised_path = audio_path;
+	std::replace(normalised_path.begin(), normalised_path.end(), '\\', '/');
+	normalised_path = stripHeadAndTailWhitespace(normalised_path);
+
+	if(normalised_path.empty() || !resource_manager)
+		return audio_path;
+
+	std::string local_abs_path;
+	if(FileUtils::fileExists(normalised_path))
+		local_abs_path = normalised_path;
+	else if(!normalised_path.empty() && normalised_path[0] == '/')
+	{
+		const std::string packaged_path = base_dir_path + "/data" + normalised_path;
+		if(FileUtils::fileExists(packaged_path))
+			local_abs_path = packaged_path;
+	}
+	else if(hasPrefix(normalised_path, "resources/") || hasPrefix(normalised_path, "gl_data/"))
+	{
+		const std::string packaged_path = base_dir_path + "/data/" + normalised_path;
+		if(FileUtils::fileExists(packaged_path))
+			local_abs_path = packaged_path;
+	}
+
+	if(local_abs_path.empty())
+		return normalised_path;
+	if(!FileTypes::hasAudioFileExtension(local_abs_path))
+		return normalised_path;
+
+	const uint64 hash = FileChecksum::fileChecksum(local_abs_path);
+	const std::string filename = FileUtils::getFilename(local_abs_path);
+	const std::string extension = ::getExtension(filename).empty() ? "mp3" : ::getExtension(filename);
+	const URLString url = ResourceManager::URLForNameAndExtensionAndHash("particle_audio_" + removeDotAndExtension(filename), extension, hash);
 	resource_manager->copyLocalFileToResourceDir(local_abs_path, url);
 
 	if(this->connection_state != ServerConnectionState_NotConnected)

@@ -101,6 +101,7 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client ShaderEditorDialog)
 	addMocFileRule(gui_client AboutDialog)
 	addMocFileRule(gui_client BotEditorWidget)
+	addMocFileRule(gui_client ScientificObjectEditor)
 	addMocFileRule(gui_client UpdateDialog)
 	addMocFileRule(gui_client UpdateManager)
 	addMocFileRule(gui_client MainOptionsDialog)
@@ -352,6 +353,16 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsWidget.ui
 		${CMAKE_SOURCE_DIR}/gui_client/BotEditorWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/BotEditorWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.h
+		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.h
+		${CMAKE_SOURCE_DIR}/gui_client/MoleculeViewportWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/MoleculeViewportWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/PeriodicTable.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PeriodicTable.h
+		${CMAKE_SOURCE_DIR}/gui_client/ScientificImageViewer.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/ScientificImageViewer.h
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/ChangePasswordDialog.ui
@@ -479,6 +490,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ShaderEditorDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AboutDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_BotEditorWidget.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_ScientificObjectEditor.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateManager.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_MainOptionsDialog.cpp
@@ -1232,6 +1244,10 @@ if(XR_SUPPORT)
 endif()
 
 include(../cmake/shared_target_settings.cmake)
+
+if(WIN32)
+	target_link_libraries(${CURRENT_TARGET} winhttp)
+endif()
 
 if(USE_SDL)
 	include_directories(${SDL_BUILD_DIR}/include/SDL2)

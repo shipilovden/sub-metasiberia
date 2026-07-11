@@ -45,11 +45,11 @@ struct Particle
 		Curve_Custom
 	};
 
-	Particle() : emitter_uid(UID::invalidUID()), restitution(0.5f), width(1.f), dwidth_dt(0.5f), cur_opacity(1.f), dopacity_dt(-0.3f), theta(0.f), theta_speed(0.f), colour(0.8f), mass(1.0e-6f), area(1.0e-6f),
+	Particle() : emitter_uid(UID::invalidUID()), restitution(0.5f), width(1.f), dwidth_dt(0.5f), cur_opacity(1.f), dopacity_dt(-0.3f), theta(0.f), theta_speed(0.f), colour(0.8f), start_colour(0.8f), end_colour(0.8f), mass(1.0e-6f), area(1.0e-6f),
 		gravity_scale(1.f), turbulence_strength(0.f), wind_accel(0, 0, 0, 0), force_centre(0, 0, 0, 1), vortex_strength(0.f), attractor_strength(0.f), attractor_radius(0.f),
 		radial_accel(0.f), linear_damping(0.f), buoyancy_lift(0.f), collision_friction(0.f),
 		use_lifetime_curve(false), age_s(0.f), lifetime_s(1.f), start_width(1.f), end_width(1.f), start_opacity(1.f), end_opacity(0.f),
-		size_curve(Curve_Linear), size_curve_mid(0.5f), opacity_curve(Curve_Linear), opacity_curve_mid(0.5f), collide_surfaces(true), die_when_hit_surface(false),
+		size_curve(Curve_Linear), size_curve_mid(0.5f), opacity_curve(Curve_Linear), opacity_curve_mid(0.5f), trail_length(0.f), collide_surfaces(true), die_when_hit_surface(false),
 		black_hole_mode(false), event_horizon_radius(0.f), particle_type(ParticleType_Smoke), additive_glow(false), glow_strength(1.f) {}
 
 	Vec4f pos;
@@ -59,6 +59,8 @@ struct Particle
 	UID emitter_uid;
 
 	Colour3f colour;
+	Colour3f start_colour;
+	Colour3f end_colour;
 
 	float area; // particle cross-sectional area (m^2).  Larger area = more wind drag.  TODO: just store ratio of area to mass?
 	float mass;
@@ -97,6 +99,7 @@ struct Particle
 	float size_curve_mid;
 	Curve opacity_curve;
 	float opacity_curve_mid;
+	float trail_length;
 
 	bool collide_surfaces;
 	bool die_when_hit_surface;
