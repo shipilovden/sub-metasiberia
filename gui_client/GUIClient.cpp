@@ -40,6 +40,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
 #include "ScientificObjectSettings.h"
+#include "PeriodicTable.h"
 #include "MapWorldLayer.h"
 #include "MapWorldUtils.h"
 #include "Scripting.h"
@@ -2996,6 +2997,14 @@ static void removeAnimatedTextureUse(GLObject& ob, AnimatedTextureManager& anima
 
 void GUIClient::removeAndDeleteGLObjectsForOb(WorldObject& ob)
 {
+	auto label_it = scientific_molecule_label_gl_obs.find(ob.uid);
+	if(label_it != scientific_molecule_label_gl_obs.end())
+	{
+		for(size_t i=0; i<label_it->second.size(); ++i)
+			opengl_engine->removeObject(label_it->second[i]);
+		scientific_molecule_label_gl_obs.erase(label_it);
+	}
+
 	if(ob.opengl_engine_ob)
 	{
 		removeAnimatedTextureUse(*ob.opengl_engine_ob, *animated_texture_manager);
@@ -4892,6 +4901,9 @@ void GUIClient::loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const
 	//ui->indigoView->objectAdded(*ob, *this->resource_manager);
 
 	loadScriptForObject(ob, world_state_lock); // Load any script for the object.
+
+	if(ScientificObjectSettings::isScientificObjectContent(ob->content))
+		createPathControlledPathVisObjects(*ob);
 
 	// If we replaced the model for selected_ob, reselect it in the OpenGL engine
 	if(this->selected_ob == ob)
@@ -18347,6 +18359,10 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 void GUIClient::clearAllObjects()
 {
 	deselectObject();
+	for(auto it = scientific_molecule_label_gl_obs.begin(); it != scientific_molecule_label_gl_obs.end(); ++it)
+		for(size_t i=0; i<it->second.size(); ++i)
+			opengl_engine->removeObject(it->second[i]);
+	scientific_molecule_label_gl_obs.clear();
 	pending_camera_pair_creates.clear();
 
 	vehicle_controller_inside = NULL;
@@ -20576,6 +20592,14 @@ void GUIClient::deleteSelectedObject()
 
 			enqueueMessageToSend(*this->client_thread, scratch_packet);
 
+			auto label_it = scientific_molecule_label_gl_obs.find(selected_ob->uid);
+			if(label_it != scientific_molecule_label_gl_obs.end())
+			{
+				for(size_t i=0; i<label_it->second.size(); ++i)
+					opengl_engine->removeObject(label_it->second[i]);
+				scientific_molecule_label_gl_obs.erase(label_it);
+			}
+
 			deselectObject();
 
 			showInfoNotification("Object deleted.");
@@ -20595,13 +20619,23 @@ ObjectPathController* GUIClient::getPathControllerForOb(const WorldObject& ob)
 
 void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 {
+	const bool is_selected_ob = this->selected_ob.nonNull() && this->selected_ob->uid == ob.uid;
+
 	// Remove any existing ones
-	for(size_t i=0; i<selected_ob_vis_gl_obs.size(); ++i)
-		opengl_engine->removeObject(this->selected_ob_vis_gl_obs[i]);
-	selected_ob_vis_gl_obs.clear();
-	for(size_t i=0; i<scientific_molecule_label_gl_obs.size(); ++i)
-		opengl_engine->removeObject(this->scientific_molecule_label_gl_obs[i]);
-	scientific_molecule_label_gl_obs.clear();
+	if(is_selected_ob)
+	{
+		for(size_t i=0; i<selected_ob_vis_gl_obs.size(); ++i)
+			opengl_engine->removeObject(this->selected_ob_vis_gl_obs[i]);
+		selected_ob_vis_gl_obs.clear();
+	}
+	auto existing_label_it = scientific_molecule_label_gl_obs.find(ob.uid);
+	if(existing_label_it != scientific_molecule_label_gl_obs.end())
+	{
+		for(size_t i=0; i<existing_label_it->second.size(); ++i)
+			opengl_engine->removeObject(existing_label_it->second[i]);
+		existing_label_it->second.clear();
+	}
+	std::vector<GLObjectRef>& molecule_label_obs = scientific_molecule_label_gl_obs[ob.uid];
 
 	struct ScientificOverlayAtom
 	{
@@ -20741,7 +20775,7 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 					return ob_to_world * Vec4f(atom_pos_os.x, atom_pos_os.y, atom_pos_os.z, 1.f);
 				};
 
-				if(!selected_ids.empty())
+				if(is_selected_ob && !selected_ids.empty())
 				{
 					for(size_t i=0; i<atoms.size(); ++i)
 					{
@@ -20756,7 +20790,7 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 					}
 				}
 
-				if(scientific_settings.selected_bond_index >= 0 && scientific_settings.selected_bond_index < (int)bonds.size())
+				if(is_selected_ob && scientific_settings.selected_bond_index >= 0 && scientific_settings.selected_bond_index < (int)bonds.size())
 				{
 					const ScientificOverlayBond& bond = bonds[(size_t)scientific_settings.selected_bond_index];
 					const Vec4f a_ws = atom_world_pos(atoms[(size_t)bond.atom_a]);
@@ -20774,11 +20808,12 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 					}
 				}
 
-				if((scientific_settings.show_labels && scientific_settings.label_max_count > 0) || scientific_settings.show_molecule_title)
+				if((scientific_settings.show_labels && scientific_settings.label_max_count > 0) || scientific_settings.show_molecule_title || scientific_settings.show_info_card)
 				{
 					const int font_size_px = 42;
 					const float label_scale = myClamp(scientific_settings.label_scale, 0.35f, 2.25f) * 0.16f * myMax(0.15f, ob.scale.x);
 					const float title_scale = myClamp(scientific_settings.molecule_title_scale, 0.05f, 20.f) * 0.16f * myMax(0.15f, ob.scale.x);
+					const float card_scale = myClamp(scientific_settings.info_card_scale, 0.05f, 20.f) * 0.12f * myMax(0.15f, ob.scale.x);
 					const Vec4f camera_right = cam_controller.getRightVec().toVec4fVector();
 					const Vec4f camera_up(0.f, 0.f, 1.f, 0.f);
 					const Vec4f camera_forward = cam_controller.getForwardsVec().toVec4fVector();
@@ -20810,7 +20845,7 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 						text_ob->materials[0].albedo_linear_rgb = toLinearSRGB(scientific_settings.label_colour);
 						text_ob->materials[0].fresnel_scale = 0.f;
 						opengl_engine->addObject(text_ob);
-						scientific_molecule_label_gl_obs.push_back(text_ob);
+						molecule_label_obs.push_back(text_ob);
 					};
 
 					if(scientific_settings.show_labels && scientific_settings.label_max_count > 0)
@@ -20847,11 +20882,78 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 							title = "Molecule";
 						add_world_text_label(title, title_anchor_ws + camera_up * (atom_highlight_radius * 1.75f + title_scale * 0.90f), title_scale);
 					}
+
+					if(scientific_settings.show_info_card)
+					{
+						Vec4f min_ws(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), 1.f);
+						Vec4f max_ws(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), 1.f);
+						for(size_t i=0; i<atoms.size(); ++i)
+						{
+							const Vec4f pos_ws = atom_world_pos(atoms[i]);
+							min_ws[0] = myMin(min_ws[0], pos_ws[0]); min_ws[1] = myMin(min_ws[1], pos_ws[1]); min_ws[2] = myMin(min_ws[2], pos_ws[2]);
+							max_ws[0] = myMax(max_ws[0], pos_ws[0]); max_ws[1] = myMax(max_ws[1], pos_ws[1]); max_ws[2] = myMax(max_ws[2], pos_ws[2]);
+						}
+						Vec4f card_anchor_ws = (min_ws + max_ws) * 0.5f;
+						card_anchor_ws[3] = 1.f;
+						card_anchor_ws = card_anchor_ws + camera_right * myMax(0.4f, scientific_settings.info_card_distance) + camera_up * (atom_highlight_radius * 1.7f + card_scale);
+
+						const ScientificOverlayAtom* selected_atom = NULL;
+						if(!selected_ids.empty())
+						{
+							const int selected_id = *selected_ids.begin();
+							for(size_t i=0; i<atoms.size(); ++i)
+								if(atoms[i].source_id == selected_id)
+								{
+									selected_atom = &atoms[i];
+									card_anchor_ws = atom_world_pos(atoms[i]) + camera_right * myMax(0.4f, scientific_settings.info_card_distance) + camera_up * (atom_highlight_radius * 1.9f + card_scale);
+									break;
+								}
+						}
+
+						std::ostringstream card;
+						if((scientific_settings.info_card_mode == "atom" || scientific_settings.info_card_mode == "selection") && selected_atom)
+						{
+							const PeriodicElementRecord* element = PeriodicTableModel::elementBySymbol(QString::fromStdString(selected_atom->element));
+							card << selected_atom->element << " — " << (element ? element->name.toStdString() : std::string("element")) << "\n";
+							card << "Atom index: " << selected_atom->source_id << "\n";
+							if(element)
+							{
+								card << "Atomic number: " << element->atomic_number << "\n";
+								card << "Atomic mass: " << element->atomic_mass.toStdString() << " u\n";
+								card << "Category: " << element->category.toStdString() << "\n";
+							}
+							card << "Charge: " << selected_atom->formal_charge << "\n";
+							card << "Coordinates: " << selected_atom->pos.x << ", " << selected_atom->pos.y << ", " << selected_atom->pos.z;
+						}
+						else if(scientific_settings.info_card_mode != "atom")
+						{
+							card << (scientific_settings.name.empty() ? std::string("Molecule") : scientific_settings.name) << "\n";
+							card << "Atoms: " << scientific_settings.atom_count << "  Bonds: " << scientific_settings.bond_count << "\n";
+							if(!scientific_settings.property_table.empty())
+							{
+								std::stringstream props(scientific_settings.property_table);
+								std::string line;
+								int copied = 0;
+								while(copied < 4 && std::getline(props, line))
+								{
+									if(!line.empty())
+									{
+										card << line << "\n";
+										copied++;
+									}
+								}
+							}
+							card << "Source: " << (scientific_settings.provenance_source.empty() ? scientific_settings.source : scientific_settings.provenance_source);
+						}
+						if(!card.str().empty())
+							add_world_text_label(card.str(), card_anchor_ws, card_scale);
+					}
 				}
 			}
 		}
 	}
 
+	if(is_selected_ob)
 	{
 		ObjectPathController* path_controller = getPathControllerForOb(ob);
 		if(path_controller)

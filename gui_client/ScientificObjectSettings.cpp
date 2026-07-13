@@ -106,10 +106,10 @@ bool isKnownScientificObjectField(const std::string& name)
 		"code_language", "code_text", "prompt_text", "generated_code",
 		"data_summary", "atom_table", "bond_table", "point_table", "value_table", "property_table",
 		"visualization_mode", "colour_scheme", "display_colour", "material", "atom_radius", "bond_thickness", "point_size", "line_width", "opacity", "object_scale",
-		"show_labels", "show_molecule_title", "molecule_title", "show_legend", "show_hydrogen", "label_mode", "label_scale", "molecule_title_scale", "label_colour", "label_max_count", "label_max_distance", "label_runtime_status",
+		"show_labels", "show_molecule_title", "molecule_title", "show_info_card", "info_card_mode", "info_card_scale", "info_card_distance", "info_card_pinned", "show_legend", "show_hydrogen", "label_mode", "label_scale", "molecule_title_scale", "label_colour", "label_max_count", "label_max_distance", "label_runtime_status",
 		"lod_level", "glow_enabled", "glow_strength", "outline_enabled", "wireframe_enabled",
 		"measure_distance", "measure_angle", "measure_torsion", "measure_area", "measure_volume", "selection_mode", "selection_state", "selected_atom_indices", "selected_bond_index", "measurements_json", "atom_count", "bond_count", "point_count", "object_dimensions",
-		"rotation_animation_enabled", "trajectory_animation_enabled", "vibration_animation_enabled", "time_series_enabled", "animation_speed", "current_frame", "frame_count", "animation_runtime_status",
+		"rotation_animation_enabled", "trajectory_animation_enabled", "vibration_animation_enabled", "time_series_enabled", "animation_speed", "animation_direction", "current_frame", "frame_count", "animation_runtime_status",
 		"simulation_enabled", "simulation_type", "simulation_notes", "provider_classifications", "computed_classifications", "user_collections", "favorite", "section_cache_manifest",
 		"ai_provider", "ai_model", "ai_endpoint", "ai_uses_user_credentials",
 		"collision_enabled", "solid", "trigger", "selectable", "movable", "gravity_enabled", "physics_motion_type", "physics_shape", "collision_layer", "physics_mass", "physics_friction", "physics_restitution",
@@ -260,6 +260,10 @@ void clampSettings(ScientificObjectSettings& s)
 	s.object_scale = (float)clampDouble(s.object_scale, 0.01, 1000.0);
 	s.label_scale = (float)clampDouble(s.label_scale, 0.05, 20.0);
 	s.molecule_title_scale = (float)clampDouble(s.molecule_title_scale, 0.05, 20.0);
+	if(s.info_card_mode != "molecule" && s.info_card_mode != "atom" && s.info_card_mode != "selection")
+		s.info_card_mode = "selection";
+	s.info_card_scale = (float)clampDouble(s.info_card_scale, 0.05, 20.0);
+	s.info_card_distance = (float)clampDouble(s.info_card_distance, 0.0, 1000.0);
 	s.label_max_count = clampInt(s.label_max_count, 0, 1000000);
 	s.label_max_distance = (float)clampDouble(s.label_max_distance, 0.0, 1000000.0);
 	s.lod_level = clampInt(s.lod_level, 0, 8);
@@ -269,6 +273,8 @@ void clampSettings(ScientificObjectSettings& s)
 	s.point_count = clampInt(s.point_count, 0, 100000000);
 	s.selected_bond_index = clampInt(s.selected_bond_index, -1, 100000000);
 	s.animation_speed = (float)clampDouble(s.animation_speed, 0.0, 100.0);
+	if(s.animation_direction != "reverse")
+		s.animation_direction = "forward";
 	s.current_frame = clampInt(s.current_frame, 0, 100000000);
 	s.frame_count = clampInt(s.frame_count, 0, 100000000);
 	s.physics_mass = (float)clampDouble(s.physics_mass, 0.0, 1000000000.0);
@@ -344,6 +350,11 @@ ScientificObjectSettings::ScientificObjectSettings()
 	show_labels(false),
 	show_molecule_title(false),
 	molecule_title(""),
+	show_info_card(false),
+	info_card_mode("selection"),
+	info_card_scale(1.0f),
+	info_card_distance(1.0f),
+	info_card_pinned(false),
 	show_legend(true),
 	show_hydrogen(true),
 	label_mode("element"),
@@ -377,6 +388,7 @@ ScientificObjectSettings::ScientificObjectSettings()
 	vibration_animation_enabled(false),
 	time_series_enabled(false),
 	animation_speed(1.0f),
+	animation_direction("forward"),
 	current_frame(0),
 	frame_count(0),
 	animation_runtime_status("not_connected"),
@@ -535,6 +547,11 @@ ScientificObjectSettings ScientificObjectSettings::fromContent(const std::string
 		settings.show_labels = root.getChildBoolValueWithDefaultVal(parser, "show_labels", settings.show_labels);
 		settings.show_molecule_title = root.getChildBoolValueWithDefaultVal(parser, "show_molecule_title", settings.show_molecule_title);
 		settings.molecule_title = root.getChildStringValueWithDefaultVal(parser, "molecule_title", settings.molecule_title);
+		settings.show_info_card = root.getChildBoolValueWithDefaultVal(parser, "show_info_card", settings.show_info_card);
+		settings.info_card_mode = root.getChildStringValueWithDefaultVal(parser, "info_card_mode", settings.info_card_mode);
+		settings.info_card_scale = (float)root.getChildDoubleValueWithDefaultVal(parser, "info_card_scale", settings.info_card_scale);
+		settings.info_card_distance = (float)root.getChildDoubleValueWithDefaultVal(parser, "info_card_distance", settings.info_card_distance);
+		settings.info_card_pinned = root.getChildBoolValueWithDefaultVal(parser, "info_card_pinned", settings.info_card_pinned);
 		settings.show_legend = root.getChildBoolValueWithDefaultVal(parser, "show_legend", settings.show_legend);
 		settings.show_hydrogen = root.getChildBoolValueWithDefaultVal(parser, "show_hydrogen", settings.show_hydrogen);
 		settings.label_mode = root.getChildStringValueWithDefaultVal(parser, "label_mode", settings.label_mode);
@@ -570,6 +587,7 @@ ScientificObjectSettings ScientificObjectSettings::fromContent(const std::string
 		settings.vibration_animation_enabled = root.getChildBoolValueWithDefaultVal(parser, "vibration_animation_enabled", settings.vibration_animation_enabled);
 		settings.time_series_enabled = root.getChildBoolValueWithDefaultVal(parser, "time_series_enabled", settings.time_series_enabled);
 		settings.animation_speed = (float)root.getChildDoubleValueWithDefaultVal(parser, "animation_speed", settings.animation_speed);
+		settings.animation_direction = root.getChildStringValueWithDefaultVal(parser, "animation_direction", settings.animation_direction);
 		settings.current_frame = root.getChildIntValueWithDefaultVal(parser, "current_frame", settings.current_frame);
 		settings.frame_count = root.getChildIntValueWithDefaultVal(parser, "frame_count", settings.frame_count);
 		settings.animation_runtime_status = root.getChildStringValueWithDefaultVal(parser, "animation_runtime_status", settings.animation_runtime_status);
@@ -687,6 +705,11 @@ std::string ScientificObjectSettings::serialiseToContent(const ScientificObjectS
 	s << "  \"show_labels\": " << (settings.show_labels ? "true" : "false") << ",\n";
 	s << "  \"show_molecule_title\": " << (settings.show_molecule_title ? "true" : "false") << ",\n";
 	s << "  \"molecule_title\": \"" << jsonEscape(settings.molecule_title) << "\",\n";
+	s << "  \"show_info_card\": " << (settings.show_info_card ? "true" : "false") << ",\n";
+	s << "  \"info_card_mode\": \"" << jsonEscape(settings.info_card_mode) << "\",\n";
+	s << "  \"info_card_scale\": " << settings.info_card_scale << ",\n";
+	s << "  \"info_card_distance\": " << settings.info_card_distance << ",\n";
+	s << "  \"info_card_pinned\": " << (settings.info_card_pinned ? "true" : "false") << ",\n";
 	s << "  \"show_legend\": " << (settings.show_legend ? "true" : "false") << ",\n";
 	s << "  \"show_hydrogen\": " << (settings.show_hydrogen ? "true" : "false") << ",\n";
 	s << "  \"label_mode\": \"" << jsonEscape(settings.label_mode) << "\",\n";
@@ -720,6 +743,7 @@ std::string ScientificObjectSettings::serialiseToContent(const ScientificObjectS
 	s << "  \"vibration_animation_enabled\": " << (settings.vibration_animation_enabled ? "true" : "false") << ",\n";
 	s << "  \"time_series_enabled\": " << (settings.time_series_enabled ? "true" : "false") << ",\n";
 	s << "  \"animation_speed\": " << settings.animation_speed << ",\n";
+	s << "  \"animation_direction\": \"" << jsonEscape(settings.animation_direction) << "\",\n";
 	s << "  \"current_frame\": " << settings.current_frame << ",\n";
 	s << "  \"frame_count\": " << settings.frame_count << ",\n";
 	s << "  \"animation_runtime_status\": \"" << jsonEscape(settings.animation_runtime_status) << "\",\n";

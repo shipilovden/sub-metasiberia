@@ -88,6 +88,11 @@ struct ScientificObjectSettings
 	bool show_labels;
 	bool show_molecule_title;
 	std::string molecule_title;
+	bool show_info_card;
+	std::string info_card_mode;
+	float info_card_scale;
+	float info_card_distance;
+	bool info_card_pinned;
 	bool show_legend;
 	bool show_hydrogen;
 	std::string label_mode;
@@ -123,6 +128,7 @@ struct ScientificObjectSettings
 	bool vibration_animation_enabled;
 	bool time_series_enabled;
 	float animation_speed;
+	std::string animation_direction;
 	int current_frame;
 	int frame_count;
 	std::string animation_runtime_status;

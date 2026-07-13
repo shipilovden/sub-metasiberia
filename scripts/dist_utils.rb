@@ -137,6 +137,31 @@ def copySDLRedistWindows(vs_version, target_dir, copy_debug)
 end
 
 
+def copyOpenXRRedistWindows(target_dir)
+	if (!OS.windows?)
+		return
+	end
+
+	# XR_SUPPORT links against the OpenXR loader DLL on Windows. Keep this copy
+	# optional so desktop-only builds and machines without the SDK still package
+	# normally.
+	glare_core_libs_dir = getAndCheckEnvVar('GLARE_CORE_LIBS')
+	candidate_sdk_dirs = []
+	candidate_sdk_dirs << ENV['OPENXR_SDK_DIR'] if ENV['OPENXR_SDK_DIR'] && ENV['OPENXR_SDK_DIR'].length > 0
+	candidate_sdk_dirs << "#{glare_core_libs_dir}/OpenXR-SDK-1.1.57/install"
+
+	candidate_sdk_dirs.each do |sdk_dir|
+		dll_path = "#{sdk_dir}/x64/bin/openxr_loader.dll"
+		if File.exist?(dll_path)
+			FileUtils.cp(dll_path, target_dir, :verbose => true)
+			return
+		end
+	end
+
+	STDERR.puts "Warning: OpenXR loader DLL not found; XR builds may require openxr_loader.dll next to gui_client.exe."
+end
+
+
 def copyCEFRedistWindows(target_dir, copy_debug = false)
 	if (!OS.windows?)
 		return

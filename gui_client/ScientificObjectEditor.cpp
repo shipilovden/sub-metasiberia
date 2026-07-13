@@ -1529,6 +1529,11 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	show_labels_check(NULL),
 	show_molecule_title_check(NULL),
 	molecule_title_edit(NULL),
+	show_info_card_check(NULL),
+	info_card_mode_combo(NULL),
+	info_card_scale_spin(NULL),
+	info_card_distance_spin(NULL),
+	info_card_pinned_check(NULL),
 	show_legend_check(NULL),
 	show_hydrogen_check(NULL),
 	label_mode_combo(NULL),
@@ -1577,6 +1582,7 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	vibration_animation_check(NULL),
 	time_series_check(NULL),
 	animation_speed_spin(NULL),
+	animation_direction_combo(NULL),
 	current_frame_spin(NULL),
 	frame_count_spin(NULL),
 	simulation_enabled_check(NULL),
@@ -1738,7 +1744,7 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	code_language_combo = addComboBox(source_grid, row, QString::fromUtf8("Язык кода"));
 	code_edit = addPlainTextEdit(source_grid, row, QString::fromUtf8("Код"), 150);
 	prompt_edit = addPlainTextEdit(source_grid, row, QString::fromUtf8("Запрос словами"), 80);
-	object_layout->addWidget(source_group);
+	object_layout->insertWidget(1, source_group); // Logical order in Settings: Object -> Data Source -> World Position -> Visualisation -> Animation -> Image.
 
 	QWidget* data_tab = new QWidget(tab_widget);
 	QVBoxLayout* data_layout = new QVBoxLayout(data_tab);
@@ -1814,6 +1820,11 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	molecule_title_edit->setPlaceholderText(QString::fromUtf8("Авто: имя объекта/молекулы"));
 	vis_grid->addWidget(new QLabel(QString::fromUtf8("Название над молекулой"), vis_group), row, 0);
 	vis_grid->addWidget(molecule_title_edit, row++, 1);
+	show_info_card_check = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать 3D-карточку"));
+	info_card_mode_combo = addComboBox(vis_grid, row, QString::fromUtf8("Режим 3D-карточки"));
+	info_card_scale_spin = addDoubleSpinBox(vis_grid, row, QString::fromUtf8("Масштаб карточки"), 0.05, 20.0, 0.05, 3);
+	info_card_distance_spin = addDoubleSpinBox(vis_grid, row, QString::fromUtf8("Дистанция карточки"), 0.0, 1000.0, 0.25, 2);
+	info_card_pinned_check = addCheckBox(vis_grid, row, QString::fromUtf8("Закрепить карточку"));
 	show_legend_check = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать легенду"));
 	show_hydrogen_check = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать водород"));
 	label_mode_combo = addComboBox(vis_grid, row, QString::fromUtf8("Режим подписей"));
@@ -1834,7 +1845,6 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	object_layout->addWidget(vis_group);
 	molecule_viewport = new MoleculeViewportWidget(object_tab);
 	object_layout->addWidget(molecule_viewport);
-	object_layout->addStretch(1);
 
 	QWidget* measure_tab = new QWidget(tab_widget);
 	QVBoxLayout* measure_layout = new QVBoxLayout(measure_tab);
@@ -1869,19 +1879,18 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	QVBoxLayout* anim_layout = new QVBoxLayout(anim_tab);
 	anim_layout->setContentsMargins(6, 6, 6, 6);
 	QGridLayout* anim_grid = NULL;
-	QGroupBox* anim_group = createSection(QString::fromUtf8("Анимация"), anim_tab, &anim_grid);
+	QGroupBox* anim_group = createSection(QString::fromUtf8("Анимация"), object_tab, &anim_grid);
 	row = 0;
 	rotation_animation_check = addCheckBox(anim_grid, row, QString::fromUtf8("Вращение"));
 	trajectory_animation_check = addCheckBox(anim_grid, row, QString::fromUtf8("Траектория"));
 	vibration_animation_check = addCheckBox(anim_grid, row, QString::fromUtf8("Колебания"));
 	time_series_check = addCheckBox(anim_grid, row, QString::fromUtf8("Временные данные"));
 	animation_speed_spin = addDoubleSpinBox(anim_grid, row, QString::fromUtf8("Скорость"), 0.0, 100.0, 0.1, 3);
+	animation_direction_combo = addComboBox(anim_grid, row, QString::fromUtf8("Направление"));
 	current_frame_spin = addSpinBox(anim_grid, row, QString::fromUtf8("Кадр"), 0, 100000000);
 	frame_count_spin = addSpinBox(anim_grid, row, QString::fromUtf8("Всего кадров"), 0, 100000000);
 	animation_status_label = new QLabel(QStringLiteral("Rotation/Spin: available in interactive molecule viewport. Trajectory, vibration and time-series: WIP."), anim_group); animation_status_label->setWordWrap(true); animation_status_label->setFrameShape(QFrame::StyledPanel); anim_grid->addWidget(animation_status_label, row++, 0, 1, 2);
-	anim_layout->addWidget(anim_group);
-	anim_layout->addStretch(1);
-	tab_widget->addTab(anim_tab, QString::fromUtf8("Анимация"));
+	object_layout->addWidget(anim_group);
 
 	QWidget* sim_tab = new QWidget(tab_widget);
 	QVBoxLayout* sim_layout = new QVBoxLayout(sim_tab);
@@ -1898,8 +1907,13 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	sim_layout->addStretch(1);
 	tab_widget->addTab(sim_tab, QString::fromUtf8("Симуляция"));
 
-	QWidget* image_tab = new QWidget(tab_widget); QVBoxLayout* image_layout = new QVBoxLayout(image_tab); image_layout->setContentsMargins(6,6,6,6); image_viewer = new ScientificImageViewer(image_tab); image_layout->addWidget(image_viewer); tab_widget->addTab(image_tab, QString::fromUtf8("Изображения"));
-	connect(tab_widget, &QTabWidget::currentChanged, this, [this, image_tab](int) { if(tab_widget->currentWidget()==image_tab) loadPubChemImage(); });
+	QGridLayout* image_grid = NULL;
+	QGroupBox* image_group = createSection(QString::fromUtf8("Изображение"), object_tab, &image_grid);
+	row = 0;
+	image_viewer = new ScientificImageViewer(image_group);
+	image_grid->addWidget(image_viewer, row++, 0, 1, 2);
+	object_layout->addWidget(image_group);
+	object_layout->addStretch(1);
 	connect(tab_widget, &QTabWidget::currentChanged, this, [this](int) { if(tab_widget->currentWidget()==molecule_card_tab) moleculeCardSectionChanged(molecule_card_sections->currentIndex()); });
 
 	QWidget* catalog_tab = new QWidget(tab_widget); QVBoxLayout* catalog_layout = new QVBoxLayout(catalog_tab); catalog_layout->setContentsMargins(6,6,6,6); QGridLayout* catalog_grid=NULL; QGroupBox* catalog_group=createSection(QString::fromUtf8("Классификация и коллекции"),catalog_tab,&catalog_grid); row=0;
@@ -1977,7 +1991,10 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	{
 		if(syncing || !rotation_animation_check || !rotation_animation_check->isChecked() || !rot_z_spin || !animation_speed_spin)
 			return;
-		double next_z = rot_z_spin->value() + std::max(0.1, animation_speed_spin->value()) * 0.35;
+		const double spin_direction = currentComboData(animation_direction_combo, QStringLiteral("forward")) == QStringLiteral("reverse") ? -1.0 : 1.0;
+		double next_z = rot_z_spin->value() + spin_direction * std::max(0.1, animation_speed_spin->value()) * 0.35;
+		while(next_z < 0.0)
+			next_z += 360.0;
 		while(next_z > 360.0)
 			next_z -= 360.0;
 		rot_z_spin->setValue(next_z);
@@ -1989,8 +2006,14 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	connect(start_angle_button, &QPushButton::clicked, this, [this]() { molecule_viewport->beginMeasurement(QStringLiteral("angle")); });
 	connect(start_torsion_button, &QPushButton::clicked, this, [this]() { molecule_viewport->beginMeasurement(QStringLiteral("torsion")); });
 	connect(clear_measurements_button, &QPushButton::clicked, this, [this]() { molecule_viewport->clearMeasurements(); });
-	connect(rotation_animation_check, &QCheckBox::toggled, this, [this](bool enabled) { molecule_viewport->setSpinEnabled(enabled, (float)animation_speed_spin->value()); if(molecule_world_spin_timer){if(enabled)molecule_world_spin_timer->start();else molecule_world_spin_timer->stop();} if(animation_status_label) animation_status_label->setText(enabled ? QString::fromUtf8("Loaded: Rotation/Spin активен в превью и в 3D-мире. Остальные animation controls остаются WIP.") : QString::fromUtf8("Rotation/Spin: доступен. Trajectory, vibration и time-series: WIP.")); });
-	connect(animation_speed_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double speed) { molecule_viewport->setSpinEnabled(rotation_animation_check->isChecked(), (float)speed); });
+	auto update_spin = [this]()
+	{
+		const float spin_direction = currentComboData(animation_direction_combo, QStringLiteral("forward")) == QStringLiteral("reverse") ? -1.f : 1.f;
+		molecule_viewport->setSpinEnabled(rotation_animation_check->isChecked(), (float)animation_speed_spin->value() * spin_direction);
+	};
+	connect(rotation_animation_check, &QCheckBox::toggled, this, [this, update_spin](bool enabled) { update_spin(); if(molecule_world_spin_timer){if(enabled)molecule_world_spin_timer->start();else molecule_world_spin_timer->stop();} if(animation_status_label) animation_status_label->setText(enabled ? QString::fromUtf8("Loaded: Rotation/Spin активен в превью и в 3D-мире. Остальные animation controls остаются WIP.") : QString::fromUtf8("Rotation/Spin: доступен. Trajectory, vibration и time-series: WIP.")); });
+	connect(animation_speed_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [update_spin](double) { update_spin(); });
+	connect(animation_direction_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [update_spin](int) { update_spin(); });
 	connect(show_3d_controls_checkbox, &QCheckBox::toggled, this, [this](bool) { if(!syncing) emit posAndRot3DControlsToggled(); });
 	const QList<QWidget*> viewport_controls = { visualization_mode_combo, colour_scheme_combo, atom_radius_spin, bond_thickness_spin, object_scale_spin, show_labels_check, show_molecule_title_check, show_legend_check, show_hydrogen_check, label_mode_combo, label_scale_spin, molecule_title_scale_spin, label_max_count_spin, label_max_distance_spin };
 	for(QWidget* control : viewport_controls)
@@ -2217,6 +2240,11 @@ void ScientificObjectEditor::installTooltips()
 	setDetailedTip(show_labels_check, QString::fromUtf8("Показывать подписи элементов, атомов, точек или осей, когда визуализатор поддерживает подписи."));
 	setDetailedTip(show_molecule_title_check, QString::fromUtf8("Показывать отдельную 3D-подпись с названием над молекулой. Она использует тот же world-mapping, что и атомные подписи."));
 	setDetailedTip(molecule_title_edit, QString::fromUtf8("Необязательный текст названия над молекулой. Если пусто — используется имя молекулы/объекта."));
+	setDetailedTip(show_info_card_check, QString::fromUtf8("Показывать compact 3D-карточку рядом с молекулой/выбранным атомом. Карточка создаётся в том же world-overlay path, что подписи, поэтому движется и удаляется вместе с молекулой."));
+	setDetailedTip(info_card_mode_combo, QString::fromUtf8("Режим карточки: по выбору, всегда молекула или только выбранный атом."));
+	setDetailedTip(info_card_scale_spin, QString::fromUtf8("Масштаб текста 3D-карточки в мире. Не меняет подписи атомов и не влияет на 2D-превью."));
+	setDetailedTip(info_card_distance_spin, QString::fromUtf8("Отступ карточки от выбранного атома или центра молекулы в world units."));
+	setDetailedTip(info_card_pinned_check, QString::fromUtf8("Закрепить карточку для текущего объекта. На первом этапе карточка всё равно обновляется из выбранного атома/молекулы, но настройка сохраняется для будущих pinned-карточек."));
 	setDetailedTip(show_legend_check, QString::fromUtf8("Показывать легенду цветов/значений, когда визуализатор поддерживает легенду."));
 	setDetailedTip(show_hydrogen_check, QString::fromUtf8("Для молекул: показывать атомы водорода. Отключение делает крупные молекулы чище."));
 	setDetailedTip(label_mode_combo, QString::fromUtf8("Какая информация должна попадать в подписи: элемент, номер атома, residue, chain или custom attribute. Runtime label objects ещё требуют отдельного child ObjectType_Text workflow."));
@@ -2337,6 +2365,13 @@ void ScientificObjectEditor::populateStaticCombos()
 	add(label_mode_combo, "Atomic mass", "atomic_mass");
 	add(label_mode_combo, "Formal charge", "formal_charge");
 	add(label_mode_combo, "Custom attribute", "custom_attribute");
+
+	add(info_card_mode_combo, "По выбору", "selection");
+	add(info_card_mode_combo, "Всегда карточка молекулы", "molecule");
+	add(info_card_mode_combo, "Только выбранный атом", "atom");
+
+	add(animation_direction_combo, "По часовой стрелке", "forward");
+	add(animation_direction_combo, "Против часовой стрелки", "reverse");
 
 	add(selection_mode_combo, "Выбор атомов", "atom");
 	add(selection_mode_combo, "Выбор связей", "bond");
@@ -2675,6 +2710,11 @@ void ScientificObjectEditor::setControlsFromSettings(const ScientificObjectSetti
 	show_labels_check->setChecked(s.show_labels);
 	show_molecule_title_check->setChecked(s.show_molecule_title);
 	molecule_title_edit->setText(qstr(s.molecule_title));
+	show_info_card_check->setChecked(s.show_info_card);
+	setComboData(info_card_mode_combo, qstr(s.info_card_mode));
+	info_card_scale_spin->setValue(s.info_card_scale);
+	info_card_distance_spin->setValue(s.info_card_distance);
+	info_card_pinned_check->setChecked(s.info_card_pinned);
 	show_legend_check->setChecked(s.show_legend);
 	show_hydrogen_check->setChecked(s.show_hydrogen);
 	setComboData(label_mode_combo, qstr(s.label_mode));
@@ -2713,9 +2753,10 @@ void ScientificObjectEditor::setControlsFromSettings(const ScientificObjectSetti
 	vibration_animation_check->setChecked(s.vibration_animation_enabled);
 	time_series_check->setChecked(s.time_series_enabled);
 	animation_speed_spin->setValue(s.animation_speed);
+	setComboData(animation_direction_combo, qstr(s.animation_direction));
 	current_frame_spin->setValue(s.current_frame);
 	frame_count_spin->setValue(s.frame_count);
-	molecule_viewport->setSpinEnabled(s.rotation_animation_enabled, s.animation_speed);
+	molecule_viewport->setSpinEnabled(s.rotation_animation_enabled, s.animation_speed * (s.animation_direction == "reverse" ? -1.f : 1.f));
 
 	simulation_enabled_check->setChecked(false);
 	setComboData(simulation_type_combo, qstr(s.simulation_type));
@@ -2812,6 +2853,11 @@ ScientificObjectSettings ScientificObjectEditor::controlsToSettings() const
 	s.show_labels = show_labels_check->isChecked();
 	s.show_molecule_title = show_molecule_title_check->isChecked();
 	s.molecule_title = stdstr(molecule_title_edit->text());
+	s.show_info_card = show_info_card_check->isChecked();
+	s.info_card_mode = stdstr(currentComboData(info_card_mode_combo, QStringLiteral("selection")));
+	s.info_card_scale = (float)info_card_scale_spin->value();
+	s.info_card_distance = (float)info_card_distance_spin->value();
+	s.info_card_pinned = info_card_pinned_check->isChecked();
 	s.show_legend = show_legend_check->isChecked();
 	s.show_hydrogen = show_hydrogen_check->isChecked();
 	s.label_mode = stdstr(currentComboData(label_mode_combo, QStringLiteral("element")));
@@ -2846,6 +2892,7 @@ ScientificObjectSettings ScientificObjectEditor::controlsToSettings() const
 	s.vibration_animation_enabled = vibration_animation_check->isChecked();
 	s.time_series_enabled = time_series_check->isChecked();
 	s.animation_speed = (float)animation_speed_spin->value();
+	s.animation_direction = stdstr(currentComboData(animation_direction_combo, QStringLiteral("forward")));
 	s.current_frame = current_frame_spin->value();
 	s.frame_count = frame_count_spin->value();
 	s.animation_runtime_status = s.rotation_animation_enabled ? "interactive_viewport_rotation_active" : ((s.trajectory_animation_enabled || s.vibration_animation_enabled || s.time_series_enabled) ? "wip_not_connected" : "disabled");
@@ -4275,7 +4322,8 @@ void ScientificObjectEditor::updateMoleculeInteractiveView()
 	ScientificObjectSettings s = controlsToSettings();
 	molecule_viewport->setMolecule(atom_table_edit->toPlainText(), bond_table_edit->toPlainText());
 	molecule_viewport->setScientificSettings(s);
-	molecule_viewport->setSpinEnabled(rotation_animation_check->isChecked(), (float)animation_speed_spin->value());
+	const float spin_direction = currentComboData(animation_direction_combo, QStringLiteral("forward")) == QStringLiteral("reverse") ? -1.f : 1.f;
+	molecule_viewport->setSpinEnabled(rotation_animation_check->isChecked(), (float)animation_speed_spin->value() * spin_direction);
 	if(molecule_metrics_label) molecule_metrics_label->setText(molecule_viewport->moleculeMetricsText());
 	updateMoleculeSelectionStatus();
 	if(measurement_records_edit) measurement_records_edit->setPlainText(molecule_viewport->measurementsJson());
@@ -4363,6 +4411,7 @@ void ScientificObjectEditor::moleculeCardSectionChanged(int index)
 void ScientificObjectEditor::handleMoleculeAction(const QString& action, int)
 {
 	if(action==QStringLiteral("toggle_labels")){show_labels_check->setChecked(!show_labels_check->isChecked());updateMoleculeInteractiveView();return;}
+	if(action==QStringLiteral("toggle_info_card")){show_info_card_check->setChecked(!show_info_card_check->isChecked());if(show_info_card_check->isChecked())setComboData(info_card_mode_combo,QStringLiteral("selection"));updateMoleculeInteractiveView();return;}
 	if(action==QStringLiteral("card")){tab_widget->setCurrentWidget(molecule_card_tab);molecule_card_sections->setCurrentIndex(0);return;}
 	if(action==QStringLiteral("properties")||action==QStringLiteral("classification")){tab_widget->setCurrentWidget(molecule_card_tab);molecule_card_sections->setCurrentIndex(action==QStringLiteral("properties")?2:3);return;}
 	if(action==QStringLiteral("images")){for(int i=0;i<tab_widget->count();++i)if(tab_widget->tabText(i)==QString::fromUtf8("Изображения")){tab_widget->setCurrentIndex(i);break;}return;}

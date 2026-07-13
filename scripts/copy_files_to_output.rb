@@ -70,6 +70,7 @@ def copy_files(vs_version, substrata_repos_dir, glare_core_repos_dir, config = n
 			copyCEFRedistWindows(output_dir, is_debug) if $copy_cef
 			copyBugSplatRedist(output_dir) if $copy_bugsplat
 			copyQtRedistWindows(vs_version, output_dir, is_debug)
+			copyOpenXRRedistWindows(output_dir)
 			copySDLRedistWindows(vs_version, output_dir, is_debug)
 		rescue => e
 			msg = "Failed to copy files for #{config_name}: #{e.message}"

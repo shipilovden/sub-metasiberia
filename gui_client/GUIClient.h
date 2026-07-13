@@ -713,7 +713,7 @@ public:
 	GLObjectRef aabb_os_vis_gl_ob; // Used for visualising the object-space AABB of the selected object.
 	GLObjectRef aabb_ws_vis_gl_ob; // Used for visualising the world-space AABB of the selected object.
 	std::vector<GLObjectRef> selected_ob_vis_gl_obs; // Used for visualising paths for path-controlled objects.
-	std::vector<GLObjectRef> scientific_molecule_label_gl_obs; // Persistent molecule labels; not cleared by object deselection.
+	std::map<UID, std::vector<GLObjectRef> > scientific_molecule_label_gl_obs; // Persistent molecule labels per scientific object; not cleared by object deselection.
 	GLObjectRef particle_emitter_shape_vis_gl_ob;
 	GLObjectRef particle_emitter_direction_vis_gl_ob;
 	GLObjectRef particle_emitter_radius_handle_vis_gl_ob;

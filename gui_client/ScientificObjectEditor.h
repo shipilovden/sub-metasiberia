@@ -189,6 +189,11 @@ private:
 	QCheckBox* show_labels_check;
 	QCheckBox* show_molecule_title_check;
 	QLineEdit* molecule_title_edit;
+	QCheckBox* show_info_card_check;
+	QComboBox* info_card_mode_combo;
+	QDoubleSpinBox* info_card_scale_spin;
+	QDoubleSpinBox* info_card_distance_spin;
+	QCheckBox* info_card_pinned_check;
 	QCheckBox* show_legend_check;
 	QCheckBox* show_hydrogen_check;
 	QComboBox* label_mode_combo;
@@ -240,6 +245,7 @@ private:
 	QCheckBox* vibration_animation_check;
 	QCheckBox* time_series_check;
 	QDoubleSpinBox* animation_speed_spin;
+	QComboBox* animation_direction_combo;
 	QSpinBox* current_frame_spin;
 	QSpinBox* frame_count_spin;
 
