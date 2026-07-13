@@ -17,6 +17,8 @@ namespace TreeSerialization
 
 	const char* presetToString(TreePresetType preset);
 	TreePresetType presetFromString(const std::string& s);
+	const char* treeTypeToString(TreeType type);
+	TreeType treeTypeFromString(const std::string& s);
 	const char* leafTypeToString(TreeLeafType type);
 	TreeLeafType leafTypeFromString(const std::string& s);
 	const char* billboardModeToString(TreeBillboardMode mode);
@@ -31,4 +33,3 @@ namespace TreeSerialization
 	std::string serialiseToContent(const TreeParams& params);
 	void clamp(TreeParams& params);
 }
-

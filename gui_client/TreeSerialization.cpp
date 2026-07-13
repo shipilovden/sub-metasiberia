@@ -152,6 +152,24 @@ TreePresetType presetFromString(const std::string& s)
 }
 
 
+const char* treeTypeToString(TreeType type)
+{
+	switch(type)
+	{
+	case TreeType::Deciduous: return "deciduous";
+	case TreeType::Evergreen: return "evergreen";
+	}
+	return "deciduous";
+}
+
+
+TreeType treeTypeFromString(const std::string& s)
+{
+	if(s == "evergreen") return TreeType::Evergreen;
+	return TreeType::Deciduous;
+}
+
+
 const char* leafTypeToString(TreeLeafType type)
 {
 	switch(type)
@@ -255,6 +273,9 @@ void clamp(TreeParams& p)
 	p.trunkTwist = clampValue(p.trunkTwist, -3.14159f, 3.14159f);
 	p.trunkSegments = clampValue(p.trunkSegments, 3, 32);
 	p.trunkSections = clampValue(p.trunkSections, 1, 48);
+	p.barkTextureType = p.barkTextureType.empty() ? "Bark001" : p.barkTextureType.substr(0, 32);
+	p.barkTextureScaleX = clampValue(p.barkTextureScaleX, 0.05f, 50.0f);
+	p.barkTextureScaleY = clampValue(p.barkTextureScaleY, 0.05f, 50.0f);
 
 	p.branchLevels = clampValue(p.branchLevels, 0, 5);
 	p.branchesPerLevel = clampValue(p.branchesPerLevel, 0, 16);
@@ -268,10 +289,20 @@ void clamp(TreeParams& p)
 	p.branchStartHeight = clampValue(p.branchStartHeight, 0.0f, 0.95f);
 
 	p.leafCount = clampValue(p.leafCount, 0, p.quality == TreeQuality::High ? 2000 : (p.quality == TreeQuality::Medium ? 900 : 250));
+	p.leafAngle = clampValue(p.leafAngle, -90.0f, 90.0f);
 	p.leafSize = clampValue(p.leafSize, 0.02f, 10.0f);
 	p.leafSizeRandomness = clampValue(p.leafSizeRandomness, 0.0f, 1.0f);
 	p.leafAlpha = clampValue(p.leafAlpha, 0.0f, 1.0f);
+	p.leafAlphaTest = clampValue(p.leafAlphaTest, 0.0f, 1.0f);
 	p.leafStartLevel = clampValue(p.leafStartLevel, 0, 5);
+
+	p.trellisWidth = clampValue(p.trellisWidth, 0.1f, 100.0f);
+	p.trellisHeight = clampValue(p.trellisHeight, 0.1f, 100.0f);
+	p.trellisSpacing = clampValue(p.trellisSpacing, 0.1f, 20.0f);
+	p.trellisForceStrength = clampValue(p.trellisForceStrength, 0.0f, 2.0f);
+	p.trellisForceMaxDistance = clampValue(p.trellisForceMaxDistance, 0.0f, 50.0f);
+	p.trellisForceFalloff = clampValue(p.trellisForceFalloff, 0.1f, 8.0f);
+	p.trellisCylinderRadius = clampValue(p.trellisCylinderRadius, 0.005f, 2.0f);
 }
 
 
@@ -300,6 +331,7 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 			return p;
 
 		p.seed = (uint32_t)root.getChildIntValueWithDefaultVal(parser, "seed", (int)p.seed);
+		p.type = treeTypeFromString(root.getChildStringValueWithDefaultVal(parser, "treeType", treeTypeToString(p.type)));
 		p.preset = presetFromString(root.getChildStringValueWithDefaultVal(parser, "preset", presetToString(p.preset)));
 		p.name = root.getChildStringValueWithDefaultVal(parser, "name", p.name);
 		p.height = (float)root.getChildDoubleValueWithDefaultVal(parser, "height", p.height);
@@ -315,6 +347,9 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 		p.trunkSegments = root.getChildIntValueWithDefaultVal(parser, "trunkSegments", p.trunkSegments);
 		p.trunkSections = root.getChildIntValueWithDefaultVal(parser, "trunkSections", p.trunkSections);
 		p.barkColor = readColour(parser, root, "barkColor", p.barkColor);
+		p.barkTextureType = root.getChildStringValueWithDefaultVal(parser, "barkTextureType", p.barkTextureType);
+		p.barkTextured = root.getChildBoolValueWithDefaultVal(parser, "barkTextured", p.barkTextured);
+		p.barkFlatShading = root.getChildBoolValueWithDefaultVal(parser, "barkFlatShading", p.barkFlatShading);
 		p.barkTextureScaleX = (float)root.getChildDoubleValueWithDefaultVal(parser, "barkTextureScaleX", p.barkTextureScaleX);
 		p.barkTextureScaleY = (float)root.getChildDoubleValueWithDefaultVal(parser, "barkTextureScaleY", p.barkTextureScaleY);
 
@@ -331,12 +366,27 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 
 		p.leafType = leafTypeFromString(root.getChildStringValueWithDefaultVal(parser, "leafType", leafTypeToString(p.leafType)));
 		p.leafCount = root.getChildIntValueWithDefaultVal(parser, "leafCount", p.leafCount);
+		p.leafAngle = (float)root.getChildDoubleValueWithDefaultVal(parser, "leafAngle", p.leafAngle);
 		p.leafSize = (float)root.getChildDoubleValueWithDefaultVal(parser, "leafSize", p.leafSize);
 		p.leafSizeRandomness = (float)root.getChildDoubleValueWithDefaultVal(parser, "leafSizeRandomness", p.leafSizeRandomness);
 		p.leafColor = readColour(parser, root, "leafColor", p.leafColor);
 		p.leafAlpha = (float)root.getChildDoubleValueWithDefaultVal(parser, "leafAlpha", p.leafAlpha);
+		p.leafAlphaTest = (float)root.getChildDoubleValueWithDefaultVal(parser, "leafAlphaTest", p.leafAlphaTest);
+		p.leafRoundedNormals = root.getChildBoolValueWithDefaultVal(parser, "leafRoundedNormals", p.leafRoundedNormals);
 		p.leafStartLevel = root.getChildIntValueWithDefaultVal(parser, "leafStartLevel", p.leafStartLevel);
 		p.billboardMode = billboardModeFromString(root.getChildStringValueWithDefaultVal(parser, "billboardMode", billboardModeToString(p.billboardMode)));
+
+		p.trellisEnabled = root.getChildBoolValueWithDefaultVal(parser, "trellisEnabled", p.trellisEnabled);
+		p.trellisPosition = readVec3(parser, root, "trellisPosition", p.trellisPosition);
+		p.trellisWidth = (float)root.getChildDoubleValueWithDefaultVal(parser, "trellisWidth", p.trellisWidth);
+		p.trellisHeight = (float)root.getChildDoubleValueWithDefaultVal(parser, "trellisHeight", p.trellisHeight);
+		p.trellisSpacing = (float)root.getChildDoubleValueWithDefaultVal(parser, "trellisSpacing", p.trellisSpacing);
+		p.trellisForceStrength = (float)root.getChildDoubleValueWithDefaultVal(parser, "trellisForceStrength", p.trellisForceStrength);
+		p.trellisForceMaxDistance = (float)root.getChildDoubleValueWithDefaultVal(parser, "trellisForceMaxDistance", p.trellisForceMaxDistance);
+		p.trellisForceFalloff = (float)root.getChildDoubleValueWithDefaultVal(parser, "trellisForceFalloff", p.trellisForceFalloff);
+		p.trellisCylinderRadius = (float)root.getChildDoubleValueWithDefaultVal(parser, "trellisCylinderRadius", p.trellisCylinderRadius);
+		p.trellisVisible = root.getChildBoolValueWithDefaultVal(parser, "trellisVisible", p.trellisVisible);
+		p.trellisColor = readColour(parser, root, "trellisColor", p.trellisColor);
 
 		p.quality = qualityFromString(root.getChildStringValueWithDefaultVal(parser, "quality", qualityToString(p.quality)));
 		p.lodEnabled = root.getChildBoolValueWithDefaultVal(parser, "lodEnabled", p.lodEnabled);
@@ -369,6 +419,7 @@ std::string serialiseToContent(const TreeParams& params_)
 	s << "  \"schema_version\": 1,\n";
 	s << "  \"preset\": \"" << presetToString(p.preset) << "\",\n";
 	s << "  \"seed\": " << p.seed << ",\n";
+	s << "  \"treeType\": \"" << treeTypeToString(p.type) << "\",\n";
 	s << "  \"name\": \"" << jsonEscape(p.name) << "\",\n";
 	s << "  \"position\": " << vec3ToJson(p.position) << ",\n";
 	s << "  \"rotation\": " << vec3ToJson(p.rotation) << ",\n";
@@ -382,6 +433,9 @@ std::string serialiseToContent(const TreeParams& params_)
 	s << "  \"trunkSegments\": " << p.trunkSegments << ",\n";
 	s << "  \"trunkSections\": " << p.trunkSections << ",\n";
 	s << "  \"barkColor\": " << colourToJson(p.barkColor) << ",\n";
+	s << "  \"barkTextureType\": \"" << jsonEscape(p.barkTextureType) << "\",\n";
+	s << "  \"barkTextured\": " << (p.barkTextured ? "true" : "false") << ",\n";
+	s << "  \"barkFlatShading\": " << (p.barkFlatShading ? "true" : "false") << ",\n";
 	s << "  \"barkTextureScaleX\": " << p.barkTextureScaleX << ",\n";
 	s << "  \"barkTextureScaleY\": " << p.barkTextureScaleY << ",\n";
 	s << "  \"branchLevels\": " << p.branchLevels << ",\n";
@@ -396,12 +450,26 @@ std::string serialiseToContent(const TreeParams& params_)
 	s << "  \"branchStartHeight\": " << p.branchStartHeight << ",\n";
 	s << "  \"leafType\": \"" << leafTypeToString(p.leafType) << "\",\n";
 	s << "  \"leafCount\": " << p.leafCount << ",\n";
+	s << "  \"leafAngle\": " << p.leafAngle << ",\n";
 	s << "  \"leafSize\": " << p.leafSize << ",\n";
 	s << "  \"leafSizeRandomness\": " << p.leafSizeRandomness << ",\n";
 	s << "  \"leafColor\": " << colourToJson(p.leafColor) << ",\n";
 	s << "  \"leafAlpha\": " << p.leafAlpha << ",\n";
+	s << "  \"leafAlphaTest\": " << p.leafAlphaTest << ",\n";
+	s << "  \"leafRoundedNormals\": " << (p.leafRoundedNormals ? "true" : "false") << ",\n";
 	s << "  \"leafStartLevel\": " << p.leafStartLevel << ",\n";
 	s << "  \"billboardMode\": \"" << billboardModeToString(p.billboardMode) << "\",\n";
+	s << "  \"trellisEnabled\": " << (p.trellisEnabled ? "true" : "false") << ",\n";
+	s << "  \"trellisPosition\": " << vec3ToJson(p.trellisPosition) << ",\n";
+	s << "  \"trellisWidth\": " << p.trellisWidth << ",\n";
+	s << "  \"trellisHeight\": " << p.trellisHeight << ",\n";
+	s << "  \"trellisSpacing\": " << p.trellisSpacing << ",\n";
+	s << "  \"trellisForceStrength\": " << p.trellisForceStrength << ",\n";
+	s << "  \"trellisForceMaxDistance\": " << p.trellisForceMaxDistance << ",\n";
+	s << "  \"trellisForceFalloff\": " << p.trellisForceFalloff << ",\n";
+	s << "  \"trellisCylinderRadius\": " << p.trellisCylinderRadius << ",\n";
+	s << "  \"trellisVisible\": " << (p.trellisVisible ? "true" : "false") << ",\n";
+	s << "  \"trellisColor\": " << colourToJson(p.trellisColor) << ",\n";
 	s << "  \"quality\": \"" << qualityToString(p.quality) << "\",\n";
 	s << "  \"lodEnabled\": " << (p.lodEnabled ? "true" : "false") << ",\n";
 	s << "  \"collisionMode\": \"" << collisionModeToString(p.collisionMode) << "\",\n";

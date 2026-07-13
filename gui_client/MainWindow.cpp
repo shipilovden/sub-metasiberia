@@ -2777,7 +2777,7 @@ void MainWindow::refreshEditMenuActionIcons()
 	setMenuActionGlyphIcon(ui->actionAddHypercard, QString::fromUtf8("▣"));
 	setMenuActionGlyphIcon(ui->actionAdd_Text, QStringLiteral("T"));
 	setMenuActionGlyphIcon(ui->actionAdd_Particles, QString::fromUtf8("*"));
-	setMenuActionGlyphIcon(action_add_tree, QString::fromUtf8("T"));
+	setMenuActionGlyphIcon(action_add_tree, QString::fromUtf8("♣"));
 	setMenuActionGlyphIcon(action_add_scientific_object, QString::fromUtf8("⚛"));
 	setMenuActionGlyphIcon(ui->actionAdd_Spotlight, QString::fromUtf8("⌁"));
 	setMenuActionGlyphIcon(ui->actionAdd_Camera, QString::fromUtf8("◉"));
@@ -3482,7 +3482,11 @@ void MainWindow::setObjectEditorControlsEditable(bool editable)
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->setControlsEditable(editable);
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+	{
+		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
+		ui->objectEditor->setControlsEditable(editable);
 		tree_editor_panel->setControlsEditable(editable);
+	}
 	else
 	{
 		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
@@ -3506,6 +3510,8 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 	else if(is_tree_editor && tree_editor_panel)
 	{
 		active_editor_kind = ActiveEditor_Tree;
+		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
+		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 		tree_editor_panel->setFromObject(ob, ob_in_editing_users_world);
 	}
 	else
@@ -3536,7 +3542,10 @@ void MainWindow::objectEditorToObject(WorldObject& ob)
 	if((active_editor_kind == ActiveEditor_Scientific || ScientificObjectSettings::isScientificObjectContent(ob.content)) && scientific_object_editor)
 		scientific_object_editor->toObject(ob);
 	else if((active_editor_kind == ActiveEditor_Tree || TreeObject::isTreeObject(ob)) && tree_editor_panel)
+	{
+		ui->objectEditor->writeTransformMembersToObject(ob);
 		tree_editor_panel->toObject(ob);
+	}
 	else
 		ui->objectEditor->toObject(ob); // Sets changed_flags on object as well.
 }
@@ -3547,7 +3556,7 @@ void MainWindow::objectEditorObjectPickedUp()
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->objectPickedUp();
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
-		tree_editor_panel->objectPickedUp();
+		ui->objectEditor->objectPickedUp();
 	else
 		ui->objectEditor->objectPickedUp();
 }
@@ -3558,7 +3567,7 @@ void MainWindow::objectEditorObjectDropped()
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->objectDropped();
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
-		tree_editor_panel->objectDropped();
+		ui->objectEditor->objectDropped();
 	else
 		ui->objectEditor->objectDropped();
 }
@@ -3569,7 +3578,7 @@ bool MainWindow::snapToGridCheckBoxChecked()
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->snapToGridChecked();
 	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
-		return tree_editor_panel->snapToGridChecked();
+		return ui->objectEditor->snapToGridCheckBox->isChecked();
 	return ui->objectEditor->snapToGridCheckBox->isChecked();
 }
 
@@ -3579,7 +3588,7 @@ double MainWindow::gridSpacing()
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->gridSpacing();
 	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
-		return tree_editor_panel->gridSpacing();
+		return ui->objectEditor->gridSpacingDoubleSpinBox->value();
 	return ui->objectEditor->gridSpacingDoubleSpinBox->value();
 }
 
@@ -3589,7 +3598,7 @@ bool MainWindow::posAndRot3DControlsEnabled()
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->posAndRot3DControlsEnabled();
 	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
-		return tree_editor_panel->posAndRot3DControlsEnabled();
+		return ui->objectEditor->posAndRot3DControlsEnabled();
 	return ui->objectEditor->posAndRot3DControlsEnabled();
 }
 
@@ -3607,9 +3616,9 @@ void MainWindow::showObjectEditor()
 	}
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 	{
-		ui->objectEditor->hide();
 		if(scientific_object_editor)
 			scientific_object_editor->hide();
+		ui->objectEditor->show();
 		tree_editor_panel->show();
 	}
 	else
@@ -3628,7 +3637,10 @@ void MainWindow::setObjectEditorEnabled(bool enabled)
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->setControlsEnabled(enabled);
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+	{
+		ui->objectEditor->setEnabled(enabled);
 		tree_editor_panel->setControlsEnabled(enabled);
+	}
 	else
 		ui->objectEditor->setEnabled(enabled);
 }
@@ -8184,7 +8196,9 @@ void MainWindow::on_actionAddTree_triggered()
 	}
 
 	TreeParams params = TreePresets::Oak();
-	params.seed = QRandomGenerator::global()->generate();
+	params.seed = (QRandomGenerator::global()->generate() & 0x7fffffffu);
+	if(params.seed == 0)
+		params.seed = 1;
 	TreeSerialization::clamp(params);
 
 	TreeObject tree(params);
@@ -8216,22 +8230,7 @@ void MainWindow::on_actionAddTree_triggered()
 	new_world_object->scale = Vec3f(params.scale);
 	new_world_object->max_model_lod_level = params.lodEnabled ? 2 : 0;
 	new_world_object->model_url = mesh_URL;
-	new_world_object->content = TreeSerialization::serialiseToContent(params);
-	new_world_object->setCollidable(params.collisionMode != TreeCollisionMode::None);
-	new_world_object->setDynamic(false);
-	new_world_object->setIsSensor(false);
-
-	new_world_object->materials.resize(2);
-	new_world_object->materials[0] = new WorldMaterial();
-	new_world_object->materials[0]->name = "Tree Bark";
-	new_world_object->materials[0]->colour_rgb = Colour3f(params.barkColor.r, params.barkColor.g, params.barkColor.b);
-	new_world_object->materials[0]->roughness = ScalarVal(0.82f);
-	new_world_object->materials[1] = new WorldMaterial();
-	new_world_object->materials[1]->name = "Tree Leaves";
-	new_world_object->materials[1]->colour_rgb = Colour3f(params.leafColor.r, params.leafColor.g, params.leafColor.b);
-	new_world_object->materials[1]->opacity = ScalarVal(params.leafAlpha);
-	new_world_object->materials[1]->roughness = ScalarVal(0.65f);
-	new_world_object->materials[1]->flags = WorldMaterial::DOUBLE_SIDED_FLAG;
+	TreeObject::applyToWorldObject(*new_world_object, params, /*rebuild_mesh=*/false);
 
 	new_world_object->setAABBOS(results.batched_mesh->aabb_os);
 
@@ -10781,7 +10780,7 @@ void MainWindow::updateObjectEditorObTransformSlot()
 		if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 			scientific_object_editor->setTransformFromObject(*gui_client.selected_ob);
 		else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
-			tree_editor_panel->setTransformFromObject(*gui_client.selected_ob);
+			ui->objectEditor->setTransformFromObject(*gui_client.selected_ob);
 		else
 			ui->objectEditor->setTransformFromObject(*gui_client.selected_ob);
 	}

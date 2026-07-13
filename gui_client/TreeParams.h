@@ -71,10 +71,17 @@ enum class TreeCollisionMode
 	Simplified
 };
 
+enum class TreeType
+{
+	Deciduous,
+	Evergreen
+};
+
 
 struct TreeParams
 {
 	uint32_t seed = 12345;
+	TreeType type = TreeType::Deciduous;
 	TreePresetType preset = TreePresetType::Oak;
 	std::string name = "Tree";
 
@@ -93,6 +100,9 @@ struct TreeParams
 	int trunkSections = 8;
 
 	TreeColor barkColor {0.35f, 0.20f, 0.10f, 1.0f};
+	std::string barkTextureType = "Bark001";
+	bool barkTextured = true;
+	bool barkFlatShading = false;
 	float barkTextureScaleX = 1.0f;
 	float barkTextureScaleY = 1.0f;
 
@@ -109,16 +119,30 @@ struct TreeParams
 
 	TreeLeafType leafType = TreeLeafType::Simple;
 	int leafCount = 500;
+	float leafAngle = 10.0f;
 	float leafSize = 0.35f;
 	float leafSizeRandomness = 0.25f;
 	TreeColor leafColor {0.20f, 0.60f, 0.18f, 1.0f};
 	float leafAlpha = 1.0f;
+	float leafAlphaTest = 0.5f;
+	bool leafRoundedNormals = true;
 	int leafStartLevel = 1;
 	TreeBillboardMode billboardMode = TreeBillboardMode::DoubleCross;
+
+	bool trellisEnabled = false;
+	TreeVec3 trellisPosition {0.0f, -2.0f, 0.0f};
+	float trellisWidth = 10.0f;
+	float trellisHeight = 20.0f;
+	float trellisSpacing = 2.0f;
+	float trellisForceStrength = 0.02f;
+	float trellisForceMaxDistance = 3.0f;
+	float trellisForceFalloff = 1.0f;
+	float trellisCylinderRadius = 0.05f;
+	bool trellisVisible = true;
+	TreeColor trellisColor {0.55f, 0.27f, 0.07f, 1.0f};
 
 	TreeQuality quality = TreeQuality::Medium;
 	bool lodEnabled = true;
 	TreeCollisionMode collisionMode = TreeCollisionMode::TrunkOnly;
 	bool castShadows = true;
 };
-

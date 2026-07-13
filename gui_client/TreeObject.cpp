@@ -13,6 +13,35 @@ Copyright Glare Technologies Limited 2026 -
 #include <BitUtils.h>
 
 
+namespace
+{
+std::string barkFolderForParams(const TreeParams& params)
+{
+	return params.barkTextureType == "Bark006" ? "Bark006_1K-JPG" : "Bark001_1K-JPG";
+}
+
+
+std::string barkPrefixForParams(const TreeParams& params)
+{
+	return params.barkTextureType == "Bark006" ? "Bark006_1K-JPG" : "Bark001_1K-JPG";
+}
+
+
+std::string leafTextureForParams(const TreeParams& params)
+{
+	switch(params.leafType)
+	{
+	case TreeLeafType::Oak:         return "tree_assets/leaves/oak.png";
+	case TreeLeafType::Birch:       return "tree_assets/leaves/aspen.png";
+	case TreeLeafType::PineNeedles: return "tree_assets/leaves/pine.png";
+	case TreeLeafType::Simple:      return "tree_assets/leaves/ash.png";
+	case TreeLeafType::None:        break;
+	}
+	return "";
+}
+}
+
+
 TreeObject::TreeObject()
 :	params(TreeSerialization::defaultParams()),
 	dirty(true)
@@ -94,17 +123,33 @@ void TreeObject::applyToWorldObject(WorldObject& ob, const TreeParams& params_, 
 	ob.materials[0]->name = "Tree Bark";
 	ob.materials[0]->colour_rgb = Colour3f(params.barkColor.r, params.barkColor.g, params.barkColor.b);
 	ob.materials[0]->roughness = ScalarVal(0.82f);
+	if(params.barkTextured)
+	{
+		const std::string folder = barkFolderForParams(params);
+		const std::string prefix = barkPrefixForParams(params);
+		ob.materials[0]->colour_texture_url = "tree_assets/bark/" + folder + "/" + prefix + "_Color.jpg";
+		ob.materials[0]->normal_map_url = "tree_assets/bark/" + folder + "/" + prefix + "_NormalGL.jpg";
+		ob.materials[0]->roughness.texture_url = "tree_assets/bark/" + folder + "/" + prefix + "_Roughness.jpg";
+	}
+	else
+	{
+		ob.materials[0]->colour_texture_url = "";
+		ob.materials[0]->normal_map_url = "";
+		ob.materials[0]->roughness.texture_url = "";
+	}
 
 	ob.materials[1]->name = "Tree Leaves";
 	ob.materials[1]->colour_rgb = Colour3f(params.leafColor.r, params.leafColor.g, params.leafColor.b);
+	ob.materials[1]->colour_texture_url = leafTextureForParams(params);
 	ob.materials[1]->opacity = ScalarVal(params.leafAlpha);
 	ob.materials[1]->roughness = ScalarVal(0.65f);
-	ob.materials[1]->flags = WorldMaterial::DOUBLE_SIDED_FLAG;
+	ob.materials[1]->flags = WorldMaterial::DOUBLE_SIDED_FLAG | WorldMaterial::USE_VERT_COLOURS_FOR_WIND;
 	if(params.leafAlpha < 0.999f)
+		BitUtils::setBit(ob.materials[1]->flags, WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG);
+	if(!ob.materials[1]->colour_texture_url.empty())
 		BitUtils::setBit(ob.materials[1]->flags, WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG);
 
 	ob.setCollidable(params.collisionMode != TreeCollisionMode::None);
 	ob.setDynamic(false);
 	ob.setIsSensor(false);
 }
-

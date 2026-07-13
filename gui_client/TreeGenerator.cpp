@@ -318,7 +318,7 @@ void TreeGenerator::generateLeaves(const TreeParams& params, TreeMeshData& mesh,
 		}
 
 		const float size = params.leafSize * randomRange(rng, 1.0f - params.leafSizeRandomness, 1.0f + params.leafSizeRandomness);
-		const float angle = randomRange(rng, 0.0f, 2.0f * PI);
+		const float angle = randomRange(rng, 0.0f, 2.0f * PI) + params.leafAngle * PI / 180.0f;
 		addLeafQuad(mesh, center, size, angle, 1);
 		if(params.billboardMode == TreeBillboardMode::DoubleCross)
 			addLeafQuad(mesh, center, size, angle + PI * 0.5f, 1);
