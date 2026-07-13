@@ -18,6 +18,7 @@ class QLabel;
 class QPushButton;
 class QSettings;
 class QSpinBox;
+class QTabWidget;
 class WorldObject;
 
 
@@ -64,13 +65,13 @@ private:
 	bool updating;
 	TreeParams current_params;
 	QTimer* rebuild_timer;
+	QTabWidget* mode_tabs;
 	QLabel* info_label;
 
 	QComboBox* preset_combo;
 	QComboBox* tree_type_combo;
 	QSpinBox* seed_spin;
 	QDoubleSpinBox* height_spin;
-	QDoubleSpinBox* scale_spin;
 	QDoubleSpinBox* trunk_height_spin;
 	QDoubleSpinBox* trunk_radius_spin;
 	QDoubleSpinBox* trunk_taper_spin;
@@ -96,6 +97,11 @@ private:
 	QDoubleSpinBox* branch_twist_spin;
 	QDoubleSpinBox* branch_randomness_spin;
 	QDoubleSpinBox* branch_start_height_spin;
+	QDoubleSpinBox* branch_force_x_spin;
+	QDoubleSpinBox* branch_force_y_spin;
+	QDoubleSpinBox* branch_force_z_spin;
+	QDoubleSpinBox* branch_force_strength_spin;
+	QDoubleSpinBox* branch_gnarliness_spin;
 	QComboBox* leaf_type_combo;
 	QSpinBox* leaf_count_spin;
 	QDoubleSpinBox* leaf_angle_spin;

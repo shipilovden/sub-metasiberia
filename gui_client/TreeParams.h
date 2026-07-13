@@ -116,6 +116,9 @@ struct TreeParams
 	float branchTwist = 0.1f;
 	float branchRandomness = 0.35f;
 	float branchStartHeight = 0.25f;
+	TreeVec3 branchForceDirection {0.0f, 1.0f, 0.0f};
+	float branchForceStrength = 0.01f;
+	float branchGnarliness = 0.2f;
 
 	TreeLeafType leafType = TreeLeafType::Simple;
 	int leafCount = 500;

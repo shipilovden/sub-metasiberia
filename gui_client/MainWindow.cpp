@@ -8227,7 +8227,7 @@ void MainWindow::on_actionAddTree_triggered()
 	new_world_object->pos = ob_pos;
 	new_world_object->axis = Vec3f(0, 0, 1);
 	new_world_object->angle = 0.0f;
-	new_world_object->scale = Vec3f(params.scale);
+	new_world_object->scale = Vec3f(1.0f);
 	new_world_object->max_model_lod_level = params.lodEnabled ? 2 : 0;
 	new_world_object->model_url = mesh_URL;
 	TreeObject::applyToWorldObject(*new_world_object, params, /*rebuild_mesh=*/false);

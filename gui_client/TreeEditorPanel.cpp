@@ -17,9 +17,11 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QGroupBox>
+#include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QTabWidget>
 #include <QtWidgets/QVBoxLayout>
 
 
@@ -72,6 +74,12 @@ void TreeEditorPanel::createUi()
 	layout->setContentsMargins(8, 8, 8, 8);
 	layout->setSpacing(8);
 
+	mode_tabs = new QTabWidget(this);
+	mode_tabs->addTab(new QWidget(this), tr("Tree"));
+	mode_tabs->addTab(new QWidget(this), tr("Export"));
+	mode_tabs->setTabEnabled(1, false);
+	layout->addWidget(mode_tabs);
+
 	info_label = new QLabel(tr("Tree Editor"), this);
 	info_label->setWordWrap(true);
 	layout->addWidget(info_label);
@@ -98,7 +106,6 @@ void TreeEditorPanel::createUi()
 	connect(tree_type_combo, SIGNAL(currentIndexChanged(int)), this, SLOT(controlChanged()));
 	seed_spin = addIntSpin(general_form, tr("Seed"), 1, 2147483647);
 	height_spin = addDoubleSpin(general_form, tr("Height"), 0.5, 60.0, 0.1, 2);
-	scale_spin = addDoubleSpin(general_form, tr("Scale"), 0.05, 20.0, 0.05, 2);
 	layout->addWidget(general_box);
 
 	QGroupBox* trunk_box = new QGroupBox(tr("Trunk"), this);
@@ -140,6 +147,11 @@ void TreeEditorPanel::createUi()
 	branch_twist_spin = addDoubleSpin(branch_form, tr("Branch Twist"), -3.14, 3.14, 0.02, 2);
 	branch_randomness_spin = addDoubleSpin(branch_form, tr("Branch Randomness"), 0.0, 2.0, 0.02, 2);
 	branch_start_height_spin = addDoubleSpin(branch_form, tr("Branch Start Height"), 0.0, 0.95, 0.01, 2);
+	branch_force_x_spin = addDoubleSpin(branch_form, tr("Branch Force X"), -1.0, 1.0, 0.01, 2);
+	branch_force_y_spin = addDoubleSpin(branch_form, tr("Branch Force Y"), -1.0, 1.0, 0.01, 2);
+	branch_force_z_spin = addDoubleSpin(branch_form, tr("Branch Force Z"), -1.0, 1.0, 0.01, 2);
+	branch_force_strength_spin = addDoubleSpin(branch_form, tr("Branch Force Strength"), -1.0, 1.0, 0.01, 3);
+	branch_gnarliness_spin = addDoubleSpin(branch_form, tr("Branch Gnarliness"), 0.0, 2.0, 0.02, 2);
 	layout->addWidget(branch_box);
 
 	QGroupBox* leaves_box = new QGroupBox(tr("Leaves"), this);
@@ -310,7 +322,7 @@ TreeParams TreeEditorPanel::controlsToParams() const
 	p.type = (TreeType)tree_type_combo->currentData().toInt();
 	p.seed = (uint32_t)seed_spin->value();
 	p.height = (float)height_spin->value();
-	p.scale = (float)scale_spin->value();
+	p.scale = 1.0f;
 	p.trunkHeight = (float)trunk_height_spin->value();
 	p.trunkRadius = (float)trunk_radius_spin->value();
 	p.trunkTaper = (float)trunk_taper_spin->value();
@@ -334,6 +346,9 @@ TreeParams TreeEditorPanel::controlsToParams() const
 	p.branchTwist = (float)branch_twist_spin->value();
 	p.branchRandomness = (float)branch_randomness_spin->value();
 	p.branchStartHeight = (float)branch_start_height_spin->value();
+	p.branchForceDirection = {(float)branch_force_x_spin->value(), (float)branch_force_y_spin->value(), (float)branch_force_z_spin->value()};
+	p.branchForceStrength = (float)branch_force_strength_spin->value();
+	p.branchGnarliness = (float)branch_gnarliness_spin->value();
 	p.leafType = (TreeLeafType)leaf_type_combo->currentData().toInt();
 	p.leafCount = leaf_count_spin->value();
 	p.leafAngle = (float)leaf_angle_spin->value();
@@ -377,7 +392,6 @@ void TreeEditorPanel::setControlsFromParams(const TreeParams& params)
 	set_combo(tree_type_combo, (int)params.type);
 	seed_spin->setValue((int)std::min<uint32_t>(params.seed, 2147483647u));
 	height_spin->setValue(params.height);
-	scale_spin->setValue(params.scale);
 	trunk_height_spin->setValue(params.trunkHeight);
 	trunk_radius_spin->setValue(params.trunkRadius);
 	trunk_taper_spin->setValue(params.trunkTaper);
@@ -405,6 +419,11 @@ void TreeEditorPanel::setControlsFromParams(const TreeParams& params)
 	branch_twist_spin->setValue(params.branchTwist);
 	branch_randomness_spin->setValue(params.branchRandomness);
 	branch_start_height_spin->setValue(params.branchStartHeight);
+	branch_force_x_spin->setValue(params.branchForceDirection.x);
+	branch_force_y_spin->setValue(params.branchForceDirection.y);
+	branch_force_z_spin->setValue(params.branchForceDirection.z);
+	branch_force_strength_spin->setValue(params.branchForceStrength);
+	branch_gnarliness_spin->setValue(params.branchGnarliness);
 	set_combo(leaf_type_combo, (int)params.leafType);
 	leaf_count_spin->setValue(params.leafCount);
 	leaf_angle_spin->setValue(params.leafAngle);

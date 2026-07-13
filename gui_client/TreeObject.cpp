@@ -113,12 +113,14 @@ void TreeObject::applyToWorldObject(WorldObject& ob, const TreeParams& params_, 
 		ob.changed_flags |= WorldObject::MODEL_URL_CHANGED;
 	}
 
-	if(ob.materials.size() < 2)
-		ob.materials.resize(2);
+	if(ob.materials.size() < 3)
+		ob.materials.resize(3);
 	if(ob.materials[0].isNull())
 		ob.materials[0] = new WorldMaterial();
 	if(ob.materials[1].isNull())
 		ob.materials[1] = new WorldMaterial();
+	if(ob.materials[2].isNull())
+		ob.materials[2] = new WorldMaterial();
 
 	ob.materials[0]->name = "Tree Bark";
 	ob.materials[0]->colour_rgb = Colour3f(params.barkColor.r, params.barkColor.g, params.barkColor.b);
@@ -148,6 +150,12 @@ void TreeObject::applyToWorldObject(WorldObject& ob, const TreeParams& params_, 
 		BitUtils::setBit(ob.materials[1]->flags, WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG);
 	if(!ob.materials[1]->colour_texture_url.empty())
 		BitUtils::setBit(ob.materials[1]->flags, WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG);
+
+	ob.materials[2]->name = "Tree Selection Hull";
+	ob.materials[2]->colour_rgb = Colour3f(1.0f);
+	ob.materials[2]->opacity = ScalarVal(0.0f);
+	ob.materials[2]->roughness = ScalarVal(1.0f);
+	ob.materials[2]->flags = WorldMaterial::DOUBLE_SIDED_FLAG | WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG;
 
 	ob.setCollidable(params.collisionMode != TreeCollisionMode::None);
 	ob.setDynamic(false);

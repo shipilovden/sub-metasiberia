@@ -622,6 +622,8 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 
 	// Tree editor
 	add("TreeEditorPanel", "Tree Editor", "Редактор дерева");
+	add("TreeEditorPanel", "Tree", "Дерево");
+	add("TreeEditorPanel", "Export", "Экспорт");
 	add("TreeEditorPanel", "Procedural Tree", "Процедурное дерево");
 	add("TreeEditorPanel", "Presets", "Пресеты");
 	add("TreeEditorPanel", "Preset", "Пресет");
@@ -665,6 +667,11 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("TreeEditorPanel", "Branch Twist", "Скручивание ветвей");
 	add("TreeEditorPanel", "Branch Randomness", "Случайность ветвей");
 	add("TreeEditorPanel", "Branch Start Height", "Высота начала ветвей");
+	add("TreeEditorPanel", "Branch Force X", "Сила ветвей X");
+	add("TreeEditorPanel", "Branch Force Y", "Сила ветвей Y");
+	add("TreeEditorPanel", "Branch Force Z", "Сила ветвей Z");
+	add("TreeEditorPanel", "Branch Force Strength", "Сила роста ветвей");
+	add("TreeEditorPanel", "Branch Gnarliness", "Корявость ветвей");
 	add("TreeEditorPanel", "Leaves", "Листья");
 	add("TreeEditorPanel", "Simple", "Простые");
 	add("TreeEditorPanel", "Pine Needles", "Хвоя");

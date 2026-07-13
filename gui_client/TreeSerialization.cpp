@@ -287,6 +287,8 @@ void clamp(TreeParams& p)
 	p.branchTwist = clampValue(p.branchTwist, -3.14159f, 3.14159f);
 	p.branchRandomness = clampValue(p.branchRandomness, 0.0f, 2.0f);
 	p.branchStartHeight = clampValue(p.branchStartHeight, 0.0f, 0.95f);
+	p.branchForceStrength = clampValue(p.branchForceStrength, -1.0f, 1.0f);
+	p.branchGnarliness = clampValue(p.branchGnarliness, 0.0f, 2.0f);
 
 	p.leafCount = clampValue(p.leafCount, 0, p.quality == TreeQuality::High ? 2000 : (p.quality == TreeQuality::Medium ? 900 : 250));
 	p.leafAngle = clampValue(p.leafAngle, -90.0f, 90.0f);
@@ -363,6 +365,9 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 		p.branchTwist = (float)root.getChildDoubleValueWithDefaultVal(parser, "branchTwist", p.branchTwist);
 		p.branchRandomness = (float)root.getChildDoubleValueWithDefaultVal(parser, "branchRandomness", p.branchRandomness);
 		p.branchStartHeight = (float)root.getChildDoubleValueWithDefaultVal(parser, "branchStartHeight", p.branchStartHeight);
+		p.branchForceDirection = readVec3(parser, root, "branchForceDirection", p.branchForceDirection);
+		p.branchForceStrength = (float)root.getChildDoubleValueWithDefaultVal(parser, "branchForceStrength", p.branchForceStrength);
+		p.branchGnarliness = (float)root.getChildDoubleValueWithDefaultVal(parser, "branchGnarliness", p.branchGnarliness);
 
 		p.leafType = leafTypeFromString(root.getChildStringValueWithDefaultVal(parser, "leafType", leafTypeToString(p.leafType)));
 		p.leafCount = root.getChildIntValueWithDefaultVal(parser, "leafCount", p.leafCount);
@@ -448,6 +453,9 @@ std::string serialiseToContent(const TreeParams& params_)
 	s << "  \"branchTwist\": " << p.branchTwist << ",\n";
 	s << "  \"branchRandomness\": " << p.branchRandomness << ",\n";
 	s << "  \"branchStartHeight\": " << p.branchStartHeight << ",\n";
+	s << "  \"branchForceDirection\": " << vec3ToJson(p.branchForceDirection) << ",\n";
+	s << "  \"branchForceStrength\": " << p.branchForceStrength << ",\n";
+	s << "  \"branchGnarliness\": " << p.branchGnarliness << ",\n";
 	s << "  \"leafType\": \"" << leafTypeToString(p.leafType) << "\",\n";
 	s << "  \"leafCount\": " << p.leafCount << ",\n";
 	s << "  \"leafAngle\": " << p.leafAngle << ",\n";

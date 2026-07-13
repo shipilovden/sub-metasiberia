@@ -215,12 +215,21 @@ TreeMeshData TreeGenerator::generate(const TreeParams& params_)
 {
 	TreeParams params = params_;
 	TreeSerialization::clamp(params);
+	if(std::fabs(params.height - params.trunkHeight) > 0.001f)
+	{
+		const float s = params.height / std::max(0.001f, params.trunkHeight);
+		params.trunkHeight = params.height;
+		params.branchLength *= s;
+		params.branchRadius *= std::sqrt(std::max(0.05f, s));
+		params.leafSize *= std::sqrt(std::max(0.05f, s));
+	}
 
 	TreeMeshData mesh;
 	std::vector<TreeVec3> branch_tips;
 	generateTrunk(params, mesh, branch_tips);
 	generateBranches(params, mesh, branch_tips);
 	generateLeaves(params, mesh, branch_tips);
+	generateSelectionHull(params, mesh);
 	return mesh;
 }
 
@@ -275,10 +284,17 @@ void TreeGenerator::generateBranches(const TreeParams& params, TreeMeshData& mes
 			const TreeVec3 start = makeVec3(curve, y, curve * 0.35f);
 			const float around = 2.0f * PI * (slot + randomRange(rng, -0.20f, 0.20f));
 			const float angle = (params.branchAngle + randomRange(rng, -params.branchRandomness * 20.0f, params.branchRandomness * 20.0f)) * PI / 180.0f;
-			const TreeVec3 out = makeVec3(std::cos(around) * std::sin(angle), std::cos(angle), std::sin(around) * std::sin(angle));
+			TreeVec3 out = makeVec3(std::cos(around) * std::sin(angle), std::cos(angle), std::sin(around) * std::sin(angle));
+			const TreeVec3 force_dir = normalise(params.branchForceDirection, makeVec3(0, 1, 0));
+			out = normalise(add(out, mul(force_dir, params.branchForceStrength * (1.0f + (float)level))));
 			const float len = params.branchLength * length_scale * randomRange(rng, 1.0f - params.branchRandomness * 0.35f, 1.0f + params.branchRandomness * 0.35f);
-			const TreeVec3 mid = add(start, mul(out, len * 0.55f));
-			const TreeVec3 tip = add(start, add(mul(out, len), makeVec3(0, params.branchCurve * len * 0.25f, 0)));
+			const TreeVec3 gnarl = makeVec3(
+				randomRange(rng, -params.branchGnarliness, params.branchGnarliness) * len * 0.12f,
+				randomRange(rng, -params.branchGnarliness, params.branchGnarliness) * len * 0.06f,
+				randomRange(rng, -params.branchGnarliness, params.branchGnarliness) * len * 0.12f
+			);
+			const TreeVec3 mid = add(add(start, mul(out, len * 0.55f)), gnarl);
+			const TreeVec3 tip = add(start, add(add(mul(out, len), makeVec3(0, params.branchCurve * len * 0.25f, 0)), mul(gnarl, 0.55f)));
 			const float r0 = params.branchRadius * radius_scale;
 			const float r1 = std::max(0.01f, r0 * params.branchTaper);
 			addCylinderBetween(mesh, start, mid, r0, (r0 + r1) * 0.5f, radial_segments, 2, 0, params.branchTwist);
@@ -326,6 +342,17 @@ void TreeGenerator::generateLeaves(const TreeParams& params, TreeMeshData& mesh,
 }
 
 
+void TreeGenerator::generateSelectionHull(const TreeParams& params, TreeMeshData& mesh)
+{
+	const float crown_radius = std::max(std::max(params.branchLength * 1.15f, params.trunkRadius * 6.0f), params.leafSize * 5.0f);
+	const float lower_radius = std::max(params.trunkRadius * 3.0f, 0.35f);
+	const float height = std::max(params.trunkHeight, params.height);
+	const TreeVec3 base = makeVec3(0.0f, std::max(0.05f, height * 0.05f), 0.0f);
+	const TreeVec3 top = makeVec3(0.0f, std::max(0.5f, height * 0.92f), 0.0f);
+	addCylinderBetween(mesh, base, top, lower_radius, crown_radius, 10, 3, 2, 0.0f);
+}
+
+
 std::string TreeGenerator::writeObjToTempFile(const TreeParams& params)
 {
 	const TreeMeshData mesh = generate(params);
@@ -349,7 +376,7 @@ std::string TreeGenerator::writeObjToTempFile(const TreeParams& params)
 		if(mat != current_mat)
 		{
 			current_mat = mat;
-			s << "usemtl " << (current_mat == 0 ? "bark" : "leaves") << "\n";
+			s << "usemtl " << (current_mat == 0 ? "bark" : (current_mat == 1 ? "leaves" : "selection_hull")) << "\n";
 		}
 		const uint32_t a = mesh.indices[i] + 1;
 		const uint32_t b = mesh.indices[i + 1] + 1;
