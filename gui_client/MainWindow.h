@@ -53,6 +53,7 @@ class UpdateManager;
 class WebcamWindow;
 class AvatarSettingsWidget;
 class ScientificObjectEditor;
+class TreeEditorPanel;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -91,6 +92,7 @@ private slots:;
 	void on_actionAdd_Audio_Source_triggered();
 	void on_actionAdd_Decal_triggered();
 	void on_actionAdd_Particles_triggered();
+	void on_actionAddTree_triggered();
 	void on_actionAddScientificObject_triggered();
 	void on_actionCopy_Object_triggered();
 	void on_actionPaste_Object_triggered();
@@ -623,11 +625,14 @@ public:
 	QDockWidget* map_dock_widget;
 	QWidget* map_dock_map_widget;
 	ScientificObjectEditor* scientific_object_editor;
+	TreeEditorPanel* tree_editor_panel;
+	QAction* action_add_tree;
 	QAction* action_add_scientific_object;
 	enum ActiveEditorKind
 	{
 		ActiveEditor_Object,
-		ActiveEditor_Scientific
+		ActiveEditor_Scientific,
+		ActiveEditor_Tree
 	};
 	ActiveEditorKind active_editor_kind;
 };

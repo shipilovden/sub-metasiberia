@@ -46,9 +46,15 @@ Copyright Glare Technologies Limited 2024 -
 #include "MapWorldUtils.h"
 #include "HTTPClient.h"
 #include "GearInventoryUI.h"
+#include "ModelLoading.h"
 #include "BotEditorWidget.h"
 #include "PlayerPhysics.h"
 #include "ParticleEmitterSettings.h"
+#include "TreeEditorPanel.h"
+#include "TreeGenerator.h"
+#include "TreeObject.h"
+#include "TreePresets.h"
+#include "TreeSerialization.h"
 #include "ScientificObjectEditor.h"
 #include "ScientificObjectSettings.h"
 #include "../qt/FlowLayout.h"
@@ -63,6 +69,8 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QDateTime>
+#include <QtCore/QRandomGenerator>
+#include <utils/FileChecksum.h>
 #include <QtCore/QHash>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
@@ -1580,6 +1588,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	,map_dock_widget(NULL)
 	,map_dock_map_widget(NULL)
 	,scientific_object_editor(NULL)
+	,tree_editor_panel(NULL)
+	,action_add_tree(NULL)
 	,action_add_scientific_object(NULL)
 	,active_editor_kind(ActiveEditor_Object)
 	//game_controller(NULL)
@@ -1986,6 +1996,9 @@ void MainWindow::initialiseUI()
 	action_add_scientific_object = new QAction(this);
 	action_add_scientific_object->setObjectName(QStringLiteral("actionAddScientificObject"));
 	connect(action_add_scientific_object, SIGNAL(triggered(bool)), this, SLOT(on_actionAddScientificObject_triggered()));
+	action_add_tree = new QAction(this);
+	action_add_tree->setObjectName(QStringLiteral("actionAddTree"));
+	connect(action_add_tree, SIGNAL(triggered(bool)), this, SLOT(on_actionAddTree_triggered()));
 
 	initialiseLanguageMenu();
 	configureEditAddSubmenu();
@@ -2113,6 +2126,12 @@ void MainWindow::initialiseUI()
 	scientific_object_editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	ui->verticalLayout_4->addWidget(scientific_object_editor);
 	scientific_object_editor->hide();
+	tree_editor_panel = new TreeEditorPanel(ui->scrollAreaWidgetContents);
+	tree_editor_panel->setObjectName(QStringLiteral("treeEditorPanel"));
+	tree_editor_panel->setMinimumWidth(360);
+	tree_editor_panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	ui->verticalLayout_4->addWidget(tree_editor_panel);
+	tree_editor_panel->hide();
 
 	// Add a spacer to right-align the UserDetailsWidget (see http://www.setnode.com/blog/right-aligning-a-button-in-a-qtoolbar/)
 	QWidget* spacer = new QWidget();
@@ -2214,6 +2233,7 @@ void MainWindow::initialiseUI()
 
 	ui->objectEditor->init();
 	scientific_object_editor->init(settings);
+	tree_editor_panel->init(settings);
 
 	ui->diagnosticsWidget->init(settings);
 	connect(ui->diagnosticsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(diagnosticsWidgetChanged()));
@@ -2299,6 +2319,10 @@ void MainWindow::initialiseUI()
 	connect(scientific_object_editor, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
 	connect(scientific_object_editor, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
 	connect(scientific_object_editor, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
+	connect(tree_editor_panel, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
+	connect(tree_editor_panel, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
+	connect(tree_editor_panel, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
+	connect(tree_editor_panel, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
 	connect(ui->parcelEditor, SIGNAL(parcelChanged()), this, SLOT(parcelEditedSlot()));
 	connect(ui->worldSettingsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(worldSettingsChangedSlot()));
 	connect(user_details, SIGNAL(logInClicked()), this, SLOT(on_actionLogIn_triggered()));
@@ -2321,6 +2345,8 @@ void MainWindow::initialiseUI()
 	ui->objectEditor->setControlsEnabled(false);
 	scientific_object_editor->setControlsEnabled(false);
 	scientific_object_editor->hide();
+	tree_editor_panel->setControlsEnabled(false);
+	tree_editor_panel->hide();
 	ui->parcelEditor->hide();
 	ui->botEditorWidget->hide();
 
@@ -2685,6 +2711,12 @@ void MainWindow::configureEditAddSubmenu()
 		action_add_scientific_object->setToolTip(tr("Add Scientific Object"));
 		action_add_scientific_object->setStatusTip(tr("Add Scientific Object"));
 	}
+	if(action_add_tree)
+	{
+		action_add_tree->setText(tr("Add Tree"));
+		action_add_tree->setToolTip(tr("Add Tree"));
+		action_add_tree->setStatusTip(tr("Add procedural tree"));
+	}
 
 	const QList<QAction*> add_actions = {
 		ui->actionAddObject,
@@ -2692,6 +2724,7 @@ void MainWindow::configureEditAddSubmenu()
 		ui->actionAdd_Text,
 		ui->actionAdd_Spotlight,
 		ui->actionAdd_Particles,
+		action_add_tree,
 		action_add_scientific_object,
 		ui->actionAdd_Camera,
 		ui->actionAdd_Seat,
@@ -2744,6 +2777,7 @@ void MainWindow::refreshEditMenuActionIcons()
 	setMenuActionGlyphIcon(ui->actionAddHypercard, QString::fromUtf8("▣"));
 	setMenuActionGlyphIcon(ui->actionAdd_Text, QStringLiteral("T"));
 	setMenuActionGlyphIcon(ui->actionAdd_Particles, QString::fromUtf8("*"));
+	setMenuActionGlyphIcon(action_add_tree, QString::fromUtf8("T"));
 	setMenuActionGlyphIcon(action_add_scientific_object, QString::fromUtf8("⚛"));
 	setMenuActionGlyphIcon(ui->actionAdd_Spotlight, QString::fromUtf8("⌁"));
 	setMenuActionGlyphIcon(ui->actionAdd_Camera, QString::fromUtf8("◉"));
@@ -3447,6 +3481,8 @@ void MainWindow::setObjectEditorControlsEditable(bool editable)
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->setControlsEditable(editable);
+	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+		tree_editor_panel->setControlsEditable(editable);
 	else
 	{
 		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
@@ -3458,6 +3494,7 @@ void MainWindow::setObjectEditorControlsEditable(bool editable)
 void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_index, bool ob_in_editing_users_world)
 {
 	const bool is_scientific_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ScientificObjectSettings::isScientificObjectContent(ob.content);
+	const bool is_tree_editor = TreeObject::isTreeObject(ob);
 	const bool is_particle_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
 	const bool is_portal_editor = ob.object_type == WorldObject::ObjectType_Portal;
 
@@ -3466,6 +3503,11 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		active_editor_kind = ActiveEditor_Scientific;
 		scientific_object_editor->setFromObject(ob, ob_in_editing_users_world);
 	}
+	else if(is_tree_editor && tree_editor_panel)
+	{
+		active_editor_kind = ActiveEditor_Tree;
+		tree_editor_panel->setFromObject(ob, ob_in_editing_users_world);
+	}
 	else
 	{
 		active_editor_kind = ActiveEditor_Object;
@@ -3473,7 +3515,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 	}
 
-	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))));
+	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor")))));
 	if(ui->editorDockWidget->toggleViewAction())
 		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }
@@ -3483,6 +3525,8 @@ int MainWindow::getSelectedMatIndex()
 {
 	if(active_editor_kind == ActiveEditor_Scientific)
 		return 0;
+	if(active_editor_kind == ActiveEditor_Tree)
+		return 0;
 	return ui->objectEditor->getSelectedMatIndex();
 }
 
@@ -3491,6 +3535,8 @@ void MainWindow::objectEditorToObject(WorldObject& ob)
 {
 	if((active_editor_kind == ActiveEditor_Scientific || ScientificObjectSettings::isScientificObjectContent(ob.content)) && scientific_object_editor)
 		scientific_object_editor->toObject(ob);
+	else if((active_editor_kind == ActiveEditor_Tree || TreeObject::isTreeObject(ob)) && tree_editor_panel)
+		tree_editor_panel->toObject(ob);
 	else
 		ui->objectEditor->toObject(ob); // Sets changed_flags on object as well.
 }
@@ -3500,6 +3546,8 @@ void MainWindow::objectEditorObjectPickedUp()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->objectPickedUp();
+	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+		tree_editor_panel->objectPickedUp();
 	else
 		ui->objectEditor->objectPickedUp();
 }
@@ -3509,6 +3557,8 @@ void MainWindow::objectEditorObjectDropped()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->objectDropped();
+	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+		tree_editor_panel->objectDropped();
 	else
 		ui->objectEditor->objectDropped();
 }
@@ -3518,6 +3568,8 @@ bool MainWindow::snapToGridCheckBoxChecked()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->snapToGridChecked();
+	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+		return tree_editor_panel->snapToGridChecked();
 	return ui->objectEditor->snapToGridCheckBox->isChecked();
 }
 
@@ -3526,6 +3578,8 @@ double MainWindow::gridSpacing()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->gridSpacing();
+	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+		return tree_editor_panel->gridSpacing();
 	return ui->objectEditor->gridSpacingDoubleSpinBox->value();
 }
 
@@ -3534,6 +3588,8 @@ bool MainWindow::posAndRot3DControlsEnabled()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->posAndRot3DControlsEnabled();
+	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+		return tree_editor_panel->posAndRot3DControlsEnabled();
 	return ui->objectEditor->posAndRot3DControlsEnabled();
 }
 
@@ -3545,12 +3601,23 @@ void MainWindow::showObjectEditor()
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 	{
 		ui->objectEditor->hide();
+		if(tree_editor_panel)
+			tree_editor_panel->hide();
 		scientific_object_editor->show();
+	}
+	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+	{
+		ui->objectEditor->hide();
+		if(scientific_object_editor)
+			scientific_object_editor->hide();
+		tree_editor_panel->show();
 	}
 	else
 	{
 		if(scientific_object_editor)
 			scientific_object_editor->hide();
+		if(tree_editor_panel)
+			tree_editor_panel->hide();
 		ui->objectEditor->show();
 	}
 }
@@ -3560,6 +3627,8 @@ void MainWindow::setObjectEditorEnabled(bool enabled)
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->setControlsEnabled(enabled);
+	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+		tree_editor_panel->setControlsEnabled(enabled);
 	else
 		ui->objectEditor->setEnabled(enabled);
 }
@@ -8099,6 +8168,84 @@ void MainWindow::on_actionAdd_Particles_triggered()
 }
 
 
+void MainWindow::on_actionAddTree_triggered()
+{
+	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 3.0f;
+
+	bool ob_pos_in_parcel;
+	const bool have_creation_perms = gui_client.haveParcelObjectCreatePermissions(ob_pos, ob_pos_in_parcel);
+	if(!have_creation_perms)
+	{
+		if(ob_pos_in_parcel)
+			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
+		else
+			showErrorNotification("You can only create trees in a parcel that you have write permissions for.");
+		return;
+	}
+
+	TreeParams params = TreePresets::Oak();
+	params.seed = QRandomGenerator::global()->generate();
+	TreeSerialization::clamp(params);
+
+	TreeObject tree(params);
+	tree.rebuild();
+
+	ModelLoading::MakeGLObjectResults results;
+	ModelLoading::makeGLObjectForModelFile(*ui->glWidget->opengl_engine, *ui->glWidget->opengl_engine->vert_buf_allocator, /*allocator=*/nullptr, tree.generatedModelPath(), /*do_opengl_stuff=*/false, results);
+	if(results.batched_mesh.isNull())
+	{
+		showErrorNotification("Failed to build procedural tree mesh.");
+		return;
+	}
+
+	const std::string bmesh_disk_path = PlatformUtils::getTempDirPath() + "/metasiberia_tree.bmesh";
+	BatchedMesh::WriteOptions write_options;
+	write_options.compression_level = 9;
+	results.batched_mesh->writeToFile(bmesh_disk_path, write_options);
+	const uint64 model_hash = FileChecksum::fileChecksum(bmesh_disk_path);
+	const URLString mesh_URL = ResourceManager::URLForNameAndExtensionAndHash("metasiberia_tree.obj", ::getExtension(bmesh_disk_path), model_hash);
+	if(!gui_client.resource_manager->isFileForURLPresent(mesh_URL))
+		gui_client.resource_manager->copyLocalFileToResourceDir(bmesh_disk_path, mesh_URL);
+
+	WorldObjectRef new_world_object = new WorldObject();
+	new_world_object->uid = UID(0);
+	new_world_object->object_type = WorldObject::ObjectType_Generic;
+	new_world_object->pos = ob_pos;
+	new_world_object->axis = Vec3f(0, 0, 1);
+	new_world_object->angle = 0.0f;
+	new_world_object->scale = Vec3f(params.scale);
+	new_world_object->max_model_lod_level = params.lodEnabled ? 2 : 0;
+	new_world_object->model_url = mesh_URL;
+	new_world_object->content = TreeSerialization::serialiseToContent(params);
+	new_world_object->setCollidable(params.collisionMode != TreeCollisionMode::None);
+	new_world_object->setDynamic(false);
+	new_world_object->setIsSensor(false);
+
+	new_world_object->materials.resize(2);
+	new_world_object->materials[0] = new WorldMaterial();
+	new_world_object->materials[0]->name = "Tree Bark";
+	new_world_object->materials[0]->colour_rgb = Colour3f(params.barkColor.r, params.barkColor.g, params.barkColor.b);
+	new_world_object->materials[0]->roughness = ScalarVal(0.82f);
+	new_world_object->materials[1] = new WorldMaterial();
+	new_world_object->materials[1]->name = "Tree Leaves";
+	new_world_object->materials[1]->colour_rgb = Colour3f(params.leafColor.r, params.leafColor.g, params.leafColor.b);
+	new_world_object->materials[1]->opacity = ScalarVal(params.leafAlpha);
+	new_world_object->materials[1]->roughness = ScalarVal(0.65f);
+	new_world_object->materials[1]->flags = WorldMaterial::DOUBLE_SIDED_FLAG;
+
+	new_world_object->setAABBOS(results.batched_mesh->aabb_os);
+
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
+		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	}
+
+	showInfoNotification("Added procedural tree. Editor will open when the server confirms creation.");
+	gui_client.deselectObject();
+}
+
+
 void MainWindow::on_actionAddScientificObject_triggered()
 {
 	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 2.0f - Vec3d(0, 0, 0.25);
@@ -9244,6 +9391,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 	ui->parcelEditor->hide();
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
+	if(tree_editor_panel)
+		tree_editor_panel->hide();
 
 	// Set dock title to "Редактор ботов"
 	ui->editorDockWidget->setWindowTitle(
@@ -9298,6 +9447,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 	ui->parcelEditor->hide();
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
+	if(tree_editor_panel)
+		tree_editor_panel->hide();
 	showEditorDockWidget();
 }
 
@@ -9321,6 +9472,8 @@ void MainWindow::hideBotEditor()
 	ui->botEditorWidget->clear(); // hides itself
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
+	if(tree_editor_panel)
+		tree_editor_panel->hide();
 	active_editor_kind = ActiveEditor_Object;
 	ui->objectEditor->show();
 	ui->editorDockWidget->setWindowTitle(
@@ -10220,6 +10373,8 @@ void MainWindow::posAndRot3DControlsToggledSlot()
 	
 	if(active_editor_kind == ActiveEditor_Scientific)
 		settings->setValue("scientificObjectEditor/show3DControls", enabled);
+	else if(active_editor_kind == ActiveEditor_Tree)
+		settings->setValue("treeEditor/show3DControls", enabled);
 	else
 		settings->setValue("objectEditor/show3DControlsCheckBoxChecked", enabled);
 }
@@ -10460,6 +10615,8 @@ void MainWindow::showParcelEditor()
 	ui->objectEditor->hide();
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
+	if(tree_editor_panel)
+		tree_editor_panel->hide();
 	ui->parcelEditor->show();
 }
 
@@ -10623,6 +10780,8 @@ void MainWindow::updateObjectEditorObTransformSlot()
 	{
 		if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 			scientific_object_editor->setTransformFromObject(*gui_client.selected_ob);
+		else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
+			tree_editor_panel->setTransformFromObject(*gui_client.selected_ob);
 		else
 			ui->objectEditor->setTransformFromObject(*gui_client.selected_ob);
 	}
@@ -11360,6 +11519,7 @@ int main(int argc, char *argv[])
 		syntax["--scientific_pubchem_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run a narrow PubChem HTTPS smoke check and write a JSON report.
 		syntax["--scientific_pubchem_apply_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run PubChem UI selection/apply smoke and write a JSON report.
 		syntax["--scientific_molecule_info_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run molecule labels/selection/measurement/Russian-search smoke.
+		syntax["--tree_generator_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run procedural tree generator determinism smoke.
 
 		if(args.size() == 3 && args[1] == "-NSDocumentRevisionsDebugMode")
 			args.resize(1); // This is some XCode debugging rubbish, remove it
@@ -11372,6 +11532,8 @@ int main(int argc, char *argv[])
 			return ScientificObjectEditor::runPubChemApplySmokeCheck(QtUtils::toQString(parsed_args.getArgStringValue("--scientific_pubchem_apply_smoke")));
 		if(parsed_args.isArgPresent("--scientific_molecule_info_smoke"))
 			return ScientificObjectEditor::runMoleculeInformationSmokeCheck(QtUtils::toQString(parsed_args.getArgStringValue("--scientific_molecule_info_smoke")));
+		if(parsed_args.isArgPresent("--tree_generator_smoke"))
+			return TreeGenerator::runSmokeCheck(parsed_args.getArgStringValue("--tree_generator_smoke"));
 
 		if(parsed_args.isArgPresent("--test"))
 		{

@@ -102,6 +102,7 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client AboutDialog)
 	addMocFileRule(gui_client BotEditorWidget)
 	addMocFileRule(gui_client ScientificObjectEditor)
+	addMocFileRule(gui_client TreeEditorPanel)
 	addMocFileRule(gui_client UpdateDialog)
 	addMocFileRule(gui_client UpdateManager)
 	addMocFileRule(gui_client MainOptionsDialog)
@@ -357,6 +358,17 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.h
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.h
+		${CMAKE_SOURCE_DIR}/gui_client/TreeEditorPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/TreeEditorPanel.h
+		${CMAKE_SOURCE_DIR}/gui_client/TreeGenerator.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/TreeGenerator.h
+		${CMAKE_SOURCE_DIR}/gui_client/TreeObject.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/TreeObject.h
+		${CMAKE_SOURCE_DIR}/gui_client/TreeParams.h
+		${CMAKE_SOURCE_DIR}/gui_client/TreePresets.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/TreePresets.h
+		${CMAKE_SOURCE_DIR}/gui_client/TreeSerialization.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/TreeSerialization.h
 		${CMAKE_SOURCE_DIR}/gui_client/MoleculeViewportWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MoleculeViewportWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/PeriodicTable.cpp
@@ -491,6 +503,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AboutDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_BotEditorWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ScientificObjectEditor.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_TreeEditorPanel.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateManager.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_MainOptionsDialog.cpp
