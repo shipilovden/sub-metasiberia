@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2026 -
 
 #include <string>
 #include <cstdint>
+#include <array>
 
 
 struct TreeVec3
@@ -119,6 +120,16 @@ struct TreeParams
 	TreeVec3 branchForceDirection {0.0f, 1.0f, 0.0f};
 	float branchForceStrength = 0.01f;
 	float branchGnarliness = 0.2f;
+	std::array<float, 4> branchAngleByLevel {0.0f, 70.0f, 60.0f, 60.0f};
+	std::array<int, 4> branchChildrenByLevel {7, 7, 5, 0};
+	std::array<float, 4> branchLengthByLevel {8.0f, 4.0f, 2.0f, 0.8f};
+	std::array<float, 4> branchRadiusByLevel {0.45f, 0.18f, 0.10f, 0.04f};
+	std::array<int, 4> branchSectionsByLevel {10, 8, 6, 4};
+	std::array<int, 4> branchSegmentsByLevel {10, 8, 6, 4};
+	std::array<float, 4> branchStartByLevel {0.0f, 0.40f, 0.30f, 0.30f};
+	std::array<float, 4> branchTaperByLevel {0.70f, 0.70f, 0.70f, 0.70f};
+	std::array<float, 4> branchTwistByLevel {0.0f, 0.0f, 0.0f, 0.0f};
+	std::array<float, 4> branchGnarlinessByLevel {0.15f, 0.20f, 0.30f, 0.02f};
 
 	TreeLeafType leafType = TreeLeafType::Simple;
 	int leafCount = 500;

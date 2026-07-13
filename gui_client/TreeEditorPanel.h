@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2026 -
 
 #include "TreeParams.h"
 #include <QtWidgets/QWidget>
+#include <array>
 
 
 class QCheckBox;
@@ -102,6 +103,16 @@ private:
 	QDoubleSpinBox* branch_force_z_spin;
 	QDoubleSpinBox* branch_force_strength_spin;
 	QDoubleSpinBox* branch_gnarliness_spin;
+	std::array<QDoubleSpinBox*, 4> branch_angle_level_spins;
+	std::array<QSpinBox*, 4> branch_children_level_spins;
+	std::array<QDoubleSpinBox*, 4> branch_length_level_spins;
+	std::array<QDoubleSpinBox*, 4> branch_radius_level_spins;
+	std::array<QSpinBox*, 4> branch_sections_level_spins;
+	std::array<QSpinBox*, 4> branch_segments_level_spins;
+	std::array<QDoubleSpinBox*, 4> branch_start_level_spins;
+	std::array<QDoubleSpinBox*, 4> branch_taper_level_spins;
+	std::array<QDoubleSpinBox*, 4> branch_twist_level_spins;
+	std::array<QDoubleSpinBox*, 4> branch_gnarliness_level_spins;
 	QComboBox* leaf_type_combo;
 	QSpinBox* leaf_count_spin;
 	QDoubleSpinBox* leaf_angle_spin;

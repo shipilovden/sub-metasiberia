@@ -121,8 +121,9 @@ void TreeEditorPanel::createUi()
 	bark_green_spin = addDoubleSpin(trunk_form, tr("Bark Green"), 0.0, 1.0, 0.01, 2);
 	bark_blue_spin = addDoubleSpin(trunk_form, tr("Bark Blue"), 0.0, 1.0, 0.01, 2);
 	bark_texture_combo = new QComboBox(this);
-	bark_texture_combo->addItem(QStringLiteral("Bark001"), QStringLiteral("Bark001"));
-	bark_texture_combo->addItem(QStringLiteral("Bark006"), QStringLiteral("Bark006"));
+	const QStringList bark_types = {QStringLiteral("Bark001"), QStringLiteral("Bark002"), QStringLiteral("Bark003"), QStringLiteral("Bark004"), QStringLiteral("Bark006"), QStringLiteral("Bark007"), QStringLiteral("Bark008"), QStringLiteral("Bark012"), QStringLiteral("Bark013"), QStringLiteral("Bark014"), QStringLiteral("Bark015")};
+	for(const QString& bark_type : bark_types)
+		bark_texture_combo->addItem(bark_type, bark_type);
 	trunk_form->addRow(tr("Bark Texture"), bark_texture_combo);
 	connect(bark_texture_combo, SIGNAL(currentIndexChanged(int)), this, SLOT(controlChanged()));
 	bark_textured_checkbox = new QCheckBox(tr("Bark Textured"), this);
@@ -152,6 +153,20 @@ void TreeEditorPanel::createUi()
 	branch_force_z_spin = addDoubleSpin(branch_form, tr("Branch Force Z"), -1.0, 1.0, 0.01, 2);
 	branch_force_strength_spin = addDoubleSpin(branch_form, tr("Branch Force Strength"), -1.0, 1.0, 0.01, 3);
 	branch_gnarliness_spin = addDoubleSpin(branch_form, tr("Branch Gnarliness"), 0.0, 2.0, 0.02, 2);
+	for(int i=0; i<4; ++i)
+	{
+		const QString suffix = QStringLiteral(" L%1").arg(i);
+		branch_angle_level_spins[i] = addDoubleSpin(branch_form, tr("Angle") + suffix, 0.0, 140.0, 1.0, 1);
+		branch_children_level_spins[i] = addIntSpin(branch_form, tr("Children") + suffix, 0, 32);
+		branch_length_level_spins[i] = addDoubleSpin(branch_form, tr("Length") + suffix, 0.05, 60.0, 0.1, 2);
+		branch_radius_level_spins[i] = addDoubleSpin(branch_form, tr("Radius") + suffix, 0.01, 5.0, 0.01, 2);
+		branch_sections_level_spins[i] = addIntSpin(branch_form, tr("Sections") + suffix, 1, 48);
+		branch_segments_level_spins[i] = addIntSpin(branch_form, tr("Segments") + suffix, 3, 32);
+		branch_start_level_spins[i] = addDoubleSpin(branch_form, tr("Start") + suffix, 0.0, 0.98, 0.01, 2);
+		branch_taper_level_spins[i] = addDoubleSpin(branch_form, tr("Taper") + suffix, 0.01, 1.0, 0.01, 2);
+		branch_twist_level_spins[i] = addDoubleSpin(branch_form, tr("Twist") + suffix, -6.28, 6.28, 0.05, 2);
+		branch_gnarliness_level_spins[i] = addDoubleSpin(branch_form, tr("Gnarliness") + suffix, 0.0, 3.0, 0.02, 2);
+	}
 	layout->addWidget(branch_box);
 
 	QGroupBox* leaves_box = new QGroupBox(tr("Leaves"), this);
@@ -349,6 +364,19 @@ TreeParams TreeEditorPanel::controlsToParams() const
 	p.branchForceDirection = {(float)branch_force_x_spin->value(), (float)branch_force_y_spin->value(), (float)branch_force_z_spin->value()};
 	p.branchForceStrength = (float)branch_force_strength_spin->value();
 	p.branchGnarliness = (float)branch_gnarliness_spin->value();
+	for(size_t i=0; i<4; ++i)
+	{
+		p.branchAngleByLevel[i] = (float)branch_angle_level_spins[i]->value();
+		p.branchChildrenByLevel[i] = branch_children_level_spins[i]->value();
+		p.branchLengthByLevel[i] = (float)branch_length_level_spins[i]->value();
+		p.branchRadiusByLevel[i] = (float)branch_radius_level_spins[i]->value();
+		p.branchSectionsByLevel[i] = branch_sections_level_spins[i]->value();
+		p.branchSegmentsByLevel[i] = branch_segments_level_spins[i]->value();
+		p.branchStartByLevel[i] = (float)branch_start_level_spins[i]->value();
+		p.branchTaperByLevel[i] = (float)branch_taper_level_spins[i]->value();
+		p.branchTwistByLevel[i] = (float)branch_twist_level_spins[i]->value();
+		p.branchGnarlinessByLevel[i] = (float)branch_gnarliness_level_spins[i]->value();
+	}
 	p.leafType = (TreeLeafType)leaf_type_combo->currentData().toInt();
 	p.leafCount = leaf_count_spin->value();
 	p.leafAngle = (float)leaf_angle_spin->value();
@@ -424,6 +452,19 @@ void TreeEditorPanel::setControlsFromParams(const TreeParams& params)
 	branch_force_z_spin->setValue(params.branchForceDirection.z);
 	branch_force_strength_spin->setValue(params.branchForceStrength);
 	branch_gnarliness_spin->setValue(params.branchGnarliness);
+	for(size_t i=0; i<4; ++i)
+	{
+		branch_angle_level_spins[i]->setValue(params.branchAngleByLevel[i]);
+		branch_children_level_spins[i]->setValue(params.branchChildrenByLevel[i]);
+		branch_length_level_spins[i]->setValue(params.branchLengthByLevel[i]);
+		branch_radius_level_spins[i]->setValue(params.branchRadiusByLevel[i]);
+		branch_sections_level_spins[i]->setValue(params.branchSectionsByLevel[i]);
+		branch_segments_level_spins[i]->setValue(params.branchSegmentsByLevel[i]);
+		branch_start_level_spins[i]->setValue(params.branchStartByLevel[i]);
+		branch_taper_level_spins[i]->setValue(params.branchTaperByLevel[i]);
+		branch_twist_level_spins[i]->setValue(params.branchTwistByLevel[i]);
+		branch_gnarliness_level_spins[i]->setValue(params.branchGnarlinessByLevel[i]);
+	}
 	set_combo(leaf_type_combo, (int)params.leafType);
 	leaf_count_spin->setValue(params.leafCount);
 	leaf_angle_spin->setValue(params.leafAngle);

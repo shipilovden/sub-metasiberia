@@ -43,5 +43,4 @@ private:
 	static void generateTrunk(const TreeParams& params, TreeMeshData& mesh, std::vector<TreeVec3>& branch_tips);
 	static void generateBranches(const TreeParams& params, TreeMeshData& mesh, std::vector<TreeVec3>& branch_tips);
 	static void generateLeaves(const TreeParams& params, TreeMeshData& mesh, const std::vector<TreeVec3>& branch_tips);
-	static void generateSelectionHull(const TreeParams& params, TreeMeshData& mesh);
 };

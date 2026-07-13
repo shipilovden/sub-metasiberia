@@ -672,6 +672,16 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("TreeEditorPanel", "Branch Force Z", "Сила ветвей Z");
 	add("TreeEditorPanel", "Branch Force Strength", "Сила роста ветвей");
 	add("TreeEditorPanel", "Branch Gnarliness", "Корявость ветвей");
+	add("TreeEditorPanel", "Angle", "Угол");
+	add("TreeEditorPanel", "Children", "Дочерние ветви");
+	add("TreeEditorPanel", "Length", "Длина");
+	add("TreeEditorPanel", "Radius", "Радиус");
+	add("TreeEditorPanel", "Sections", "Секции");
+	add("TreeEditorPanel", "Segments", "Сегменты");
+	add("TreeEditorPanel", "Start", "Начало");
+	add("TreeEditorPanel", "Taper", "Сужение");
+	add("TreeEditorPanel", "Twist", "Скручивание");
+	add("TreeEditorPanel", "Gnarliness", "Корявость");
 	add("TreeEditorPanel", "Leaves", "Листья");
 	add("TreeEditorPanel", "Simple", "Простые");
 	add("TreeEditorPanel", "Pine Needles", "Хвоя");

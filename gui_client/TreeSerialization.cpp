@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <cstring>
 #include <iomanip>
 #include <sstream>
+#include <type_traits>
 
 
 namespace
@@ -66,6 +67,41 @@ std::string vec3ToJson(const TreeVec3& v)
 	std::ostringstream s;
 	s << std::setprecision(8) << "[" << v.x << ", " << v.y << ", " << v.z << "]";
 	return s.str();
+}
+
+
+template <class T, size_t N>
+std::string arrayToJson(const std::array<T, N>& a)
+{
+	std::ostringstream s;
+	s << std::setprecision(8) << "[";
+	for(size_t i=0; i<N; ++i)
+	{
+		if(i)
+			s << ", ";
+		s << a[i];
+	}
+	s << "]";
+	return s.str();
+}
+
+
+template <class T, size_t N>
+void readArray(const JSONParser& parser, const JSONNode& root, const char* name, std::array<T, N>& out)
+{
+	if(!root.hasChild(name))
+		return;
+	const JSONNode& n = root.getChildNode(parser, name);
+	if(n.type != JSONNode::Type_Array)
+		return;
+	const size_t count = std::min<size_t>(N, n.child_indices.size());
+	for(size_t i=0; i<count; ++i)
+	{
+		if constexpr(std::is_integral<T>::value)
+			out[i] = (T)parser.nodes[n.child_indices[i]].getIntValue();
+		else
+			out[i] = (T)parser.nodes[n.child_indices[i]].getDoubleValue();
+	}
 }
 
 
@@ -266,13 +302,13 @@ void clamp(TreeParams& p)
 	p.name = p.name.empty() ? "Tree" : p.name.substr(0, 128);
 	p.height = clampValue(p.height, 0.5f, 60.0f);
 	p.scale = clampValue(p.scale, 0.05f, 20.0f);
-	p.trunkHeight = clampValue(p.trunkHeight, 0.25f, 60.0f);
-	p.trunkRadius = clampValue(p.trunkRadius, 0.02f, 5.0f);
-	p.trunkTaper = clampValue(p.trunkTaper, 0.02f, 1.0f);
+	p.trunkHeight = clampValue(p.trunkHeight, 2.0f, 60.0f);
+	p.trunkRadius = clampValue(p.trunkRadius, 0.08f, 5.0f);
+	p.trunkTaper = clampValue(p.trunkTaper, 0.10f, 1.0f);
 	p.trunkCurve = clampValue(p.trunkCurve, -2.0f, 2.0f);
 	p.trunkTwist = clampValue(p.trunkTwist, -3.14159f, 3.14159f);
-	p.trunkSegments = clampValue(p.trunkSegments, 3, 32);
-	p.trunkSections = clampValue(p.trunkSections, 1, 48);
+	p.trunkSegments = clampValue(p.trunkSegments, 6, 32);
+	p.trunkSections = clampValue(p.trunkSections, 4, 48);
 	p.barkTextureType = p.barkTextureType.empty() ? "Bark001" : p.barkTextureType.substr(0, 32);
 	p.barkTextureScaleX = clampValue(p.barkTextureScaleX, 0.05f, 50.0f);
 	p.barkTextureScaleY = clampValue(p.barkTextureScaleY, 0.05f, 50.0f);
@@ -289,6 +325,19 @@ void clamp(TreeParams& p)
 	p.branchStartHeight = clampValue(p.branchStartHeight, 0.0f, 0.95f);
 	p.branchForceStrength = clampValue(p.branchForceStrength, -1.0f, 1.0f);
 	p.branchGnarliness = clampValue(p.branchGnarliness, 0.0f, 2.0f);
+	for(size_t i=0; i<4; ++i)
+	{
+		p.branchAngleByLevel[i] = clampValue(p.branchAngleByLevel[i], 0.0f, 140.0f);
+		p.branchChildrenByLevel[i] = clampValue(p.branchChildrenByLevel[i], 0, 32);
+		p.branchLengthByLevel[i] = clampValue(p.branchLengthByLevel[i], 0.05f, 60.0f);
+		p.branchRadiusByLevel[i] = clampValue(p.branchRadiusByLevel[i], 0.01f, 5.0f);
+		p.branchSectionsByLevel[i] = clampValue(p.branchSectionsByLevel[i], 1, 48);
+		p.branchSegmentsByLevel[i] = clampValue(p.branchSegmentsByLevel[i], 3, 32);
+		p.branchStartByLevel[i] = clampValue(p.branchStartByLevel[i], 0.0f, 0.98f);
+		p.branchTaperByLevel[i] = clampValue(p.branchTaperByLevel[i], 0.01f, 1.0f);
+		p.branchTwistByLevel[i] = clampValue(p.branchTwistByLevel[i], -6.28318f, 6.28318f);
+		p.branchGnarlinessByLevel[i] = clampValue(p.branchGnarlinessByLevel[i], 0.0f, 3.0f);
+	}
 
 	p.leafCount = clampValue(p.leafCount, 0, p.quality == TreeQuality::High ? 2000 : (p.quality == TreeQuality::Medium ? 900 : 250));
 	p.leafAngle = clampValue(p.leafAngle, -90.0f, 90.0f);
@@ -368,6 +417,16 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 		p.branchForceDirection = readVec3(parser, root, "branchForceDirection", p.branchForceDirection);
 		p.branchForceStrength = (float)root.getChildDoubleValueWithDefaultVal(parser, "branchForceStrength", p.branchForceStrength);
 		p.branchGnarliness = (float)root.getChildDoubleValueWithDefaultVal(parser, "branchGnarliness", p.branchGnarliness);
+		readArray(parser, root, "branchAngleByLevel", p.branchAngleByLevel);
+		readArray(parser, root, "branchChildrenByLevel", p.branchChildrenByLevel);
+		readArray(parser, root, "branchLengthByLevel", p.branchLengthByLevel);
+		readArray(parser, root, "branchRadiusByLevel", p.branchRadiusByLevel);
+		readArray(parser, root, "branchSectionsByLevel", p.branchSectionsByLevel);
+		readArray(parser, root, "branchSegmentsByLevel", p.branchSegmentsByLevel);
+		readArray(parser, root, "branchStartByLevel", p.branchStartByLevel);
+		readArray(parser, root, "branchTaperByLevel", p.branchTaperByLevel);
+		readArray(parser, root, "branchTwistByLevel", p.branchTwistByLevel);
+		readArray(parser, root, "branchGnarlinessByLevel", p.branchGnarlinessByLevel);
 
 		p.leafType = leafTypeFromString(root.getChildStringValueWithDefaultVal(parser, "leafType", leafTypeToString(p.leafType)));
 		p.leafCount = root.getChildIntValueWithDefaultVal(parser, "leafCount", p.leafCount);
@@ -456,6 +515,16 @@ std::string serialiseToContent(const TreeParams& params_)
 	s << "  \"branchForceDirection\": " << vec3ToJson(p.branchForceDirection) << ",\n";
 	s << "  \"branchForceStrength\": " << p.branchForceStrength << ",\n";
 	s << "  \"branchGnarliness\": " << p.branchGnarliness << ",\n";
+	s << "  \"branchAngleByLevel\": " << arrayToJson(p.branchAngleByLevel) << ",\n";
+	s << "  \"branchChildrenByLevel\": " << arrayToJson(p.branchChildrenByLevel) << ",\n";
+	s << "  \"branchLengthByLevel\": " << arrayToJson(p.branchLengthByLevel) << ",\n";
+	s << "  \"branchRadiusByLevel\": " << arrayToJson(p.branchRadiusByLevel) << ",\n";
+	s << "  \"branchSectionsByLevel\": " << arrayToJson(p.branchSectionsByLevel) << ",\n";
+	s << "  \"branchSegmentsByLevel\": " << arrayToJson(p.branchSegmentsByLevel) << ",\n";
+	s << "  \"branchStartByLevel\": " << arrayToJson(p.branchStartByLevel) << ",\n";
+	s << "  \"branchTaperByLevel\": " << arrayToJson(p.branchTaperByLevel) << ",\n";
+	s << "  \"branchTwistByLevel\": " << arrayToJson(p.branchTwistByLevel) << ",\n";
+	s << "  \"branchGnarlinessByLevel\": " << arrayToJson(p.branchGnarlinessByLevel) << ",\n";
 	s << "  \"leafType\": \"" << leafTypeToString(p.leafType) << "\",\n";
 	s << "  \"leafCount\": " << p.leafCount << ",\n";
 	s << "  \"leafAngle\": " << p.leafAngle << ",\n";
