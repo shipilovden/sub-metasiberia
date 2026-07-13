@@ -270,10 +270,13 @@ void TreeEditorPanel::createUi()
 
 void TreeEditorPanel::setFromObject(const WorldObject& ob, bool)
 {
+	const bool needs_legacy_repair = TreeSerialization::contentNeedsLegacyRepair(ob.content);
 	std::string parse_error;
 	current_params = TreeSerialization::fromContent(ob.content, &parse_error);
 	setControlsFromParams(current_params);
-	info_label->setText(parse_error.empty() ? tr("Procedural Tree") : QString::fromStdString(parse_error));
+	info_label->setText(needs_legacy_repair ? tr("Procedural Tree repaired from legacy placeholder") : (parse_error.empty() ? tr("Procedural Tree") : QString::fromStdString(parse_error)));
+	if(needs_legacy_repair)
+		QTimer::singleShot(0, this, SLOT(rebuildNow()));
 }
 
 

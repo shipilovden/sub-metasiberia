@@ -29,6 +29,7 @@ namespace TreeSerialization
 	TreeCollisionMode collisionModeFromString(const std::string& s);
 
 	TreeParams defaultParams();
+	bool contentNeedsLegacyRepair(const std::string& content);
 	TreeParams fromContent(const std::string& content, std::string* parse_error_out = 0);
 	std::string serialiseToContent(const TreeParams& params);
 	void clamp(TreeParams& params);

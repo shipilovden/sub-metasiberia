@@ -296,6 +296,18 @@ TreeParams defaultParams()
 }
 
 
+bool contentNeedsLegacyRepair(const std::string& content)
+{
+	if(!isTreeContent(content))
+		return false;
+	return
+		(content.find("\"presetId\": \"custom\"") != std::string::npos || content.find("\"preset\": \"custom\"") != std::string::npos) &&
+		(content.find("\"trunkHeight\": 2") != std::string::npos || content.find("\"trunkHeight\": 2.0") != std::string::npos) &&
+		(content.find("\"trunkRadius\": 0.08") != std::string::npos || content.find("\"trunkRadius\": 0.080") != std::string::npos) &&
+		(content.find("\"trunkTaper\": 0.1") != std::string::npos || content.find("\"trunkTaper\": 0.10") != std::string::npos);
+}
+
+
 void clamp(TreeParams& p)
 {
 	p.seed = p.seed == 0 ? 1 : p.seed;
@@ -467,6 +479,26 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 	}
 
 	clamp(p);
+	if(contentNeedsLegacyRepair(content) ||
+		(p.presetId == "custom" && p.trunkHeight <= 2.01f && p.trunkRadius <= 0.081f && p.trunkTaper <= 0.101f))
+	{
+		const uint32_t seed = p.seed;
+		const float height = p.height;
+		const TreeVec3 position = p.position;
+		const TreeVec3 rotation = p.rotation;
+		const float scale = p.scale;
+		p = TreePresets::presetById(TreePresets::defaultPresetId());
+		p.seed = seed;
+		if(height > 2.5f)
+		{
+			p.height = height;
+			p.trunkHeight = height;
+		}
+		p.position = position;
+		p.rotation = rotation;
+		p.scale = scale;
+		clamp(p);
+	}
 	return p;
 }
 

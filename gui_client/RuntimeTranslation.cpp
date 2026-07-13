@@ -625,6 +625,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("TreeEditorPanel", "Tree", "Дерево");
 	add("TreeEditorPanel", "Export", "Экспорт");
 	add("TreeEditorPanel", "Procedural Tree", "Процедурное дерево");
+	add("TreeEditorPanel", "Procedural Tree repaired from legacy placeholder", "Процедурное дерево восстановлено из старой заглушки");
 	add("TreeEditorPanel", "Presets", "Пресеты");
 	add("TreeEditorPanel", "Preset", "Пресет");
 	add("TreeEditorPanel", "Oak", "Дуб");
