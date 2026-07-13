@@ -87,12 +87,11 @@ void TreeEditorPanel::createUi()
 	QGroupBox* presets_box = new QGroupBox(tr("Presets"), this);
 	QFormLayout* presets_form = new QFormLayout(presets_box);
 	preset_combo = new QComboBox(this);
-	preset_combo->addItem(tr("Oak"), QVariant((int)TreePresetType::Oak));
-	preset_combo->addItem(tr("Birch"), QVariant((int)TreePresetType::Birch));
-	preset_combo->addItem(tr("Pine"), QVariant((int)TreePresetType::Pine));
-	preset_combo->addItem(tr("Dead Tree"), QVariant((int)TreePresetType::DeadTree));
-	preset_combo->addItem(tr("Bush"), QVariant((int)TreePresetType::Bush));
-	preset_combo->addItem(tr("Custom"), QVariant((int)TreePresetType::Custom));
+	size_t preset_count = 0;
+	const TreePresets::PresetInfo* presets = TreePresets::allPresets(preset_count);
+	for(size_t i=0; i<preset_count; ++i)
+		preset_combo->addItem(tr(presets[i].display_name), QVariant(QString::fromLatin1(presets[i].id)));
+	preset_combo->addItem(tr("Custom"), QVariant(QStringLiteral("custom")));
 	presets_form->addRow(tr("Preset"), preset_combo);
 	connect(preset_combo, SIGNAL(currentIndexChanged(int)), this, SLOT(presetChanged(int)));
 	layout->addWidget(presets_box);
@@ -139,7 +138,7 @@ void TreeEditorPanel::createUi()
 	QGroupBox* branch_box = new QGroupBox(tr("Branches"), this);
 	QFormLayout* branch_form = new QFormLayout(branch_box);
 	branch_levels_spin = addIntSpin(branch_form, tr("Branch Levels"), 0, 5);
-	branches_per_level_spin = addIntSpin(branch_form, tr("Branches Per Level"), 0, 16);
+	branches_per_level_spin = addIntSpin(branch_form, tr("Branches Per Level"), 0, 128);
 	branch_angle_spin = addDoubleSpin(branch_form, tr("Branch Angle"), 0.0, 120.0, 1.0, 1);
 	branch_length_spin = addDoubleSpin(branch_form, tr("Branch Length"), 0.05, 30.0, 0.1, 2);
 	branch_radius_spin = addDoubleSpin(branch_form, tr("Branch Radius"), 0.01, 3.0, 0.01, 2);
@@ -157,7 +156,7 @@ void TreeEditorPanel::createUi()
 	{
 		const QString suffix = QStringLiteral(" L%1").arg(i);
 		branch_angle_level_spins[i] = addDoubleSpin(branch_form, tr("Angle") + suffix, 0.0, 140.0, 1.0, 1);
-		branch_children_level_spins[i] = addIntSpin(branch_form, tr("Children") + suffix, 0, 32);
+		branch_children_level_spins[i] = addIntSpin(branch_form, tr("Children") + suffix, 0, 128);
 		branch_length_level_spins[i] = addDoubleSpin(branch_form, tr("Length") + suffix, 0.05, 60.0, 0.1, 2);
 		branch_radius_level_spins[i] = addDoubleSpin(branch_form, tr("Radius") + suffix, 0.01, 5.0, 0.01, 2);
 		branch_sections_level_spins[i] = addIntSpin(branch_form, tr("Sections") + suffix, 1, 48);
@@ -333,7 +332,8 @@ double TreeEditorPanel::gridSpacing() const
 TreeParams TreeEditorPanel::controlsToParams() const
 {
 	TreeParams p = current_params;
-	p.preset = (TreePresetType)preset_combo->currentData().toInt();
+	p.presetId = preset_combo->currentData().toString().toStdString();
+	p.preset = p.presetId == "custom" ? TreePresetType::Custom : p.preset;
 	p.type = (TreeType)tree_type_combo->currentData().toInt();
 	p.seed = (uint32_t)seed_spin->value();
 	p.height = (float)height_spin->value();
@@ -416,7 +416,23 @@ void TreeEditorPanel::setControlsFromParams(const TreeParams& params)
 		if(i >= 0)
 			combo->setCurrentIndex(i);
 	};
-	set_combo(preset_combo, (int)params.preset);
+	int preset_index = preset_combo->findData(QString::fromStdString(params.presetId));
+	if(preset_index < 0)
+	{
+		const char* fallback_id = TreePresets::defaultPresetId();
+		switch(params.preset)
+		{
+		case TreePresetType::Oak:      fallback_id = "oak_medium"; break;
+		case TreePresetType::Birch:    fallback_id = "aspen_medium"; break;
+		case TreePresetType::Pine:     fallback_id = "pine_medium"; break;
+		case TreePresetType::DeadTree: fallback_id = "custom"; break;
+		case TreePresetType::Bush:     fallback_id = "bush_1"; break;
+		case TreePresetType::Custom:   fallback_id = "custom"; break;
+		}
+		preset_index = preset_combo->findData(QString::fromLatin1(fallback_id));
+	}
+	if(preset_index >= 0)
+		preset_combo->setCurrentIndex(preset_index);
 	set_combo(tree_type_combo, (int)params.type);
 	seed_spin->setValue((int)std::min<uint32_t>(params.seed, 2147483647u));
 	height_spin->setValue(params.height);
@@ -509,11 +525,12 @@ void TreeEditorPanel::emitObjectChangedDebounced()
 void TreeEditorPanel::controlChanged()
 {
 	current_params = controlsToParams();
-	if(current_params.preset != TreePresetType::Custom)
+	if(current_params.presetId != "custom")
 	{
 		current_params.preset = TreePresetType::Custom;
+		current_params.presetId = "custom";
 		updating = true;
-		const int i = preset_combo->findData(QVariant((int)TreePresetType::Custom));
+		const int i = preset_combo->findData(QStringLiteral("custom"));
 		if(i >= 0)
 			preset_combo->setCurrentIndex(i);
 		updating = false;
@@ -540,10 +557,10 @@ void TreeEditorPanel::presetChanged(int)
 {
 	if(updating)
 		return;
-	const TreePresetType preset = (TreePresetType)preset_combo->currentData().toInt();
-	if(preset == TreePresetType::Custom)
+	const QString preset_id = preset_combo->currentData().toString();
+	if(preset_id == QStringLiteral("custom"))
 		return;
-	TreeParams p = TreePresets::preset(preset);
+	TreeParams p = TreePresets::presetById(preset_id.toStdString());
 	p.seed = current_params.seed;
 	current_params = p;
 	setControlsFromParams(current_params);
@@ -553,10 +570,10 @@ void TreeEditorPanel::presetChanged(int)
 
 void TreeEditorPanel::resetPreset()
 {
-	TreePresetType preset = (TreePresetType)preset_combo->currentData().toInt();
-	if(preset == TreePresetType::Custom)
-		preset = current_params.preset == TreePresetType::Custom ? TreePresetType::Oak : current_params.preset;
-	current_params = TreePresets::preset(preset);
+	QString preset_id = preset_combo->currentData().toString();
+	if(preset_id == QStringLiteral("custom"))
+		preset_id = current_params.presetId.empty() || current_params.presetId == "custom" ? QString::fromLatin1(TreePresets::defaultPresetId()) : QString::fromStdString(current_params.presetId);
+	current_params = TreePresets::presetById(preset_id.toStdString());
 	setControlsFromParams(current_params);
 	rebuildNow();
 }

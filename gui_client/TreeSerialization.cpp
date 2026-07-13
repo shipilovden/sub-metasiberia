@@ -292,13 +292,14 @@ TreeCollisionMode collisionModeFromString(const std::string& s)
 
 TreeParams defaultParams()
 {
-	return TreePresets::Oak();
+	return TreePresets::presetById(TreePresets::defaultPresetId());
 }
 
 
 void clamp(TreeParams& p)
 {
 	p.seed = p.seed == 0 ? 1 : p.seed;
+	p.presetId = p.presetId.empty() ? TreePresets::defaultPresetId() : p.presetId.substr(0, 64);
 	p.name = p.name.empty() ? "Tree" : p.name.substr(0, 128);
 	p.height = clampValue(p.height, 0.5f, 60.0f);
 	p.scale = clampValue(p.scale, 0.05f, 20.0f);
@@ -314,7 +315,7 @@ void clamp(TreeParams& p)
 	p.barkTextureScaleY = clampValue(p.barkTextureScaleY, 0.05f, 50.0f);
 
 	p.branchLevels = clampValue(p.branchLevels, 0, 5);
-	p.branchesPerLevel = clampValue(p.branchesPerLevel, 0, 16);
+	p.branchesPerLevel = clampValue(p.branchesPerLevel, 0, 128);
 	p.branchAngle = clampValue(p.branchAngle, 0.0f, 120.0f);
 	p.branchLength = clampValue(p.branchLength, 0.05f, 30.0f);
 	p.branchRadius = clampValue(p.branchRadius, 0.01f, 3.0f);
@@ -328,7 +329,7 @@ void clamp(TreeParams& p)
 	for(size_t i=0; i<4; ++i)
 	{
 		p.branchAngleByLevel[i] = clampValue(p.branchAngleByLevel[i], 0.0f, 140.0f);
-		p.branchChildrenByLevel[i] = clampValue(p.branchChildrenByLevel[i], 0, 32);
+		p.branchChildrenByLevel[i] = clampValue(p.branchChildrenByLevel[i], 0, 128);
 		p.branchLengthByLevel[i] = clampValue(p.branchLengthByLevel[i], 0.05f, 60.0f);
 		p.branchRadiusByLevel[i] = clampValue(p.branchRadiusByLevel[i], 0.01f, 5.0f);
 		p.branchSectionsByLevel[i] = clampValue(p.branchSectionsByLevel[i], 1, 48);
@@ -384,6 +385,7 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 		p.seed = (uint32_t)root.getChildIntValueWithDefaultVal(parser, "seed", (int)p.seed);
 		p.type = treeTypeFromString(root.getChildStringValueWithDefaultVal(parser, "treeType", treeTypeToString(p.type)));
 		p.preset = presetFromString(root.getChildStringValueWithDefaultVal(parser, "preset", presetToString(p.preset)));
+		p.presetId = root.getChildStringValueWithDefaultVal(parser, "presetId", p.presetId);
 		p.name = root.getChildStringValueWithDefaultVal(parser, "name", p.name);
 		p.height = (float)root.getChildDoubleValueWithDefaultVal(parser, "height", p.height);
 		p.scale = (float)root.getChildDoubleValueWithDefaultVal(parser, "scale", p.scale);
@@ -482,6 +484,7 @@ std::string serialiseToContent(const TreeParams& params_)
 	s << "  \"generator\": \"metasiberia_tree\",\n";
 	s << "  \"schema_version\": 1,\n";
 	s << "  \"preset\": \"" << presetToString(p.preset) << "\",\n";
+	s << "  \"presetId\": \"" << jsonEscape(p.presetId) << "\",\n";
 	s << "  \"seed\": " << p.seed << ",\n";
 	s << "  \"treeType\": \"" << treeTypeToString(p.type) << "\",\n";
 	s << "  \"name\": \"" << jsonEscape(p.name) << "\",\n";

@@ -84,6 +84,7 @@ struct TreeParams
 	uint32_t seed = 12345;
 	TreeType type = TreeType::Deciduous;
 	TreePresetType preset = TreePresetType::Oak;
+	std::string presetId = "ash_medium";
 	std::string name = "Tree";
 
 	float height = 8.0f;

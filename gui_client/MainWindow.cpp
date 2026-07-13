@@ -8195,7 +8195,7 @@ void MainWindow::on_actionAddTree_triggered()
 		return;
 	}
 
-	TreeParams params = TreePresets::Oak();
+	TreeParams params = TreePresets::presetById(TreePresets::defaultPresetId());
 	params.seed = (QRandomGenerator::global()->generate() & 0x7fffffffu);
 	if(params.seed == 0)
 		params.seed = 1;

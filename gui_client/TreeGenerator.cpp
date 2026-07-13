@@ -4,6 +4,7 @@ TreeGenerator.cpp
 Copyright Glare Technologies Limited 2026 -
 =====================================================================*/
 #include "TreeGenerator.h"
+#include "TreePresets.h"
 #include "TreeSerialization.h"
 
 
@@ -381,10 +382,9 @@ std::string TreeGenerator::writeObjToTempFile(const TreeParams& params)
 
 int TreeGenerator::runSmokeCheck(const std::string& report_path)
 {
-	TreeParams a;
+	TreeParams a = TreePresets::presetById(TreePresets::defaultPresetId());
 	a.seed = 12345;
-	a.trunkHeight = 8.0f;
-	a.quality = TreeQuality::Medium;
+	a.quality = TreeQuality::High;
 	TreeSerialization::clamp(a);
 
 	TreeParams b = a;
