@@ -55,6 +55,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "TreeObject.h"
 #include "TreePresets.h"
 #include "TreeSerialization.h"
+#include "UploadResourceThread.h"
 #include "ScientificObjectEditor.h"
 #include "ScientificObjectSettings.h"
 #include "../qt/FlowLayout.h"
@@ -8220,6 +8221,24 @@ void MainWindow::on_actionAddTree_triggered()
 	const URLString mesh_URL = ResourceManager::URLForNameAndExtensionAndHash("metasiberia_tree.obj", ::getExtension(bmesh_disk_path), model_hash);
 	if(!gui_client.resource_manager->isFileForURLPresent(mesh_URL))
 		gui_client.resource_manager->copyLocalFileToResourceDir(bmesh_disk_path, mesh_URL);
+	const std::string resource_path = gui_client.resource_manager->pathForURL(mesh_URL);
+	if(gui_client.connection_state != GUIClient::ServerConnectionState_NotConnected && FileUtils::fileExists(resource_path))
+	{
+		gui_client.num_resources_uploading++;
+#if EMSCRIPTEN
+		const size_t max_num_upload_threads = 1;
+#else
+		const size_t max_num_upload_threads = 4;
+#endif
+		if(gui_client.resource_upload_thread_manager.getNumThreads() == 0)
+		{
+			const std::string username = getUsernameForDomain(gui_client.server_hostname);
+			const std::string password = getDecryptedPasswordForDomain(gui_client.server_hostname);
+			for(size_t q=0; q<max_num_upload_threads; ++q)
+				gui_client.resource_upload_thread_manager.addThread(new UploadResourceThread(&gui_client.msg_queue, &gui_client.upload_queue, gui_client.server_hostname, GUIClient::server_port, username, password, gui_client.client_tls_config, &gui_client.num_resources_uploading));
+		}
+		gui_client.upload_queue.enqueue(new ResourceToUpload(resource_path, mesh_URL));
+	}
 
 	WorldObjectRef new_world_object = new WorldObject();
 	new_world_object->uid = UID(0);

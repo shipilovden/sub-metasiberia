@@ -159,7 +159,7 @@ TreeParams makeEZPreset(
 	p.branchTwist = twist1;
 	p.branchRandomness = 0.45f;
 	p.branchStartHeight = start1;
-	p.branchForceDirection = {0.0f, 1.0f, 0.0f};
+	p.branchForceDirection = {0.0f, 0.0f, 1.0f};
 	p.branchForceStrength = force_strength;
 	p.branchGnarliness = std::max(0.0f, g1);
 	p.branchAngleByLevel = {0.0f, a1, a2, a3};

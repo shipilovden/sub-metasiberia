@@ -172,8 +172,8 @@ void addLeafQuad(TreeMeshData& mesh, const TreeVec3& center, float size, float a
 	const float half = size * 0.5f;
 	const float c = std::cos(angle);
 	const float s = std::sin(angle);
-	const TreeVec3 right = makeVec3(c, 0, s);
-	const TreeVec3 up = makeVec3(0, 1, 0);
+	const TreeVec3 right = makeVec3(c, s, 0);
+	const TreeVec3 up = makeVec3(0, 0, 1);
 	const TreeVec3 n = normalise(cross(right, up), makeVec3(0, 0, 1));
 
 	const TreeVec3 p0 = add(add(center, mul(right, -half)), mul(up, size));
@@ -247,7 +247,7 @@ void TreeGenerator::generateTrunk(const TreeParams& params, TreeMeshData& mesh, 
 	{
 		const float t = (float)i / (float)sections;
 		const float bend = params.trunkCurve * std::sin(t * PI) * params.trunkHeight * 0.08f;
-		centers.push_back(makeVec3(bend, t * params.trunkHeight, bend * 0.35f));
+		centers.push_back(makeVec3(bend, bend * 0.35f, t * params.trunkHeight));
 	}
 
 	for(int i=0; i<sections; ++i)
@@ -282,22 +282,22 @@ void TreeGenerator::generateBranches(const TreeParams& params, TreeMeshData& mes
 		{
 			const float slot = (float)i / (float)std::max(1, count);
 			const float h = std::min(0.96f, base_h + randomRange(rng, -0.06f, 0.10f));
-			const float y = h * params.trunkHeight;
+			const float z = h * params.trunkHeight;
 			const float curve = params.trunkCurve * std::sin(h * PI) * params.trunkHeight * 0.08f;
-			const TreeVec3 start = makeVec3(curve, y, curve * 0.35f);
+			const TreeVec3 start = makeVec3(curve, curve * 0.35f, z);
 			const float around = 2.0f * PI * (slot + randomRange(rng, -0.20f, 0.20f));
 			const float angle = (params.branchAngleByLevel[child_level] + randomRange(rng, -params.branchRandomness * 20.0f, params.branchRandomness * 20.0f)) * PI / 180.0f;
-			TreeVec3 out = makeVec3(std::cos(around) * std::sin(angle), std::cos(angle), std::sin(around) * std::sin(angle));
-			const TreeVec3 force_dir = normalise(params.branchForceDirection, makeVec3(0, 1, 0));
+			TreeVec3 out = makeVec3(std::cos(around) * std::sin(angle), std::sin(around) * std::sin(angle), std::cos(angle));
+			const TreeVec3 force_dir = normalise(params.branchForceDirection, makeVec3(0, 0, 1));
 			out = normalise(add(out, mul(force_dir, params.branchForceStrength * (1.0f + (float)level))));
 			const float len = params.branchLengthByLevel[child_level] * randomRange(rng, 1.0f - params.branchRandomness * 0.35f, 1.0f + params.branchRandomness * 0.35f);
 			const TreeVec3 gnarl = makeVec3(
 				randomRange(rng, -params.branchGnarlinessByLevel[child_level], params.branchGnarlinessByLevel[child_level]) * len * 0.12f,
-				randomRange(rng, -params.branchGnarlinessByLevel[child_level], params.branchGnarlinessByLevel[child_level]) * len * 0.06f,
-				randomRange(rng, -params.branchGnarlinessByLevel[child_level], params.branchGnarlinessByLevel[child_level]) * len * 0.12f
+				randomRange(rng, -params.branchGnarlinessByLevel[child_level], params.branchGnarlinessByLevel[child_level]) * len * 0.12f,
+				randomRange(rng, -params.branchGnarlinessByLevel[child_level], params.branchGnarlinessByLevel[child_level]) * len * 0.06f
 			);
 			const TreeVec3 mid = add(add(start, mul(out, len * 0.55f)), gnarl);
-			const TreeVec3 tip = add(start, add(add(mul(out, len), makeVec3(0, params.branchCurve * len * 0.25f, 0)), mul(gnarl, 0.55f)));
+			const TreeVec3 tip = add(start, add(add(mul(out, len), makeVec3(0, 0, params.branchCurve * len * 0.25f)), mul(gnarl, 0.55f)));
 			const float r0 = params.branchRadiusByLevel[child_level];
 			const float r1 = std::max(0.01f, r0 * params.branchTaperByLevel[child_level]);
 			addCylinderBetween(mesh, start, mid, r0, (r0 + r1) * 0.5f, radial_segments, branch_sections, 0, params.branchTwistByLevel[child_level]);
@@ -315,7 +315,7 @@ void TreeGenerator::generateLeaves(const TreeParams& params, TreeMeshData& mesh,
 		return;
 
 	uint32_t rng = params.seed ^ 0x85ebca6bu;
-	const float crown_center_y = params.trunkHeight * (params.preset == TreePresetType::Bush ? 0.55f : 0.78f);
+	const float crown_center_z = params.trunkHeight * (params.preset == TreePresetType::Bush ? 0.55f : 0.78f);
 	const float crown_radius = std::max(params.branchLength * 0.75f, params.trunkRadius * 3.0f);
 	const float crown_height = std::max(params.trunkHeight * 0.28f, params.leafSize * 2.0f);
 
@@ -326,14 +326,14 @@ void TreeGenerator::generateLeaves(const TreeParams& params, TreeMeshData& mesh,
 		{
 			center = branch_tips[(size_t)(random01(rng) * (float)branch_tips.size()) % branch_tips.size()];
 			center.x += randomRange(rng, -params.branchLength * 0.28f, params.branchLength * 0.28f);
-			center.y += randomRange(rng, -params.leafSize, params.leafSize * 1.8f);
-			center.z += randomRange(rng, -params.branchLength * 0.28f, params.branchLength * 0.28f);
+			center.y += randomRange(rng, -params.branchLength * 0.28f, params.branchLength * 0.28f);
+			center.z += randomRange(rng, -params.leafSize, params.leafSize * 1.8f);
 		}
 		else
 		{
 			const float a = randomRange(rng, 0.0f, 2.0f * PI);
 			const float r = std::sqrt(random01(rng)) * crown_radius;
-			center = makeVec3(std::cos(a) * r, crown_center_y + randomRange(rng, -crown_height * 0.5f, crown_height * 0.5f), std::sin(a) * r);
+			center = makeVec3(std::cos(a) * r, std::sin(a) * r, crown_center_z + randomRange(rng, -crown_height * 0.5f, crown_height * 0.5f));
 		}
 
 		const float size = params.leafSize * randomRange(rng, 1.0f - params.leafSizeRandomness, 1.0f + params.leafSizeRandomness);
@@ -403,11 +403,24 @@ int TreeGenerator::runSmokeCheck(const std::string& report_path)
 	const uint64 hash_d = FileChecksum::fileChecksum(path_d);
 
 	const TreeMeshData mesh = generate(a);
+	TreeVec3 min_p = mesh.vertices.empty() ? makeVec3(0, 0, 0) : mesh.vertices[0].pos;
+	TreeVec3 max_p = min_p;
+	for(size_t i=1; i<mesh.vertices.size(); ++i)
+	{
+		min_p.x = std::min(min_p.x, mesh.vertices[i].pos.x);
+		min_p.y = std::min(min_p.y, mesh.vertices[i].pos.y);
+		min_p.z = std::min(min_p.z, mesh.vertices[i].pos.z);
+		max_p.x = std::max(max_p.x, mesh.vertices[i].pos.x);
+		max_p.y = std::max(max_p.y, mesh.vertices[i].pos.y);
+		max_p.z = std::max(max_p.z, mesh.vertices[i].pos.z);
+	}
+	const TreeVec3 dims = makeVec3(max_p.x - min_p.x, max_p.y - min_p.y, max_p.z - min_p.z);
 	const bool same_seed_same_mesh = hash_a1 == hash_a2;
 	const bool changed_seed_changes_mesh = hash_a1 != hash_c;
 	const bool changed_param_changes_mesh = hash_a1 != hash_d;
 	const bool non_empty_mesh = !mesh.vertices.empty() && !mesh.indices.empty();
-	const bool ok = same_seed_same_mesh && changed_seed_changes_mesh && changed_param_changes_mesh && non_empty_mesh;
+	const bool z_up = dims.z >= a.trunkHeight * 0.90f && min_p.z > -a.leafSize * 4.0f;
+	const bool ok = same_seed_same_mesh && changed_seed_changes_mesh && changed_param_changes_mesh && non_empty_mesh && z_up;
 
 	std::ostringstream s;
 	s << "{\n";
@@ -416,6 +429,8 @@ int TreeGenerator::runSmokeCheck(const std::string& report_path)
 	s << "  \"changed_seed_changes_mesh\": " << (changed_seed_changes_mesh ? "true" : "false") << ",\n";
 	s << "  \"changed_param_changes_mesh\": " << (changed_param_changes_mesh ? "true" : "false") << ",\n";
 	s << "  \"non_empty_mesh\": " << (non_empty_mesh ? "true" : "false") << ",\n";
+	s << "  \"z_up_mesh\": " << (z_up ? "true" : "false") << ",\n";
+	s << "  \"aabb_dims\": [" << dims.x << ", " << dims.y << ", " << dims.z << "],\n";
 	s << "  \"vertex_count\": " << mesh.vertices.size() << ",\n";
 	s << "  \"index_count\": " << mesh.indices.size() << ",\n";
 	s << "  \"hash_same_seed_a\": " << hash_a1 << ",\n";
