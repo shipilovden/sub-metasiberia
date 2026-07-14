@@ -55,6 +55,10 @@ Copyright Glare Technologies Limited 2024 -
 #include "TreeObject.h"
 #include "TreePresets.h"
 #include "TreeSerialization.h"
+#include "LucideIconUtils.h"
+#include "VoxelEditorData.h"
+#include "VoxelEditorPanel.h"
+#include "VoxelTools.h"
 #include "UploadResourceThread.h"
 #include "ScientificObjectEditor.h"
 #include "ScientificObjectSettings.h"
@@ -1590,6 +1594,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	,map_dock_map_widget(NULL)
 	,scientific_object_editor(NULL)
 	,tree_editor_panel(NULL)
+	,voxel_editor_panel(NULL)
 	,action_add_tree(NULL)
 	,action_add_scientific_object(NULL)
 	,active_editor_kind(ActiveEditor_Object)
@@ -2133,6 +2138,16 @@ void MainWindow::initialiseUI()
 	tree_editor_panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	ui->verticalLayout_4->addWidget(tree_editor_panel);
 	tree_editor_panel->hide();
+	voxel_editor_panel = new VoxelEditorPanel(ui->scrollAreaWidgetContents);
+	voxel_editor_panel->setObjectName(QStringLiteral("voxelEditorPanel"));
+	voxel_editor_panel->setMinimumWidth(360);
+	voxel_editor_panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	voxel_editor_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
+	// Keep the specialised voxel controls at the top of the dock so the editor
+	// is immediately visible after creation; generic transform controls remain
+	// available below it.
+	ui->verticalLayout_4->insertWidget(0, voxel_editor_panel);
+	voxel_editor_panel->hide();
 
 	// Add a spacer to right-align the UserDetailsWidget (see http://www.setnode.com/blog/right-aligning-a-button-in-a-qtoolbar/)
 	QWidget* spacer = new QWidget();
@@ -2234,7 +2249,7 @@ void MainWindow::initialiseUI()
 
 	ui->objectEditor->init();
 	scientific_object_editor->init(settings);
-	tree_editor_panel->init(settings);
+	tree_editor_panel->init(settings, TreeObject::findBundledAssetRoot(base_dir_path));
 
 	ui->diagnosticsWidget->init(settings);
 	connect(ui->diagnosticsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(diagnosticsWidgetChanged()));
@@ -2324,6 +2339,24 @@ void MainWindow::initialiseUI()
 	connect(tree_editor_panel, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
 	connect(tree_editor_panel, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
 	connect(tree_editor_panel, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
+	connect(voxel_editor_panel, &VoxelEditorPanel::objectMetadataChanged, this, [this]() { objectEditedSlot(); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::meshRebuildRequested, this, [this]()
+	{
+		objectEditedSlot();
+		gui_client.rebuildSelectedVoxelObject();
+	});
+	connect(voxel_editor_panel, &VoxelEditorPanel::toolStateChanged, this, [this]() { gui_client.cancelVoxelShapeTool(); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::proceduralGenerationRequested, this, [this](const int type_value)
+	{
+		const VoxelProceduralType type = static_cast<VoxelProceduralType>(type_value);
+		gui_client.applyVoxelProceduralGenerator(type, voxel_editor_panel->proceduralParams(type));
+	});
+	connect(voxel_editor_panel, &VoxelEditorPanel::selectionCopyRequested, this, [this]() { gui_client.copyVoxelSelection(); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::selectionPasteRequested, this, [this]() { gui_client.pasteVoxelSelection(voxel_editor_panel->selectionOffset()); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::selectionDeleteRequested, this, [this]() { gui_client.deleteVoxelSelection(); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::selectionDuplicateRequested, this, [this]() { gui_client.duplicateVoxelSelection(voxel_editor_panel->selectionOffset()); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::selectionMoveRequested, this, [this]() { gui_client.moveVoxelSelection(voxel_editor_panel->selectionOffset()); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::selectionClearRequested, this, [this]() { gui_client.clearVoxelSelection(); });
 	connect(ui->parcelEditor, SIGNAL(parcelChanged()), this, SLOT(parcelEditedSlot()));
 	connect(ui->worldSettingsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(worldSettingsChangedSlot()));
 	connect(user_details, SIGNAL(logInClicked()), this, SLOT(on_actionLogIn_triggered()));
@@ -2348,6 +2381,8 @@ void MainWindow::initialiseUI()
 	scientific_object_editor->hide();
 	tree_editor_panel->setControlsEnabled(false);
 	tree_editor_panel->hide();
+	voxel_editor_panel->setEditable(false);
+	voxel_editor_panel->hide();
 	ui->parcelEditor->hide();
 	ui->botEditorWidget->hide();
 
@@ -2725,6 +2760,7 @@ void MainWindow::configureEditAddSubmenu()
 		ui->actionAdd_Text,
 		ui->actionAdd_Spotlight,
 		ui->actionAdd_Particles,
+		ui->actionAdd_Voxels,
 		action_add_tree,
 		action_add_scientific_object,
 		ui->actionAdd_Camera,
@@ -2765,30 +2801,38 @@ void MainWindow::refreshEditMenuActionIcons()
 	if(!ui)
 		return;
 
+	const QString lucide_dir = LucideIconUtils::directoryForBasePath(base_dir_path);
+	const auto set_lucide = [&lucide_dir](QAction* action, const char* name, const QColor& colour, const QString& fallback)
+	{
+		if(!LucideIconUtils::setActionIcon(action, lucide_dir, QString::fromLatin1(name), colour))
+			setMenuActionGlyphIcon(action, fallback);
+	};
+
 	if(ui->menuEdit)
-		setMenuActionGlyphIcon(ui->menuEdit->menuAction(), QString::fromUtf8("✎"));
+		set_lucide(ui->menuEdit->menuAction(), "pencil", QColor(QStringLiteral("#CBD5E1")), QString::fromUtf8("✎"));
 
 	QMenu* add_menu = ui->menuEdit ? ui->menuEdit->findChild<QMenu*>("menuEditAdd", Qt::FindDirectChildrenOnly) : NULL;
 	if(add_menu)
-		setMenuActionGlyphIcon(add_menu->menuAction(), QStringLiteral("+"));
+		set_lucide(add_menu->menuAction(), "plus", QColor(QStringLiteral("#60A5FA")), QStringLiteral("+"));
 
-	setMenuActionGlyphIcon(ui->actionUndo, QString::fromUtf8("↶"));
-	setMenuActionGlyphIcon(ui->actionRedo, QString::fromUtf8("↷"));
-	setMenuActionGlyphIcon(ui->actionAddObject, QString::fromUtf8("□"));
-	setMenuActionGlyphIcon(ui->actionAddHypercard, QString::fromUtf8("▣"));
-	setMenuActionGlyphIcon(ui->actionAdd_Text, QStringLiteral("T"));
-	setMenuActionGlyphIcon(ui->actionAdd_Particles, QString::fromUtf8("*"));
-	setMenuActionGlyphIcon(action_add_tree, QString::fromUtf8("♣"));
-	setMenuActionGlyphIcon(action_add_scientific_object, QString::fromUtf8("⚛"));
-	setMenuActionGlyphIcon(ui->actionAdd_Spotlight, QString::fromUtf8("⌁"));
-	setMenuActionGlyphIcon(ui->actionAdd_Camera, QString::fromUtf8("◉"));
-	setMenuActionGlyphIcon(ui->actionAdd_Seat, QString::fromUtf8("╚"));
-	setMenuActionGlyphIcon(ui->actionAdd_Audio_Source, QString::fromUtf8("♫"));
-	setMenuActionGlyphIcon(ui->actionAdd_Web_View, QString::fromUtf8("◎"));
-	setMenuActionGlyphIcon(ui->actionAdd_Video, QString::fromUtf8("▶"));
-	setMenuActionGlyphIcon(ui->actionAdd_Decal, QString::fromUtf8("▤"));
-	setMenuActionGlyphIcon(ui->actionAdd_Portal, QString::fromUtf8("↻"));
-	setMenuActionGlyphIcon(ui->actionAddBot, QString::fromUtf8("☻"));
+	set_lucide(ui->actionUndo, "undo-2", QColor(QStringLiteral("#CBD5E1")), QString::fromUtf8("↶"));
+	set_lucide(ui->actionRedo, "redo-2", QColor(QStringLiteral("#CBD5E1")), QString::fromUtf8("↷"));
+	set_lucide(ui->actionAddObject, "image-plus", QColor(QStringLiteral("#60A5FA")), QString::fromUtf8("□"));
+	set_lucide(ui->actionAddHypercard, "panels-top-left", QColor(QStringLiteral("#A78BFA")), QString::fromUtf8("▣"));
+	set_lucide(ui->actionAdd_Text, "type", QColor(QStringLiteral("#F8FAFC")), QStringLiteral("T"));
+	set_lucide(ui->actionAdd_Spotlight, "spotlight", QColor(QStringLiteral("#FACC15")), QString::fromUtf8("⌁"));
+	set_lucide(ui->actionAdd_Particles, "sparkles", QColor(QStringLiteral("#C084FC")), QString::fromUtf8("*"));
+	set_lucide(ui->actionAdd_Voxels, "boxes", QColor(QStringLiteral("#F97316")), QString::fromUtf8("▦"));
+	set_lucide(action_add_tree, "trees", QColor(QStringLiteral("#4ADE80")), QString::fromUtf8("♣"));
+	set_lucide(action_add_scientific_object, "atom", QColor(QStringLiteral("#22D3EE")), QString::fromUtf8("⚛"));
+	set_lucide(ui->actionAdd_Camera, "camera", QColor(QStringLiteral("#93C5FD")), QString::fromUtf8("◉"));
+	set_lucide(ui->actionAdd_Seat, "armchair", QColor(QStringLiteral("#D6B98C")), QString::fromUtf8("╚"));
+	set_lucide(ui->actionAdd_Audio_Source, "audio-lines", QColor(QStringLiteral("#F472B6")), QString::fromUtf8("♫"));
+	set_lucide(ui->actionAdd_Web_View, "globe", QColor(QStringLiteral("#38BDF8")), QString::fromUtf8("◎"));
+	set_lucide(ui->actionAdd_Video, "video", QColor(QStringLiteral("#FB7185")), QString::fromUtf8("▶"));
+	set_lucide(ui->actionAdd_Decal, "sticker", QColor(QStringLiteral("#F59E0B")), QString::fromUtf8("▤"));
+	set_lucide(ui->actionAdd_Portal, "door-open", QColor(QStringLiteral("#818CF8")), QString::fromUtf8("↻"));
+	set_lucide(ui->actionAddBot, "bot", QColor(QStringLiteral("#2DD4BF")), QString::fromUtf8("☻"));
 	setMenuActionGlyphIcon(ui->actionAdd_to_Favorites, QString::fromUtf8("★"));
 	setMenuActionGlyphIcon(ui->actionCopy_Object, QString::fromUtf8("⧉"));
 	setMenuActionGlyphIcon(ui->actionPaste_Object, QString::fromUtf8("▣"));
@@ -2815,24 +2859,6 @@ void MainWindow::configureMainToolbarButtons()
 		return;
 
 	refreshEditMenuActionIcons();
-
-	const auto set_svg_icon = [this](QAction* action, const std::string& filename)
-	{
-		if(!action)
-			return;
-
-		QString icon_path = QtUtils::toQString(base_dir_path + "/data/resources/buttons/" + filename);
-		if(!QFile::exists(icon_path))
-			icon_path = QtUtils::toQString(base_dir_path + "/resources/buttons/" + filename);
-		if(QFile::exists(icon_path))
-			action->setIcon(QIcon(icon_path));
-	};
-
-	set_svg_icon(ui->actionAddObject, "add_model_image.svg");
-	set_svg_icon(ui->actionAdd_Video, "add_video.svg");
-	set_svg_icon(ui->actionAddHypercard, "add_hypercard.svg");
-	set_svg_icon(ui->actionAdd_Web_View, "add_web_view.svg");
-	set_svg_icon(ui->actionAdd_Voxels, "add_voxels.svg");
 
 	const QList<QAction*> add_toolbar_actions = {
 		ui->actionAddObject,
@@ -3488,6 +3514,12 @@ void MainWindow::setObjectEditorControlsEditable(bool editable)
 		ui->objectEditor->setControlsEditable(editable);
 		tree_editor_panel->setControlsEditable(editable);
 	}
+	else if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel)
+	{
+		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
+		ui->objectEditor->setControlsEditable(editable);
+		voxel_editor_panel->setEditable(editable);
+	}
 	else
 	{
 		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
@@ -3500,6 +3532,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 {
 	const bool is_scientific_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ScientificObjectSettings::isScientificObjectContent(ob.content);
 	const bool is_tree_editor = TreeObject::isTreeObject(ob);
+	const bool is_voxel_editor = ob.object_type == WorldObject::ObjectType_VoxelGroup;
 	const bool is_particle_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
 	const bool is_portal_editor = ob.object_type == WorldObject::ObjectType_Portal;
 
@@ -3515,6 +3548,14 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 		tree_editor_panel->setFromObject(ob, ob_in_editing_users_world);
 	}
+	else if(is_voxel_editor && voxel_editor_panel)
+	{
+		active_editor_kind = ActiveEditor_Voxel;
+		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
+		voxel_editor_panel->setFromObject(ob);
+		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
+		ui->objectEditor->setContentForSpecialisedEditor(voxel_editor_panel->legacyContent());
+	}
 	else
 	{
 		active_editor_kind = ActiveEditor_Object;
@@ -3522,7 +3563,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 	}
 
-	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor")))));
+	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))))));
 	if(ui->editorDockWidget->toggleViewAction())
 		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }
@@ -3534,6 +3575,8 @@ int MainWindow::getSelectedMatIndex()
 		return 0;
 	if(active_editor_kind == ActiveEditor_Tree)
 		return 0;
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel)
+		return voxel_editor_panel->currentMaterialIndex();
 	return ui->objectEditor->getSelectedMatIndex();
 }
 
@@ -3546,6 +3589,35 @@ void MainWindow::objectEditorToObject(WorldObject& ob)
 	{
 		ui->objectEditor->writeTransformMembersToObject(ob);
 		tree_editor_panel->toObject(ob);
+	}
+	else if((active_editor_kind == ActiveEditor_Voxel || ob.object_type == WorldObject::ObjectType_VoxelGroup) && voxel_editor_panel)
+	{
+		// Preserve the existing voxel object's generic material/physics/audio/script
+		// controls transactionally, then let the specialised panel apply layer
+		// metadata and palette ownership.  Voxel metadata uses WorldObject::content,
+		// so the generic content editor reads/writes the preserved legacy sidecar.
+		WorldObjectRef edited_ob = new WorldObject();
+		edited_ob->copyNetworkStateFrom(ob);
+		edited_ob->uid = ob.uid;
+		edited_ob->changed_flags = ob.changed_flags;
+		ui->objectEditor->toObject(*edited_ob);
+		voxel_editor_panel->setLegacyContent(edited_ob->content);
+		std::string error;
+		if(!voxel_editor_panel->applyToObject(*edited_ob, error))
+		{
+			voxel_editor_panel->setFromObject(ob);
+			ui->objectEditor->setFromObject(ob, voxel_editor_panel->currentMaterialIndex(), connectedToUsersWorldOrGodUser());
+			ui->objectEditor->setContentForSpecialisedEditor(voxel_editor_panel->legacyContent());
+			throw glare::Exception(error.empty() ? "Could not apply voxel editor state." : error);
+		}
+		const uint32 edited_changed_flags = edited_ob->changed_flags;
+		ob.copyNetworkStateFrom(*edited_ob);
+		ob.setCompressedVoxels(edited_ob->getCompressedVoxels());
+		ob.changed_flags = edited_changed_flags;
+		ob.decompressVoxels();
+		voxel_editor_panel->setFromObject(ob);
+		ui->objectEditor->setFromObject(ob, voxel_editor_panel->currentMaterialIndex(), connectedToUsersWorldOrGodUser());
+		ui->objectEditor->setContentForSpecialisedEditor(voxel_editor_panel->legacyContent());
 	}
 	else
 		ui->objectEditor->toObject(ob); // Sets changed_flags on object as well.
@@ -3613,14 +3685,27 @@ void MainWindow::showObjectEditor()
 		ui->objectEditor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
+		if(voxel_editor_panel)
+			voxel_editor_panel->hide();
 		scientific_object_editor->show();
 	}
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 	{
 		if(scientific_object_editor)
 			scientific_object_editor->hide();
+		if(voxel_editor_panel)
+			voxel_editor_panel->hide();
 		ui->objectEditor->show();
 		tree_editor_panel->show();
+	}
+	else if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel)
+	{
+		if(scientific_object_editor)
+			scientific_object_editor->hide();
+		if(tree_editor_panel)
+			tree_editor_panel->hide();
+		ui->objectEditor->show();
+		voxel_editor_panel->show();
 	}
 	else
 	{
@@ -3628,6 +3713,8 @@ void MainWindow::showObjectEditor()
 			scientific_object_editor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
+		if(voxel_editor_panel)
+			voxel_editor_panel->hide();
 		ui->objectEditor->show();
 	}
 }
@@ -3641,6 +3728,11 @@ void MainWindow::setObjectEditorEnabled(bool enabled)
 	{
 		ui->objectEditor->setEnabled(enabled);
 		tree_editor_panel->setControlsEnabled(enabled);
+	}
+	else if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel)
+	{
+		ui->objectEditor->setEnabled(enabled);
+		voxel_editor_panel->setEditable(enabled);
 	}
 	else
 		ui->objectEditor->setEnabled(enabled);
@@ -8249,7 +8341,29 @@ void MainWindow::on_actionAddTree_triggered()
 	new_world_object->scale = Vec3f(1.0f);
 	new_world_object->max_model_lod_level = params.lodEnabled ? 2 : 0;
 	new_world_object->model_url = mesh_URL;
-	TreeObject::applyToWorldObject(*new_world_object, params, /*rebuild_mesh=*/false);
+	TreeObject::applyToWorldObject(*new_world_object, params, /*rebuild_mesh=*/false, TreeObject::findBundledAssetRoot(base_dir_path));
+
+	// Convert bundled EZ-Tree textures into content-addressed resources before
+	// the CreateObject packet is sent.  This makes the tree render identically
+	// after reconnect and on other clients; the server can request the files via
+	// the normal GetFile flow because they are already in ResourceManager.
+	WorldObject::GetDependencyOptions dependency_options;
+	dependency_options.use_basis = false;
+	dependency_options.include_lightmaps = false;
+	dependency_options.get_optimised_mesh = false;
+	DependencyURLVector dependency_urls;
+	new_world_object->appendDependencyURLsBaseLevel(dependency_options, dependency_urls);
+	for(size_t i=0; i<dependency_urls.size(); ++i)
+	{
+		if(FileUtils::fileExists(dependency_urls[i].URL))
+		{
+			const URLString local_path = dependency_urls[i].URL;
+			const URLString resource_url = ResourceManager::URLForPathAndHash(toStdString(local_path), FileChecksum::fileChecksum(local_path));
+			if(!gui_client.resource_manager->isFileForURLPresent(resource_url))
+				gui_client.resource_manager->copyLocalFileToResourceDir(toStdString(local_path), resource_url);
+		}
+	}
+	new_world_object->convertLocalPathsToURLS(*gui_client.resource_manager);
 
 	new_world_object->setAABBOS(results.batched_mesh->aabb_os);
 
@@ -8372,6 +8486,7 @@ void MainWindow::on_actionAdd_Voxels_triggered()
 	new_world_object->object_type = WorldObject::ObjectType_VoxelGroup;
 	new_world_object->materials.resize(1);
 	new_world_object->materials[0] = new WorldMaterial();
+	new_world_object->content = VoxelEditorData::serialiseToContent(VoxelEditorData::defaultForObject(*new_world_object));
 	new_world_object->pos = ob_pos;
 	new_world_object->axis = Vec3f(0, 0, 1);
 	new_world_object->angle = 0;
@@ -8388,7 +8503,7 @@ void MainWindow::on_actionAdd_Voxels_triggered()
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}
 
-	showInfoNotification("Voxel Object created.");
+	showInfoNotification("Voxel object created. The voxel editor will open after the server confirms creation.");
 
 	// Deselect any currently selected object
 	gui_client.deselectObject();
@@ -9411,6 +9526,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 		scientific_object_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
+	if(voxel_editor_panel)
+		voxel_editor_panel->hide();
 
 	// Set dock title to "Редактор ботов"
 	ui->editorDockWidget->setWindowTitle(
@@ -9467,6 +9584,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 		scientific_object_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
+	if(voxel_editor_panel)
+		voxel_editor_panel->hide();
 	showEditorDockWidget();
 }
 
@@ -9492,6 +9611,8 @@ void MainWindow::hideBotEditor()
 		scientific_object_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
+	if(voxel_editor_panel)
+		voxel_editor_panel->hide();
 	active_editor_kind = ActiveEditor_Object;
 	ui->objectEditor->show();
 	ui->editorDockWidget->setWindowTitle(
@@ -9601,6 +9722,17 @@ void MainWindow::on_actionUndo_triggered()
 {
 	try
 	{
+		if(active_editor_kind == ActiveEditor_Voxel)
+		{
+			if(gui_client.canUndoVoxelEdit())
+			{
+				gui_client.undoVoxelEdit(); // A permission failure is terminal; never fall through to unrelated global history.
+				return;
+			}
+			if(!gui_client.selectedVoxelModificationAllowed("undo voxel edit"))
+				return;
+			gui_client.clearSelectedVoxelEditHistory(); // Drop any delta redo branch before crossing into global history.
+		}
 		WorldObjectRef ob = gui_client.undo_buffer.getUndoWorldObject();
 		gui_client.applyUndoOrRedoObject(ob);
 	}
@@ -9615,6 +9747,17 @@ void MainWindow::on_actionRedo_triggered()
 {
 	try
 	{
+		if(active_editor_kind == ActiveEditor_Voxel)
+		{
+			if(gui_client.canRedoVoxelEdit())
+			{
+				gui_client.redoVoxelEdit();
+				return;
+			}
+			if(!gui_client.selectedVoxelModificationAllowed("redo voxel edit"))
+				return;
+			gui_client.clearSelectedVoxelEditHistory();
+		}
 		WorldObjectRef ob = gui_client.undo_buffer.getRedoWorldObject();
 		gui_client.applyUndoOrRedoObject(ob);
 	}
@@ -10393,6 +10536,8 @@ void MainWindow::posAndRot3DControlsToggledSlot()
 		settings->setValue("scientificObjectEditor/show3DControls", enabled);
 	else if(active_editor_kind == ActiveEditor_Tree)
 		settings->setValue("treeEditor/show3DControls", enabled);
+	else if(active_editor_kind == ActiveEditor_Voxel)
+		settings->setValue("voxelEditor/show3DControls", enabled);
 	else
 		settings->setValue("objectEditor/show3DControlsCheckBoxChecked", enabled);
 }
@@ -10574,6 +10719,30 @@ void MainWindow::startLightmapFlagTimer()
 }
 
 
+bool MainWindow::getVoxelEditorToolState(VoxelToolType& tool_out, VoxelToolSettings& settings_out) const
+{
+	if(active_editor_kind != ActiveEditor_Voxel || !voxel_editor_panel || !voxel_editor_panel->sceneToolsEnabled())
+		return false;
+	tool_out = voxel_editor_panel->currentTool();
+	settings_out = voxel_editor_panel->toolSettings();
+	return true;
+}
+
+
+void MainWindow::voxelEditorMaterialPicked(const int material_index)
+{
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel)
+		voxel_editor_panel->selectMaterialIndex(material_index);
+}
+
+
+void MainWindow::voxelEditorObjectDataChanged(const WorldObject& ob)
+{
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel)
+		voxel_editor_panel->notifyVoxelDataChanged(ob);
+}
+
+
 void MainWindow::showAvatarSettings()
 {
 	on_actionAvatarSettings_triggered();
@@ -10635,6 +10804,8 @@ void MainWindow::showParcelEditor()
 		scientific_object_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
+	if(voxel_editor_panel)
+		voxel_editor_panel->hide();
 	ui->parcelEditor->show();
 }
 
@@ -10930,6 +11101,12 @@ void MainWindow::glWidgetKeyPressed(QKeyEvent* e)
 			gui_client.showInfoNotification("XR recentered. Keep looking straight ahead in the headset.");
 		else
 			gui_client.showInfoNotification("XR recenter is unavailable because there is no active XR session.");
+		return;
+	}
+
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->handleShortcut(e))
+	{
+		e->accept();
 		return;
 	}
 
@@ -11538,6 +11715,8 @@ int main(int argc, char *argv[])
 		syntax["--scientific_pubchem_apply_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run PubChem UI selection/apply smoke and write a JSON report.
 		syntax["--scientific_molecule_info_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run molecule labels/selection/measurement/Russian-search smoke.
 		syntax["--tree_generator_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run procedural tree generator determinism smoke.
+		syntax["--tree_editor_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run tree editor preset-population/repair smoke.
+		syntax["--voxel_editor_smoke"] = std::vector<ArgumentParser::ArgumentType>(1, ArgumentParser::ArgumentType_string); // Run native voxel editor data/tools/widget smoke.
 
 		if(args.size() == 3 && args[1] == "-NSDocumentRevisionsDebugMode")
 			args.resize(1); // This is some XCode debugging rubbish, remove it
@@ -11552,6 +11731,17 @@ int main(int argc, char *argv[])
 			return ScientificObjectEditor::runMoleculeInformationSmokeCheck(QtUtils::toQString(parsed_args.getArgStringValue("--scientific_molecule_info_smoke")));
 		if(parsed_args.isArgPresent("--tree_generator_smoke"))
 			return TreeGenerator::runSmokeCheck(parsed_args.getArgStringValue("--tree_generator_smoke"));
+		if(parsed_args.isArgPresent("--tree_editor_smoke"))
+			return TreeEditorPanel::runSmokeCheck(parsed_args.getArgStringValue("--tree_editor_smoke"));
+		if(parsed_args.isArgPresent("--voxel_editor_smoke"))
+		{
+			std::string report;
+			const bool smoke_ok = VoxelEditorPanel::runSmokeCheck(report);
+			QFile report_file(QtUtils::toQString(parsed_args.getArgStringValue("--voxel_editor_smoke")));
+			if(!report_file.open(QIODevice::WriteOnly | QIODevice::Truncate) || report_file.write(QByteArray(report.data(), (int)report.size())) != (qint64)report.size())
+				return 2;
+			return smoke_ok ? 0 : 1;
+		}
 
 		if(parsed_args.isArgPresent("--test"))
 		{

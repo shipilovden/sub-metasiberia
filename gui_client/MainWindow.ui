@@ -639,7 +639,7 @@
   </action>
   <action name="actionAdd_Voxels">
    <property name="text">
-    <string>Add Voxels</string>
+    <string>Add Voxel</string>
    </property>
   </action>
   <action name="actionAdd_Particles">

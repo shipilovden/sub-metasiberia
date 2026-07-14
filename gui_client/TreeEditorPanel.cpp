@@ -10,6 +10,7 @@ Copyright Glare Technologies Limited 2026 -
 
 
 #include "../shared/WorldObject.h"
+#include <utils/FileUtils.h>
 #include <QtCore/QRandomGenerator>
 #include <QtCore/QTimer>
 #include <QtWidgets/QCheckBox>
@@ -23,12 +24,18 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QVBoxLayout>
+#include <cmath>
+#include <cstring>
+#include <sstream>
 
 
 TreeEditorPanel::TreeEditorPanel(QWidget* parent)
 :	QWidget(parent),
 	settings(NULL),
 	updating(false),
+	controls_editable(false),
+	pending_mesh_rebuild(false),
+	preserve_current_params_for_next_to_object(false),
 	current_params(TreeSerialization::defaultParams())
 {
 	rebuild_timer = new QTimer(this);
@@ -39,9 +46,108 @@ TreeEditorPanel::TreeEditorPanel(QWidget* parent)
 }
 
 
-void TreeEditorPanel::init(QSettings* settings_)
+int TreeEditorPanel::runSmokeCheck(const std::string& report_path)
+{
+	TreeEditorPanel panel;
+	panel.init(/*settings=*/NULL, /*asset_root_path=*/std::string());
+
+	TreeParams expected = TreeSerialization::defaultParams();
+	expected.seed = 123456;
+	WorldObject default_ob;
+	default_ob.object_type = WorldObject::ObjectType_Generic;
+	default_ob.content = TreeSerialization::serialiseToContent(expected);
+	panel.setFromObject(default_ob, /*ob_in_editing_users_world=*/true);
+	panel.toObject(default_ob);
+	const TreeParams default_roundtrip = TreeSerialization::fromContent(default_ob.content);
+	const bool preset_survives_panel_population =
+		default_roundtrip.presetId == expected.presetId &&
+		std::fabs(default_roundtrip.trunkHeight - expected.trunkHeight) < 0.011f &&
+		std::fabs(default_roundtrip.trunkRadius - expected.trunkRadius) < 0.011f &&
+		default_roundtrip.branchLevels == expected.branchLevels &&
+		default_roundtrip.leafCount == expected.leafCount;
+
+	panel.setControlsEditable(true);
+	panel.branch_angle_level_spins[1]->setValue(expected.branchAngle + 1.0f);
+	const bool level_aliases_synchronised =
+		std::fabs(panel.branch_angle_spin->value() - panel.branch_angle_level_spins[1]->value()) < 0.001 &&
+		std::fabs(panel.controlsToParams().branchAngle - panel.controlsToParams().branchAngleByLevel[1]) < 0.001f;
+	panel.rebuild_timer->stop();
+
+	TreeParams placeholder = expected;
+	placeholder.preset = TreePresetType::Custom;
+	placeholder.presetId = "custom";
+	placeholder.height = 9.0f;
+	placeholder.trunkHeight = 0.25f;
+	placeholder.trunkRadius = 0.02f;
+	placeholder.trunkTaper = 0.02f;
+	WorldObject legacy_ob;
+	legacy_ob.object_type = WorldObject::ObjectType_Generic;
+	legacy_ob.content = TreeSerialization::serialiseToContent(placeholder);
+	panel.setFromObject(legacy_ob, /*ob_in_editing_users_world=*/true);
+	panel.toObject(legacy_ob);
+	const TreeParams repaired = TreeSerialization::fromContent(legacy_ob.content);
+	const bool placeholder_repaired =
+		repaired.presetId == TreePresets::defaultPresetId() &&
+		repaired.trunkHeight > 2.0f &&
+		repaired.trunkRadius > 0.08f &&
+		!legacy_ob.model_url.empty();
+
+	std::string schema1_content = TreeSerialization::serialiseToContent(expected);
+	const size_t schema_pos = schema1_content.find("\"schema_version\": 2");
+	if(schema_pos != std::string::npos)
+		schema1_content.replace(schema_pos, std::strlen("\"schema_version\": 2"), "\"schema_version\": 1");
+	const std::string raw_leaf_count = "\"leafCount\": " + std::to_string(expected.leafCount);
+	const size_t leaf_count_pos = schema1_content.find(raw_leaf_count);
+	if(leaf_count_pos != std::string::npos)
+		schema1_content.replace(leaf_count_pos, raw_leaf_count.size(), "\"leafCount\": " + std::to_string(expected.leafCount * 45));
+	bool mesh_upgrade = false;
+	const TreeParams migrated = TreeSerialization::fromContent(schema1_content, NULL, NULL, &mesh_upgrade);
+	const bool schema1_mesh_migrated =
+		mesh_upgrade && migrated.presetId == expected.presetId && migrated.leafCount == expected.leafCount &&
+		std::fabs(migrated.branchRadiusByLevel[1] - expected.branchRadiusByLevel[1]) < 0.001f;
+
+	TreeParams custom_v1 = expected;
+	custom_v1.preset = TreePresetType::Custom;
+	custom_v1.presetId = "custom";
+	custom_v1.trunkRadius = 0.4f;
+	custom_v1.branchRadiusByLevel = {0.4f, 0.2f, 0.1f, 0.05f};
+	custom_v1.leafCount = 450;
+	std::string custom_schema1_content = TreeSerialization::serialiseToContent(custom_v1);
+	const size_t custom_schema_pos = custom_schema1_content.find("\"schema_version\": 2");
+	if(custom_schema_pos != std::string::npos)
+		custom_schema1_content.replace(custom_schema_pos, std::strlen("\"schema_version\": 2"), "\"schema_version\": 1");
+	const TreeParams migrated_custom = TreeSerialization::fromContent(custom_schema1_content);
+	const bool schema1_custom_radii_migrated =
+		std::fabs(migrated_custom.branchRadiusByLevel[1] - 0.5f) < 0.001f &&
+		std::fabs(migrated_custom.branchRadiusByLevel[2] - 0.5f) < 0.001f &&
+		std::fabs(migrated_custom.branchRadiusByLevel[3] - 0.5f) < 0.001f &&
+		migrated_custom.leafCount == 10;
+
+	const bool ok = preset_survives_panel_population && level_aliases_synchronised && placeholder_repaired && schema1_mesh_migrated && schema1_custom_radii_migrated;
+	std::ostringstream s;
+	s << "{\n";
+	s << "  \"ok\": " << (ok ? "true" : "false") << ",\n";
+	s << "  \"preset_survives_panel_population\": " << (preset_survives_panel_population ? "true" : "false") << ",\n";
+	s << "  \"level_aliases_synchronised\": " << (level_aliases_synchronised ? "true" : "false") << ",\n";
+	s << "  \"placeholder_repaired\": " << (placeholder_repaired ? "true" : "false") << ",\n";
+	s << "  \"schema1_mesh_migrated\": " << (schema1_mesh_migrated ? "true" : "false") << ",\n";
+	s << "  \"schema1_custom_radii_migrated\": " << (schema1_custom_radii_migrated ? "true" : "false") << ",\n";
+	s << "  \"roundtrip_preset\": \"" << default_roundtrip.presetId << "\",\n";
+	s << "  \"roundtrip_trunk_height\": " << default_roundtrip.trunkHeight << ",\n";
+	s << "  \"roundtrip_trunk_radius\": " << default_roundtrip.trunkRadius << ",\n";
+	s << "  \"repaired_preset\": \"" << repaired.presetId << "\",\n";
+	s << "  \"repaired_trunk_height\": " << repaired.trunkHeight << ",\n";
+	s << "  \"repaired_trunk_radius\": " << repaired.trunkRadius << "\n";
+	s << "}\n";
+	FileUtils::writeEntireFileTextMode(report_path, s.str());
+	return ok ? 0 : 1;
+}
+
+
+void TreeEditorPanel::init(QSettings* settings_, const std::string& asset_root_path_)
 {
 	settings = settings_;
+	asset_root_path = asset_root_path_;
 	(void)settings;
 }
 
@@ -104,14 +210,14 @@ void TreeEditorPanel::createUi()
 	general_form->addRow(tr("Tree Type"), tree_type_combo);
 	connect(tree_type_combo, SIGNAL(currentIndexChanged(int)), this, SLOT(controlChanged()));
 	seed_spin = addIntSpin(general_form, tr("Seed"), 1, 2147483647);
-	height_spin = addDoubleSpin(general_form, tr("Height"), 0.5, 60.0, 0.1, 2);
+	height_spin = addDoubleSpin(general_form, tr("Height"), 0.01, 60.0, 0.1, 2);
 	layout->addWidget(general_box);
 
 	QGroupBox* trunk_box = new QGroupBox(tr("Trunk"), this);
 	QFormLayout* trunk_form = new QFormLayout(trunk_box);
-	trunk_height_spin = addDoubleSpin(trunk_form, tr("Trunk Height"), 0.25, 60.0, 0.1, 2);
-	trunk_radius_spin = addDoubleSpin(trunk_form, tr("Trunk Radius"), 0.02, 5.0, 0.02, 2);
-	trunk_taper_spin = addDoubleSpin(trunk_form, tr("Trunk Taper"), 0.02, 1.0, 0.02, 2);
+	trunk_height_spin = addDoubleSpin(trunk_form, tr("Trunk Height"), 0.01, 60.0, 0.1, 2);
+	trunk_radius_spin = addDoubleSpin(trunk_form, tr("Trunk Radius"), 0.005, 5.0, 0.01, 3);
+	trunk_taper_spin = addDoubleSpin(trunk_form, tr("Trunk Taper"), 0.0, 1.0, 0.02, 2);
 	trunk_curve_spin = addDoubleSpin(trunk_form, tr("Trunk Curve"), -2.0, 2.0, 0.02, 2);
 	trunk_twist_spin = addDoubleSpin(trunk_form, tr("Trunk Twist"), -3.14, 3.14, 0.02, 2);
 	trunk_segments_spin = addIntSpin(trunk_form, tr("Trunk Segments"), 3, 32);
@@ -137,35 +243,40 @@ void TreeEditorPanel::createUi()
 
 	QGroupBox* branch_box = new QGroupBox(tr("Branches"), this);
 	QFormLayout* branch_form = new QFormLayout(branch_box);
-	branch_levels_spin = addIntSpin(branch_form, tr("Branch Levels"), 0, 5);
+	branch_levels_spin = addIntSpin(branch_form, tr("Branch Levels"), 0, 3);
 	branches_per_level_spin = addIntSpin(branch_form, tr("Branches Per Level"), 0, 128);
-	branch_angle_spin = addDoubleSpin(branch_form, tr("Branch Angle"), 0.0, 120.0, 1.0, 1);
-	branch_length_spin = addDoubleSpin(branch_form, tr("Branch Length"), 0.05, 30.0, 0.1, 2);
+	branch_angle_spin = addDoubleSpin(branch_form, tr("Branch Angle"), 0.0, 180.0, 1.0, 1);
+	branch_length_spin = addDoubleSpin(branch_form, tr("Branch Length"), 0.01, 30.0, 0.1, 2);
 	branch_radius_spin = addDoubleSpin(branch_form, tr("Branch Radius"), 0.01, 3.0, 0.01, 2);
-	branch_taper_spin = addDoubleSpin(branch_form, tr("Branch Taper"), 0.02, 1.0, 0.02, 2);
+	branch_taper_spin = addDoubleSpin(branch_form, tr("Branch Taper"), 0.0, 1.0, 0.02, 2);
 	branch_curve_spin = addDoubleSpin(branch_form, tr("Branch Curve"), -2.0, 2.0, 0.02, 2);
 	branch_twist_spin = addDoubleSpin(branch_form, tr("Branch Twist"), -3.14, 3.14, 0.02, 2);
 	branch_randomness_spin = addDoubleSpin(branch_form, tr("Branch Randomness"), 0.0, 2.0, 0.02, 2);
-	branch_start_height_spin = addDoubleSpin(branch_form, tr("Branch Start Height"), 0.0, 0.95, 0.01, 2);
+	branch_start_height_spin = addDoubleSpin(branch_form, tr("Branch Start Height"), 0.0, 1.0, 0.01, 2);
 	branch_force_x_spin = addDoubleSpin(branch_form, tr("Branch Force X"), -1.0, 1.0, 0.01, 2);
 	branch_force_y_spin = addDoubleSpin(branch_form, tr("Branch Force Y"), -1.0, 1.0, 0.01, 2);
 	branch_force_z_spin = addDoubleSpin(branch_form, tr("Branch Force Z"), -1.0, 1.0, 0.01, 2);
 	branch_force_strength_spin = addDoubleSpin(branch_form, tr("Branch Force Strength"), -1.0, 1.0, 0.01, 3);
-	branch_gnarliness_spin = addDoubleSpin(branch_form, tr("Branch Gnarliness"), 0.0, 2.0, 0.02, 2);
+	branch_gnarliness_spin = addDoubleSpin(branch_form, tr("Branch Gnarliness"), -2.0, 2.0, 0.02, 2);
 	for(int i=0; i<4; ++i)
 	{
 		const QString suffix = QStringLiteral(" L%1").arg(i);
-		branch_angle_level_spins[i] = addDoubleSpin(branch_form, tr("Angle") + suffix, 0.0, 140.0, 1.0, 1);
+		branch_angle_level_spins[i] = addDoubleSpin(branch_form, tr("Angle") + suffix, 0.0, 180.0, 1.0, 1);
 		branch_children_level_spins[i] = addIntSpin(branch_form, tr("Children") + suffix, 0, 128);
-		branch_length_level_spins[i] = addDoubleSpin(branch_form, tr("Length") + suffix, 0.05, 60.0, 0.1, 2);
+		branch_length_level_spins[i] = addDoubleSpin(branch_form, tr("Length") + suffix, 0.01, 60.0, 0.1, 2);
 		branch_radius_level_spins[i] = addDoubleSpin(branch_form, tr("Radius") + suffix, 0.01, 5.0, 0.01, 2);
 		branch_sections_level_spins[i] = addIntSpin(branch_form, tr("Sections") + suffix, 1, 48);
 		branch_segments_level_spins[i] = addIntSpin(branch_form, tr("Segments") + suffix, 3, 32);
-		branch_start_level_spins[i] = addDoubleSpin(branch_form, tr("Start") + suffix, 0.0, 0.98, 0.01, 2);
-		branch_taper_level_spins[i] = addDoubleSpin(branch_form, tr("Taper") + suffix, 0.01, 1.0, 0.01, 2);
+		branch_start_level_spins[i] = addDoubleSpin(branch_form, tr("Start") + suffix, 0.0, 1.0, 0.01, 2);
+		branch_taper_level_spins[i] = addDoubleSpin(branch_form, tr("Taper") + suffix, 0.0, 1.0, 0.01, 2);
 		branch_twist_level_spins[i] = addDoubleSpin(branch_form, tr("Twist") + suffix, -6.28, 6.28, 0.05, 2);
-		branch_gnarliness_level_spins[i] = addDoubleSpin(branch_form, tr("Gnarliness") + suffix, 0.0, 3.0, 0.02, 2);
+		branch_gnarliness_level_spins[i] = addDoubleSpin(branch_form, tr("Gnarliness") + suffix, -3.0, 3.0, 0.02, 2);
 	}
+	// These entries do not exist as independent inputs in EZ-Tree: the root has
+	// no attachment angle/start, and final-level branches do not spawn children.
+	branch_angle_level_spins[0]->setEnabled(false);
+	branch_start_level_spins[0]->setEnabled(false);
+	branch_children_level_spins[3]->setEnabled(false);
 	layout->addWidget(branch_box);
 
 	QGroupBox* leaves_box = new QGroupBox(tr("Leaves"), this);
@@ -179,7 +290,7 @@ void TreeEditorPanel::createUi()
 	leaves_form->addRow(tr("Leaf Type"), leaf_type_combo);
 	connect(leaf_type_combo, SIGNAL(currentIndexChanged(int)), this, SLOT(controlChanged()));
 	leaf_count_spin = addIntSpin(leaves_form, tr("Leaf Count"), 0, 2000);
-	leaf_angle_spin = addDoubleSpin(leaves_form, tr("Leaf Angle"), -90.0, 90.0, 1.0, 1);
+	leaf_angle_spin = addDoubleSpin(leaves_form, tr("Leaf Angle"), 0.0, 100.0, 1.0, 1);
 	leaf_size_spin = addDoubleSpin(leaves_form, tr("Leaf Size"), 0.02, 10.0, 0.02, 2);
 	leaf_size_randomness_spin = addDoubleSpin(leaves_form, tr("Leaf Size Variance"), 0.0, 1.0, 0.02, 2);
 	leaf_red_spin = addDoubleSpin(leaves_form, tr("Leaf Red"), 0.0, 1.0, 0.01, 2);
@@ -190,11 +301,11 @@ void TreeEditorPanel::createUi()
 	leaf_rounded_normals_checkbox = new QCheckBox(tr("Rounded Leaf Normals"), this);
 	leaves_form->addRow(QString(), leaf_rounded_normals_checkbox);
 	connect(leaf_rounded_normals_checkbox, SIGNAL(toggled(bool)), this, SLOT(controlChanged()));
-	leaf_start_level_spin = addIntSpin(leaves_form, tr("Leaf Start Level"), 0, 5);
+	leaf_start_spin = addDoubleSpin(leaves_form, tr("Leaf Start"), 0.0, 1.0, 0.01, 3);
 	billboard_combo = new QComboBox(this);
 	billboard_combo->addItem(tr("Single"), QVariant((int)TreeBillboardMode::Single));
 	billboard_combo->addItem(tr("Double Cross"), QVariant((int)TreeBillboardMode::DoubleCross));
-	billboard_combo->addItem(tr("Mesh Leaves later"), QVariant((int)TreeBillboardMode::MeshLeaves));
+	billboard_combo->addItem(tr("Triple Cross"), QVariant((int)TreeBillboardMode::MeshLeaves));
 	leaves_form->addRow(tr("Billboard Mode"), billboard_combo);
 	connect(billboard_combo, SIGNAL(currentIndexChanged(int)), this, SLOT(controlChanged()));
 	layout->addWidget(leaves_box);
@@ -270,32 +381,73 @@ void TreeEditorPanel::createUi()
 
 void TreeEditorPanel::setFromObject(const WorldObject& ob, bool)
 {
-	const bool needs_legacy_repair = TreeSerialization::contentNeedsLegacyRepair(ob.content);
+	// Do not let a debounced edit from the previously selected object rebuild
+	// the object that has just become selected.
+	rebuild_timer->stop();
+	preserve_current_params_for_next_to_object = false;
+
+	bool needs_legacy_repair = false;
+	bool needs_mesh_upgrade = false;
 	std::string parse_error;
-	current_params = TreeSerialization::fromContent(ob.content, &parse_error);
+	current_params = TreeSerialization::fromContent(ob.content, &parse_error, &needs_legacy_repair, &needs_mesh_upgrade);
 	setControlsFromParams(current_params);
-	info_label->setText(needs_legacy_repair ? tr("Procedural Tree repaired from legacy placeholder") : (parse_error.empty() ? tr("Procedural Tree") : QString::fromStdString(parse_error)));
-	if(needs_legacy_repair)
-		QTimer::singleShot(0, this, SLOT(rebuildNow()));
+	info_label->setText(needs_legacy_repair ? tr("Procedural Tree repaired from legacy placeholder") : (needs_mesh_upgrade ? tr("Procedural Tree upgraded to EZ-Tree geometry") : (parse_error.empty() ? tr("Procedural Tree") : QString::fromStdString(parse_error))));
+	// GUIClient supplies the actual object-edit permission immediately after
+	// populating the panel.  Defer migration until that call so merely selecting
+	// somebody else's schema-1 tree cannot upload or send an object update.
+	pending_mesh_rebuild = needs_legacy_repair || needs_mesh_upgrade;
 }
 
 
 void TreeEditorPanel::toObject(WorldObject& ob_out)
 {
-	current_params = controlsToParams();
-	TreeObject::applyToWorldObject(ob_out, current_params, /*rebuild_mesh=*/true);
+	// Automatic schema migration should keep the exact upstream floating-point
+	// preset values rather than round-tripping them through display spin boxes.
+	if(preserve_current_params_for_next_to_object)
+		preserve_current_params_for_next_to_object = false;
+	else
+		current_params = controlsToParams();
+	TreeObject::applyToWorldObject(ob_out, current_params, /*rebuild_mesh=*/true, asset_root_path);
 }
 
 
 void TreeEditorPanel::setControlsEnabled(bool enabled)
 {
 	setEnabled(enabled);
+	if(!enabled)
+	{
+		controls_editable = false;
+		rebuild_timer->stop();
+	}
 }
 
 
 void TreeEditorPanel::setControlsEditable(bool editable)
 {
+	controls_editable = editable;
 	setEnabled(editable);
+	if(!editable)
+		rebuild_timer->stop();
+	else if(pending_mesh_rebuild)
+		rebuild_timer->start(0);
+}
+
+
+void TreeEditorPanel::hideEvent(QHideEvent* event)
+{
+	// A zero-delay migration callback must never survive a switch to another
+	// editor and accidentally apply the tree payload to the newly selected
+	// object.  Keep the pending flag so hiding/showing the dock can resume it.
+	rebuild_timer->stop();
+	QWidget::hideEvent(event);
+}
+
+
+void TreeEditorPanel::showEvent(QShowEvent* event)
+{
+	QWidget::showEvent(event);
+	if(pending_mesh_rebuild && controls_editable)
+		rebuild_timer->start(0);
 }
 
 
@@ -389,7 +541,7 @@ TreeParams TreeEditorPanel::controlsToParams() const
 	p.leafAlpha = (float)leaf_alpha_spin->value();
 	p.leafAlphaTest = (float)leaf_alpha_test_spin->value();
 	p.leafRoundedNormals = leaf_rounded_normals_checkbox->isChecked();
-	p.leafStartLevel = leaf_start_level_spin->value();
+	p.leafStart = (float)leaf_start_spin->value();
 	p.billboardMode = (TreeBillboardMode)billboard_combo->currentData().toInt();
 	p.trellisEnabled = trellis_enabled_checkbox->isChecked();
 	p.trellisPosition = {(float)trellis_x_spin->value(), (float)trellis_y_spin->value(), (float)trellis_z_spin->value()};
@@ -410,8 +562,11 @@ TreeParams TreeEditorPanel::controlsToParams() const
 }
 
 
-void TreeEditorPanel::setControlsFromParams(const TreeParams& params)
+void TreeEditorPanel::setControlsFromParams(const TreeParams& params_)
 {
+	// This method is commonly called with current_params itself.  Keep a copy so
+	// a future widget signal can never mutate the values while they are applied.
+	const TreeParams params = params_;
 	updating = true;
 	const auto set_combo = [](QComboBox* combo, int value)
 	{
@@ -495,7 +650,7 @@ void TreeEditorPanel::setControlsFromParams(const TreeParams& params)
 	leaf_alpha_spin->setValue(params.leafAlpha);
 	leaf_alpha_test_spin->setValue(params.leafAlphaTest);
 	leaf_rounded_normals_checkbox->setChecked(params.leafRoundedNormals);
-	leaf_start_level_spin->setValue(params.leafStartLevel);
+	leaf_start_spin->setValue(params.leafStart);
 	set_combo(billboard_combo, (int)params.billboardMode);
 	trellis_enabled_checkbox->setChecked(params.trellisEnabled);
 	trellis_x_spin->setValue(params.trellisPosition.x);
@@ -519,7 +674,7 @@ void TreeEditorPanel::setControlsFromParams(const TreeParams& params)
 
 void TreeEditorPanel::emitObjectChangedDebounced()
 {
-	if(updating)
+	if(updating || !controls_editable)
 		return;
 	rebuild_timer->start();
 }
@@ -527,6 +682,94 @@ void TreeEditorPanel::emitObjectChangedDebounced()
 
 void TreeEditorPanel::controlChanged()
 {
+	// setControlsFromParams() changes dozens of widgets.  Their Qt signals must
+	// not turn the selected preset into Custom while the panel is still being
+	// populated with the remaining values.
+	if(updating)
+		return;
+
+	// The compact controls are convenient aliases for EZ-Tree levels 0 and 1.
+	// Keep the detailed arrays in lockstep so every enabled realtime control has
+	// an immediate and unambiguous effect on the generated mesh.
+	QObject* changed = sender();
+	updating = true;
+	if(changed == height_spin || changed == trunk_height_spin || changed == branch_length_level_spins[0])
+	{
+		const double v = changed == height_spin ? height_spin->value() : (changed == trunk_height_spin ? trunk_height_spin->value() : branch_length_level_spins[0]->value());
+		height_spin->setValue(v); trunk_height_spin->setValue(v); branch_length_level_spins[0]->setValue(v);
+	}
+	else if(changed == trunk_radius_spin || changed == branch_radius_level_spins[0])
+	{
+		const double v = changed == trunk_radius_spin ? trunk_radius_spin->value() : branch_radius_level_spins[0]->value();
+		trunk_radius_spin->setValue(v); branch_radius_level_spins[0]->setValue(v);
+	}
+	else if(changed == trunk_taper_spin || changed == branch_taper_level_spins[0])
+	{
+		const double v = changed == trunk_taper_spin ? trunk_taper_spin->value() : branch_taper_level_spins[0]->value();
+		trunk_taper_spin->setValue(v); branch_taper_level_spins[0]->setValue(v);
+	}
+	else if(changed == trunk_curve_spin || changed == branch_gnarliness_level_spins[0])
+	{
+		const double v = changed == trunk_curve_spin ? trunk_curve_spin->value() : branch_gnarliness_level_spins[0]->value();
+		trunk_curve_spin->setValue(v); branch_gnarliness_level_spins[0]->setValue(v);
+	}
+	else if(changed == trunk_twist_spin || changed == branch_twist_level_spins[0])
+	{
+		const double v = changed == trunk_twist_spin ? trunk_twist_spin->value() : branch_twist_level_spins[0]->value();
+		trunk_twist_spin->setValue(v); branch_twist_level_spins[0]->setValue(v);
+	}
+	else if(changed == trunk_sections_spin || changed == branch_sections_level_spins[0])
+	{
+		const int v = changed == trunk_sections_spin ? trunk_sections_spin->value() : branch_sections_level_spins[0]->value();
+		trunk_sections_spin->setValue(v); branch_sections_level_spins[0]->setValue(v);
+	}
+	else if(changed == trunk_segments_spin || changed == branch_segments_level_spins[0])
+	{
+		const int v = changed == trunk_segments_spin ? trunk_segments_spin->value() : branch_segments_level_spins[0]->value();
+		trunk_segments_spin->setValue(v); branch_segments_level_spins[0]->setValue(v);
+	}
+	else if(changed == branches_per_level_spin || changed == branch_children_level_spins[0])
+	{
+		const int v = changed == branches_per_level_spin ? branches_per_level_spin->value() : branch_children_level_spins[0]->value();
+		branches_per_level_spin->setValue(v); branch_children_level_spins[0]->setValue(v);
+	}
+	else if(changed == branch_angle_spin || changed == branch_angle_level_spins[1])
+	{
+		const double v = changed == branch_angle_spin ? branch_angle_spin->value() : branch_angle_level_spins[1]->value();
+		branch_angle_spin->setValue(v); branch_angle_level_spins[1]->setValue(v);
+	}
+	else if(changed == branch_length_spin || changed == branch_length_level_spins[1])
+	{
+		const double v = changed == branch_length_spin ? branch_length_spin->value() : branch_length_level_spins[1]->value();
+		branch_length_spin->setValue(v); branch_length_level_spins[1]->setValue(v);
+	}
+	else if(changed == branch_radius_spin || changed == branch_radius_level_spins[1])
+	{
+		const double v = changed == branch_radius_spin ? branch_radius_spin->value() : branch_radius_level_spins[1]->value();
+		branch_radius_spin->setValue(v); branch_radius_level_spins[1]->setValue(v);
+	}
+	else if(changed == branch_taper_spin || changed == branch_taper_level_spins[1])
+	{
+		const double v = changed == branch_taper_spin ? branch_taper_spin->value() : branch_taper_level_spins[1]->value();
+		branch_taper_spin->setValue(v); branch_taper_level_spins[1]->setValue(v);
+	}
+	else if(changed == branch_curve_spin || changed == branch_gnarliness_spin || changed == branch_gnarliness_level_spins[1])
+	{
+		const double v = changed == branch_curve_spin ? branch_curve_spin->value() : (changed == branch_gnarliness_spin ? branch_gnarliness_spin->value() : branch_gnarliness_level_spins[1]->value());
+		branch_curve_spin->setValue(v); branch_gnarliness_spin->setValue(v); branch_gnarliness_level_spins[1]->setValue(v);
+	}
+	else if(changed == branch_twist_spin || changed == branch_twist_level_spins[1])
+	{
+		const double v = changed == branch_twist_spin ? branch_twist_spin->value() : branch_twist_level_spins[1]->value();
+		branch_twist_spin->setValue(v); branch_twist_level_spins[1]->setValue(v);
+	}
+	else if(changed == branch_start_height_spin || changed == branch_start_level_spins[1])
+	{
+		const double v = changed == branch_start_height_spin ? branch_start_height_spin->value() : branch_start_level_spins[1]->value();
+		branch_start_height_spin->setValue(v); branch_start_level_spins[1]->setValue(v);
+	}
+	updating = false;
+
 	current_params = controlsToParams();
 	if(current_params.presetId != "custom")
 	{
@@ -544,7 +787,15 @@ void TreeEditorPanel::controlChanged()
 
 void TreeEditorPanel::rebuildNow()
 {
-	current_params = controlsToParams();
+	if(!controls_editable)
+		return;
+	rebuild_timer->stop();
+	const bool automatic_migration = pending_mesh_rebuild;
+	pending_mesh_rebuild = false;
+	if(automatic_migration)
+		preserve_current_params_for_next_to_object = true;
+	else
+		current_params = controlsToParams();
 	emit objectChanged();
 }
 

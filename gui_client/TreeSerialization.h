@@ -30,7 +30,7 @@ namespace TreeSerialization
 
 	TreeParams defaultParams();
 	bool contentNeedsLegacyRepair(const std::string& content);
-	TreeParams fromContent(const std::string& content, std::string* parse_error_out = 0);
+	TreeParams fromContent(const std::string& content, std::string* parse_error_out = 0, bool* legacy_repair_out = 0, bool* mesh_upgrade_out = 0);
 	std::string serialiseToContent(const TreeParams& params);
 	void clamp(TreeParams& params);
 }

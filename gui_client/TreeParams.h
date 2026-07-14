@@ -118,7 +118,9 @@ struct TreeParams
 	float branchTwist = 0.1f;
 	float branchRandomness = 0.35f;
 	float branchStartHeight = 0.25f;
-	TreeVec3 branchForceDirection {0.0f, 1.0f, 0.0f};
+	// Stored in Metasiberia engine coordinates (Z-up).  TreeGenerator converts
+	// this vector to EZ-Tree's internal Y-up coordinates at the boundary.
+	TreeVec3 branchForceDirection {0.0f, 0.0f, 1.0f};
 	float branchForceStrength = 0.01f;
 	float branchGnarliness = 0.2f;
 	std::array<float, 4> branchAngleByLevel {0.0f, 70.0f, 60.0f, 60.0f};
@@ -141,18 +143,25 @@ struct TreeParams
 	float leafAlpha = 1.0f;
 	float leafAlphaTest = 0.5f;
 	bool leafRoundedNormals = true;
+	// Fraction of a final-level branch after which leaves may start.  This is
+	// the `leaves.start` value from EZ-Tree (0 = the whole branch, 1 = tip).
+	float leafStart = 0.0f;
+	// Kept for backwards-compatible deserialisation of the first Metasiberia
+	// tree schema.  The faithful EZ-Tree generator uses leafStart instead.
 	int leafStartLevel = 1;
 	TreeBillboardMode billboardMode = TreeBillboardMode::DoubleCross;
 
 	bool trellisEnabled = false;
-	TreeVec3 trellisPosition {0.0f, -2.0f, 0.0f};
-	float trellisWidth = 10.0f;
-	float trellisHeight = 20.0f;
-	float trellisSpacing = 2.0f;
+	// Upstream default source position (0,0,-2), converted to engine-space
+	// metres together with its linear dimensions.
+	TreeVec3 trellisPosition {0.0f, 0.4f, 0.0f};
+	float trellisWidth = 2.0f;
+	float trellisHeight = 4.0f;
+	float trellisSpacing = 0.4f;
 	float trellisForceStrength = 0.02f;
-	float trellisForceMaxDistance = 3.0f;
+	float trellisForceMaxDistance = 0.6f;
 	float trellisForceFalloff = 1.0f;
-	float trellisCylinderRadius = 0.05f;
+	float trellisCylinderRadius = 0.01f;
 	bool trellisVisible = true;
 	TreeColor trellisColor {0.55f, 0.27f, 0.07f, 1.0f};
 

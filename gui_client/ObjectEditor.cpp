@@ -2694,6 +2694,13 @@ static void checkStringSize(StringType& s, size_t max_size)
 }
 
 
+void ObjectEditor::setContentForSpecialisedEditor(const std::string& content)
+{
+	SignalBlocker blocker(this->contentTextEdit);
+	this->contentTextEdit->setPlainText(QtUtils::toQString(content));
+}
+
+
 static bool objectTypeUsesEditableModelURL(WorldObject::ObjectType object_type)
 {
 	return object_type == WorldObject::ObjectType_Generic;

@@ -103,6 +103,7 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client BotEditorWidget)
 	addMocFileRule(gui_client ScientificObjectEditor)
 	addMocFileRule(gui_client TreeEditorPanel)
+	addMocFileRule(gui_client VoxelEditorPanel)
 	addMocFileRule(gui_client UpdateDialog)
 	addMocFileRule(gui_client UpdateManager)
 	addMocFileRule(gui_client MainOptionsDialog)
@@ -281,6 +282,14 @@ ${CMAKE_SOURCE_DIR}/gui_client/ThreadMessages.h
 ${CMAKE_SOURCE_DIR}/gui_client/UIInterface.h
 ${CMAKE_SOURCE_DIR}/gui_client/UndoBuffer.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/UndoBuffer.h
+${CMAKE_SOURCE_DIR}/gui_client/VoxelEditorData.cpp
+${CMAKE_SOURCE_DIR}/gui_client/VoxelEditorData.h
+${CMAKE_SOURCE_DIR}/gui_client/VoxelProceduralGenerator.cpp
+${CMAKE_SOURCE_DIR}/gui_client/VoxelProceduralGenerator.h
+${CMAKE_SOURCE_DIR}/gui_client/VoxelTools.cpp
+${CMAKE_SOURCE_DIR}/gui_client/VoxelTools.h
+${CMAKE_SOURCE_DIR}/gui_client/VoxelUndoStack.cpp
+${CMAKE_SOURCE_DIR}/gui_client/VoxelUndoStack.h
 ${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/UploadResourceThread.h
 ${CMAKE_SOURCE_DIR}/gui_client/URLParser.cpp
@@ -369,6 +378,10 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/TreePresets.h
 		${CMAKE_SOURCE_DIR}/gui_client/TreeSerialization.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/TreeSerialization.h
+		${CMAKE_SOURCE_DIR}/gui_client/LucideIconUtils.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/LucideIconUtils.h
+		${CMAKE_SOURCE_DIR}/gui_client/VoxelEditorPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/VoxelEditorPanel.h
 		${CMAKE_SOURCE_DIR}/gui_client/MoleculeViewportWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MoleculeViewportWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/PeriodicTable.cpp
@@ -504,6 +517,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_BotEditorWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ScientificObjectEditor.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_TreeEditorPanel.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_VoxelEditorPanel.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateManager.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_MainOptionsDialog.cpp

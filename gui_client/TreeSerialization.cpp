@@ -20,6 +20,7 @@ Copyright Glare Technologies Limited 2026 -
 namespace
 {
 static const char* const TREE_OBJECT_MARKER = "metasiberia_tree_object_v1";
+static const int TREE_SCHEMA_VERSION = 2;
 
 
 template <class T>
@@ -313,51 +314,52 @@ void clamp(TreeParams& p)
 	p.seed = p.seed == 0 ? 1 : p.seed;
 	p.presetId = p.presetId.empty() ? TreePresets::defaultPresetId() : p.presetId.substr(0, 64);
 	p.name = p.name.empty() ? "Tree" : p.name.substr(0, 128);
-	p.height = clampValue(p.height, 0.5f, 60.0f);
+	p.height = clampValue(p.height, 0.01f, 60.0f);
 	p.scale = clampValue(p.scale, 0.05f, 20.0f);
-	p.trunkHeight = clampValue(p.trunkHeight, 2.0f, 60.0f);
-	p.trunkRadius = clampValue(p.trunkRadius, 0.08f, 5.0f);
-	p.trunkTaper = clampValue(p.trunkTaper, 0.10f, 1.0f);
+	p.trunkHeight = clampValue(p.trunkHeight, 0.01f, 60.0f);
+	p.trunkRadius = clampValue(p.trunkRadius, 0.005f, 5.0f);
+	p.trunkTaper = clampValue(p.trunkTaper, 0.0f, 1.0f);
 	p.trunkCurve = clampValue(p.trunkCurve, -2.0f, 2.0f);
 	p.trunkTwist = clampValue(p.trunkTwist, -3.14159f, 3.14159f);
-	p.trunkSegments = clampValue(p.trunkSegments, 6, 32);
-	p.trunkSections = clampValue(p.trunkSections, 4, 48);
+	p.trunkSegments = clampValue(p.trunkSegments, 3, 32);
+	p.trunkSections = clampValue(p.trunkSections, 1, 48);
 	p.barkTextureType = p.barkTextureType.empty() ? "Bark001" : p.barkTextureType.substr(0, 32);
 	p.barkTextureScaleX = clampValue(p.barkTextureScaleX, 0.05f, 50.0f);
 	p.barkTextureScaleY = clampValue(p.barkTextureScaleY, 0.05f, 50.0f);
 
-	p.branchLevels = clampValue(p.branchLevels, 0, 5);
+	p.branchLevels = clampValue(p.branchLevels, 0, 3);
 	p.branchesPerLevel = clampValue(p.branchesPerLevel, 0, 128);
-	p.branchAngle = clampValue(p.branchAngle, 0.0f, 120.0f);
-	p.branchLength = clampValue(p.branchLength, 0.05f, 30.0f);
+	p.branchAngle = clampValue(p.branchAngle, 0.0f, 180.0f);
+	p.branchLength = clampValue(p.branchLength, 0.01f, 30.0f);
 	p.branchRadius = clampValue(p.branchRadius, 0.01f, 3.0f);
-	p.branchTaper = clampValue(p.branchTaper, 0.02f, 1.0f);
+	p.branchTaper = clampValue(p.branchTaper, 0.0f, 1.0f);
 	p.branchCurve = clampValue(p.branchCurve, -2.0f, 2.0f);
 	p.branchTwist = clampValue(p.branchTwist, -3.14159f, 3.14159f);
 	p.branchRandomness = clampValue(p.branchRandomness, 0.0f, 2.0f);
-	p.branchStartHeight = clampValue(p.branchStartHeight, 0.0f, 0.95f);
+	p.branchStartHeight = clampValue(p.branchStartHeight, 0.0f, 1.0f);
 	p.branchForceStrength = clampValue(p.branchForceStrength, -1.0f, 1.0f);
-	p.branchGnarliness = clampValue(p.branchGnarliness, 0.0f, 2.0f);
+	p.branchGnarliness = clampValue(p.branchGnarliness, -2.0f, 2.0f);
 	for(size_t i=0; i<4; ++i)
 	{
-		p.branchAngleByLevel[i] = clampValue(p.branchAngleByLevel[i], 0.0f, 140.0f);
+		p.branchAngleByLevel[i] = clampValue(p.branchAngleByLevel[i], 0.0f, 180.0f);
 		p.branchChildrenByLevel[i] = clampValue(p.branchChildrenByLevel[i], 0, 128);
-		p.branchLengthByLevel[i] = clampValue(p.branchLengthByLevel[i], 0.05f, 60.0f);
+		p.branchLengthByLevel[i] = clampValue(p.branchLengthByLevel[i], 0.01f, 60.0f);
 		p.branchRadiusByLevel[i] = clampValue(p.branchRadiusByLevel[i], 0.01f, 5.0f);
 		p.branchSectionsByLevel[i] = clampValue(p.branchSectionsByLevel[i], 1, 48);
 		p.branchSegmentsByLevel[i] = clampValue(p.branchSegmentsByLevel[i], 3, 32);
-		p.branchStartByLevel[i] = clampValue(p.branchStartByLevel[i], 0.0f, 0.98f);
-		p.branchTaperByLevel[i] = clampValue(p.branchTaperByLevel[i], 0.01f, 1.0f);
+		p.branchStartByLevel[i] = clampValue(p.branchStartByLevel[i], 0.0f, 1.0f);
+		p.branchTaperByLevel[i] = clampValue(p.branchTaperByLevel[i], 0.0f, 1.0f);
 		p.branchTwistByLevel[i] = clampValue(p.branchTwistByLevel[i], -6.28318f, 6.28318f);
-		p.branchGnarlinessByLevel[i] = clampValue(p.branchGnarlinessByLevel[i], 0.0f, 3.0f);
+		p.branchGnarlinessByLevel[i] = clampValue(p.branchGnarlinessByLevel[i], -3.0f, 3.0f);
 	}
 
 	p.leafCount = clampValue(p.leafCount, 0, p.quality == TreeQuality::High ? 2000 : (p.quality == TreeQuality::Medium ? 900 : 250));
-	p.leafAngle = clampValue(p.leafAngle, -90.0f, 90.0f);
+	p.leafAngle = clampValue(p.leafAngle, 0.0f, 100.0f);
 	p.leafSize = clampValue(p.leafSize, 0.02f, 10.0f);
 	p.leafSizeRandomness = clampValue(p.leafSizeRandomness, 0.0f, 1.0f);
 	p.leafAlpha = clampValue(p.leafAlpha, 0.0f, 1.0f);
 	p.leafAlphaTest = clampValue(p.leafAlphaTest, 0.0f, 1.0f);
+	p.leafStart = clampValue(p.leafStart, 0.0f, 1.0f);
 	p.leafStartLevel = clampValue(p.leafStartLevel, 0, 5);
 
 	p.trellisWidth = clampValue(p.trellisWidth, 0.1f, 100.0f);
@@ -370,11 +372,15 @@ void clamp(TreeParams& p)
 }
 
 
-TreeParams fromContent(const std::string& content, std::string* parse_error_out)
+TreeParams fromContent(const std::string& content, std::string* parse_error_out, bool* legacy_repair_out, bool* mesh_upgrade_out)
 {
 	TreeParams p = defaultParams();
 	if(parse_error_out)
 		parse_error_out->clear();
+	if(legacy_repair_out)
+		*legacy_repair_out = false;
+	if(mesh_upgrade_out)
+		*mesh_upgrade_out = false;
 
 	if(!isTreeContent(content))
 		return p;
@@ -383,6 +389,7 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 	if(json_start == std::string::npos)
 		return p;
 
+	int schema_version = 1;
 	try
 	{
 		JSONParser parser;
@@ -394,6 +401,7 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 		if(root.type != JSONNode::Type_Object)
 			return p;
 
+		schema_version = root.getChildIntValueWithDefaultVal(parser, "schema_version", 1);
 		p.seed = (uint32_t)root.getChildIntValueWithDefaultVal(parser, "seed", (int)p.seed);
 		p.type = treeTypeFromString(root.getChildStringValueWithDefaultVal(parser, "treeType", treeTypeToString(p.type)));
 		p.preset = presetFromString(root.getChildStringValueWithDefaultVal(parser, "preset", presetToString(p.preset)));
@@ -451,6 +459,7 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 		p.leafAlpha = (float)root.getChildDoubleValueWithDefaultVal(parser, "leafAlpha", p.leafAlpha);
 		p.leafAlphaTest = (float)root.getChildDoubleValueWithDefaultVal(parser, "leafAlphaTest", p.leafAlphaTest);
 		p.leafRoundedNormals = root.getChildBoolValueWithDefaultVal(parser, "leafRoundedNormals", p.leafRoundedNormals);
+		p.leafStart = (float)root.getChildDoubleValueWithDefaultVal(parser, "leafStart", p.leafStart);
 		p.leafStartLevel = root.getChildIntValueWithDefaultVal(parser, "leafStartLevel", p.leafStartLevel);
 		p.billboardMode = billboardModeFromString(root.getChildStringValueWithDefaultVal(parser, "billboardMode", billboardModeToString(p.billboardMode)));
 
@@ -479,8 +488,11 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 	}
 
 	clamp(p);
-	if(contentNeedsLegacyRepair(content) ||
-		(p.presetId == "custom" && p.trunkHeight <= 2.01f && p.trunkRadius <= 0.081f && p.trunkTaper <= 0.101f))
+	const bool needs_legacy_repair = contentNeedsLegacyRepair(content) ||
+		(p.presetId == "custom" && p.trunkHeight <= 2.01f && p.trunkRadius <= 0.081f && p.trunkTaper <= 0.101f);
+	if(legacy_repair_out)
+		*legacy_repair_out = needs_legacy_repair;
+	if(needs_legacy_repair)
 	{
 		const uint32_t seed = p.seed;
 		const float height = p.height;
@@ -499,6 +511,69 @@ TreeParams fromContent(const std::string& content, std::string* parse_error_out)
 		p.scale = scale;
 		clamp(p);
 	}
+	else if(schema_version < TREE_SCHEMA_VERSION)
+	{
+		// Schema 1 contained hand-approximated preset values (including global
+		// leaf counts and absolute child radii).  Upgrade known presets to the
+		// exact upstream values while preserving object identity, size and the
+		// user's material/optimisation choices.
+		TreeParams exact = TreePresets::presetById(p.presetId);
+		if(p.presetId != "custom" && exact.presetId == p.presetId)
+		{
+			const float height_scale = p.height / std::max(0.001f, exact.height);
+			const float radial_scale = std::sqrt(std::max(0.05f, height_scale));
+			exact.seed = p.seed;
+			exact.name = p.name;
+			exact.position = p.position;
+			exact.rotation = p.rotation;
+			exact.scale = p.scale;
+			exact.height = p.height;
+			exact.trunkHeight *= height_scale;
+			exact.trunkRadius *= radial_scale;
+			exact.branchLength *= height_scale;
+			exact.branchLengthByLevel[0] = exact.trunkHeight;
+			for(size_t i=1; i<exact.branchLengthByLevel.size(); ++i)
+				exact.branchLengthByLevel[i] *= height_scale;
+			exact.branchRadiusByLevel[0] = exact.trunkRadius;
+			exact.leafSize *= radial_scale;
+			exact.barkColor = p.barkColor;
+			exact.barkTextured = p.barkTextured;
+			exact.barkFlatShading = p.barkFlatShading;
+			exact.leafAlpha = p.leafAlpha;
+			exact.leafRoundedNormals = p.leafRoundedNormals;
+			exact.quality = p.quality;
+			exact.lodEnabled = p.lodEnabled;
+			exact.collisionMode = p.collisionMode;
+			exact.castShadows = p.castShadows;
+			p = exact;
+		}
+		else
+		{
+			// Schema 1 custom trees stored every level radius as an absolute
+			// engine-space metre value.  The EZ-Tree algorithm uses level 1..3
+			// as multipliers of the interpolated parent radius.
+			const std::array<float, 4> old_radii = p.branchRadiusByLevel;
+			p.branchRadiusByLevel[0] = p.trunkRadius;
+			for(size_t i=1; i<p.branchRadiusByLevel.size(); ++i)
+				p.branchRadiusByLevel[i] = old_radii[i] / std::max(0.005f, old_radii[i - 1]);
+			p.branchRadius = p.branchRadiusByLevel[1];
+			// The old approximate generator read the per-level arrays, while the
+			// new faithful port exposes convenient level-1 aliases as well.
+			p.branchesPerLevel = p.branchChildrenByLevel[0];
+			p.branchAngle = p.branchAngleByLevel[1];
+			p.branchLength = p.branchLengthByLevel[1];
+			p.branchTaper = p.branchTaperByLevel[1];
+			p.branchTwist = p.branchTwistByLevel[1];
+			p.branchGnarliness = p.branchGnarlinessByLevel[1];
+			p.branchStartHeight = p.branchStartByLevel[1];
+			const int old_multiplier = p.leafType == TreeLeafType::PineNeedles ? 30 : 45;
+			p.leafCount = std::max(1, p.leafCount / old_multiplier);
+			p.leafStart = 0.0f;
+		}
+		clamp(p);
+	}
+	if(mesh_upgrade_out)
+		*mesh_upgrade_out = schema_version < TREE_SCHEMA_VERSION;
 	return p;
 }
 
@@ -514,7 +589,7 @@ std::string serialiseToContent(const TreeParams& params_)
 	s << "{\n";
 	s << "  \"type\": \"tree\",\n";
 	s << "  \"generator\": \"metasiberia_tree\",\n";
-	s << "  \"schema_version\": 1,\n";
+	s << "  \"schema_version\": " << TREE_SCHEMA_VERSION << ",\n";
 	s << "  \"preset\": \"" << presetToString(p.preset) << "\",\n";
 	s << "  \"presetId\": \"" << jsonEscape(p.presetId) << "\",\n";
 	s << "  \"seed\": " << p.seed << ",\n";
@@ -569,6 +644,7 @@ std::string serialiseToContent(const TreeParams& params_)
 	s << "  \"leafAlpha\": " << p.leafAlpha << ",\n";
 	s << "  \"leafAlphaTest\": " << p.leafAlphaTest << ",\n";
 	s << "  \"leafRoundedNormals\": " << (p.leafRoundedNormals ? "true" : "false") << ",\n";
+	s << "  \"leafStart\": " << p.leafStart << ",\n";
 	s << "  \"leafStartLevel\": " << p.leafStartLevel << ",\n";
 	s << "  \"billboardMode\": \"" << billboardModeToString(p.billboardMode) << "\",\n";
 	s << "  \"trellisEnabled\": " << (p.trellisEnabled ? "true" : "false") << ",\n";

@@ -26,6 +26,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "URLWhitelist.h"
 #include "URLParser.h"
 #include "LoadModelTask.h"
+#include "VoxelEditorData.h"
 #include "BuildScatteringInfoTask.h"
 #include "LoadTextureTask.h"
 #include "LoadAudioTask.h"
@@ -118,12 +119,50 @@ Copyright Glare Technologies Limited 2024 -
 #endif
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <tracy/Tracy.hpp>
+
+
+static VoxelMeshMode voxelMeshModeForObject(const WorldObject& object)
+{
+	const VoxelRenderMode mode = VoxelEditorData::fromObject(object).render_mode;
+	return mode == VoxelRenderMode::Cubes ? VoxelMeshMode::Cubes : VoxelMeshMode::Greedy;
+}
+
+
+// Used only to distinguish an echo of our latest voxel edit from a genuinely
+// divergent remote update.  Delta history remains valid for the former and is
+// discarded for the latter.
+static uint64 voxelEditorRevisionForObject(const WorldObject& object)
+{
+	uint64 revision = 0x6d657461766f7865ULL;
+	const Reference<glare::SharedImmutableArray<uint8> > compressed = object.getCompressedVoxels();
+	if(compressed.nonNull() && !compressed->empty())
+		revision = XXH64(compressed->data(), compressed->dataSizeBytes(), revision);
+	if(!object.content.empty())
+		revision = XXH64(object.content.data(), object.content.size(), revision);
+	const uint64 material_count = (uint64)object.materials.size();
+	revision = XXH64(&material_count, sizeof(material_count), revision);
+	for(const WorldMaterialRef& material : object.materials)
+	{
+		if(material.nonNull())
+		{
+			const float values[4] = { material->colour_rgb.r, material->colour_rgb.g, material->colour_rgb.b, material->opacity.val };
+			revision = XXH64(values, sizeof(values), revision);
+		}
+		else
+		{
+			const uint32 null_marker = 0xFFFFFFFFu;
+			revision = XXH64(&null_marker, sizeof(null_marker), revision);
+		}
+	}
+	return revision;
+}
 #include "superluminal/PerformanceAPI.h"
 #if BUGSPLAT_SUPPORT
 #include <BugSplat.h>
 #endif
 #include <clocale>
 #include <algorithm>
+#include <utility>
 #include <cctype>
 #include <cmath>
 #include <set>
@@ -4568,7 +4607,21 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				}
 				else
 				{
-					const URLString pseudo_lod_model_url = toURLString("__voxel__" + toString(hash) + "_" + toString(ob_model_lod_level));
+					const VoxelMeshMode voxel_mesh_mode = voxelMeshModeForObject(*ob);
+					const std::string mesh_mode_suffix = voxel_mesh_mode == VoxelMeshMode::Cubes ? "_cubes" : "_greedy";
+					js::Vector<bool, 16> mat_transparent(ob->materials.size());
+					std::string transparency_bytes(ob->materials.size(), '\0');
+					for(size_t i=0; i<ob->materials.size(); ++i)
+					{
+						mat_transparent[i] = ob->materials[i]->opacity.val < 1.f;
+						transparency_bytes[i] = mat_transparent[i] ? '\1' : '\0';
+					}
+					// Transparent material boundaries change voxel topology: a visible
+					// neighbour needs a face when the adjacent layer becomes transparent.
+					// Keep those meshes separate in the async cache as well as Cubes/Greedy.
+					const uint64 transparency_hash = XXH64(transparency_bytes.data(), transparency_bytes.size(), 0);
+					const URLString pseudo_lod_model_url = toURLString("__voxel__" + toString(hash) + "_" + toString(ob_model_lod_level) +
+						mesh_mode_suffix + "_t" + toString(transparency_hash));
 
 					Reference<MeshData>         mesh_data          = mesh_manager.getMeshData(pseudo_lod_model_url);
 					Reference<PhysicsShapeData> physics_shape_data = mesh_manager.getPhysicsShapeData(MeshManagerPhysicsShapeKey(pseudo_lod_model_url, ob->isDynamic()));
@@ -4591,10 +4644,6 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 						{
 							//conPrint("Making LoadModelTask for voxel " + pseudo_lod_model_url);
 
-							js::Vector<bool, 16> mat_transparent(ob->materials.size());
-							for(size_t i=0; i<ob->materials.size(); ++i)
-								mat_transparent[i] = ob->materials[i]->opacity.val < 1.f;
-
 							// Do the model loading (conversion of voxel group to triangle mesh) in a different thread
 							Reference<LoadModelTask> load_model_task = new LoadModelTask();
 
@@ -4606,6 +4655,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 							load_model_task->compressed_voxels = ob->getCompressedVoxels();
 							load_model_task->ob_to_world_matrix = obToWorldMatrix(*ob);
 							load_model_task->voxel_hash = hash;
+							load_model_task->voxel_mesh_mode = voxel_mesh_mode;
 							load_model_task->mat_transparent = mat_transparent;
 							load_model_task->need_lightmap_uvs = !ob->lightmap_url.empty();
 							load_model_task->build_dynamic_physics_ob = ob->isDynamic();
@@ -10478,6 +10528,11 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 						removeInstancesOfObject(ob);
 						//removeObScriptingInfo(ob);
 
+						if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
+						{
+							voxel_undo_stack.clear(ob->uid);
+							voxel_undo_expected_revisions.erase(ob->uid.value());
+						}
 						this->world_state->objects.erase(ob->uid);
 
 						active_objects.erase(ob);
@@ -10527,6 +10582,18 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 						if(!ob_just_created_or_initially_sent) // Don't reload materials when we just created the object locally.
 						{
+							if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
+							{
+								const auto revision_it = voxel_undo_expected_revisions.find(ob->uid.value());
+								if(revision_it != voxel_undo_expected_revisions.end() && revision_it->second != voxelEditorRevisionForObject(*ob))
+								{
+									voxel_undo_stack.clear(ob->uid);
+									voxel_undo_expected_revisions.erase(revision_it);
+									if(ob == selected_ob.ptr())
+										cancelVoxelShapeTool();
+								}
+							}
+
 							// Update transform for object and object materials in OpenGL engine
 							if(ob->opengl_engine_ob.nonNull() && (ob != selected_ob.getPointer())) // Don't update the selected object based on network messages, we will consider the local transform for it authoritative.
 							{
@@ -10559,7 +10626,15 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 							}
 
 							if(ob == selected_ob.ptr())
-								ui_interface->objectModelURLUpdated(*ob); // Update model URL in UI if we have selected the object.
+							{
+								if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
+								{
+									ob->decompressVoxels();
+									ui_interface->setObjectEditorFromOb(*ob, ui_interface->getSelectedMatIndex(), /*ob in editing user's world=*/connectedToUsersWorldOrGodUser());
+								}
+								else
+									ui_interface->objectModelURLUpdated(*ob); // Update model URL in UI if we have selected the object.
+							}
 
 
 							if(ob->object_type == WorldObject::ObjectType_Text)
@@ -16115,6 +16190,7 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 
 			WorldObjectRef in_world_ob;
 			bool voxels_different = false;
+			bool voxel_render_mode_different = false;
 
 			UID use_uid;
 			if(recreated_ob_uid.find(restored_ob->uid) == recreated_ob_uid.end())
@@ -16139,6 +16215,9 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 						(*in_world_ob->getCompressedVoxels() == *restored_ob->getCompressedVoxels());
 
 					voxels_different = !voxels_same;
+					voxel_render_mode_different = voxelMeshModeForObject(*in_world_ob) != voxelMeshModeForObject(*restored_ob);
+					voxel_undo_stack.clear(in_world_ob->uid);
+					voxel_undo_expected_revisions.erase(in_world_ob->uid.value());
 				}
 
 				in_world_ob->copyNetworkStateFrom(*restored_ob);
@@ -16148,7 +16227,7 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 
 			if(in_world_ob.nonNull())
 			{
-				if(voxels_different)
+				if(voxels_different || voxel_render_mode_different)
 					updateObjectModelForChangedDecompressedVoxels(in_world_ob);
 				else
 				{
@@ -16198,10 +16277,6 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 					// Update in Indigo view
 					//ui->indigoView->objectTransformChanged(*in_world_ob);
 
-					// Update object values in editor
-					//ui->objectEditor->setFromObject(*in_world_ob, ui->objectEditor->getSelectedMatIndex(), /*ob in editing user's world=*/connectedToUsersPersonalWorldOrGodUser());
-					ui_interface->setObjectEditorFromOb(*in_world_ob, ui_interface->getSelectedMatIndex(), /*ob in editing user's world=*/connectedToUsersWorldOrGodUser());
-
 					// updateInstancedCopiesOfObject(ob); // TODO: enable + test this
 					in_world_ob->transformChanged();
 
@@ -16209,6 +16284,10 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 					in_world_ob->from_local_other_dirty = true;
 					this->world_state->dirty_from_local_objects.insert(in_world_ob);
 				}
+
+				// Keep the specialised panel and generic controls in sync for both
+				// metadata-only and voxel-payload undo/redo paths.
+				ui_interface->setObjectEditorFromOb(*in_world_ob, ui_interface->getSelectedMatIndex(), /*ob in editing user's world=*/connectedToUsersWorldOrGodUser());
 			}
 			else
 			{
@@ -16985,6 +17064,12 @@ void GUIClient::summonCar()
 // Object transform has been edited, e.g. by the object editor.
 void GUIClient::objectTransformEdited()
 {
+	// Generic transform/property edits are stored in UndoBuffer.  Treat them as
+	// a chronology barrier for the separate delta-only voxel history so Ctrl+Z
+	// can never apply an older geometry command ahead of a newer generic edit.
+	if(selected_ob.nonNull() && selected_ob->object_type == WorldObject::ObjectType_VoxelGroup)
+		clearSelectedVoxelEditHistory();
+
 	if(this->selected_ob.nonNull())
 	{
 		const Vec3d old_pos = this->selected_ob->pos;
@@ -17113,6 +17198,9 @@ void GUIClient::objectTransformEdited()
 // Object property (that is not a transform property) has been edited, e.g. by the object editor.
 void GUIClient::objectEdited()
 {
+	if(selected_ob.nonNull() && selected_ob->object_type == WorldObject::ObjectType_VoxelGroup)
+		clearSelectedVoxelEditHistory();
+
 	// Update object material(s) with values from editor.
 	if(this->selected_ob.nonNull())
 	{
@@ -17189,7 +17277,7 @@ void GUIClient::objectEdited()
 				Reference<OpenGLMeshRenderData> gl_meshdata = ModelLoading::makeModelForVoxelGroup(selected_ob->getDecompressedVoxelGroup(), subsample_factor, ob_to_world,
 					opengl_engine->vert_buf_allocator.ptr(), /*do_opengl_stuff=*/true, /*need_lightmap_uvs=*/false, mat_transparent, /*build_dynamic_physics_ob=*/selected_ob->isDynamic(),
 					worker_allocator.ptr(), 
-					physics_shape);
+					physics_shape, voxelMeshModeForObject(*selected_ob));
 
 				// Remove existing physics object
 				checkRemoveObAndSetRefToNull(physics_world, selected_ob->physics_object);
@@ -18358,6 +18446,9 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 // Remove all particles, decals, deselect all objects etc.
 void GUIClient::clearAllObjects()
 {
+	voxel_undo_stack.clearAll();
+	voxel_undo_expected_revisions.clear();
+	cancelVoxelShapeTool();
 	deselectObject();
 	for(auto it = scientific_molecule_label_gl_obs.begin(); it != scientific_molecule_label_gl_obs.end(); ++it)
 		for(size_t i=0; i<it->second.size(); ++i)
@@ -19234,6 +19325,78 @@ void GUIClient::mousePressed(MouseEvent& e)
 		}
 	}
 
+	// The native voxel editor uses an unmodified left click on the selected
+	// voxel object.  Ctrl/Alt remain reserved for the legacy one-voxel tools.
+	if(e.button == MouseButton::Left && selectedObjectIsVoxelOb() &&
+		!BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Ctrl) &&
+		!BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Alt))
+	{
+		VoxelToolType tool = VoxelToolType::Brush;
+		VoxelToolSettings tool_settings;
+		if(ui_interface->getVoxelEditorToolState(tool, tool_settings))
+		{
+			const Vec4f origin = cam_controller.getPosition().toVec4fPoint();
+			const Vec4f dir = getDirForPixelTrace(e.cursor_pos.x, e.cursor_pos.y);
+			RayTraceResult results;
+			physics_world->traceRay(origin, dir, /*max_t=*/1.0e5f, /*ignore body id=*/JPH::BodyID(), results);
+			if(results.hit_object && selected_ob->physics_object.nonNull() && results.hit_object == selected_ob->physics_object.ptr())
+			{
+				const Vec4f hitpos_ws = origin + dir * results.hit_t;
+				const bool shape_tool = tool == VoxelToolType::Box || tool == VoxelToolType::Sphere ||
+					tool == VoxelToolType::Line || tool == VoxelToolType::Select;
+				const bool creates_outside = tool == VoxelToolType::Brush || tool == VoxelToolType::Box ||
+					tool == VoxelToolType::Sphere || tool == VoxelToolType::Line;
+				const bool use_outside = creates_outside && tool_settings.brush_mode == VoxelBrushMode::Add;
+				const Vec4f sample_ws = hitpos_ws + results.hit_normal_ws * (use_outside ? 1.0e-3f : -1.0e-3f);
+				const Vec4f sample_os = worldToObMatrix(*selected_ob) * sample_ws;
+				const Vec3<int> voxel_coord((int)std::floor(sample_os[0]), (int)std::floor(sample_os[1]), (int)std::floor(sample_os[2]));
+
+				if(shape_tool)
+				{
+					if(!voxel_shape_start_valid || voxel_shape_object_uid != selected_ob->uid || voxel_shape_tool != tool)
+					{
+						voxel_shape_start_valid = true;
+						voxel_shape_object_uid = selected_ob->uid;
+						voxel_shape_tool = tool;
+						voxel_shape_start = voxel_coord;
+						if(tool == VoxelToolType::Box)
+							showInfoNotification("Box start set. Click the opposite corner.");
+						else if(tool == VoxelToolType::Sphere)
+							showInfoNotification("Sphere bounds start set. Click the opposite corner.");
+						else if(tool == VoxelToolType::Line)
+							showInfoNotification("Line start set. Click the end point.");
+						else
+							showInfoNotification("Selection start set. Click the opposite corner.");
+					}
+					else
+					{
+						const VoxelToolInput input(voxel_shape_start, voxel_coord);
+						voxel_shape_start_valid = false;
+						if(tool == VoxelToolType::Select)
+						{
+							voxel_selection_bounds = VoxelSelectionBounds(input.start, input.end);
+							voxel_selection_valid = true;
+							voxel_selection_object_uid = selected_ob->uid;
+							const Vec3<int> extent = voxel_selection_bounds.extent();
+							showInfoNotification("Voxel region selected: " + toString(extent.x) + " x " + toString(extent.y) + " x " + toString(extent.z) + ".");
+						}
+						else
+							applyVoxelEditorTool(tool, input);
+					}
+				}
+				else
+				{
+					voxel_shape_start_valid = false;
+					applyVoxelEditorTool(tool, VoxelToolInput(voxel_coord));
+				}
+
+				e.accepted = true;
+				ui_interface->setCamRotationOnMouseDragEnabled(false);
+				return;
+			}
+		}
+	}
+
 	if(this->selected_ob.nonNull() && this->selected_ob->opengl_engine_ob.nonNull())
 	{
 		// Don't try and grab an axis etc.. when we are clicking on a voxel group to add/remove voxels.
@@ -19404,7 +19567,7 @@ void GUIClient::mousePressed(MouseEvent& e)
 		const Vec4f dir = getDirForPixelTrace(e.cursor_pos.x, e.cursor_pos.y);
 		RayTraceResult results;
 		this->physics_world->traceRay(origin, dir, /*max_t=*/1.0e5f, /*ignore body id=*/JPH::BodyID(), results);
-		if(results.hit_object)
+		if(results.hit_object && selected_ob->physics_object.nonNull() && results.hit_object == selected_ob->physics_object.ptr())
 		{
 			const Vec4f hitpos_ws = origin + dir*results.hit_t;
 
@@ -19420,6 +19583,7 @@ void GUIClient::mousePressed(MouseEvent& e)
 					const bool have_edit_permissions = objectModificationAllowedWithMsg(*selected_ob, "edit");
 					if(have_edit_permissions)
 					{
+						clearSelectedVoxelEditHistory();
 						const float current_voxel_w = 1;
 
 						const Matrix4f world_to_ob = worldToObMatrix(*selected_ob);
@@ -19612,6 +19776,421 @@ void GUIClient::mouseDoubleClicked(MouseEvent& mouse_event)
 }
 
 
+bool GUIClient::applyVoxelEditorTool(const VoxelToolType tool, const VoxelToolInput& input, const VoxelToolSettings* settings_override)
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup)
+		return false;
+	if(!objectModificationAllowedWithMsg(*selected_ob, "edit"))
+		return false;
+
+	VoxelToolType panel_tool = VoxelToolType::Brush;
+	VoxelToolSettings tool_settings;
+	if(!ui_interface->getVoxelEditorToolState(panel_tool, tool_settings))
+		return false;
+	if(!settings_override && panel_tool != tool)
+		return false;
+	if(settings_override)
+		tool_settings = *settings_override;
+
+	selected_ob->decompressVoxels();
+	const VoxelEditorState state = VoxelEditorData::fromObject(*selected_ob);
+	VoxelToolResult result = VoxelTools::execute(tool, input, tool_settings, state, selected_ob->getDecompressedVoxels());
+	if(!result.error.empty())
+	{
+		showErrorNotification(result.error);
+		return false;
+	}
+	if(tool == VoxelToolType::Picker)
+	{
+		if(result.picked_material_index >= 0)
+		{
+			ui_interface->voxelEditorMaterialPicked(result.picked_material_index);
+			return true;
+		}
+		showInfoNotification("No visible voxel was found at the picked coordinate.");
+		return false;
+	}
+	if(!result.changed())
+		return false;
+
+	const bool may_expand_bounds = (tool == VoxelToolType::Brush || tool == VoxelToolType::Box ||
+		tool == VoxelToolType::Sphere || tool == VoxelToolType::Line) &&
+		tool_settings.brush_mode != VoxelBrushMode::Paint;
+	return finaliseAppliedVoxelEdit(std::move(result.command), may_expand_bounds, result.truncated);
+}
+
+
+bool GUIClient::finaliseAppliedVoxelEdit(VoxelEditCommand command, const bool may_expand_bounds, const bool truncated)
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup || command.empty())
+		return false;
+
+	if(selected_ob->getDecompressedVoxels().empty())
+	{
+		command.undo(*selected_ob);
+		showErrorNotification("The last voxel cannot be removed. Delete the complete object instead.");
+		return false;
+	}
+
+	if(may_expand_bounds)
+	{
+		const js::AABBox candidate_aabb_ws = selected_ob->getDecompressedVoxelGroup().getAABB().transformedAABB(obToWorldMatrix(*selected_ob));
+		bool object_position_in_parcel = false;
+		if(!haveObjectWritePermissions(*selected_ob, candidate_aabb_ws, object_position_in_parcel) || !object_position_in_parcel)
+		{
+			command.undo(*selected_ob);
+			showErrorNotification("The voxel operation would extend the object outside parcels where you have write permission.");
+			return false;
+		}
+	}
+
+	if(!voxel_undo_stack.push(*selected_ob, command))
+	{
+		command.undo(*selected_ob);
+		showErrorNotification("Could not store the voxel edit in undo history.");
+		return false;
+	}
+	if(truncated)
+		showInfoNotification("The voxel operation reached its safety limit and was truncated.");
+
+	updateObjectModelForChangedDecompressedVoxels(selected_ob);
+	voxel_undo_expected_revisions[selected_ob->uid.value()] = voxelEditorRevisionForObject(*selected_ob);
+	ui_interface->voxelEditorObjectDataChanged(*selected_ob);
+	force_new_undo_edit = true;
+	return true;
+}
+
+
+bool GUIClient::applyVoxelProceduralGenerator(const VoxelProceduralType type, const VoxelProceduralParams& params)
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup)
+		return false;
+	if(!objectModificationAllowedWithMsg(*selected_ob, "generate voxels"))
+		return false;
+
+	selected_ob->decompressVoxels();
+	const VoxelEditorState state = VoxelEditorData::fromObject(*selected_ob);
+	VoxelProceduralResult result = VoxelProceduralGenerator::execute(type, params, state, selected_ob->getDecompressedVoxels());
+	if(!result.error.empty())
+	{
+		showErrorNotification(result.error);
+		return false;
+	}
+	if(!result.changed())
+	{
+		showInfoNotification("The procedural generator produced no voxel changes.");
+		return false;
+	}
+
+	const size_t generated_count = result.generated_voxels;
+	if(!finaliseAppliedVoxelEdit(std::move(result.command), /*may_expand_bounds=*/true, result.truncated))
+		return false;
+	showInfoNotification(std::string("Generated ") + VoxelProceduralGenerator::typeName(type) + ": " + toString(generated_count) + " voxels.");
+	return true;
+}
+
+
+bool GUIClient::copyVoxelSelection()
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup ||
+		!voxel_selection_valid || voxel_selection_object_uid != selected_ob->uid)
+	{
+		showInfoNotification("Select a voxel region with the Select tool first.");
+		return false;
+	}
+
+	VoxelToolType tool;
+	VoxelToolSettings tool_settings;
+	if(!ui_interface->getVoxelEditorToolState(tool, tool_settings))
+		return false;
+	selected_ob->decompressVoxels();
+	const VoxelEditorState state = VoxelEditorData::fromObject(*selected_ob);
+	VoxelClipboardResult result = VoxelTools::copySelection(voxel_selection_bounds, tool_settings, state, selected_ob->getDecompressedVoxels());
+	if(!result.error.empty())
+	{
+		showErrorNotification(result.error);
+		return false;
+	}
+	if(result.clipboard.empty())
+	{
+		showInfoNotification("The selected region contains no voxels in the active layer.");
+		return false;
+	}
+	voxel_clipboard = std::move(result.clipboard);
+	voxel_clipboard_origin = voxel_selection_bounds.min;
+	showInfoNotification("Copied " + toString(voxel_clipboard.voxelCount()) + " voxels.");
+	return true;
+}
+
+
+bool GUIClient::pasteVoxelSelection(const Vec3<int>& offset)
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup || voxel_clipboard.empty())
+	{
+		showInfoNotification("Copy a voxel selection before pasting.");
+		return false;
+	}
+	if(!objectModificationAllowedWithMsg(*selected_ob, "paste voxels"))
+		return false;
+
+	VoxelToolType tool;
+	VoxelToolSettings tool_settings;
+	if(!ui_interface->getVoxelEditorToolState(tool, tool_settings))
+		return false;
+	const Vec3<int> destination(voxel_clipboard_origin.x + offset.x, voxel_clipboard_origin.y + offset.y, voxel_clipboard_origin.z + offset.z);
+	selected_ob->decompressVoxels();
+	const VoxelEditorState state = VoxelEditorData::fromObject(*selected_ob);
+	VoxelToolResult result = VoxelTools::pasteSelection(voxel_clipboard, destination, tool_settings, state, selected_ob->getDecompressedVoxels());
+	if(!result.error.empty())
+	{
+		showErrorNotification(result.error);
+		return false;
+	}
+	if(!result.changed())
+		return false;
+	if(!finaliseAppliedVoxelEdit(std::move(result.command), /*may_expand_bounds=*/true, result.truncated))
+		return false;
+	const Vec3<int> extent = voxel_clipboard.extent;
+	voxel_selection_bounds = VoxelSelectionBounds(destination,
+		Vec3<int>(destination.x + extent.x - 1, destination.y + extent.y - 1, destination.z + extent.z - 1));
+	voxel_selection_valid = true;
+	voxel_selection_object_uid = selected_ob->uid;
+	showInfoNotification("Voxel selection pasted.");
+	return true;
+}
+
+
+bool GUIClient::deleteVoxelSelection()
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup ||
+		!voxel_selection_valid || voxel_selection_object_uid != selected_ob->uid)
+	{
+		showInfoNotification("Select a voxel region before deleting it.");
+		return false;
+	}
+	if(!objectModificationAllowedWithMsg(*selected_ob, "delete selected voxels"))
+		return false;
+	VoxelToolType tool;
+	VoxelToolSettings tool_settings;
+	if(!ui_interface->getVoxelEditorToolState(tool, tool_settings))
+		return false;
+	selected_ob->decompressVoxels();
+	const VoxelEditorState state = VoxelEditorData::fromObject(*selected_ob);
+	VoxelToolResult result = VoxelTools::deleteSelection(voxel_selection_bounds, tool_settings, state, selected_ob->getDecompressedVoxels());
+	if(!result.error.empty())
+	{
+		showErrorNotification(result.error);
+		return false;
+	}
+	if(!result.changed())
+		return false;
+	return finaliseAppliedVoxelEdit(std::move(result.command), /*may_expand_bounds=*/false, result.truncated);
+}
+
+
+bool GUIClient::duplicateVoxelSelection(const Vec3<int>& offset)
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup ||
+		!voxel_selection_valid || voxel_selection_object_uid != selected_ob->uid)
+	{
+		showInfoNotification("Select a voxel region before duplicating it.");
+		return false;
+	}
+	if(!objectModificationAllowedWithMsg(*selected_ob, "duplicate voxels"))
+		return false;
+	VoxelToolType tool;
+	VoxelToolSettings tool_settings;
+	if(!ui_interface->getVoxelEditorToolState(tool, tool_settings))
+		return false;
+	const Vec3<int> destination(voxel_selection_bounds.min.x + offset.x,
+		voxel_selection_bounds.min.y + offset.y, voxel_selection_bounds.min.z + offset.z);
+	selected_ob->decompressVoxels();
+	const VoxelEditorState state = VoxelEditorData::fromObject(*selected_ob);
+	VoxelToolResult result = VoxelTools::duplicateSelection(voxel_selection_bounds, destination, tool_settings, state, selected_ob->getDecompressedVoxels());
+	if(!result.error.empty())
+	{
+		showErrorNotification(result.error);
+		return false;
+	}
+	if(!result.changed())
+		return false;
+	return finaliseAppliedVoxelEdit(std::move(result.command), /*may_expand_bounds=*/true, result.truncated);
+}
+
+
+bool GUIClient::moveVoxelSelection(const Vec3<int>& offset)
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup ||
+		!voxel_selection_valid || voxel_selection_object_uid != selected_ob->uid)
+	{
+		showInfoNotification("Select a voxel region before moving it.");
+		return false;
+	}
+	if(offset.x == 0 && offset.y == 0 && offset.z == 0)
+	{
+		showInfoNotification("Choose a non-zero move offset.");
+		return false;
+	}
+	if(!objectModificationAllowedWithMsg(*selected_ob, "move voxels"))
+		return false;
+	VoxelToolType tool;
+	VoxelToolSettings tool_settings;
+	if(!ui_interface->getVoxelEditorToolState(tool, tool_settings))
+		return false;
+	const Vec3<int> old_extent = voxel_selection_bounds.extent();
+	const Vec3<int> destination(voxel_selection_bounds.min.x + offset.x,
+		voxel_selection_bounds.min.y + offset.y, voxel_selection_bounds.min.z + offset.z);
+	selected_ob->decompressVoxels();
+	const VoxelEditorState state = VoxelEditorData::fromObject(*selected_ob);
+	VoxelToolResult result = VoxelTools::moveSelection(voxel_selection_bounds, destination, tool_settings, state, selected_ob->getDecompressedVoxels());
+	if(!result.error.empty())
+	{
+		showErrorNotification(result.error);
+		return false;
+	}
+	if(!result.changed())
+		return false;
+	if(!finaliseAppliedVoxelEdit(std::move(result.command), /*may_expand_bounds=*/true, result.truncated))
+		return false;
+	voxel_selection_bounds = VoxelSelectionBounds(destination,
+		Vec3<int>(destination.x + old_extent.x - 1, destination.y + old_extent.y - 1, destination.z + old_extent.z - 1));
+	voxel_selection_object_uid = selected_ob->uid;
+	showInfoNotification("Voxel selection moved.");
+	return true;
+}
+
+
+void GUIClient::clearVoxelSelection()
+{
+	voxel_selection_valid = false;
+	voxel_selection_object_uid = UID::invalidUID();
+}
+
+
+bool GUIClient::canUndoVoxelEdit() const
+{
+	return selected_ob.nonNull() && selected_ob->object_type == WorldObject::ObjectType_VoxelGroup && voxel_undo_stack.canUndo(selected_ob->uid);
+}
+
+
+bool GUIClient::canRedoVoxelEdit() const
+{
+	return selected_ob.nonNull() && selected_ob->object_type == WorldObject::ObjectType_VoxelGroup && voxel_undo_stack.canRedo(selected_ob->uid);
+}
+
+
+bool GUIClient::validateSelectedVoxelEditHistoryRevision()
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup)
+		return false;
+
+	const auto revision_it = voxel_undo_expected_revisions.find(selected_ob->uid.value());
+	if(revision_it != voxel_undo_expected_revisions.end() && revision_it->second != voxelEditorRevisionForObject(*selected_ob))
+	{
+		voxel_undo_stack.clear(selected_ob->uid);
+		voxel_undo_expected_revisions.erase(revision_it);
+		cancelVoxelShapeTool();
+		showErrorNotification("Voxel undo history was cleared because the object changed remotely.");
+		return false;
+	}
+	return true;
+}
+
+
+bool GUIClient::undoVoxelEdit()
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup)
+		return false;
+	if(!voxel_undo_stack.canUndo(selected_ob->uid))
+		return false;
+	if(!objectModificationAllowedWithMsg(*selected_ob, "undo voxel edit"))
+		return false;
+	if(!validateSelectedVoxelEditHistoryRevision())
+		return false;
+	selected_ob->decompressVoxels();
+	if(!voxel_undo_stack.undo(*selected_ob))
+		return false;
+	updateObjectModelForChangedDecompressedVoxels(selected_ob);
+	voxel_undo_expected_revisions[selected_ob->uid.value()] = voxelEditorRevisionForObject(*selected_ob);
+	ui_interface->voxelEditorObjectDataChanged(*selected_ob);
+	force_new_undo_edit = true;
+	return true;
+}
+
+
+bool GUIClient::redoVoxelEdit()
+{
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup)
+		return false;
+	if(!voxel_undo_stack.canRedo(selected_ob->uid))
+		return false;
+	if(!objectModificationAllowedWithMsg(*selected_ob, "redo voxel edit"))
+		return false;
+	if(!validateSelectedVoxelEditHistoryRevision())
+		return false;
+	selected_ob->decompressVoxels();
+	if(!voxel_undo_stack.redo(*selected_ob))
+		return false;
+
+	const js::AABBox candidate_aabb_ws = selected_ob->getDecompressedVoxelGroup().getAABB().transformedAABB(obToWorldMatrix(*selected_ob));
+	bool object_position_in_parcel = false;
+	if(!haveObjectWritePermissions(*selected_ob, candidate_aabb_ws, object_position_in_parcel) || !object_position_in_parcel)
+	{
+		// Restore both the voxel data and the redo entry.  VoxelUndoStack::undo()
+		// is the inverse transition of the redo performed immediately above.
+		if(!voxel_undo_stack.undo(*selected_ob))
+		{
+			voxel_undo_stack.clear(selected_ob->uid);
+			voxel_undo_expected_revisions.erase(selected_ob->uid.value());
+		}
+		showErrorNotification("Redo would extend the voxel object outside parcels where you have write permission.");
+		return false;
+	}
+	updateObjectModelForChangedDecompressedVoxels(selected_ob);
+	voxel_undo_expected_revisions[selected_ob->uid.value()] = voxelEditorRevisionForObject(*selected_ob);
+	ui_interface->voxelEditorObjectDataChanged(*selected_ob);
+	force_new_undo_edit = true;
+	return true;
+}
+
+
+bool GUIClient::selectedVoxelModificationAllowed(const char* action)
+{
+	return selected_ob.nonNull() && selected_ob->object_type == WorldObject::ObjectType_VoxelGroup &&
+		objectModificationAllowedWithMsg(*selected_ob, action ? action : "edit");
+}
+
+
+void GUIClient::clearSelectedVoxelEditHistory()
+{
+	if(selected_ob.nonNull() && selected_ob->object_type == WorldObject::ObjectType_VoxelGroup)
+	{
+		voxel_undo_stack.clear(selected_ob->uid);
+		voxel_undo_expected_revisions.erase(selected_ob->uid.value());
+	}
+	cancelVoxelShapeTool();
+	clearVoxelSelection();
+}
+
+
+void GUIClient::cancelVoxelShapeTool()
+{
+	voxel_shape_start_valid = false;
+	voxel_shape_object_uid = UID::invalidUID();
+}
+
+
+void GUIClient::rebuildSelectedVoxelObject()
+{
+	if(selected_ob.nonNull() && selected_ob->object_type == WorldObject::ObjectType_VoxelGroup)
+	{
+		selected_ob->decompressVoxels();
+		updateObjectModelForChangedDecompressedVoxels(selected_ob);
+		ui_interface->voxelEditorObjectDataChanged(*selected_ob);
+	}
+}
+
+
 void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob)
 {
 	Lock lock(this->world_state->mutex);
@@ -19657,7 +20236,7 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 		Reference<OpenGLMeshRenderData> gl_meshdata = ModelLoading::makeModelForVoxelGroup(ob->getDecompressedVoxelGroup(), subsample_factor, ob_to_world,
 			opengl_engine->vert_buf_allocator.ptr(), /*do_opengl_stuff=*/true, /*need_lightmap_uvs=*/false, mat_transparent, /*build_dynamic_physics_ob=*/ob->isDynamic(),
 			worker_allocator.ptr(),
-			physics_shape);
+			physics_shape, voxelMeshModeForObject(*ob));
 
 		GLObjectRef gl_ob = opengl_engine->allocateObject();
 		gl_ob->ob_to_world_matrix = ob_to_world;
@@ -21163,6 +21742,8 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 
 
 	// Show object editor, hide parcel editor.
+	if(selected_ob->object_type == WorldObject::ObjectType_VoxelGroup)
+		selected_ob->decompressVoxels(); // The editor needs an accurate count and sparse payload immediately.
 	ui_interface->setObjectEditorFromOb(*selected_ob, selected_mat_index, /*ob in editing user's world=*/connectedToUsersWorldOrGodUser()); // Update the editor widget with values from the selected object
 	ui_interface->setObjectEditorEnabled(true);
 	ui_interface->showObjectEditor();
@@ -21195,6 +21776,7 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 
 void GUIClient::deselectObject()
 {
+	cancelVoxelShapeTool();
 	if(this->selected_ob.nonNull())
 	{
 		this->selected_ob->is_selected = false;

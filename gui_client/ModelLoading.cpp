@@ -557,9 +557,14 @@ void ModelLoading::makeGLObjectForModelFile(
 
 		checkValidAndSanitiseMesh(*mesh);
 
-		const bool metasiberia_scientific_molecule_obj = hasPrefix(FileUtils::getFilename(model_path), "metasiberia_scientific_molecule_");
+		const std::string model_filename = FileUtils::getFilename(model_path);
+		const bool metasiberia_scientific_molecule_obj = hasPrefix(model_filename, "metasiberia_scientific_molecule_");
+		// Procedural trees are emitted directly in Substrata engine space (Z-up)
+		// and in metres.  Treating them as arbitrary imported OBJ files rotated
+		// the trunk onto -Y and scaleMesh() silently made a 9 m tree 0.9 m tall.
+		const bool metasiberia_tree_obj = hasPrefix(model_filename, "metasiberia_tree_");
 
-		if(!metasiberia_scientific_molecule_obj)
+		if(!metasiberia_scientific_molecule_obj && !metasiberia_tree_obj)
 		{
 			// Convert model coordinates to z up
 			for(size_t i=0; i<mesh->vert_positions.size(); ++i)
@@ -1568,16 +1573,16 @@ static Reference<OpenGLMeshRenderData> buildVoxelOpenGLMeshData(const Indigo::Me
 }
 
 
-Reference<OpenGLMeshRenderData> ModelLoading::makeModelForVoxelGroup(const VoxelGroup& voxel_group, int subsample_factor, const Matrix4f& ob_to_world, 
-	VertexBufferAllocator* vert_buf_allocator, bool do_opengl_stuff, bool need_lightmap_uvs, const js::Vector<bool, 16>& mats_transparent, bool build_dynamic_physics_ob, 
-	glare::Allocator* mem_allocator, PhysicsShape& physics_shape_out)
+Reference<OpenGLMeshRenderData> ModelLoading::makeModelForVoxelGroup(const VoxelGroup& voxel_group, int subsample_factor, const Matrix4f& ob_to_world,
+	VertexBufferAllocator* vert_buf_allocator, bool do_opengl_stuff, bool need_lightmap_uvs, const js::Vector<bool, 16>& mats_transparent, bool build_dynamic_physics_ob,
+	glare::Allocator* mem_allocator, PhysicsShape& physics_shape_out, VoxelMeshMode mesh_mode)
 {
 	ZoneScoped; // Tracy profiler
 
 	// Timer timer;
 	StandardPrintOutput print_output;
 
-	Indigo::MeshRef indigo_mesh = VoxelMeshBuilding::makeIndigoMeshForVoxelGroup(voxel_group, subsample_factor, mats_transparent, mem_allocator);
+	Indigo::MeshRef indigo_mesh = VoxelMeshBuilding::makeIndigoMeshForVoxelGroup(voxel_group, subsample_factor, mats_transparent, mem_allocator, mesh_mode);
 	// We will compute geometric normals in the opengl shader, so don't need to compute them here.
 
 	if(need_lightmap_uvs)

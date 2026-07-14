@@ -54,6 +54,7 @@ class WebcamWindow;
 class AvatarSettingsWidget;
 class ScientificObjectEditor;
 class TreeEditorPanel;
+class VoxelEditorPanel;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -405,6 +406,9 @@ public:
 	virtual void setUIForSelectedObject() override; // Enable/disable delete object action etc..
 	virtual void startObEditorTimerIfNotActive() override;
 	virtual void startLightmapFlagTimer() override;
+	virtual bool getVoxelEditorToolState(VoxelToolType& tool_out, VoxelToolSettings& settings_out) const override;
+	virtual void voxelEditorMaterialPicked(int material_index) override;
+	virtual void voxelEditorObjectDataChanged(const WorldObject& ob) override;
 
 	virtual void showAvatarSettings() override;
 
@@ -626,13 +630,15 @@ public:
 	QWidget* map_dock_map_widget;
 	ScientificObjectEditor* scientific_object_editor;
 	TreeEditorPanel* tree_editor_panel;
+	VoxelEditorPanel* voxel_editor_panel;
 	QAction* action_add_tree;
 	QAction* action_add_scientific_object;
 	enum ActiveEditorKind
 	{
 		ActiveEditor_Object,
 		ActiveEditor_Scientific,
-		ActiveEditor_Tree
+		ActiveEditor_Tree,
+		ActiveEditor_Voxel
 	};
 	ActiveEditorKind active_editor_kind;
 };

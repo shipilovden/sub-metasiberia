@@ -17,6 +17,8 @@ Copyright Glare Technologies Limited 2023 -
 class WorldObject;
 class Parcel;
 class MapTilesResultReceivedMessage;
+enum class VoxelToolType;
+struct VoxelToolSettings;
 
 
 /*=====================================================================
@@ -95,6 +97,17 @@ public:
 	virtual bool posAndRot3DControlsEnabled() = 0;
 	virtual void startObEditorTimerIfNotActive() = 0;
 	virtual void startLightmapFlagTimer() = 0;
+
+	// Optional native voxel-editor bridge.  The SDL/web UI keeps the default
+	// no-op implementation and therefore retains the legacy Ctrl/Alt tools.
+	virtual bool getVoxelEditorToolState(VoxelToolType& tool_out, VoxelToolSettings& settings_out) const
+	{
+		(void)tool_out;
+		(void)settings_out;
+		return false;
+	}
+	virtual void voxelEditorMaterialPicked(int material_index) { (void)material_index; }
+	virtual void voxelEditorObjectDataChanged(const WorldObject& ob) { (void)ob; }
 
 	virtual void showAvatarSettings() = 0; // Show avatar settings dialog.
 	virtual bool isAvatarSettingsDialogVisible() const { return false; } // Check if avatar settings dialog is visible (SDL only)

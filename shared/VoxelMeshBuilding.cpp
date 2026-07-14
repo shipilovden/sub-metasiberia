@@ -24,6 +24,7 @@ Copyright Glare Technologies Limited 2022 -
 #include "superluminal/PerformanceAPI.h"
 #endif
 #include <limits>
+#include <unordered_map>
 
 
 class VoxelHashFunc
@@ -40,6 +41,37 @@ struct VoxelBounds
 {
 	Vec3<int> min;
 	Vec3<int> max;
+};
+
+
+struct CubicVoxelCoord
+{
+	CubicVoxelCoord() : x(0), y(0), z(0) {}
+	CubicVoxelCoord(int x_, int y_, int z_) : x(x_), y(y_), z(z_) {}
+
+	bool operator == (const CubicVoxelCoord& other) const { return x == other.x && y == other.y && z == other.z; }
+	bool operator < (const CubicVoxelCoord& other) const
+	{
+		if(x != other.x) return x < other.x;
+		if(y != other.y) return y < other.y;
+		return z < other.z;
+	}
+
+	int x;
+	int y;
+	int z;
+};
+
+
+struct CubicVoxelCoordHash
+{
+	size_t operator () (const CubicVoxelCoord& c) const
+	{
+		uint64 h = (uint32)c.x;
+		h = (h * 0x9e3779b185ebca87ULL) ^ (uint32)c.y;
+		h = (h * 0xc2b2ae3d27d4eb4fULL) ^ (uint32)c.z;
+		return (size_t)h;
+	}
 };
 
 
@@ -1173,12 +1205,118 @@ Reference<Indigo::Mesh> VoxelMeshBuilding::makeIndigoMeshWithShadingNormalsForVo
 }
 
 
+// Build an intentionally unmerged cube surface.  This mode is useful while
+// editing because every visible voxel face remains an independent quad.  It
+// shares the same sparse source data and transparency boundary rules as the
+// greedy path; only the surface aggregation strategy differs.
+static Reference<Indigo::Mesh> makeCubicIndigoMeshForVoxelGroup(const VoxelGroup& voxel_group, const int subsample_factor,
+	const js::Vector<bool, 16>& mats_transparent)
+{
+	if(voxel_group.voxels.empty())
+		throw glare::Exception("No voxels");
+	if(subsample_factor <= 0 || !Maths::isPowerOfTwo((uint32)subsample_factor))
+		throw glare::Exception("Invalid voxel subsample factor");
+
+	const int subsample_shift = Maths::intLogBase2((uint32)subsample_factor);
+	std::unordered_map<CubicVoxelCoord, int, CubicVoxelCoordHash> cells;
+	cells.reserve(voxel_group.voxels.size());
+	for(size_t i=0; i<voxel_group.voxels.size(); ++i)
+	{
+		const Voxel& voxel = voxel_group.voxels[i];
+		if(voxel.mat_index < 0 || voxel.mat_index >= 255)
+			throw glare::Exception("Invalid voxel material index");
+
+		const Vec4i source_pos(voxel.pos.x, voxel.pos.y, voxel.pos.z, 0);
+		const Vec4i p = shiftRightWithSignExtension(source_pos, subsample_shift);
+		if(p[0] < -32768 || p[1] < -32768 || p[2] < -32768 || p[0] > 32766 || p[1] > 32766 || p[2] > 32766)
+			throw glare::Exception("Invalid voxel position coord: " + p.toString());
+		cells[CubicVoxelCoord(p[0], p[1], p[2])] = voxel.mat_index;
+	}
+
+	bool mat_transparent[255];
+	for(size_t i=0; i<255; ++i)
+		mat_transparent[i] = (i < mats_transparent.size()) && mats_transparent[i];
+
+	static const int neighbour_offsets[6][3] = {
+		{ 1, 0, 0}, {-1, 0, 0}, {0,  1, 0}, {0, -1, 0}, {0, 0,  1}, {0, 0, -1}
+	};
+	static const float face_corners[6][4][3] = {
+		{{1,0,0}, {1,1,0}, {1,1,1}, {1,0,1}}, // +X
+		{{0,0,0}, {0,0,1}, {0,1,1}, {0,1,0}}, // -X
+		{{0,1,0}, {0,1,1}, {1,1,1}, {1,1,0}}, // +Y
+		{{0,0,0}, {1,0,0}, {1,0,1}, {0,0,1}}, // -Y
+		{{0,0,1}, {1,0,1}, {1,1,1}, {0,1,1}}, // +Z
+		{{0,0,0}, {0,1,0}, {1,1,0}, {1,0,0}}  // -Z
+	};
+
+	Reference<Indigo::Mesh> mesh = new Indigo::Mesh();
+	mesh->setMaxNumTexcoordSets(0);
+	mesh->vert_positions.reserve(cells.size() * 12);
+	mesh->triangles.reserve(cells.size() * 6);
+
+	std::vector<CubicVoxelCoord> sorted_coords;
+	sorted_coords.reserve(cells.size());
+	for(auto it = cells.begin(); it != cells.end(); ++it)
+		sorted_coords.push_back(it->first);
+	std::sort(sorted_coords.begin(), sorted_coords.end());
+
+	for(const CubicVoxelCoord& p : sorted_coords)
+	{
+		const int material_index = cells.find(p)->second;
+		for(int face=0; face<6; ++face)
+		{
+			const CubicVoxelCoord adjacent(
+				p.x + neighbour_offsets[face][0],
+				p.y + neighbour_offsets[face][1],
+				p.z + neighbour_offsets[face][2]
+			);
+			const auto adjacent_it = cells.find(adjacent);
+			const bool face_visible = adjacent_it == cells.end() ||
+				(mat_transparent[adjacent_it->second] && adjacent_it->second != material_index);
+			if(!face_visible)
+				continue;
+
+			const uint32 first_vertex = (uint32)mesh->vert_positions.size();
+			for(int corner=0; corner<4; ++corner)
+			{
+				mesh->vert_positions.push_back(Indigo::Vec3f(
+					(float)p.x + face_corners[face][corner][0],
+					(float)p.y + face_corners[face][corner][1],
+					(float)p.z + face_corners[face][corner][2]
+				));
+			}
+
+			const size_t triangle_start = mesh->triangles.size();
+			mesh->triangles.resize(triangle_start + 2);
+			const uint32 triangle_indices[2][3] = {
+				{first_vertex, first_vertex + 1, first_vertex + 2},
+				{first_vertex, first_vertex + 2, first_vertex + 3}
+			};
+			for(int triangle=0; triangle<2; ++triangle)
+			{
+				for(int vertex=0; vertex<3; ++vertex)
+				{
+					mesh->triangles[triangle_start + triangle].vertex_indices[vertex] = triangle_indices[triangle][vertex];
+					mesh->triangles[triangle_start + triangle].uv_indices[vertex] = 0;
+				}
+				mesh->triangles[triangle_start + triangle].tri_mat_index = (uint32)material_index;
+			}
+		}
+	}
+
+	mesh->endOfModel();
+	return mesh;
+}
+
+
 Reference<Indigo::Mesh> VoxelMeshBuilding::makeIndigoMeshForVoxelGroup(const VoxelGroup& voxel_group, const int subsample_factor, const js::Vector<bool, 16>& mats_transparent,
-	glare::Allocator* mem_allocator)
+	glare::Allocator* mem_allocator, VoxelMeshMode mesh_mode)
 {
 	assert(voxel_group.voxels.size() > 0);
 	// conPrint("Adding " + toString(voxel_group.voxels.size()) + " voxels.");
 
+	if(mesh_mode == VoxelMeshMode::Cubes)
+		return makeCubicIndigoMeshForVoxelGroup(voxel_group, subsample_factor, mats_transparent);
 	return doMakeIndigoMeshForVoxelGroupWith3dArray(voxel_group.voxels, subsample_factor, mats_transparent, mem_allocator);
 }
 
@@ -1308,6 +1446,14 @@ void VoxelMeshBuilding::test()
 
 		testAssert(data->num_materials_referenced == 1);
 		testAssert(data->triangles.size() == 6 * 2);
+
+		// Cubic mode keeps one quad per exposed voxel face.  The shared face
+		// between the two cells is culled, leaving ten quads (twenty tris).
+		data = makeIndigoMeshForVoxelGroup(group, /*subsample_factor=*/1, mat_transparent, /*allocator=*/NULL, VoxelMeshMode::Cubes);
+		testAssert(data->num_materials_referenced == 1);
+		testAssert(data->triangles.size() == 10 * 2);
+		testAssert(data->aabb_os.bound[0] == Indigo::Vec3f(0,0,0));
+		testAssert(data->aabb_os.bound[1] == Indigo::Vec3f(2,1,1));
 
 		// Test with subsampling
 		data = makeIndigoMeshForVoxelGroup(group, /*subsample_factor=*/4, mat_transparent, /*allocator=*/NULL);

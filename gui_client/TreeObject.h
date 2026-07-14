@@ -26,11 +26,11 @@ public:
 
 	static bool isTreeObject(const WorldObject& ob);
 	static TreeParams paramsFromObject(const WorldObject& ob);
-	static void applyToWorldObject(WorldObject& ob, const TreeParams& params, bool rebuild_mesh);
+	static std::string findBundledAssetRoot(const std::string& base_dir_path);
+	static void applyToWorldObject(WorldObject& ob, const TreeParams& params, bool rebuild_mesh, const std::string& asset_root_path = std::string());
 
 private:
 	TreeParams params;
 	std::string model_path;
 	bool dirty;
 };
-

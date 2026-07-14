@@ -42,6 +42,9 @@ public:
 
 	void setFromObject(const WorldObject& ob, int selected_mat_index, bool ob_in_editing_users_world);
 	void setTransformFromObject(const WorldObject& ob);
+	// Specialised editors may store their metadata in WorldObject::content while
+	// exposing a preserved legacy/user content value in the generic controls.
+	void setContentForSpecialisedEditor(const std::string& content);
 
 	void objectLastModifiedUpdated(const WorldObject& ob) { updateInfoLabel(ob); }
 

@@ -12,6 +12,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "UIInterface.h"
 #include "ProximityLoader.h"
 #include "UndoBuffer.h"
+#include "VoxelProceduralGenerator.h"
+#include "VoxelUndoStack.h"
 #include "GestureUI.h"
 #include "ObInfoUI.h"
 #include "MiscInfoUI.h"
@@ -251,6 +253,24 @@ public:
 	void summonCar();
 	void objectTransformEdited();
 	void objectEdited();
+	bool applyVoxelEditorTool(VoxelToolType tool, const VoxelToolInput& input, const VoxelToolSettings* settings_override = NULL);
+	bool applyVoxelProceduralGenerator(VoxelProceduralType type, const VoxelProceduralParams& params);
+	bool copyVoxelSelection();
+	bool pasteVoxelSelection(const Vec3<int>& offset);
+	bool deleteVoxelSelection();
+	bool duplicateVoxelSelection(const Vec3<int>& offset);
+	bool moveVoxelSelection(const Vec3<int>& offset);
+	void clearVoxelSelection();
+	bool finaliseAppliedVoxelEdit(VoxelEditCommand command, bool may_expand_bounds, bool truncated);
+	bool canUndoVoxelEdit() const;
+	bool canRedoVoxelEdit() const;
+	bool validateSelectedVoxelEditHistoryRevision();
+	bool undoVoxelEdit();
+	bool redoVoxelEdit();
+	bool selectedVoxelModificationAllowed(const char* action);
+	void clearSelectedVoxelEditHistory();
+	void cancelVoxelShapeTool();
+	void rebuildSelectedVoxelObject();
 	void posAndRot3DControlsToggled(bool enabled);
 	void mousePressed(MouseEvent& e);
 	void mouseReleased(MouseEvent& e);
@@ -650,6 +670,15 @@ public:
 	Vec3f selected_ob_transform_rollback_axis;
 	float selected_ob_transform_rollback_angle;
 	Vec3f selected_ob_transform_rollback_scale;
+	bool voxel_shape_start_valid = false;
+	UID voxel_shape_object_uid = UID::invalidUID();
+	VoxelToolType voxel_shape_tool = VoxelToolType::Box;
+	Vec3<int> voxel_shape_start = Vec3<int>(0, 0, 0);
+	bool voxel_selection_valid = false;
+	UID voxel_selection_object_uid = UID::invalidUID();
+	VoxelSelectionBounds voxel_selection_bounds;
+	VoxelClipboard voxel_clipboard;
+	Vec3<int> voxel_clipboard_origin = Vec3<int>(0, 0, 0);
 
 	ParcelRef selected_parcel;
 
@@ -880,6 +909,8 @@ public:
 
 	glare::AudioEngine audio_engine;
 	UndoBuffer undo_buffer;
+	VoxelUndoStack voxel_undo_stack;
+	std::map<uint64, uint64> voxel_undo_expected_revisions;
 
 	glare::AudioSourceRef wind_audio_source;
 

@@ -40,7 +40,6 @@ public:
 	static float randomRange(uint32_t& state, float min_v, float max_v);
 
 private:
-	static void generateTrunk(const TreeParams& params, TreeMeshData& mesh, std::vector<TreeVec3>& branch_tips);
-	static void generateBranches(const TreeParams& params, TreeMeshData& mesh, std::vector<TreeVec3>& branch_tips);
-	static void generateLeaves(const TreeParams& params, TreeMeshData& mesh, const std::vector<TreeVec3>& branch_tips);
+	static void generateTree(const TreeParams& params, TreeMeshData& mesh);
+	static void generateTrellis(const TreeParams& params, TreeMeshData& mesh);
 };

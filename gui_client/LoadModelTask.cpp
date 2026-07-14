@@ -28,6 +28,7 @@ LoadModelTask::LoadModelTask()
 :	build_physics_ob(true),
 	build_dynamic_physics_ob(false),
 	model_lod_level(-1),
+	voxel_mesh_mode(VoxelMeshMode::Greedy),
 	need_lightmap_uvs(false),
 	extract_gltf_materials(false)
 {}
@@ -69,8 +70,8 @@ void LoadModelTask::run(size_t thread_index)
 
 				// conPrint("Loading vox model for ob with UID " + voxel_ob->uid.toString() + " for LOD level " + toString(use_model_lod_level) + ", using subsample_factor " + toString(subsample_factor) + ", " + toString(voxel_group.voxels.size()) + " voxels");
 
-				gl_meshdata = ModelLoading::makeModelForVoxelGroup(voxel_group, subsample_factor, ob_to_world_matrix, /*vert_buf_allocator=*/NULL, /*do_opengl_stuff=*/false, 
-					need_lightmap_uvs, mat_transparent, build_dynamic_physics_ob, worker_allocator.ptr(), /*physics shape out=*/physics_shape);
+				gl_meshdata = ModelLoading::makeModelForVoxelGroup(voxel_group, subsample_factor, ob_to_world_matrix, /*vert_buf_allocator=*/NULL, /*do_opengl_stuff=*/false,
+					need_lightmap_uvs, mat_transparent, build_dynamic_physics_ob, worker_allocator.ptr(), /*physics shape out=*/physics_shape, voxel_mesh_mode);
 			}
 			else // Else not voxel ob, just loading a model:
 			{

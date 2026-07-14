@@ -13,6 +13,13 @@ class VoxelGroup;
 namespace glare { class Allocator; }
 
 
+enum class VoxelMeshMode
+{
+	Greedy,
+	Cubes
+};
+
+
 /*=====================================================================
 VoxelMeshBuilding
 -----------------
@@ -24,7 +31,7 @@ class VoxelMeshBuilding
 public:
 	// If mats_transparent is lacking entries for a particular material index, the material is assumed to be opaque.
 	static Reference<Indigo::Mesh> makeIndigoMeshForVoxelGroup(const VoxelGroup& voxel_group, const int subsample_factor, const js::Vector<bool, 16>& mats_transparent,
-		glare::Allocator* mem_allocator);
+		glare::Allocator* mem_allocator, VoxelMeshMode mesh_mode = VoxelMeshMode::Greedy);
 
 
 	// Build a mesh with shading normals and UVs.  This is used in ChunkGenThread.

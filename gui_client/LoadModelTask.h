@@ -11,6 +11,7 @@ Copyright Glare Technologies Limited 2025 -
 #include "../shared/Resource.h"
 #include "../shared/URLString.h"
 #include "../shared/WorldMaterial.h"
+#include "../shared/VoxelMeshBuilding.h"
 #include <opengl/OpenGLEngine.h>
 #include <opengl/OpenGLUploadThread.h>
 #include <utils/Task.h>
@@ -96,6 +97,7 @@ public:
 	
 	Reference<glare::SharedImmutableArray<uint8> > compressed_voxels;
 	uint64 voxel_hash;
+	VoxelMeshMode voxel_mesh_mode;
 	js::Vector<bool> mat_transparent;
 	bool need_lightmap_uvs;
 	Matrix4f ob_to_world_matrix; // Used for generating lightmap coords for voxel meshes.

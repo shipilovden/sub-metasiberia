@@ -20,5 +20,11 @@ courtesy to the authors and contributors at ambientcg.
 | `Bark014_1K-JPG/`   | https://ambientcg.com/view?id=Bark014   |
 | `Bark015_1K-JPG/`   | https://ambientcg.com/view?id=Bark015   |
 
-The leaf textures in `leaves/` are bundled with the EZ-Tree demo app and are
-licensed under the project's own license (see repository LICENSE).
+The leaf textures in `leaves/`, the 16 preset parameter sets in `presets/`,
+and the native C++ generator adaptation are derived from or informed by
+[dgreenheck/ez-tree](https://github.com/dgreenheck/ez-tree), pinned for this
+integration at commit `48dc193515135cff2b33515c47f0a8703b977e63`.
+
+EZ-Tree is licensed under the MIT license.  The complete upstream license text
+is included locally in `EZ_TREE_LICENSE.txt`.  The generator is a native
+Metasiberia adaptation and does not embed the Three.js demo application.

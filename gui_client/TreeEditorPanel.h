@@ -9,16 +9,19 @@ Copyright Glare Technologies Limited 2026 -
 #include "TreeParams.h"
 #include <QtWidgets/QWidget>
 #include <array>
+#include <string>
 
 
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QFormLayout;
+class QHideEvent;
 class QLabel;
 class QPushButton;
 class QSettings;
 class QSpinBox;
+class QShowEvent;
 class QTabWidget;
 class WorldObject;
 
@@ -28,8 +31,9 @@ class TreeEditorPanel : public QWidget
 	Q_OBJECT
 public:
 	explicit TreeEditorPanel(QWidget* parent = 0);
+	static int runSmokeCheck(const std::string& report_path);
 
-	void init(QSettings* settings);
+	void init(QSettings* settings, const std::string& asset_root_path);
 	void setFromObject(const WorldObject& ob, bool ob_in_editing_users_world);
 	void toObject(WorldObject& ob_out);
 	void setControlsEnabled(bool enabled);
@@ -47,6 +51,10 @@ signals:
 	void posAndRot3DControlsToggled();
 	void deleteObjectRequested();
 
+protected:
+	void hideEvent(QHideEvent* event) override;
+	void showEvent(QShowEvent* event) override;
+
 private slots:
 	void controlChanged();
 	void rebuildNow();
@@ -63,7 +71,11 @@ private:
 	QSpinBox* addIntSpin(QFormLayout* form, const QString& label, int min_v, int max_v);
 
 	QSettings* settings;
+	std::string asset_root_path;
 	bool updating;
+	bool controls_editable;
+	bool pending_mesh_rebuild;
+	bool preserve_current_params_for_next_to_object;
 	TreeParams current_params;
 	QTimer* rebuild_timer;
 	QTabWidget* mode_tabs;
@@ -124,7 +136,7 @@ private:
 	QDoubleSpinBox* leaf_alpha_spin;
 	QDoubleSpinBox* leaf_alpha_test_spin;
 	QCheckBox* leaf_rounded_normals_checkbox;
-	QSpinBox* leaf_start_level_spin;
+	QDoubleSpinBox* leaf_start_spin;
 	QComboBox* billboard_combo;
 	QCheckBox* trellis_enabled_checkbox;
 	QDoubleSpinBox* trellis_x_spin;

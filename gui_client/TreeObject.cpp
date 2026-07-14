@@ -11,6 +11,7 @@ Copyright Glare Technologies Limited 2026 -
 #include "../shared/WorldObject.h"
 #include "../shared/WorldMaterial.h"
 #include <BitUtils.h>
+#include <utils/FileUtils.h>
 
 
 namespace
@@ -40,6 +41,14 @@ std::string leafTextureForParams(const TreeParams& params)
 	case TreeLeafType::None:        break;
 	}
 	return "";
+}
+
+
+std::string assetPath(const std::string& asset_root_path, const std::string& relative_path)
+{
+	if(relative_path.empty())
+		return std::string();
+	return asset_root_path.empty() ? relative_path : FileUtils::join(asset_root_path, relative_path);
 }
 }
 
@@ -98,7 +107,23 @@ TreeParams TreeObject::paramsFromObject(const WorldObject& ob)
 }
 
 
-void TreeObject::applyToWorldObject(WorldObject& ob, const TreeParams& params_, bool rebuild_mesh)
+std::string TreeObject::findBundledAssetRoot(const std::string& base_dir_path)
+{
+	const std::string packaged_root = FileUtils::join(base_dir_path, "data/resources/tree_assets");
+	if(FileUtils::fileExists(FileUtils::join(packaged_root, "leaves/ash.png")))
+		return packaged_root;
+
+	// The Qt wrapper also keeps a resource copy beside the executable.  This
+	// fallback is useful for developer builds made before the distribution copy.
+	const std::string adjacent_root = FileUtils::join(base_dir_path, "resources/tree_assets");
+	if(FileUtils::fileExists(FileUtils::join(adjacent_root, "leaves/ash.png")))
+		return adjacent_root;
+
+	return std::string();
+}
+
+
+void TreeObject::applyToWorldObject(WorldObject& ob, const TreeParams& params_, bool rebuild_mesh, const std::string& asset_root_path)
 {
 	TreeParams params = params_;
 	TreeSerialization::clamp(params);
@@ -129,9 +154,9 @@ void TreeObject::applyToWorldObject(WorldObject& ob, const TreeParams& params_, 
 	{
 		const std::string folder = barkFolderForParams(params);
 		const std::string prefix = barkPrefixForParams(params);
-		ob.materials[0]->colour_texture_url = "tree_assets/bark/" + folder + "/" + prefix + "_Color.jpg";
-		ob.materials[0]->normal_map_url = "tree_assets/bark/" + folder + "/" + prefix + "_NormalGL.jpg";
-		ob.materials[0]->roughness.texture_url = "tree_assets/bark/" + folder + "/" + prefix + "_Roughness.jpg";
+		ob.materials[0]->colour_texture_url = assetPath(asset_root_path, "bark/" + folder + "/" + prefix + "_Color.jpg");
+		ob.materials[0]->normal_map_url = assetPath(asset_root_path, "bark/" + folder + "/" + prefix + "_NormalGL.jpg");
+		ob.materials[0]->roughness.texture_url = assetPath(asset_root_path, "bark/" + folder + "/" + prefix + "_Roughness.jpg");
 	}
 	else
 	{
@@ -142,7 +167,10 @@ void TreeObject::applyToWorldObject(WorldObject& ob, const TreeParams& params_, 
 
 	ob.materials[1]->name = "Tree Leaves";
 	ob.materials[1]->colour_rgb = Colour3f(params.leafColor.r, params.leafColor.g, params.leafColor.b);
-	ob.materials[1]->colour_texture_url = leafTextureForParams(params);
+	std::string leaf_texture = leafTextureForParams(params);
+	if(leaf_texture.size() >= 12 && leaf_texture.compare(0, 12, "tree_assets/") == 0)
+		leaf_texture = leaf_texture.substr(12);
+	ob.materials[1]->colour_texture_url = assetPath(asset_root_path, leaf_texture);
 	ob.materials[1]->opacity = ScalarVal(params.leafAlpha);
 	ob.materials[1]->roughness = ScalarVal(0.65f);
 	ob.materials[1]->flags = WorldMaterial::DOUBLE_SIDED_FLAG | WorldMaterial::USE_VERT_COLOURS_FOR_WIND;
@@ -150,6 +178,17 @@ void TreeObject::applyToWorldObject(WorldObject& ob, const TreeParams& params_, 
 		BitUtils::setBit(ob.materials[1]->flags, WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG);
 	if(!ob.materials[1]->colour_texture_url.empty())
 		BitUtils::setBit(ob.materials[1]->flags, WorldMaterial::COLOUR_TEX_HAS_ALPHA_FLAG);
+
+	const size_t required_material_count = params.trellisEnabled && params.trellisVisible ? 3 : 2;
+	ob.materials.resize(required_material_count);
+	if(required_material_count > 2)
+	{
+		if(ob.materials[2].isNull())
+			ob.materials[2] = new WorldMaterial();
+		ob.materials[2]->name = "Tree Trellis";
+		ob.materials[2]->colour_rgb = Colour3f(params.trellisColor.r, params.trellisColor.g, params.trellisColor.b);
+		ob.materials[2]->roughness = ScalarVal(0.8f);
+	}
 
 	ob.setCollidable(params.collisionMode != TreeCollisionMode::None);
 	ob.setDynamic(false);

@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2016 -
 
 #include "../shared/WorldMaterial.h"
 #include "../shared/WorldObject.h"
+#include "../shared/VoxelMeshBuilding.h"
 #include <opengl/OpenGLEngine.h>
 #include <dll/include/IndigoMesh.h>
 #include <graphics/BatchedMesh.h>
@@ -103,10 +104,10 @@ public:
 	}
 
 	// Build OpenGLMeshRenderData from voxel data.  Also return a reference to a physics shape.
-	static Reference<OpenGLMeshRenderData> makeModelForVoxelGroup(const VoxelGroup& voxel_group, int subsample_factor, const Matrix4f& ob_to_world, 
+	static Reference<OpenGLMeshRenderData> makeModelForVoxelGroup(const VoxelGroup& voxel_group, int subsample_factor, const Matrix4f& ob_to_world,
 		VertexBufferAllocator* vert_buf_allocator, bool do_opengl_stuff, bool need_lightmap_uvs, const js::Vector<bool, 16>& mats_transparent, bool build_dynamic_physics_ob,
 		glare::Allocator* mem_allocator,
-		PhysicsShape& physics_shape_out);
+		PhysicsShape& physics_shape_out, VoxelMeshMode mesh_mode = VoxelMeshMode::Greedy);
 
 	//static Reference<BatchedMesh> makeBatchedMeshForVoxelGroup(const VoxelGroup& voxel_group);
 	//static Reference<Indigo::Mesh> makeIndigoMeshForVoxelGroup(const VoxelGroup& voxel_group);
