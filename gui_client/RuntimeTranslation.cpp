@@ -58,7 +58,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Add Web View", "Добавить Web View");
 	add("MainWindow", "Parcels", "Участки");
 	add("MainWindow", "Avatar Settings", "Настройки аватара");
-	add("MainWindow", "About Metasiberia", "О Metasiberia");
+	add("MainWindow", "About Metasiberia", "О Метасибири");
 	add("MainWindow", "Add Text", "Добавить текст");
 	add("MainWindow", "Add Spotlight", "Добавить прожектор");
 	add("MainWindow", "Add Particles", "Добавить частицы");

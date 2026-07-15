@@ -1514,11 +1514,18 @@ void VoxelEditorPanel::applyIcons()
 	if(icon_directory.isEmpty())
 		return;
 
+	const QPalette icon_palette = palette();
+	const QColor foreground = icon_palette.color(QPalette::ButtonText);
+	const auto themed = [&icon_palette](const QColor& colour)
+	{
+		return LucideIconUtils::themeAwareColour(colour, icon_palette, QPalette::ButtonText, QPalette::Button);
+	};
+
 	for(QAbstractButton* button : tool_button_group->buttons())
 	{
 		const VoxelToolType tool = static_cast<VoxelToolType>(tool_button_group->id(button));
 		const char* name = "boxes";
-		QColor colour(QStringLiteral("#E2E8F0"));
+		QColor colour = foreground;
 		switch(tool)
 		{
 		case VoxelToolType::Brush:  name = "brush"; colour = QColor(QStringLiteral("#60A5FA")); break;
@@ -1531,31 +1538,30 @@ void VoxelEditorPanel::applyIcons()
 		case VoxelToolType::Picker: name = "pipette"; colour = QColor(QStringLiteral("#FACC15")); break;
 		case VoxelToolType::Select: name = "square-dashed-mouse-pointer"; break;
 		}
-		LucideIconUtils::setButtonIcon(button, icon_directory, QString::fromLatin1(name), colour);
+		LucideIconUtils::setButtonIcon(button, icon_directory, QString::fromLatin1(name), themed(colour));
 	}
 
-	const QColor foreground(QStringLiteral("#E2E8F0"));
-	LucideIconUtils::setButtonIcon(add_layer_button, icon_directory, QStringLiteral("layers-plus"), QColor(QStringLiteral("#4ADE80")));
-	LucideIconUtils::setButtonIcon(delete_layer_button, icon_directory, QStringLiteral("layers-minus"), QColor(QStringLiteral("#FB7185")));
+	LucideIconUtils::setButtonIcon(add_layer_button, icon_directory, QStringLiteral("layers-plus"), themed(QColor(QStringLiteral("#4ADE80"))));
+	LucideIconUtils::setButtonIcon(delete_layer_button, icon_directory, QStringLiteral("layers-minus"), themed(QColor(QStringLiteral("#FB7185"))));
 	LucideIconUtils::setButtonIcon(move_layer_up_button, icon_directory, QStringLiteral("arrow-up"), foreground);
 	LucideIconUtils::setButtonIcon(move_layer_down_button, icon_directory, QStringLiteral("arrow-down"), foreground);
-	LucideIconUtils::setButtonIcon(rebuild_mesh_button, icon_directory, QStringLiteral("refresh-cw"), QColor(QStringLiteral("#60A5FA")));
+	LucideIconUtils::setButtonIcon(rebuild_mesh_button, icon_directory, QStringLiteral("refresh-cw"), themed(QColor(QStringLiteral("#60A5FA"))));
 
 	LucideIconUtils::setButtonIcon(selection_copy_button, icon_directory, QStringLiteral("copy"), foreground);
-	LucideIconUtils::setButtonIcon(selection_paste_button, icon_directory, QStringLiteral("clipboard-paste"), QColor(QStringLiteral("#60A5FA")));
-	LucideIconUtils::setButtonIcon(selection_delete_button, icon_directory, QStringLiteral("trash-2"), QColor(QStringLiteral("#FB7185")));
-	LucideIconUtils::setButtonIcon(selection_duplicate_button, icon_directory, QStringLiteral("copy-plus"), QColor(QStringLiteral("#A78BFA")));
-	LucideIconUtils::setButtonIcon(selection_move_button, icon_directory, QStringLiteral("move-3d"), QColor(QStringLiteral("#22D3EE")));
+	LucideIconUtils::setButtonIcon(selection_paste_button, icon_directory, QStringLiteral("clipboard-paste"), themed(QColor(QStringLiteral("#60A5FA"))));
+	LucideIconUtils::setButtonIcon(selection_delete_button, icon_directory, QStringLiteral("trash-2"), themed(QColor(QStringLiteral("#FB7185"))));
+	LucideIconUtils::setButtonIcon(selection_duplicate_button, icon_directory, QStringLiteral("copy-plus"), themed(QColor(QStringLiteral("#A78BFA"))));
+	LucideIconUtils::setButtonIcon(selection_move_button, icon_directory, QStringLiteral("move-3d"), themed(QColor(QStringLiteral("#22D3EE"))));
 	LucideIconUtils::setButtonIcon(selection_clear_button, icon_directory, QStringLiteral("square-dashed-mouse-pointer"), foreground);
 
-	LucideIconUtils::setButtonIcon(procedural_random_seed_button, icon_directory, QStringLiteral("dices"), QColor(QStringLiteral("#FACC15")));
-	LucideIconUtils::setButtonIcon(generate_box_button, icon_directory, QStringLiteral("cuboid"), QColor(QStringLiteral("#F97316")));
-	LucideIconUtils::setButtonIcon(generate_ellipsoid_button, icon_directory, QStringLiteral("circle"), QColor(QStringLiteral("#4ADE80")));
-	LucideIconUtils::setButtonIcon(generate_rock_button, icon_directory, QStringLiteral("mountain"), QColor(QStringLiteral("#A8A29E")));
-	LucideIconUtils::setButtonIcon(generate_terrain_button, icon_directory, QStringLiteral("land-plot"), QColor(QStringLiteral("#84CC16")));
-	LucideIconUtils::setButtonIcon(generate_noise_button, icon_directory, QStringLiteral("dices"), QColor(QStringLiteral("#C084FC")));
-	LucideIconUtils::setButtonIcon(generate_crystal_button, icon_directory, QStringLiteral("gem"), QColor(QStringLiteral("#22D3EE")));
-	LucideIconUtils::setButtonIcon(generate_wall_button, icon_directory, QStringLiteral("brick-wall"), QColor(QStringLiteral("#D6B98C")));
+	LucideIconUtils::setButtonIcon(procedural_random_seed_button, icon_directory, QStringLiteral("dices"), themed(QColor(QStringLiteral("#FACC15"))));
+	LucideIconUtils::setButtonIcon(generate_box_button, icon_directory, QStringLiteral("cuboid"), themed(QColor(QStringLiteral("#F97316"))));
+	LucideIconUtils::setButtonIcon(generate_ellipsoid_button, icon_directory, QStringLiteral("circle"), themed(QColor(QStringLiteral("#4ADE80"))));
+	LucideIconUtils::setButtonIcon(generate_rock_button, icon_directory, QStringLiteral("mountain"), themed(QColor(QStringLiteral("#A8A29E"))));
+	LucideIconUtils::setButtonIcon(generate_terrain_button, icon_directory, QStringLiteral("land-plot"), themed(QColor(QStringLiteral("#84CC16"))));
+	LucideIconUtils::setButtonIcon(generate_noise_button, icon_directory, QStringLiteral("dices"), themed(QColor(QStringLiteral("#C084FC"))));
+	LucideIconUtils::setButtonIcon(generate_crystal_button, icon_directory, QStringLiteral("gem"), themed(QColor(QStringLiteral("#22D3EE"))));
+	LucideIconUtils::setButtonIcon(generate_wall_button, icon_directory, QStringLiteral("brick-wall"), themed(QColor(QStringLiteral("#D6B98C"))));
 
 	const char* exchange_icons[] = { "file-input", "file-output", "file-output", "save" };
 	for(size_t i=0; i<exchange_buttons.size() && i<4; ++i)

@@ -113,6 +113,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtGui/QDesktopServices>
 #include <QtGui/QFont>
 #include <QtGui/QGuiApplication>
+#include <QtGui/QHelpEvent>
 #include <QtGui/QImageReader>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QLineEdit>
@@ -165,6 +166,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/FileOutStream.h"
 #include "../utils/BufferOutStream.h"
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 #include "../utils/IndigoXMLDoc.h"
 #include "../utils/LimitedAllocator.h"
@@ -328,7 +330,10 @@ static void applyQtThemePalette(const QtThemeColors& theme)
 		QApplication::setStyle(fusion_style);
 
 	const QColor highlighted_colour = theme.primary;
-	const QColor highlighted_text_colour = (highlighted_colour.valueF() > 0.5) ? theme.mantle : theme.text;
+	const int highlighted_gray = qGray(highlighted_colour.rgb());
+	const QColor highlighted_text_colour =
+		(std::abs(qGray(theme.text.rgb()) - highlighted_gray) >= std::abs(qGray(theme.mantle.rgb()) - highlighted_gray)) ?
+		theme.text : theme.mantle;
 
 	qreal h = 0, s = 0, v = 0, a = 1;
 	theme.text.getHsvF(&h, &s, &v, &a);
@@ -1998,6 +2003,9 @@ void MainWindow::initialiseUI()
 		ui = new Ui::MainWindow();
 		ui->setupUi(this);
 	}
+	ui->menubar->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+	ui->menubar->setMouseTracking(true);
+	ui->menubar->installEventFilter(this);
 
 	action_add_scientific_object = new QAction(this);
 	action_add_scientific_object->setObjectName(QStringLiteral("actionAddScientificObject"));
@@ -2158,38 +2166,16 @@ void MainWindow::initialiseUI()
 	ui->toolBar->addWidget(spacer);
 
 	url_widget = new URLWidget(this);
-	url_widget->backPushButton->setIcon(QIcon(QtUtils::toQString(base_dir_path + "/data/resources/back.png")));
 	const int button_W = 24;
-	url_widget->backPushButton->setIconSize(QSize(button_W, button_W));
 	url_widget->backPushButton->setFixedSize(button_W, button_W);
-	url_widget->backPushButton->setText("");
-
-	QIcon browser_icon;
-	const std::string browser_icon_path = base_dir_path + "/data/resources/buttons/browser_globe.png";
-	if(QFile::exists(QtUtils::toQString(browser_icon_path)))
-		browser_icon = QIcon(QtUtils::toQString(browser_icon_path));
-	if(browser_icon.isNull())
-		browser_icon = style()->standardIcon(QStyle::SP_DriveNetIcon);
-	if(browser_icon.isNull())
-	{
-		url_widget->browserPushButton->setText("Web");
-	}
-	else
-	{
-		url_widget->browserPushButton->setIcon(browser_icon);
-		url_widget->browserPushButton->setIconSize(QSize(button_W - 2, button_W - 2));
-		url_widget->browserPushButton->setText("");
-	}
+	url_widget->backPushButton->setText(QString());
 	url_widget->browserPushButton->setFixedSize(button_W, button_W);
+	url_widget->browserPushButton->setText(QString());
 	url_widget->browserPushButton->setToolTip(tr("Open Current Location In Browser"));
-
 	url_widget->favoritePushButton->setFixedSize(button_W, button_W);
-	url_widget->favoritePushButton->setText(QString(QChar(0x2605))); // Filled star glyph.
-	QFont favorite_font = url_widget->favoritePushButton->font();
-	favorite_font.setBold(true);
-	favorite_font.setPointSizeF(favorite_font.pointSizeF() + 2.0);
-	url_widget->favoritePushButton->setFont(favorite_font);
+	url_widget->favoritePushButton->setText(QString());
 	url_widget->favoritePushButton->setToolTip(tr("Add to Favorites"));
+	refreshNavigationButtonIcons();
 
 	ui->toolBar->addWidget(url_widget);
 
@@ -2620,6 +2606,11 @@ void MainWindow::updateThemesMenuCheckedState(const std::string& active_theme_na
 		if(action)
 			action->setChecked(action->data().toString() == active_name);
 	}
+
+	// QMenu styles commonly replace the native check indicator with the action
+	// icon.  Refresh after changing checked state so the active theme gets an
+	// explicit Lucide circle-check marker.
+	refreshMainMenuActionIcons();
 }
 
 
@@ -2792,64 +2783,195 @@ void MainWindow::configureEditAddSubmenu()
 		add_menu->addAction(action);
 	}
 
-	refreshEditMenuActionIcons();
+	refreshMainMenuActionIcons();
 }
 
 
-void MainWindow::refreshEditMenuActionIcons()
+void MainWindow::refreshMainMenuActionIcons()
 {
 	if(!ui)
 		return;
 
 	const QString lucide_dir = LucideIconUtils::directoryForBasePath(base_dir_path);
-	const auto set_lucide = [&lucide_dir](QAction* action, const char* name, const QColor& colour, const QString& fallback)
+	const QPalette icon_palette = QApplication::palette();
+	const QColor foreground = icon_palette.color(QPalette::WindowText);
+	const auto themed = [&icon_palette](const QColor& colour)
 	{
-		if(!LucideIconUtils::setActionIcon(action, lucide_dir, QString::fromLatin1(name), colour))
+		return LucideIconUtils::themeAwareColour(colour, icon_palette, QPalette::WindowText, QPalette::Window);
+	};
+	const auto set_lucide_size = [&lucide_dir](QAction* action, const char* name, const QColor& colour, const QString& fallback, const int logical_size)
+	{
+		if(!LucideIconUtils::setActionIcon(action, lucide_dir, QString::fromLatin1(name), colour, logical_size))
 			setMenuActionGlyphIcon(action, fallback);
 	};
+	const auto set_lucide = [&set_lucide_size](QAction* action, const char* name, const QColor& colour, const QString& fallback)
+	{
+		set_lucide_size(action, name, colour, fallback, 20);
+	};
+	const auto set_plain = [&set_lucide, &foreground](QAction* action, const char* name, const QString& fallback)
+	{
+		set_lucide(action, name, foreground, fallback);
+	};
+	const auto set_accent = [&set_lucide, &themed](QAction* action, const char* name, const char* colour, const QString& fallback)
+	{
+		set_lucide(action, name, themed(QColor(QString::fromLatin1(colour))), fallback);
+	};
+	const auto set_top_icon = [&lucide_dir](QAction* action, const char* name, const QColor& colour, const QString& fallback)
+	{
+		// QMenuBar asks QIcon for the platform small-icon metric, so merely
+		// requesting a smaller pixmap is scaled back up.  Keep a 20 px canvas but
+		// draw a 16 px glyph inside it, matching the visible size of toolbar icons.
+		if(!LucideIconUtils::setPaddedActionIcon(action, lucide_dir, QString::fromLatin1(name), colour, 20, 16))
+			setMenuActionGlyphIcon(action, fallback);
+	};
+	const auto set_top_plain = [&set_top_icon, &foreground](QAction* action, const char* name, const QString& fallback)
+	{
+		set_top_icon(action, name, foreground, fallback);
+	};
+	const auto set_top_accent = [&set_top_icon, &themed](QAction* action, const char* name, const char* colour, const QString& fallback)
+	{
+		set_top_icon(action, name, themed(QColor(QString::fromLatin1(colour))), fallback);
+	};
 
-	if(ui->menuEdit)
-		set_lucide(ui->menuEdit->menuAction(), "pencil", QColor(QStringLiteral("#CBD5E1")), QString::fromUtf8("✎"));
+	// Top-level menu bar: keep the main navigation calm and theme-coloured.
+	set_top_plain(ui->menuEdit->menuAction(), "pencil", QString::fromUtf8("✎"));
+	set_top_plain(ui->menuMovement->menuAction(), "move", QString::fromUtf8("↔"));
+	set_top_plain(ui->menuAvatar->menuAction(), "user-round", QString::fromUtf8("●"));
+	set_top_plain(ui->menuVehicles->menuAction(), "car-front", QString::fromUtf8("▰"));
+	set_top_plain(ui->menuGear->menuAction(), "backpack", QString::fromUtf8("▣"));
+	set_top_plain(ui->menuView->menuAction(), "eye", QString::fromUtf8("◉"));
+	set_top_plain(ui->menuGo->menuAction(), "navigation", QString::fromUtf8("➤"));
+	set_top_plain(ui->menuTools->menuAction(), "wrench", QString::fromUtf8("⚒"));
+	set_top_plain(ui->menuWindow->menuAction(), "layout-template", QString::fromUtf8("▦"));
+	set_top_plain(ui->menuThemes->menuAction(), "palette", QString::fromUtf8("◐"));
+	set_top_plain(ui->actionShow_Parcels, "land-plot", QString::fromUtf8("▱"));
+	set_top_plain(ui->actionAbout_Substrata, "info", QStringLiteral("i"));
+	set_top_accent(ui->actionUpdate, "circle-arrow-up", "#22C55E", QString::fromUtf8("↑"));
 
 	QMenu* add_menu = ui->menuEdit ? ui->menuEdit->findChild<QMenu*>("menuEditAdd", Qt::FindDirectChildrenOnly) : NULL;
 	if(add_menu)
-		set_lucide(add_menu->menuAction(), "plus", QColor(QStringLiteral("#60A5FA")), QStringLiteral("+"));
+		set_accent(add_menu->menuAction(), "plus", "#60A5FA", QStringLiteral("+"));
 
-	set_lucide(ui->actionUndo, "undo-2", QColor(QStringLiteral("#CBD5E1")), QString::fromUtf8("↶"));
-	set_lucide(ui->actionRedo, "redo-2", QColor(QStringLiteral("#CBD5E1")), QString::fromUtf8("↷"));
-	set_lucide(ui->actionAddObject, "image-plus", QColor(QStringLiteral("#60A5FA")), QString::fromUtf8("□"));
-	set_lucide(ui->actionAddHypercard, "panels-top-left", QColor(QStringLiteral("#A78BFA")), QString::fromUtf8("▣"));
-	set_lucide(ui->actionAdd_Text, "type", QColor(QStringLiteral("#F8FAFC")), QStringLiteral("T"));
-	set_lucide(ui->actionAdd_Spotlight, "spotlight", QColor(QStringLiteral("#FACC15")), QString::fromUtf8("⌁"));
-	set_lucide(ui->actionAdd_Particles, "sparkles", QColor(QStringLiteral("#C084FC")), QString::fromUtf8("*"));
-	set_lucide(ui->actionAdd_Voxels, "boxes", QColor(QStringLiteral("#F97316")), QString::fromUtf8("▦"));
-	set_lucide(action_add_tree, "trees", QColor(QStringLiteral("#4ADE80")), QString::fromUtf8("♣"));
-	set_lucide(action_add_scientific_object, "atom", QColor(QStringLiteral("#22D3EE")), QString::fromUtf8("⚛"));
-	set_lucide(ui->actionAdd_Camera, "camera", QColor(QStringLiteral("#93C5FD")), QString::fromUtf8("◉"));
-	set_lucide(ui->actionAdd_Seat, "armchair", QColor(QStringLiteral("#D6B98C")), QString::fromUtf8("╚"));
-	set_lucide(ui->actionAdd_Audio_Source, "audio-lines", QColor(QStringLiteral("#F472B6")), QString::fromUtf8("♫"));
-	set_lucide(ui->actionAdd_Web_View, "globe", QColor(QStringLiteral("#38BDF8")), QString::fromUtf8("◎"));
-	set_lucide(ui->actionAdd_Video, "video", QColor(QStringLiteral("#FB7185")), QString::fromUtf8("▶"));
-	set_lucide(ui->actionAdd_Decal, "sticker", QColor(QStringLiteral("#F59E0B")), QString::fromUtf8("▤"));
-	set_lucide(ui->actionAdd_Portal, "door-open", QColor(QStringLiteral("#818CF8")), QString::fromUtf8("↻"));
-	set_lucide(ui->actionAddBot, "bot", QColor(QStringLiteral("#2DD4BF")), QString::fromUtf8("☻"));
-	setMenuActionGlyphIcon(ui->actionAdd_to_Favorites, QString::fromUtf8("★"));
-	setMenuActionGlyphIcon(ui->actionCopy_Object, QString::fromUtf8("⧉"));
-	setMenuActionGlyphIcon(ui->actionPaste_Object, QString::fromUtf8("▣"));
-	setMenuActionGlyphIcon(ui->actionCloneObject, QString::fromUtf8("⧉"));
-	setMenuActionGlyphIcon(ui->actionDeleteObject, QString::fromUtf8("✕"));
-	setMenuActionGlyphIcon(ui->actionFind_Object, QString::fromUtf8("⌕"));
-	setMenuActionGlyphIcon(ui->actionList_Objects_Nearby, QString::fromUtf8("⊙"));
-	setMenuActionGlyphIcon(ui->actionSave_Object_To_Disk, QString::fromUtf8("▣"));
-	setMenuActionGlyphIcon(ui->actionSave_Parcel_Objects_To_Disk, QString::fromUtf8("▤"));
-	setMenuActionGlyphIcon(ui->actionLoad_Objects_From_Disk, QString::fromUtf8("⇪"));
+	// Edit and creation commands use semantic accents; ordinary commands stay monochrome.
+	set_plain(ui->actionUndo, "undo-2", QString::fromUtf8("↶"));
+	set_plain(ui->actionRedo, "redo-2", QString::fromUtf8("↷"));
+	set_accent(ui->actionAddObject, "image-plus", "#60A5FA", QString::fromUtf8("□"));
+	set_accent(ui->actionAddHypercard, "panels-top-left", "#A78BFA", QString::fromUtf8("▣"));
+	set_plain(ui->actionAdd_Text, "type", QStringLiteral("T"));
+	set_accent(ui->actionAdd_Spotlight, "spotlight", "#FACC15", QString::fromUtf8("⌁"));
+	set_accent(ui->actionAdd_Particles, "sparkles", "#C084FC", QString::fromUtf8("*"));
+	set_accent(ui->actionAdd_Voxels, "boxes", "#F97316", QString::fromUtf8("▦"));
+	set_accent(action_add_tree, "trees", "#4ADE80", QString::fromUtf8("♣"));
+	set_accent(action_add_scientific_object, "atom", "#22D3EE", QString::fromUtf8("⚛"));
+	set_accent(ui->actionAdd_Camera, "camera", "#93C5FD", QString::fromUtf8("◉"));
+	set_accent(ui->actionAdd_Seat, "armchair", "#D6B98C", QString::fromUtf8("╚"));
+	set_accent(ui->actionAdd_Audio_Source, "audio-lines", "#F472B6", QString::fromUtf8("♫"));
+	set_accent(ui->actionAdd_Web_View, "globe", "#38BDF8", QString::fromUtf8("◎"));
+	set_accent(ui->actionAdd_Video, "video", "#FB7185", QString::fromUtf8("▶"));
+	set_accent(ui->actionAdd_Decal, "sticker", "#F59E0B", QString::fromUtf8("▤"));
+	set_accent(ui->actionAdd_Portal, "door-open", "#818CF8", QString::fromUtf8("↻"));
+	set_accent(ui->actionAddBot, "bot", "#2DD4BF", QString::fromUtf8("☻"));
+	set_accent(ui->actionAdd_to_Favorites, "star", "#F59E0B", QString::fromUtf8("★"));
+	set_plain(ui->actionCopy_Object, "copy", QString::fromUtf8("⧉"));
+	set_plain(ui->actionPaste_Object, "clipboard-paste", QString::fromUtf8("▣"));
+	set_plain(ui->actionCloneObject, "copy-plus", QString::fromUtf8("⧉"));
+	set_accent(ui->actionDeleteObject, "trash-2", "#FB7185", QString::fromUtf8("✕"));
+	set_plain(ui->actionFind_Object, "search", QString::fromUtf8("⌕"));
+	set_plain(ui->actionList_Objects_Nearby, "radar", QString::fromUtf8("⊙"));
+	set_accent(ui->menuLightmaps->menuAction(), "sun", "#FACC15", QString::fromUtf8("☼"));
+	set_accent(ui->actionBake_Lightmaps_fast_for_all_objects_in_parcel, "gauge", "#FACC15", QString::fromUtf8("◌"));
+	set_accent(ui->actionBake_lightmaps_high_quality_for_all_objects_in_parcel, "sun-medium", "#FACC15", QString::fromUtf8("◎"));
+	set_plain(ui->actionSave_Object_To_Disk, "save", QString::fromUtf8("▣"));
+	set_plain(ui->actionSave_Parcel_Objects_To_Disk, "package", QString::fromUtf8("▤"));
+	set_plain(ui->actionLoad_Objects_From_Disk, "folder-open", QString::fromUtf8("⇪"));
 
-	if(ui->menuLightmaps)
-		setMenuActionGlyphIcon(ui->menuLightmaps->menuAction(), QString::fromUtf8("◌"));
-	if(ui->actionBake_Lightmaps_fast_for_all_objects_in_parcel)
-		setMenuActionGlyphIcon(ui->actionBake_Lightmaps_fast_for_all_objects_in_parcel, QString::fromUtf8("◌"));
-	if(ui->actionBake_lightmaps_high_quality_for_all_objects_in_parcel)
-		setMenuActionGlyphIcon(ui->actionBake_lightmaps_high_quality_for_all_objects_in_parcel, QString::fromUtf8("◎"));
+	// Movement, avatar, transport, gear and camera.
+	set_plain(ui->actionFly_Mode, "plane", QString::fromUtf8("➤"));
+	set_plain(ui->actionAvatarSettings, "user-round-cog", QString::fromUtf8("●"));
+	set_plain(ui->actionSummon_Bike, "bike", QString::fromUtf8("◌"));
+	set_plain(ui->actionSummon_Hovercar, "rocket", QString::fromUtf8("▲"));
+	set_plain(ui->actionSummon_Boat, "ship", QString::fromUtf8("▱"));
+	set_plain(ui->actionSummon_Jet_Ski, "waves-horizontal", QString::fromUtf8("≈"));
+	set_plain(ui->actionSummon_Car, "car-front", QString::fromUtf8("▰"));
+	set_plain(ui->actionOpen_Gear_Inventory, "backpack", QString::fromUtf8("▣"));
+	set_plain(ui->actionConvert_Selected_Object_To_Gear_Item, "package-plus", QString::fromUtf8("+"));
+	set_plain(ui->actionThird_Person_Camera, "camera", QString::fromUtf8("◉"));
+
+	// World navigation.
+	set_plain(ui->actionGo_Back, "arrow-left", QString::fromUtf8("←"));
+	set_plain(ui->actionGo_to_Position, "crosshair", QString::fromUtf8("⊕"));
+	set_plain(ui->actionGo_to_Parcel, "land-plot", QString::fromUtf8("▱"));
+	set_plain(ui->actionGo_To_Start_Location, "house", QString::fromUtf8("⌂"));
+	set_plain(ui->actionGoToMainWorld, "globe", QString::fromUtf8("◎"));
+	set_plain(ui->actionGoToPersonalWorld, "user-round", QString::fromUtf8("●"));
+	set_plain(ui->actionGo_to_CryptoVoxels_World, "boxes", QString::fromUtf8("▦"));
+	set_plain(ui->actionGo_to_Substrata_Server, "server", QString::fromUtf8("▤"));
+	set_accent(ui->actionGo_to_Metasiberia_Server, "snowflake", "#38BDF8", QString::fromUtf8("✣"));
+	set_plain(ui->actionGo_to_Shki_nvkz_Server, "radio-tower", QString::fromUtf8("⌁"));
+	set_plain(ui->actionGo_to_Map_World, "map", QString::fromUtf8("▱"));
+	set_accent(ui->menuGo_to_Favorites->menuAction(), "star", "#F59E0B", QString::fromUtf8("★"));
+	set_plain(ui->actionSet_Start_Location, "map-pin-house", QString::fromUtf8("⌂"));
+
+	// Tools, windows, language, themes and help.
+	set_plain(ui->actionTake_Screenshot, "camera", QString::fromUtf8("◉"));
+	set_plain(ui->actionShow_Screenshot_Folder, "folder-open", QString::fromUtf8("▣"));
+	set_plain(ui->actionShow_Log, "file-text", QString::fromUtf8("▤"));
+	set_plain(ui->actionExport_view_to_Indigo, "file-output", QString::fromUtf8("⇱"));
+	set_plain(ui->actionMute_Audio, "volume-x", QString::fromUtf8("×"));
+	set_plain(ui->actionOptions, "settings", QString::fromUtf8("⚙"));
+	set_plain(ui->actionReset_Layout, "layout-template", QString::fromUtf8("▦"));
+	set_plain(ui->actionEnter_Fullscreen, "maximize", QString::fromUtf8("□"));
+	set_plain(ui->menuLanguage->menuAction(), "languages", QString::fromUtf8("A"));
+	set_plain(ui->actionLanguage_English, "languages", QStringLiteral("A"));
+	set_plain(ui->actionLanguage_Russian, "languages", QString::fromUtf8("Я"));
+	if(theme_action_group)
+	{
+		for(QAction* theme_action : theme_action_group->actions())
+			if(theme_action)
+			{
+				if(theme_action->isChecked())
+					set_accent(theme_action, "circle-check", "#22C55E", QString::fromUtf8("✓"));
+				else
+					set_plain(theme_action, theme_action->data().toString().isEmpty() ? "monitor" : "palette", QString::fromUtf8("◐"));
+			}
+	}
+
+	set_plain(ui->editorDockWidget->toggleViewAction(), "pencil-ruler", QString::fromUtf8("✎"));
+	if(avatar_dock_widget)
+		set_plain(avatar_dock_widget->toggleViewAction(), "user-round", QString::fromUtf8("●"));
+	set_plain(ui->materialBrowserDockWidget->toggleViewAction(), "palette", QString::fromUtf8("◐"));
+	set_plain(ui->environmentDockWidget->toggleViewAction(), "cloud-sun", QString::fromUtf8("☼"));
+	set_plain(ui->worldSettingsDockWidget->toggleViewAction(), "globe", QString::fromUtf8("◎"));
+	if(map_dock_widget)
+		set_plain(map_dock_widget->toggleViewAction(), "map", QString::fromUtf8("▱"));
+	set_plain(ui->chatDockWidget->toggleViewAction(), "messages-square", QString::fromUtf8("▣"));
+	set_accent(ui->helpInfoDockWidget->toggleViewAction(), "circle-question-mark", "#60A5FA", QStringLiteral("?"));
+	set_plain(ui->webcamDockWidget->toggleViewAction(), "video", QString::fromUtf8("▶"));
+	set_plain(ui->indigoViewDockWidget->toggleViewAction(), "sparkles", QString::fromUtf8("*"));
+	set_plain(ui->diagnosticsDockWidget->toggleViewAction(), "activity", QString::fromUtf8("⌁"));
+}
+
+
+void MainWindow::refreshNavigationButtonIcons()
+{
+	if(!url_widget)
+		return;
+
+	const QString lucide_dir = LucideIconUtils::directoryForBasePath(base_dir_path);
+	const QPalette icon_palette = url_widget->palette();
+	const QColor foreground = icon_palette.color(QPalette::ButtonText);
+	const QColor favorite = LucideIconUtils::themeAwareColour(
+		QColor(QStringLiteral("#F59E0B")), icon_palette, QPalette::ButtonText, QPalette::Button);
+
+	url_widget->backPushButton->setText(QString());
+	url_widget->browserPushButton->setText(QString());
+	url_widget->favoritePushButton->setText(QString());
+	if(!LucideIconUtils::setButtonIcon(url_widget->backPushButton, lucide_dir, QStringLiteral("arrow-left"), foreground))
+		url_widget->backPushButton->setText(QString::fromUtf8("←"));
+	if(!LucideIconUtils::setButtonIcon(url_widget->browserPushButton, lucide_dir, QStringLiteral("external-link"), foreground))
+		url_widget->browserPushButton->setText(QString::fromUtf8("↗"));
+	if(!LucideIconUtils::setButtonIcon(url_widget->favoritePushButton, lucide_dir, QStringLiteral("star"), favorite))
+		url_widget->favoritePushButton->setText(QString::fromUtf8("★"));
 }
 
 
@@ -2858,7 +2980,7 @@ void MainWindow::configureMainToolbarButtons()
 	if(!ui || !ui->toolBar)
 		return;
 
-	refreshEditMenuActionIcons();
+	refreshMainMenuActionIcons();
 
 	const QList<QAction*> add_toolbar_actions = {
 		ui->actionAddObject,
@@ -2918,7 +3040,12 @@ void MainWindow::configureMainToolbarButtons()
 		url_widget->browserPushButton->setFixedSize(button_w, button_w);
 		url_widget->browserPushButton->setIconSize(QSize(18, 18));
 		url_widget->favoritePushButton->setFixedSize(button_w, button_w);
+		url_widget->favoritePushButton->setIconSize(QSize(18, 18));
+		refreshNavigationButtonIcons();
 	}
+
+	if(voxel_editor_panel)
+		voxel_editor_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
 }
 
 
@@ -2945,11 +3072,11 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	const auto css = [](const QColor& colour) { return colour.name(QColor::HexRgb); };
 
 	const QString menu_bar_style = QString(
-		"QMenuBar#menubar { background: %1; color: %2; border: none; border-bottom: 1px solid %3; spacing: 2px; }"
-		"QMenuBar#menubar::item { background: transparent; color: %2; padding: 3px 8px; border-radius: 3px; }"
-		"QMenuBar#menubar::item:selected { background: %4; color: %2; }"
-		"QMenuBar#menubar::item:pressed { background: %5; color: %6; }")
-		.arg(css(window), css(text), css(border), css(hover), css(highlight), css(highlighted_text));
+		"QMenuBar#menubar { background: %1; color: %2; border: none; border-bottom: 1px solid %3; spacing: 4px; padding: 2px 5px; }"
+		"QMenuBar#menubar::item { background: %7; color: %2; border: 1px solid %3; padding: 3px; border-radius: 4px; }"
+		"QMenuBar#menubar::item:selected { background: %4; color: %2; border-color: %5; }"
+		"QMenuBar#menubar::item:pressed { background: %8; color: %2; border-color: %5; }")
+		.arg(css(window), css(text), css(border), css(hover), css(highlight), css(highlighted_text), css(button), css(pressed));
 
 	const QString menu_style = QString(
 		"QMenu { background: %1; color: %2; border: 1px solid %3; padding: 5px; }"
@@ -2986,6 +3113,11 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	if(ui->menubar)
 	{
 		ui->menubar->setStyleSheet(menu_bar_style);
+		// Let QMenuBar derive its height from the styled 28 px items.  A fixed
+		// 28 px bar is too short once its own padding and bottom border are added;
+		// Qt then moves every action into the overflow chevron.
+		ui->menubar->ensurePolished();
+		ui->menubar->updateGeometry();
 		const QList<QMenu*> menus = ui->menubar->findChildren<QMenu*>();
 		for(QMenu* menu : menus)
 			if(menu)
@@ -7753,11 +7885,18 @@ void MainWindow::updateFavoritesMenu()
 		return;
 
 	ui->menuGo_to_Favorites->clear();
+	const QString lucide_dir = LucideIconUtils::directoryForBasePath(base_dir_path);
+	const QPalette icon_palette = QApplication::palette();
+	const QColor foreground = icon_palette.color(QPalette::WindowText);
+	const QColor favorite_colour = LucideIconUtils::themeAwareColour(
+		QColor(QStringLiteral("#F59E0B")), icon_palette, QPalette::WindowText, QPalette::Window);
 
 	const std::vector<FavoriteLocation> favs = loadFavoriteLocations(*settings);
 	if(favs.empty())
 	{
 		QAction* a = ui->menuGo_to_Favorites->addAction(tr("(No favorites)"));
+		if(!LucideIconUtils::setActionIcon(a, lucide_dir, QStringLiteral("star"), favorite_colour))
+			setMenuActionGlyphIcon(a, QString::fromUtf8("★"));
 		a->setEnabled(false);
 		return;
 	}
@@ -7765,6 +7904,8 @@ void MainWindow::updateFavoritesMenu()
 	for(const FavoriteLocation& fav : favs)
 	{
 		QAction* a = ui->menuGo_to_Favorites->addAction(fav.name);
+		if(!LucideIconUtils::setActionIcon(a, lucide_dir, QStringLiteral("map-pin"), foreground))
+			setMenuActionGlyphIcon(a, QString::fromUtf8("•"));
 		a->setData(fav.url);
 		connect(a, &QAction::triggered, this, [this, fav]() {
 			visitSubURL(QtUtils::toStdString(fav.url));
@@ -7775,6 +7916,21 @@ void MainWindow::updateFavoritesMenu()
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
+	if(ui && (obj == ui->menubar) && (event->type() == QEvent::ToolTip))
+	{
+		QHelpEvent* help_event = static_cast<QHelpEvent*>(event);
+		QAction* action = ui->menubar->actionAt(help_event->pos());
+		if(action && !action->toolTip().isEmpty())
+		{
+			QToolTip::showText(help_event->globalPos(), action->toolTip(), ui->menubar, ui->menubar->actionGeometry(action));
+			return true;
+		}
+
+		QToolTip::hideText();
+		event->ignore();
+		return true;
+	}
+
 	if(event->type() == QEvent::MouseButtonRelease && obj && obj->property("chatPrivateListRow").toBool())
 	{
 		QMouseEvent* mouse_event = static_cast<QMouseEvent*>(event);
@@ -9684,6 +9840,8 @@ void MainWindow::onUpdateAvailabilityChanged(bool available)
 
 	// Default UI state.
 	ui->actionUpdate->setText("Update");
+	ui->actionUpdate->setToolTip(ui->actionUpdate->text());
+	ui->actionUpdate->setStatusTip(ui->actionUpdate->text());
 
 	if(update_manager->checkInProgress())
 		return;
@@ -9701,6 +9859,8 @@ void MainWindow::onUpdateAvailabilityChanged(bool available)
 	{
 		const QString tag = update_manager->latest().tag;
 		ui->actionUpdate->setText("Update (" + tag + ")");
+		ui->actionUpdate->setToolTip(ui->actionUpdate->text());
+		ui->actionUpdate->setStatusTip(ui->actionUpdate->text());
 
 		// Notify once per tag.
 		const QString last_notified = settings ? settings->value("update/last_notified_tag", "").toString() : QString();
@@ -9708,7 +9868,7 @@ void MainWindow::onUpdateAvailabilityChanged(bool available)
 		{
 			settings->setValue("update/last_notified_tag", tag);
 			statusBar()->showMessage("Update available: " + tag, 20000);
-			QMessageBox::information(this, "Update available", "A new version is available: " + tag + "\n\nOpen Help -> Update to download and install.");
+			QMessageBox::information(this, "Update available", "A new version is available: " + tag + "\n\nUse the Update button in the top menu bar to download and install.");
 		}
 	}
 	else

@@ -318,7 +318,8 @@ private:
 	void applyUILanguage(RuntimeTranslation::UILanguage language, bool persist_setting);
 	void refreshTranslatedUiText();
 	void configureEditAddSubmenu();
-	void refreshEditMenuActionIcons();
+	void refreshMainMenuActionIcons();
+	void refreshNavigationButtonIcons();
 	void configureMainToolbarButtons();
 	void applyMainChromeThemeStylesheet();
 	void updateMenuTooltips();

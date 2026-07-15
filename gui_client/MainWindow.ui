@@ -142,13 +142,6 @@
     <addaction name="actionMute_Audio"/>
     <addaction name="actionOptions"/>
    </widget>
-   <widget class="QMenu" name="menuHelp">
-    <property name="title">
-     <string>Help</string>
-    </property>
-    <addaction name="actionAbout_Substrata"/>
-    <addaction name="actionUpdate"/>
-   </widget>
    <widget class="QMenu" name="menuThemes">
     <property name="title">
      <string>Themes</string>
@@ -194,7 +187,8 @@
    <addaction name="menuWindow"/>
    <addaction name="menuThemes"/>
    <addaction name="actionShow_Parcels"/>
-   <addaction name="menuHelp"/>
+   <addaction name="actionAbout_Substrata"/>
+   <addaction name="actionUpdate"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QToolBar" name="toolBar">
