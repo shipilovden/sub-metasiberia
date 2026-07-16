@@ -86,7 +86,7 @@ private:
 	Reference<OpenGLScene> avatar_preview_scene;
 	Reference<OpenGLScene> main_world_scene;
 	GLObjectRef avatar_preview_gl_ob;
-	GLObjectRef world_avatar_gl_ob; // world scene avatar for preview camera
+	std::vector<EquippedGearGraphics> equipped_gear_graphics;
 	Matrix4f avatar_pre_ob_to_world_matrix;
 
 	GLUIWindowRef window;

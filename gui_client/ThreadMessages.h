@@ -26,6 +26,7 @@ enum GuiClientThreadMessages
 	Msg_ClientDisconnectedFromServerMessage,
 	Msg_AvatarIsHereMessage,
 	Msg_AvatarCreatedMessage,
+	Msg_OurAvatarFullUpdateMessage,
 	Msg_AvatarPerformGestureMessage,
 	Msg_AvatarStopGestureMessage,
 	Msg_ChatMessage,

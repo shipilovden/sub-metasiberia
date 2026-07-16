@@ -17,6 +17,7 @@ Copyright Glare Technologies Limited 2021 -
 #include <string>
 #include <vector>
 struct GLObject;
+struct MeshData;
 class OpenGLEngine;
 class PhysicsWorld;
 class PhysicsObject;
@@ -42,6 +43,20 @@ struct AnimToPlay
 	int anim_i;
 	double play_end_time;
 	bool animated_head;
+};
+
+
+struct EquippedGearGraphics
+{
+	EquippedGearGraphics();
+	~EquippedGearGraphics();
+
+	Matrix4f transform;
+	Reference<GLObject> gear_gl_ob;
+	std::string bone_name;
+	int bone_node_i;
+	UID gear_id;
+	Reference<MeshData> mesh_data;
 };
 
 
@@ -116,6 +131,7 @@ public:
 		const Matrix4f& pre_ob_to_world_matrix, uint32 anim_state, double cur_time, double dt, const PoseConstraint& pose_constraint, AnimEvents& anim_events_out);
 
 	void build(bool our_avatar);
+	void updateGearBones();
 	//void create(OpenGLEngine& engine, const std::string& URL);
 
 	void destroy(OpenGLEngine& engine, PhysicsWorld& physics_world);
@@ -154,6 +170,7 @@ public:
 	
 	Reference<GLObject> skinned_gl_ob;
 	int loaded_lod_level;
+	std::vector<EquippedGearGraphics> equipped_gear_graphics;
 
 private:
 	Vec3f avatar_rotation_at_turn_start;

@@ -3009,6 +3009,23 @@ void GUIClient::startLoadingTexturesForAvatar(const Avatar& av, int ob_lod_level
 		if(!mat->normal_map_url.empty())
 			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->normal_map_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/false, /*use_basis=*/this->server_has_basis_textures);
 	}
+
+	for(size_t gear_i=0; gear_i<av.equipped_gear.items.size(); ++gear_i)
+	{
+		const GearItem* item = av.equipped_gear.items[gear_i].ptr();
+		for(size_t i=0; i<item->materials.size(); ++i)
+		{
+			const WorldMaterial* mat = item->materials[i].ptr();
+			if(!mat->colour_texture_url.empty())
+				startLoadingTextureForObjectOrAvatar(UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), 1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->colour_texture_url, mat->colourTexHasAlpha(), true, true, server_has_basis_textures);
+			if(!mat->emission_texture_url.empty())
+				startLoadingTextureForObjectOrAvatar(UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), 1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->emission_texture_url, false, true, true, server_has_basis_textures);
+			if(!mat->roughness.texture_url.empty())
+				startLoadingTextureForObjectOrAvatar(UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), 1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->roughness.texture_url, false, false, true, server_has_basis_textures);
+			if(!mat->normal_map_url.empty())
+				startLoadingTextureForObjectOrAvatar(UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), 1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->normal_map_url, false, false, false, server_has_basis_textures);
+		}
+	}
 }
 
 
@@ -3650,30 +3667,41 @@ static void assignLoadedOpenGLTexturesToAvatarMats(Avatar* av, bool use_basis, O
 	ZoneScoped; // Tracy profiler
 
 	GLObject* gl_ob = av->graphics.skinned_gl_ob.ptr();
-	if(!gl_ob)
-		return;
-
-	for(size_t z=0; z<gl_ob->materials.size(); ++z)
+	if(gl_ob)
 	{
-		OpenGLMaterial& opengl_mat = gl_ob->materials[z];
-		const WorldMaterial* world_mat = (z < av->avatar_settings.materials.size()) ? av->avatar_settings.materials[z].ptr() : NULL;
+		for(size_t z=0; z<gl_ob->materials.size(); ++z)
+		{
+			OpenGLMaterial& opengl_mat = gl_ob->materials[z];
+			const WorldMaterial* world_mat = (z < av->avatar_settings.materials.size()) ? av->avatar_settings.materials[z].ptr() : NULL;
+			bool mat_changed = false;
+			checkAssignBestOpenGLTexture(opengl_mat.albedo_texture, world_mat, world_mat ? world_mat->colour_texture_url : URLString(), opengl_mat.tex_path, gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, world_mat ? world_mat->colourTexHasAlpha() : false, true, mat_changed);
+			checkAssignBestOpenGLTexture(opengl_mat.emission_texture, world_mat, world_mat ? world_mat->emission_texture_url : URLString(), opengl_mat.emission_tex_path, gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, false, true, mat_changed);
+			checkAssignBestOpenGLTexture(opengl_mat.metallic_roughness_texture, world_mat, world_mat ? world_mat->roughness.texture_url : URLString(), opengl_mat.metallic_roughness_tex_path, gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, false, false, mat_changed);
+			checkAssignBestOpenGLTexture(opengl_mat.normal_map, world_mat, world_mat ? world_mat->normal_map_url : URLString(), opengl_mat.normal_map_path, gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, false, false, mat_changed);
+			if(mat_changed)
+				opengl_engine.materialTextureChanged(*gl_ob, opengl_mat);
+		}
+	}
 
-		bool mat_changed = false;
+	for(size_t i=0; i<myMin(av->graphics.equipped_gear_graphics.size(), av->equipped_gear.items.size()); ++i)
+	{
+		GLObject* gear_gl_ob = av->graphics.equipped_gear_graphics[i].gear_gl_ob.ptr();
+		if(!gear_gl_ob)
+			continue;
 
-		checkAssignBestOpenGLTexture(opengl_mat.albedo_texture, world_mat, world_mat ? world_mat->colour_texture_url : URLString(), opengl_mat.tex_path, gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, 
-			/*tex has alpha=*/world_mat ? world_mat->colourTexHasAlpha() : false, /*use sRBB=*/true, mat_changed);
-
-		checkAssignBestOpenGLTexture(opengl_mat.emission_texture, world_mat, world_mat ? world_mat->emission_texture_url : URLString(), opengl_mat.emission_tex_path, gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, 
-			/*tex has alpha=*/false, /*use sRBB=*/true, mat_changed);
-
-		checkAssignBestOpenGLTexture(opengl_mat.metallic_roughness_texture, world_mat, world_mat ? world_mat->roughness.texture_url : URLString(), opengl_mat.metallic_roughness_tex_path, gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, 
-			/*tex has alpha=*/false, /*use sRBB=*/false, mat_changed);
-
-		checkAssignBestOpenGLTexture(opengl_mat.normal_map, world_mat, world_mat ? world_mat->normal_map_url : URLString(), opengl_mat.normal_map_path, gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, 
-			/*tex has alpha=*/false, /*use_sRGB=*/false, mat_changed);
-		
-		if(mat_changed)
-			opengl_engine.materialTextureChanged(*gl_ob, opengl_mat);
+		const GearItem* item = av->equipped_gear.items[i].ptr();
+		for(size_t z=0; z<gear_gl_ob->materials.size(); ++z)
+		{
+			OpenGLMaterial& opengl_mat = gear_gl_ob->materials[z];
+			const WorldMaterial* world_mat = (z < item->materials.size()) ? item->materials[z].ptr() : NULL;
+			bool mat_changed = false;
+			checkAssignBestOpenGLTexture(opengl_mat.albedo_texture, world_mat, world_mat ? world_mat->colour_texture_url : URLString(), opengl_mat.tex_path, gear_gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, world_mat ? world_mat->colourTexHasAlpha() : false, true, mat_changed);
+			checkAssignBestOpenGLTexture(opengl_mat.emission_texture, world_mat, world_mat ? world_mat->emission_texture_url : URLString(), opengl_mat.emission_tex_path, gear_gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, false, true, mat_changed);
+			checkAssignBestOpenGLTexture(opengl_mat.metallic_roughness_texture, world_mat, world_mat ? world_mat->roughness.texture_url : URLString(), opengl_mat.metallic_roughness_tex_path, gear_gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, false, false, mat_changed);
+			checkAssignBestOpenGLTexture(opengl_mat.normal_map, world_mat, world_mat ? world_mat->normal_map_url : URLString(), opengl_mat.normal_map_path, gear_gl_ob, z, opengl_engine, resource_manager, animated_texture_manager, allocator, use_basis, false, false, mat_changed);
+			if(mat_changed)
+				opengl_engine.materialTextureChanged(*gear_gl_ob, opengl_mat);
+		}
 	}
 }
 
@@ -5018,6 +5046,8 @@ void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const R
 
 	if(our_avatar && gear_inventory_ui)
 		gear_inventory_ui->setAvatarGLObject(avatar->graphics, avatar->graphics.skinned_gl_ob, avatar->avatar_settings.pre_ob_to_world_matrix);
+	if(our_avatar)
+		ui_interface->gearInventoryUpdated(); // The native preview may have been waiting for this asynchronous mesh.
 
 	// If we just loaded the graphics for our own avatar, see if there is a gesture animation we should be playing, and if so, play it.
 	if(our_avatar)
@@ -5034,6 +5064,106 @@ void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const R
 	}
 
 	// conPrint("GUIClient::loadPresentAvatarModel done");
+}
+
+
+void GUIClient::loadPresentGearModel(const GearItem* item, EquippedGearGraphics* gear_graphics, Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data)
+{
+	checkRemoveObAndSetRefToNull(opengl_engine, gear_graphics->gear_gl_ob);
+
+	glare::ArenaFrame frame(arena_allocator);
+	gear_graphics->gear_gl_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data->gl_meshdata, av_lod_level, item->materials, URLString(),
+		server_has_basis_textures, *resource_manager, &arena_allocator, Matrix4f::identity());
+	gear_graphics->mesh_data = mesh_data;
+	mesh_data->meshDataBecameUsed();
+	gear_graphics->gear_id = item->id;
+	gear_graphics->bone_name = item->bone_name;
+	gear_graphics->bone_node_i = -1;
+	gear_graphics->transform = item->gearObToBoneSpaceMatrix();
+	avatar->graphics.updateGearBones();
+	assignLoadedOpenGLTexturesToAvatarMats(avatar, server_has_basis_textures, *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
+	// setOverallTransform() will attach it after a valid animated bone has been
+	// resolved.  Until then it must not flash at the world origin.
+	gear_graphics->gear_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(100000.f, 100000.f, 100000.f);
+	opengl_engine->addObject(gear_graphics->gear_gl_ob);
+
+	if(avatar->our_avatar && gear_inventory_ui)
+		gear_inventory_ui->setAvatarGLObject(avatar->graphics, avatar->graphics.skinned_gl_ob, avatar->avatar_settings.pre_ob_to_world_matrix);
+	if(avatar->our_avatar)
+		ui_interface->gearInventoryUpdated(); // Rebuild the isolated preview now that this gear mesh is present.
+}
+
+
+void GUIClient::loadGearModelsForAvatar(Avatar* avatar, int av_lod_level, int model_lod_level, float max_dist_for_model_lod_level, bool our_avatar)
+{
+	bool rebuild_graphics = avatar->graphics.equipped_gear_graphics.size() != avatar->equipped_gear.items.size();
+	if(!rebuild_graphics)
+		for(size_t i=0; i<avatar->equipped_gear.items.size(); ++i)
+			if(avatar->graphics.equipped_gear_graphics[i].gear_id != avatar->equipped_gear.items[i]->id)
+			{
+				rebuild_graphics = true;
+				break;
+			}
+
+	if(rebuild_graphics)
+	{
+		for(size_t i=0; i<avatar->graphics.equipped_gear_graphics.size(); ++i)
+			checkRemoveObAndSetRefToNull(opengl_engine, avatar->graphics.equipped_gear_graphics[i].gear_gl_ob);
+		avatar->graphics.equipped_gear_graphics.clear();
+		avatar->graphics.equipped_gear_graphics.resize(avatar->equipped_gear.items.size());
+	}
+
+	WorldObject::GetLODModelURLOptions options(server_has_optimised_meshes, server_opt_mesh_version);
+	for(size_t i=0; i<avatar->equipped_gear.items.size(); ++i)
+	{
+		const GearItem* item = avatar->equipped_gear.items[i].ptr();
+		EquippedGearGraphics& graphics = avatar->graphics.equipped_gear_graphics[i];
+		graphics.gear_id = item->id;
+		if(graphics.bone_name != item->bone_name)
+			graphics.bone_node_i = -1;
+		graphics.bone_name = item->bone_name;
+		graphics.transform = item->gearObToBoneSpaceMatrix();
+		if(graphics.gear_gl_ob)
+			continue;
+
+		URLString lod_model_url = WorldObject::getLODModelURLForLevel(item->model_url, model_lod_level, options);
+		if(lod_model_url != item->model_url && !resource_manager->isFileForURLPresent(lod_model_url) && resource_manager->isFileForURLPresent(item->model_url))
+			lod_model_url = item->model_url;
+
+		Reference<MeshData> mesh_data = mesh_manager.getMeshData(lod_model_url);
+		if(mesh_data.nonNull() && mesh_data->gl_meshdata->vbo_handle.valid())
+		{
+			loadPresentGearModel(item, &graphics, avatar, av_lod_level, mesh_data);
+			continue;
+		}
+
+		if(resource_manager->isFileForURLPresent(lod_model_url))
+		{
+			const bool just_added = checkAddModelToProcessingSet(lod_model_url, false);
+			if(just_added)
+			{
+				Reference<LoadModelTask> task = new LoadModelTask();
+				task->resource = resource_manager->getOrCreateResourceForURL(lod_model_url);
+				task->lod_model_url = lod_model_url;
+				task->model_lod_level = model_lod_level;
+				task->opengl_engine = opengl_engine;
+				task->result_msg_queue = &msg_queue;
+				task->resource_manager = resource_manager;
+				task->build_physics_ob = false;
+				task->worker_allocator = worker_allocator;
+				task->upload_thread = opengl_upload_thread;
+				task->ob_to_world_matrix = obToWorldMatrix(*avatar);
+				task->mat_transparent.resize(item->materials.size());
+				for(size_t z=0; z<item->materials.size(); ++z)
+					task->mat_transparent[z] = item->materials[z]->opacity.val < 1.f;
+				load_item_queue.enqueueItem(lod_model_url, *avatar, task, max_dist_for_model_lod_level, our_avatar);
+			}
+			else
+				load_item_queue.checkUpdateItemPosition(lod_model_url, *avatar, our_avatar);
+		}
+		loading_model_URL_to_avatar_UID_map[lod_model_url].insert(avatar->uid);
+	}
+	avatar->graphics.updateGearBones();
 }
 
 
@@ -5054,7 +5184,13 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 
 	// If we have a model loaded, that is not the placeholder model, and it has the correct LOD level, we don't need to do anything.
 	if(avatar->graphics.skinned_gl_ob.nonNull() && /*&& !ob->using_placeholder_model && */(avatar->graphics.loaded_lod_level == ob_lod_level))
+	{
+		if(!avatar->equipped_gear.items.empty())
+			startDownloadingResourcesForAvatar(avatar, ob_lod_level, our_avatar);
+		startLoadingTexturesForAvatar(*avatar, ob_lod_level, max_dist_for_ob_lod_level, our_avatar);
+		loadGearModelsForAvatar(avatar, ob_lod_level, ob_model_lod_level, max_dist_for_ob_model_lod_level, our_avatar);
 		return;
+	}
 
 	Timer timer;
 	
@@ -5221,6 +5357,8 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 		{
 			this->loading_model_URL_to_avatar_UID_map[lod_model_url].insert(avatar->uid);
 		}
+
+		loadGearModelsForAvatar(avatar, ob_lod_level, ob_model_lod_level, max_dist_for_ob_model_lod_level, our_avatar);
 
 		//print("\tModel loaded. (Elapsed: " + timer.elapsedStringNSigFigs(4) + ")");
 	}
@@ -7081,6 +7219,24 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 							print("Error while loading avatar model: " + e.what());
 						}
 					}
+
+					for(size_t gear_i=0; gear_i<myMin(av->equipped_gear.items.size(), av->graphics.equipped_gear_graphics.size()); ++gear_i)
+					{
+						const GearItem* item = av->equipped_gear.items[gear_i].ptr();
+						WorldObject::GetLODModelURLOptions gear_options(server_has_optimised_meshes, server_opt_mesh_version);
+						URLString desired_gear_URL = WorldObject::getLODModelURLForLevel(item->model_url, av_lod_level, gear_options);
+						if(desired_gear_URL == lod_model_url || item->model_url == lod_model_url)
+						{
+							try
+							{
+								loadPresentGearModel(item, &av->graphics.equipped_gear_graphics[gear_i], av, av_lod_level, the_mesh_data);
+							}
+							catch(glare::Exception& e)
+							{
+								print("Error while loading gear model: " + e.what());
+							}
+						}
+					}
 				}
 			}
 		}
@@ -7095,6 +7251,7 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 void GUIClient::handleUploadedTexture(const OpenGLTextureKey& path, const URLString& URL, const OpenGLTextureRef& opengl_tex, const TextureDataRef& tex_data, const Map2DRef& terrain_map)
 {
 	ZoneScoped; // Tracy profiler
+	bool our_avatar_preview_material_changed = false;
 
 	// Assign to terrain
 	if(terrain_map && terrain_system)
@@ -7214,12 +7371,20 @@ void GUIClient::handleUploadedTexture(const OpenGLTextureKey& path, const URLStr
 
 						glare::ArenaFrame frame(arena_allocator);
 						assignLoadedOpenGLTexturesToAvatarMats(av, /*use basis=*/this->server_has_basis_textures, *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
+						if(av->isOurAvatar())
+							our_avatar_preview_material_changed = true;
 					}
 				}
 				loading_texture_URL_to_avatar_UID_map.erase(res); // Now that this texture has been loaded, remove from map
 			}
 		}
 	}
+
+	// The inventory preview owns copies of the avatar and gear materials.  Rebuild
+	// those copies once an asynchronously loaded texture reaches our live avatar;
+	// MainWindow coalesces bursts of these notifications into one refresh.
+	if(our_avatar_preview_material_changed)
+		ui_interface->gearInventoryUpdated();
 }
 
 
@@ -7274,6 +7439,7 @@ void GUIClient::updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::stri
 	avatar.avatar_settings.model_url = mesh_URL;
 	avatar.avatar_settings.pre_ob_to_world_matrix = pre_ob_to_world_matrix;
 	avatar.avatar_settings.materials = materials;
+	avatar.equipped_gear = logged_in_equipped_gear;
 
 
 	// Copy all dependencies (textures etc..) to resources dir.  UploadResourceThread will read from here.
@@ -7296,6 +7462,12 @@ void GUIClient::updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::stri
 
 	// Convert texture paths on the object to URLs
 	avatar.convertLocalPathsToURLS(*resource_manager);
+	// Keep the local authoritative candidate in sync immediately.  The server
+	// echo below will confirm/sanitise it; meanwhile preview and world-transition
+	// CreateAvatar must not resurrect the previously logged-in model.
+	logged_in_avatar_settings = avatar.avatar_settings;
+	requestGearPreviewResources();
+	ui_interface->gearInventoryUpdated();
 
 	//if(!gui_client.task_manager)
 	//	gui_client.task_manager = new glare::TaskManager("mainwindow general task manager", myClamp<size_t>(PlatformUtils::getNumLogicalProcessors() / 2, 1, 8)), // Currently just used for LODGeneration::generateLODTexturesForMaterialsIfNotPresent().
@@ -12777,8 +12949,22 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->logged_in_user_name = "";
 			this->logged_in_user_flags = 0;
 			this->logged_in_avatar_settings = AvatarSettings();
+			this->logged_in_equipped_gear = GearItems();
+			this->logged_in_all_gear = GearItems();
+			if(gear_inventory_ui)
+			{
+				gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+				gear_inventory_ui->setAllGear(logged_in_all_gear);
+			}
+			this->server_protocol_version = 0;
+			this->server_capabilities = 0;
+			this->server_has_basis_textures = false;
+			this->server_has_basisu_terrain_detail_maps = false;
+			this->server_has_optimised_meshes = false;
+			this->server_opt_mesh_version = -1;
 
 			ui_interface->setTextAsNotLoggedIn();
+			ui_interface->gearInventoryUpdated();
 
 			ui_interface->updateWorldSettingsControlsEditable();
 
@@ -13038,6 +13224,16 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->logged_in_user_flags = m->user_flags;
 			this->logged_in_avatar_settings = m->avatar_settings;
 			this->logged_in_equipped_gear = m->equipped_gear;
+			this->logged_in_all_gear = GearItems();
+			if(gear_inventory_ui)
+			{
+				gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+				gear_inventory_ui->setAllGear(logged_in_all_gear);
+			}
+			requestGearPreviewResources();
+			if(serverSupportsGearInventory())
+				requestGearInventory();
+			ui_interface->gearInventoryUpdated();
 
 			logMessage("Logged in as '" + m->username + "', id " + toString(this->logged_in_user_id.value()));
 
@@ -13096,6 +13292,13 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			this->logged_in_user_flags = 0;
 			this->logged_in_avatar_settings = AvatarSettings();
 			this->logged_in_equipped_gear = GearItems();
+			this->logged_in_all_gear = GearItems();
+			if(gear_inventory_ui)
+			{
+				gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+				gear_inventory_ui->setAllGear(logged_in_all_gear);
+			}
+			ui_interface->gearInventoryUpdated();
 			this->avatar_uid_to_bot_id.clear();
 			this->bot_infos.clear();
 			updateBotListUI();
@@ -13128,8 +13331,22 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		case Msg_UserGearListMessage:
 		{
 			const UserGearListMessage* m = checkedDowncastPtr<const UserGearListMessage>(msg);
+			logged_in_all_gear = m->all_gear;
+			requestGearPreviewResources();
 			if(gear_inventory_ui)
 				gear_inventory_ui->setAllGear(m->all_gear);
+			ui_interface->gearInventoryUpdated();
+		}
+		break;
+		case Msg_OurAvatarFullUpdateMessage:
+		{
+			const OurAvatarFullUpdateMessage* m = checkedDowncastPtr<const OurAvatarFullUpdateMessage>(msg);
+			logged_in_avatar_settings = m->avatar_settings;
+			logged_in_equipped_gear = m->equipped_gear;
+			requestGearPreviewResources();
+			if(gear_inventory_ui)
+				gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+			ui_interface->gearInventoryUpdated();
 		}
 		break;
 		case Msg_ChatBotCreatedMessage:
@@ -18387,6 +18604,11 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 
 	this->client_avatar_uid = UID::invalidUID();
 	this->server_protocol_version = 0;
+	this->server_capabilities = 0;
+	this->server_has_basis_textures = false;
+	this->server_has_basisu_terrain_detail_maps = false;
+	this->server_has_optimised_meshes = false;
+	this->server_opt_mesh_version = -1;
 	this->pending_camera_pair_creates.clear();
 
 
@@ -18394,12 +18616,20 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	this->logged_in_user_name = "";
 	this->logged_in_user_flags = 0;
 	this->logged_in_avatar_settings = AvatarSettings();
+	this->logged_in_equipped_gear = GearItems();
+	this->logged_in_all_gear = GearItems();
+	if(gear_inventory_ui)
+	{
+		gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+		gear_inventory_ui->setAllGear(logged_in_all_gear);
+	}
 
 	this->server_using_lod_chunks = false;
 
 	if(ui_interface)
 	{
 		ui_interface->setTextAsNotLoggedIn();
+		ui_interface->gearInventoryUpdated();
 
 		ui_interface->updateWorldSettingsControlsEditable();
 
@@ -18782,6 +19012,7 @@ void GUIClient::changeToDifferentWorld(const URLParseResults& parse_res)
 		avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
 		avatar.avatar_settings = this->logged_in_avatar_settings;
 		avatar.name = this->logged_in_user_name;
+		avatar.equipped_gear = this->logged_in_equipped_gear;
 
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateAvatar);
 		writeAvatarToNetworkStream(avatar, scratch_packet);
@@ -23079,18 +23310,68 @@ void GUIClient::openGearInventory()
 	}
 
 	gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+	gear_inventory_ui->setAllGear(logged_in_all_gear);
 
-	if((connection_state == ServerConnectionState_Connected) && (server_protocol_version < 52))
+	requestGearPreviewResources();
+	requestGearInventory();
+}
+
+
+void GUIClient::requestGearInventory()
+{
+	if(connection_state != ServerConnectionState_Connected || client_thread.isNull())
 	{
-		showInfoNotification("This server does not support gear sync yet. Opening local gear inventory only.");
+		showInfoNotification("Для синхронизации инвентаря сначала подключитесь к серверу.");
+		return;
+	}
+	if(!logged_in_user_id.valid())
+	{
+		showInfoNotification("Для синхронизации инвентаря войдите в аккаунт.");
+		return;
+	}
+	if(!serverSupportsGearInventory())
+	{
+		showInfoNotification("Сервер пока не поддерживает синхронизацию инвентаря. Требуется сервер с поддержкой экипировки.");
 		return;
 	}
 
-	if(client_thread && (connection_state == ServerConnectionState_Connected))
+	MessageUtils::initPacket(scratch_packet, Protocol::QueryUserGear);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::requestGearPreviewResources()
+{
+	if(resource_manager.isNull())
+		return;
+
+	Avatar preview_avatar;
+	preview_avatar.pos = cam_controller.getPosition();
+	preview_avatar.avatar_settings = logged_in_avatar_settings;
+	preview_avatar.equipped_gear = logged_in_equipped_gear;
+	startDownloadingResourcesForAvatar(&preview_avatar, /*ob_lod_level=*/0, /*our_avatar=*/true);
+
+	// Card thumbnails are not dependencies of Avatar, request them explicitly.
+	for(size_t i=0; i<logged_in_all_gear.items.size(); ++i)
 	{
-		MessageUtils::initPacket(scratch_packet, Protocol::QueryUserGear);
-		enqueueMessageToSend(*client_thread, scratch_packet);
+		const URLString& preview_URL = logged_in_all_gear.items[i]->preview_image_URL;
+		if(preview_URL.empty() || resource_manager->isFileForURLPresent(preview_URL))
+			continue;
+
+		DownloadingResourceInfo info;
+		info.build_physics_ob = false;
+		info.pos = preview_avatar.pos;
+		info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(/*aabb_ws_longest_len=*/1.f, /*importance_factor=*/1.0e4f);
+		info.used_by_other = true;
+		info.net_download_priority = 1000;
+		startDownloadingResource(preview_URL, preview_avatar.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.f, info);
 	}
+}
+
+
+bool GUIClient::serverSupportsGearInventory() const
+{
+	return BitUtils::isBitSet(server_capabilities, Protocol::GEAR_INVENTORY_SUPPORT);
 }
 
 
@@ -23102,9 +23383,14 @@ void GUIClient::convertSelectedObjectToGearItem()
 		return;
 	}
 
-	if(server_protocol_version < 52)
+	if(!serverSupportsGearInventory())
 	{
-		showErrorNotification("This server does not support gear creation yet.");
+		showErrorNotification("Сервер пока не поддерживает создание предметов инвентаря. Соединение сохранено.");
+		return;
+	}
+	if(!logged_in_user_id.valid())
+	{
+		showErrorNotification("You must be logged in to create gear items.");
 		return;
 	}
 
@@ -23157,61 +23443,115 @@ void GUIClient::convertSelectedObjectToGearItem()
 
 void GUIClient::gearItemClicked(const GearItemRef& item)
 {
+	if(item.isNull() || connection_state != ServerConnectionState_Connected || client_thread.isNull() || !logged_in_user_id.valid() || !serverSupportsGearInventory())
+	{
+		showErrorNotification("Невозможно надеть предмет: серверная синхронизация экипировки недоступна.");
+		return;
+	}
+
 	for(size_t i=0; i<logged_in_equipped_gear.items.size(); ++i)
 		if(logged_in_equipped_gear.items[i]->id == item->id)
 			return;
 
-	logged_in_equipped_gear.items.push_back(item);
+	GearItemRef inventory_item;
+	for(size_t i=0; i<logged_in_all_gear.items.size(); ++i)
+		if(logged_in_all_gear.items[i].nonNull() && logged_in_all_gear.items[i]->id == item->id)
+		{
+			inventory_item = logged_in_all_gear.items[i];
+			break;
+		}
+	if(inventory_item.isNull())
+	{
+		showErrorNotification("Невозможно надеть предмет: его нет в серверном инвентаре.");
+		return;
+	}
 
+	bool update_sent = false;
 	if(world_state)
 	{
 		WorldStateLock lock(world_state->mutex);
 		Avatar* avatar = getOurAvatar(lock);
 		if(avatar)
 		{
-			avatar->equipped_gear.items.push_back(item);
+			logged_in_equipped_gear.items.push_back(inventory_item);
+			avatar->equipped_gear = logged_in_equipped_gear;
 			avatar->other_dirty = true;
 			avatar->transform_dirty = true;
 
-			if(client_thread)
-			{
-				MessageUtils::initPacket(scratch_packet, Protocol::AvatarFullUpdate);
-				writeAvatarToNetworkStream(*avatar, scratch_packet);
-				enqueueMessageToSend(*client_thread, scratch_packet);
-			}
+			MessageUtils::initPacket(scratch_packet, Protocol::AvatarFullUpdate);
+			writeAvatarToNetworkStream(*avatar, scratch_packet);
+			enqueueMessageToSend(*client_thread, scratch_packet);
+			update_sent = true;
 		}
+	}
+	if(!update_sent)
+	{
+		showErrorNotification("Невозможно надеть предмет: аватар ещё не создан в текущем мире.");
+		return;
 	}
 
 	if(gear_inventory_ui)
 		gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+	requestGearPreviewResources();
+	ui_interface->gearInventoryUpdated();
 }
 
 
 void GUIClient::equippedGearItemClicked(const GearItemRef& item)
 {
-	logged_in_equipped_gear.removeItem(item);
+	if(item.isNull() || connection_state != ServerConnectionState_Connected || client_thread.isNull() || !logged_in_user_id.valid() || !serverSupportsGearInventory())
+	{
+		showErrorNotification("Невозможно снять предмет: серверная синхронизация экипировки недоступна.");
+		return;
+	}
 
+	bool update_sent = false;
 	if(world_state)
 	{
 		WorldStateLock lock(world_state->mutex);
 		Avatar* avatar = getOurAvatar(lock);
 		if(avatar)
 		{
-			avatar->equipped_gear.removeItem(item);
+			logged_in_equipped_gear.removeItem(item);
+			avatar->equipped_gear = logged_in_equipped_gear;
 			avatar->other_dirty = true;
 			avatar->transform_dirty = true;
 
-			if(client_thread)
-			{
-				MessageUtils::initPacket(scratch_packet, Protocol::AvatarFullUpdate);
-				writeAvatarToNetworkStream(*avatar, scratch_packet);
-				enqueueMessageToSend(*client_thread, scratch_packet);
-			}
+			MessageUtils::initPacket(scratch_packet, Protocol::AvatarFullUpdate);
+			writeAvatarToNetworkStream(*avatar, scratch_packet);
+			enqueueMessageToSend(*client_thread, scratch_packet);
+			update_sent = true;
 		}
+	}
+	if(!update_sent)
+	{
+		showErrorNotification("Невозможно снять предмет: аватар ещё не создан в текущем мире.");
+		return;
 	}
 
 	if(gear_inventory_ui)
 		gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+	requestGearPreviewResources();
+	ui_interface->gearInventoryUpdated();
+}
+
+
+void GUIClient::deleteGearItem(const GearItemRef& item)
+{
+	if(item.isNull() || connection_state != ServerConnectionState_Connected || client_thread.isNull() || !logged_in_user_id.valid() || !serverSupportsGearInventory())
+	{
+		showErrorNotification("Невозможно удалить предмет: серверная синхронизация экипировки недоступна.");
+		return;
+	}
+	if(logged_in_equipped_gear.items.end() != std::find_if(logged_in_equipped_gear.items.begin(), logged_in_equipped_gear.items.end(), [&item](const GearItemRef& equipped) { return equipped.nonNull() && equipped->id == item->id; }))
+	{
+		showErrorNotification("Сначала снимите предмет, затем удаляйте его из инвентаря.");
+		return;
+	}
+	MessageUtils::initPacket(scratch_packet, Protocol::DeleteGearItem);
+	::writeToStream(item->id, scratch_packet);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
 }
 
 
@@ -23219,6 +23559,20 @@ void GUIClient::gearItemChangedOnOurAvatar(GearItem* updated_item)
 {
 	if(updated_item == NULL)
 		return;
+	if(connection_state != ServerConnectionState_Connected || client_thread.isNull() || !logged_in_user_id.valid() || !serverSupportsGearInventory())
+	{
+		showErrorNotification("Невозможно сохранить предмет: серверная синхронизация экипировки недоступна.");
+		return;
+	}
+
+	for(size_t i=0; i<logged_in_all_gear.items.size(); ++i)
+	{
+		if(logged_in_all_gear.items[i]->id == updated_item->id)
+		{
+			logged_in_all_gear.items[i]->copyUserSettableFieldsFromOther(*updated_item);
+			break;
+		}
+	}
 
 	for(size_t i=0; i<logged_in_equipped_gear.items.size(); ++i)
 	{
@@ -23244,20 +23598,34 @@ void GUIClient::gearItemChangedOnOurAvatar(GearItem* updated_item)
 				}
 			}
 
-			avatar->other_dirty = true;
+			for(size_t i=0; i<myMin(avatar->equipped_gear.items.size(), avatar->graphics.equipped_gear_graphics.size()); ++i)
+			{
+				if(avatar->equipped_gear.items[i]->id == updated_item->id)
+				{
+					EquippedGearGraphics& graphics = avatar->graphics.equipped_gear_graphics[i];
+					graphics.gear_id = updated_item->id;
+					graphics.bone_name = updated_item->bone_name;
+					graphics.bone_node_i = -1;
+					graphics.transform = updated_item->gearObToBoneSpaceMatrix();
+					break;
+				}
+			}
+			avatar->graphics.updateGearBones();
 			avatar->transform_dirty = true;
 		}
 	}
 
-	if(client_thread && (connection_state == ServerConnectionState_Connected) && (server_protocol_version >= 52))
-	{
-		MessageUtils::initPacket(scratch_packet, Protocol::GearItemUpdate);
-		updated_item->writeToStream(scratch_packet);
-		enqueueMessageToSend(*client_thread, scratch_packet);
-	}
+	MessageUtils::initPacket(scratch_packet, Protocol::GearItemUpdate);
+	updated_item->writeToStream(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
 
 	if(gear_inventory_ui)
+	{
 		gear_inventory_ui->setEquippedGear(logged_in_equipped_gear);
+		gear_inventory_ui->setAllGear(logged_in_all_gear);
+	}
+	requestGearPreviewResources();
+	ui_interface->gearInventoryUpdated();
 }
 
 

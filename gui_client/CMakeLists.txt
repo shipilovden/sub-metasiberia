@@ -355,6 +355,8 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.ui
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarPreviewWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarPreviewWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/AvatarGearPreviewWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AvatarGearPreviewWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarSettingsDialog.ui
@@ -402,6 +404,8 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/FindObjectDialog.ui
 		${CMAKE_SOURCE_DIR}/gui_client/GlWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/GlWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/GearInventoryPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/GearInventoryPanel.h
 		${CMAKE_SOURCE_DIR}/gui_client/GoToParcelDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/GoToParcelDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/GoToParcelDialog.ui
@@ -1260,6 +1264,8 @@ if(MSVC)
 	set_source_files_properties(
 		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AvatarGearPreviewWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/GearInventoryPanel.cpp
 		PROPERTIES COMPILE_OPTIONS "/utf-8"
 	)
 endif()

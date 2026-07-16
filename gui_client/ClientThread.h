@@ -100,6 +100,20 @@ public:
 };
 
 
+// Carries the server-authoritative settings and equipped gear received in an
+// AvatarFullUpdate for this client's own avatar to the GUI thread.
+class OurAvatarFullUpdateMessage : public ThreadMessage
+{
+public:
+	OurAvatarFullUpdateMessage(const AvatarSettings& avatar_settings_, const GearItems& equipped_gear_)
+	: ThreadMessage(Msg_OurAvatarFullUpdateMessage), avatar_settings(avatar_settings_), equipped_gear(equipped_gear_)
+	{}
+
+	AvatarSettings avatar_settings;
+	GearItems equipped_gear;
+};
+
+
 class RemoteClientAudioStreamToServerStarted : public ThreadMessage
 {
 public:

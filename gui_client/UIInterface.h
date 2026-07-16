@@ -108,6 +108,7 @@ public:
 	}
 	virtual void voxelEditorMaterialPicked(int material_index) { (void)material_index; }
 	virtual void voxelEditorObjectDataChanged(const WorldObject& ob) { (void)ob; }
+	virtual void gearInventoryUpdated() {}
 
 	virtual void showAvatarSettings() = 0; // Show avatar settings dialog.
 	virtual bool isAvatarSettingsDialogVisible() const { return false; } // Check if avatar settings dialog is visible (SDL only)

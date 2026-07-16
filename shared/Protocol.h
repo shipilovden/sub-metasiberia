@@ -105,6 +105,7 @@ const uint32 QueryUserGear			= 1400; // Client requests the full list of gear it
 const uint32 UserGearList			= 1401; // Server sends back GearItems for all gear owned by the user.
 const uint32 GearItemUpdate			= 1402; // A client has modified a GearItem (e.g. in the gear editor).
 const uint32 CreateGearItem			= 1403; // A client wants to create a new GearItem.
+const uint32 DeleteGearItem			= 1404; // A client wants to delete an owned GearItem.
 
 const uint32 CreateChatBot			= 1500; // Client wants to create a new chatbot (pos + heading + name).
 const uint32 ChatBotCreated			= 1501; // Server confirms creation and sends back the bot id.
@@ -241,6 +242,10 @@ const uint32 SENDS_USER_MOVED_CHATBOT_MSGS			= 0x2;//  Does the client send User
 const uint32 OBJECT_TEXTURE_BASISU_SUPPORT			= 0x1;
 const uint32 TERRAIN_DETAIL_MAPS_BASISU_SUPPORT		= 0x2;
 const uint32 OPTIMISED_MESH_SUPPORT					= 0x4;
+// The server implements QueryUserGear/UserGearList/GearItemUpdate/CreateGearItem.
+// Do not infer this from the protocol version: some Metasiberia v52+ servers
+// advertised the message IDs but did not have the corresponding handlers.
+const uint32 GEAR_INVENTORY_SUPPORT					= 0x8;
 
 const int OPTIMISED_MESH_VERSION = 3;
 

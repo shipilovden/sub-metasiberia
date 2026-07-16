@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2021 -
 
 
 #include "AnimationManager.h"
+#include "MeshManager.h"
 #include "AvatarGroundingUtils.h"
 #include "PhysicsWorld.h"
 #include "opengl/OpenGLEngine.h"
@@ -22,6 +23,16 @@ Copyright Glare Technologies Limited 2021 -
 #if USE_JOLT
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #endif
+
+
+EquippedGearGraphics::EquippedGearGraphics()
+:	transform(Matrix4f::identity()),
+	bone_node_i(-1)
+{}
+
+
+EquippedGearGraphics::~EquippedGearGraphics()
+{}
 
 
 AvatarGraphics::AvatarGraphics(Avatar* avatar_)
@@ -1222,6 +1233,24 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 			Vec4f spine2_pos = skinned_gl_ob->ob_to_world_matrix * (skinned_gl_ob->anim_node_data[spine2_node_i].node_hierarchical_to_object * Vec4f(0,0,0,1));
 			anim_events_out.blob_sphere_positions[anim_events_out.num_blobs++] = spine2_pos;
 		}
+
+		for(size_t i=0; i<equipped_gear_graphics.size(); ++i)
+		{
+			EquippedGearGraphics& gear = equipped_gear_graphics[i];
+			if(gear.gear_gl_ob && gear.bone_node_i >= 0 && gear.bone_node_i < (int)skinned_gl_ob->anim_node_data.size())
+			{
+				gear.gear_gl_ob->ob_to_world_matrix =
+					(skinned_gl_ob->ob_to_world_matrix * skinned_gl_ob->anim_node_data[gear.bone_node_i].node_hierarchical_to_object) * gear.transform;
+				engine.updateObjectTransformData(*gear.gear_gl_ob);
+			}
+			else if(gear.gear_gl_ob)
+			{
+				// Never leave invalid/not-yet-resolved attachments at the origin or
+				// at a stale transform from a previously selected bone.
+				gear.gear_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(100000.f, 100000.f, 100000.f);
+				engine.updateObjectTransformData(*gear.gear_gl_ob);
+			}
+		}
 	}
 	else // else if skinned_gl_ob is NULL:
 	{
@@ -1379,6 +1408,22 @@ void AvatarGraphics::build(bool our_avatar_)
 
 
 	skinned_gl_ob->current_anim_i = idle_anim_i; // current_anim_i will be 0 on GLObject creation, which is waving anim or something, set to idle anim.
+	updateGearBones();
+}
+
+
+void AvatarGraphics::updateGearBones()
+{
+	if(skinned_gl_ob.isNull() || skinned_gl_ob->mesh_data.isNull())
+		return;
+
+	const AnimationData& anim_data = skinned_gl_ob->mesh_data->animation_data;
+	for(size_t i=0; i<equipped_gear_graphics.size(); ++i)
+	{
+		EquippedGearGraphics& gear = equipped_gear_graphics[i];
+		if(gear.bone_node_i == -1)
+			gear.bone_node_i = anim_data.getNodeIndex(gear.bone_name);
+	}
 }
 
 
@@ -1386,6 +1431,9 @@ void AvatarGraphics::destroy(OpenGLEngine& engine, PhysicsWorld& physics_world)
 {
 	checkRemoveObAndSetRefToNull(engine, skinned_gl_ob);
 	checkRemoveObAndSetRefToNull(engine, selected_ob_beam);
+	for(size_t i=0; i<equipped_gear_graphics.size(); ++i)
+		checkRemoveObAndSetRefToNull(engine, equipped_gear_graphics[i].gear_gl_ob);
+	equipped_gear_graphics.clear();
 
 	checkRemoveObAndSetRefToNull(engine, debug_avatar_basis_ob);
 	checkRemoveObAndSetRefToNull(physics_world, physics_ob);

@@ -293,6 +293,9 @@ public:
 	void goBack();
 	void gestureSettingsChanged(const GestureSettings& new_gesture_settings);
 	void openGearInventory();
+	bool serverSupportsGearInventory() const;
+	void requestGearInventory();
+	void requestGearPreviewResources();
 	void convertSelectedObjectToGearItem();
 	void createBot(const Vec3d& pos, float heading);
 	std::string uploadLocalFileForBot(const std::string& local_abs_path); // Copy local file to resources dir and return sub:// URL
@@ -361,6 +364,7 @@ public:
 	void updateBotListUI();
 	void gearItemClicked(const GearItemRef& item);
 	void equippedGearItemClicked(const GearItemRef& item);
+	void deleteGearItem(const GearItemRef& item);
 	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings);
 	void applyWorldSettingsToOpenGLEngine();
 	void spawnFloatingChatMessageForAvatar(const UID& avatar_uid, const std::string& message, double cur_time);
@@ -385,6 +389,8 @@ public:
 	void loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
 	void loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, int voxel_subsample_factor, WorldStateLock& world_state_lock);
 	void loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
+	void loadPresentGearModel(const GearItem* item, EquippedGearGraphics* equipped_gear_graphics, Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
+	void loadGearModelsForAvatar(Avatar* avatar, int av_lod_level, int model_lod_level, float max_dist_for_model_lod_level, bool our_avatar);
 	void loadModelForAvatar(Avatar* avatar);
 	void gearItemChangedOnOurAvatar(GearItem* item);
 	void loadScriptForObject(WorldObject* ob, WorldStateLock& world_state_lock);
@@ -1192,6 +1198,7 @@ public:
 	std::map<uint64, BotClientInfo> bot_infos;
 	UID selected_bot_avatar_uid; // Currently selected bot avatar UID (for gizmo)
 	GearItems logged_in_equipped_gear; // Last equipped gear settings received from server in a LoggedInMessage.
+	GearItems logged_in_all_gear; // Last full inventory received from the server.
 
 	bool server_using_lod_chunks; // Should be equal to !world_state->lod_chunks.empty(), cached in a boolean.
 

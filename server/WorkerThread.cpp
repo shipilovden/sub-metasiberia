@@ -49,6 +49,7 @@ Copyright Glare Technologies Limited 2018 -
 #include <maths/CheckedMaths.h>
 #include <openssl/err.h>
 #include <algorithm>
+#include <cmath>
 #include <RuntimeCheck.h>
 #include <Timer.h>
 #include <zstd.h>
@@ -1550,6 +1551,78 @@ void WorkerThread::sendPerWorldInitialDataToClient(ServerAllWorldsState* world_s
 }
 
 
+static const size_t MAX_NUM_EQUIPPED_GEAR_ITEMS = 24; // Matches the 4 x 6 equipment grid and bounds avatar/network work.
+static const float MAX_GEAR_TRANSLATION_COMPONENT = 100.f;
+static const float MIN_GEAR_SCALE_COMPONENT = 0.001f;
+static const float MAX_GEAR_SCALE_COMPONENT = 100.f;
+static const float MAX_GEAR_ROTATION_AXIS_COMPONENT = 1.f;
+static const float MAX_GEAR_ROTATION_ANGLE = 62.84f; // 3600 degrees plus float-conversion tolerance, matching the native editor.
+
+
+static bool gearItemsContainID(const GearItems& gear_items, const UID& item_id)
+{
+	for(size_t i=0; i<gear_items.items.size(); ++i)
+		if(gear_items.items[i].nonNull() && gear_items.items[i]->id == item_id)
+			return true;
+	return false;
+}
+
+
+static void appendAuthoritativeEquippedGearItem(const UID& item_id, const User& user, ServerAllWorldsState* world_state,
+	Lock& /*lock*/, GearItems& gear_items_out) REQUIRES(world_state->mutex)
+{
+	if(gear_items_out.items.size() >= MAX_NUM_EQUIPPED_GEAR_ITEMS ||
+		user.gear_ids.count(item_id) == 0 || gearItemsContainID(gear_items_out, item_id))
+		return;
+
+	auto gear_it = world_state->gear_items.find(item_id);
+	if(gear_it != world_state->gear_items.end() && gear_it->second.nonNull() && gear_it->second->owner_id == user.id)
+		gear_items_out.items.push_back(gear_it->second);
+}
+
+
+static void getEquippedGearForUser(const User& user, ServerAllWorldsState* world_state, Lock& lock, GearItems& gear_items_out) REQUIRES(world_state->mutex)
+{
+	gear_items_out.items.clear();
+	gear_items_out.items.reserve(myMin(user.equipped_gear_ids.size(), MAX_NUM_EQUIPPED_GEAR_ITEMS));
+
+	for(size_t i=0; i<user.equipped_gear_ids.size(); ++i)
+		appendAuthoritativeEquippedGearItem(user.equipped_gear_ids[i], user, world_state, lock, gear_items_out);
+}
+
+
+static void validateRequestedEquippedGearForUser(const User& user, const GearItems& requested_gear, ServerAllWorldsState* world_state,
+	Lock& lock, GearItems& gear_items_out) REQUIRES(world_state->mutex)
+{
+	gear_items_out.items.clear();
+	gear_items_out.items.reserve(myMin(requested_gear.items.size(), MAX_NUM_EQUIPPED_GEAR_ITEMS));
+
+	for(size_t i=0; i<requested_gear.items.size(); ++i)
+		if(requested_gear.items[i].nonNull())
+			appendAuthoritativeEquippedGearItem(requested_gear.items[i]->id, user, world_state, lock, gear_items_out);
+}
+
+
+static bool isGearTransformValid(const GearItem& item)
+{
+	return
+		item.translation.isFinite() &&
+		std::fabs(item.translation.x) <= MAX_GEAR_TRANSLATION_COMPONENT &&
+		std::fabs(item.translation.y) <= MAX_GEAR_TRANSLATION_COMPONENT &&
+		std::fabs(item.translation.z) <= MAX_GEAR_TRANSLATION_COMPONENT &&
+		item.axis.isFinite() &&
+		std::fabs(item.axis.x) <= MAX_GEAR_ROTATION_AXIS_COMPONENT &&
+		std::fabs(item.axis.y) <= MAX_GEAR_ROTATION_AXIS_COMPONENT &&
+		std::fabs(item.axis.z) <= MAX_GEAR_ROTATION_AXIS_COMPONENT &&
+		item.axis.length2() >= 1.0e-8f &&
+		isFinite(item.angle) && std::fabs(item.angle) <= MAX_GEAR_ROTATION_ANGLE &&
+		item.scale.isFinite() &&
+		item.scale.x >= MIN_GEAR_SCALE_COMPONENT && item.scale.x <= MAX_GEAR_SCALE_COMPONENT &&
+		item.scale.y >= MIN_GEAR_SCALE_COMPONENT && item.scale.y <= MAX_GEAR_SCALE_COMPONENT &&
+		item.scale.z >= MIN_GEAR_SCALE_COMPONENT && item.scale.z <= MAX_GEAR_SCALE_COMPONENT;
+}
+
+
 void WorkerThread::doRun()
 {
 	PlatformUtils::setCurrentThreadNameIfTestsEnabled("WorkerThread");
@@ -1564,6 +1637,7 @@ void WorkerThread::doRun()
 	UserID client_user_id = UserID::invalidUserID(); // Will be an invalid reference if client is not logged in, otherwise will refer to the user account the client is logged in to.
 	std::string client_user_name;
 	AvatarSettings client_user_avatar_settings;
+	GearItems client_equipped_gear;
 	GestureSettings client_gesture_settings;
 	uint32 client_user_flags = 0;
 
@@ -1641,7 +1715,11 @@ void WorkerThread::doRun()
 
 		if(client_protocol_version >= 41) // Sending server_capabilities was added in protocol version 41.
 		{
-			const uint32 server_capabilities = Protocol::OBJECT_TEXTURE_BASISU_SUPPORT | Protocol::TERRAIN_DETAIL_MAPS_BASISU_SUPPORT | Protocol::OPTIMISED_MESH_SUPPORT;
+			const uint32 server_capabilities =
+				Protocol::OBJECT_TEXTURE_BASISU_SUPPORT |
+				Protocol::TERRAIN_DETAIL_MAPS_BASISU_SUPPORT |
+				Protocol::OPTIMISED_MESH_SUPPORT |
+				Protocol::GEAR_INVENTORY_SUPPORT;
 			socket->writeUInt32(server_capabilities);
 		}
 
@@ -1706,6 +1784,7 @@ void WorkerThread::doRun()
 					client_user_id = cookie_logged_in_user->id;
 					client_user_name = cookie_logged_in_user->name;
 					client_user_avatar_settings = cookie_logged_in_user->avatar_settings; // TODO: clone materials?
+					getEquippedGearForUser(*cookie_logged_in_user, world_state, lock, client_equipped_gear);
 					client_user_flags = cookie_logged_in_user->flags;
 					client_gesture_settings = cookie_logged_in_user->gesture_settings;
 				}
@@ -1721,6 +1800,16 @@ void WorkerThread::doRun()
 				writeAvatarSettingsToStream(client_user_avatar_settings, scratch_packet);
 				scratch_packet.writeUInt32(client_user_flags);
 				client_gesture_settings.writeToStream(scratch_packet);
+				if(client_protocol_version >= 52)
+				{
+					WorldStateLock lock(world_state->mutex);
+					auto user_it = world_state->user_id_to_users.find(client_user_id);
+					if(client_user_id.valid() && user_it != world_state->user_id_to_users.end())
+						getEquippedGearForUser(*user_it->second, world_state, lock, client_equipped_gear);
+					else
+						client_equipped_gear.items.clear();
+					client_equipped_gear.writeToStream(scratch_packet);
+				}
 				MessageUtils::updatePacketLengthField(scratch_packet);
 
 				socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
@@ -2007,7 +2096,15 @@ void WorkerThread::doRun()
 
 							Avatar temp_avatar;
 							readAvatarFromNetworkStreamGivenUID(msg_buffer, temp_avatar); // Read message data before grabbing lock
+							if(avatar_uid != client_avatar_uid)
+							{
+								writeErrorMessageToClient(socket, "Cannot update another avatar.");
+								break;
+							}
 
+							bool avatar_update_accepted = false;
+							bool authoritative_echo_prepared = false;
+							DependencyURLSet authoritative_URLs;
 							// Look up existing avatar in world state
 							{
 								WorldStateLock lock(world_state->mutex);
@@ -2019,43 +2116,79 @@ void WorkerThread::doRun()
 									avatar->copyNetworkStateFrom(temp_avatar);
 									avatar->other_dirty = true;
 
-
-									// Store avatar settings in the user data
+									// Store avatar settings and equipped gear IDs in user data.  Only IDs
+									// from the requesting user's inventory are accepted.  Always
+									// replace client-supplied GearItem fields with the authoritative objects
+									// in world_state, while preserving the first occurrence of each ID.
+									GearItems validated_equipped_gear;
 									if(client_user_id.valid())
 									{
-										const bool avatar_settings_changed = !(client_user_avatar_settings == avatar->avatar_settings);
-
-										if(avatar_settings_changed && !world_state->isInReadOnlyMode())
+										auto res2 = world_state->user_id_to_users.find(client_user_id);
+										if(res2 != world_state->user_id_to_users.end())
 										{
-											client_user_avatar_settings = avatar->avatar_settings;
+											Reference<User> client_user = res2->second;
+											const bool read_only = world_state->read_only_mode;
+											if(client_protocol_version >= 52 && !read_only)
+												validateRequestedEquippedGearForUser(*client_user, temp_avatar.equipped_gear, world_state, lock, validated_equipped_gear);
+											else
+												getEquippedGearForUser(*client_user, world_state, lock, validated_equipped_gear);
 
-											auto res2 = world_state->user_id_to_users.find(client_user_id);
-											if(res2 != world_state->user_id_to_users.end())
+											const bool avatar_settings_changed = !(client_user_avatar_settings == avatar->avatar_settings);
+											const bool equipped_gear_changed = !(client_equipped_gear == validated_equipped_gear);
+											if((avatar_settings_changed || equipped_gear_changed) && !read_only)
 											{
-												Reference<User> client_user = res2->second;
 												client_user->avatar_settings = avatar->avatar_settings;
+												if(client_protocol_version >= 52)
+													client_user->updateEquippedGearIDs(validated_equipped_gear);
 												world_state->addUserAsDBDirty(client_user);
 
-												conPrintIfNotFuzzing("Updated user avatar settings.  model_url: " + toStdString(client_user->avatar_settings.model_url));
+												conPrintIfNotFuzzing("Updated user avatar settings and equipped gear.");
 											}
+
+											client_user_avatar_settings = avatar->avatar_settings;
+											client_equipped_gear = validated_equipped_gear;
 										}
 									}
+									avatar->equipped_gear = validated_equipped_gear;
+
+									// Serialise and collect dependencies while GearItem/material refs are
+									// protected by world_state->mutex.  After this scope we retain only
+									// owned packet bytes and URL values, never mutable shallow refs.
+									if(client_protocol_version >= 52)
+									{
+										MessageUtils::initPacket(scratch_packet, Protocol::AvatarFullUpdate);
+										writeAvatarToNetworkStream(*avatar, scratch_packet);
+										MessageUtils::updatePacketLengthField(scratch_packet);
+										authoritative_echo_prepared = true;
+									}
+
+									Avatar::GetDependencyOptions options;
+									options.get_optimised_mesh = false; // Get non-optimised mesh, optimise on server.
+									options.use_basis = false; // Get non-basis resources, convert to basis on server.
+									avatar->getDependencyURLSetBaseLevel(options, authoritative_URLs);
+									avatar_update_accepted = true;
 
 									//conPrint("updated avatar transform");
 								}
 							}
 
-							// Process resources
-							DependencyURLSet URLs;
-							Avatar::GetDependencyOptions options;
-							options.get_optimised_mesh = false; // Get non-optimised mesh, optimise on server.
-							options.use_basis = false; // Get non-basis resources, convert to basis on server.
-							temp_avatar.getDependencyURLSetBaseLevel(options, URLs); 
-							for(auto it = URLs.begin(); it != URLs.end(); ++it)
+							if(avatar_update_accepted)
 							{
-								sendGetFileMessageIfNeeded(it->URL);
+								// Send the accepted server-owned gear list back immediately.  The normal
+								// dirty-avatar broadcast still updates other clients; this direct echo
+								// lets the sender converge after filtering, deduplication or truncation.
+								if(authoritative_echo_prepared)
+								{
+									socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+									socket->flush();
+								}
 
-								server->enqueueMsgForLodGenThread(new CheckGenLodResourcesForURL(it->URL));
+								// Process only the authoritative URL value snapshot.
+								for(auto it = authoritative_URLs.begin(); it != authoritative_URLs.end(); ++it)
+								{
+									sendGetFileMessageIfNeeded(it->URL);
+									server->enqueueMsgForLodGenThread(new CheckGenLodResourcesForURL(it->URL));
+								}
 							}
 
 							break;
@@ -2074,10 +2207,19 @@ void WorkerThread::doRun()
 
 							const UID use_avatar_uid = client_avatar_uid;
 							temp_avatar.uid = use_avatar_uid;
-
-							// Look up existing avatar in world state
+							DependencyURLSet create_avatar_URLs;
+							// CreateAvatar is also used after a world transition.  Resolve gear,
+							// insert the avatar and snapshot dependency URL values under one lock,
+							// so mutable GearItem/material refs are never traversed after unlock.
 							{
 								WorldStateLock lock(world_state->mutex);
+								auto user_it = world_state->user_id_to_users.find(client_user_id);
+								if(client_user_id.valid() && user_it != world_state->user_id_to_users.end())
+									getEquippedGearForUser(*user_it->second, world_state, lock, client_equipped_gear);
+								else
+									client_equipped_gear.items.clear();
+								temp_avatar.equipped_gear = client_equipped_gear;
+
 								ServerWorldState::AvatarMapType& avatars = cur_world_state->getAvatars(lock);
 								auto res = avatars.find(use_avatar_uid);
 								if(res == avatars.end())
@@ -2092,18 +2234,18 @@ void WorkerThread::doRun()
 
 									conPrintIfNotFuzzing("created new avatar");
 								}
+
+								Avatar::GetDependencyOptions options;
+								options.get_optimised_mesh = false; // Get non-optimised mesh, optimise on server.
+								options.use_basis = false; // Get non-basis resources, convert to basis on server.
+								temp_avatar.getDependencyURLSetForAllLODLevels(options, create_avatar_URLs);
 							}
 
 							if(!temp_avatar.avatar_settings.model_url.empty())
 								sendGetFileMessageIfNeeded(temp_avatar.avatar_settings.model_url);
 
 							// Process resources
-							DependencyURLSet URLs;
-							Avatar::GetDependencyOptions options;
-							options.get_optimised_mesh = false; // Get non-optimised mesh, optimise on server.
-							options.use_basis = false; // Get non-basis resources, convert to basis on server.
-							temp_avatar.getDependencyURLSetForAllLODLevels(options, URLs);
-							for(auto it = URLs.begin(); it != URLs.end(); ++it)
+							for(auto it = create_avatar_URLs.begin(); it != create_avatar_URLs.end(); ++it)
 							{
 								sendGetFileMessageIfNeeded(it->URL);
 
@@ -3712,6 +3854,7 @@ void WorkerThread::doRun()
 										client_user_id = user->id;
 										client_user_name = user->name;
 										client_user_avatar_settings = user->avatar_settings;
+										getEquippedGearForUser(*user, world_state, lock, client_equipped_gear);
 										client_user_flags = user->flags;
 										client_gesture_settings = user->gesture_settings;
 										setRoutingClientInfo(client_user_id, client_user_name, client_avatar_uid);
@@ -3734,6 +3877,16 @@ void WorkerThread::doRun()
 								writeAvatarSettingsToStream(client_user_avatar_settings, scratch_packet);
 								scratch_packet.writeUInt32(client_user_flags);
 								client_gesture_settings.writeToStream(scratch_packet);
+								if(client_protocol_version >= 52)
+								{
+									WorldStateLock lock(world_state->mutex);
+									auto user_it = world_state->user_id_to_users.find(client_user_id);
+									if(client_user_id.valid() && user_it != world_state->user_id_to_users.end())
+										getEquippedGearForUser(*user_it->second, world_state, lock, client_equipped_gear);
+									else
+										client_equipped_gear.items.clear();
+									client_equipped_gear.writeToStream(scratch_packet);
+								}
 								MessageUtils::updatePacketLengthField(scratch_packet);
 
 								socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
@@ -4118,6 +4271,223 @@ void WorkerThread::doRun()
 								}
 							}
 
+							break;
+						}
+					case Protocol::QueryUserGear:
+						{
+							MessageUtils::initPacket(scratch_packet, Protocol::UserGearList);
+							GearItems all_gear;
+							{
+								WorldStateLock lock(world_state->mutex);
+								auto user_it = world_state->user_id_to_users.find(client_user_id);
+								if(client_user_id.valid() && user_it != world_state->user_id_to_users.end())
+								{
+									for(const UID& gear_id : user_it->second->gear_ids)
+									{
+										auto gear_it = world_state->gear_items.find(gear_id);
+										if(gear_it != world_state->gear_items.end())
+											all_gear.items.push_back(gear_it->second);
+									}
+								}
+								all_gear.writeToStream(scratch_packet);
+							}
+							MessageUtils::updatePacketLengthField(scratch_packet);
+							socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+							socket->flush();
+							break;
+						}
+					case Protocol::GearItemUpdate:
+						{
+							GearItemRef updated_item = new GearItem();
+							readGearItemFromStream(msg_buffer, *updated_item);
+
+							if(!isGearTransformValid(*updated_item))
+							{
+								writeErrorMessageToClient(socket, "Invalid gear transform.");
+								break;
+							}
+							if(world_state->isInReadOnlyMode())
+							{
+								writeErrorMessageToClient(socket, "Server is in read-only mode; gear cannot be modified.");
+								break;
+							}
+
+							bool updated = false;
+							{
+								WorldStateLock lock(world_state->mutex);
+								auto user_it = world_state->user_id_to_users.find(client_user_id);
+								if(client_user_id.valid() && user_it != world_state->user_id_to_users.end() && user_it->second->gear_ids.count(updated_item->id) != 0)
+								{
+									auto gear_it = world_state->gear_items.find(updated_item->id);
+									if(gear_it != world_state->gear_items.end() && gear_it->second->owner_id == client_user_id)
+									{
+										const uint32 authoritative_flags = gear_it->second->flags;
+										gear_it->second->copyUserSettableFieldsFromOther(*updated_item);
+										gear_it->second->flags = authoritative_flags;
+										world_state->addGearItemAsDBDirty(gear_it->second);
+										auto avatar_it = cur_world_state->getAvatars(lock).find(client_avatar_uid);
+										if(avatar_it != cur_world_state->getAvatars(lock).end())
+											avatar_it->second->other_dirty = true;
+										updated = true;
+									}
+								}
+							}
+
+							if(!updated)
+								writeErrorMessageToClient(socket, "Gear item was not found in your inventory.");
+							break;
+						}
+					case Protocol::DeleteGearItem:
+						{
+							const UID gear_id = readUIDFromStream(msg_buffer);
+							if(world_state->isInReadOnlyMode())
+							{
+								writeErrorMessageToClient(socket, "Server is in read-only mode; gear cannot be deleted.");
+								break;
+							}
+
+							bool deleted = false;
+							GearItems remaining_gear;
+							{
+								WorldStateLock lock(world_state->mutex);
+								auto user_it = world_state->user_id_to_users.find(client_user_id);
+								const bool is_equipped = client_user_id.valid() && user_it != world_state->user_id_to_users.end() && std::find(user_it->second->equipped_gear_ids.begin(), user_it->second->equipped_gear_ids.end(), gear_id) != user_it->second->equipped_gear_ids.end();
+								if(client_user_id.valid() && user_it != world_state->user_id_to_users.end() && !is_equipped && user_it->second->gear_ids.count(gear_id) != 0)
+								{
+									auto gear_it = world_state->gear_items.find(gear_id);
+									if(gear_it != world_state->gear_items.end() && gear_it->second->owner_id == client_user_id)
+								{
+									user_it->second->gear_ids.erase(gear_id);
+									if(gear_it->second->database_key.valid())
+										world_state->db_records_to_delete.insert(gear_it->second->database_key);
+									if(gear_it->second->preview_image_screenshot_id != 0)
+									{
+										auto screenshot_it = world_state->screenshots.find(gear_it->second->preview_image_screenshot_id);
+										if(screenshot_it != world_state->screenshots.end())
+										{
+											if(screenshot_it->second->database_key.valid())
+												world_state->db_records_to_delete.insert(screenshot_it->second->database_key);
+											world_state->screenshots.erase(screenshot_it);
+										}
+									}
+									world_state->gear_items.erase(gear_it);
+									world_state->addUserAsDBDirty(user_it->second);
+									deleted = true;
+								}
+								}
+								if(deleted)
+									for(const UID& remaining_id : user_it->second->gear_ids)
+									{
+										auto remaining_it = world_state->gear_items.find(remaining_id);
+										if(remaining_it != world_state->gear_items.end())
+											remaining_gear.items.push_back(remaining_it->second);
+									}
+							}
+
+							if(!deleted)
+							{
+								writeErrorMessageToClient(socket, "Gear item was not found, is equipped, or is not owned by you.");
+								break;
+							}
+							MessageUtils::initPacket(scratch_packet, Protocol::UserGearList);
+							remaining_gear.writeToStream(scratch_packet);
+							MessageUtils::updatePacketLengthField(scratch_packet);
+							socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+							socket->flush();
+							break;
+						}
+					case Protocol::CreateGearItem:
+						{
+							GearItemRef new_item = new GearItem();
+							readGearItemFromStream(msg_buffer, *new_item);
+							new_item->flags = 0;
+							new_item->max_supply = 1;
+							new_item->preview_image_URL.clear();
+
+							if(new_item->model_url.empty() || !isGearTransformValid(*new_item))
+							{
+								writeErrorMessageToClient(socket, "The selected object cannot be converted to gear.");
+								break;
+							}
+							if(world_state->isInReadOnlyMode())
+							{
+								writeErrorMessageToClient(socket, "Server is in read-only mode; gear cannot be created.");
+								break;
+							}
+							if(!client_user_id.valid())
+							{
+								writeErrorMessageToClient(socket, "You must be logged in to create gear.");
+								break;
+							}
+
+							new_item->id = world_state->getNextGearItemUID();
+							const uint64 screenshot_id = world_state->getNextScreenshotUID();
+							GearItems all_gear;
+							DependencyURLSet authoritative_URLs;
+							bool success = false;
+							MessageUtils::initPacket(scratch_packet, Protocol::UserGearList);
+							{
+								WorldStateLock lock(world_state->mutex);
+								auto user_it = world_state->user_id_to_users.find(client_user_id);
+								if(user_it != world_state->user_id_to_users.end())
+								{
+									new_item->created_time = TimeStamp::currentTime();
+									new_item->creator_id = client_user_id;
+									new_item->owner_id = client_user_id;
+
+									ScreenshotRef gear_shot = new Screenshot();
+									gear_shot->id = screenshot_id;
+									gear_shot->screenshot_type = Screenshot::ScreenshotType_Gear;
+									gear_shot->gear_item_id = new_item->id;
+									gear_shot->width_px = 256;
+									gear_shot->state = Screenshot::ScreenshotState_notdone;
+									gear_shot->created_time = TimeStamp::currentTime();
+									world_state->screenshots[gear_shot->id] = gear_shot;
+									world_state->addScreenshotAsDBDirty(gear_shot);
+
+									new_item->preview_image_screenshot_id = gear_shot->id;
+									world_state->gear_items[new_item->id] = new_item;
+									world_state->addGearItemAsDBDirty(new_item);
+									user_it->second->gear_ids.insert(new_item->id);
+									world_state->addUserAsDBDirty(user_it->second);
+
+									for(const UID& gear_id : user_it->second->gear_ids)
+									{
+										auto gear_it = world_state->gear_items.find(gear_id);
+										if(gear_it != world_state->gear_items.end())
+											all_gear.items.push_back(gear_it->second);
+									}
+									all_gear.writeToStream(scratch_packet);
+
+									// Snapshot dependency URL values while the newly inserted
+									// GearItem/material references are protected by the world lock.
+									// Another connection for the same account may update the item
+									// as soon as it receives UserGearList.
+									const WorldMaterial::GetURLOptions mat_options(/*use basis=*/false, /*area allocator=*/nullptr);
+									DependencyURLVector mat_urls;
+									for(size_t i=0; i<new_item->materials.size(); ++i)
+										new_item->materials[i]->appendDependencyURLsAllLODLevels(mat_options, mat_urls);
+									authoritative_URLs = DependencyURLSet(mat_urls.begin(), mat_urls.end());
+									authoritative_URLs.insert(DependencyURL(new_item->model_url));
+									success = true;
+								}
+							}
+
+							if(!success)
+							{
+								writeErrorMessageToClient(socket, "Failed to create gear item.");
+								break;
+							}
+
+							MessageUtils::updatePacketLengthField(scratch_packet);
+							socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+							socket->flush();
+
+							for(auto it = authoritative_URLs.begin(); it != authoritative_URLs.end(); ++it)
+							{
+								sendGetFileMessageIfNeeded(it->URL);
+								server->enqueueMsgForLodGenThread(new CheckGenLodResourcesForURL(it->URL));
+							}
 							break;
 						}
 					case Protocol::CreateChatBot: // Client wants to create a new chatbot

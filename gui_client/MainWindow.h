@@ -55,6 +55,7 @@ class AvatarSettingsWidget;
 class ScientificObjectEditor;
 class TreeEditorPanel;
 class VoxelEditorPanel;
+class GearInventoryPanel;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -410,6 +411,7 @@ public:
 	virtual bool getVoxelEditorToolState(VoxelToolType& tool_out, VoxelToolSettings& settings_out) const override;
 	virtual void voxelEditorMaterialPicked(int material_index) override;
 	virtual void voxelEditorObjectDataChanged(const WorldObject& ob) override;
+	virtual void gearInventoryUpdated() override;
 
 	virtual void showAvatarSettings() override;
 
@@ -632,6 +634,8 @@ public:
 	ScientificObjectEditor* scientific_object_editor;
 	TreeEditorPanel* tree_editor_panel;
 	VoxelEditorPanel* voxel_editor_panel;
+	GearInventoryPanel* gear_inventory_panel;
+	bool gear_inventory_refresh_pending;
 	QAction* action_add_tree;
 	QAction* action_add_scientific_object;
 	enum ActiveEditorKind
@@ -639,7 +643,8 @@ public:
 		ActiveEditor_Object,
 		ActiveEditor_Scientific,
 		ActiveEditor_Tree,
-		ActiveEditor_Voxel
+		ActiveEditor_Voxel,
+		ActiveEditor_GearInventory
 	};
 	ActiveEditorKind active_editor_kind;
 };

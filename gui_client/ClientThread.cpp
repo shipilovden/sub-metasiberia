@@ -664,6 +664,9 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 					avatar->other_dirty = true;
 				}
 			}
+
+			if(avatar_uid == this->client_avatar_uid)
+				out_msg_queue->enqueue(new OurAvatarFullUpdateMessage(temp_avatar.avatar_settings, temp_avatar.equipped_gear));
 			break;
 		}
 	case Protocol::AvatarIsHere:

@@ -88,18 +88,11 @@ GearInventoryUI::GearInventoryUI(GUIClient* gui_client_, GLUIRef gl_ui_)
 	avatar_preview_scene->shadow_mapping = false;
 	avatar_preview_scene->draw_overlay_objects = false;
 	avatar_preview_scene->render_to_main_render_framebuffer = false;
+	// The sky reload state is global to OpenGLEngine, not per scene.  A preview
+	// environment object can otherwise consume a pending world-sky reload before
+	// the main scene is drawn (notably just after F5), leaving the world grey.
+	avatar_preview_scene->env_ob = nullptr;
 	opengl_engine->addScene(avatar_preview_scene);
-
-	{
-		OpenGLSceneRef old_scene = opengl_engine->getCurrentScene();
-		opengl_engine->setCurrentScene(avatar_preview_scene);
-
-		OpenGLMaterial env_mat;
-		opengl_engine->setEnvMat(env_mat);
-		opengl_engine->setSunDir(normalise(Vec4f(1.f, -1.f, 1.f, 0.f)));
-
-		opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
-	}
 
 	avatar_preview_widget = new AvatarPreviewGLUIWidget(*gl_ui);
 	outer_grid->setCellWidget(/*x=*/0, /*y=*/0, avatar_preview_widget);
@@ -141,6 +134,9 @@ GearInventoryUI::~GearInventoryUI()
 		opengl_engine->setCurrentScene(avatar_preview_scene);
 
 		checkRemoveObAndSetRefToNull(*opengl_engine, avatar_preview_gl_ob);
+		for(size_t i=0; i<equipped_gear_graphics.size(); ++i)
+			checkRemoveObAndSetRefToNull(*opengl_engine, equipped_gear_graphics[i].gear_gl_ob);
+		equipped_gear_graphics.clear();
 
 		opengl_engine->setCurrentScene(main_world_scene.nonNull() ? main_world_scene : old_scene);
 		opengl_engine->removeScene(avatar_preview_scene);
@@ -253,23 +249,48 @@ void GearInventoryUI::setAllGear(const GearItems& all_gear_)
 }
 
 
-void GearInventoryUI::setAvatarGLObject(const AvatarGraphics& /*graphics*/, const Reference<GLObject>& avatar_gl_ob, const Matrix4f& pre_ob_to_world_matrix)
+void GearInventoryUI::setAvatarGLObject(const AvatarGraphics& graphics, const Reference<GLObject>& avatar_gl_ob, const Matrix4f& pre_ob_to_world_matrix)
 {
-	avatar_pre_ob_to_world_matrix = pre_ob_to_world_matrix;
-	world_avatar_gl_ob = avatar_gl_ob; // store for preview camera
+	if(avatar_preview_scene.isNull())
+		return;
 
-	if(avatar_preview_widget.nonNull() && avatar_gl_ob.nonNull())
+	avatar_pre_ob_to_world_matrix = pre_ob_to_world_matrix;
+	OpenGLSceneRef old_scene = opengl_engine->getCurrentScene();
+	opengl_engine->setCurrentScene(avatar_preview_scene);
+	checkRemoveObAndSetRefToNull(*opengl_engine, avatar_preview_gl_ob);
+	for(size_t i=0; i<equipped_gear_graphics.size(); ++i)
+		checkRemoveObAndSetRefToNull(*opengl_engine, equipped_gear_graphics[i].gear_gl_ob);
+	equipped_gear_graphics.clear();
+
+	if(avatar_gl_ob.nonNull())
 	{
-		// Point camera directly at the avatar's FRONT.
-		// Avatar forward direction = column 1 of ob_to_world_matrix (Y-axis).
-		const Vec4f pos = avatar_gl_ob->ob_to_world_matrix.getColumn(3);
-		const Vec4f fwd = avatar_gl_ob->ob_to_world_matrix.getColumn(1); // forward = Y-axis
-		avatar_preview_widget->cam_target_pos = Vec4f(pos[0], pos[1], pos[2] + 1.0f, 1.f);
+		avatar_preview_gl_ob = opengl_engine->allocateObject();
+		avatar_preview_gl_ob->mesh_data = avatar_gl_ob->mesh_data;
+		avatar_preview_gl_ob->materials = avatar_gl_ob->materials;
+		avatar_preview_gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0.f, 0.f, 1.67f) * pre_ob_to_world_matrix;
+		opengl_engine->addObject(avatar_preview_gl_ob);
+
+		for(size_t i=0; i<graphics.equipped_gear_graphics.size(); ++i)
+		{
+			EquippedGearGraphics preview_graphics = graphics.equipped_gear_graphics[i];
+			if(graphics.equipped_gear_graphics[i].gear_gl_ob)
+			{
+				GLObjectRef preview_ob = opengl_engine->allocateObject();
+				preview_ob->mesh_data = graphics.equipped_gear_graphics[i].gear_gl_ob->mesh_data;
+				preview_ob->materials = graphics.equipped_gear_graphics[i].gear_gl_ob->materials;
+				preview_ob->ob_to_world_matrix = Matrix4f::identity();
+				opengl_engine->addObject(preview_ob);
+				preview_graphics.gear_gl_ob = preview_ob;
+			}
+			equipped_gear_graphics.push_back(preview_graphics);
+		}
+
+		avatar_preview_widget->cam_target_pos = Vec4f(0.f, 0.f, 0.95f, 1.f);
 		avatar_preview_widget->cam_dist  = 2.5f;
 		avatar_preview_widget->cam_theta = 1.4f;
-		// cam_phi = heading so camera is directly in front of the avatar
-		avatar_preview_widget->cam_phi = std::atan2(fwd[0], fwd[1]);
+		avatar_preview_widget->cam_phi = 0.f;
 	}
+	opengl_engine->setCurrentScene(old_scene);
 
 	if(gear_editor_ui)
 		gear_editor_ui->setAvatarGLObject(avatar_preview_gl_ob, avatar_pre_ob_to_world_matrix);
@@ -446,7 +467,7 @@ void GearInventoryUI::openEditorForItem(const GearItemRef& item)
 
 void GearInventoryUI::renderAvatarPreview()
 {
-	if(avatar_preview_widget.isNull() || main_world_scene.isNull())
+	if(avatar_preview_widget.isNull() || avatar_preview_scene.isNull())
 		return;
 
 	OpenGLSceneRef old_scene = opengl_engine->getCurrentScene();
@@ -454,17 +475,29 @@ void GearInventoryUI::renderAvatarPreview()
 	const int saved_main_w = opengl_engine->getMainViewPortWidth();
 	const int saved_main_h = opengl_engine->getMainViewPortHeight();
 
-	// Render the world scene into the preview FBO at preview resolution.
-	// This gives proper sky, sun, IBL lighting, and world background.
 	const int preview_w = avatar_preview_widget->getPreviewFBOWidth();
 	const int preview_h = avatar_preview_widget->getPreviewFBOHeight();
 	opengl_engine->setMainViewportDims(preview_w, preview_h);
-	opengl_engine->setCurrentScene(main_world_scene);
+	opengl_engine->setCurrentScene(avatar_preview_scene);
+
+	if(avatar_preview_gl_ob)
+	{
+		for(size_t i=0; i<equipped_gear_graphics.size(); ++i)
+		{
+			EquippedGearGraphics& gear = equipped_gear_graphics[i];
+			if(gear.gear_gl_ob && gear.bone_node_i >= 0 && gear.bone_node_i < (int)avatar_preview_gl_ob->anim_node_data.size())
+			{
+				gear.gear_gl_ob->ob_to_world_matrix =
+					(avatar_preview_gl_ob->ob_to_world_matrix * avatar_preview_gl_ob->anim_node_data[gear.bone_node_i].node_hierarchical_to_object) * gear.transform;
+				opengl_engine->updateObjectTransformData(*gear.gear_gl_ob);
+			}
+		}
+	}
 
 	avatar_preview_widget->renderAvatarPreview();
 
 	opengl_engine->setMainViewportDims(saved_main_w, saved_main_h);
-	opengl_engine->setCurrentScene(main_world_scene);
+	opengl_engine->setCurrentScene(old_scene);
 	opengl_engine->setTargetFrameBuffer(old_fbo);
 }
 

@@ -46,6 +46,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "MapWorldUtils.h"
 #include "HTTPClient.h"
 #include "GearInventoryUI.h"
+#include "GearInventoryPanel.h"
 #include "ModelLoading.h"
 #include "BotEditorWidget.h"
 #include "PlayerPhysics.h"
@@ -1600,6 +1601,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	,scientific_object_editor(NULL)
 	,tree_editor_panel(NULL)
 	,voxel_editor_panel(NULL)
+	,gear_inventory_panel(NULL)
+	,gear_inventory_refresh_pending(false)
 	,action_add_tree(NULL)
 	,action_add_scientific_object(NULL)
 	,active_editor_kind(ActiveEditor_Object)
@@ -2156,6 +2159,24 @@ void MainWindow::initialiseUI()
 	// available below it.
 	ui->verticalLayout_4->insertWidget(0, voxel_editor_panel);
 	voxel_editor_panel->hide();
+	gear_inventory_panel = new GearInventoryPanel(ui->scrollAreaWidgetContents);
+	gear_inventory_panel->setObjectName(QStringLiteral("gearInventoryPanel"));
+	gear_inventory_panel->setMinimumWidth(360);
+	gear_inventory_panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	gear_inventory_panel->initPreview(
+		this->base_dir_path,
+		this->settings,
+		gui_client.resource_manager,
+		&gui_client.animation_manager,
+		[main_gl_widget = QPointer<GlWidget>(ui->glWidget)]() {
+			if(main_gl_widget)
+				main_gl_widget->makeCurrent();
+		}
+	);
+	gear_inventory_panel->setClient(&gui_client);
+	gear_inventory_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
+	ui->verticalLayout_4->insertWidget(0, gear_inventory_panel);
+	gear_inventory_panel->hide();
 
 	// Add a spacer to right-align the UserDetailsWidget (see http://www.setnode.com/blog/right-aligning-a-button-in-a-qtoolbar/)
 	QWidget* spacer = new QWidget();
@@ -3046,6 +3067,8 @@ void MainWindow::configureMainToolbarButtons()
 
 	if(voxel_editor_panel)
 		voxel_editor_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
+	if(gear_inventory_panel)
+		gear_inventory_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
 }
 
 
@@ -3346,6 +3369,11 @@ void MainWindow::afterGLInitInitialise()
 MainWindow::~MainWindow()
 {
 	running_destructor = true; // Set this to not append log messages during destruction, causes assert failure in Qt.
+	// QObject children outlive the generated Ui wrapper.  Stop the preview while
+	// its restore target still exists, so no timer/destructor callback can touch
+	// a destroyed main GL widget.
+	if(gear_inventory_panel)
+		gear_inventory_panel->shutdownPreview();
 
 	if(runtime_translator && QApplication::instance())
 		QApplication::instance()->removeTranslator(runtime_translator);
@@ -3386,6 +3414,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	}
 
 	ui->glWidget->makeCurrent();
+	if(gear_inventory_panel)
+		gear_inventory_panel->shutdownPreview();
 
 	// If we are in fullscreen mode, exit it before we save the window state.  This is because we want to start next time not in fullscreen mode.
 	if(this->isFullScreen())
@@ -3812,6 +3842,8 @@ void MainWindow::showObjectEditor()
 {
 	ui->parcelEditor->hide();
 	ui->botEditorWidget->hide();
+	if(gear_inventory_panel)
+		gear_inventory_panel->hide();
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 	{
 		ui->objectEditor->hide();
@@ -9557,10 +9589,25 @@ void MainWindow::on_actionUpdate_triggered()
 
 void MainWindow::on_actionOpen_Gear_Inventory_triggered()
 {
-	ui->glWidget->makeCurrent(); // Ensure GL context is current for FBO/texture creation inside GearInventoryUI.
-	gui_client.openGearInventory();
-	if(gui_client.gear_inventory_ui)
-		gui_client.gear_inventory_ui->refreshText(current_ui_language == RuntimeTranslation::UILanguage::Russian);
+	if(!gear_inventory_panel)
+		return;
+
+	ui->objectEditor->hide();
+	ui->parcelEditor->hide();
+	ui->botEditorWidget->hide();
+	if(scientific_object_editor) scientific_object_editor->hide();
+	if(tree_editor_panel) tree_editor_panel->hide();
+	if(voxel_editor_panel) voxel_editor_panel->hide();
+	active_editor_kind = ActiveEditor_GearInventory;
+	gear_inventory_panel->show();
+	gear_inventory_panel->refreshFromClient();
+	ui->editorDockWidget->setWindowTitle(tr("Инвентарь и экипировка"));
+	if(ui->editorDockWidget->toggleViewAction())
+		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
+	ui->editorDockWidget->setFloating(false);
+	addDockWidget(Qt::LeftDockWidgetArea, ui->editorDockWidget);
+	ui->editorDockWidget->show();
+	gui_client.requestGearInventory();
 }
 
 
@@ -10903,6 +10950,23 @@ void MainWindow::voxelEditorObjectDataChanged(const WorldObject& ob)
 }
 
 
+void MainWindow::gearInventoryUpdated()
+{
+	// Avatar and gear meshes can finish loading in a burst.  Rebuilding every
+	// card and the preview once per callback stalls the Qt render thread, so
+	// coalesce all callbacks already queued for this event-loop iteration.
+	if(!gear_inventory_panel || !gear_inventory_panel->isVisible() || gear_inventory_refresh_pending)
+		return;
+
+	gear_inventory_refresh_pending = true;
+	QTimer::singleShot(0, gear_inventory_panel, [this]() {
+		gear_inventory_refresh_pending = false;
+		if(gear_inventory_panel && gear_inventory_panel->isVisible())
+			gear_inventory_panel->refreshFromClient();
+	});
+}
+
+
 void MainWindow::showAvatarSettings()
 {
 	on_actionAvatarSettings_triggered();
@@ -10960,6 +11024,8 @@ void MainWindow::setHelpInfoLabel(const std::string& text)
 void MainWindow::showParcelEditor()
 {
 	ui->objectEditor->hide();
+	if(gear_inventory_panel)
+		gear_inventory_panel->hide();
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
 	if(tree_editor_panel)

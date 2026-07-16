@@ -954,10 +954,13 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("AboutDialog", "About", "О программе");
 	add("AboutDialog", "Generate Crash", "Сгенерировать сбой");
 	add("AboutDialog", "Metasiberia v%1", "Metasiberia v%1");
-	add("AboutDialog", "Metasiberia is inspired and based on <a href=\"https://www.glaretechnologies.com/\"><span style=\" text-decoration: underline; color:#222222;\">Glare-core</span></a>.<br>",
-		"Metasiberia вдохновлена и основана на <a href=\"https://www.glaretechnologies.com/\"><span style=\" text-decoration: underline; color:#222222;\">Glare-core</span></a>.<br>");
-	add("AboutDialog", "Author: <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>",
-		"Автор: <a href=\"https://x.com/denshipilovart\"><span style=\" text-decoration: underline; color:#222222;\">Denis Shipilov</span></a>");
+	add("AboutDialog", "Metasiberia is inspired by and based on %1.", "Metasiberia вдохновлена и основана на %1.");
+	add("AboutDialog", "Author: %1", "Автор: %1");
+	add("AboutDialog", "The Tree Editor is based on the %1 project.", "За основу Редактора деревьев взят проект %1.");
+	add("AboutDialog", "The Voxel Editor is based on the %1 project.", "За основу Редактора вокселей взят проект %1.");
+	add("AboutDialog", "Author: <b>%1</b> — %2", "Автор: <b>%1</b> — %2");
+	add("AboutDialog", "Data for the Scientific Object Editor comes from PubChem: %1.", "Данные для Редактора научных объектов взяты с PubChem: %1.");
+	add("AboutDialog", "The editor will gradually be expanded with new data.", "Постепенно редактор будет дополняться новыми данными.");
 
 	// BotSettingsDialog / BotEditorWidget
 	add("BotSettingsDialog", "Bot Settings",      "Настройки бота");
