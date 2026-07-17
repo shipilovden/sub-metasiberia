@@ -302,12 +302,17 @@ void AvatarGearPreviewWidget::paintEvent(QPaintEvent* event)
 	// complete paint (including its buffer swap), never from inside paintGL().
 	RestoreMainContextAfterQtEvent restore_context(*this, restore_main_context);
 	AvatarPreviewWidget::paintEvent(event);
-	if(gizmo_visible && selected_gear_id.valid() && interaction_mode != Interaction_Orbit)
+	// The gizmo is an inspection aid, not a mode-specific overlay.  Keep it
+	// visible in orbit mode as well; orbit only changes mouse handling.
+	if(gizmo_visible && selected_gear_id.valid())
 	{
 		QPainter painter(this);
 		painter.setRenderHint(QPainter::Antialiasing, true);
 		const QPoint origin(width() / 2, height() / 2);
-		const int extent = qMax(36, qMin(width(), height()) / 8);
+		const int extent = qMax(52, qMin(width(), height()) / 6);
+		painter.setPen(QPen(QColor(0, 0, 0, 180), 2));
+		painter.setBrush(QColor(20, 24, 30, 150));
+		painter.drawEllipse(origin, extent + 12, extent + 12);
 		const auto draw_axis = [&painter, origin, extent](const QPoint& end, const QColor& colour, const QString& label)
 		{
 			painter.setPen(QPen(colour, 3));

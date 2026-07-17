@@ -7,6 +7,7 @@ Native Qt gear inventory/editor dock for Metasiberia.
 
 
 #include "../shared/GearItem.h"
+#include <QtCore/QTimer>
 #include <QtCore/QString>
 #include <QtWidgets/QWidget>
 #include <functional>
@@ -59,6 +60,7 @@ private:
 	void setTransformAxis(TransformAxis axis);
 	void updateToolButtonStates();
 	QString previewPathForItem(const GearItem& item) const;
+	QString previewResourceSignature() const;
 	QString boneDisplayName(const QString& bone_name) const;
 	QString boneDataName() const;
 	void setHoverHelp(QWidget* widget, const QString& text);
@@ -86,6 +88,9 @@ private:
 	QDoubleSpinBox* rotation_axis_spins[3];
 	QDoubleSpinBox* rotation_angle_spin;
 	QDoubleSpinBox* scale_spins[3];
+	QCheckBox* link_scale_check;
+	QTimer preview_resource_timer;
+	QString preview_signature;
 	QToolButton* orbit_button;
 	QToolButton* refresh_button;
 	QToolButton* move_button;

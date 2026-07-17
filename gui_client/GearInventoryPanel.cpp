@@ -753,6 +753,10 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	move_button = new QToolButton(this); move_button->setText(tr("Перемещение")); move_button->setCheckable(true);
 	rotate_button = new QToolButton(this); rotate_button->setText(tr("Вращение")); rotate_button->setCheckable(true);
 	scale_button = new QToolButton(this); scale_button->setText(tr("Масштаб")); scale_button->setCheckable(true);
+	orbit_button->setToolTip(tr("Обзор аватара: ЛКМ вращает, колесо изменяет масштаб просмотра"));
+	move_button->setToolTip(tr("Перемещение предмета: перетаскивание мышью или gizmo"));
+	rotate_button->setToolTip(tr("Вращение предмета: перетаскивание мышью или gizmo"));
+	scale_button->setToolTip(tr("Масштаб предмета: перетаскивание мышью или gizmo"));
 	tools->addWidget(orbit_button);
 	tools->addWidget(move_button);
 	tools->addWidget(rotate_button);
@@ -771,6 +775,10 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 		axis_buttons[i]->setToolTip(tr("Ось преобразования"));
 		tools->addWidget(axis_buttons[i]);
 	}
+	axis_buttons[0]->setToolTip(tr("Все оси X/Y/Z"));
+	axis_buttons[1]->setToolTip(tr("Ось X"));
+	axis_buttons[2]->setToolTip(tr("Ось Y"));
+	axis_buttons[3]->setToolTip(tr("Ось Z"));
 	preview_layout->addLayout(tools);
 	root->addWidget(preview_group);
 
@@ -825,6 +833,10 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	grid->addWidget(new QLabel(tr("Угол"), this), 5, 0);
 	grid->addWidget(rotation_angle_spin, 5, 1, 1, 3);
 	grid->addWidget(new QLabel(tr("Масштаб"), this), 6, 0);
+	link_scale_check = new QCheckBox(tr("Связать X/Y/Z"), this);
+	link_scale_check->setChecked(true);
+	link_scale_check->setToolTip(tr("Изменение одной стороны одновременно изменяет масштаб X, Y и Z"));
+	grid->addWidget(link_scale_check, 6, 4);
 	apply_button = new QPushButton(tr("Сохранить положение"), this);
 	delete_button = new QPushButton(tr("Удалить предмет"), this);
 	delete_button->setToolTip(tr("Удалить выбранный предмет из инвентаря"));
@@ -843,6 +855,17 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	tabs->addTab(all_page, tr("Все предметы"));
 	root->addWidget(tabs);
 	root->addStretch(1);
+	preview_resource_timer.setInterval(750);
+	connect(&preview_resource_timer, &QTimer::timeout, this, [this]() {
+		if(!isVisible() || !gui_client) return;
+		const QString signature = previewResourceSignature();
+		if(signature != preview_signature)
+		{
+			preview_signature = signature;
+			rebuildCards();
+		}
+	});
+	preview_resource_timer.start();
 
 	connect(refresh_button, &QToolButton::clicked, this, [this]() { if(gui_client) gui_client->requestGearInventory(); });
 	connect(orbit_button, &QToolButton::clicked, this, [this]() { setTransformMode(Mode_Orbit); });
@@ -853,6 +876,7 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 		connect(axis_buttons[i], &QToolButton::clicked, this, [this, i]() { setTransformAxis((TransformAxis)i); });
 	connect(apply_button, &QPushButton::clicked, this, [this]() { updateSelectionFromEditor(true); });
 	connect(gizmo_button, &QCheckBox::toggled, this, [this](bool on) { preview->setGizmoVisible(on); });
+	connect(link_scale_check, &QCheckBox::toggled, this, [this](bool) { updateEditorFromSelection(); });
 	connect(name_edit, &QLineEdit::editingFinished, this, [this]() { updateSelectionFromEditor(true); });
 	connect(bone_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { updateSelectionFromEditor(true); });
 	connect(rotation_angle_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) { updateSelectionFromEditor(true); });
@@ -860,6 +884,11 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	{
 		connect(translation_spins[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) { updateSelectionFromEditor(true); });
 		connect(rotation_axis_spins[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) { updateSelectionFromEditor(true); });
+		connect(scale_spins[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, i](double value) {
+			if(updating_editor || !link_scale_check->isChecked()) return;
+			for(int j=0; j<3; ++j)
+				if(j != i) { const QSignalBlocker blocker(scale_spins[j]); scale_spins[j]->setValue(value); }
+		});
 		connect(scale_spins[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) { updateSelectionFromEditor(true); });
 	}
 	connect(delete_button, &QPushButton::clicked, this, [this]() {
@@ -998,6 +1027,7 @@ void GearInventoryPanel::rebuildCards()
 	all_cards_layout->addStretch(1);
 	selected_item = restored_selection;
 	preview->setSelectedGear(selected_item ? selected_item->id : UID::invalidUID());
+	preview_signature = previewResourceSignature();
 	updateEditorFromSelection();
 }
 
@@ -1021,9 +1051,19 @@ QWidget* GearInventoryPanel::makeCard(const GearItemRef& item, bool equipped)
 		const QPixmap pix(preview_path);
 		if(!pix.isNull()) thumb->setPixmap(pix.scaled(68, 68, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 	}
+	// A freshly-created item may not have a server screenshot URL yet.  Use the
+	// already rendered equipment preview for the selected card instead of
+	// falling back to a generic package icon.  The server thumbnail remains the
+	// preferred source and replaces this fallback as soon as it arrives.
+	if((thumb->pixmap() == nullptr || thumb->pixmap()->isNull()) && selected_item && selected_item->id == item->id && preview->hasRenderableAvatar())
+	{
+		const QImage frame = preview->grabFrameBuffer();
+		if(!frame.isNull())
+			thumb->setPixmap(QPixmap::fromImage(frame).scaled(68, 68, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+	}
 	if(thumb->pixmap() == nullptr || thumb->pixmap()->isNull())
 		thumb->setPixmap(LucideIconUtils::tintedIcon(icon_directory, "package", palette().color(QPalette::Text), 42).pixmap(42, 42));
-	thumb->setToolTip(item->preview_image_URL.empty() ? tr("Мини-превью пока не загружено") : tr("Мини-превью предмета"));
+	thumb->setToolTip(item->preview_image_URL.empty() ? tr("Изображение предмета из превью; серверная миниатюра будет загружена автоматически") : tr("Мини-превью предмета"));
 	row->addWidget(thumb);
 
 	QVBoxLayout* text = new QVBoxLayout();
@@ -1051,7 +1091,7 @@ QWidget* GearInventoryPanel::makeCard(const GearItemRef& item, bool equipped)
 	connect(select, &QPushButton::clicked, this, [this, item]() { selectItem(item); });
 	connect(toggle, &QPushButton::clicked, this, [this, item, equipped]() {
 		if(equipped) gui_client->equippedGearItemClicked(item); else gui_client->gearItemClicked(item);
-		selected_item = item;
+		selectItem(item);
 	});
 	actions->addWidget(select);
 	actions->addWidget(toggle);
@@ -1101,6 +1141,7 @@ void GearInventoryPanel::updateEditorFromSelection()
 	name_edit->setEnabled(have_item && canSynchroniseInventory());
 	bone_combo->setEnabled(editable);
 	for(int i=0; i<3; ++i) { translation_spins[i]->setEnabled(editable); rotation_axis_spins[i]->setEnabled(editable); scale_spins[i]->setEnabled(editable); }
+	link_scale_check->setEnabled(editable);
 	rotation_angle_spin->setEnabled(editable);
 	apply_button->setEnabled(editable);
 	delete_button->setEnabled(have_item && canSynchroniseInventory());
@@ -1208,7 +1249,6 @@ void GearInventoryPanel::setTransformMode(TransformMode mode)
 		static_cast<AvatarGearPreviewWidget::TransformAxis>(transform_axis)
 	);
 	updateToolButtonStates();
-	preview->update();
 }
 
 
@@ -1254,6 +1294,22 @@ QString GearInventoryPanel::previewPathForItem(const GearItem& item) const
 	{
 		return QString();
 	}
+}
+
+
+QString GearInventoryPanel::previewResourceSignature() const
+{
+	if(!gui_client || gui_client->resource_manager.isNull())
+		return QString();
+	QString signature;
+	for(size_t i=0; i<gui_client->logged_in_all_gear.items.size(); ++i)
+	{
+		const GearItemRef& item = gui_client->logged_in_all_gear.items[i];
+		if(item.isNull() || item->preview_image_URL.empty()) continue;
+		const bool present = gui_client->resource_manager->isFileForURLPresent(item->preview_image_URL);
+		signature += QString::number(item->id.value()) + (present ? QStringLiteral(":1;") : QStringLiteral(":0;"));
+	}
+	return signature;
 }
 
 
