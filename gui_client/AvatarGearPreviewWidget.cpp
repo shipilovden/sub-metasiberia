@@ -9,6 +9,7 @@ avatar settings preview.
 
 #include "AnimationManager.h"
 #include "AvatarGroundingUtils.h"
+#include "MeshBuilding.h"
 #include "ModelLoading.h"
 #include "../dll/include/IndigoException.h"
 #include "../dll/IndigoStringUtils.h"
@@ -18,15 +19,16 @@ avatar settings preview.
 #include "../utils/FileUtils.h"
 #include "../utils/StringUtils.h"
 #include "graphics/SRGBUtils.h"
+#include <QtCore/QRectF>
 #include <QtGui/QHideEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPaintEvent>
-#include <QtGui/QPainter>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QShowEvent>
 #include <QtGui/QWheelEvent>
 #include <cmath>
 #include <exception>
+#include <limits>
 #include <utility>
 
 
@@ -79,6 +81,35 @@ static bool isLoadableTexturePath(const std::string& path)
 {
 	return !path.empty() && !hasExtension(path, "mp4");
 }
+
+
+static const Colour3f gizmo_default_colours[3] = {
+	Colour3f(0.6f, 0.2f, 0.2f), Colour3f(0.2f, 0.6f, 0.2f), Colour3f(0.2f, 0.2f, 0.6f)
+};
+static const Colour3f gizmo_hover_colours[3] = {
+	Colour3f(1.f, 0.45f, 0.3f), Colour3f(0.3f, 1.f, 0.3f), Colour3f(0.3f, 0.45f, 1.f)
+};
+static const Colour4f gizmo_default_colours_rgba[3] = {
+	Colour4f(0.6f, 0.2f, 0.2f, 1.f), Colour4f(0.2f, 0.6f, 0.2f, 1.f), Colour4f(0.2f, 0.2f, 0.6f, 1.f)
+};
+static const Vec4f gizmo_rotation_basis[6] = {
+	Vec4f(0, 1, 0, 0), Vec4f(0, 0, 1, 0),
+	Vec4f(0, 0, 1, 0), Vec4f(1, 0, 0, 0),
+	Vec4f(1, 0, 0, 0), Vec4f(0, 1, 0, 0)
+};
+static const float gizmo_arc_half_angle = 1.5f;
+
+
+static float pointSegmentDistance(const Vec2f& p, const Vec2f& a, const Vec2f& b)
+{
+	const Vec2f ab = b - a;
+	const float len2 = ab.x * ab.x + ab.y * ab.y;
+	if(len2 <= 1.0e-8f)
+		return (p - a).length();
+	const Vec2f ap = p - a;
+	const float t = myClamp((ap.x * ab.x + ap.y * ab.y) / len2, 0.f, 1.f);
+	return (p - (a + ab * t)).length();
+}
 }
 
 
@@ -96,8 +127,12 @@ AvatarGearPreviewWidget::AvatarGearPreviewWidget(QWidget* parent)
 	use_basis_textures(false),
 	use_optimised_meshes(false),
 	optimised_mesh_version(-1),
-	gizmo_visible(true)
+	gizmo_visible(true),
+	hovered_gizmo_handle(-1),
+	applied_gizmo_hover(-2),
+	grabbed_gizmo_handle(-1)
 {
+	setMouseTracking(true);
 	render_timer.setInterval(33);
 	connect(&render_timer, &QTimer::timeout, this, [this]() { renderTick(); });
 	resource_retry_timer.start();
@@ -164,11 +199,42 @@ void AvatarGearPreviewWidget::setPreviewData(
 	int optimised_mesh_version_
 )
 {
+	bool update_existing_scene = initialised && !content_dirty && avatar_gl_ob.nonNull() &&
+		preview_gear.size() == equipped_gear_.items.size() &&
+		preview_equipped_gear.items.size() == equipped_gear_.items.size() &&
+		preview_avatar_settings.model_url == avatar_settings_.model_url &&
+		preview_avatar_settings.pre_ob_to_world_matrix == avatar_settings_.pre_ob_to_world_matrix &&
+		preview_avatar_settings.materials.size() == avatar_settings_.materials.size() &&
+		use_basis_textures == use_basis_textures_ &&
+		use_optimised_meshes == use_optimised_meshes_ &&
+		optimised_mesh_version == optimised_mesh_version_;
+	if(update_existing_scene)
+	{
+		for(size_t i=0; i<equipped_gear_.items.size(); ++i)
+		{
+			if(equipped_gear_.items[i].isNull() || preview_equipped_gear.items[i].isNull() ||
+				equipped_gear_.items[i]->id != preview_equipped_gear.items[i]->id ||
+				equipped_gear_.items[i]->model_url != preview_equipped_gear.items[i]->model_url ||
+				equipped_gear_.items[i]->materials.size() != preview_equipped_gear.items[i]->materials.size())
+			{
+				update_existing_scene = false;
+				break;
+			}
+		}
+	}
+
 	preview_avatar_settings = avatar_settings_;
 	preview_equipped_gear = equipped_gear_;
 	use_basis_textures = use_basis_textures_;
 	use_optimised_meshes = use_optimised_meshes_;
 	optimised_mesh_version = optimised_mesh_version_;
+	if(update_existing_scene)
+	{
+		for(size_t i=0; i<preview_gear.size(); ++i)
+			preview_gear[i].item = preview_equipped_gear.items[i];
+		update();
+		return;
+	}
 	content_dirty = true;
 	waiting_for_resources = false;
 	last_error.clear();
@@ -190,6 +256,27 @@ void AvatarGearPreviewWidget::resourcesChanged()
 void AvatarGearPreviewWidget::setSelectedGear(const UID& gear_id)
 {
 	selected_gear_id = gear_id;
+	hovered_gizmo_handle = -1;
+	applied_gizmo_hover = -2;
+	grabbed_gizmo_handle = -1;
+	update();
+}
+
+
+void AvatarGearPreviewWidget::updateGearItemData(const GearItem& gear_item)
+{
+	for(size_t i=0; i<preview_gear.size(); ++i)
+	{
+		PreviewGear& gear = preview_gear[i];
+		if(gear.item.nonNull() && gear.item->id == gear_item.id)
+		{
+			if(gear.item.ptr() != &gear_item)
+				gear.item->copyUserSettableFieldsFromOther(gear_item);
+			gear.bone_name = gear.item->bone_name;
+			update();
+			break;
+		}
+	}
 }
 
 
@@ -198,6 +285,7 @@ void AvatarGearPreviewWidget::setInteractionMode(InteractionMode mode, Transform
 	interaction_mode = mode;
 	transform_axis = axis;
 	transform_dragging = false;
+	grabbed_gizmo_handle = -1;
 }
 
 
@@ -214,9 +302,15 @@ void AvatarGearPreviewWidget::setTransformDragCallback(TransformDragCallback cal
 }
 
 
-void AvatarGearPreviewWidget::setTransformAxisClickCallback(TransformAxisClickCallback callback)
+void AvatarGearPreviewWidget::setTransformHandleClickCallback(TransformHandleClickCallback callback)
 {
-	transform_axis_click_callback = std::move(callback);
+	transform_handle_click_callback = std::move(callback);
+}
+
+
+void AvatarGearPreviewWidget::setGearSelectionCallback(GearSelectionCallback callback)
+{
+	gear_selection_callback = std::move(callback);
 }
 
 
@@ -230,6 +324,7 @@ void AvatarGearPreviewWidget::shutdown()
 	{
 		PreviewContextScope context(*this, restore_main_context);
 		clearPreviewObjects();
+		destroyGizmoObjects();
 		AvatarPreviewWidget::shutdown();
 	}
 	owned_texture_server = nullptr;
@@ -252,6 +347,8 @@ void AvatarGearPreviewWidget::paintGL()
 	{
 		rebuildSceneIfNeeded();
 		updateGearAttachmentTransforms(); // Uses the pose computed on the preceding frame.
+		ensureGizmoObjects();
+		updateGizmoObjects();
 	}
 	catch(glare::Exception& e)
 	{
@@ -282,6 +379,7 @@ void AvatarGearPreviewWidget::paintGL()
 	try
 	{
 		updateGearAttachmentTransforms();
+		updateGizmoObjects();
 	}
 	catch(glare::Exception& e)
 	{
@@ -302,30 +400,6 @@ void AvatarGearPreviewWidget::paintEvent(QPaintEvent* event)
 	// complete paint (including its buffer swap), never from inside paintGL().
 	RestoreMainContextAfterQtEvent restore_context(*this, restore_main_context);
 	AvatarPreviewWidget::paintEvent(event);
-	// The gizmo is an inspection aid, not a mode-specific overlay.  Keep it
-	// visible in orbit mode as well; orbit only changes mouse handling.
-	if(gizmo_visible && selected_gear_id.valid())
-	{
-		QPainter painter(this);
-		painter.setRenderHint(QPainter::Antialiasing, true);
-		const QPoint origin(width() / 2, height() / 2);
-		const int extent = qMax(52, qMin(width(), height()) / 6);
-		painter.setPen(QPen(QColor(0, 0, 0, 180), 2));
-		painter.setBrush(QColor(20, 24, 30, 150));
-		painter.drawEllipse(origin, extent + 12, extent + 12);
-		const auto draw_axis = [&painter, origin, extent](const QPoint& end, const QColor& colour, const QString& label)
-		{
-			painter.setPen(QPen(colour, 3));
-			painter.drawLine(origin, end);
-			painter.setBrush(colour);
-			painter.drawEllipse(end, 4, 4);
-			painter.setPen(colour);
-			painter.drawText(end + QPoint(6, 5), label);
-		};
-		draw_axis(origin + QPoint(extent, 0), QColor(220, 70, 70), QStringLiteral("X"));
-		draw_axis(origin + QPoint(0, -extent), QColor(75, 190, 90), QStringLiteral("Y"));
-		draw_axis(origin + QPoint(-extent / 2, extent / 2), QColor(75, 120, 230), QStringLiteral("Z"));
-	}
 }
 
 
@@ -340,6 +414,24 @@ void AvatarGearPreviewWidget::resizeEvent(QResizeEvent* event)
 
 void AvatarGearPreviewWidget::mousePressEvent(QMouseEvent* event)
 {
+	if(event->button() == Qt::LeftButton && gizmo_visible && selected_gear_id.valid() && transform_drag_callback)
+	{
+		const int handle = gizmoHandleAt(event->pos());
+		if(handle >= 0)
+		{
+			grabbed_gizmo_handle = handle;
+			interaction_mode = handle < 3 ? Interaction_Move : Interaction_Rotate;
+			transform_axis = static_cast<TransformAxis>((handle % 3) + 1);
+			if(transform_handle_click_callback)
+				transform_handle_click_callback(interaction_mode, transform_axis);
+			transform_dragging = true;
+			transform_drag_origin = event->pos();
+			transform_drag_callback(interaction_mode, transform_axis, QPoint(0, 0), /*finished=*/false);
+			event->accept();
+			return;
+		}
+	}
+
 	if(interaction_mode == Interaction_Orbit)
 	{
 		AvatarPreviewWidget::mousePressEvent(event);
@@ -348,19 +440,6 @@ void AvatarGearPreviewWidget::mousePressEvent(QMouseEvent* event)
 
 	if(event->button() == Qt::LeftButton && selected_gear_id.valid() && transform_drag_callback)
 	{
-		if(gizmo_visible && transform_axis_click_callback)
-		{
-			const QPoint origin(width() / 2, height() / 2);
-			const int extent = qMax(36, qMin(width(), height()) / 8);
-			const QPoint ends[] = { origin + QPoint(extent, 0), origin + QPoint(0, -extent), origin + QPoint(-extent / 2, extent / 2) };
-			const TransformAxis axes[] = { Axis_X, Axis_Y, Axis_Z };
-			for(int i=0; i<3; ++i)
-				if((event->pos() - ends[i]).manhattanLength() < 18)
-				{
-					transform_axis_click_callback(axes[i]);
-					break;
-				}
-		}
 		transform_dragging = true;
 		transform_drag_origin = event->pos();
 		// A zero-delta callback marks the beginning of a transform gesture, so
@@ -375,8 +454,36 @@ void AvatarGearPreviewWidget::mousePressEvent(QMouseEvent* event)
 }
 
 
+void AvatarGearPreviewWidget::mouseDoubleClickEvent(QMouseEvent* event)
+{
+	if(event->button() == Qt::LeftButton && gear_selection_callback)
+	{
+		UID gear_id;
+		if(gearAt(event->pos(), gear_id))
+		{
+			selected_gear_id = gear_id;
+			gizmo_visible = true;
+			gear_selection_callback(gear_id);
+			event->accept();
+			return;
+		}
+	}
+	AvatarPreviewWidget::mouseDoubleClickEvent(event);
+}
+
+
 void AvatarGearPreviewWidget::mouseMoveEvent(QMouseEvent* event)
 {
+	if(!transform_dragging && gizmo_visible)
+	{
+		const int handle = gizmoHandleAt(event->pos());
+		if(handle != hovered_gizmo_handle)
+		{
+			hovered_gizmo_handle = handle;
+			update();
+		}
+	}
+
 	if(interaction_mode == Interaction_Orbit)
 	{
 		AvatarPreviewWidget::mouseMoveEvent(event);
@@ -401,6 +508,7 @@ void AvatarGearPreviewWidget::mouseReleaseEvent(QMouseEvent* event)
 		if(transform_drag_callback)
 			transform_drag_callback(interaction_mode, transform_axis, event->pos() - transform_drag_origin, /*finished=*/true);
 		transform_dragging = false;
+		grabbed_gizmo_handle = -1;
 		event->accept();
 		return;
 	}
@@ -671,6 +779,7 @@ void AvatarGearPreviewWidget::rebuildSceneIfNeeded()
 
 void AvatarGearPreviewWidget::clearPreviewObjects()
 {
+	removeGizmoObjects();
 	if(opengl_engine.isNull())
 	{
 		avatar_gl_ob = nullptr;
@@ -725,6 +834,263 @@ void AvatarGearPreviewWidget::updateGearAttachmentTransforms()
 			// preceding attachment transform.
 			gear.gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(100000.f, 100000.f, 100000.f);
 			opengl_engine->updateObjectTransformData(*gear.gl_ob);
+		}
+	}
+}
+
+
+AvatarGearPreviewWidget::PreviewGear* AvatarGearPreviewWidget::selectedPreviewGear()
+{
+	for(size_t i=0; i<preview_gear.size(); ++i)
+		if(preview_gear[i].item.nonNull() && preview_gear[i].item->id == selected_gear_id)
+			return &preview_gear[i];
+	return nullptr;
+}
+
+
+const AvatarGearPreviewWidget::PreviewGear* AvatarGearPreviewWidget::selectedPreviewGear() const
+{
+	for(size_t i=0; i<preview_gear.size(); ++i)
+		if(preview_gear[i].item.nonNull() && preview_gear[i].item->id == selected_gear_id)
+			return &preview_gear[i];
+	return nullptr;
+}
+
+
+void AvatarGearPreviewWidget::ensureGizmoObjects()
+{
+	if(opengl_engine.isNull() || !opengl_engine->initSucceeded() || gizmo_axis_objects[0].nonNull())
+		return;
+
+	const Vec4f origin(0, 0, 0, 1);
+	const Vec4f axes[3] = { Vec4f(1, 0, 0, 0), Vec4f(0, 1, 0, 0), Vec4f(0, 0, 1, 0) };
+	for(int i=0; i<3; ++i)
+	{
+		gizmo_axis_objects[i] = opengl_engine->makeArrowObject(origin, origin + axes[i], gizmo_default_colours_rgba[i], 1.f);
+		gizmo_axis_objects[i]->materials[0].albedo_linear_rgb = toLinearSRGB(gizmo_default_colours[i]);
+		gizmo_axis_objects[i]->always_visible = true;
+
+		gizmo_rotation_objects[i] = opengl_engine->allocateObject();
+		gizmo_rotation_objects[i]->mesh_data = MeshBuilding::makeRotationArcHandleMeshData(
+			*opengl_engine->vert_buf_allocator, gizmo_arc_half_angle * 2.f);
+		gizmo_rotation_objects[i]->materials.resize(1);
+		gizmo_rotation_objects[i]->materials[0].albedo_linear_rgb = toLinearSRGB(gizmo_default_colours[i]);
+		gizmo_rotation_objects[i]->always_visible = true;
+	}
+	applied_gizmo_hover = -2;
+}
+
+
+void AvatarGearPreviewWidget::updateGizmoObjects()
+{
+	PreviewGear* gear = selectedPreviewGear();
+	if(!gizmo_visible || gear == nullptr || gear->gl_ob.isNull() || opengl_engine.isNull())
+	{
+		removeGizmoObjects();
+		return;
+	}
+
+	ensureGizmoObjects();
+	if(gizmo_axis_objects[0].isNull())
+		return;
+
+	const js::AABBox aabb_ws = opengl_engine->getAABBWSForObjectWithTransform(*gear->gl_ob, gear->gl_ob->ob_to_world_matrix);
+	const Vec4f centre = aabb_ws.centroid();
+	const Vec4f camera_pos = previewCameraPositionWS();
+	const Vec4f camera_to_centre = centre - camera_pos;
+	const float control_scale = myMax(camera_to_centre.length() * 0.2f, 0.08f);
+
+	const Vec4f axis_vectors[3] = {
+		Vec4f(camera_to_centre[0] > 0 ? -control_scale : control_scale, 0, 0, 0),
+		Vec4f(0, camera_to_centre[1] > 0 ? -control_scale : control_scale, 0, 0),
+		Vec4f(0, 0, camera_to_centre[2] > 0 ? -control_scale : control_scale, 0)
+	};
+	for(int i=0; i<3; ++i)
+	{
+		gizmo_axis_segments[i].a = centre;
+		gizmo_axis_segments[i].b = centre + axis_vectors[i];
+		gizmo_axis_objects[i]->ob_to_world_matrix = OpenGLEngine::arrowObjectTransform(
+			gizmo_axis_segments[i].a, gizmo_axis_segments[i].b, control_scale);
+		if(opengl_engine->isObjectAdded(gizmo_axis_objects[i]))
+			opengl_engine->updateObjectTransformData(*gizmo_axis_objects[i]);
+		else
+			opengl_engine->addObject(gizmo_axis_objects[i]);
+	}
+
+	const float arc_radius = control_scale * 0.7f;
+	for(int i=0; i<3; ++i)
+	{
+		const Vec4f basis_a = gizmo_rotation_basis[i * 2];
+		const Vec4f basis_b = gizmo_rotation_basis[i * 2 + 1];
+		const Vec4f to_camera = camera_pos - centre;
+		const float angle = std::atan2(dot(basis_b, to_camera), dot(basis_a, to_camera));
+		const float start_angle = angle - gizmo_arc_half_angle - 0.1f;
+		const float end_angle = angle + gizmo_arc_half_angle + 0.1f;
+		const size_t segment_count = 32;
+		gizmo_rotation_segments[i].resize(segment_count);
+		for(size_t z=0; z<segment_count; ++z)
+		{
+			const float theta_0 = start_angle + (end_angle - start_angle) * (float)z / (float)segment_count;
+			const float theta_1 = start_angle + (end_angle - start_angle) * (float)(z + 1) / (float)segment_count;
+			gizmo_rotation_segments[i][z].a = centre + basis_a * std::cos(theta_0) * arc_radius + basis_b * std::sin(theta_0) * arc_radius;
+			gizmo_rotation_segments[i][z].b = centre + basis_a * std::cos(theta_1) * arc_radius + basis_b * std::sin(theta_1) * arc_radius;
+		}
+
+		gizmo_rotation_objects[i]->ob_to_world_matrix = Matrix4f::translationMatrix(centre) *
+			Matrix4f::rotationMatrix(crossProduct(basis_a, basis_b), angle - gizmo_arc_half_angle) *
+			Matrix4f(basis_a, basis_b, crossProduct(basis_a, basis_b), Vec4f(0, 0, 0, 1)) *
+			Matrix4f::uniformScaleMatrix(arc_radius);
+		if(opengl_engine->isObjectAdded(gizmo_rotation_objects[i]))
+			opengl_engine->updateObjectTransformData(*gizmo_rotation_objects[i]);
+		else
+			opengl_engine->addObject(gizmo_rotation_objects[i]);
+	}
+
+	updateGizmoColours(hovered_gizmo_handle);
+}
+
+
+void AvatarGearPreviewWidget::removeGizmoObjects()
+{
+	if(opengl_engine.nonNull())
+	{
+		for(int i=0; i<3; ++i)
+		{
+			if(gizmo_axis_objects[i].nonNull() && opengl_engine->isObjectAdded(gizmo_axis_objects[i]))
+				opengl_engine->removeObject(gizmo_axis_objects[i]);
+			if(gizmo_rotation_objects[i].nonNull() && opengl_engine->isObjectAdded(gizmo_rotation_objects[i]))
+				opengl_engine->removeObject(gizmo_rotation_objects[i]);
+			gizmo_rotation_segments[i].clear();
+		}
+	}
+	applied_gizmo_hover = -2;
+}
+
+
+void AvatarGearPreviewWidget::destroyGizmoObjects()
+{
+	removeGizmoObjects();
+	for(int i=0; i<3; ++i)
+	{
+		gizmo_axis_objects[i] = nullptr;
+		gizmo_rotation_objects[i] = nullptr;
+		gizmo_rotation_segments[i].clear();
+	}
+}
+
+
+int AvatarGearPreviewWidget::gizmoHandleAt(const QPoint& pixel) const
+{
+	if(!gizmo_visible || selectedPreviewGear() == nullptr)
+		return -1;
+
+	const Vec2f p((float)pixel.x(), (float)pixel.y());
+	float best_distance = 14.f;
+	int best_handle = -1;
+	for(int i=0; i<3; ++i)
+	{
+		Vec2f a, b;
+		if(projectPreviewPointToPixel(gizmo_axis_segments[i].a, a) && projectPreviewPointToPixel(gizmo_axis_segments[i].b, b))
+		{
+			const float distance = pointSegmentDistance(p, a, b);
+			if(distance < best_distance)
+			{
+				best_distance = distance;
+				best_handle = i;
+			}
+		}
+	}
+	for(int i=0; i<3; ++i)
+	{
+		for(size_t z=0; z<gizmo_rotation_segments[i].size(); ++z)
+		{
+			Vec2f a, b;
+			if(projectPreviewPointToPixel(gizmo_rotation_segments[i][z].a, a) && projectPreviewPointToPixel(gizmo_rotation_segments[i][z].b, b))
+			{
+				const float distance = pointSegmentDistance(p, a, b);
+				if(distance < best_distance)
+				{
+					best_distance = distance;
+					best_handle = 3 + i;
+				}
+			}
+		}
+	}
+	return best_handle;
+}
+
+
+bool AvatarGearPreviewWidget::gearAt(const QPoint& pixel, UID& gear_id_out) const
+{
+	if(opengl_engine.isNull())
+		return false;
+	float best_distance2 = std::numeric_limits<float>::max();
+	bool found = false;
+	for(size_t i=0; i<preview_gear.size(); ++i)
+	{
+		const PreviewGear& gear = preview_gear[i];
+		if(gear.item.isNull() || gear.gl_ob.isNull())
+			continue;
+		const js::AABBox aabb = opengl_engine->getAABBWSForObjectWithTransform(*gear.gl_ob, gear.gl_ob->ob_to_world_matrix);
+		float min_x = std::numeric_limits<float>::max();
+		float min_y = std::numeric_limits<float>::max();
+		float max_x = -std::numeric_limits<float>::max();
+		float max_y = -std::numeric_limits<float>::max();
+		int projected_count = 0;
+		for(int corner=0; corner<8; ++corner)
+		{
+			const Vec4f point(
+				(corner & 1) ? aabb.max_[0] : aabb.min_[0],
+				(corner & 2) ? aabb.max_[1] : aabb.min_[1],
+				(corner & 4) ? aabb.max_[2] : aabb.min_[2], 1.f);
+			Vec2f projected;
+			if(projectPreviewPointToPixel(point, projected))
+			{
+				min_x = myMin(min_x, projected.x); min_y = myMin(min_y, projected.y);
+				max_x = myMax(max_x, projected.x); max_y = myMax(max_y, projected.y);
+				projected_count++;
+			}
+		}
+		if(projected_count == 0)
+			continue;
+		const QRectF bounds(QPointF(min_x - 6.f, min_y - 6.f), QPointF(max_x + 6.f, max_y + 6.f));
+		const QPointF click((qreal)pixel.x(), (qreal)pixel.y());
+		if(bounds.contains(click))
+		{
+			const QPointF centre = bounds.center();
+			const float dx = (float)(click.x() - centre.x());
+			const float dy = (float)(click.y() - centre.y());
+			const float distance2 = dx * dx + dy * dy;
+			if(distance2 < best_distance2)
+			{
+				best_distance2 = distance2;
+				gear_id_out = gear.item->id;
+				found = true;
+			}
+		}
+	}
+	return found;
+}
+
+
+void AvatarGearPreviewWidget::updateGizmoColours(int hovered_handle)
+{
+	if(applied_gizmo_hover == hovered_handle || opengl_engine.isNull())
+		return;
+	applied_gizmo_hover = hovered_handle;
+	for(int i=0; i<3; ++i)
+	{
+		if(gizmo_axis_objects[i].nonNull())
+		{
+			gizmo_axis_objects[i]->materials[0].albedo_linear_rgb = toLinearSRGB(hovered_handle == i ? gizmo_hover_colours[i] : gizmo_default_colours[i]);
+			if(opengl_engine->isObjectAdded(gizmo_axis_objects[i]))
+				opengl_engine->objectMaterialsUpdated(*gizmo_axis_objects[i]);
+		}
+		if(gizmo_rotation_objects[i].nonNull())
+		{
+			gizmo_rotation_objects[i]->materials[0].albedo_linear_rgb = toLinearSRGB(hovered_handle == i + 3 ? gizmo_hover_colours[i] : gizmo_default_colours[i]);
+			if(opengl_engine->isObjectAdded(gizmo_rotation_objects[i]))
+				opengl_engine->objectMaterialsUpdated(*gizmo_rotation_objects[i]);
 		}
 	}
 }

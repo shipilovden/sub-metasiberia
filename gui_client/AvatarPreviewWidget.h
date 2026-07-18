@@ -46,6 +46,13 @@ protected:
 	virtual void resizeGL(int w, int h) override; // Gets called whenever the widget has been resized (and also when it is shown for the first time because all newly created widgets get a resize event automatically).
 	virtual void paintGL() override; // Gets called whenever the widget needs to be updated.
 
+	// Camera helpers for specialised preview widgets.  These use the exact
+	// camera and projection configured by paintGL(), so overlays and picking can
+	// be anchored to rendered objects instead of to the QWidget centre.
+	Matrix4f previewWorldToCameraMatrix() const;
+	Vec4f previewCameraPositionWS() const;
+	bool projectPreviewPointToPixel(const Vec4f& point_ws, Vec2f& pixel_coords_out) const;
+
 	virtual void keyPressEvent(QKeyEvent* e) override;
 	virtual void keyReleaseEvent(QKeyEvent* e) override;
 	virtual void mousePressEvent(QMouseEvent* e) override;

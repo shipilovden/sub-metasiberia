@@ -915,8 +915,23 @@ void GearInventoryPanel::initPreview(const std::string& base_dir_path, QSettings
 	preview->setTransformDragCallback([this](AvatarGearPreviewWidget::InteractionMode, AvatarGearPreviewWidget::TransformAxis, const QPoint& delta, bool finished) {
 		applyPreviewDrag(delta, finished);
 	});
-	preview->setTransformAxisClickCallback([this](AvatarGearPreviewWidget::TransformAxis axis) {
+	preview->setTransformHandleClickCallback([this](AvatarGearPreviewWidget::InteractionMode mode, AvatarGearPreviewWidget::TransformAxis axis) {
+		setTransformMode(static_cast<TransformMode>(mode));
 		setTransformAxis(static_cast<TransformAxis>(axis));
+	});
+	preview->setGearSelectionCallback([this](const UID& gear_id) {
+		if(!gui_client)
+			return;
+		for(size_t i=0; i<gui_client->logged_in_equipped_gear.items.size(); ++i)
+		{
+			const GearItemRef& item = gui_client->logged_in_equipped_gear.items[i];
+			if(item.nonNull() && item->id == gear_id)
+			{
+				gizmo_button->setChecked(true);
+				selectItem(item);
+				break;
+			}
+		}
 	});
 }
 
@@ -940,7 +955,11 @@ void GearInventoryPanel::setIconDirectory(const QString& directory)
 	LucideIconUtils::setButtonIcon(apply_button, directory, "save", fg);
 	LucideIconUtils::setButtonIcon(delete_button, directory, "trash-2", fg);
 	LucideIconUtils::setButtonIcon(gizmo_button, directory, "move-3d", fg);
-	const QString hover_style = QStringLiteral("QToolButton:hover, QPushButton:hover, QCheckBox:hover { background: palette(highlight); color: palette(highlighted-text); } QFrame#gearInventoryCard:hover { border: 1px solid palette(highlight); }");
+	const QString hover_style = QStringLiteral(
+		"QToolButton:hover, QPushButton:hover, QCheckBox:hover { background: palette(highlight); color: palette(highlighted-text); }"
+		"QToolButton:checked { background: palette(highlight); color: palette(highlighted-text); border: 1px solid palette(highlight); }"
+		"QToolButton:checked:hover { background: palette(highlight); color: palette(highlighted-text); }"
+		"QFrame#gearInventoryCard:hover { border: 1px solid palette(highlight); }");
 	setStyleSheet(styleSheet() + hover_style);
 }
 
@@ -1168,15 +1187,15 @@ void GearInventoryPanel::updateSelectionFromEditor(bool send_to_server)
 			selected_item->axis = Vec3f(0, 0, 1);
 		selected_item->angle = degreeToRad((float)rotation_angle_spin->value());
 	}
+	preview->updateGearItemData(*selected_item);
 	if(send_to_server)
 		gui_client->gearItemChangedOnOurAvatar(selected_item.ptr());
-	preview->update();
 }
 
 
 void GearInventoryPanel::applyPreviewDrag(const QPoint& total_delta, bool finished)
 {
-	if(!selected_item || !selectedItemIsEquipped() || !canSynchroniseInventory())
+	if(!selected_item || !selectedItemIsEquipped())
 		return;
 	if(total_delta.isNull() && !finished)
 	{
@@ -1215,8 +1234,8 @@ void GearInventoryPanel::applyPreviewDrag(const QPoint& total_delta, bool finish
 		else selected_item->scale = drag_start_scale * factor;
 	}
 	updateEditorFromSelection();
-	preview->update();
-	if(finished || !total_delta.isNull())
+	preview->updateGearItemData(*selected_item);
+	if((finished || !total_delta.isNull()) && canSynchroniseInventory())
 		gui_client->gearItemChangedOnOurAvatar(selected_item.ptr());
 }
 

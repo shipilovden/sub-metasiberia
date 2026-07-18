@@ -217,11 +217,7 @@ void AvatarPreviewWidget::paintGL()
 	if(opengl_engine.isNull())
 		return;
 
-	const Matrix4f T = Matrix4f::translationMatrix(0.f, cam_dist, 0.f);
-	const Matrix4f z_rot = Matrix4f::rotationMatrix(Vec4f(0,0,1,0), cam_phi);
-	const Matrix4f x_rot = Matrix4f::rotationMatrix(Vec4f(1,0,0,0), -(cam_theta - Maths::pi_2<float>()));
-	const Matrix4f rot = x_rot * z_rot;
-	const Matrix4f world_to_camera_space_matrix = T * rot * Matrix4f::translationMatrix(-cam_target_pos);
+	const Matrix4f world_to_camera_space_matrix = previewWorldToCameraMatrix();
 
 	const float sensor_width = 0.035f;
 	const float lens_sensor_dist = 0.03f;
@@ -232,6 +228,43 @@ void AvatarPreviewWidget::paintGL()
 	opengl_engine->setPerspectiveCameraTransform(world_to_camera_space_matrix, sensor_width, lens_sensor_dist, render_aspect_ratio, /*lens shift up=*/0.f, /*lens shift right=*/0.f);
 	opengl_engine->setCurrentTime((float)timer.elapsed());
 	opengl_engine->draw();
+}
+
+
+Matrix4f AvatarPreviewWidget::previewWorldToCameraMatrix() const
+{
+	const Matrix4f T = Matrix4f::translationMatrix(0.f, cam_dist, 0.f);
+	const Matrix4f z_rot = Matrix4f::rotationMatrix(Vec4f(0, 0, 1, 0), cam_phi);
+	const Matrix4f x_rot = Matrix4f::rotationMatrix(Vec4f(1, 0, 0, 0), -(cam_theta - Maths::pi_2<float>()));
+	return T * x_rot * z_rot * Matrix4f::translationMatrix(-cam_target_pos);
+}
+
+
+Vec4f AvatarPreviewWidget::previewCameraPositionWS() const
+{
+	Matrix4f camera_to_world;
+	if(previewWorldToCameraMatrix().getInverseForAffine3Matrix(camera_to_world))
+		return camera_to_world.getColumn(3);
+	return cam_target_pos;
+}
+
+
+bool AvatarPreviewWidget::projectPreviewPointToPixel(const Vec4f& point_ws, Vec2f& pixel_coords_out) const
+{
+	const Vec4f point_cs = previewWorldToCameraMatrix() * point_ws;
+	if(point_cs[1] <= 0.001f || viewport_w <= 0 || viewport_h <= 0)
+		return false;
+
+	const float sensor_width = 0.035f;
+	const float sensor_height = sensor_width / myMax(viewport_aspect_ratio, 0.001f);
+	const float lens_sensor_dist = 0.03f;
+	const float r_x = point_cs[0] / point_cs[1];
+	const float r_y = -point_cs[2] / point_cs[1];
+	pixel_coords_out = Vec2f(
+		viewport_w * (lens_sensor_dist * r_x / sensor_width + 0.5f),
+		viewport_h * (lens_sensor_dist * r_y / sensor_height + 0.5f)
+	);
+	return true;
 }
 
 

@@ -49,7 +49,8 @@ public:
 
 	using RestoreMainContextCallback = std::function<void()>;
 	using TransformDragCallback = std::function<void(InteractionMode, TransformAxis, const QPoint&, bool)>;
-	using TransformAxisClickCallback = std::function<void(TransformAxis)>;
+	using TransformHandleClickCallback = std::function<void(InteractionMode, TransformAxis)>;
+	using GearSelectionCallback = std::function<void(const UID&)>;
 
 	explicit AvatarGearPreviewWidget(QWidget* parent = nullptr);
 	~AvatarGearPreviewWidget();
@@ -78,10 +79,12 @@ public:
 	void resourcesChanged();
 
 	void setSelectedGear(const UID& gear_id);
+	void updateGearItemData(const GearItem& gear_item);
 	void setInteractionMode(InteractionMode mode, TransformAxis axis);
 	void setGizmoVisible(bool visible);
 	void setTransformDragCallback(TransformDragCallback callback);
-	void setTransformAxisClickCallback(TransformAxisClickCallback callback);
+	void setTransformHandleClickCallback(TransformHandleClickCallback callback);
+	void setGearSelectionCallback(GearSelectionCallback callback);
 
 	void shutdown();
 
@@ -97,6 +100,7 @@ protected:
 	void resizeEvent(QResizeEvent* event) override;
 	void paintGL() override;
 	void mousePressEvent(QMouseEvent* event) override;
+	void mouseDoubleClickEvent(QMouseEvent* event) override;
 	void mouseMoveEvent(QMouseEvent* event) override;
 	void mouseReleaseEvent(QMouseEvent* event) override;
 	void wheelEvent(QWheelEvent* event) override;
@@ -112,12 +116,26 @@ private:
 		int bone_node_i = -1;
 		bool added_to_engine = false;
 	};
+	struct GizmoSegment
+	{
+		Vec4f a;
+		Vec4f b;
+	};
 
 	void renderTick();
 	bool anyMissingResourceIsAvailable() const;
 	void rebuildSceneIfNeeded();
 	void clearPreviewObjects();
 	void updateGearAttachmentTransforms();
+	PreviewGear* selectedPreviewGear();
+	const PreviewGear* selectedPreviewGear() const;
+	void ensureGizmoObjects();
+	void updateGizmoObjects();
+	void removeGizmoObjects();
+	void destroyGizmoObjects();
+	int gizmoHandleAt(const QPoint& pixel) const;
+	bool gearAt(const QPoint& pixel, UID& gear_id_out) const;
+	void updateGizmoColours(int hovered_handle);
 
 	std::string resolveModelPath(const URLString& base_url, URLString& desired_url_out);
 	std::string resolveResourcePath(const URLString& preferred_url, const URLString& fallback_url);
@@ -130,7 +148,8 @@ private:
 	AnimationManager* animation_manager;
 	RestoreMainContextCallback restore_main_context;
 	TransformDragCallback transform_drag_callback;
-	TransformAxisClickCallback transform_axis_click_callback;
+	TransformHandleClickCallback transform_handle_click_callback;
+	GearSelectionCallback gear_selection_callback;
 
 	Reference<TextureServer> owned_texture_server;
 	AvatarSettings preview_avatar_settings;
@@ -158,4 +177,11 @@ private:
 	QTimer render_timer;
 	QElapsedTimer resource_retry_timer;
 	bool gizmo_visible;
+	GLObjectRef gizmo_axis_objects[3];
+	GLObjectRef gizmo_rotation_objects[3];
+	GizmoSegment gizmo_axis_segments[3];
+	std::vector<GizmoSegment> gizmo_rotation_segments[3];
+	int hovered_gizmo_handle;
+	int applied_gizmo_hover;
+	int grabbed_gizmo_handle;
 };

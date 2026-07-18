@@ -3123,8 +3123,9 @@ void MainWindow::applyMainChromeThemeStylesheet()
 		"QMainWindow#MainWindow { background: %1; color: %2; }"
 		"QDockWidget { background: %1; color: %2; }"
 		"QDockWidget::title { background: %1; color: %2; border-bottom: 1px solid %3; padding: 3px 6px; text-align: left; }"
+		"QDockWidget#editorDockWidget::title { background: %4; color: %2; border: none; padding: 3px 6px; text-align: left; }"
 		"QStatusBar { background: %1; color: %2; border-top: 1px solid %3; }")
-		.arg(css(window), css(text), css(border));
+		.arg(css(window), css(text), css(border), css(base));
 
 	const QString tooltip_style = QString(
 		"QToolTip { color: %1; background-color: %2; border: 1px solid %3; font-size: 9pt; padding: 6px; border-radius: 3px; }")
