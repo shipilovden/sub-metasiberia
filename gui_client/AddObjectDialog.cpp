@@ -80,10 +80,20 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	models.push_back("Icosahedron");
 	models.push_back("Platonic_Solid");
 	models.push_back("Torus");
+	models.push_back("Cone");
+	models.push_back("Pyramid");
+	models.push_back("Octahedron");
+	models.push_back("Wedge");
+	models.push_back("Triangular_Prism");
+	models.push_back("Hexagonal_Prism");
 
 	for(size_t i=0; i<models.size(); ++i)
 	{
-		const std::string image_path = base_dir_path + "/data/resources/models/" + models[i] + ".png";
+		std::string preview_model = models[i];
+		if(preview_model == "Quad") preview_model = "quad";
+		else if(preview_model == "Cone" || preview_model == "Hexagonal_Prism") preview_model = "Cylinder";
+		else if(preview_model == "Pyramid" || preview_model == "Octahedron" || preview_model == "Wedge" || preview_model == "Triangular_Prism") preview_model = "Platonic_Solid";
+		const std::string image_path = base_dir_path + "/data/resources/models/" + preview_model + ".PNG";
 
 		listWidget->addItem(new QListWidgetItem(QIcon(QtUtils::toQString(image_path)), QtUtils::toQString(models[i])));
 	}

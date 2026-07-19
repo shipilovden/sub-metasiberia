@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>640</width>
-    <height>641</height>
+    <height>755</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -247,6 +247,88 @@
           <widget class="QLabel" name="inputVolumeScaleLabel">
            <property name="text">
             <string>100%</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="MCPGroupBox">
+     <property name="title">
+      <string>MCP server</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_4">
+      <item>
+       <widget class="QCheckBox" name="enableMCPCheckBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="toolTip">
+         <string>The local MCP endpoint is unavailable until this build has a listener that binds exclusively to localhost.</string>
+        </property>
+        <property name="text">
+         <string>Enable local MCP server (allows AI agents to control Metasiberia)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="MCPAvailabilityLabel">
+        <property name="toolTip">
+         <string>The listener must bind only to 127.0.0.1 or ::1; filtering requests after accepting them on a wildcard socket is not sufficient.</string>
+        </property>
+        <property name="text">
+         <string>MCP is temporarily unavailable in this build: a secure localhost-only listener is required.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="MCPSettingsContainer" native="true">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <layout class="QFormLayout" name="formLayout_3">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item row="0" column="0">
+          <widget class="QLabel" name="MCPPortLabel">
+           <property name="toolTip">
+            <string>Unprivileged loopback port for the local MCP endpoint</string>
+           </property>
+           <property name="text">
+            <string>Local port</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QSpinBox" name="MCPPortSpinBox">
+           <property name="toolTip">
+            <string>Valid range: 1024 to 65535</string>
+           </property>
+           <property name="minimum">
+            <number>1024</number>
+           </property>
+           <property name="maximum">
+            <number>65535</number>
+           </property>
+           <property name="value">
+            <number>8095</number>
            </property>
           </widget>
          </item>

@@ -34,4 +34,5 @@ signals:
 
 private slots:
 	void on_userDetailsLabel_linkActivated(const QString& link);
+	void on_logoutButton_clicked();
 };

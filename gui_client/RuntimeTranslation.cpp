@@ -65,6 +65,10 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Add Tree", "Добавить дерево");
 	add("MainWindow", "Add procedural tree", "Добавить процедурное дерево");
 	add("MainWindow", "Add Scientific Object", "Добавить научный объект");
+	add("MainWindow", "Add Cultural Object", "Добавить объект культуры");
+	add("MainWindow", "Create a cultural object and open the Cultural Object Editor", "Создать объект культуры и открыть Редактор объектов культуры");
+	add("MainWindow", "Add Document", "Добавить документ");
+	add("MainWindow", "Open the document editor for PDF, Markdown, HTML or text", "Открыть редактор документов для PDF, Markdown, HTML или текста");
 	add("MainWindow", "Add Camera", "Добавить камеру");
 	add("MainWindow", "Add Seat", "Добавить сиденье");
 	add("MainWindow", "Add Audio Player", "Добавить аудио-плеер");
@@ -135,6 +139,10 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Tree Editor", "Редактор дерева");
 	add("MainWindow", "Voxel Editor", "Редактор вокселей");
 	add("MainWindow", "Scientific Object Editor", "Редактор научных объектов");
+	add("MainWindow", "Cultural Object Editor", "Редактор объектов культуры");
+	add("MainWindow", "Animation Editor", "Редактор анимаций");
+	add("MainWindow", "Photo and Video Settings", "Настройки фото и видео");
+	add("MainWindow", "Documents", "Документы");
 	add("MainWindow", "Portal Editor", "Редактор порталов");
 	add("MainWindow", "Open Current Location In Browser", "Открыть текущую локацию в браузере");
 	add("MainWindow", "Open map settings", "Открыть настройки карты");
@@ -961,6 +969,20 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("AboutDialog", "Author: <b>%1</b> — %2", "Автор: <b>%1</b> — %2");
 	add("AboutDialog", "Data for the Scientific Object Editor comes from PubChem: %1.", "Данные для Редактора научных объектов взяты с PubChem: %1.");
 	add("AboutDialog", "The editor will gradually be expanded with new data.", "Постепенно редактор будет дополняться новыми данными.");
+	add("AboutDialog", "Main website: %1", "Основной сайт: %1");
+	add("AboutDialog", "Administration: %1", "Админка: %1");
+	add("AboutDialog", "Avatars: %1", "Аватары: %1");
+	add("AboutDialog", "Telegram: %1", "Telegram: %1");
+	add("AboutDialog", "Instagram: %1", "Instagram: %1");
+	add("AboutDialog", "VK: %1", "VK: %1");
+	add("AboutDialog", "Metasiberia", "Metasiberia");
+	add("AboutDialog", "Author of Metasiberia", "Автор Metasiberia");
+	add("AboutDialog", "Author: <b>Denis Shipilov</b>", "Автор: <b>Denis Shipilov</b>");
+	add("AboutDialog", "X: %1", "X: %1");
+	add("AboutDialog", "Open-source foundations", "Проекты и открытые компоненты");
+	add("AboutDialog", "Interface icons are provided by %1.", "Иконки интерфейса взяты из проекта %1.");
+	add("AboutDialog", "Scientific data", "Научные данные");
+	add("UserDetailsWidget", "Log out", "Выйти");
 
 	// BotSettingsDialog / BotEditorWidget
 	add("BotSettingsDialog", "Bot Settings",      "Настройки бота");

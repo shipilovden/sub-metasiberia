@@ -63,6 +63,11 @@ Copyright Glare Technologies Limited 2024 -
 #include "UploadResourceThread.h"
 #include "ScientificObjectEditor.h"
 #include "ScientificObjectSettings.h"
+#include "CulturalObjectEditor.h"
+#include "CulturalObjectSettings.h"
+#include "AnimationEditorPanel.h"
+#include "PhotoVideoSettingsPanel.h"
+#include "DocumentEditorPanel.h"
 #include "../qt/FlowLayout.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
@@ -84,6 +89,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QJsonParseError>
 #include <QtCore/QIODevice>
 #include <QtCore/QSettings>
+#include <QtCore/QUuid>
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QSet>
 #include <QtCore/QThread>
@@ -144,6 +150,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QToolTip>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
+#include <QtWidgets/QStyle>
 #include <QtWidgets/QStyleFactory>
 #include <QtGui/QScreen>
 #include <QtGamepad/QGamepadManager>
@@ -1508,6 +1515,54 @@ private:
 };
 
 
+static void installEditorDockTitleBar(QDockWidget* dock_widget)
+{
+	if(!dock_widget)
+		return;
+
+	QWidget* title_bar = new QWidget(dock_widget);
+	title_bar->setObjectName(QStringLiteral("editorDockTitleBar"));
+	title_bar->setAttribute(Qt::WA_StyledBackground, true);
+	title_bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+	QHBoxLayout* layout = new QHBoxLayout(title_bar);
+	layout->setContentsMargins(6, 2, 3, 2);
+	layout->setSpacing(2);
+
+	QLabel* title_label = new QLabel(dock_widget->windowTitle(), title_bar);
+	title_label->setObjectName(QStringLiteral("editorDockTitleLabel"));
+	title_label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	title_label->setAttribute(Qt::WA_TransparentForMouseEvents);
+	layout->addWidget(title_label, 1);
+
+	QToolButton* float_button = new QToolButton(title_bar);
+	float_button->setObjectName(QStringLiteral("editorDockFloatButton"));
+	float_button->setAutoRaise(true);
+	float_button->setFixedSize(18, 18);
+	float_button->setIconSize(QSize(12, 12));
+	float_button->setIcon(dock_widget->style()->standardIcon(QStyle::SP_TitleBarNormalButton));
+	float_button->setToolTip(QCoreApplication::translate("MainWindow", "Dock or undock this panel"));
+	layout->addWidget(float_button);
+
+	QToolButton* close_button = new QToolButton(title_bar);
+	close_button->setObjectName(QStringLiteral("editorDockCloseButton"));
+	close_button->setAutoRaise(true);
+	close_button->setFixedSize(18, 18);
+	close_button->setIconSize(QSize(12, 12));
+	close_button->setIcon(dock_widget->style()->standardIcon(QStyle::SP_TitleBarCloseButton));
+	close_button->setToolTip(QCoreApplication::translate("MainWindow", "Close"));
+	layout->addWidget(close_button);
+
+	QObject::connect(dock_widget, &QDockWidget::windowTitleChanged, title_label, &QLabel::setText);
+	QObject::connect(float_button, &QToolButton::clicked, dock_widget, [dock_widget]() {
+		dock_widget->setFloating(!dock_widget->isFloating());
+	});
+	QObject::connect(close_button, &QToolButton::clicked, dock_widget, [dock_widget]() { dock_widget->close(); });
+
+	dock_widget->setTitleBarWidget(title_bar);
+}
+
+
 static void dockMetasiberiaMapLikeChat(QMainWindow* main_window, QDockWidget* map_dock_widget, QDockWidget* chat_dock_widget)
 {
 	if(!main_window || !map_dock_widget)
@@ -1598,13 +1653,23 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	,avatar_settings_widget(NULL)
 	,map_dock_widget(NULL)
 	,map_dock_map_widget(NULL)
+	,animation_editor_dock_widget(NULL)
+	,animation_editor_panel(NULL)
+	,photo_video_dock_widget(NULL)
+	,photo_video_settings_panel(NULL)
+	,native_photo_video_gl_ready(false)
+	,document_editor_dock_widget(NULL)
+	,document_editor_panel(NULL)
 	,scientific_object_editor(NULL)
+	,cultural_object_editor(NULL)
 	,tree_editor_panel(NULL)
 	,voxel_editor_panel(NULL)
 	,gear_inventory_panel(NULL)
 	,gear_inventory_refresh_pending(false)
 	,action_add_tree(NULL)
 	,action_add_scientific_object(NULL)
+	,action_add_cultural_object(NULL)
+	,action_add_document(NULL)
 	,active_editor_kind(ActiveEditor_Object)
 	//game_controller(NULL)
 {
@@ -2013,6 +2078,12 @@ void MainWindow::initialiseUI()
 	action_add_scientific_object = new QAction(this);
 	action_add_scientific_object->setObjectName(QStringLiteral("actionAddScientificObject"));
 	connect(action_add_scientific_object, SIGNAL(triggered(bool)), this, SLOT(on_actionAddScientificObject_triggered()));
+	action_add_cultural_object = new QAction(this);
+	action_add_cultural_object->setObjectName(QStringLiteral("actionAddCulturalObject"));
+	connect(action_add_cultural_object, SIGNAL(triggered(bool)), this, SLOT(on_actionAddCulturalObject_triggered()));
+	action_add_document = new QAction(this);
+	action_add_document->setObjectName(QStringLiteral("actionAddDocument"));
+	connect(action_add_document, SIGNAL(triggered(bool)), this, SLOT(on_actionAddDocument_triggered()));
 	action_add_tree = new QAction(this);
 	action_add_tree->setObjectName(QStringLiteral("actionAddTree"));
 	connect(action_add_tree, SIGNAL(triggered(bool)), this, SLOT(on_actionAddTree_triggered()));
@@ -2092,6 +2163,111 @@ void MainWindow::initialiseUI()
 	dockMetasiberiaMapLikeChat(this, map_dock_widget, ui->chatDockWidget);
 	map_dock_widget->hide();
 
+	animation_editor_dock_widget = new QDockWidget(tr("Animation Editor"), this);
+	animation_editor_dock_widget->setObjectName(QStringLiteral("animationEditorDockWidget"));
+	animation_editor_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	animation_editor_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	animation_editor_panel = new AnimationEditorPanel(settings, animation_editor_dock_widget);
+	animation_editor_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
+	animation_editor_dock_widget->setWidget(animation_editor_panel);
+	animation_editor_dock_widget->setMinimumWidth(440);
+	addDockWidget(Qt::RightDockWidgetArea, animation_editor_dock_widget);
+	animation_editor_dock_widget->hide();
+
+	QVector<AnimationEditorItem> initial_animations;
+	initial_animations << AnimationEditorItem{QStringLiteral("idle_default"), tr("Idle Default"), tr("System"), tr("Built-in"), 0.0, true}
+		<< AnimationEditorItem{QStringLiteral("walk_default"), tr("Walk Default"), tr("Movement"), tr("Built-in"), 0.0, true}
+		<< AnimationEditorItem{QStringLiteral("run_default"), tr("Run Default"), tr("Movement"), tr("Built-in"), 0.0, false}
+		<< AnimationEditorItem{QStringLiteral("jump_start"), tr("Jump Start"), tr("Movement"), tr("Built-in"), 0.0, false}
+		<< AnimationEditorItem{QStringLiteral("falling"), tr("Falling"), tr("Movement"), tr("Built-in"), 0.0, false}
+		<< AnimationEditorItem{QStringLiteral("landing"), tr("Landing"), tr("Movement"), tr("Built-in"), 0.0, false};
+	animation_editor_panel->setAnimations(initial_animations);
+	connect(animation_editor_panel, &AnimationEditorPanel::applyProfileRequested, this,
+		[this](const QString& profile_name, const QVariantMap&) {
+			showInfoNotification("Animation profile saved: " + QtUtils::toStdString(profile_name));
+		});
+
+	photo_video_dock_widget = new QDockWidget(tr("Photo and Video Settings"), this);
+	photo_video_dock_widget->setObjectName(QStringLiteral("photoVideoSettingsDockWidget"));
+	photo_video_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	photo_video_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	photo_video_settings_panel = new PhotoVideoSettingsPanel(settings, photo_video_dock_widget);
+	photo_video_settings_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
+	photo_video_dock_widget->setWidget(photo_video_settings_panel);
+	photo_video_dock_widget->setMinimumWidth(400);
+	addDockWidget(Qt::RightDockWidgetArea, photo_video_dock_widget);
+	photo_video_dock_widget->hide();
+
+	const auto apply_photo_video_camera_mode = [this](const QString& mode) {
+		if(mode == QStringLiteral("selfie")) gui_client.cam_controller.selfieCameraModeSelected();
+		else if(mode == QStringLiteral("fixed_angle")) gui_client.cam_controller.fixedAngleCameraModeSelected();
+		else if(mode == QStringLiteral("free")) gui_client.cam_controller.freeCameraModeSelected();
+		else if(mode == QStringLiteral("tracking")) gui_client.cam_controller.trackingCameraModeSelected();
+		else gui_client.cam_controller.standardCameraModeSelected();
+	};
+	const auto apply_photo_video_autofocus_mode = [this](const QString& mode) {
+		gui_client.cam_controller.setAutofocusMode(mode == QStringLiteral("eye") ? CameraController::AutofocusMode_Eye : CameraController::AutofocusMode_Off);
+	};
+	const auto apply_photo_video_settings = [this](const QVariantMap& values) {
+		if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene())
+		{
+			auto* scene = ui->glWidget->opengl_engine->getCurrentScene();
+			scene->dof_blur_strength = (float)values.value(QStringLiteral("dof_blur"), 0.0).toDouble();
+			scene->dof_blur_focus_distance = (float)values.value(QStringLiteral("focus_distance"), 3.0).toDouble();
+			scene->exposure_factor = (float)std::exp2(values.value(QStringLiteral("ev"), 0.0).toDouble());
+			scene->saturation_multiplier = (float)values.value(QStringLiteral("saturation"), 1.0).toDouble();
+		}
+		gui_client.cam_controller.lens_sensor_dist = (float)(values.value(QStringLiteral("focal_length_mm"), 25.0).toDouble() * 0.001);
+		Vec3d angles = gui_client.cam_controller.getAngles();
+		angles.z = ::degreeToRad(values.value(QStringLiteral("roll_degrees"), 0.0).toDouble());
+		gui_client.cam_controller.setAngles(angles);
+	};
+	connect(photo_video_dock_widget, &QDockWidget::visibilityChanged, this,
+		[this, apply_photo_video_camera_mode, apply_photo_video_autofocus_mode, apply_photo_video_settings](const bool visible) {
+			if(!native_photo_video_gl_ready)
+				return;
+			gui_client.setPhotoModeEnabled(visible);
+			if(visible)
+			{
+				gui_client.photo_mode_ui.setVisible(false); // Native Qt dock replaces the legacy GL overlay.
+				const QVariantMap restored_state = photo_video_settings_panel->currentSettings();
+				apply_photo_video_camera_mode(restored_state.value(QStringLiteral("camera_mode"), QStringLiteral("standard")).toString());
+				apply_photo_video_autofocus_mode(restored_state.value(QStringLiteral("autofocus_mode"), QStringLiteral("off")).toString());
+				apply_photo_video_settings(restored_state);
+			}
+		});
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::cameraModeChanged, this, apply_photo_video_camera_mode);
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::autofocusModeChanged, this, apply_photo_video_autofocus_mode);
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::settingsChanged, this, apply_photo_video_settings);
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::capturePhotoRequested, this,
+		[this](const QVariantMap&) { takeScreenshot(); });
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::browseGalleryRequested, this, [this]() { showScreenshots(); });
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::recordingChanged, this,
+		[this](const bool recording, const QVariantMap&) {
+			if(recording)
+			{
+				showErrorNotification("Video recording backend is not available in this build yet; the recording profile was saved.");
+				photo_video_settings_panel->setRecording(false);
+			}
+		});
+
+	document_editor_dock_widget = new QDockWidget(tr("Documents"), this);
+	document_editor_dock_widget->setObjectName(QStringLiteral("documentEditorDockWidget"));
+	document_editor_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	document_editor_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	document_editor_panel = new DocumentEditorPanel(document_editor_dock_widget);
+	document_editor_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
+	document_editor_dock_widget->setWidget(document_editor_panel);
+	document_editor_dock_widget->setMinimumWidth(430);
+	addDockWidget(Qt::RightDockWidgetArea, document_editor_dock_widget);
+	document_editor_dock_widget->hide();
+	connect(document_editor_panel, &DocumentEditorPanel::errorOccurred, this,
+		[this](const QString& message) { showErrorNotification(QtUtils::toStdString(message)); });
+	connect(document_editor_panel, &DocumentEditorPanel::statusMessageChanged, this,
+		[this](const QString& message) { statusBar()->showMessage(message, 5000); });
+	connect(document_editor_panel, &DocumentEditorPanel::pdfPageTextureRequested, this,
+		[this](const QString&, int) { showErrorNotification("PDF page-to-texture export requires the Qt PDF module in this build."); });
+
 	// Add dock widgets to Window menu
 	ui->menuWindow->addSeparator();
 	ui->menuWindow->addAction(ui->editorDockWidget->toggleViewAction());
@@ -2100,6 +2276,9 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(ui->environmentDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->worldSettingsDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(map_dock_widget->toggleViewAction());
+	ui->menuWindow->addAction(animation_editor_dock_widget->toggleViewAction());
+	ui->menuWindow->addAction(photo_video_dock_widget->toggleViewAction());
+	ui->menuWindow->addAction(document_editor_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(ui->chatDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->helpInfoDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->webcamDockWidget->toggleViewAction());
@@ -2131,6 +2310,7 @@ void MainWindow::initialiseUI()
 	ui->objectEditor->base_dir_path = base_dir_path;
 	ui->objectEditor->settings = settings;
 	ui->editorDockWidget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	installEditorDockTitleBar(ui->editorDockWidget);
 	ui->editorDockWidget->setMinimumWidth(360);
 	ui->scrollArea->setWidgetResizable(true);
 	ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -2143,6 +2323,13 @@ void MainWindow::initialiseUI()
 	scientific_object_editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	ui->verticalLayout_4->addWidget(scientific_object_editor);
 	scientific_object_editor->hide();
+	cultural_object_editor = new CulturalObjectEditor(ui->scrollAreaWidgetContents);
+	cultural_object_editor->setObjectName(QStringLiteral("culturalObjectEditor"));
+	cultural_object_editor->setPosAndRot3DControlsEnabled(settings->value("culturalObjectEditor/show3DControls", true).toBool());
+	cultural_object_editor->setMinimumWidth(360);
+	cultural_object_editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	ui->verticalLayout_4->addWidget(cultural_object_editor);
+	cultural_object_editor->hide();
 	tree_editor_panel = new TreeEditorPanel(ui->scrollAreaWidgetContents);
 	tree_editor_panel->setObjectName(QStringLiteral("treeEditorPanel"));
 	tree_editor_panel->setMinimumWidth(360);
@@ -2342,6 +2529,10 @@ void MainWindow::initialiseUI()
 	connect(scientific_object_editor, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
 	connect(scientific_object_editor, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
 	connect(scientific_object_editor, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
+	connect(cultural_object_editor, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
+	connect(cultural_object_editor, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
+	connect(cultural_object_editor, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
+	connect(cultural_object_editor, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
 	connect(tree_editor_panel, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
 	connect(tree_editor_panel, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
 	connect(tree_editor_panel, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
@@ -2386,6 +2577,8 @@ void MainWindow::initialiseUI()
 	ui->objectEditor->setControlsEnabled(false);
 	scientific_object_editor->setControlsEnabled(false);
 	scientific_object_editor->hide();
+	cultural_object_editor->setControlsEnabled(false);
+	cultural_object_editor->hide();
 	tree_editor_panel->setControlsEnabled(false);
 	tree_editor_panel->hide();
 	voxel_editor_panel->setEditable(false);
@@ -2394,6 +2587,12 @@ void MainWindow::initialiseUI()
 	ui->botEditorWidget->hide();
 
 	refreshMapDockText();
+	if(animation_editor_dock_widget)
+		animation_editor_dock_widget->setWindowTitle(tr("Animation Editor"));
+	if(photo_video_dock_widget)
+		photo_video_dock_widget->setWindowTitle(tr("Photo and Video Settings"));
+	if(document_editor_dock_widget)
+		document_editor_dock_widget->setWindowTitle(tr("Documents"));
 	updateMapDockState();
 
 	startMainTimer();
@@ -2718,6 +2917,12 @@ void MainWindow::refreshTranslatedUiText()
 	}
 
 	refreshMapDockText();
+	if(animation_editor_dock_widget)
+		animation_editor_dock_widget->setWindowTitle(tr("Animation Editor"));
+	if(photo_video_dock_widget)
+		photo_video_dock_widget->setWindowTitle(tr("Photo and Video Settings"));
+	if(document_editor_dock_widget)
+		document_editor_dock_widget->setWindowTitle(tr("Documents"));
 
 	if(gui_client.gear_inventory_ui)
 		gui_client.gear_inventory_ui->refreshText(current_ui_language == RuntimeTranslation::UILanguage::Russian);
@@ -2759,6 +2964,18 @@ void MainWindow::configureEditAddSubmenu()
 		action_add_scientific_object->setToolTip(tr("Add Scientific Object"));
 		action_add_scientific_object->setStatusTip(tr("Add Scientific Object"));
 	}
+	if(action_add_cultural_object)
+	{
+		action_add_cultural_object->setText(tr("Add Cultural Object"));
+		action_add_cultural_object->setToolTip(tr("Create a cultural object and open the Cultural Object Editor"));
+		action_add_cultural_object->setStatusTip(tr("Add Cultural Object"));
+	}
+	if(action_add_document)
+	{
+		action_add_document->setText(tr("Add Document"));
+		action_add_document->setToolTip(tr("Open the document editor for PDF, Markdown, HTML or text"));
+		action_add_document->setStatusTip(tr("Add Document"));
+	}
 	if(action_add_tree)
 	{
 		action_add_tree->setText(tr("Add Tree"));
@@ -2775,6 +2992,8 @@ void MainWindow::configureEditAddSubmenu()
 		ui->actionAdd_Voxels,
 		action_add_tree,
 		action_add_scientific_object,
+		action_add_cultural_object,
+		action_add_document,
 		ui->actionAdd_Camera,
 		ui->actionAdd_Seat,
 		ui->actionAdd_Audio_Source,
@@ -2868,6 +3087,12 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_top_plain(ui->actionShow_Parcels, "land-plot", QString::fromUtf8("▱"));
 	set_top_plain(ui->actionAbout_Substrata, "info", QStringLiteral("i"));
 	set_top_accent(ui->actionUpdate, "circle-arrow-up", "#22C55E", QString::fromUtf8("↑"));
+	if(animation_editor_dock_widget)
+		set_plain(animation_editor_dock_widget->toggleViewAction(), "activity", QString::fromUtf8("A"));
+	if(photo_video_dock_widget)
+		set_plain(photo_video_dock_widget->toggleViewAction(), "camera", QString::fromUtf8("◉"));
+	if(document_editor_dock_widget)
+		set_plain(document_editor_dock_widget->toggleViewAction(), "file-text", QString::fromUtf8("▤"));
 
 	QMenu* add_menu = ui->menuEdit ? ui->menuEdit->findChild<QMenu*>("menuEditAdd", Qt::FindDirectChildrenOnly) : NULL;
 	if(add_menu)
@@ -2884,6 +3109,8 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_accent(ui->actionAdd_Voxels, "boxes", "#F97316", QString::fromUtf8("▦"));
 	set_accent(action_add_tree, "trees", "#4ADE80", QString::fromUtf8("♣"));
 	set_accent(action_add_scientific_object, "atom", "#22D3EE", QString::fromUtf8("⚛"));
+	set_accent(action_add_cultural_object, "palette", "#F59E0B", QString::fromUtf8("◆"));
+	set_accent(action_add_document, "file-text", "#60A5FA", QString::fromUtf8("▤"));
 	set_accent(ui->actionAdd_Camera, "camera", "#93C5FD", QString::fromUtf8("◉"));
 	set_accent(ui->actionAdd_Seat, "armchair", "#D6B98C", QString::fromUtf8("╚"));
 	set_accent(ui->actionAdd_Audio_Source, "audio-lines", "#F472B6", QString::fromUtf8("♫"));
@@ -3123,9 +3350,12 @@ void MainWindow::applyMainChromeThemeStylesheet()
 		"QMainWindow#MainWindow { background: %1; color: %2; }"
 		"QDockWidget { background: %1; color: %2; }"
 		"QDockWidget::title { background: %1; color: %2; border-bottom: 1px solid %3; padding: 3px 6px; text-align: left; }"
-		"QDockWidget#editorDockWidget::title { background: %4; color: %2; border: none; padding: 3px 6px; text-align: left; }"
+		"QWidget#editorDockTitleBar { background: %1; border: none; }"
+		"QLabel#editorDockTitleLabel { background: transparent; color: %2; border: none; }"
+		"QWidget#editorDockTitleBar QToolButton { background: transparent; color: %2; border: none; border-radius: 3px; padding: 1px; }"
+		"QWidget#editorDockTitleBar QToolButton:hover { background: %4; }"
 		"QStatusBar { background: %1; color: %2; border-top: 1px solid %3; }")
-		.arg(css(window), css(text), css(border), css(base));
+		.arg(css(window), css(text), css(border), css(hover));
 
 	const QString tooltip_style = QString(
 		"QToolTip { color: %1; background-color: %2; border: 1px solid %3; font-size: 9pt; padding: 6px; border-radius: 3px; }")
@@ -3315,6 +3545,12 @@ void MainWindow::afterGLInitInitialise()
 	const auto device_pixel_ratio = ui->glWidget->devicePixelRatio(); // For retina screens this is 2, meaning the gl viewport width is in physical pixels, which have twice the density of qt pixel coordinates.
 
 	gui_client.afterGLInitInitialise((double)device_pixel_ratio, ui->glWidget->opengl_engine, fonts, emoji_fonts);
+	native_photo_video_gl_ready = true;
+	if(photo_video_dock_widget && photo_video_dock_widget->isVisible())
+	{
+		gui_client.setPhotoModeEnabled(true);
+		gui_client.photo_mode_ui.setVisible(false);
+	}
 
 
 	if(settings->value("mainwindow/showParcels", QVariant(false)).toBool())
@@ -3370,6 +3606,9 @@ void MainWindow::afterGLInitInitialise()
 MainWindow::~MainWindow()
 {
 	running_destructor = true; // Set this to not append log messages during destruction, causes assert failure in Qt.
+	native_photo_video_gl_ready = false;
+	if(photo_video_dock_widget)
+		photo_video_dock_widget->blockSignals(true);
 	// QObject children outlive the generated Ui wrapper.  Stop the preview while
 	// its restore target still exists, so no timer/destructor callback can touch
 	// a destroyed main GL widget.
@@ -3635,6 +3874,8 @@ void MainWindow::writeTransformMembersToObject(WorldObject& ob)
 {
 	if(ScientificObjectSettings::isScientificObjectContent(ob.content) && scientific_object_editor)
 		scientific_object_editor->writeTransformMembersToObject(ob);
+	else if(CulturalObjectSettings::isCulturalObjectContent(ob.content) && cultural_object_editor)
+		cultural_object_editor->writeTransformMembersToObject(ob);
 	else
 		ui->objectEditor->writeTransformMembersToObject(ob);
 }
@@ -3644,6 +3885,8 @@ void MainWindow::objectLastModifiedUpdated(const WorldObject& ob)
 {
 	if(ScientificObjectSettings::isScientificObjectContent(ob.content) && scientific_object_editor)
 		scientific_object_editor->objectLastModifiedUpdated(ob);
+	else if(CulturalObjectSettings::isCulturalObjectContent(ob.content) && cultural_object_editor)
+		cultural_object_editor->objectLastModifiedUpdated(ob);
 	else
 		ui->objectEditor->objectLastModifiedUpdated(ob);
 }
@@ -3671,6 +3914,8 @@ void MainWindow::setObjectEditorControlsEditable(bool editable)
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->setControlsEditable(editable);
+	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+		cultural_object_editor->setControlsEditable(editable);
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 	{
 		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
@@ -3694,6 +3939,7 @@ void MainWindow::setObjectEditorControlsEditable(bool editable)
 void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_index, bool ob_in_editing_users_world)
 {
 	const bool is_scientific_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ScientificObjectSettings::isScientificObjectContent(ob.content);
+	const bool is_cultural_editor = (ob.object_type == WorldObject::ObjectType_Generic) && CulturalObjectSettings::isCulturalObjectContent(ob.content);
 	const bool is_tree_editor = TreeObject::isTreeObject(ob);
 	const bool is_voxel_editor = ob.object_type == WorldObject::ObjectType_VoxelGroup;
 	const bool is_particle_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
@@ -3703,6 +3949,11 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 	{
 		active_editor_kind = ActiveEditor_Scientific;
 		scientific_object_editor->setFromObject(ob, ob_in_editing_users_world);
+	}
+	else if(is_cultural_editor && cultural_object_editor)
+	{
+		active_editor_kind = ActiveEditor_Cultural;
+		cultural_object_editor->setFromObject(ob, ob_in_editing_users_world);
 	}
 	else if(is_tree_editor && tree_editor_panel)
 	{
@@ -3726,7 +3977,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 	}
 
-	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))))));
+	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_cultural_editor ? tr("Cultural Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor")))))));
 	if(ui->editorDockWidget->toggleViewAction())
 		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }
@@ -3735,6 +3986,8 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 int MainWindow::getSelectedMatIndex()
 {
 	if(active_editor_kind == ActiveEditor_Scientific)
+		return 0;
+	if(active_editor_kind == ActiveEditor_Cultural)
 		return 0;
 	if(active_editor_kind == ActiveEditor_Tree)
 		return 0;
@@ -3748,6 +4001,8 @@ void MainWindow::objectEditorToObject(WorldObject& ob)
 {
 	if((active_editor_kind == ActiveEditor_Scientific || ScientificObjectSettings::isScientificObjectContent(ob.content)) && scientific_object_editor)
 		scientific_object_editor->toObject(ob);
+	else if((active_editor_kind == ActiveEditor_Cultural || CulturalObjectSettings::isCulturalObjectContent(ob.content)) && cultural_object_editor)
+		cultural_object_editor->toObject(ob);
 	else if((active_editor_kind == ActiveEditor_Tree || TreeObject::isTreeObject(ob)) && tree_editor_panel)
 	{
 		ui->objectEditor->writeTransformMembersToObject(ob);
@@ -3791,6 +4046,8 @@ void MainWindow::objectEditorObjectPickedUp()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->objectPickedUp();
+	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+		cultural_object_editor->objectPickedUp();
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		ui->objectEditor->objectPickedUp();
 	else
@@ -3802,6 +4059,8 @@ void MainWindow::objectEditorObjectDropped()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->objectDropped();
+	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+		cultural_object_editor->objectDropped();
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		ui->objectEditor->objectDropped();
 	else
@@ -3813,6 +4072,8 @@ bool MainWindow::snapToGridCheckBoxChecked()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->snapToGridChecked();
+	if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+		return cultural_object_editor->snapToGridChecked();
 	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		return ui->objectEditor->snapToGridCheckBox->isChecked();
 	return ui->objectEditor->snapToGridCheckBox->isChecked();
@@ -3823,6 +4084,8 @@ double MainWindow::gridSpacing()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->gridSpacing();
+	if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+		return cultural_object_editor->gridSpacing();
 	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		return ui->objectEditor->gridSpacingDoubleSpinBox->value();
 	return ui->objectEditor->gridSpacingDoubleSpinBox->value();
@@ -3833,6 +4096,8 @@ bool MainWindow::posAndRot3DControlsEnabled()
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		return scientific_object_editor->posAndRot3DControlsEnabled();
+	if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+		return cultural_object_editor->posAndRot3DControlsEnabled();
 	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		return ui->objectEditor->posAndRot3DControlsEnabled();
 	return ui->objectEditor->posAndRot3DControlsEnabled();
@@ -3848,16 +4113,31 @@ void MainWindow::showObjectEditor()
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 	{
 		ui->objectEditor->hide();
+		if(cultural_object_editor)
+			cultural_object_editor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
 		if(voxel_editor_panel)
 			voxel_editor_panel->hide();
 		scientific_object_editor->show();
 	}
+	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+	{
+		ui->objectEditor->hide();
+		if(scientific_object_editor)
+			scientific_object_editor->hide();
+		if(tree_editor_panel)
+			tree_editor_panel->hide();
+		if(voxel_editor_panel)
+			voxel_editor_panel->hide();
+		cultural_object_editor->show();
+	}
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 	{
 		if(scientific_object_editor)
 			scientific_object_editor->hide();
+		if(cultural_object_editor)
+			cultural_object_editor->hide();
 		if(voxel_editor_panel)
 			voxel_editor_panel->hide();
 		ui->objectEditor->show();
@@ -3867,6 +4147,8 @@ void MainWindow::showObjectEditor()
 	{
 		if(scientific_object_editor)
 			scientific_object_editor->hide();
+		if(cultural_object_editor)
+			cultural_object_editor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
 		ui->objectEditor->show();
@@ -3876,6 +4158,8 @@ void MainWindow::showObjectEditor()
 	{
 		if(scientific_object_editor)
 			scientific_object_editor->hide();
+		if(cultural_object_editor)
+			cultural_object_editor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
 		if(voxel_editor_panel)
@@ -3889,6 +4173,8 @@ void MainWindow::setObjectEditorEnabled(bool enabled)
 {
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->setControlsEnabled(enabled);
+	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+		cultural_object_editor->setControlsEnabled(enabled);
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 	{
 		ui->objectEditor->setEnabled(enabled);
@@ -8652,6 +8938,100 @@ void MainWindow::on_actionAddScientificObject_triggered()
 }
 
 
+void MainWindow::on_actionAddCulturalObject_triggered()
+{
+	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 2.0f - Vec3d(0, 0, 0.25);
+
+	bool ob_pos_in_parcel;
+	const bool have_creation_perms = gui_client.haveParcelObjectCreatePermissions(ob_pos, ob_pos_in_parcel);
+	if(!have_creation_perms)
+	{
+		if(ob_pos_in_parcel)
+			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
+		else
+			showErrorNotification("You can only create cultural objects in a parcel that you have write permissions for.");
+		return;
+	}
+
+	URLString unit_cube_mesh_URL = "unit_cube_bmesh_7263660735544605926.bmesh";
+	if(!gui_client.resource_manager->isFileForURLPresent(unit_cube_mesh_URL))
+	{
+		Reference<Indigo::Mesh> indigo_mesh = MeshBuilding::makeUnitCubeIndigoMesh();
+		BatchedMeshRef mesh = BatchedMesh::buildFromIndigoMesh(*indigo_mesh);
+		const std::string bmesh_disk_path = PlatformUtils::getTempDirPath() + "/unit_cube.bmesh";
+		mesh->writeToFile(bmesh_disk_path);
+		unit_cube_mesh_URL = gui_client.resource_manager->copyLocalFileToResourceDirAndReturnURL(bmesh_disk_path);
+	}
+
+	CulturalObjectSettings cultural_settings = CulturalObjectSettings::defaultObject();
+	cultural_settings.uuid = QtUtils::toStdString(QUuid::createUuid().toString(QUuid::WithoutBraces));
+	cultural_settings.title = "Cultural Object";
+	cultural_settings.card_title = cultural_settings.title;
+	cultural_settings.object_type = "custom";
+	cultural_settings.cultural_category = "user_cultural_object";
+	cultural_settings.description = "Cultural, artistic or heritage object. Choose its classifications, import local metadata, or connect it to a Cultural API source.";
+	cultural_settings.source_mode = "manual";
+	cultural_settings.provider_id = "manual";
+	cultural_settings.retrieval_status = "idle";
+	cultural_settings.modified_at = QtUtils::toStdString(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+
+	WorldObjectRef new_world_object = new WorldObject();
+	new_world_object->uid = UID(0);
+	new_world_object->object_type = WorldObject::ObjectType_Generic;
+	new_world_object->pos = ob_pos;
+	new_world_object->axis = Vec3f(0, 0, 1);
+	new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>());
+	new_world_object->scale = Vec3f(0.5f);
+	new_world_object->max_model_lod_level = 0;
+	new_world_object->model_url = unit_cube_mesh_URL;
+	new_world_object->content = CulturalObjectSettings::serialiseToContent(cultural_settings);
+	new_world_object->script = "-- Metasiberia CulturalObject v1\n";
+	new_world_object->setCollidable(false);
+	new_world_object->setDynamic(false);
+	new_world_object->setIsSensor(false);
+
+	new_world_object->materials.resize(1);
+	new_world_object->materials[0] = new WorldMaterial();
+	new_world_object->materials[0]->name = "Cultural Object Preview";
+	new_world_object->materials[0]->colour_rgb = Colour3f(0.42f, 0.20f, 0.06f);
+	new_world_object->materials[0]->emission_rgb = Colour3f(0.08f, 0.035f, 0.008f);
+	new_world_object->materials[0]->opacity = ScalarVal(0.94f);
+	new_world_object->materials[0]->roughness = ScalarVal(0.55f);
+	new_world_object->materials[0]->flags = WorldMaterial::DOUBLE_SIDED_FLAG;
+	new_world_object->setAABBOS(gui_client.image_cube_shape.getAABBOS());
+
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
+		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	}
+
+	showInfoNotification("Added cultural object. Editor will open when the server confirms creation.");
+	gui_client.deselectObject();
+}
+
+
+void MainWindow::on_actionAddDocument_triggered()
+{
+	if(!document_editor_panel || !document_editor_dock_widget)
+		return;
+
+	const QString filename = QFileDialog::getOpenFileName(
+		this,
+		tr("Add Document"),
+		QString(),
+		tr("Documents (*.pdf *.md *.markdown *.html *.htm *.txt);;PDF (*.pdf);;Markdown (*.md *.markdown);;HTML (*.html *.htm);;Text (*.txt);;All files (*.*)"));
+	if(filename.isEmpty())
+		return;
+
+	document_editor_dock_widget->setFloating(false);
+	addDockWidget(Qt::RightDockWidgetArea, document_editor_dock_widget);
+	document_editor_dock_widget->show();
+	document_editor_dock_widget->raise();
+	document_editor_panel->loadFile(filename);
+}
+
+
 void MainWindow::on_actionAdd_Voxels_triggered()
 {
 	// Offset down by 0.25 to allow for centering with voxel width of 0.5.
@@ -9597,6 +9977,7 @@ void MainWindow::on_actionOpen_Gear_Inventory_triggered()
 	ui->parcelEditor->hide();
 	ui->botEditorWidget->hide();
 	if(scientific_object_editor) scientific_object_editor->hide();
+	if(cultural_object_editor) cultural_object_editor->hide();
 	if(tree_editor_panel) tree_editor_panel->hide();
 	if(voxel_editor_panel) voxel_editor_panel->hide();
 	active_editor_kind = ActiveEditor_GearInventory;
@@ -9728,6 +10109,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 	ui->parcelEditor->hide();
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
+	if(cultural_object_editor)
+		cultural_object_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
 	if(voxel_editor_panel)
@@ -9786,6 +10169,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 	ui->parcelEditor->hide();
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
+	if(cultural_object_editor)
+		cultural_object_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
 	if(voxel_editor_panel)
@@ -9813,6 +10198,8 @@ void MainWindow::hideBotEditor()
 	ui->botEditorWidget->clear(); // hides itself
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
+	if(cultural_object_editor)
+		cultural_object_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
 	if(voxel_editor_panel)
@@ -10742,6 +11129,8 @@ void MainWindow::posAndRot3DControlsToggledSlot()
 	
 	if(active_editor_kind == ActiveEditor_Scientific)
 		settings->setValue("scientificObjectEditor/show3DControls", enabled);
+	else if(active_editor_kind == ActiveEditor_Cultural)
+		settings->setValue("culturalObjectEditor/show3DControls", enabled);
 	else if(active_editor_kind == ActiveEditor_Tree)
 		settings->setValue("treeEditor/show3DControls", enabled);
 	else if(active_editor_kind == ActiveEditor_Voxel)
@@ -11029,6 +11418,8 @@ void MainWindow::showParcelEditor()
 		gear_inventory_panel->hide();
 	if(scientific_object_editor)
 		scientific_object_editor->hide();
+	if(cultural_object_editor)
+		cultural_object_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
 	if(voxel_editor_panel)
@@ -11196,6 +11587,8 @@ void MainWindow::updateObjectEditorObTransformSlot()
 	{
 		if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 			scientific_object_editor->setTransformFromObject(*gui_client.selected_ob);
+		else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+			cultural_object_editor->setTransformFromObject(*gui_client.selected_ob);
 		else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 			ui->objectEditor->setTransformFromObject(*gui_client.selected_ob);
 		else

@@ -140,6 +140,7 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 	connect(this->buttonBox, SIGNAL(accepted()), this, SLOT(accepted()));
 
 	connect(this->useCustomCacheDirCheckBox, SIGNAL(toggled(bool)), this, SLOT(customCacheDirCheckBoxChanged(bool)));
+	connect(this->enableMCPCheckBox, SIGNAL(toggled(bool)), this, SLOT(MCPCheckBoxChanged(bool)));
 
 	this->customCacheDirFileSelectWidget->setSettingsKey("options/lastCacheDirFileSelectDir");
 	this->customCacheDirFileSelectWidget->setType(FileSelectWidget::Type_Directory);
@@ -196,6 +197,12 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 
 	inputVolumeScaleHorizontalSlider->setValue(						settings->value(inputScaleFactorNameKey(), 100).toInt());
 
+	const int MCP_port = myClamp(settings->value(MCPPortKey(), defaultMCPPort()).toInt(), minMCPPort(), maxMCPPort());
+	SignalBlocker::setChecked(this->enableMCPCheckBox, false);
+	this->enableMCPCheckBox->setEnabled(false);
+	SignalBlocker::setValue(this->MCPPortSpinBox, MCP_port);
+	this->MCPSettingsContainer->setEnabled(false);
+
 #ifdef OSX
 	// Force SSAO to false for now on Mac, as when it's enabled, the number of texture units exceeds the max (16) for the terrain shader.
 	this->SSAOCheckBox->hide();
@@ -230,12 +237,21 @@ void MainOptionsDialog::accepted()
 
 	settings->setValue(inputDeviceNameKey(),						this->inputDeviceComboBox->currentText());
 	settings->setValue(inputScaleFactorNameKey(),					this->inputVolumeScaleHorizontalSlider->value());
+
+	settings->setValue(MCPEnabledKey(),								false);
+	settings->setValue(MCPPortKey(),								this->MCPPortSpinBox->value());
 }
 
 
 void MainOptionsDialog::customCacheDirCheckBoxChanged(bool checked)
 {
 	this->customCacheDirFileSelectWidget->setEnabled(checked);
+}
+
+
+void MainOptionsDialog::MCPCheckBoxChanged(bool /*checked*/)
+{
+	this->MCPSettingsContainer->setEnabled(false);
 }
 
 

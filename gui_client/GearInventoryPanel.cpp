@@ -1210,19 +1210,27 @@ void GearInventoryPanel::applyPreviewDrag(const QPoint& total_delta, bool finish
 	if(transform_mode == Mode_Move)
 	{
 		selected_item->translation = drag_start_translation;
-		const float amount = (horizontal + vertical) * 0.0025f;
-		if(transform_axis == Axis_X) selected_item->translation.x += amount;
-		else if(transform_axis == Axis_Y) selected_item->translation.y += amount;
-		else if(transform_axis == Axis_Z) selected_item->translation.z += amount;
-		else { selected_item->translation.x += horizontal * 0.0025f; selected_item->translation.z += vertical * 0.0025f; }
+		Vec3f bone_space_delta;
+		if(transform_axis != Axis_All)
+		{
+			// Axis handles are world-space (X red, Y green, Z blue).  If the
+			// projected handle is temporarily edge-on, keep the item still
+			// instead of falling back to the old local-axis mapping.
+			if(preview->currentMoveDragDeltaBoneSpace(total_delta, bone_space_delta))
+				selected_item->translation += bone_space_delta;
+		}
+		else
+			selected_item->translation += Vec3f(horizontal * 0.0025f, 0.f, vertical * 0.0025f);
 	}
 	else if(transform_mode == Mode_Rotate)
 	{
 		selected_item->axis = drag_start_axis;
-		if(transform_axis == Axis_X) selected_item->axis = Vec3f(1, 0, 0);
-		else if(transform_axis == Axis_Y) selected_item->axis = Vec3f(0, 1, 0);
-		else if(transform_axis == Axis_Z) selected_item->axis = Vec3f(0, 0, 1);
-		selected_item->angle = drag_start_angle + horizontal * 0.01f + vertical * 0.004f;
+		Vec3f bone_space_axis;
+		const bool have_axis = transform_axis == Axis_All || preview->currentWorldAxisBoneSpace(bone_space_axis);
+		if(transform_axis != Axis_All && have_axis)
+			selected_item->axis = bone_space_axis;
+		if(have_axis)
+			selected_item->angle = drag_start_angle + horizontal * 0.01f + vertical * 0.004f;
 	}
 	else if(transform_mode == Mode_Scale)
 	{

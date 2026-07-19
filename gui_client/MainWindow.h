@@ -53,6 +53,10 @@ class UpdateManager;
 class WebcamWindow;
 class AvatarSettingsWidget;
 class ScientificObjectEditor;
+class CulturalObjectEditor;
+class AnimationEditorPanel;
+class PhotoVideoSettingsPanel;
+class DocumentEditorPanel;
 class TreeEditorPanel;
 class VoxelEditorPanel;
 class GearInventoryPanel;
@@ -96,6 +100,8 @@ private slots:;
 	void on_actionAdd_Particles_triggered();
 	void on_actionAddTree_triggered();
 	void on_actionAddScientificObject_triggered();
+	void on_actionAddCulturalObject_triggered();
+	void on_actionAddDocument_triggered();
 	void on_actionCopy_Object_triggered();
 	void on_actionPaste_Object_triggered();
 	void on_actionCloneObject_triggered();
@@ -631,17 +637,28 @@ public:
 	AvatarSettingsWidget* avatar_settings_widget;
 	QDockWidget* map_dock_widget;
 	QWidget* map_dock_map_widget;
+	QDockWidget* animation_editor_dock_widget;
+	AnimationEditorPanel* animation_editor_panel;
+	QDockWidget* photo_video_dock_widget;
+	PhotoVideoSettingsPanel* photo_video_settings_panel;
+	bool native_photo_video_gl_ready;
+	QDockWidget* document_editor_dock_widget;
+	DocumentEditorPanel* document_editor_panel;
 	ScientificObjectEditor* scientific_object_editor;
+	CulturalObjectEditor* cultural_object_editor;
 	TreeEditorPanel* tree_editor_panel;
 	VoxelEditorPanel* voxel_editor_panel;
 	GearInventoryPanel* gear_inventory_panel;
 	bool gear_inventory_refresh_pending;
 	QAction* action_add_tree;
 	QAction* action_add_scientific_object;
+	QAction* action_add_cultural_object;
+	QAction* action_add_document;
 	enum ActiveEditorKind
 	{
 		ActiveEditor_Object,
 		ActiveEditor_Scientific,
+		ActiveEditor_Cultural,
 		ActiveEditor_Tree,
 		ActiveEditor_Voxel,
 		ActiveEditor_GearInventory

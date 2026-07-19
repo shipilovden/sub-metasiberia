@@ -1527,13 +1527,21 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	opacity_spin(NULL),
 	object_scale_spin(NULL),
 	show_labels_check(NULL),
+	atom_labels_pinned_check(NULL),
 	show_molecule_title_check(NULL),
 	molecule_title_edit(NULL),
+	molecule_title_pinned_check(NULL),
 	show_info_card_check(NULL),
 	info_card_mode_combo(NULL),
 	info_card_scale_spin(NULL),
 	info_card_distance_spin(NULL),
 	info_card_pinned_check(NULL),
+	info_card_dark_background_check(NULL),
+	info_card_stand_type_combo(NULL),
+	info_card_auto_fit_text_check(NULL),
+	info_card_stand_width_spin(NULL),
+	info_card_stand_height_spin(NULL),
+	info_card_stand_depth_spin(NULL),
 	show_legend_check(NULL),
 	show_hydrogen_check(NULL),
 	label_mode_combo(NULL),
@@ -1815,16 +1823,24 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	object_scale_spin = addDoubleSpinBox(vis_grid, row, QString::fromUtf8("Масштаб визуализации"), 0.01, 1000.0, 0.05, 3);
 	show_3d_controls_checkbox = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать 3D-контролы"));
 	show_labels_check = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать подписи"));
+	atom_labels_pinned_check = addCheckBox(vis_grid, row, QString::fromUtf8("Закрепить подписи атомов"));
 	show_molecule_title_check = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать название молекулы"));
 	molecule_title_edit = new QLineEdit(vis_group);
 	molecule_title_edit->setPlaceholderText(QString::fromUtf8("Авто: имя объекта/молекулы"));
 	vis_grid->addWidget(new QLabel(QString::fromUtf8("Название над молекулой"), vis_group), row, 0);
 	vis_grid->addWidget(molecule_title_edit, row++, 1);
+	molecule_title_pinned_check = addCheckBox(vis_grid, row, QString::fromUtf8("Закрепить название молекулы"));
 	show_info_card_check = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать 3D-карточку"));
 	info_card_mode_combo = addComboBox(vis_grid, row, QString::fromUtf8("Режим 3D-карточки"));
 	info_card_scale_spin = addDoubleSpinBox(vis_grid, row, QString::fromUtf8("Масштаб карточки"), 0.05, 20.0, 0.05, 3);
 	info_card_distance_spin = addDoubleSpinBox(vis_grid, row, QString::fromUtf8("Дистанция карточки"), 0.0, 1000.0, 0.25, 2);
 	info_card_pinned_check = addCheckBox(vis_grid, row, QString::fromUtf8("Закрепить карточку"));
+	info_card_dark_background_check = addCheckBox(vis_grid, row, QString::fromUtf8("Тёмный фон карточки"));
+	info_card_stand_type_combo = addComboBox(vis_grid, row, QString::fromUtf8("Стенд карточки"));
+	info_card_auto_fit_text_check = addCheckBox(vis_grid, row, QString::fromUtf8("Автоподгонка текста под стенд"));
+	info_card_stand_width_spin = addDoubleSpinBox(vis_grid, row, QString::fromUtf8("Ширина стенда"), 0.2, 100.0, 0.1, 2);
+	info_card_stand_height_spin = addDoubleSpinBox(vis_grid, row, QString::fromUtf8("Высота стенда"), 0.2, 100.0, 0.1, 2);
+	info_card_stand_depth_spin = addDoubleSpinBox(vis_grid, row, QString::fromUtf8("Толщина стенда"), 0.005, 10.0, 0.01, 3);
 	show_legend_check = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать легенду"));
 	show_hydrogen_check = addCheckBox(vis_grid, row, QString::fromUtf8("Показывать водород"));
 	label_mode_combo = addComboBox(vis_grid, row, QString::fromUtf8("Режим подписей"));
@@ -2015,7 +2031,7 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	connect(animation_speed_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [update_spin](double) { update_spin(); });
 	connect(animation_direction_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [update_spin](int) { update_spin(); });
 	connect(show_3d_controls_checkbox, &QCheckBox::toggled, this, [this](bool) { if(!syncing) emit posAndRot3DControlsToggled(); });
-	const QList<QWidget*> viewport_controls = { visualization_mode_combo, colour_scheme_combo, atom_radius_spin, bond_thickness_spin, object_scale_spin, show_labels_check, show_molecule_title_check, show_legend_check, show_hydrogen_check, label_mode_combo, label_scale_spin, molecule_title_scale_spin, label_max_count_spin, label_max_distance_spin };
+	const QList<QWidget*> viewport_controls = { visualization_mode_combo, colour_scheme_combo, atom_radius_spin, bond_thickness_spin, object_scale_spin, show_labels_check, atom_labels_pinned_check, show_molecule_title_check, molecule_title_pinned_check, show_info_card_check, info_card_mode_combo, info_card_scale_spin, info_card_distance_spin, info_card_pinned_check, info_card_dark_background_check, info_card_stand_type_combo, info_card_auto_fit_text_check, info_card_stand_width_spin, info_card_stand_height_spin, info_card_stand_depth_spin, show_legend_check, show_hydrogen_check, label_mode_combo, label_scale_spin, molecule_title_scale_spin, label_max_count_spin, label_max_distance_spin };
 	for(QWidget* control : viewport_controls)
 	{
 		if(QComboBox* combo = qobject_cast<QComboBox*>(control)) connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { updateMoleculeInteractiveView(); });
@@ -2238,13 +2254,21 @@ void ScientificObjectEditor::installTooltips()
 	setDetailedTip(opacity_spin, QString::fromUtf8("Прозрачность объекта. Уменьши значение, если объект перекрывает сцену."));
 	setDetailedTip(object_scale_spin, QString::fromUtf8("Масштаб научной визуализации внутри объекта, отдельно от масштаба самого объекта в мире."));
 	setDetailedTip(show_labels_check, QString::fromUtf8("Показывать подписи элементов, атомов, точек или осей, когда визуализатор поддерживает подписи."));
+	setDetailedTip(atom_labels_pinned_check, QString::fromUtf8("Фиксировать ориентацию подписей атомов относительно молекулы. При выключенной фиксации подписи ориентируются к текущей камере."));
 	setDetailedTip(show_molecule_title_check, QString::fromUtf8("Показывать отдельную 3D-подпись с названием над молекулой. Она использует тот же world-mapping, что и атомные подписи."));
 	setDetailedTip(molecule_title_edit, QString::fromUtf8("Необязательный текст названия над молекулой. Если пусто — используется имя молекулы/объекта."));
+	setDetailedTip(molecule_title_pinned_check, QString::fromUtf8("Фиксировать название в одной позиции и ориентации относительно молекулы."));
 	setDetailedTip(show_info_card_check, QString::fromUtf8("Показывать compact 3D-карточку рядом с молекулой/выбранным атомом. Карточка создаётся в том же world-overlay path, что подписи, поэтому движется и удаляется вместе с молекулой."));
 	setDetailedTip(info_card_mode_combo, QString::fromUtf8("Режим карточки: по выбору, всегда молекула или только выбранный атом."));
 	setDetailedTip(info_card_scale_spin, QString::fromUtf8("Масштаб текста 3D-карточки в мире. Не меняет подписи атомов и не влияет на 2D-превью."));
 	setDetailedTip(info_card_distance_spin, QString::fromUtf8("Отступ карточки от выбранного атома или центра молекулы в world units."));
-	setDetailedTip(info_card_pinned_check, QString::fromUtf8("Закрепить карточку для текущего объекта. На первом этапе карточка всё равно обновляется из выбранного атома/молекулы, но настройка сохраняется для будущих pinned-карточек."));
+	setDetailedTip(info_card_pinned_check, QString::fromUtf8("Закрепить карточку в одной позиции и ориентации относительно молекулы. Выбор другого атома изменит содержание, но не переместит карточку."));
+	setDetailedTip(info_card_dark_background_check, QString::fromUtf8("Добавить тёмный читаемый фон под текстом карточки."));
+	setDetailedTip(info_card_stand_type_combo, QString::fromUtf8("Выбрать mesh-стенд: без стенда, плоская панель, скруглённая панель или панель на опоре."));
+	setDetailedTip(info_card_auto_fit_text_check, QString::fromUtf8("Автоматически уменьшать текст, чтобы он помещался в заданные размеры стенда."));
+	setDetailedTip(info_card_stand_width_spin, QString::fromUtf8("Ширина mesh-стенда карточки в локальных единицах объекта."));
+	setDetailedTip(info_card_stand_height_spin, QString::fromUtf8("Высота mesh-стенда карточки в локальных единицах объекта."));
+	setDetailedTip(info_card_stand_depth_spin, QString::fromUtf8("Толщина панели и опоры mesh-стенда."));
 	setDetailedTip(show_legend_check, QString::fromUtf8("Показывать легенду цветов/значений, когда визуализатор поддерживает легенду."));
 	setDetailedTip(show_hydrogen_check, QString::fromUtf8("Для молекул: показывать атомы водорода. Отключение делает крупные молекулы чище."));
 	setDetailedTip(label_mode_combo, QString::fromUtf8("Какая информация должна попадать в подписи: элемент, номер атома, residue, chain или custom attribute. Runtime label objects ещё требуют отдельного child ObjectType_Text workflow."));
@@ -2369,6 +2393,10 @@ void ScientificObjectEditor::populateStaticCombos()
 	add(info_card_mode_combo, "По выбору", "selection");
 	add(info_card_mode_combo, "Всегда карточка молекулы", "molecule");
 	add(info_card_mode_combo, "Только выбранный атом", "atom");
+	add(info_card_stand_type_combo, "Без стенда", "none");
+	add(info_card_stand_type_combo, "Плоская панель", "panel");
+	add(info_card_stand_type_combo, "Скруглённая панель", "rounded_panel");
+	add(info_card_stand_type_combo, "Панель на опоре", "pedestal");
 
 	add(animation_direction_combo, "По часовой стрелке", "forward");
 	add(animation_direction_combo, "Против часовой стрелки", "reverse");
@@ -2708,13 +2736,21 @@ void ScientificObjectEditor::setControlsFromSettings(const ScientificObjectSetti
 	opacity_spin->setValue(s.opacity);
 	object_scale_spin->setValue(s.object_scale);
 	show_labels_check->setChecked(s.show_labels);
+	atom_labels_pinned_check->setChecked(s.atom_labels_pinned);
 	show_molecule_title_check->setChecked(s.show_molecule_title);
 	molecule_title_edit->setText(qstr(s.molecule_title));
+	molecule_title_pinned_check->setChecked(s.molecule_title_pinned);
 	show_info_card_check->setChecked(s.show_info_card);
 	setComboData(info_card_mode_combo, qstr(s.info_card_mode));
 	info_card_scale_spin->setValue(s.info_card_scale);
 	info_card_distance_spin->setValue(s.info_card_distance);
 	info_card_pinned_check->setChecked(s.info_card_pinned);
+	info_card_dark_background_check->setChecked(s.info_card_dark_background);
+	setComboData(info_card_stand_type_combo, qstr(s.info_card_stand_type));
+	info_card_auto_fit_text_check->setChecked(s.info_card_auto_fit_text);
+	info_card_stand_width_spin->setValue(s.info_card_stand_width);
+	info_card_stand_height_spin->setValue(s.info_card_stand_height);
+	info_card_stand_depth_spin->setValue(s.info_card_stand_depth);
 	show_legend_check->setChecked(s.show_legend);
 	show_hydrogen_check->setChecked(s.show_hydrogen);
 	setComboData(label_mode_combo, qstr(s.label_mode));
@@ -2851,13 +2887,21 @@ ScientificObjectSettings ScientificObjectEditor::controlsToSettings() const
 	s.opacity = (float)opacity_spin->value();
 	s.object_scale = (float)object_scale_spin->value();
 	s.show_labels = show_labels_check->isChecked();
+	s.atom_labels_pinned = atom_labels_pinned_check->isChecked();
 	s.show_molecule_title = show_molecule_title_check->isChecked();
 	s.molecule_title = stdstr(molecule_title_edit->text());
+	s.molecule_title_pinned = molecule_title_pinned_check->isChecked();
 	s.show_info_card = show_info_card_check->isChecked();
 	s.info_card_mode = stdstr(currentComboData(info_card_mode_combo, QStringLiteral("selection")));
 	s.info_card_scale = (float)info_card_scale_spin->value();
 	s.info_card_distance = (float)info_card_distance_spin->value();
 	s.info_card_pinned = info_card_pinned_check->isChecked();
+	s.info_card_dark_background = info_card_dark_background_check->isChecked();
+	s.info_card_stand_type = stdstr(currentComboData(info_card_stand_type_combo, QStringLiteral("rounded_panel")));
+	s.info_card_auto_fit_text = info_card_auto_fit_text_check->isChecked();
+	s.info_card_stand_width = (float)info_card_stand_width_spin->value();
+	s.info_card_stand_height = (float)info_card_stand_height_spin->value();
+	s.info_card_stand_depth = (float)info_card_stand_depth_spin->value();
 	s.show_legend = show_legend_check->isChecked();
 	s.show_hydrogen = show_hydrogen_check->isChecked();
 	s.label_mode = stdstr(currentComboData(label_mode_combo, QStringLiteral("element")));

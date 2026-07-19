@@ -21627,7 +21627,22 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 					const Vec4f camera_right = cam_controller.getRightVec().toVec4fVector();
 					const Vec4f camera_up(0.f, 0.f, 1.f, 0.f);
 					const Vec4f camera_forward = cam_controller.getForwardsVec().toVec4fVector();
-					auto add_world_text_label = [&](const std::string& text, const Vec4f& pos_ws, float use_label_scale)
+					const Vec4f object_right = safeNormaliseOr(ob_to_world * Vec4f(1.f, 0.f, 0.f, 0.f), Vec4f(1.f, 0.f, 0.f, 0.f));
+					const Vec4f object_up = safeNormaliseOr(ob_to_world * Vec4f(0.f, 0.f, 1.f, 0.f), Vec4f(0.f, 0.f, 1.f, 0.f));
+					const Vec4f object_forward = safeNormaliseOr(ob_to_world * Vec4f(0.f, 1.f, 0.f, 0.f), Vec4f(0.f, 1.f, 0.f, 0.f));
+					Vec3f molecule_min_os(std::numeric_limits<float>::max());
+					Vec3f molecule_max_os(-std::numeric_limits<float>::max());
+					for(size_t i=0; i<atoms.size(); ++i)
+					{
+						const Vec3f pos_os = molecule_atom_os_for_world_overlay(atoms[i].pos);
+						molecule_min_os.x = myMin(molecule_min_os.x, pos_os.x); molecule_min_os.y = myMin(molecule_min_os.y, pos_os.y); molecule_min_os.z = myMin(molecule_min_os.z, pos_os.z);
+						molecule_max_os.x = myMax(molecule_max_os.x, pos_os.x); molecule_max_os.y = myMax(molecule_max_os.y, pos_os.y); molecule_max_os.z = myMax(molecule_max_os.z, pos_os.z);
+					}
+					const Vec3f molecule_center_os = (molecule_min_os + molecule_max_os) * 0.5f;
+					const Vec4f pinned_molecule_center_ws = ob_to_world * Vec4f(molecule_center_os.x, molecule_center_os.y, molecule_center_os.z, 1.f);
+					const Vec4f pinned_molecule_top_ws = ob_to_world * Vec4f(molecule_center_os.x, molecule_center_os.y, molecule_max_os.z, 1.f);
+					auto add_world_text_label = [&](const std::string& text, const Vec4f& pos_ws, float use_label_scale,
+						const Vec4f& right_ws, const Vec4f& up_ws, const Vec4f& forward_ws, float max_width_ws, float max_height_ws, bool use_light_card_text)
 					{
 						const std::string use_text = UTF8Utils::sanitiseUTF8String(text);
 						if(use_text.empty())
@@ -21637,13 +21652,21 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 						OpenGLTextureRef atlas_texture;
 						Reference<OpenGLMeshRenderData> meshdata = GLUIText::makeMeshDataForText(opengl_engine, gl_ui->font_char_text_cache.ptr(), gl_ui->getFonts(), gl_ui->getEmojiFonts(), use_text,
 							font_size_px, 1.f / font_size_px, true, this->stack_allocator, rect_os, atlas_texture, char_positions_font_coords);
+						if(max_width_ws > 0.f || max_height_ws > 0.f)
+						{
+							const Vec2f text_dims = rect_os.getWidths();
+							if(max_width_ws > 0.f && text_dims.x > 1.0e-5f)
+								use_label_scale = myMin(use_label_scale, max_width_ws / text_dims.x);
+							if(max_height_ws > 0.f && text_dims.y > 1.0e-5f)
+								use_label_scale = myMin(use_label_scale, max_height_ws / text_dims.y);
+						}
 
 						Matrix4f label_to_world = Matrix4f::identity();
-						label_to_world.setColumn(0, camera_right * use_label_scale);
-						label_to_world.setColumn(1, camera_up * use_label_scale);
-						label_to_world.setColumn(2, camera_forward * -use_label_scale);
+						label_to_world.setColumn(0, right_ws * use_label_scale);
+						label_to_world.setColumn(1, up_ws * use_label_scale);
+						label_to_world.setColumn(2, forward_ws * -use_label_scale);
 						const Vec2f label_center_os = (rect_os.getMin() + rect_os.getMax()) * 0.5f;
-						label_to_world.setColumn(3, pos_ws - camera_right * (label_center_os.x * use_label_scale) - camera_up * (label_center_os.y * use_label_scale));
+						label_to_world.setColumn(3, pos_ws - right_ws * (label_center_os.x * use_label_scale) - up_ws * (label_center_os.y * use_label_scale));
 
 						GLObjectRef text_ob = opengl_engine->allocateObject();
 						text_ob->ob_to_world_matrix = label_to_world;
@@ -21652,19 +21675,67 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 						text_ob->materials[0].alpha_blend = true;
 						text_ob->materials[0].sdf_text = true;
 						text_ob->materials[0].transmission_texture = atlas_texture;
-						text_ob->materials[0].albedo_linear_rgb = toLinearSRGB(scientific_settings.label_colour);
+						text_ob->materials[0].albedo_linear_rgb = toLinearSRGB(use_light_card_text ? Colour3f(0.96f, 0.97f, 1.0f) : scientific_settings.label_colour);
 						text_ob->materials[0].fresnel_scale = 0.f;
 						opengl_engine->addObject(text_ob);
 						molecule_label_obs.push_back(text_ob);
 					};
+					auto add_card_mesh_part = [&](const Vec4f& center_ws, const Vec4f& right_ws, const Vec4f& up_ws, const Vec4f& forward_ws,
+						float width_ws, float height_ws, float depth_ws, bool rounded, bool dark_surface)
+					{
+						GLObjectRef stand_ob = opengl_engine->allocateObject();
+						stand_ob->materials.resize(1);
+						const Colour3f stand_colour = dark_surface ? Colour3f(0.018f, 0.022f, 0.030f) : Colour3f(0.20f, 0.22f, 0.25f);
+						stand_ob->materials[0].albedo_linear_rgb = stand_colour;
+						stand_ob->materials[0].fresnel_scale = 0.05f;
+						stand_ob->materials[0].roughness = 0.82f;
+						if(rounded)
+						{
+							stand_ob->mesh_data = MeshPrimitiveBuilding::makeRoundedCornerRect(*opengl_engine->vert_buf_allocator,
+								Vec4f(1.f, 0.f, 0.f, 0.f), Vec4f(0.f, 1.f, 0.f, 0.f), 1.f, 1.f, 0.10f, 8);
+							Matrix4f stand_to_world = Matrix4f::identity();
+							stand_to_world.setColumn(0, right_ws * width_ws);
+							stand_to_world.setColumn(1, up_ws * height_ws);
+							// Face the single-sided rounded panel towards the viewer/object-front.
+							stand_to_world.setColumn(2, forward_ws * -depth_ws);
+							stand_to_world.setColumn(3, center_ws - right_ws * (width_ws * 0.5f) - up_ws * (height_ws * 0.5f) + forward_ws * depth_ws);
+							stand_ob->ob_to_world_matrix = stand_to_world;
+						}
+						else
+						{
+							stand_ob->mesh_data = opengl_engine->getCubeMeshData();
+							Matrix4f stand_to_world = Matrix4f::identity();
+							stand_to_world.setColumn(0, right_ws * width_ws);
+							stand_to_world.setColumn(1, up_ws * height_ws);
+							stand_to_world.setColumn(2, forward_ws * depth_ws);
+							stand_to_world.setColumn(3, center_ws - right_ws * (width_ws * 0.5f) - up_ws * (height_ws * 0.5f) + forward_ws * (depth_ws * 0.25f));
+							stand_ob->ob_to_world_matrix = stand_to_world;
+						}
+						opengl_engine->addObject(stand_ob);
+						molecule_label_obs.push_back(stand_ob);
+					};
+					auto add_card_backdrop = [&](const Vec4f& center_ws, const Vec4f& right_ws, const Vec4f& up_ws, const Vec4f& forward_ws,
+						float width_ws, float height_ws, float depth_ws)
+					{
+						add_card_mesh_part(center_ws, right_ws, up_ws, forward_ws, width_ws, height_ws, depth_ws, /*rounded=*/true, /*dark_surface=*/true);
+					};
+					auto add_card_stand_part = [&](const Vec4f& center_ws, const Vec4f& right_ws, const Vec4f& up_ws, const Vec4f& forward_ws,
+						float width_ws, float height_ws, float depth_ws, bool rounded)
+					{
+						add_card_mesh_part(center_ws, right_ws, up_ws, forward_ws, width_ws, height_ws, depth_ws, rounded, scientific_settings.info_card_dark_background);
+					};
 
 					if(scientific_settings.show_labels && scientific_settings.label_max_count > 0)
 					{
+						const Vec4f& label_right = scientific_settings.atom_labels_pinned ? object_right : camera_right;
+						const Vec4f& label_up = scientific_settings.atom_labels_pinned ? object_up : camera_up;
+						const Vec4f& label_forward = scientific_settings.atom_labels_pinned ? object_forward : camera_forward;
 						const int label_count = myMin((int)atoms.size(), scientific_settings.label_max_count);
 						for(int i=0; i<label_count; ++i)
 						{
 							const Vec4f atom_pos_ws = atom_world_pos(atoms[(size_t)i]);
-							add_world_text_label(scientific_atom_label(scientific_settings, atoms[(size_t)i]), atom_pos_ws + camera_up * (atom_highlight_radius * 1.05f + label_scale * 0.75f), label_scale);
+							add_world_text_label(scientific_atom_label(scientific_settings, atoms[(size_t)i]), atom_pos_ws + label_up * (atom_highlight_radius * 1.05f + label_scale * 0.75f), label_scale,
+								label_right, label_up, label_forward, 0.f, 0.f, false);
 						}
 					}
 
@@ -21687,10 +21758,16 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 						Vec4f title_anchor_ws = (min_ws + max_ws) * 0.5f;
 						title_anchor_ws[3] = 1.f;
 						title_anchor_ws[2] = max_z_ws;
+						if(scientific_settings.molecule_title_pinned)
+							title_anchor_ws = pinned_molecule_top_ws;
 						std::string title = scientific_settings.molecule_title.empty() ? scientific_settings.name : scientific_settings.molecule_title;
 						if(title.empty())
 							title = "Molecule";
-						add_world_text_label(title, title_anchor_ws + camera_up * (atom_highlight_radius * 1.75f + title_scale * 0.90f), title_scale);
+						const Vec4f& title_right = scientific_settings.molecule_title_pinned ? object_right : camera_right;
+						const Vec4f& title_up = scientific_settings.molecule_title_pinned ? object_up : camera_up;
+						const Vec4f& title_forward = scientific_settings.molecule_title_pinned ? object_forward : camera_forward;
+						add_world_text_label(title, title_anchor_ws + title_up * (atom_highlight_radius * 1.75f + title_scale * 0.90f), title_scale,
+							title_right, title_up, title_forward, 0.f, 0.f, false);
 					}
 
 					if(scientific_settings.show_info_card)
@@ -21705,7 +21782,16 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 						}
 						Vec4f card_anchor_ws = (min_ws + max_ws) * 0.5f;
 						card_anchor_ws[3] = 1.f;
-						card_anchor_ws = card_anchor_ws + camera_right * myMax(0.4f, scientific_settings.info_card_distance) + camera_up * (atom_highlight_radius * 1.7f + card_scale);
+						if(scientific_settings.info_card_pinned)
+							card_anchor_ws = pinned_molecule_center_ws;
+						const Vec4f& card_right = scientific_settings.info_card_pinned ? object_right : camera_right;
+						const Vec4f& card_up = scientific_settings.info_card_pinned ? object_up : camera_up;
+						const Vec4f& card_forward = scientific_settings.info_card_pinned ? object_forward : camera_forward;
+						const float object_display_scale = myMax(0.15f, ob.scale.x);
+						const float stand_width = scientific_settings.info_card_stand_width * object_display_scale;
+						const float stand_height = scientific_settings.info_card_stand_height * object_display_scale;
+						const float stand_depth = scientific_settings.info_card_stand_depth * object_display_scale;
+						card_anchor_ws = card_anchor_ws + card_right * myMax(0.4f, scientific_settings.info_card_distance) + card_up * (atom_highlight_radius * 1.7f + stand_height * 0.5f);
 
 						const ScientificOverlayAtom* selected_atom = NULL;
 						if(!selected_ids.empty())
@@ -21715,7 +21801,8 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 								if(atoms[i].source_id == selected_id)
 								{
 									selected_atom = &atoms[i];
-									card_anchor_ws = atom_world_pos(atoms[i]) + camera_right * myMax(0.4f, scientific_settings.info_card_distance) + camera_up * (atom_highlight_radius * 1.9f + card_scale);
+									if(!scientific_settings.info_card_pinned)
+										card_anchor_ws = atom_world_pos(atoms[i]) + card_right * myMax(0.4f, scientific_settings.info_card_distance) + card_up * (atom_highlight_radius * 1.9f + stand_height * 0.5f);
 									break;
 								}
 						}
@@ -21756,7 +21843,32 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 							card << "Source: " << (scientific_settings.provenance_source.empty() ? scientific_settings.source : scientific_settings.provenance_source);
 						}
 						if(!card.str().empty())
-							add_world_text_label(card.str(), card_anchor_ws, card_scale);
+						{
+							const bool has_stand = scientific_settings.info_card_stand_type != "none";
+							if(has_stand)
+							{
+								const bool rounded = scientific_settings.info_card_stand_type == "rounded_panel";
+								add_card_stand_part(card_anchor_ws, card_right, card_up, card_forward, stand_width, stand_height, stand_depth, rounded);
+								if(scientific_settings.info_card_stand_type == "pedestal")
+								{
+									const float support_height = stand_height * 0.55f;
+									const Vec4f support_center = card_anchor_ws - card_up * (stand_height * 0.5f + support_height * 0.5f);
+									add_card_stand_part(support_center, card_right, card_up, card_forward, stand_width * 0.09f, support_height, stand_depth * 1.4f, false);
+									const Vec4f base_center = support_center - card_up * (support_height * 0.5f + stand_height * 0.04f);
+									add_card_stand_part(base_center, card_right, card_up, card_forward, stand_width * 0.45f, stand_height * 0.08f, stand_depth * 1.8f, false);
+								}
+							}
+							else if(scientific_settings.info_card_dark_background)
+							{
+								// A dark card background is a text backdrop, not a selected stand type.
+								// In particular, stand_type == "none" must never create supports or a stand body.
+								add_card_backdrop(card_anchor_ws, card_right, card_up, card_forward, stand_width, stand_height, stand_depth);
+							}
+							const float max_text_width = scientific_settings.info_card_auto_fit_text ? stand_width * 0.86f : 0.f;
+							const float max_text_height = scientific_settings.info_card_auto_fit_text ? stand_height * 0.82f : 0.f;
+							add_world_text_label(card.str(), card_anchor_ws - card_forward * (stand_depth * 0.10f), card_scale,
+								card_right, card_up, card_forward, max_text_width, max_text_height, scientific_settings.info_card_dark_background);
+						}
 					}
 				}
 			}

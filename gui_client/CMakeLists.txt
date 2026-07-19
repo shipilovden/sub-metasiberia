@@ -102,6 +102,10 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client AboutDialog)
 	addMocFileRule(gui_client BotEditorWidget)
 	addMocFileRule(gui_client ScientificObjectEditor)
+	addMocFileRule(gui_client CulturalObjectEditor)
+	addMocFileRule(gui_client AnimationEditorPanel)
+	addMocFileRule(gui_client PhotoVideoSettingsPanel)
+	addMocFileRule(gui_client DocumentEditorPanel)
 	addMocFileRule(gui_client TreeEditorPanel)
 	addMocFileRule(gui_client VoxelEditorPanel)
 	addMocFileRule(gui_client UpdateDialog)
@@ -369,6 +373,21 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.h
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.h
+		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectEditor.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectEditor.h
+		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectSettings.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectSettings.h
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationEditorPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationEditorPanel.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoVideoSettingsPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoVideoSettingsPanel.h
+		${CMAKE_SOURCE_DIR}/gui_client/DocumentEditorPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/DocumentEditorPanel.h
+		${CMAKE_SOURCE_DIR}/gui_client/DocumentObjectSettings.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/DocumentObjectSettings.h
+		${CMAKE_SOURCE_DIR}/gui_client/MCPClientHandler.cpp
+		${GLARE_CORE_TRUNK_DIR_ENV}/webserver/RequestHandler.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/MCPClientHandler.h
 		${CMAKE_SOURCE_DIR}/gui_client/TreeEditorPanel.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/TreeEditorPanel.h
 		${CMAKE_SOURCE_DIR}/gui_client/TreeGenerator.cpp
@@ -520,6 +539,10 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AboutDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_BotEditorWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ScientificObjectEditor.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_CulturalObjectEditor.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_AnimationEditorPanel.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_PhotoVideoSettingsPanel.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_DocumentEditorPanel.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_TreeEditorPanel.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_VoxelEditorPanel.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateDialog.cpp

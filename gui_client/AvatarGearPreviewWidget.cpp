@@ -120,6 +120,7 @@ AvatarGearPreviewWidget::AvatarGearPreviewWidget(QWidget* parent)
 	interaction_mode(Interaction_Orbit),
 	transform_axis(Axis_All),
 	transform_dragging(false),
+	transform_drag_axis_mapping_valid(false),
 	initialised(false),
 	shutting_down(false),
 	content_dirty(false),
@@ -285,6 +286,7 @@ void AvatarGearPreviewWidget::setInteractionMode(InteractionMode mode, Transform
 	interaction_mode = mode;
 	transform_axis = axis;
 	transform_dragging = false;
+	transform_drag_axis_mapping_valid = false;
 	grabbed_gizmo_handle = -1;
 }
 
@@ -311,6 +313,35 @@ void AvatarGearPreviewWidget::setTransformHandleClickCallback(TransformHandleCli
 void AvatarGearPreviewWidget::setGearSelectionCallback(GearSelectionCallback callback)
 {
 	gear_selection_callback = std::move(callback);
+}
+
+
+bool AvatarGearPreviewWidget::currentMoveDragDeltaBoneSpace(const QPoint& total_pixel_delta, Vec3f& delta_out) const
+{
+	delta_out = Vec3f(0.f);
+	if(!transform_drag_axis_mapping_valid)
+		return false;
+
+	const Vec2f pixel_delta((float)total_pixel_delta.x(), (float)total_pixel_delta.y());
+	const float pixel_length2 = dot(transform_drag_axis_pixel_vector, transform_drag_axis_pixel_vector);
+	if(pixel_length2 < 1.0e-6f)
+		return false;
+
+	const float axis_fraction = dot(pixel_delta, transform_drag_axis_pixel_vector) / pixel_length2;
+	delta_out = transform_drag_axis_bone_vector * axis_fraction;
+	return true;
+}
+
+
+bool AvatarGearPreviewWidget::currentWorldAxisBoneSpace(Vec3f& axis_out) const
+{
+	if(!transform_drag_axis_mapping_valid)
+	{
+		axis_out = Vec3f(0.f);
+		return false;
+	}
+	axis_out = transform_drag_world_axis_bone_vector;
+	return axis_out.length2() > 1.0e-8f;
 }
 
 
@@ -424,6 +455,7 @@ void AvatarGearPreviewWidget::mousePressEvent(QMouseEvent* event)
 			transform_axis = static_cast<TransformAxis>((handle % 3) + 1);
 			if(transform_handle_click_callback)
 				transform_handle_click_callback(interaction_mode, transform_axis);
+			prepareTransformDragAxisMapping();
 			transform_dragging = true;
 			transform_drag_origin = event->pos();
 			transform_drag_callback(interaction_mode, transform_axis, QPoint(0, 0), /*finished=*/false);
@@ -440,6 +472,7 @@ void AvatarGearPreviewWidget::mousePressEvent(QMouseEvent* event)
 
 	if(event->button() == Qt::LeftButton && selected_gear_id.valid() && transform_drag_callback)
 	{
+		prepareTransformDragAxisMapping();
 		transform_dragging = true;
 		transform_drag_origin = event->pos();
 		// A zero-delta callback marks the beginning of a transform gesture, so
@@ -508,6 +541,7 @@ void AvatarGearPreviewWidget::mouseReleaseEvent(QMouseEvent* event)
 		if(transform_drag_callback)
 			transform_drag_callback(interaction_mode, transform_axis, event->pos() - transform_drag_origin, /*finished=*/true);
 		transform_dragging = false;
+		transform_drag_axis_mapping_valid = false;
 		grabbed_gizmo_handle = -1;
 		event->accept();
 		return;
@@ -947,6 +981,64 @@ void AvatarGearPreviewWidget::updateGizmoObjects()
 	}
 
 	updateGizmoColours(hovered_gizmo_handle);
+}
+
+
+bool AvatarGearPreviewWidget::selectedGearBoneToWorldMatrix(Matrix4f& matrix_out) const
+{
+	const PreviewGear* gear = selectedPreviewGear();
+	if(gear == nullptr || avatar_gl_ob.isNull() || avatar_gl_ob->mesh_data.isNull() ||
+		gear->bone_node_i < 0 || gear->bone_node_i >= (int)avatar_gl_ob->anim_node_data.size())
+		return false;
+
+	matrix_out = avatar_gl_ob->ob_to_world_matrix *
+		avatar_gl_ob->anim_node_data[gear->bone_node_i].node_hierarchical_to_object;
+	return true;
+}
+
+
+void AvatarGearPreviewWidget::prepareTransformDragAxisMapping()
+{
+	transform_drag_axis_mapping_valid = false;
+	if(transform_axis < Axis_X || transform_axis > Axis_Z)
+		return;
+
+	const int axis_i = (int)transform_axis - (int)Axis_X;
+	Vec2f start_pixel, end_pixel;
+	if(!projectPreviewPointToPixel(gizmo_axis_segments[axis_i].a, start_pixel) ||
+		!projectPreviewPointToPixel(gizmo_axis_segments[axis_i].b, end_pixel))
+		return;
+
+	const Vec2f pixel_vector = end_pixel - start_pixel;
+	if(dot(pixel_vector, pixel_vector) < 1.0e-6f)
+		return;
+
+	Matrix4f bone_to_world;
+	Matrix4f world_to_bone;
+	if(!selectedGearBoneToWorldMatrix(bone_to_world) || !bone_to_world.getInverseForAffine3Matrix(world_to_bone))
+		return;
+
+	// The gizmo follows the same world axes as the object editor (red X,
+	// green Y, blue Z), while GearItem stores translation/rotation in bone
+	// space.  Convert both the dragged segment and rotation axis here so a
+	// rotated animated bone cannot swap the visible gizmo directions.
+	Vec4f world_segment = gizmo_axis_segments[axis_i].b - gizmo_axis_segments[axis_i].a;
+	world_segment[3] = 0.f;
+	const Vec4f bone_segment = world_to_bone * world_segment;
+
+	Vec4f world_axis(0, 0, 0, 0);
+	world_axis[axis_i] = 1.f;
+	const Vec4f bone_axis = world_to_bone * world_axis;
+	Vec3f normalised_bone_axis(bone_axis[0], bone_axis[1], bone_axis[2]);
+	const float bone_axis_len = std::sqrt(normalised_bone_axis.length2());
+	if(bone_axis_len < 1.0e-6f)
+		return;
+	normalised_bone_axis /= bone_axis_len;
+
+	transform_drag_axis_pixel_vector = pixel_vector;
+	transform_drag_axis_bone_vector = Vec3f(bone_segment[0], bone_segment[1], bone_segment[2]);
+	transform_drag_world_axis_bone_vector = normalised_bone_axis;
+	transform_drag_axis_mapping_valid = true;
 }
 
 

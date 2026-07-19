@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2021 -
 
 #include "ui_MainOptionsDialog.h"
 #include <QtCore/QString>
+#include <string>
 class QSettings;
 
 
@@ -53,6 +54,15 @@ public:
 
 	static const QString showMinimapKey() { return "setting/show_minimap"; }
 
+	// Local MCP endpoint settings.  Credentials are deliberately not stored in
+	// this dialog: the runtime integration must obtain them from CredentialManager.
+	static const QString MCPEnabledKey()	{ return "mcp_client/enabled"; }
+	static const QString MCPPortKey()		{ return "mcp_client/port"; }
+
+	static int defaultMCPPort() { return 8095; }
+	static int minMCPPort() { return 1024; }
+	static int maxMCPPort() { return 65535; }
+
 	static std::string getInputDeviceName(const QSettings* settings);
 	static float getInputScaleFactor(const QSettings* settings);
 
@@ -61,6 +71,7 @@ public:
 private slots:;
 	void accepted();
 	void customCacheDirCheckBoxChanged(bool checked);
+	void MCPCheckBoxChanged(bool checked);
 
 	void on_inputDeviceComboBox_currentIndexChanged(int index);
 	void on_inputVolumeScaleHorizontalSlider_valueChanged(int new_value);

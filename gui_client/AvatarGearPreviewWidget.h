@@ -85,6 +85,8 @@ public:
 	void setTransformDragCallback(TransformDragCallback callback);
 	void setTransformHandleClickCallback(TransformHandleClickCallback callback);
 	void setGearSelectionCallback(GearSelectionCallback callback);
+	bool currentMoveDragDeltaBoneSpace(const QPoint& total_pixel_delta, Vec3f& delta_out) const;
+	bool currentWorldAxisBoneSpace(Vec3f& axis_out) const;
 
 	void shutdown();
 
@@ -136,6 +138,8 @@ private:
 	int gizmoHandleAt(const QPoint& pixel) const;
 	bool gearAt(const QPoint& pixel, UID& gear_id_out) const;
 	void updateGizmoColours(int hovered_handle);
+	void prepareTransformDragAxisMapping();
+	bool selectedGearBoneToWorldMatrix(Matrix4f& matrix_out) const;
 
 	std::string resolveModelPath(const URLString& base_url, URLString& desired_url_out);
 	std::string resolveResourcePath(const URLString& preferred_url, const URLString& fallback_url);
@@ -163,6 +167,10 @@ private:
 	TransformAxis transform_axis;
 	QPoint transform_drag_origin;
 	bool transform_dragging;
+	Vec2f transform_drag_axis_pixel_vector;
+	Vec3f transform_drag_axis_bone_vector;
+	Vec3f transform_drag_world_axis_bone_vector;
+	bool transform_drag_axis_mapping_valid;
 
 	bool initialised;
 	bool shutting_down;
