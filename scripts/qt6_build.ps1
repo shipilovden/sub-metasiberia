@@ -8,7 +8,7 @@ param(
     [string]$XR = "Auto",
     [ValidateRange(1, 64)]
     [int]$Jobs = 8,
-    [string]$QtVersion = "6.10.0",
+    [string]$QtVersion = "6.11.1",
     [string]$QtDir = "",
     [string]$RepoRoot = "C:\programming\substrata",
     [string]$BuildDir = "C:\programming\substrata_build_qt6",
@@ -80,6 +80,10 @@ function Resolve-Qt6Dir {
         }
     }
 
+    $mingwCandidates = @($candidates | Where-Object { Test-Path -LiteralPath (Join-Path $_ "lib\libQt6Core.a") })
+    if ($mingwCandidates.Count -gt 0) {
+        throw "Found Qt 6 MinGW distribution at $($mingwCandidates -join '; '), but this Windows workflow requires Qt 6 MSVC 2022 because CEF and native dependencies use the Visual Studio ABI. Install the Qt 6.11.1 MSVC 2022 64-bit component; Qt 5 fallback is forbidden."
+    }
     throw "Qt 6 $QtVersion MSVC 2022 distribution was not found. Install it or pass -QtDir <root>; Qt 5 fallback is forbidden. Checked: $($candidates -join '; ')"
 }
 
