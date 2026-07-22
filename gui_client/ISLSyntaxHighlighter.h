@@ -11,7 +11,11 @@ Copyright Glare Technologies Limited 2024 -
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 #include <QtCore5Compat/QRegExp>
 #else
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtCore5Compat/QRegExp>
+#else
 #include <QtCore/QRegExp>
+#endif
 #endif
 #include <QtGui/QTextCharFormat>
 

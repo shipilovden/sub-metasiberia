@@ -24,7 +24,11 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QMap>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtCore5Compat/QRegExp>
+#else
 #include <QtCore/QRegExp>
+#endif
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QSettings>
 #include <QtCore/QStandardPaths>

@@ -16,7 +16,11 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtGui/QTextCursor>
 #include <QtGui/QTextDocument>
 #include <QtWidgets/QCheckBox>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtGui/QAction>
+#else
 #include <QtWidgets/QAction>
+#endif
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QFileDialog>

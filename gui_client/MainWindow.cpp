@@ -112,8 +112,13 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QRegularExpression>
 #include <QtGui/QTextDocument>
 #include <QtGui/QWheelEvent>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtGui/QAction>
+#include <QtGui/QActionGroup>
+#else
 #include <QtWidgets/QAction>
 #include <QtWidgets/QActionGroup>
+#endif
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QAbstractButton>
 #include <QtGui/QClipboard>

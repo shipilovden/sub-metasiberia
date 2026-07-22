@@ -10,7 +10,11 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtCore5Compat/QRegExp>
+#else
 #include <QtCore/QRegExp>
+#endif
 #include <QtCore/QTimer>
 #include <QtGui/QClipboard>
 #include <QtGui/QContextMenuEvent>
