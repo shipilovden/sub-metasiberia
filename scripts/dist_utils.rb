@@ -96,17 +96,24 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	
 	FileUtils.mkdir_p(styles_dir_target_dir, :verbose => true)
 	
-	FileUtils.cp("#{styles_dir}/qwindowsvistastyle.dll",  styles_dir_target_dir, :verbose => true) if !copy_debug
-	FileUtils.cp("#{styles_dir}/qwindowsvistastyled.dll", styles_dir_target_dir, :verbose => true) if copy_debug
+	style_name = copy_debug ? "qwindowsvistastyled.dll" : "qwindowsvistastyle.dll"
+	style_path = "#{styles_dir}/#{style_name}"
+	if File.exist?(style_path)
+		FileUtils.cp(style_path, styles_dir_target_dir, :verbose => true)
+	else
+		STDERR.puts "Warning: Qt style plugin not found: #{style_path}"
+	end
 	
 	# Gamepads
-	gamepads_dir = "#{plugins_path}/gamepads"
-	gamepads_dir_target_dir = "#{target_dir}/gamepads"
-	
-	FileUtils.mkdir_p(gamepads_dir_target_dir, :verbose => true)
-	
-	FileUtils.cp("#{gamepads_dir}/xinputgamepad.dll",  gamepads_dir_target_dir, :verbose => true) if !copy_debug
-	FileUtils.cp("#{gamepads_dir}/xinputgamepadd.dll", gamepads_dir_target_dir, :verbose => true) if copy_debug
+	if qt_major < 6
+		gamepads_dir = "#{plugins_path}/gamepads"
+		gamepads_dir_target_dir = "#{target_dir}/gamepads"
+		
+		FileUtils.mkdir_p(gamepads_dir_target_dir, :verbose => true)
+		
+		FileUtils.cp("#{gamepads_dir}/xinputgamepad.dll",  gamepads_dir_target_dir, :verbose => true) if !copy_debug
+		FileUtils.cp("#{gamepads_dir}/xinputgamepadd.dll", gamepads_dir_target_dir, :verbose => true) if copy_debug
+	end
 
 	# Multimedia services (needed for webcam / camera support).
 	mediaservice_dir = "#{plugins_path}/mediaservice"
