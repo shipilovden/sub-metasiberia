@@ -2876,12 +2876,12 @@ void MainWindow::initialiseLanguageMenu()
 	{
 		if(checked)
 			applyUILanguage(RuntimeTranslation::UILanguage::English, /*persist_setting=*/true);
-	}, Qt::UniqueConnection);
+	});
 	connect(ui->actionLanguage_Russian, &QAction::toggled, this, [this](bool checked)
 	{
 		if(checked)
 			applyUILanguage(RuntimeTranslation::UILanguage::Russian, /*persist_setting=*/true);
-	}, Qt::UniqueConnection);
+	});
 
 	updateMenuTooltips();
 }
@@ -12264,6 +12264,14 @@ static void qtMessageHandler(QtMsgType type, const QMessageLogContext& context, 
 
 	const std::string formatted_msg = "Qt: " + typestr + ": " + msgstr + context_str;
 	qt_debug_msgs.push_back(formatted_msg);
+	// Flush Qt diagnostics immediately.  Fatal Qt messages are followed by an
+	// abort, so waiting for the normal UI log flush loses the most useful
+	// startup-crash detail.
+	if(log_file)
+	{
+		log_file->getFileStream() << formatted_msg << "\n";
+		log_file->flush();
+	}
 }
 
 
