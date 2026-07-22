@@ -30,7 +30,7 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	
 	# Get Qt path.
 	glare_core_libs_dir = getAndCheckEnvVar('GLARE_CORE_LIBS')
-	qt_dir = "#{glare_core_libs_dir}/Qt/#{$qt_version}-vs#{vs_version}-64"
+	qt_dir = (defined?($indigo_qt_dir) && $indigo_qt_dir && !$indigo_qt_dir.empty?) ? $indigo_qt_dir : "#{glare_core_libs_dir}/Qt/#{$qt_version}-vs#{vs_version}-64"
 	lib_path = "#{qt_dir}/bin"
 	plugins_path = "#{qt_dir}/plugins"
 	

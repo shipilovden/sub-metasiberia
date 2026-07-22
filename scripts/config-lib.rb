@@ -11,8 +11,9 @@ $vs_version = 2022 # Visual Studio version used to build libraries and Substrata
 # 5.15.16 is the latest released open source version in the pre-6.0 series as of November 2024.
 # NOTE: should match the qt_version in substrata-private config-lib.rb.
 $qt_version = "5.15.16" if OS.windows?
-$qt_version = "5.15.10" if OS.mac? 
+$qt_version = "5.15.10" if OS.mac?
 $qt_version = "5.15.10" if OS.linux?
+$qt_version = ENV['SUBSTRATA_QT_VERSION'] unless ENV['SUBSTRATA_QT_VERSION'].nil? || ENV['SUBSTRATA_QT_VERSION'].empty?
 
 
 $llvm_version = "15.0.7" # NOTE: Also defined in SUBSTRATA_LLVM_VERSION in CMakeLists.txt.
@@ -27,8 +28,11 @@ end
 
 indigo_qt_base_dir = "#{glare_core_libs_dir}/Qt"
 
-$indigo_qt_dir = ""
-if OS.unix?
+$indigo_qt_dir = ENV['SUBSTRATA_QT_DIR'] unless ENV['SUBSTRATA_QT_DIR'].nil? || ENV['SUBSTRATA_QT_DIR'].empty?
+if !$indigo_qt_dir.nil? && !$indigo_qt_dir.empty?
+	# An explicit path is used by the isolated Qt 6 workflow (and is also
+	# useful for non-standard Qt 5 installations).
+elsif OS.unix?
 	$indigo_qt_dir = "#{indigo_qt_base_dir}/#{$qt_version}"
 else
 	$indigo_qt_dir = "#{indigo_qt_base_dir}/#{$qt_version}-vs#{$vs_version}-64"
