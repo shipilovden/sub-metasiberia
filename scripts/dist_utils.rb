@@ -108,9 +108,8 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	if qt_major < 6
 		gamepads_dir = "#{plugins_path}/gamepads"
 		gamepads_dir_target_dir = "#{target_dir}/gamepads"
-		
 		FileUtils.mkdir_p(gamepads_dir_target_dir, :verbose => true)
-		
+
 		FileUtils.cp("#{gamepads_dir}/xinputgamepad.dll",  gamepads_dir_target_dir, :verbose => true) if !copy_debug
 		FileUtils.cp("#{gamepads_dir}/xinputgamepadd.dll", gamepads_dir_target_dir, :verbose => true) if copy_debug
 	end
