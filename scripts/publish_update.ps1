@@ -154,7 +154,7 @@ ExecNative "powershell" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "
 $env:GLARE_CORE_LIBS = "c:/programming"
 $env:WINTER_DIR = "c:/programming/winter"
 $env:GLARE_CORE_TRUNK_DIR = "c:/programming/glare-core"
-$env:CEF_BINARY_DISTRIB_DIR = "C:\cef\chromium\src\cef\binary_distrib\cef_binary_139.0.40+g465474a+chromium-139.0.7258.139_windows64"
+$env:CEF_BINARY_DISTRIB_DIR = "D:\cef\binary_distrib\cef_binary_139.0.40+g465474a+chromium-139.0.7258.139_windows64"
 $env:INDIGO_QT_VERSION = "5.15.16-vs2022-64"
 $env:CYBERSPACE_OUTPUT = "c:/programming/substrata_output_qt"
 

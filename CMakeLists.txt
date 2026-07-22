@@ -107,8 +107,8 @@ MESSAGE("CYBERSPACE_OUTPUT: ${CYBERSPACE_OUTPUT_ENV}")
 checkAndGetEnvVar(GLARE_CORE_TRUNK_DIR GLARE_CORE_TRUNK_DIR_ENV)
 MESSAGE("GLARE_CORE_TRUNK_DIR: ${GLARE_CORE_TRUNK_DIR_ENV}")
 
-SET(CEF_BINARY_DISTRIB_DIR_ENV $ENV{CEF_BINARY_DISTRIB_DIR})
-MESSAGE("CEF_BINARY_DISTRIB_DIR: ${CEF_BINARY_DISTRIB_DIR_ENV}")
+SET(CEF_BINARY_DISTRIB_DIR "$ENV{CEF_BINARY_DISTRIB_DIR}" CACHE PATH "Path to the CEF binary distribution root")
+MESSAGE("CEF_BINARY_DISTRIB_DIR: ${CEF_BINARY_DISTRIB_DIR}")
 
 if(INDIGO_SUPPORT)
 	checkAndGetEnvVar(INDIGO_TRUNK_DIR INDIGO_TRUNK_DIR_ENV)
@@ -172,7 +172,28 @@ set(pugixmldir	"${GLARE_CORE_TRUNK_DIR_ENV}/pugixml/src")
 set(pngdir		"${GLARE_CORE_TRUNK_DIR_ENV}/libpng")
 set(zstddir		"${GLARE_CORE_TRUNK_DIR_ENV}/zstd")
 
-set(cef_binary_dist_dir ${CEF_BINARY_DISTRIB_DIR_ENV})
+set(cef_binary_dist_dir "${CEF_BINARY_DISTRIB_DIR}")
+
+if(CEF_SUPPORT)
+	if(NOT CEF_BINARY_DISTRIB_DIR)
+		message(FATAL_ERROR "CEF_SUPPORT is ON, but CEF_BINARY_DISTRIB_DIR is empty. Pass -DCEF_BINARY_DISTRIB_DIR=<cef_binary_* directory> or set the environment variable.")
+	endif()
+
+	set(cef_required_files "include/cef_app.h")
+	if(WIN32)
+		list(APPEND cef_required_files
+			"Release/libcef.lib"
+			"Release/libcef.dll"
+			"libcef_dll_build/libcef_dll_wrapper/Release/libcef_dll_wrapper.lib"
+		)
+	endif()
+
+	foreach(cef_required_file IN LISTS cef_required_files)
+		if(NOT EXISTS "${CEF_BINARY_DISTRIB_DIR}/${cef_required_file}")
+			message(FATAL_ERROR "CEF_SUPPORT is ON, but required CEF artifact is missing: ${CEF_BINARY_DISTRIB_DIR}/${cef_required_file}")
+		endif()
+	endforeach()
+endif()
 
 # The version of Qt we use needs to be accessed by both CMake and ruby build_dist script etc..
 # So get via getConfigOption()

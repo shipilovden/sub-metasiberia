@@ -24,13 +24,6 @@ Metasiberia is a virtual world project inspired by and based on the open-source 
 
 The public website at `metasiberia.com` is hosted separately. This repository contains the native/web clients, game server, and the server-site/admin implementation served at `vr.metasiberia.com`.
 
-## Development Map
-
-- Start with [`AGENTS.md`](AGENTS.md) for repository-wide working rules.
-- Use [`docs/codex/project-index.md`](docs/codex/project-index.md) to find a component and its entry point.
-- Use [`docs/codex/build-and-test.md`](docs/codex/build-and-test.md) for verified build and test commands.
-- Use [`docs/codex/documentation-index.md`](docs/codex/documentation-index.md) to distinguish current, historical, and planned documents.
-
 ![](docs/images/metasiberia.png)
 
 ## Community and Support
