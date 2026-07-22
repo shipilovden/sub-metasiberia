@@ -152,7 +152,7 @@ try {
     $env:CEF_BINARY_DISTRIB_DIR = $CefDistribDir
     if ($xrResolved.Enabled) { $env:OPENXR_SDK_DIR = $xrResolved.Dir }
 
-    $cmakeArgs = @("-S", $RepoRoot, "-B", $BuildDir, "-G", "Visual Studio 17 2022", "-A", "x64", "-DUSE_SDL=OFF", "-DCEF_SUPPORT=ON", "-DXR_SUPPORT=$(if($xrResolved.Enabled){'ON'}else{'OFF'})", "-DCEF_BINARY_DISTRIB_DIR=$CefDistribDir")
+    $cmakeArgs = @("-S", $RepoRoot, "-B", $BuildDir, "-G", "Visual Studio 17 2022", "-A", "x64", "-DUSE_SDL=OFF", "-DBUGSPLAT_SUPPORT=OFF", "-DCEF_SUPPORT=ON", "-DXR_SUPPORT=$(if($xrResolved.Enabled){'ON'}else{'OFF'})", "-DCEF_BINARY_DISTRIB_DIR=$CefDistribDir")
     if ($xrResolved.Enabled) { $cmakeArgs += "-DOPENXR_SDK_DIR=$($xrResolved.Dir)" }
     Invoke-Native "cmake" $cmakeArgs "Qt 6 CMake configure failed"
 

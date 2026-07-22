@@ -2,6 +2,11 @@
 
 set(CURRENT_TARGET gui_client)
 
+if(SUBSTRATA_QT6 AND WIN32)
+	# Qt 6.11 rejects MSVC's permissive language mode in qcompilerdetection.h.
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive-")
+endif()
+
 if(NOT USE_SDL)
 	programAvailable(${INDIGO_QT_DIR}/bin/moc)
 endif()
