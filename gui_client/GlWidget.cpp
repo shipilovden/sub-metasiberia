@@ -38,8 +38,11 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtGamepad/QGamepadManager>
 #endif
 #include <QtGui/QOpenGLContext>
-#if defined(_WIN32)
+#if defined(_WIN32) && (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 #include <QtPlatformHeaders/QWGLNativeContext>
+#endif
+#if defined(_WIN32) && (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtGui/qnativeinterface.h>
 #endif
 #include <tracy/Tracy.hpp>
 #include <set>
@@ -399,7 +402,7 @@ void GlWidget::initializeGL()
 void* GlWidget::makeNewSharedGLContext()
 {
 #if defined(_WIN32)
-	QOpenGLContext* window_context = this->context()->contextHandle();
+	QOpenGLContext* window_context = this->context();
 	
 	QOpenGLContext* new_window_context = new QOpenGLContext();
 	new_window_context->setFormat(window_context->format());
@@ -408,11 +411,17 @@ void* GlWidget::makeNewSharedGLContext()
 	assert(new_window_context->isValid());
 
 
+	#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	QNativeInterface::QWGLContext* nativeContext = new_window_context->nativeInterface<QNativeInterface::QWGLContext>();
+	if(nativeContext == nullptr)
+		return nullptr;
+	HGLRC hglrc = nativeContext->nativeContext();
+	#else
 	QVariant nativeHandle = new_window_context->nativeHandle();
 	assert(!nativeHandle.isNull() && nativeHandle.canConvert<QWGLNativeContext>());
-	
 	QWGLNativeContext nativeContext = nativeHandle.value<QWGLNativeContext>();
 	HGLRC hglrc = nativeContext.context();
+	#endif
 
 	return hglrc;
 #else
@@ -423,7 +432,9 @@ void* GlWidget::makeNewSharedGLContext()
 
 void GlWidget::paintGL()
 {
-	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called."  (https://doc.qt.io/qt-5/qglwidget.html#initializeGL)
+	#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
+	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called."
+	#endif
 	if(opengl_engine.isNull())
 		return;
 

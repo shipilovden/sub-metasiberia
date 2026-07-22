@@ -10,6 +10,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QRegularExpression>
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 #include <QtCore5Compat/QRegExp>
 #else
@@ -148,7 +149,7 @@ void MoleculeViewportWidget::setMolecule(const QString& atom_table, const QStrin
 	const QStringList atom_lines = atom_table.split(QChar('\n'));
 	for(const QString& raw : atom_lines)
 	{
-		const QStringList p = raw.trimmed().split(QRegExp(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS);
+		const QStringList p = raw.trimmed().split(QRegularExpression(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS);
 		if(p.size() < 5) continue;
 		bool ok_id = false, ok_x = false, ok_y = false, ok_z = false;
 		Atom a; a.source_id = p[0].toInt(&ok_id); a.element = p[1]; a.pos = QVector3D(p[2].toFloat(&ok_x), p[3].toFloat(&ok_y), p[4].toFloat(&ok_z));
@@ -161,7 +162,7 @@ void MoleculeViewportWidget::setMolecule(const QString& atom_table, const QStrin
 	for(QString raw : bond_lines)
 	{
 		raw.replace(QChar('-'), QChar(' ')); raw.replace(QChar(':'), QChar(' '));
-		const QStringList p = raw.trimmed().split(QRegExp(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS); if(p.size() < 2) continue;
+		const QStringList p = raw.trimmed().split(QRegularExpression(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS); if(p.size() < 2) continue;
 		const int source_a = p[0].toInt(), source_b = p[1].toInt(); Bond b;
 		for(int i=0; i<atoms.size(); ++i) { if(atoms[i].source_id == source_a) b.atom_a = i; if(atoms[i].source_id == source_b) b.atom_b = i; }
 		if(b.atom_a < 0 || b.atom_b < 0 || b.atom_a == b.atom_b) continue;
