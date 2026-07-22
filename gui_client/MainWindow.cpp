@@ -78,6 +78,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../shared/LODGeneration.h"
 #include "../shared/ImageDecoding.h"
 #include "../shared/MessageUtils.h"
+#include "../shared/ResourceManager.h"
 #include <QtCore/QMimeData>
 #include <QtCore/QByteArray>
 #include <QtCore/QDir>
@@ -354,7 +355,11 @@ static void applyQtThemePalette(const QtThemeColors& theme)
 		(std::abs(qGray(theme.text.rgb()) - highlighted_gray) >= std::abs(qGray(theme.mantle.rgb()) - highlighted_gray)) ?
 		theme.text : theme.mantle;
 
+	#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	float h = 0, s = 0, v = 0, a = 1;
+	#else
 	qreal h = 0, s = 0, v = 0, a = 1;
+	#endif
 	theme.text.getHsvF(&h, &s, &v, &a);
 	const QColor bright_text_colour = QColor::fromHsvF(h, s, 1.0 - v, a);
 
@@ -2658,7 +2663,7 @@ void MainWindow::initialiseUI()
 			throw glare::Exception("GetAdapter failed: " + PlatformUtils::COMErrorString(hr));
 		DXGI_ADAPTER_DESC desc;
 		adapter->GetDesc(&desc);
-		logMessage("Direct3D device adapter: " + StringUtils::PlatformToUTF8UnicodeEncoding(desc.Description) + ", LUID: {" + toString((uint32)desc.AdapterLuid.LowPart) + ", " + toString(desc.AdapterLuid.HighPart) + "}");
+		logMessage("Direct3D device adapter: " + StringUtils::PlatformToUTF8UnicodeEncoding(desc.Description) + ", LUID: {" + toString((uint64)desc.AdapterLuid.LowPart) + ", " + toString((int64)desc.AdapterLuid.HighPart) + "}");
 	}
 #endif //_WIN32
 
@@ -7572,7 +7577,11 @@ void MainWindow::runScreenshotCode()
 			{
 				conPrint("Taking screenshot...");
 
+				#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+				ui->glWidget->update(); // Queue a QOpenGLWidget paint to set camera transform, sensor width etc.
+				#else
 				ui->glWidget->updateGL(); // Make sure QGLWidget::paintGL gets called to set camera transform, sensor width etc.
+				#endif
 
 				opengl_engine->setMainViewportDims(target_viewport_w, target_viewport_h);
 				ImageMapUInt8Ref map = opengl_engine->drawToBufferAndReturnImageMap();
@@ -11831,11 +11840,16 @@ void MainWindow::glWidgetFocusOut()
 
 void MainWindow::glWidgetMouseWheelEvent(QWheelEvent* e)
 {
-	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
+	#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	const QPoint wheel_pos = e->position().toPoint();
+	#else
+	const QPoint wheel_pos = e->pos();
+	#endif
+	const Vec2f widget_pos((float)wheel_pos.x(), (float)wheel_pos.y());
 	const Vec2f gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
 
 	MouseWheelEvent mouse_event;
-	mouse_event.cursor_pos = Vec2i(e->pos().x(), e->pos().y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
+	mouse_event.cursor_pos = Vec2i(wheel_pos.x(), wheel_pos.y()) * ui->glWidget->devicePixelRatio(); // Use devicePixelRatio to convert from logical to physical pixel coords.
 	mouse_event.gl_coords = gl_coords;
 	mouse_event.angle_delta = Vec2f((float)e->angleDelta().x() / 8.f, (float)e->angleDelta().y() / 8.f); // angleDelta() returns "the relative amount that the wheel was rotated, in eighths of a degree".
 	mouse_event.modifiers = fromQtModifiers(e->modifiers());

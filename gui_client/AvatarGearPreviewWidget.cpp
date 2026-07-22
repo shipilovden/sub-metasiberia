@@ -22,6 +22,9 @@ avatar settings preview.
 #include <QtCore/QRectF>
 #include <QtGui/QHideEvent>
 #include <QtGui/QMouseEvent>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtGui/QOpenGLContext>
+#endif
 #include <QtGui/QPaintEvent>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QShowEvent>
@@ -65,7 +68,11 @@ public:
 
 	~RestoreMainContextAfterQtEvent()
 	{
+		#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 		if(QGLContext::currentContext() == widget.context())
+		#else
+		if(QOpenGLContext::currentContext() == widget.context())
+		#endif
 			widget.doneCurrent();
 		if(restore_main_context)
 			restore_main_context();

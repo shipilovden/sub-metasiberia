@@ -1074,13 +1074,31 @@ QWidget* GearInventoryPanel::makeCard(const GearItemRef& item, bool equipped)
 	// already rendered equipment preview for the selected card instead of
 	// falling back to a generic package icon.  The server thumbnail remains the
 	// preferred source and replaces this fallback as soon as it arrives.
-	if((thumb->pixmap() == nullptr || thumb->pixmap()->isNull()) && selected_item && selected_item->id == item->id && preview->hasRenderableAvatar())
+	#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	const QPixmap current_thumb_pixmap = thumb->pixmap(Qt::ReturnByValue);
+	const bool has_thumb_pixmap = !current_thumb_pixmap.isNull();
+	#else
+	const QPixmap* current_thumb_pixmap = thumb->pixmap();
+	const bool has_thumb_pixmap = current_thumb_pixmap != nullptr && !current_thumb_pixmap->isNull();
+	#endif
+	if(!has_thumb_pixmap && selected_item && selected_item->id == item->id && preview->hasRenderableAvatar())
 	{
+		#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+		const QImage frame = preview->grabFramebuffer();
+		#else
 		const QImage frame = preview->grabFrameBuffer();
+		#endif
 		if(!frame.isNull())
 			thumb->setPixmap(QPixmap::fromImage(frame).scaled(68, 68, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 	}
-	if(thumb->pixmap() == nullptr || thumb->pixmap()->isNull())
+	#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	const QPixmap final_thumb_pixmap = thumb->pixmap(Qt::ReturnByValue);
+	const bool has_final_thumb_pixmap = !final_thumb_pixmap.isNull();
+	#else
+	const QPixmap* final_thumb_pixmap = thumb->pixmap();
+	const bool has_final_thumb_pixmap = final_thumb_pixmap != nullptr && !final_thumb_pixmap->isNull();
+	#endif
+	if(!has_final_thumb_pixmap)
 		thumb->setPixmap(LucideIconUtils::tintedIcon(icon_directory, "package", palette().color(QPalette::Text), 42).pixmap(42, 42));
 	thumb->setToolTip(item->preview_image_URL.empty() ? tr("Изображение предмета из превью; серверная миниатюра будет загружена автоматически") : tr("Мини-превью предмета"));
 	row->addWidget(thumb);

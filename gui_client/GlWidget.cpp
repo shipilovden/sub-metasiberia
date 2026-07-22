@@ -42,7 +42,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtPlatformHeaders/QWGLNativeContext>
 #endif
 #if defined(_WIN32) && (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-#include <QtGui/qnativeinterface.h>
+#include <QtCore/qnativeinterface.h>
 #endif
 #include <tracy/Tracy.hpp>
 #include <set>
