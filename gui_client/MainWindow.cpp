@@ -3749,6 +3749,18 @@ void MainWindow::onIndigoViewDockWidgetVisibilityChanged(bool visible)
 
 void MainWindow::logMessage(const std::string& msg) // Append to LogWindow log display
 {
+	// CEF callbacks (and a few worker callbacks) can arrive off the Qt GUI
+	// thread.  Updating LogWindow or the shared log stream there can corrupt
+	// Qt widget state; marshal the complete operation to MainWindow's thread.
+	if(QThread::currentThread() != this->thread())
+	{
+		QMetaObject::invokeMethod(this, [this, msg]()
+		{
+			this->logMessage(msg);
+		}, Qt::QueuedConnection);
+		return;
+	}
+
 	const std::string timestamped_msg = doubleToStringNDecimalPlaces(Clock::getTimeSinceInit(), 3) + " s:   " + msg;
 
 	if(this->log_window && !running_destructor)
