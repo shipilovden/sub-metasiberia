@@ -11896,6 +11896,15 @@ void MainWindow::glWidgetViewportResized(int w, int h)
 
 void MainWindow::setGLWidgetContextAsCurrent()
 {
+	if(QThread::currentThread() != this->thread())
+	{
+		QMetaObject::invokeMethod(this, [this]()
+		{
+			this->ui->glWidget->makeCurrent();
+		}, Qt::BlockingQueuedConnection);
+		return;
+	}
+
 	this->ui->glWidget->makeCurrent();
 }
 
@@ -11908,6 +11917,17 @@ bool MainWindow::connectedToUsersWorldOrGodUser()
 
 Vec2i MainWindow::getGlWidgetPosInGlobalSpace()
 {
+	if(QThread::currentThread() != this->thread())
+	{
+		Vec2i result;
+		QMetaObject::invokeMethod(this, [this, &result]()
+		{
+			const QPoint p = this->ui->glWidget->mapToGlobal(this->ui->glWidget->pos());
+			result = Vec2i(p.x(), p.y());
+		}, Qt::BlockingQueuedConnection);
+		return result;
+	}
+
 	const QPoint p = this->ui->glWidget->mapToGlobal(this->ui->glWidget->pos());
 	return Vec2i(p.x(), p.y());
 }
@@ -11939,6 +11959,15 @@ void MainWindow::openServerScriptLogSlot()
 
 void MainWindow::webViewDataLinkHovered(const std::string& url)
 {
+	if(QThread::currentThread() != this->thread())
+	{
+		QMetaObject::invokeMethod(this, [this, url]()
+		{
+			this->webViewDataLinkHovered(url);
+		}, Qt::QueuedConnection);
+		return;
+	}
+
 	if(url.empty())
 	{
 		ui->glWidget->setCursorIfNotHidden(Qt::ArrowCursor);
