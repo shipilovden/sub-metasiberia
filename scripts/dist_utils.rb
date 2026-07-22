@@ -34,18 +34,24 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	lib_path = "#{qt_dir}/bin"
 	plugins_path = "#{qt_dir}/plugins"
 	
-	# Qt dlls.
-	# Qt5Multimedia depends on Qt5Network, so include it explicitly.
-	dll_files = ["Qt5Core", "Qt5Gui", "Qt5OpenGL", "Qt5Widgets", "Qt5Network", "Qt5Gamepad", "Qt5Multimedia", "Qt5MultimediaWidgets"]
+	# Qt dlls. Keep Qt 5 and Qt 6 runtime names isolated by the selected config.rb version.
+	qt_major = $qt_version.to_s.split(".").first.to_i
+	qt_prefix = qt_major >= 6 ? "Qt6" : "Qt5"
+	# QtMultimedia depends on QtNetwork, so include it explicitly.
+	dll_files = ["Core", "Gui", "OpenGL", "Widgets", "Network", "Multimedia", "MultimediaWidgets"]
+	dll_files << "OpenGLWidgets" if qt_major >= 6
+	dll_files << "Gamepad"
+	dll_files << "Core5Compat" if qt_major >= 6
 
 		
 	dll_files.each do |dll_file|
-		FileUtils.cp("#{lib_path}/#{dll_file}.dll", target_dir, :verbose => true) if !copy_debug
-		FileUtils.cp("#{lib_path}/#{dll_file}d.dll", target_dir, :verbose => true) if copy_debug
+		qt_dll_name = "#{qt_prefix}#{dll_file}"
+		FileUtils.cp("#{lib_path}/#{qt_dll_name}.dll", target_dir, :verbose => true) if !copy_debug
+		FileUtils.cp("#{lib_path}/#{qt_dll_name}d.dll", target_dir, :verbose => true) if copy_debug
 	end
 
 	# Optional Qt SVG support for toolbar/menu SVG icons.
-	svg_dll_path = copy_debug ? "#{lib_path}/Qt5Svgd.dll" : "#{lib_path}/Qt5Svg.dll"
+	svg_dll_path = copy_debug ? "#{lib_path}/#{qt_prefix}Svgd.dll" : "#{lib_path}/#{qt_prefix}Svg.dll"
 	if File.exist?(svg_dll_path)
 		FileUtils.cp(svg_dll_path, target_dir, :verbose => true)
 	else

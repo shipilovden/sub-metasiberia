@@ -1433,22 +1433,31 @@ elseif(WIN32)
 			optimized "${SDL_BUILD_DIR}/RelWithDebInfo/SDL2main.lib" 
 		)
 	else() # Else use Qt:
-		target_link_libraries(${CURRENT_TARGET}
-		
-				# Qt 6:
-		#	optimized Qt6Gui
-		#	optimized Qt6Core
-		#	optimized Qt6OpenGL
-		#	optimized Qt6Widgets
-		#	optimized Qt6OpenGLWidgets
-		#	optimized Qt6Core5Compat
-		#	debug Qt6Guid
-		#	debug Qt6Cored
-		#	debug Qt6OpenGLd
-		#	debug Qt6Widgetsd
-		#	debug Qt6OpenGLWidgetsd
-		#	debug Qt6Core5Compatd
-			
+		if(SUBSTRATA_QT6)
+			target_link_libraries(${CURRENT_TARGET}
+				optimized Qt6Gui
+				optimized Qt6Core
+				optimized Qt6OpenGL
+				optimized Qt6OpenGLWidgets
+				optimized Qt6Widgets
+				optimized Qt6Multimedia
+				optimized Qt6MultimediaWidgets
+				optimized Qt6Network
+				optimized Qt6Gamepad
+				optimized Qt6Core5Compat
+				debug Qt6Guid
+				debug Qt6Cored
+				debug Qt6OpenGLd
+				debug Qt6OpenGLWidgetsd
+				debug Qt6Widgetsd
+				debug Qt6Multimediad
+				debug Qt6MultimediaWidgetsd
+				debug Qt6Networkd
+				debug Qt6Gamepadd
+				debug Qt6Core5Compatd
+			)
+		else()
+			target_link_libraries(${CURRENT_TARGET}
 			# Qt 5:
 			optimized qtmain
 			optimized Qt5Gui
@@ -1468,7 +1477,8 @@ elseif(WIN32)
 			debug Qt5MultimediaWidgetsd
 			debug Qt5Networkd
 			debug Qt5Gamepadd
-		)
+			)
+		endif()
 	endif()
 	
 	# Chromium embedded framework
