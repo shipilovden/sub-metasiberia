@@ -14,7 +14,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "UpdateDialog.h"
 #include "UpdateManager.h"
 #include "CreateObjectsDialog.h"
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 #include "webcam/WebcamWindow.h"
+#endif
 #include "ClientThread.h"
 #include "GoToPositionDialog.h"
 #include "LogWindow.h"
@@ -22,7 +24,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "AvatarSettingsDialog.h"
 #include "AvatarSettingsWidget.h"
 #include "AddObjectDialog.h"
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 #include "AddVideoDialog.h"
+#endif
 #include "MainOptionsDialog.h"
 #include "FindObjectDialog.h"
 #include "ListObjectsNearbyDialog.h"
@@ -2107,9 +2111,10 @@ void MainWindow::initialiseUI()
 		ui->menuGo_to_Favorites->installEventFilter(this); // For right-click context menu (rename/delete).
 	}
 
+	webcam_window = NULL;
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 	// Replace webcam dock content with full WebcamWindow (camera list, settings, etc.) before restoreState.
 	// If it fails for any reason, keep the existing simple webcam UI (label + checkbox) as a fallback.
-	webcam_window = NULL;
 	try
 	{
 		webcam_window = new WebcamWindow(this);
@@ -2125,6 +2130,7 @@ void MainWindow::initialiseUI()
 		logMessage("Webcam window init failed (unknown exception) (using simple webcam UI)");
 		webcam_window = NULL;
 	}
+#endif
 
 	setAcceptDrops(true);
 
@@ -8422,6 +8428,7 @@ void MainWindow::on_actionAdd_Web_View_triggered()
 
 void MainWindow::on_actionAdd_Video_triggered()
 {
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 	try
 	{
 		const float quad_w = 0.4f;
@@ -8511,6 +8518,9 @@ void MainWindow::on_actionAdd_Video_triggered()
 		m.showMessage(QtUtils::toQString(e.what()));
 		m.exec();
 	}
+#else
+	showInfoNotification("Video creation is unavailable in the Qt 6 workflow until the QVideoSink port is complete.");
+#endif
 }
 
 
@@ -9940,8 +9950,10 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 void MainWindow::on_webcamEnableCheckBox_toggled(bool checked)
 {
 	// If the full WebcamWindow is active, it owns capture and UI.
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 	if(webcam_window)
 		return;
+#endif
 
 	// Keep capture state in sync with checkbox state.
 	gui_client.setWebcamEnabled(checked);
@@ -9964,10 +9976,15 @@ void MainWindow::setWebcamWindowVisible(bool visible)
 	// If user hides the dock, stop capturing to avoid background CPU usage.
 	if(!visible)
 	{
+#if SUBSTRATA_USE_QT_MULTIMEDIA
 		if(webcam_window)
 			webcam_window->setWebcamEnabled(false);
 		else if(ui->webcamEnableCheckBox)
 			ui->webcamEnableCheckBox->setChecked(false);
+#else
+		if(ui->webcamEnableCheckBox)
+			ui->webcamEnableCheckBox->setChecked(false);
+#endif
 	}
 }
 

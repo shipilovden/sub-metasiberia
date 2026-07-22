@@ -28,6 +28,12 @@ Copyright Glare Technologies Limited 2026 -
 #include <algorithm>
 #include <cmath>
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#define SUBSTRATA_SKIP_EMPTY_PARTS Qt::SkipEmptyParts
+#else
+#define SUBSTRATA_SKIP_EMPTY_PARTS QString::SkipEmptyParts
+#endif
+
 
 namespace
 {
@@ -142,7 +148,7 @@ void MoleculeViewportWidget::setMolecule(const QString& atom_table, const QStrin
 	const QStringList atom_lines = atom_table.split(QChar('\n'));
 	for(const QString& raw : atom_lines)
 	{
-		const QStringList p = raw.trimmed().split(QRegExp(QStringLiteral("\\s+")), QString::SkipEmptyParts);
+		const QStringList p = raw.trimmed().split(QRegExp(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS);
 		if(p.size() < 5) continue;
 		bool ok_id = false, ok_x = false, ok_y = false, ok_z = false;
 		Atom a; a.source_id = p[0].toInt(&ok_id); a.element = p[1]; a.pos = QVector3D(p[2].toFloat(&ok_x), p[3].toFloat(&ok_y), p[4].toFloat(&ok_z));
@@ -155,7 +161,7 @@ void MoleculeViewportWidget::setMolecule(const QString& atom_table, const QStrin
 	for(QString raw : bond_lines)
 	{
 		raw.replace(QChar('-'), QChar(' ')); raw.replace(QChar(':'), QChar(' '));
-		const QStringList p = raw.trimmed().split(QRegExp(QStringLiteral("\\s+")), QString::SkipEmptyParts); if(p.size() < 2) continue;
+		const QStringList p = raw.trimmed().split(QRegExp(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS); if(p.size() < 2) continue;
 		const int source_a = p[0].toInt(), source_b = p[1].toInt(); Bond b;
 		for(int i=0; i<atoms.size(); ++i) { if(atoms[i].source_id == source_a) b.atom_a = i; if(atoms[i].source_id == source_b) b.atom_b = i; }
 		if(b.atom_a < 0 || b.atom_b < 0 || b.atom_a == b.atom_b) continue;
@@ -193,7 +199,7 @@ int MoleculeViewportWidget::selectedBondIndex() const { return selected_bond; }
 
 void MoleculeViewportWidget::setSelectionState(const QString& selected, int bond, const QString& state)
 {
-	selected_atoms.clear(); for(const QString& id_text : selected.split(QChar(','), QString::SkipEmptyParts)) { const int id = id_text.toInt(); for(int i=0; i<atoms.size(); ++i) if(atoms[i].source_id == id) selected_atoms.push_back(i); }
+	selected_atoms.clear(); for(const QString& id_text : selected.split(QChar(','), SUBSTRATA_SKIP_EMPTY_PARTS)) { const int id = id_text.toInt(); for(int i=0; i<atoms.size(); ++i) if(atoms[i].source_id == id) selected_atoms.push_back(i); }
 	selected_bond = bond >= 0 && bond < bonds.size() ? bond : -1; molecule_selected = state == QStringLiteral("molecule_selected"); update();
 }
 

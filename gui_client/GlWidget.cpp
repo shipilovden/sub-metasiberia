@@ -28,7 +28,11 @@ Copyright Glare Technologies Limited 2023 -
 #include "../qt/QtUtils.h"
 #include <QtGui/QMouseEvent>
 #include <QtCore/QSettings>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QtGui/QShortcut>
+#else
 #include <QtWidgets/QShortcut>
+#endif
 #if SUBSTRATA_USE_QT_GAMEPAD
 #include <QtGamepad/QGamepad>
 #include <QtGamepad/QGamepadManager>

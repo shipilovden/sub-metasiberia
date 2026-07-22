@@ -36,6 +36,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
 #include <QtCore/QUrlQuery>
+#include <QtCore/QRegularExpression>
 #include <QtGui/QPixmap>
 #include <QtGui/QImage>
 #include <QtGui/QClipboard>
@@ -43,6 +44,12 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtGui/QTextOption>
 #include <QtGui/QWheelEvent>
 #include <QtWidgets/QCheckBox>
+
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#define SUBSTRATA_SKIP_EMPTY_PARTS Qt::SkipEmptyParts
+#else
+#define SUBSTRATA_SKIP_EMPTY_PARTS QString::SkipEmptyParts
+#endif
 #include <QtWidgets/QColorDialog>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
@@ -824,7 +831,7 @@ QString detectPubChemQueryKind(const QString& q)
 		return QStringLiteral("inchikey");
 	if(trimmed.contains('=') || trimmed.contains('#') || trimmed.contains('[') || trimmed.contains(']') || trimmed.contains('@'))
 		return QStringLiteral("smiles");
-	if(trimmed.contains(QRegExp(QStringLiteral("^[A-Z][A-Za-z0-9]*[0-9]"))))
+	if(QRegularExpression(QStringLiteral("^[A-Z][A-Za-z0-9]*[0-9]")).match(trimmed).hasMatch())
 		return QStringLiteral("formula");
 	return QStringLiteral("name");
 }
@@ -950,7 +957,7 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 	for(int i=0; i<atom_count; ++i)
 	{
 		const QString line = lines[4 + i];
-		const QStringList parts = line.split(QRegExp(QStringLiteral("\\s+")), QString::SkipEmptyParts);
+		const QStringList parts = line.split(QRegExp(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS);
 		if(parts.size() < 4)
 		{
 			parsed.error = QStringLiteral("SDF atom line %1 is incomplete.").arg(i + 1);
@@ -979,7 +986,7 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 	}
 	for(int line_i=4+atom_count+bond_count; line_i<lines.size(); ++line_i)
 	{
-		const QStringList p=lines[line_i].split(QRegExp(QStringLiteral("\\s+")),QString::SkipEmptyParts);
+		const QStringList p=lines[line_i].split(QRegExp(QStringLiteral("\\s+")),SUBSTRATA_SKIP_EMPTY_PARTS);
 		if(p.size()>=4&&p[0]==QStringLiteral("M")&&p[1]==QStringLiteral("CHG"))
 		{
 			const int count=p[2].toInt();for(int j=0;j<count&&3+j*2+1<p.size();++j){const int index=p[3+j*2].toInt()-1;if(index>=0&&index<formal_charges.size())formal_charges[index]=p[4+j*2].toInt();}
@@ -989,7 +996,7 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 	for(int i=0; i<bond_count; ++i)
 	{
 		const QString line = lines[4 + atom_count + i];
-		const QStringList parts = line.split(QRegExp(QStringLiteral("\\s+")), QString::SkipEmptyParts);
+		const QStringList parts = line.split(QRegExp(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS);
 		if(parts.size() < 3)
 		{
 			parsed.error = QStringLiteral("SDF bond line %1 is incomplete.").arg(i + 1);
@@ -1006,8 +1013,8 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 
 	parsed.atom_count = atom_count;
 	parsed.bond_count = bond_count;
-	QStringList atom_output=QString::fromStdString(atoms.str()).split(QChar('\n'),QString::SkipEmptyParts);
-	for(int i=0;i<atom_output.size()&&i<formal_charges.size();++i){QStringList p=atom_output[i].split(QChar(' '),QString::SkipEmptyParts);if(p.size()>=6){p[5]=QString::number(formal_charges[i]);atom_output[i]=p.join(QChar(' '));}}
+	QStringList atom_output=QString::fromStdString(atoms.str()).split(QChar('\n'),SUBSTRATA_SKIP_EMPTY_PARTS);
+	for(int i=0;i<atom_output.size()&&i<formal_charges.size();++i){QStringList p=atom_output[i].split(QChar(' '),SUBSTRATA_SKIP_EMPTY_PARTS);if(p.size()>=6){p[5]=QString::number(formal_charges[i]);atom_output[i]=p.join(QChar(' '));}}
 	parsed.atom_table = atom_output.join(QChar('\n')) + QChar('\n');
 	parsed.bond_table = QString::fromStdString(bonds.str());
 	parsed.dimensions = QString::fromUtf8("%1 x %2 x %3 Å")
@@ -1024,7 +1031,7 @@ QString moleculeLegendFromAtomTable(const QString& atom_table)
 	const QStringList lines = atom_table.split(QChar('\n'));
 	for(const QString& line : lines)
 	{
-		const QStringList parts = line.split(QRegExp(QStringLiteral("\\s+")), QString::SkipEmptyParts);
+		const QStringList parts = line.split(QRegExp(QStringLiteral("\\s+")), SUBSTRATA_SKIP_EMPTY_PARTS);
 		if(parts.size() >= 2)
 			counts[parts[1]] += 1;
 	}

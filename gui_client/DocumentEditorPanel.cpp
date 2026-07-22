@@ -184,7 +184,11 @@ void DocumentEditorPanel::buildUi()
 	editor_stack = new QStackedWidget(editor_page);
 	source_editor = new QTextEdit(editor_stack);
 	source_editor->setAcceptRichText(false);
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+	source_editor->setTabStopDistance(32.0);
+#else
 	source_editor->setTabStopWidth(32);
+#endif
 	source_editor->setPlaceholderText(tr("Введите текст, HTML или Markdown..."));
 	preview_editor = new QTextEdit(editor_stack);
 	preview_editor->setAcceptRichText(true);

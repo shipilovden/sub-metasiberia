@@ -74,6 +74,16 @@ set(tracy_files "${GLARE_CORE_TRUNK_DIR_ENV}/tracy/public/TracyClient.cpp")
 
 #============== SDL / Qt ==============
 
+set(SUBSTRATA_USE_QT_MULTIMEDIA TRUE)
+if(SUBSTRATA_QT6)
+	# Qt 6 removed QAbstractVideoSurface; keep the legacy video/webcam UI on Qt 5
+	# until it is ported to QVideoSink/QVideoFrame APIs.
+	set(SUBSTRATA_USE_QT_MULTIMEDIA FALSE)
+	add_definitions(-DSUBSTRATA_USE_QT_MULTIMEDIA=0)
+	else()
+	add_definitions(-DSUBSTRATA_USE_QT_MULTIMEDIA=1)
+endif()
+
 if(USE_SDL)
 	if(NOT EXISTS "${SDL_BUILD_DIR}/include/SDL2/SDL.h")
 		MESSAGE(FATAL_ERROR "Could not find SDL.h from your SDL2 build; looked at '${SDL_BUILD_DIR}/include/SDL2/SDL.h'. Please specify the SDL2 build directory with -DSDL_BUILD_DIR=XXX")
@@ -97,7 +107,9 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client AvatarSettingsWidget)
 	addMocFileRule(gui_client AvatarPreviewWidget)
 	addMocFileRule(gui_client AddObjectDialog)
-	addMocFileRule(gui_client AddVideoDialog)
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
+		addMocFileRule(gui_client AddVideoDialog)
+	endif()
 	addMocFileRule(gui_client AddObjectPreviewWidget)
 	addMocFileRule(gui_client ObjectEditor)
 	addMocFileRule(gui_client EnvironmentOptionsWidget)
@@ -149,7 +161,9 @@ if(NOT USE_SDL)
 
 	# Rules to compile the .ui files into ui_xx.h, using 'uic'.
 	addUIFileRule(gui_client AddObjectDialog)
-	addUIFileRule(gui_client AddVideoDialog)
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
+		addUIFileRule(gui_client AddVideoDialog)
+	endif()
 	addUIFileRule(gui_client AvatarSettingsDialog)
 	addUIFileRule(gui_client AvatarSettingsWidget)
 	addUIFileRule(gui_client MainWindow)
@@ -367,9 +381,6 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/AddObjectDialog.ui
 		${CMAKE_SOURCE_DIR}/gui_client/AddObjectPreviewWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AddObjectPreviewWidget.h
-		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.h
-		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.ui
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarPreviewWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarPreviewWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarGearPreviewWidget.cpp
@@ -494,7 +505,6 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/SignUpDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/SignUpDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/SignUpDialog.ui
-		${CMAKE_SOURCE_DIR}/gui_client/SubstrataVideoSurface.h
 		${CMAKE_SOURCE_DIR}/gui_client/UserDetailsWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/UserDetailsWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/UserDetailsWidget.ui
@@ -510,7 +520,17 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/CreateObjectsDialog.ui
 
-		# Webcam Qt UI (Qt Multimedia).  Not built for SDL configurations.
+	)
+endif()
+
+if(SUBSTRATA_USE_QT_MULTIMEDIA AND NOT USE_SDL)
+	list(APPEND gui_client
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamCapture.h
+		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.h
+		${CMAKE_SOURCE_DIR}/gui_client/AddVideoDialog.ui
+		${CMAKE_SOURCE_DIR}/gui_client/SubstrataVideoSurface.h
 		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamWindow.h
 		${CMAKE_SOURCE_DIR}/gui_client/webcam/WebcamVideoView.cpp
@@ -534,7 +554,6 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarSettingsWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarPreviewWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AddObjectDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AddVideoDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AddObjectPreviewWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ObjectEditor.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_EnvironmentOptionsWidget.cpp
@@ -572,14 +591,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_CreateObjectsDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_VRoidAuthFlow.cpp
 
-	# Webcam Qt UI (Qt Multimedia)
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamControlPanel.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamVideoView.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
-
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AddObjectDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AvatarSettingsDialog.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_AvatarSettingsWidget.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_ObjectEditor.h
@@ -607,6 +619,16 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/ui_WorldSettingsWidget.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_CreateObjectsDialog.h
 	)
+	if(SUBSTRATA_USE_QT_MULTIMEDIA)
+		list(APPEND gui_client
+			${CMAKE_SOURCE_DIR}/gui_client/moc_AddVideoDialog.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamControlPanel.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamVideoView.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h
+		)
+	endif()
 
 
 	SET(qt
