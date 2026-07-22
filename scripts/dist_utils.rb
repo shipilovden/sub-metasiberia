@@ -40,7 +40,7 @@ def copyQtRedistWindows(vs_version, target_dir, copy_debug = false)
 	# QtMultimedia depends on QtNetwork, so include it explicitly.
 	dll_files = ["Core", "Gui", "OpenGL", "Widgets", "Network", "Multimedia", "MultimediaWidgets"]
 	dll_files << "OpenGLWidgets" if qt_major >= 6
-	dll_files << "Gamepad"
+	dll_files << "Gamepad" if qt_major < 6
 	dll_files << "Core5Compat" if qt_major >= 6
 
 		

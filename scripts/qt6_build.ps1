@@ -71,7 +71,7 @@ function Resolve-Qt6Dir {
             "lib\Qt6Core.lib", "lib\Qt6Gui.lib", "lib\Qt6OpenGL.lib",
             "lib\Qt6OpenGLWidgets.lib", "lib\Qt6Widgets.lib",
             "lib\Qt6Multimedia.lib", "lib\Qt6MultimediaWidgets.lib",
-            "lib\Qt6Network.lib", "lib\Qt6Gamepad.lib", "lib\Qt6Core5Compat.lib",
+            "lib\Qt6Network.lib", "lib\Qt6Core5Compat.lib",
             "bin\Qt6Core.dll", "plugins\platforms\qwindows.dll"
         )
         if ((Test-Path -LiteralPath $candidate -PathType Container) -and
@@ -106,7 +106,7 @@ function Validate-Runtime([string]$Config, [bool]$XREnabled) {
     $required = @(
         "gui_client.exe", "Qt6Core.dll", "Qt6Gui.dll", "Qt6OpenGL.dll",
         "Qt6OpenGLWidgets.dll", "Qt6Widgets.dll", "Qt6Multimedia.dll",
-        "Qt6MultimediaWidgets.dll", "Qt6Network.dll", "Qt6Gamepad.dll",
+        "Qt6MultimediaWidgets.dll", "Qt6Network.dll",
         "Qt6Core5Compat.dll", "platforms\qwindows.dll", "browser_process.exe",
         "libcef.dll", "chrome_elf.dll", "libEGL.dll", "libGLESv2.dll",
         "resources.pak", "locales\en-US.pak"

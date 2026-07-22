@@ -29,7 +29,10 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtGui/QMouseEvent>
 #include <QtCore/QSettings>
 #include <QtWidgets/QShortcut>
+#if SUBSTRATA_USE_QT_GAMEPAD
 #include <QtGamepad/QGamepad>
+#include <QtGamepad/QGamepadManager>
+#endif
 #include <QtGui/QOpenGLContext>
 #if defined(_WIN32)
 #include <QtPlatformHeaders/QWGLNativeContext>
@@ -103,7 +106,9 @@ GlWidget::GlWidget(QWidget *parent)
 	cam_move_on_key_input_enabled(true),
 	near_draw_dist(0.22f), // As large as possible as we can get without clipping becoming apparent.
 	max_draw_dist(1000.f),
+#if SUBSTRATA_USE_QT_GAMEPAD
 	gamepad(NULL),
+#endif
 	print_output(NULL),
 	settings(NULL),
 	take_map_screenshot(false),
@@ -168,7 +173,7 @@ GlWidget::GlWidget(QWidget *parent)
 
 void GlWidget::initGamepadsSlot()
 {
-#if 1 // If use Qt for gamepad input:
+#if SUBSTRATA_USE_QT_GAMEPAD // If use Qt for gamepad input:
 	// See if we have any attached gamepads
 	QGamepadManager* manager = QGamepadManager::instance();
 

@@ -153,8 +153,10 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QStyle>
 #include <QtWidgets/QStyleFactory>
 #include <QtGui/QScreen>
+#if SUBSTRATA_USE_QT_GAMEPAD
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
+#endif
 #include "../qt/QtUtils.h"
 #ifdef _MSC_VER
 #pragma warning(pop) // Re-enable warnings
@@ -2055,7 +2057,9 @@ void MainWindow::initialiseUI()
 {
 	ZoneScoped; // Tracy profiler
 
+#if SUBSTRATA_USE_QT_GAMEPAD
 	QGamepadManager::instance(); // Creating the instance here before any windows are created is required for querying gamepads to work.
+#endif
 
 	const QString saved_ui_language = settings->value(
 		UI_LANGUAGE_SETTINGS_KEY,
@@ -2509,8 +2513,10 @@ void MainWindow::initialiseUI()
 	connect(ui->glWidget, SIGNAL(keyReleased(QKeyEvent*)), this, SLOT(glWidgetkeyReleased(QKeyEvent*)));
 	connect(ui->glWidget, SIGNAL(focusOutSignal()), this, SLOT(glWidgetFocusOut()));
 	connect(ui->glWidget, SIGNAL(mouseWheelSignal(QWheelEvent*)), this, SLOT(glWidgetMouseWheelEvent(QWheelEvent*)));
+#if SUBSTRATA_USE_QT_GAMEPAD
 	connect(ui->glWidget, SIGNAL(gamepadButtonXChangedSignal(bool)), this, SLOT(gamepadButtonXChanged(bool)));
 	connect(ui->glWidget, SIGNAL(gamepadButtonAChangedSignal(bool)), this, SLOT(gamepadButtonAChanged(bool)));
+#endif
 	connect(ui->glWidget, SIGNAL(viewportResizedSignal(int, int)), this, SLOT(glWidgetViewportResized(int, int)));
 	connect(ui->glWidget, SIGNAL(cutShortcutActivated()), this, SLOT(glWidgetCutShortcutTriggered()));
 	connect(ui->glWidget, SIGNAL(copyShortcutActivated()), this, SLOT(glWidgetCopyShortcutTriggered()));
@@ -11950,6 +11956,7 @@ float MainWindow::gamepadAxisRightY()
 
 #else
 
+#if SUBSTRATA_USE_QT_GAMEPAD
 bool MainWindow::gamepadAttached()
 {
 	return ui->glWidget->gamepad != nullptr;
@@ -11984,6 +11991,19 @@ float MainWindow::gamepadAxisRightY()
 {
 	return ui->glWidget->gamepad ? (float)ui->glWidget->gamepad->axisRightY() : 0.0f;
 }
+#else
+bool MainWindow::gamepadAttached()
+{
+	return false;
+}
+
+float MainWindow::gamepadButtonL2() { return 0.0f; }
+float MainWindow::gamepadButtonR2() { return 0.0f; }
+float MainWindow::gamepadAxisLeftX() { return 0.0f; }
+float MainWindow::gamepadAxisLeftY() { return 0.0f; }
+float MainWindow::gamepadAxisRightX() { return 0.0f; }
+float MainWindow::gamepadAxisRightY() { return 0.0f; }
+#endif
 #endif
 
 

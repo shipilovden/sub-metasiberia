@@ -76,6 +76,14 @@ if(USE_SDL)
 endif()
 
 if(NOT USE_SDL)
+	# Qt Gamepad is available in the Qt 5 desktop kit, but is not shipped as a
+	# Qt 6.11.1 package. Keep the Qt6 build independent of that removed module.
+	if(SUBSTRATA_QT6)
+		add_definitions(-DSUBSTRATA_USE_QT_GAMEPAD=0)
+	else()
+		add_definitions(-DSUBSTRATA_USE_QT_GAMEPAD=1)
+	endif()
+
 	# Rules to build moc_xx.cpp files, from xx.h files, using the program 'moc'.
 	addMocFileRule(gui_client MainWindow)
 	addMocFileRule(gui_client GuiClientApplication)
@@ -1443,7 +1451,6 @@ elseif(WIN32)
 				optimized Qt6Multimedia
 				optimized Qt6MultimediaWidgets
 				optimized Qt6Network
-				optimized Qt6Gamepad
 				optimized Qt6Core5Compat
 				debug Qt6Guid
 				debug Qt6Cored
@@ -1453,7 +1460,6 @@ elseif(WIN32)
 				debug Qt6Multimediad
 				debug Qt6MultimediaWidgetsd
 				debug Qt6Networkd
-				debug Qt6Gamepadd
 				debug Qt6Core5Compatd
 			)
 		else()

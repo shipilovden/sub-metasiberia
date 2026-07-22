@@ -27,7 +27,9 @@ class PlayerPhysics;
 class TextureServer;
 class EnvEmitter;
 class QSettings;
+#if SUBSTRATA_USE_QT_GAMEPAD
 class QGamepad;
+#endif
 
 
 class GlWidget : public
@@ -123,7 +125,9 @@ private:
 
 	std::string initialisation_error_msg;
 public:
+#if SUBSTRATA_USE_QT_GAMEPAD
 	QGamepad* gamepad;
+#endif
 	Reference<OpenGLEngine> opengl_engine;
 	float near_draw_dist;
 	float max_draw_dist;
