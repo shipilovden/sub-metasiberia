@@ -1470,6 +1470,7 @@ elseif(WIN32)
 	else() # Else use Qt:
 		if(SUBSTRATA_QT6)
 			target_link_libraries(${CURRENT_TARGET}
+				optimized Qt6EntryPoint
 				optimized Qt6Gui
 				optimized Qt6Core
 				optimized Qt6OpenGL
@@ -1479,6 +1480,7 @@ elseif(WIN32)
 				optimized Qt6MultimediaWidgets
 				optimized Qt6Network
 				optimized Qt6Core5Compat
+				debug Qt6EntryPointd
 				debug Qt6Guid
 				debug Qt6Cored
 				debug Qt6OpenGLd
