@@ -64292,7 +64292,7 @@ fn main(
 	    }));
 	};
 
-	const convertSourceToUrl = async ({
+	const convertSourceToBytes = async ({
 	    fileSystem,
 	    filename,
 	    outputName,
@@ -64331,25 +64331,43 @@ fn main(
 	            throw new Error('Gaussian splat conversion produced no output.');
 	        }
 
-	        const bytes = output instanceof Uint8Array
-	            ? output
-	            : new Uint8Array(output);
-	        const blob = new Blob([bytes], {
-	            type: 'application/octet-stream'
-	        });
-	        const blobUrl = URL.createObjectURL(blob);
+	        const bytes = output instanceof Uint8Array ?
+	            output :
+	            (
+	                ArrayBuffer.isView(output) ?
+	                    new Uint8Array(
+	                        output.buffer,
+	                        output.byteOffset,
+	                        output.byteLength
+	                    ) :
+	                    new Uint8Array(output)
+	            );
 	        progress({ stage: 'ready', value: 1 });
 	        return {
-	            url: blobUrl,
 	            filename: outputName,
-	            blob,
-	            bytes,
-	            revoke: () => URL.revokeObjectURL(blobUrl)
+	            bytes
 	        };
 	    } finally {
 	        await closeSources(sources);
 	    }
 	};
+
+	const createUrlResult = ({ filename, bytes }) => {
+	    const blob = new Blob([bytes], {
+	        type: 'application/octet-stream'
+	    });
+	    const blobUrl = URL.createObjectURL(blob);
+	    return {
+	        url: blobUrl,
+	        filename,
+	        blob,
+	        bytes,
+	        revoke: () => URL.revokeObjectURL(blobUrl)
+	    };
+	};
+
+	const convertSourceToUrl = async (options) =>
+	    createUrlResult(await convertSourceToBytes(options));
 
 	const convertToViewerUrl = async (inputUrl, progress = () => {}) => {
 	    const { baseUrl, filename } = splitUrl(inputUrl);
@@ -64550,7 +64568,7 @@ fn main(
 	    );
 	};
 
-	const convertFilesToPlyUrl = async (
+	const convertFilesToPlyBytes = async (
 	    files,
 	    mainFilename,
 	    progress = () => {}
@@ -64566,7 +64584,7 @@ fn main(
 	    const fileSystem = new MemoryReadFileSystem();
 	    const names = await populateMemoryFileSystem(fileSystem, files);
 	    const useFilename = selectMainFilename(names, mainFilename);
-	    return convertSourceToUrl({
+	    return convertSourceToBytes({
 	        fileSystem,
 	        filename: useFilename,
 	        outputName: 'metasiberia-runtime.ply',
@@ -64574,36 +64592,53 @@ fn main(
 	    });
 	};
 
-	const convertFileToPlyUrl = async (
+	const isFileCollection = (value) =>
+	    value instanceof Map ||
+	    Array.isArray(value) ||
+	    (
+	        value &&
+	        typeof value !== 'string' &&
+	        !(value instanceof ArrayBuffer) &&
+	        !ArrayBuffer.isView(value) &&
+	        !(typeof Blob !== 'undefined' && value instanceof Blob) &&
+	        typeof value[Symbol.iterator] === 'function'
+	    );
+
+	const convertFileToPlyBytes = async (
 	    fileOrBytes,
 	    filename,
 	    progress = () => {}
 	) => {
-	    if (
-	        fileOrBytes instanceof Map ||
-	        Array.isArray(fileOrBytes) ||
-	        (
-	            fileOrBytes &&
-	            typeof fileOrBytes !== 'string' &&
-	            !(fileOrBytes instanceof ArrayBuffer) &&
-	            !ArrayBuffer.isView(fileOrBytes) &&
-	            !(typeof Blob !== 'undefined' && fileOrBytes instanceof Blob) &&
-	            typeof fileOrBytes[Symbol.iterator] === 'function'
-	        )
-	    ) {
-	        return convertFilesToPlyUrl(fileOrBytes, filename, progress);
+	    if (isFileCollection(fileOrBytes)) {
+	        return convertFilesToPlyBytes(fileOrBytes, filename, progress);
 	    }
 
 	    const useFilename = filename || fileOrBytes?.name;
 	    if (!useFilename) {
 	        throw new Error('A filename with a Gaussian splat extension is required.');
 	    }
-	    return convertFilesToPlyUrl(
+	    return convertFilesToPlyBytes(
 	        new Map([[useFilename, fileOrBytes]]),
 	        useFilename,
 	        progress
 	    );
 	};
+
+	const convertFilesToPlyUrl = async (
+	    files,
+	    mainFilename,
+	    progress = () => {}
+	) => createUrlResult(
+	    await convertFilesToPlyBytes(files, mainFilename, progress)
+	);
+
+	const convertFileToPlyUrl = async (
+	    fileOrBytes,
+	    filename,
+	    progress = () => {}
+	) => createUrlResult(
+	    await convertFileToPlyBytes(fileOrBytes, filename, progress)
+	);
 
 	const converterApi = Object.freeze({
 	    supportedExtensions: Object.freeze([
@@ -64612,6 +64647,8 @@ fn main(
 	    ]),
 	    convertToViewerUrl,
 	    convertUrlToPlyUrl,
+	    convertFileToPlyBytes,
+	    convertFilesToPlyBytes,
 	    convertFileToPlyUrl,
 	    convertFilesToPlyUrl,
 	    setWebPWasmUrl
