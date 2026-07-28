@@ -282,6 +282,21 @@ def copyCyberspaceResources(substrata_repos_dir, glare_core_repos_dir, dist_dir,
 	FileUtils.mkdir_p("#{dist_dir}/data", :verbose => true) # Make 'data' dir, so that setting it as a target will make data/shaders be created etc..
 
 	FileUtils.cp_r(substrata_repos_dir + "/resources", dist_dir + "/data", :verbose => true)
+
+	# The native Gaussian splat loader uses a hidden (windowless) CEF instance
+	# to normalise supported containers to ordinary binary PLY.  Keep exactly
+	# the same audited converter bundle as the web viewer instead of carrying a
+	# second generated copy in resources/.
+	gaussian_runtime_dir = dist_dir + "/data/resources/gaussian_splat"
+	FileUtils.mkdir_p(gaussian_runtime_dir, :verbose => true)
+	FileUtils.cp(
+		substrata_repos_dir + "/webserver_public_files/gaussian_splat_converter.js",
+		gaussian_runtime_dir + "/gaussian_splat_converter.js",
+		:verbose => true)
+	FileUtils.cp(
+		substrata_repos_dir + "/webserver_public_files/webp.wasm",
+		gaussian_runtime_dir + "/webp.wasm",
+		:verbose => true)
 	
 	FileUtils.cp_r(substrata_repos_dir + "/shaders", dist_dir + "/data", :verbose => true) # Copy OpenGL shaders from the Substrata repo.
 	
