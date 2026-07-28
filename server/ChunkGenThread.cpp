@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2024 -
 
 
 #include "ServerWorldState.h"
+#include "../shared/GaussianSplatAsset.h"
 #include "../shared/LODGeneration.h"
 #include "../shared/VoxelMeshBuilding.h"
 #include "../shared/ImageDecoding.h"
@@ -1144,6 +1145,11 @@ static ChunkBuildResults buildChunk(ServerAllWorldsState* world_state, Reference
 
 inline static bool shouldExcludeObjectFromLODChunkMesh(const WorldObject* ob)
 {
+	// Gaussian splats need their dedicated renderer and cannot be baked into
+	// the server's triangle-mesh LOD chunks.
+	if(GaussianSplatAsset::hasSupportedExtension(ob->model_url))
+		return true;
+
 	// Objects with scripts are likely to be moving, so don't bake into chunk.
 	if(!ob->script.empty())
 		return true;

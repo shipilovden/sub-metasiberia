@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2021 -
 #include "WebServerResponseUtils.h"
 #include "../server/ServerWorldState.h"
 #include "../server/Order.h"
+#include "../shared/GaussianSplatAsset.h"
 #include <graphics/FormatDecoderGLTF.h>
 #include <graphics/BatchedMesh.h>
 #include <ConPrint.h>
@@ -132,7 +133,13 @@ void handleResourceRequest(ServerAllWorldsState& world_state, const web::Request
 					}
 
 
-				const std::string content_type = web::ResponseUtils::getContentTypeForPath(local_path); // Guess content type
+				// Unknown extensions default to text/plain, which is incorrect
+				// for binary splat containers. Keep the generic resource
+				// endpoint and range support, but serve 3DGS data as opaque
+				// binary.
+				const std::string content_type = GaussianSplatAsset::hasSupportedExtension(resource_URL) ?
+					"application/octet-stream" :
+					web::ResponseUtils::getContentTypeForPath(local_path); // Guess content type
 
 				MemMappedFile file(local_path);
 

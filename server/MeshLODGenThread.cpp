@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2022 -
 
 #include "Server.h"
 #include "ServerWorldState.h"
+#include "../shared/GaussianSplatAsset.h"
 #include "../shared/LODGeneration.h"
 #include "../shared/ImageDecoding.h"
 #include "../shared/Protocol.h"
@@ -139,6 +140,12 @@ static void checkObjectSpaceAABB(ServerAllWorldsState* world_state, ServerWorldS
 		}
 		else if(ob->object_type == WorldObject::ObjectType_Generic)
 		{
+			// Gaussian splats are point primitives, not triangle meshes. Their
+			// bounds are supplied by the uploading client and must not be
+			// recomputed with the mesh decoder.
+			if(GaussianSplatAsset::hasSupportedExtension(ob->model_url))
+				return;
+
 			// Try and load mesh, get AABB from it.
 			if(!ob->model_url.empty())
 			{
@@ -184,7 +191,8 @@ static void checkForLODMeshesToGenerate(ServerAllWorldsState* world_state, Serve
 {
 	try
 	{
-		if(ob->object_type == WorldObject::ObjectType_Generic)
+		if(ob->object_type == WorldObject::ObjectType_Generic &&
+			!GaussianSplatAsset::hasSupportedExtension(ob->model_url))
 		{
 			if(!ob->model_url.empty())
 			{
@@ -286,7 +294,8 @@ static void checkForOptimisedMeshesToGenerate(ServerAllWorldsState* world_state,
 {
 	try
 	{
-		if(ob->object_type == WorldObject::ObjectType_Generic)
+		if(ob->object_type == WorldObject::ObjectType_Generic &&
+			!GaussianSplatAsset::hasSupportedExtension(ob->model_url))
 		{
 			if(!ob->model_url.empty())
 			{
