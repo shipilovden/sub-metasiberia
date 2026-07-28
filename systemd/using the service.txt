@@ -1,0 +1,42 @@
+The service should be installed into /etc/systemd/user/
+
+Reload after adding the service:
+sudo systemctl daemon-reload
+
+Now enable and start the service:
+systemctl enable cyberspace-server.service --user
+systemctl start cyberspace-server.service --user
+
+you can see the status with (doesnt need sudo)
+systemctl status cyberspace-server.service --user
+
+
+And to show info about the service:
+-----------------
+systemctl show cyberspace-server.service --user
+
+
+and the log with
+journalctl --unit=cyberspace-server.service --user --since "1 hour ago" -f
+
+
+NOTE: 
+Had to execute
+	sudo setcap 'cap_net_bind_service=+ep' /home/nick/cyberspace/server
+to allow the program to bind to port 80.
+
+
+
+
+Need to enable lingering, otherwise service will shut down when not logged in. (See https://www.freedesktop.org/software/systemd/man/loginctl.html)
+
+	sudo loginctl enable-linger nick
+
+and
+
+	loginctl user-status nick
+	
+should show some data with:
+
+Linger: yes
+

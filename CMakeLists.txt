@@ -107,8 +107,8 @@ MESSAGE("CYBERSPACE_OUTPUT: ${CYBERSPACE_OUTPUT_ENV}")
 checkAndGetEnvVar(GLARE_CORE_TRUNK_DIR GLARE_CORE_TRUNK_DIR_ENV)
 MESSAGE("GLARE_CORE_TRUNK_DIR: ${GLARE_CORE_TRUNK_DIR_ENV}")
 
-SET(CEF_BINARY_DISTRIB_DIR "$ENV{CEF_BINARY_DISTRIB_DIR}" CACHE PATH "Path to the CEF binary distribution root")
-MESSAGE("CEF_BINARY_DISTRIB_DIR: ${CEF_BINARY_DISTRIB_DIR}")
+SET(CEF_BINARY_DISTRIB_DIR_ENV $ENV{CEF_BINARY_DISTRIB_DIR})
+MESSAGE("CEF_BINARY_DISTRIB_DIR: ${CEF_BINARY_DISTRIB_DIR_ENV}")
 
 if(INDIGO_SUPPORT)
 	checkAndGetEnvVar(INDIGO_TRUNK_DIR INDIGO_TRUNK_DIR_ENV)
@@ -153,16 +153,6 @@ MESSAGE("SDL_BUILD_DIR: ${SDL_BUILD_DIR}")
 SET(USE_SDL OFF CACHE BOOL "Use SDL for client UI instead of Qt")
 MESSAGE("USE_SDL (instead of Qt): ${USE_SDL}")
 
-SET(XR_SUPPORT OFF CACHE BOOL "Enable experimental XR/OpenXR integration for native clients")
-MESSAGE("XR_SUPPORT: ${XR_SUPPORT}")
-
-set(default_openxr_sdk_dir "")
-if(EXISTS "${GLARE_CORE_LIBS_ENV}/OpenXR-SDK-1.1.57/install/cmake/OpenXRConfig.cmake")
-	set(default_openxr_sdk_dir "${GLARE_CORE_LIBS_ENV}/OpenXR-SDK-1.1.57/install")
-endif()
-SET(OPENXR_SDK_DIR "${default_openxr_sdk_dir}" CACHE PATH "Path to installed OpenXR SDK root (contains include/, lib/, cmake/)")
-MESSAGE("OPENXR_SDK_DIR: ${OPENXR_SDK_DIR}")
-
 
 # External library directory (apart from llvm, openssl and Qt)
 set(imathdir	"${GLARE_CORE_TRUNK_DIR_ENV}/Imath")
@@ -172,28 +162,7 @@ set(pugixmldir	"${GLARE_CORE_TRUNK_DIR_ENV}/pugixml/src")
 set(pngdir		"${GLARE_CORE_TRUNK_DIR_ENV}/libpng")
 set(zstddir		"${GLARE_CORE_TRUNK_DIR_ENV}/zstd")
 
-set(cef_binary_dist_dir "${CEF_BINARY_DISTRIB_DIR}")
-
-if(CEF_SUPPORT)
-	if(NOT CEF_BINARY_DISTRIB_DIR)
-		message(FATAL_ERROR "CEF_SUPPORT is ON, but CEF_BINARY_DISTRIB_DIR is empty. Pass -DCEF_BINARY_DISTRIB_DIR=<cef_binary_* directory> or set the environment variable.")
-	endif()
-
-	set(cef_required_files "include/cef_app.h")
-	if(WIN32)
-		list(APPEND cef_required_files
-			"Release/libcef.lib"
-			"Release/libcef.dll"
-			"libcef_dll_build/libcef_dll_wrapper/Release/libcef_dll_wrapper.lib"
-		)
-	endif()
-
-	foreach(cef_required_file IN LISTS cef_required_files)
-		if(NOT EXISTS "${CEF_BINARY_DISTRIB_DIR}/${cef_required_file}")
-			message(FATAL_ERROR "CEF_SUPPORT is ON, but required CEF artifact is missing: ${CEF_BINARY_DISTRIB_DIR}/${cef_required_file}")
-		endif()
-	endforeach()
-endif()
+set(cef_binary_dist_dir ${CEF_BINARY_DISTRIB_DIR_ENV})
 
 # The version of Qt we use needs to be accessed by both CMake and ruby build_dist script etc..
 # So get via getConfigOption()
@@ -241,19 +210,13 @@ string(REPLACE "." "_" SUBSTRATA_LLVM_VERSION_PATH ${SUBSTRATA_LLVM_VERSION})
 
 # Qt
 if(WIN32)
-	if(NOT DEFINED ENV{SUBSTRATA_QT_DIR} OR "$ENV{SUBSTRATA_QT_DIR}" STREQUAL "")
-		set(INDIGO_QT_DIR			"${GLARE_CORE_LIBS_ENV}/Qt/${INDIGO_QT_VERSION}-vs${CYBERSPACE_VS_VER}-${CYBERSPACE_BITNESS}")
+	if(INDIGO_QT_DIR STREQUAL "")
+		set(INDIGO_QT_DIR "${GLARE_CORE_LIBS_ENV}/Qt/${INDIGO_QT_VERSION}-vs${CYBERSPACE_VS_VER}-${CYBERSPACE_BITNESS}")
 	endif()
 else()
-	if(NOT DEFINED ENV{SUBSTRATA_QT_DIR} OR "$ENV{SUBSTRATA_QT_DIR}" STREQUAL "")
-		set(INDIGO_QT_DIR        	"${GLARE_CORE_LIBS_ENV}/Qt/${INDIGO_QT_VERSION}")
+	if(INDIGO_QT_DIR STREQUAL "")
+		set(INDIGO_QT_DIR "${GLARE_CORE_LIBS_ENV}/Qt/${INDIGO_QT_VERSION}")
 	endif()
-endif()
-
-if(INDIGO_QT_VERSION MATCHES "^6(\\.|$)")
-	set(SUBSTRATA_QT6 ON)
-else()
-	set(SUBSTRATA_QT6 OFF)
 endif()
 
 set(INDIGO_QT_INCLUDE_DIR	"${INDIGO_QT_DIR}/include")
@@ -317,7 +280,6 @@ endif()
 
 MESSAGE("\n----------Library dirs:----------")
 MESSAGE("QT dir: ${INDIGO_QT_DIR}")
-MESSAGE("Qt 6 workflow: ${SUBSTRATA_QT6}")
 MESSAGE("LibJPEG Turbo dir: ${jpegturbodir}")
 MESSAGE("llvmdir: ${llvmdir}")
 MESSAGE("libressldir: ${libressldir}")
@@ -341,7 +303,7 @@ ADD_SUBDIRECTORY(server server)
 
 #ADD_SUBDIRECTORY(lightmapper_bot lightmapper_bot)
 
-ADD_SUBDIRECTORY(screenshot_bot screenshot_bot)
+#ADD_SUBDIRECTORY(screenshot_bot screenshot_bot)
 
 #ADD_SUBDIRECTORY(${SUBSTRATA_PRIVATE_REPO_PATH}/eth_bot eth_bot)
 

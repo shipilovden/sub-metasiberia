@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>BotSettingsDialog</class>
+ <widget class="QDialog" name="BotSettingsDialog">
+  <property name="windowTitle">
+   <string>Bot Settings</string>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>540</width>
+    <height>560</height>
+   </size>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <!-- ======= Tab 1: Identity ======= -->
+     <widget class="QWidget" name="tabIdentity">
+      <attribute name="title">
+       <string>Identity</string>
+      </attribute>
+      <layout class="QFormLayout" name="formIdentity">
+       <item row="0" column="0">
+        <widget class="QLabel" name="nameLabel">
+         <property name="text"><string>Name:</string></property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLineEdit" name="nameEdit">
+         <property name="placeholderText"><string>Bot name</string></property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="avatarLabel">
+         <property name="text"><string>Avatar model URL:</string></property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <layout class="QHBoxLayout">
+         <item>
+          <widget class="QLineEdit" name="avatarURLEdit">
+           <property name="placeholderText"><string>https://... (.glb/.obj)</string></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="browseAvatarButton">
+           <property name="text"><string>Browse...</string></property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <!-- ======= Tab 2: AI / Prompt ======= -->
+     <widget class="QWidget" name="tabAI">
+      <attribute name="title">
+       <string>AI / Prompt</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="layoutAI">
+       <item>
+        <widget class="QLabel" name="promptLabel">
+         <property name="text"><string>System prompt (character, instructions):</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPlainTextEdit" name="promptEdit">
+         <property name="placeholderText">
+          <string>You are a helpful assistant named Bot. You live in the Metasiberia virtual world...</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="llmNoteLabel">
+         <property name="text">
+          <string>&lt;i&gt;LLM provider and API key are configured in server settings.&lt;/i&gt;</string>
+         </property>
+         <property name="wordWrap"><bool>true</bool></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <!-- ======= Tab 3: Animations ======= -->
+     <widget class="QWidget" name="tabAnimations">
+      <attribute name="title">
+       <string>Animations</string>
+      </attribute>
+      <layout class="QFormLayout" name="formAnims">
+       <item row="0" column="0" colspan="2">
+        <widget class="QLabel"><property name="text"><string>&lt;b&gt;Greeting gesture&lt;/b&gt; (plays when a user approaches)</string></property></widget>
+       </item>
+       <item row="1" column="0"><widget class="QLabel"><property name="text"><string>Name:</string></property></widget></item>
+       <item row="1" column="1"><widget class="QLineEdit" name="greetingNameEdit"><property name="placeholderText"><string>e.g. wave</string></property></widget></item>
+       <item row="2" column="0"><widget class="QLabel"><property name="text"><string>URL:</string></property></widget></item>
+       <item row="2" column="1">
+        <layout class="QHBoxLayout">
+         <item><widget class="QLineEdit" name="greetingURLEdit"/></item>
+         <item><widget class="QPushButton" name="testGreetingButton"><property name="text"><string>Test</string></property></widget></item>
+        </layout>
+       </item>
+       <item row="3" column="0"><widget class="QLabel"><property name="text"><string>Cooldown (s):</string></property></widget></item>
+       <item row="3" column="1"><widget class="QDoubleSpinBox" name="greetingCooldownSpin"><property name="value"><double>30.0</double></property><property name="maximum"><double>3600.0</double></property></widget></item>
+
+       <item row="4" column="0" colspan="2"><widget class="QLabel"><property name="text"><string>&lt;b&gt;Idle gesture&lt;/b&gt; (plays periodically)</string></property></widget></item>
+       <item row="5" column="0"><widget class="QLabel"><property name="text"><string>Name:</string></property></widget></item>
+       <item row="5" column="1"><widget class="QLineEdit" name="idleNameEdit"/></item>
+       <item row="6" column="0"><widget class="QLabel"><property name="text"><string>URL:</string></property></widget></item>
+       <item row="6" column="1">
+        <layout class="QHBoxLayout">
+         <item><widget class="QLineEdit" name="idleURLEdit"/></item>
+         <item><widget class="QPushButton" name="testIdleButton"><property name="text"><string>Test</string></property></widget></item>
+        </layout>
+       </item>
+       <item row="7" column="0"><widget class="QLabel"><property name="text"><string>Interval (s):</string></property></widget></item>
+       <item row="7" column="1"><widget class="QDoubleSpinBox" name="idleIntervalSpin"><property name="value"><double>20.0</double></property><property name="maximum"><double>3600.0</double></property></widget></item>
+
+       <item row="8" column="0" colspan="2"><widget class="QLabel"><property name="text"><string>&lt;b&gt;Reactive gesture&lt;/b&gt; (reaction to user actions)</string></property></widget></item>
+       <item row="9" column="0"><widget class="QLabel"><property name="text"><string>Name:</string></property></widget></item>
+       <item row="9" column="1"><widget class="QLineEdit" name="reactiveNameEdit"/></item>
+       <item row="10" column="0"><widget class="QLabel"><property name="text"><string>URL:</string></property></widget></item>
+       <item row="10" column="1">
+        <layout class="QHBoxLayout">
+         <item><widget class="QLineEdit" name="reactiveURLEdit"/></item>
+         <item><widget class="QPushButton" name="testReactiveButton"><property name="text"><string>Test</string></property></widget></item>
+        </layout>
+       </item>
+       <item row="11" column="0"><widget class="QLabel"><property name="text"><string>Cooldown (s):</string></property></widget></item>
+       <item row="11" column="1"><widget class="QDoubleSpinBox" name="reactiveCooldownSpin"><property name="value"><double>15.0</double></property><property name="maximum"><double>3600.0</double></property></widget></item>
+      </layout>
+     </widget>
+     <!-- ======= Tab 4: Reactions ======= -->
+     <widget class="QWidget" name="tabReactions">
+      <attribute name="title">
+       <string>Reactions</string>
+      </attribute>
+      <layout class="QFormLayout" name="formReactions">
+       <item row="0" column="0" colspan="2">
+        <widget class="QLabel"><property name="text"><string>&lt;b&gt;Proximity reactions&lt;/b&gt;</string></property></widget>
+       </item>
+       <item row="1" column="0"><widget class="QLabel"><property name="text"><string>Greet when user within (m):</string></property></widget></item>
+       <item row="1" column="1"><widget class="QDoubleSpinBox" name="greetDistSpin"><property name="value"><double>6.0</double></property><property name="maximum"><double>100.0</double></property><property name="singleStep"><double>0.5</double></property></widget></item>
+       <item row="2" column="0"><widget class="QLabel"><property name="text"><string>Farewell when user beyond (m):</string></property></widget></item>
+       <item row="2" column="1"><widget class="QDoubleSpinBox" name="farewellDistSpin"><property name="value"><double>10.0</double></property><property name="maximum"><double>100.0</double></property><property name="singleStep"><double>0.5</double></property></widget></item>
+       <item row="3" column="0" colspan="2">
+        <widget class="QLabel"><property name="text"><string>&lt;i&gt;Reaction to chat messages: bot automatically replies to messages within greeting distance.&lt;/i&gt;</string></property><property name="wordWrap"><bool>true</bool></property></widget>
+       </item>
+       <item row="4" column="0" colspan="2">
+        <widget class="QLabel"><property name="text"><string>&lt;b&gt;Bot state&lt;/b&gt;</string></property></widget>
+       </item>
+       <item row="5" column="0"><widget class="QLabel"><property name="text"><string>Disabled (pause bot):</string></property></widget></item>
+       <item row="5" column="1"><widget class="QCheckBox" name="disabledCheck"/></item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <!-- Bottom buttons -->
+   <item>
+    <layout class="QHBoxLayout">
+     <item>
+      <widget class="QPushButton" name="deleteButton">
+       <property name="text"><string>Delete Bot</string></property>
+       <property name="toolTip"><string>Permanently delete this bot from the world</string></property>
+      </widget>
+     </item>
+     <item>
+      <spacer><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="cancelButton">
+       <property name="text"><string>Cancel</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="saveButton">
+       <property name="text"><string>Save</string></property>
+       <property name="default"><bool>true</bool></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

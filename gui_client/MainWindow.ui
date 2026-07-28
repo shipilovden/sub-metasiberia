@@ -1,0 +1,929 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1426</width>
+    <height>975</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="GlWidget" name="glWidget" native="true"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1426</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuWindow">
+    <property name="title">
+     <string>Window</string>
+    </property>
+    <addaction name="actionReset_Layout"/>
+    <addaction name="actionEnter_Fullscreen"/>
+    <widget class="QMenu" name="menuLanguage">
+     <property name="title">
+      <string>Language</string>
+     </property>
+     <addaction name="actionLanguage_English"/>
+     <addaction name="actionLanguage_Russian"/>
+    </widget>
+    <addaction name="menuLanguage"/>
+   </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="title">
+     <string>Edit</string>
+    </property>
+    <widget class="QMenu" name="menuLightmaps">
+     <property name="title">
+      <string>Lightmaps</string>
+     </property>
+     <addaction name="actionBake_Lightmaps_fast_for_all_objects_in_parcel"/>
+     <addaction name="actionBake_lightmaps_high_quality_for_all_objects_in_parcel"/>
+    </widget>
+    <addaction name="actionUndo"/>
+    <addaction name="actionRedo"/>
+    <addaction name="separator"/>
+    <addaction name="actionAddObject"/>
+    <addaction name="actionAddHypercard"/>
+    <addaction name="actionAdd_Text"/>
+    <addaction name="actionAdd_Spotlight"/>
+    <addaction name="actionAdd_Audio_Source"/>
+    <addaction name="actionAdd_Web_View"/>
+    <addaction name="actionAdd_Video"/>
+    <addaction name="actionAdd_Decal"/>
+    <addaction name="actionAdd_Portal"/>
+    <addaction name="separator"/>
+    <addaction name="actionAdd_to_Favorites"/>
+    <addaction name="separator"/>
+    <addaction name="actionCopy_Object"/>
+    <addaction name="actionPaste_Object"/>
+    <addaction name="actionCloneObject"/>
+    <addaction name="actionDeleteObject"/>
+    <addaction name="separator"/>
+    <addaction name="actionFind_Object"/>
+    <addaction name="actionList_Objects_Nearby"/>
+    <addaction name="separator"/>
+    <addaction name="menuLightmaps"/>
+    <addaction name="actionSave_Object_To_Disk"/>
+    <addaction name="actionSave_Parcel_Objects_To_Disk"/>
+    <addaction name="actionLoad_Objects_From_Disk"/>
+   </widget>
+   <widget class="QMenu" name="menuMovement">
+    <property name="title">
+     <string>Movement</string>
+    </property>
+    <addaction name="actionFly_Mode"/>
+   </widget>
+   <widget class="QMenu" name="menuGo">
+    <property name="title">
+     <string>Go</string>
+    </property>
+    <addaction name="actionGo_Back"/>
+    <addaction name="separator"/>
+    <addaction name="actionGo_to_Position"/>
+    <addaction name="actionGo_to_Parcel"/>
+    <addaction name="actionGo_To_Start_Location"/>
+    <addaction name="actionGoToMainWorld"/>
+    <addaction name="actionGoToPersonalWorld"/>
+    <addaction name="actionGo_to_CryptoVoxels_World"/>
+    <addaction name="separator"/>
+    <addaction name="actionGo_to_Substrata_Server"/>
+    <addaction name="actionGo_to_Metasiberia_Server"/>
+    <addaction name="actionGo_to_Shki_nvkz_Server"/>
+    <addaction name="separator"/>
+    <widget class="QMenu" name="menuGo_to_Favorites">
+     <property name="title">
+      <string>Go to Favorites</string>
+     </property>
+    </widget>
+    <addaction name="menuGo_to_Favorites"/>
+    <addaction name="separator"/>
+    <addaction name="actionSet_Start_Location"/>
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <addaction name="actionTake_Screenshot"/>
+    <addaction name="actionShow_Screenshot_Folder"/>
+    <addaction name="actionShow_Log"/>
+    <addaction name="actionExport_view_to_Indigo"/>
+    <addaction name="actionMute_Audio"/>
+    <addaction name="actionOptions"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionAbout_Substrata"/>
+   </widget>
+   <widget class="QMenu" name="menuAvatar">
+    <property name="title">
+     <string>Avatar</string>
+    </property>
+    <addaction name="actionAvatarSettings"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <addaction name="actionThird_Person_Camera"/>
+   </widget>
+   <widget class="QMenu" name="menuVehicles">
+    <property name="title">
+     <string>Vehicles</string>
+    </property>
+    <addaction name="actionSummon_Bike"/>
+    <addaction name="actionSummon_Hovercar"/>
+    <addaction name="actionSummon_Boat"/>
+    <addaction name="actionSummon_Jet_Ski"/>
+    <addaction name="actionSummon_Car"/>
+   </widget>
+   <addaction name="menuEdit"/>
+   <addaction name="menuMovement"/>
+   <addaction name="menuAvatar"/>
+   <addaction name="menuVehicles"/>
+   <addaction name="menuView"/>
+   <addaction name="menuGo"/>
+   <addaction name="menuTools"/>
+   <addaction name="menuWindow"/>
+   <addaction name="menuHelp"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <property name="movable">
+    <bool>false</bool>
+   </property>
+   <property name="floatable">
+    <bool>false</bool>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionAddObject"/>
+   <addaction name="actionAdd_Video"/>
+   <addaction name="actionAddHypercard"/>
+   <addaction name="actionAdd_Voxels"/>
+   <addaction name="actionAdd_Web_View"/>
+   <addaction name="actionShow_Parcels"/>
+  </widget>
+  <widget class="QDockWidget" name="chatDockWidget">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="windowTitle">
+    <string>Chat</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QWidget" name="chatDockWidgetContents">
+    <layout class="QVBoxLayout" name="verticalLayout_3">
+     <item>
+      <widget class="QWidget" name="chatWidget" native="true">
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <item>
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>Online Users:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTextEdit" name="onlineUsersTextEdit">
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>100</height>
+           </size>
+          </property>
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTextEdit" name="chatMessagesTextEdit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="widget" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout">
+           <item>
+            <widget class="QLineEdit" name="chatMessageLineEdit"/>
+           </item>
+           <item>
+            <widget class="QPushButton" name="chatPushButton">
+             <property name="text">
+              <string>Chat</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="webcamDockWidget">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="windowTitle">
+    <string>Webcam</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QWidget" name="webcamDockWidgetContents">
+    <layout class="QVBoxLayout" name="verticalLayout_webcam">
+     <item>
+      <widget class="QLabel" name="webcamLabel">
+       <property name="minimumSize">
+        <size>
+         <width>320</width>
+         <height>240</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>640</width>
+         <height>480</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Webcam feed will appear here</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="scaledContents">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="webcamEnableCheckBox">
+       <property name="text">
+        <string>Enable Webcam</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="editorDockWidget">
+   <property name="windowTitle">
+    <string>Editor</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number>
+   </attribute>
+   <widget class="QWidget" name="editorDockWidgetContents">
+    <layout class="QVBoxLayout" name="verticalLayout_8">
+     <item>
+      <widget class="QScrollArea" name="scrollArea">
+       <property name="widgetResizable">
+        <bool>true</bool>
+       </property>
+       <widget class="QWidget" name="scrollAreaWidgetContents">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>69</width>
+          <height>233</height>
+         </rect>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <item>
+          <widget class="ObjectEditor" name="objectEditor" native="true"/>
+         </item>
+         <item>
+          <widget class="ParcelEditor" name="parcelEditor" native="true"/>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="infoDockWidget">
+   <property name="floating">
+    <bool>true</bool>
+   </property>
+   <property name="features">
+    <set>QDockWidget::DockWidgetFloatable</set>
+   </property>
+   <property name="allowedAreas">
+    <set>Qt::NoDockWidgetArea</set>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>4</number>
+   </attribute>
+   <widget class="QWidget" name="infoDockWidgetContents">
+    <layout class="QVBoxLayout" name="verticalLayout_6">
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <property name="leftMargin">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QWidget" name="notificationContainer" native="true">
+       <layout class="QVBoxLayout" name="verticalLayout_7"/>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="helpInfoDockWidget">
+   <property name="floating">
+    <bool>true</bool>
+   </property>
+   <property name="windowTitle">
+    <string>Help Information</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>8</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents">
+    <layout class="QVBoxLayout" name="verticalLayout_5">
+     <item>
+      <widget class="QLabel" name="helpInfoLabel">
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="materialBrowserDockWidget">
+   <property name="windowTitle">
+    <string>Material Browser</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number>
+   </attribute>
+   <widget class="QWidget" name="materialBrowserDockWidgetContents_old">
+    <layout class="QVBoxLayout" name="verticalLayout_9">
+     <item>
+      <widget class="QScrollArea" name="scrollArea_2">
+       <property name="widgetResizable">
+        <bool>true</bool>
+       </property>
+       <widget class="MaterialBrowser" name="materialBrowserDockWidgetContents">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>69</width>
+          <height>234</height>
+         </rect>
+        </property>
+       </widget>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="indigoViewDockWidget">
+   <property name="windowTitle">
+    <string>Indigo View</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>8</number>
+   </attribute>
+   <widget class="QWidget" name="indigoViewDockWidgetContents">
+    <layout class="QVBoxLayout" name="verticalLayout_10">
+     <item>
+      <widget class="IndigoView" name="indigoView" native="true"/>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="diagnosticsDockWidget">
+   <property name="windowTitle">
+    <string>Diagnostics</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>8</number>
+   </attribute>
+   <widget class="QWidget" name="diagnosticsDockWidgetContents">
+    <layout class="QVBoxLayout" name="verticalLayout_11">
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <property name="leftMargin">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="DiagnosticsWidget" name="diagnosticsWidget" native="true"/>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="environmentDockWidget">
+   <property name="windowTitle">
+    <string>Environment</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents_2">
+    <layout class="QVBoxLayout" name="verticalLayout_12">
+     <item>
+      <widget class="EnvironmentOptionsWidget" name="environmentOptionsWidget" native="true"/>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="worldSettingsDockWidget">
+   <property name="windowTitle">
+    <string>World Settings</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents_3">
+    <layout class="QVBoxLayout" name="verticalLayout_13">
+     <item>
+      <widget class="WorldSettingsWidget" name="worldSettingsWidget" native="true"/>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <action name="actionAvatarSettings">
+   <property name="text">
+    <string>Avatar Settings</string>
+   </property>
+  </action>
+  <action name="actionAddObject">
+   <property name="text">
+    <string>Add Model / Image</string>
+   </property>
+   <property name="toolTip">
+    <string>Add Model/Image</string>
+   </property>
+  </action>
+  <action name="actionDeleteObject">
+   <property name="text">
+    <string>Delete Object</string>
+   </property>
+  </action>
+  <action name="actionReset_Layout">
+   <property name="text">
+    <string>Reset Layout</string>
+   </property>
+  </action>
+  <action name="actionCloneObject">
+   <property name="text">
+    <string>Clone Object</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+D</string>
+   </property>
+  </action>
+  <action name="actionLogIn">
+   <property name="text">
+    <string>LogIn</string>
+   </property>
+   <property name="toolTip">
+    <string>Log in</string>
+   </property>
+  </action>
+  <action name="actionSignUp">
+   <property name="text">
+    <string>SignUp</string>
+   </property>
+  </action>
+  <action name="actionLogOut">
+   <property name="text">
+    <string>LogOut</string>
+   </property>
+  </action>
+  <action name="actionAddHypercard">
+   <property name="text">
+    <string>Add Hypercard</string>
+   </property>
+  </action>
+  <action name="actionShow_Parcels">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Parcels</string>
+   </property>
+  </action>
+  <action name="actionFly_Mode">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Fly Mode     F</string>
+   </property>
+  </action>
+  <action name="actionAdd_Voxels">
+   <property name="text">
+    <string>Add Voxels</string>
+   </property>
+  </action>
+  <action name="actionGoToMainWorld">
+   <property name="text">
+    <string>Go to Main World</string>
+   </property>
+  </action>
+  <action name="actionGoToPersonalWorld">
+   <property name="text">
+    <string>Go to Personal World</string>
+   </property>
+  </action>
+  <action name="actionGo_to_CryptoVoxels_World">
+   <property name="text">
+    <string>Go to Cryptovoxels World</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Substrata_Server">
+   <property name="text">
+    <string>Go to Substrata Server</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Metasiberia_Server">
+   <property name="text">
+    <string>Go to Metasiberia Server</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Shki_nvkz_Server">
+   <property name="text">
+    <string>Go to Shki-nvkz Server</string>
+   </property>
+  </action>
+  <action name="actionExport_view_to_Indigo">
+   <property name="text">
+    <string>Export view to Indigo</string>
+   </property>
+  </action>
+  <action name="actionAbout_Substrata">
+   <property name="text">
+    <string>About Metasiberia</string>
+   </property>
+  </action>
+  <action name="actionOptions">
+   <property name="text">
+    <string>Options</string>
+   </property>
+  </action>
+  <action name="actionAdd_Spotlight">
+   <property name="text">
+    <string>Add Spotlight</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Parcel">
+   <property name="text">
+    <string>Go to Parcel</string>
+   </property>
+  </action>
+  <action name="actionUndo">
+   <property name="text">
+    <string>Undo</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Z</string>
+   </property>
+  </action>
+  <action name="actionRedo">
+   <property name="text">
+    <string>Redo</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Y</string>
+   </property>
+  </action>
+  <action name="actionShow_Log">
+   <property name="text">
+    <string>Show Log</string>
+   </property>
+  </action>
+  <action name="actionFind_Object">
+   <property name="text">
+    <string>Find Object by ID</string>
+   </property>
+  </action>
+  <action name="actionBake_Lightmaps_fast_for_all_objects_in_parcel">
+   <property name="text">
+    <string>Bake Lightmaps (fast) for all objects in parcel</string>
+   </property>
+  </action>
+  <action name="actionBake_lightmaps_high_quality_for_all_objects_in_parcel">
+   <property name="text">
+    <string>Bake lightmaps (high quality) for all objects in parcel</string>
+   </property>
+  </action>
+  <action name="actionThird_Person_Camera">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Third Person Camera       V</string>
+   </property>
+  </action>
+  <action name="actionAdd_Audio_Source">
+   <property name="text">
+    <string>Add Audio Source</string>
+   </property>
+  </action>
+  <action name="actionTake_Screenshot">
+   <property name="text">
+    <string>Take Screenshot</string>
+   </property>
+  </action>
+  <action name="actionShow_Screenshot_Folder">
+   <property name="text">
+    <string>Show Screenshot Folder</string>
+   </property>
+  </action>
+  <action name="actionList_Objects_Nearby">
+   <property name="text">
+    <string>Find Objects Nearby</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+F</string>
+   </property>
+  </action>
+  <action name="actionAdd_Web_View">
+   <property name="text">
+    <string>Add Web View</string>
+   </property>
+  </action>
+  <action name="actionCopy_Object">
+   <property name="text">
+    <string>Copy Object</string>
+   </property>
+  </action>
+  <action name="actionPaste_Object">
+   <property name="text">
+    <string>Paste Object</string>
+   </property>
+  </action>
+  <action name="actionGo_to_Position">
+   <property name="text">
+    <string>Go to Position</string>
+   </property>
+  </action>
+  <action name="actionSet_Start_Location">
+   <property name="text">
+    <string>Set current location as start location</string>
+   </property>
+  </action>
+  <action name="actionGo_To_Start_Location">
+   <property name="text">
+    <string>Go To Start Location</string>
+   </property>
+  </action>
+  <action name="actionSummon_Bike">
+   <property name="text">
+    <string>Summon Bike</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+B</string>
+   </property>
+  </action>
+  <action name="actionSummon_Hovercar">
+   <property name="text">
+    <string>Summon Hovercar</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+H</string>
+   </property>
+  </action>
+  <action name="actionMute_Audio">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Mute Audio</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+M</string>
+   </property>
+  </action>
+  <action name="actionAdd_Video">
+   <property name="text">
+    <string>Add Video</string>
+   </property>
+  </action>
+  <action name="actionAdd_Text">
+   <property name="text">
+    <string>Add Text</string>
+   </property>
+  </action>
+  <action name="actionSummon_Boat">
+   <property name="text">
+    <string>Summon Boat</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+B</string>
+   </property>
+  </action>
+  <action name="actionSave_Object_To_Disk">
+   <property name="text">
+    <string>Save Object To Disk</string>
+   </property>
+  </action>
+  <action name="actionSave_Parcel_Objects_To_Disk">
+   <property name="text">
+    <string>Save Parcel Objects To Disk</string>
+   </property>
+  </action>
+  <action name="actionLoad_Objects_From_Disk">
+   <property name="text">
+    <string>Load Object(s) From Disk</string>
+   </property>
+  </action>
+  <action name="actionDelete_All_Parcel_Objects">
+   <property name="text">
+    <string>Delete All Parcel Objects</string>
+   </property>
+  </action>
+  <action name="actionAdd_Decal">
+   <property name="text">
+    <string>Add Decal</string>
+   </property>
+  </action>
+  <action name="actionEnter_Fullscreen">
+   <property name="text">
+    <string>Enter Fullscreen Mode</string>
+   </property>
+  </action>
+  <action name="actionLanguage_English">
+   <property name="text">
+    <string>English</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionLanguage_Russian">
+   <property name="text">
+    <string>Русский</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSummon_Car">
+   <property name="text">
+    <string>Summon Car</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+C</string>
+   </property>
+  </action>
+  <action name="actionAdd_Portal">
+   <property name="text">
+    <string>Add Portal</string>
+   </property>
+  </action>
+  <action name="actionAdd_to_Favorites">
+   <property name="text">
+    <string>Add to Favorites</string>
+   </property>
+  </action>
+  <action name="actionGo_Back">
+   <property name="text">
+    <string>Go Back</string>
+   </property>
+  </action>
+  <action name="actionSummon_Jet_Ski">
+   <property name="text">
+    <string>Summon Jet Ski</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+J</string>
+   </property>
+  </action>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>GlWidget</class>
+   <extends>QWidget</extends>
+   <header>GlWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ObjectEditor</class>
+   <extends>QWidget</extends>
+   <header>ObjectEditor.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ParcelEditor</class>
+   <extends>QWidget</extends>
+   <header>ParcelEditor.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>MaterialBrowser</class>
+   <extends>QWidget</extends>
+   <header>MaterialBrowser.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>IndigoView</class>
+   <extends>QWidget</extends>
+   <header>IndigoView.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>DiagnosticsWidget</class>
+   <extends>QWidget</extends>
+   <header>DiagnosticsWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>EnvironmentOptionsWidget</class>
+   <extends>QWidget</extends>
+   <header>EnvironmentOptionsWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>WorldSettingsWidget</class>
+   <extends>QWidget</extends>
+   <header>WorldSettingsWidget.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

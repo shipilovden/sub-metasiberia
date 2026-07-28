@@ -1,0 +1,16 @@
+# This file should go into /etc/systemd/user/
+
+[Unit]
+Description=Cyberspace Server
+After=network.target
+
+[Service]
+ExecStart=/home/nick/cyberspace/server
+WorkingDirectory=/home/nick/cyberspace
+Restart=on-failure
+LimitNOFILE=1000000
+#User=nick
+#Group=nick
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,557 @@
+body {
+	margin-top: 0;
+	margin-bottom: 40px;
+	margin-left: auto;
+	margin-right: auto;
+	max-width: 1000px;
+	line-height: 1.6;
+	font-size: 18px;
+	color: #222;
+	/*padding: 0 10px;*/
+	padding: 0;
+	font-family: Helvetica;
+}
+.root-body {
+	/*margin-top: 46px;*/
+	margin-top: 20px;
+	margin-left: 0;
+	margin-right: 0;
+	width: 96vw;
+	/*width: 100%;*/
+	max-width: 3000px; /*override max-width: 1000px in body*/
+	/*max-width: 100%;*/
+	overflow-x: hidden; /*prevents horizontal scroll bar by allowing the body to be under the vertical scroll bar*/
+}
+
+.root-rest-of-body {
+	max-width: 1000px;
+	width: 75vw;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+/* This is the body class for all pages apart from the root page. */
+.standard-body 
+{
+	margin-top: 60px;
+	width: 75vw;
+}
+h1,h2,h3
+{
+	line-height: 1.2;
+}
+h2 {
+    margin-top: 45px;
+}
+table
+{
+	width: 100%;
+}
+td
+{
+	vertical-align: top;
+}
+a
+{
+	color: #25617e;
+}
+.main
+{
+	min-height: 400px;
+}
+.caption
+{
+	font-size: 0.8em;
+	color: grey;
+	margin-bottom: 20px;
+}
+#login
+{
+	text-align: right;
+	float: right;
+	margin-top: -8px;
+}
+.map-info {
+	padding: 6px 8px;
+	background: white;
+	background: rgba(255,255,255,0.8);
+	box-shadow: 0 0 15px rgba(0,0,0,0.15);
+	border-radius: 5px;
+}
+
+
+.form-field {
+	margin-bottom: 1em;
+}
+
+.msg {
+	background-color: yellow;
+}
+.info-notify
+{
+	background-color: blanchedalmond;
+}
+
+.footer {
+	font-size: 0.8em;
+	color: grey;
+	text-align: center;
+}
+
+#price-plot-canvas
+{
+	border:1px solid #d3d3d3;
+}
+#tooltip-canvas
+{
+	border:1px solid #d3d3d3;
+	position:absolute;
+	left:-400px;
+	top:100px;
+	pointer-events:none;
+}
+#selection-point-canvas
+{
+	border:none;
+	position:absolute;
+	left:-400px;
+	top:100px;
+	pointer-events:none;
+}
+
+.eth-address
+{
+	color: grey;
+}
+.substrata-logo-top-small
+{
+	padding-bottom:20px;
+}
+.logo-root-page
+{
+	padding-bottom:20px;
+}
+.buy-visa-image
+{
+	position: relative;
+	top: 9px;
+}
+.buy-paypal-image
+{
+	position: relative;
+	top: 6px;
+	left: -1px;
+}
+.inline-block
+{
+	display: inline-block;
+}
+#mapid
+{
+	height: 650px;
+}
+.hidden
+{
+	display: none;
+}
+
+/*These colours should match those in map.js*/
+.map-col-mradmin
+{
+	color: #3388ff; /* blue */
+}
+.map-col-other
+{
+	color: #0f9caa; /* blue */
+}
+.map-col-for-auction
+{
+	color: #b40d96; /* purpleish */
+}
+.map-col-highlighted
+{
+	color: #ef9518;
+}
+
+.commands {
+	font-size: 0.8em;
+	font-family: "Lucida Console", Courier, monospace;
+	background-color: rgb(230, 230, 230);
+	overflow: auto;
+}
+.code-block {
+	/* Style from https://stackoverflow.com/a/48694906 */
+	background: #f4f4f4;
+	border: 1px solid #ddd;
+	border-left: 3px solid #f36d33;
+	color: #666;
+	page-break-inside: avoid;
+	font-family: monospace;
+	font-size: 15px;
+	line-height: 1.6;
+	margin-bottom: 1.6em;
+	max-width: 100%;
+	overflow: auto;
+	padding: 1em 1.5em;
+	display: block;
+	word-wrap: break-word;
+}
+
+
+.root-auction-list-container {
+	/* Use grid layout, works pretty well with putting items side by side, also works well with having a little bit of space between them */
+	display: grid;
+	/*auto-fit: Fit whatever columns there are into the space. Prefer expanding columns to fill space rather than empty columns.*/
+	grid-template-columns: repeat(auto-fit, minmax( /*min=*/ 230px, /*max=*/ 230px));
+	grid-auto-flow: row;
+	gap: 15px 15px;
+}
+
+.root-auction-div {
+	margin-bottom: 30px;
+}
+
+.root-auction-thumbnail {
+	width: 230px; /* for consistency with root-news-thumbnail width*/
+	object-fit: cover;
+}
+
+
+.root-news-div-container {
+	/* Use grid layout, works pretty well with putting items side by side, also works well with having a little bit of space between them */
+	display: grid;
+	/*auto-fit: Fit whatever columns there are into the space. Prefer expanding columns to fill space rather than empty columns.*/
+	grid-template-columns: repeat(auto-fit, minmax( /*min=*/ 230px, /*max=*/ 230px));
+	grid-auto-flow: row;
+	gap: 15px 15px;
+}
+
+.root-news-div {
+	margin-bottom: 30px;
+}
+
+.root-news-thumb-div {
+	min-height: 160px;
+}
+
+.root-news-thumbnail {
+	width: 230px;
+	height: 131px;
+	object-fit: cover;
+}
+
+.root-news-title {
+	font-weight: bold;
+}
+
+.root-news-title a { /*override link colour*/
+	color: black;
+}
+
+.root-news-content {
+}
+
+.root-news-content a { /*override link colour*/
+	color: black;
+	text-decoration: none;
+}
+
+.news-image {
+	max-width: 650px;
+}
+
+.news-post-timestamp {
+	font-size: 0.8em;
+}
+
+.news-post-content {
+	margin-bottom: 60px;
+}
+
+
+
+/*----------------------------------------Events-----------------------------------------*/
+.root-events-div-container {
+	/* Use grid layout, works pretty well with putting items side by side, also works well with having a little bit of space between them */
+	display: grid;
+	/*auto-fit: Fit whatever columns there are into the space. Prefer expanding columns to fill space rather than empty columns.*/
+	grid-template-columns: repeat(auto-fit, minmax( /*min=*/ 230px, /*max=*/ 230px));
+	grid-auto-flow: row;
+	gap: 15px 15px;
+}
+
+.root-event-div {
+	margin-bottom: 30px;
+}
+
+.root-event-thumb-div {
+	min-height: 160px;
+}
+
+.root-event-thumbnail {
+	width: 230px;
+	height: 131px;
+	object-fit: cover;
+}
+
+.root-event-title {
+	font-weight: bold;
+}
+
+.root-event-title a { /*override link colour*/
+	color: black;
+}
+
+.root-event-content {
+}
+
+.root-event-content a { /*override link colour*/
+	color: black;
+	text-decoration: none;
+}
+
+.root-event-time {
+	font-size: 0.8em;
+	color: #777;
+}
+
+.event-image {
+	max-width: 650px;
+}
+
+.event-post-timestamp {
+	font-size: 0.8em;
+}
+
+.event-post-content {
+	margin-bottom: 60px;
+}
+
+.event-datum-title {
+	padding-right: 1em;
+}
+.event-datum {
+}
+
+.event-title {
+	font-size: 1.2em;
+}
+
+.event-description {
+	padding-bottom: 1em;
+}
+
+
+
+
+
+
+.top-section {
+	position: relative; /*needed because position: absolute positions relative to 'positioned' ancestor*/
+	height: 60vh;
+	min-height: 400px;
+	max-height: 600px;
+	width: 100vw;
+}
+
+.top-section-text-container {
+	position: absolute;
+	width: 75vw;
+	top: 150px;
+	left: 50vw;
+	transform: translate(-50%, 0);
+	
+	color: white;
+	border-radius: 0px;
+	margin: 0px;
+	padding: 10px;
+	font-size: 1.0em;
+}
+
+.top-intro-section {
+	padding: 10px;
+	background-color: rgba(0, 0, 0, 0.6);
+	margin-bottom: 40px;
+}
+
+
+.play-webclient-div {
+	padding: 10px;
+	background-color: rgba(0, 0, 0, 0.6);
+	font-size: 1.3em;
+	margin-left: auto;
+	margin-right: auto;
+	width: fit-content; /* make the div just as wide as the 'Enter Substrata in your browser' text */
+}
+
+.play-webclient-div a { /*override link colour*/
+	color: white;
+}
+
+
+
+.top-image {
+	width: 100vw;
+	height: 60vh;
+	min-height: 400px;
+	max-height: 600px;
+	object-fit: cover;
+}
+
+
+.top-logo-section img {
+	display: block;
+	margin: 10px;
+}
+
+
+
+#top-image {
+	opacity: 1;
+	transition: opacity 2s;
+}
+
+#top-image.fadeOut {
+	opacity: 0;
+}
+
+
+.photo-container {
+	display: grid;
+	/*auto-fit: Fit whatever columns there are into the space. Prefer expanding columns to fill space rather than empty columns.*/
+	grid-template-columns: repeat(auto-fit, minmax( /*min=*/ 230px, /*max=*/ 230px));
+	grid-auto-flow: row;
+	gap: 15px 15px;
+}
+
+.root-photo-img {
+	width: 230px;
+	height: 172px;
+	object-fit: cover;
+	display: block; /*to remove whitespace under the image: https://www.tutorialrepublic.com/faq/how-to-remove-white-space-under-an-image-using-css.php */
+}
+
+.photo-midsize-img {
+	max-width: 100%;
+}
+
+
+/* Used on parcel page for both screenshots and photos */
+.generic-image-container {
+	display: grid;
+	/*auto-fit: Fit whatever columns there are into the space. Prefer expanding columns to fill space rather than empty columns.*/
+	grid-template-columns: repeat(auto-fit, minmax( /*min=*/ 320px, /*max=*/ 320px));
+	grid-auto-flow: row;
+	gap: 15px 15px;
+}
+
+.generic-image {
+	width: 320px;
+	height: 240px;
+	object-fit: cover;
+	display: block; /*to remove whitespace under the image: https://www.tutorialrepublic.com/faq/how-to-remove-white-space-under-an-image-using-css.php */
+}
+
+
+
+
+
+
+.article-image {
+	max-width: 75vw;
+}
+
+.script-log {
+	font-size: 0.9em;
+}
+
+.log-timestamp {
+	color: cadetblue;
+}
+.log-ob {
+	color:darkcyan
+}
+.log-error {
+	color: firebrick;
+}
+.log-print {
+}
+
+
+.code-func-definition {
+	margin-top: 2em;
+	margin-bottom: 0.5em;
+	font-size: 1.2em;
+	font-weight: 400;
+	background-color: #ecf9f2;
+}
+
+.code-arg {
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+}
+
+.code-arg-code {
+	background: #f4f4f4;
+	border: 1px solid #ddd;
+	border-left: 3px solid #caefef;
+	color: #444;
+	font-family: monospace;
+	font-size: 16px;
+	margin-right: 0.5em;
+	padding: 0.1em 0.3em;
+}
+
+.code-func-description {
+
+}
+
+
+.code-attr {
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+}
+.code-attr-code {
+	background: #f4f4f4;
+	border: 1px solid #ddd;
+	border-left: 3px solid #caefef;
+	color: #444;
+	font-family: monospace;
+	font-size: 16px;
+	margin-right: 1em;
+	padding: 0.1em 0.3em;
+}
+
+.code-attr-descrip {
+}
+
+.feature-enabled {
+	color: green;
+}
+.feature-disabled {
+	color: darkred;
+}
+
+
+
+.full-width {
+	width: 96%;
+}
+
+.grouped-region {
+	background: #f4f4f4;
+	padding: 1em;
+	margin-bottom: 1em;
+}
+
+.field-description {
+	color: #444;
+	font-size: 0.8em;
+}
+
+.danger-zone {
+	background: #e97e7e;
+	width: 96%;
+	text-align: right;
+	padding: 0.5em;
+}

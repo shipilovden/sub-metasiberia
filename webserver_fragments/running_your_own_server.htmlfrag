@@ -1,0 +1,186 @@
+
+<p>Running your own Substrata server is (hopefully) relatively easy, as it's just a single executable to run.  It will require some technical proficiency though.</p>
+
+<p>You can run a Substrata server on your personal computer, or on a cloud server somewhere.  It's free to run.</p>
+<p>The instructions below are generally written for running a server on your personal computer, though they can be adapted for e.g. a cloud Linux server.</p>
+
+<h2>Download</h2>
+
+<p>Download the server distribution for your operating system:</p>
+<p>
+Windows - <a href="https://downloads.indigorenderer.com/dist/cyberspace/SubstrataServer_v1.5.7.7z">SubstrataServer_v1.5.7.7z</a>
+</p>
+<p>	
+MacOS - <a href="https://downloads.indigorenderer.com/dist/cyberspace/SubstrataServerMacOS_v1.5.4_x64.tar.gz">SubstrataServerMacOS_v1.5.4_x64.tar.gz</a>
+</p>	
+<p>	
+Linux - <a href="https://downloads.indigorenderer.com/dist/cyberspace/SubstrataServer_v1.5.7.tar.gz">SubstrataServer_v1.5.7.tar.gz</a>
+</p>
+
+<p>Extract the contents into a convenient directory, e.g. c:/substrata_server</p>
+
+<p>(You will need <a href="https://www.7-zip.org/download.html">7-zip</a> to extract the Windows distribution)</p>
+
+<p>Executables are signed by Glare Technologies Limited on Windows and Mac:
+on Windows, check that server.exe has a digital signature from Glare Technologies Limited.  (right click on exe, Properties, Digital Signatures tab)</p>
+
+
+<h2>Run the server</h2>
+
+<p>Run the server executable from the files you just extracted.</p>
+
+<p>This will create the server_state_dir (if it does not already exist) described in the next section.</p>
+
+<h2>Locating server_state_dir</h2>
+
+<p>This is the top level directory where config files will be placed, and will have subdirectories where various files will be saved.</p>
+
+<p>This directory will be automatically created, if it does not already exist, when the substrata server is run.</p>
+
+<p>server_state_dir is:</p>
+<p>On Windows: APPDATA/Substrata/server_data </p>
+<p>Where APPDATA is your application data directory, something like C:\Users\YOURNAME\AppData.</p>
+
+<p>On Mac: /Users/USERNAME/cyberspace_server_state</p>
+<p>On Linux: /home/USERNAME/cyberspace_server_state</p>
+<p>Where USERNAME is the current user name.</p>
+
+
+
+
+
+<h2>Generating a TLS keypair</h2>
+
+<h3>On Windows</h3>
+
+<p>
+If you don't have OpenSSL installed, download from our server: <a href="https://downloads.indigorenderer.com/dist/cyberspace/LibreSSL_3.5.2_OpenSSL.zip">LibreSSL_3.5.2_OpenSSL.zip</a>.
+</p>
+<p>
+	Extract to a directory, check that openssl.exe has a Digital signature from Glare Technologies Limited.  (right click on exe, Properties, Digital Signatures tab)
+</p>
+<p>
+	Open a command shell (cmd.exe or powershell), go to the directory you extracted the openssl files (openssl.exe, openssl.cnf and some dlls), and execute this command: 
+</p>
+<pre class="code-block">./openssl req -new -newkey rsa:4096 -x509 -sha256 -days 3650 -nodes -out MyCertificate.crt -keyout MyKey.key -config openssl.cnf</pre>
+<p>
+	It will ask some questions, you can press enter to skip them, apart from at least one:  Organization name, enter anything you want.
+</p>
+<p>
+	This should generate two files: MyCertificate.crt (your public key) and MyKey.key (your private key).
+	Copy these files into your server_state_dir.
+</p>
+
+
+<h3>On Linux / Mac</h3>
+
+<p>You probably already have openssl installed, so execute</p>
+
+<pre class="code-block">openssl req -new -newkey rsa:4096 -x509 -sha256 -days 3650 -nodes -out MyCertificate.crt -keyout MyKey.key</pre>
+
+<p>and copy the two generated files (MyCertificate.crt and MyKey.key) into your server_state_dir.</p>
+
+
+<h2>Downloading other server distribution files</h2>
+
+<p>Download this zip file: <a href="https://downloads.indigorenderer.com/dist/cyberspace/server_dist_files.zip">server_dist_files.zip</a>,
+	and extract the contents into your server_state_dir.</p>
+
+
+<p>For the webclient server files, download this zip file: <a href="https://downloads.indigorenderer.com/dist/cyberspace/substrata_webclient_1.5.7.zip">substrata_webclient_1.5.7.zip</a>,
+	and extract the contents into a dir called 'webclient' in your server_state_dir</p>
+
+<p>Your server_state_dir (i.e. C:\Users\YOURNAME\AppData\Roaming\Substrata), should now looks something like:</p>
+
+<pre>
+Substrata
+   |
+   --------server_data
+               |
+               -----------substrata_server_config.xml, MyCertificate.crt, MyKey.key
+               |
+                ----------dist_resources
+               |            |
+               |            ---------- xbot_glb_3242545562312850498.bmesh  
+               |
+               -----------webserver_public_files
+               |           |
+               |           ---------- logo_main_page.png, logo_small.png, main.css
+               |
+               -----------webclient
+                           |
+                           |---------- data
+                           |            |
+                           |            ---- gl_data, resources
+                           |
+                           ----------- gui_client.data, gui_client.js, gui_client.wasm, webclient.html
+              
+                          
+</pre>
+<p>Now open up substrata_server_config.xml with a text editor.  You will need to set <i>webclient_dir</i>: The location where the webclient files are found.
+Set it to the dir called 'webclient' in your server_state_dir as used above, e.g. </p>
+
+<pre class="code-block">
+&lt;webclient_dir&gt;C:\Users\YOURNAME\AppData\Roaming\Substrata\webclient&lt;/webclient_dir&gt;
+</pre>
+
+
+<h2>Run the server</h2>
+
+<p>In cmd.exe or powershell, change into the directory you extracted the server distribution, and run the server, e.g.</p>
+
+<pre class="code-block">
+cd c:/substrata_server
+./server.exe
+</pre>
+
+
+<p>Read the output carefully, there will probably be some warning messages, but if it doesn't exit by itself, then your server is ready to use!</p>
+
+<h2>Visiting in your Substrata client</h2>
+
+<p>Run Substrata, then enter sub://localhost (sub://127.0.0.1 on Mac) in the URL bar:</p>
+
+<img src="/files/substrata_localhost.PNG" alt="Substrata connecting to localhost" class="article-image" />
+
+<p>You should see an empty Substrata world.</p>
+<p>
+Create a user in your Substrata client using the 'Sign Up' link in the top right of your Substrata client.  The first user you create will be the admin user, and will have permissions to create and destroy objects anywhere, 
+as well as to administer the server via the admin web interface.
+</p>
+
+<h2>Visiting the local web interface</h2>
+
+<p>In your web browser, visit https://localhost/.  Note that because we used a self-signed certificate, your browser will probably complain that the certificate is invalid ('site not secure').  Just skip these warnings.
+</p>
+<p>
+You should see a basic substrata website:  
+</p>
+
+<img src="/files/substrata_website_localhost.PNG" alt="Substrata localhost website" class="article-image" />
+
+<p>You can log into the web interface using the same username and password you just created in your Substrata client.</p>
+
+<p>Once you have logged in, you can click on your name in the upper right of the page, then click on 'Admin Page' on the upper right of the page again, to access the administrator web interface:</p>
+
+<img src="/files/admin_page.PNG" alt="Substrata admin web interface" class="article-image" />
+
+<h2>Video tutorial</h2>
+
+<p>
+Here is a slightly out of date, but still very helpful tutorial, walking you through similar steps.
+</p>
+
+<iframe width="650" height="365" src="https://www.youtube.com/embed/d7eYzp8vqV8" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen=""></iframe>
+
+
+<h2>Support</h2>
+
+<p>Need help running your own server?  Come and chat about it on our <a href="https://discord.gg/R6tfYn3">Discord server</a>.</p>
+
+
+<h2>TODO</h2>
+
+<p>To document:</p>
+
+<p>* How to use a TLS certificate from a public certificate authority like Let's Encrypt, instead of a self-signed certificate.</p>

@@ -1,0 +1,13 @@
+The code was checked out from https://github.com/resonance-audio/resonance-audio early may 2021.
+third_party/clone_core_deps.sh was run
+
+renamed "D:\programming\resonance-audio\trunk\platforms\common\utils.cc" -> "D:\programming\resonance-audio\trunk\platforms\common\common_utils.cc"
+as .obj filenames were clashing
+
+Including most files in cmake, apart from test files. (ones with _test.cc suffix)
+
+
+Slightly modified resonance_audio\graph\resonance_audio_api_impl.cc to avoid a repeated memory allocation.  (Search for "GLARE NEW")
+
+
+Modified some files for Emscripten compilation (search for "GLARE NEW")

@@ -1,0 +1,13 @@
+# MetaSiberia standard primitive: square pyramid, Y-up source coordinates.
+o Pyramid
+usemtl default
+v 0.000000 0.500000 0.000000
+v -0.500000 -0.500000 -0.500000
+v 0.500000 -0.500000 -0.500000
+v 0.500000 -0.500000 0.500000
+v -0.500000 -0.500000 0.500000
+f 1 3 2
+f 1 4 3
+f 1 5 4
+f 1 2 5
+f 2 3 4 5

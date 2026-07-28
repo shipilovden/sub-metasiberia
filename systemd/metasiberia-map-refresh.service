@@ -1,0 +1,14 @@
+[Unit]
+Description=Metasiberia low-cost daily map refresh trigger
+After=network-online.target metasiberia-server.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=METASIBERIA_BASE_URL=https://127.0.0.1:8443
+Environment=METASIBERIA_HOST_HEADER=vr.metasiberia.com
+Environment=METASIBERIA_STATE_BIN=/home/denshipilov/cyberspace_server_state/server_state.bin
+Environment=METASIBERIA_PUBLIC_DIR=/home/denshipilov/cyberspace_server_state/webserver_public_files
+TimeoutStartSec=240
+ExecStart=/usr/bin/python3 /usr/local/bin/metasiberia_map_maintenance.py regen
