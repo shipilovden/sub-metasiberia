@@ -26,6 +26,8 @@ SET(shared_files
 ../shared/ImageDecoding.h
 ../shared/FileTypes.cpp
 ../shared/FileTypes.h
+../shared/GaussianSplatAsset.cpp
+../shared/GaussianSplatAsset.h
 ../shared/LODGeneration.cpp
 ../shared/LODGeneration.h
 ../shared/MessageUtils.h

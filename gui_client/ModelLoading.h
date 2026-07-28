@@ -127,7 +127,14 @@ bool ModelLoading::isSupportedModelExtension(string_view extension)
 		StringUtils::equalCaseInsensitive(extension, "glb") ||
 		StringUtils::equalCaseInsensitive(extension, "vrm") ||
 		StringUtils::equalCaseInsensitive(extension, "igmesh") ||
-		StringUtils::equalCaseInsensitive(extension, "subvox");
+		StringUtils::equalCaseInsensitive(extension, "subvox") ||
+		StringUtils::equalCaseInsensitive(extension, "ply") ||
+		StringUtils::equalCaseInsensitive(extension, "splat") ||
+		StringUtils::equalCaseInsensitive(extension, "ksplat") ||
+		StringUtils::equalCaseInsensitive(extension, "spz") ||
+		StringUtils::equalCaseInsensitive(extension, "sog") ||
+		StringUtils::equalCaseInsensitive(extension, "lcc") ||
+		StringUtils::equalCaseInsensitive(extension, "lcc2");
 }
 
 

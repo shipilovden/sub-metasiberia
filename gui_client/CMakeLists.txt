@@ -631,6 +631,8 @@ SET(shared_files
 ../shared/ImageDecoding.h
 ../shared/FileTypes.cpp
 ../shared/FileTypes.h
+../shared/GaussianSplatAsset.cpp
+../shared/GaussianSplatAsset.h
 ../shared/GroundPatch.cpp
 ../shared/GroundPatch.h
 ../shared/LODGeneration.cpp
