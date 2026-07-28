@@ -43720,7 +43720,7 @@ fn getViewDir() {
 	  }
 	  return segments.join("/") || (isAbsolute(p) ? "/" : ".");
 	};
-	const basename = function(p, extension) {
+	const basename$1 = function(p, extension) {
 	  const segments = normalizeWindowsPath(p).split("/");
 	  let lastSegment = "";
 	  for (let i = segments.length - 1; i >= 0; i--) {
@@ -53514,7 +53514,7 @@ fn main(
 	// so any URL querystring/fragment (e.g. a presigned `?token=...`) is preserved.
 	const fetchSogMeta = async (fileSystem, filename) => {
 	    const baseDir = dirname(filename);
-	    const metaName = basename(filename);
+	    const metaName = basename$1(filename);
 	    const resolve = (name) => (baseDir ? join(baseDir, name) : name);
 	    const metaBytes = await readFile$1(fileSystem, resolve(metaName));
 	    const rawMeta = JSON.parse(new TextDecoder().decode(metaBytes));
@@ -55450,7 +55450,7 @@ fn main(
 	        return await fileSystem.createSource(fullPath);
 	    }
 	    catch (err) {
-	        const base = basename(fullPath);
+	        const base = basename$1(fullPath);
 	        // Only retry with the bare filename when the full path is genuinely
 	        // missing; other failures are real and must not be masked.
 	        if (!isMissingError(err) || base === fullPath) {
@@ -56239,7 +56239,7 @@ fn main(
 	    await writer.write(new Uint8Array(splatIData.buffer));
 	    await writer.write(shData);
 	    await writer.close();
-	    logWrittenFile(basename(filename), writer.bytesWritten);
+	    logWrittenFile(basename$1(filename), writer.bytesWritten);
 	    writingGroup.end();
 	};
 	/**
@@ -56289,7 +56289,7 @@ fn main(
 	        await writer.write(textEncoder.encode(`${row}\n`));
 	    }
 	    await writer.close();
-	    logWrittenFile(basename(filename), writer.bytesWritten);
+	    logWrittenFile(basename$1(filename), writer.bytesWritten);
 	    writingGroup.end();
 	};
 
@@ -56615,7 +56615,7 @@ fn main(
 	    const writer = await fs.createWriter(filename);
 	    await writer.write(new Uint8Array(glb));
 	    await writer.close();
-	    logWrittenFile(basename(filename), writer.bytesWritten);
+	    logWrittenFile(basename$1(filename), writer.bytesWritten);
 	    writingGroup.end();
 	};
 
@@ -57243,13 +57243,13 @@ fn main(
 	        const metaFilename = zipFs ? 'meta.json' : outputFilename;
 	        await writeFile$1(outputFs, metaFilename, metaJson);
 	        if (emitInfo && !zipFs) {
-	            logWrittenFile(basename(outputFilename), metaJson.byteLength);
+	            logWrittenFile(basename$1(outputFilename), metaJson.byteLength);
 	        }
 	        if (zipFs) {
 	            await zipFs.close();
 	        }
 	        if (emitInfo && bundleWriter) {
-	            logWrittenFile(basename(outputFilename), bundleWriter.bytesWritten);
+	            logWrittenFile(basename$1(outputFilename), bundleWriter.bytesWritten);
 	        }
 	        writingGroup?.end();
 	    }
@@ -57352,13 +57352,13 @@ fn main(
 	        const htmlBytes = encoder.encode(resultHtml);
 	        const writingGroup = logger.group('Writing');
 	        await writeFile$1(fs, filename, htmlBytes);
-	        logWrittenFile(basename(filename), htmlBytes.byteLength);
+	        logWrittenFile(basename$1(filename), htmlBytes.byteLength);
 	        writingGroup.end();
 	    }
 	    else {
 	        // Unbundled mode: write separate files
 	        const outputDir = dirname(filename);
-	        const baseFilename = basename(filename, '.html');
+	        const baseFilename = basename$1(filename, '.html');
 	        const sogFilename = `${baseFilename}.sog`;
 	        const sogPath = join(outputDir, sogFilename);
 	        const writingGroup = logger.group('Writing');
@@ -57375,17 +57375,17 @@ fn main(
 	        const cssPath = join(outputDir, 'index.css');
 	        const cssBytes = encoder.encode(index$2);
 	        await writeFile$1(fs, cssPath, cssBytes);
-	        logWrittenFile(basename(cssPath), cssBytes.byteLength);
+	        logWrittenFile(basename$1(cssPath), cssBytes.byteLength);
 	        // Write JS file
 	        const jsPath = join(outputDir, 'index.js');
 	        const jsBytes = encoder.encode(index);
 	        await writeFile$1(fs, jsPath, jsBytes);
-	        logWrittenFile(basename(jsPath), jsBytes.byteLength);
+	        logWrittenFile(basename$1(jsPath), jsBytes.byteLength);
 	        // Write settings file
 	        const settingsPath = join(outputDir, 'settings.json');
 	        const settingsBytes = encoder.encode(JSON.stringify(viewerSettings, null, 4));
 	        await writeFile$1(fs, settingsPath, settingsBytes);
-	        logWrittenFile(basename(settingsPath), settingsBytes.byteLength);
+	        logWrittenFile(basename$1(settingsPath), settingsBytes.byteLength);
 	        // Generate HTML with external references
 	        const content = 'fetch(contentUrl)';
 	        const resultHtml = index$1
@@ -57393,7 +57393,7 @@ fn main(
 	            .replace('.compressed.ply', '.sog');
 	        const htmlBytes = encoder.encode(resultHtml);
 	        await writeFile$1(fs, filename, htmlBytes);
-	        logWrittenFile(basename(filename), htmlBytes.byteLength);
+	        logWrittenFile(basename$1(filename), htmlBytes.byteLength);
 	        writingGroup.end();
 	    }
 	};
@@ -58213,7 +58213,7 @@ fn main(
 	    const webp = webPCodec.encodeLosslessRGBA(rgba, width, height);
 	    encodingGroup.end();
 	    await writeFile$1(fs, filename, webp);
-	    logWrittenFile(basename(filename), webp.byteLength);
+	    logWrittenFile(basename$1(filename), webp.byteLength);
 	    g.end();
 	};
 
@@ -58293,7 +58293,7 @@ fn main(
 	        }
 	    }
 	    await writer.close();
-	    logWrittenFile(basename(filename), writer.bytesWritten);
+	    logWrittenFile(basename$1(filename), writer.bytesWritten);
 	    writingGroup.end();
 	};
 
@@ -58432,7 +58432,7 @@ fn main(
 	        throw new Error('SPZ writer requested a legacy version but the backend did not emit gzip-compressed output');
 	    }
 	    await writeFile$1(fs, filename, bytes);
-	    logWrittenFile(basename(filename), bytes.byteLength);
+	    logWrittenFile(basename$1(filename), bytes.byteLength);
 	    writingGroup.end();
 	};
 
@@ -63739,7 +63739,7 @@ fn main(
 	    };
 	    const jsonBytes = (new TextEncoder()).encode(JSON.stringify(metadata, null, 2));
 	    await writeFile$1(fs, jsonFilename, jsonBytes);
-	    logWrittenFile(basename(jsonFilename), jsonBytes.byteLength);
+	    logWrittenFile(basename$1(jsonFilename), jsonBytes.byteLength);
 	    const binFilename = jsonFilename.replace('.voxel.json', '.voxel.bin');
 	    const binarySize = (octree.nodes.length + octree.leafData.length) * 4;
 	    const buffer = new ArrayBuffer(binarySize);
@@ -63747,7 +63747,7 @@ fn main(
 	    view.set(octree.nodes, 0);
 	    view.set(octree.leafData, octree.nodes.length);
 	    await writeFile$1(fs, binFilename, new Uint8Array(buffer));
-	    logWrittenFile(basename(binFilename), binarySize);
+	    logWrittenFile(basename$1(binFilename), binarySize);
 	};
 	/**
 	 * Voxelizes Gaussian splat data and writes the result as a sparse voxel octree.
@@ -63939,7 +63939,7 @@ fn main(
 	        if (glbBytes) {
 	            const glbFilename = filename.replace('.voxel.json', '.collision.glb');
 	            await writeFile$1(fs, glbFilename, glbBytes);
-	            logWrittenFile(basename(glbFilename), glbBytes.length);
+	            logWrittenFile(basename$1(glbFilename), glbBytes.length);
 	        }
 	        writingSub.end();
 	        g.end();
@@ -64263,6 +64263,13 @@ fn main(
 
 	const directViewerExtensions = new Set(['ply', 'sog', 'json']);
 
+	const setWebPWasmUrl = (wasmUrl) => {
+	    if (typeof wasmUrl !== 'string' || !wasmUrl.trim()) {
+	        throw new TypeError('The WebP decoder WASM URL must be a non-empty string.');
+	    }
+	    WebPCodec.wasmUrl = wasmUrl;
+	};
+
 	const extension = (filename) => {
 	    const lower = filename.toLowerCase();
 	    if (lower.endsWith('.compressed.ply')) return 'compressed.ply';
@@ -64389,42 +64396,182 @@ fn main(
 	    throw new TypeError('Expected a File, Blob, ArrayBuffer or typed array.');
 	};
 
-	const normaliseMemoryFilename = (filename) =>
-	    String(filename).replaceAll('\\', '/').replace(/^\.?\//, '');
-
-	const addMemoryEntry = async (fileSystem, filename, value) => {
-	    const name = normaliseMemoryFilename(filename);
-	    const bytes = await toUint8Array(value);
-	    fileSystem.set(name, bytes);
-
-	    const slash = name.lastIndexOf('/');
-	    if (slash !== -1) {
-	        fileSystem.set(name.substring(slash + 1), bytes);
+	const normaliseRelativeFilename = (filename) => {
+	    if (typeof filename !== 'string') {
+	        throw new TypeError('Gaussian splat file paths must be strings.');
 	    }
+
+	    if (filename.includes('\0')) {
+	        throw new Error('Gaussian splat file paths must not contain NUL bytes.');
+	    }
+
+	    const forwardPath = filename.replaceAll('\\', '/');
+	    if (
+	        forwardPath.startsWith('/') ||
+	        /^[a-z][a-z0-9+.-]*:/i.test(forwardPath)
+	    ) {
+	        throw new Error(`Gaussian splat path must be relative: ${filename}`);
+	    }
+
+	    const normalisedParts = [];
+	    for (const part of forwardPath.split('/')) {
+	        if (!part || part === '.') {
+	            continue;
+	        }
+	        if (part === '..') {
+	            throw new Error(
+	                `Gaussian splat path must stay inside the selected folder: ${filename}`
+	            );
+	        }
+	        normalisedParts.push(part);
+	    }
+
+	    if (!normalisedParts.length) {
+	        throw new Error('Gaussian splat file paths must not be empty.');
+	    }
+
+	    return normalisedParts.join('/');
 	};
 
-	const populateMemoryFileSystem = async (fileSystem, fileOrBytes, filename) => {
-	    if (fileOrBytes instanceof Map) {
-	        for (const [name, value] of fileOrBytes) {
-	            await addMemoryEntry(fileSystem, name, value);
-	        }
-	        return;
+	const basename = (filename) => {
+	    const slash = filename.lastIndexOf('/');
+	    return slash === -1 ? filename : filename.substring(slash + 1);
+	};
+
+	const getCollectionEntries = (files) => {
+	    if (files instanceof Map) {
+	        return Array.from(files.entries());
 	    }
 
-	    if (Array.isArray(fileOrBytes) &&
-	        fileOrBytes.every((value) => value && typeof value.name === 'string')) {
-	        for (const file of fileOrBytes) {
-	            const name = file.webkitRelativePath || file.name;
-	            await addMemoryEntry(fileSystem, name, file);
+	    if (
+	        Array.isArray(files) ||
+	        (
+	            files &&
+	            typeof files !== 'string' &&
+	            typeof files[Symbol.iterator] === 'function'
+	        )
+	    ) {
+	        const selectedFiles = Array.from(files);
+	        if (
+	            selectedFiles.every(
+	                (file) => file && typeof file.name === 'string'
+	            )
+	        ) {
+	            return selectedFiles.map((file) => [
+	                file.webkitRelativePath || file.name,
+	                file
+	            ]);
 	        }
-	        return;
 	    }
 
-	    const useFilename = filename || fileOrBytes?.name;
-	    if (!useFilename) {
-	        throw new Error('A filename with a Gaussian splat extension is required.');
+	    throw new TypeError(
+	        'Expected a Map of relative paths or a File/FileList collection.'
+	    );
+	};
+
+	const populateMemoryFileSystem = async (fileSystem, files) => {
+	    const names = [];
+	    const seenNames = new Set();
+
+	    for (const [rawName, value] of getCollectionEntries(files)) {
+	        const name = normaliseRelativeFilename(rawName);
+	        if (seenNames.has(name)) {
+	            throw new Error(
+	                `Duplicate Gaussian splat file path after normalisation: ${name}`
+	            );
+	        }
+
+	        seenNames.add(name);
+	        names.push(name);
+	        fileSystem.set(name, await toUint8Array(value));
 	    }
-	    await addMemoryEntry(fileSystem, useFilename, fileOrBytes);
+
+	    if (!names.length) {
+	        throw new Error('No Gaussian splat files were selected.');
+	    }
+
+	    return names;
+	};
+
+	const findUniqueFilename = (names, predicate) => {
+	    const matches = names.filter(predicate);
+	    return matches.length === 1 ? matches[0] : undefined;
+	};
+
+	const selectMainFilename = (names, requestedFilename) => {
+	    if (requestedFilename !== undefined && requestedFilename !== null) {
+	        const requested = normaliseRelativeFilename(requestedFilename);
+	        if (names.includes(requested)) {
+	            return requested;
+	        }
+
+	        const requestedBasename = basename(requested).toLowerCase();
+	        const basenameMatch = findUniqueFilename(
+	            names,
+	            (name) => basename(name).toLowerCase() === requestedBasename
+	        );
+	        if (basenameMatch) {
+	            return basenameMatch;
+	        }
+
+	        throw new Error(
+	            `Gaussian splat main file was not found in the selected set: ${requested}`
+	        );
+	    }
+
+	    for (const preferredBasename of ['lod-meta.json', 'meta.json']) {
+	        const match = findUniqueFilename(
+	            names,
+	            (name) => basename(name).toLowerCase() === preferredBasename
+	        );
+	        if (match) {
+	            return match;
+	        }
+	    }
+
+	    for (const preferredExtension of ['lcc2', 'lcc']) {
+	        const match = findUniqueFilename(
+	            names,
+	            (name) => extension(name) === preferredExtension
+	        );
+	        if (match) {
+	            return match;
+	        }
+	    }
+
+	    const supportedInputs = names.filter((name) => getInputFormat(name));
+	    if (supportedInputs.length === 1) {
+	        return supportedInputs[0];
+	    }
+
+	    throw new Error(
+	        'Could not choose the Gaussian splat main file. ' +
+	        'Pass its relative path as mainFilename.'
+	    );
+	};
+
+	const convertFilesToPlyUrl = async (
+	    files,
+	    mainFilename,
+	    progress = () => {}
+	) => {
+	    if (typeof mainFilename === 'function') {
+	        progress = mainFilename;
+	        mainFilename = undefined;
+	    }
+	    if (typeof progress !== 'function') {
+	        throw new TypeError('Gaussian splat progress callback must be a function.');
+	    }
+
+	    const fileSystem = new MemoryReadFileSystem();
+	    const names = await populateMemoryFileSystem(fileSystem, files);
+	    const useFilename = selectMainFilename(names, mainFilename);
+	    return convertSourceToUrl({
+	        fileSystem,
+	        filename: useFilename,
+	        outputName: 'metasiberia-runtime.ply',
+	        progress
+	    });
 	};
 
 	const convertFileToPlyUrl = async (
@@ -64432,15 +64579,30 @@ fn main(
 	    filename,
 	    progress = () => {}
 	) => {
-	    const fileSystem = new MemoryReadFileSystem();
-	    await populateMemoryFileSystem(fileSystem, fileOrBytes, filename);
-	    const useFilename = normaliseMemoryFilename(filename || fileOrBytes?.name);
-	    return convertSourceToUrl({
-	        fileSystem,
-	        filename: useFilename,
-	        outputName: 'metasiberia-runtime.ply',
+	    if (
+	        fileOrBytes instanceof Map ||
+	        Array.isArray(fileOrBytes) ||
+	        (
+	            fileOrBytes &&
+	            typeof fileOrBytes !== 'string' &&
+	            !(fileOrBytes instanceof ArrayBuffer) &&
+	            !ArrayBuffer.isView(fileOrBytes) &&
+	            !(typeof Blob !== 'undefined' && fileOrBytes instanceof Blob) &&
+	            typeof fileOrBytes[Symbol.iterator] === 'function'
+	        )
+	    ) {
+	        return convertFilesToPlyUrl(fileOrBytes, filename, progress);
+	    }
+
+	    const useFilename = filename || fileOrBytes?.name;
+	    if (!useFilename) {
+	        throw new Error('A filename with a Gaussian splat extension is required.');
+	    }
+	    return convertFilesToPlyUrl(
+	        new Map([[useFilename, fileOrBytes]]),
+	        useFilename,
 	        progress
-	    });
+	    );
 	};
 
 	const converterApi = Object.freeze({
@@ -64450,7 +64612,9 @@ fn main(
 	    ]),
 	    convertToViewerUrl,
 	    convertUrlToPlyUrl,
-	    convertFileToPlyUrl
+	    convertFileToPlyUrl,
+	    convertFilesToPlyUrl,
+	    setWebPWasmUrl
 	});
 
 	window.MetasiberiaGaussianSplatConverter = converterApi;
