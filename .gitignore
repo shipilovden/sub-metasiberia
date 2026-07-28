@@ -1,8 +1,0 @@
-local_backups/
-.tmp_deploy_ts.txt
-
-# Legacy Emscripten build tree
-emscripten_build3/
-
-# Local XR captures and test recordings
-vr_screenshots/

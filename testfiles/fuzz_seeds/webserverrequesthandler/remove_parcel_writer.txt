@@ -1,1 +1,0 @@
-GET /remove_parcel_writer?parcel_id=10&writer_id=0

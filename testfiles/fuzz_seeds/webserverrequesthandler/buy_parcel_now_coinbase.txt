@@ -1,1 +1,0 @@
-POST /buy_parcel_now_coinbase!parcel_auction_id=0
