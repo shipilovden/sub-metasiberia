@@ -34,4 +34,6 @@ bool hasSupportedExtension(string_view path);
 // payload is not loaded into memory, and unknown PLY properties are allowed.
 // Returns false with a bounded diagnostic for ordinary point clouds/meshes.
 bool validatePlyHeader(const std::string& header, std::string& error_out);
+
+void test();
 }
