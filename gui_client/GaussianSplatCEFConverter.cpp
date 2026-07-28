@@ -22,6 +22,7 @@ GaussianSplatCEFConverter.cpp
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <vector>
 
 #if CEF_SUPPORT
 #include <cef_app.h>
@@ -35,7 +36,7 @@ GaussianSplatCEFConverter.cpp
 #include <wrapper/cef_helpers.h>
 #endif
 
-
+#if CEF_SUPPORT
 namespace
 {
 static const char* const VIRTUAL_ORIGIN = "https://metasiberia-splat-converter";
@@ -135,19 +136,23 @@ static std::string makeRootPage(const std::string& main_virtual_filename)
 				"const c=window.MetasiberiaGaussianSplatConverter||window.MetasiberiaSplatConverter;"
 				"if(!c)throw new Error('Bundled Gaussian converter did not initialise.');"
 				"let converted;"
-				"if(typeof c.convertUrlToPlyUrl==='function'){"
-					"converted=await c.convertUrlToPlyUrl(inputUrl,report);"
-				"}else if(typeof c.convertFileToPlyUrl==='function'){"
+				"if(typeof c.convertUrlToPlyBytes==='function'){"
+					"converted=await c.convertUrlToPlyBytes(inputUrl,report);"
+				"}else if(typeof c.convertFileToPlyBytes==='function'){"
 					"const response=await fetch(inputUrl);"
 					"if(!response.ok)throw new Error('Input HTTP '+response.status);"
 					"const bytes=await response.arrayBuffer();"
-					"converted=await c.convertFileToPlyUrl(bytes,filename,report);"
+					"converted=await c.convertFileToPlyBytes(bytes,filename,report);"
+				"}else if(typeof c.convertUrlToPlyUrl==='function'){"
+					"converted=await c.convertUrlToPlyUrl(inputUrl,report);"
 				"}else{"
 					"throw new Error('Bundled converter lacks the native PLY API.');"
 				"}"
 				"let outputUrl;"
 				"if(typeof converted==='string')outputUrl=converted;"
 				"else if(converted&&converted.url)outputUrl=converted.url;"
+				"else if(converted&&converted.bytes)"
+					"outputUrl=URL.createObjectURL(new Blob([converted.bytes],{type:'application/octet-stream'}));"
 				"else if(converted instanceof Uint8Array||converted instanceof ArrayBuffer)"
 					"outputUrl=URL.createObjectURL(new Blob([converted],{type:'application/octet-stream'}));"
 				"else throw new Error('Converter returned no PLY payload.');"
@@ -166,6 +171,7 @@ static std::string makeRootPage(const std::string& main_virtual_filename)
 		"</script>";
 }
 }
+#endif
 
 
 GaussianSplatCEFConverter::Config::Config()
@@ -191,7 +197,6 @@ struct ConverterState : public ThreadSafeRefCounted
 	std::string error_message;
 	std::string progress_stage;
 	double progress_value;
-	std::vector<unsigned char> output_bytes;
 	std::string canonical_input_path;
 	std::string canonical_input_dir;
 	std::string main_virtual_filename;
@@ -639,10 +644,11 @@ public:
 						"Converted PLY size " + toString(file_size) +
 						" bytes is outside the configured limit.");
 
-				std::vector<unsigned char> bytes;
-				FileUtils::readEntireFile(state->config.output_path, bytes);
-				const size_t header_size = myMin(bytes.size(), (size_t)(1024 * 1024));
-				const std::string header((const char*)bytes.data(), header_size);
+				FileInStream converted_file(state->config.output_path);
+				const size_t header_size = myMin((size_t)file_size, (size_t)(1024 * 1024));
+				std::vector<unsigned char> header_bytes(header_size);
+				converted_file.readData(header_bytes.data(), header_bytes.size());
+				const std::string header((const char*)header_bytes.data(), header_bytes.size());
 				if(!hasPrefix(header, "ply") ||
 					header.find("format binary_little_endian 1.0") == std::string::npos ||
 					header.find("element vertex ") == std::string::npos ||
@@ -652,10 +658,7 @@ public:
 				{
 					Lock lock(state->mutex);
 					if(state->state == GaussianSplatCEFConverter::State_Running)
-					{
-						state->output_bytes.swap(bytes);
 						state->state = GaussianSplatCEFConverter::State_Succeeded;
-					}
 				}
 			}
 			catch(glare::Exception& e)
@@ -720,7 +723,6 @@ public:
 	std::string progress_stage;
 	double progress_value = 0.0;
 	std::string output_path;
-	std::vector<unsigned char> output_bytes;
 };
 
 #endif
@@ -915,17 +917,6 @@ const std::string& GaussianSplatCEFConverter::outputPath() const
 	return impl->state ? impl->state->config.output_path : empty;
 #else
 	return impl->output_path;
-#endif
-}
-
-
-const std::vector<unsigned char>& GaussianSplatCEFConverter::outputBytes() const
-{
-#if CEF_SUPPORT
-	static const std::vector<unsigned char> empty;
-	return impl->state ? impl->state->output_bytes : empty;
-#else
-	return impl->output_bytes;
 #endif
 }
 

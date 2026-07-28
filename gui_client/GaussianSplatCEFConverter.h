@@ -10,7 +10,6 @@ Hidden Chromium conversion bridge for Gaussian splat containers.
 
 #include <map>
 #include <string>
-#include <vector>
 
 
 /*=====================================================================
@@ -79,10 +78,9 @@ public:
 	const std::string& progressStage() const;
 	double progressValue() const;
 
-	// Valid only after State_Succeeded.  Keeping output_path as well as bytes
-	// lets the native loader choose mmap/file or in-memory decoding.
+	// Valid only after State_Succeeded. The caller memory-maps this temporary
+	// file, avoiding a second full-size native copy of large splat payloads.
 	const std::string& outputPath() const;
-	const std::vector<unsigned char>& outputBytes() const;
 
 	// Runtime paths installed by scripts/copy_files_to_output.rb.
 	static std::string packagedConverterScriptPath(const std::string& resources_dir_path);

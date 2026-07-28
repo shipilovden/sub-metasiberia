@@ -211,6 +211,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/EmbeddedBrowser.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/EmbeddedBrowser.h
 ${CMAKE_SOURCE_DIR}/gui_client/GestureUI.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GestureUI.h
+${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatCEFConverter.cpp
+${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatCEFConverter.h
 ${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatRenderer.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatRenderer.h
 ${CMAKE_SOURCE_DIR}/gui_client/GUIClient.cpp

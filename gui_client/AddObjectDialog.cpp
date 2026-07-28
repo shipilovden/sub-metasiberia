@@ -6,6 +6,7 @@ Copyright Glare Technologies Limited 2022 -
 #include "AddObjectDialog.h"
 
 
+#include "GaussianSplatCEFConverter.h"
 #include "ModelLoading.h"
 #include "GaussianSplatRenderer.h"
 #include "MeshBuilding.h"
@@ -19,6 +20,7 @@ Copyright Glare Technologies Limited 2022 -
 #include "../simpleraytracer/raymesh.h"
 #include "../dll/IndigoStringUtils.h"
 #include "../utils/Exception.h"
+#include "../utils/FileUtils.h"
 #include "../utils/StringUtils.h"
 #include "../utils/ConPrint.h"
 #include "../utils/TaskManager.h"
@@ -28,13 +30,32 @@ Copyright Glare Technologies Limited 2022 -
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QErrorMessage>
 #include <QtWidgets/QListWidget>
+#include <QtWidgets/QProgressDialog>
+#include <QtWidgets/QPushButton>
 #include <QtCore/QSettings>
 #include <QtCore/QTimer>
+
+
+static void deleteAddObjectGaussianTemporaryFile(const std::string& path)
+{
+	if(path.empty())
+		return;
+	try
+	{
+		if(FileUtils::fileExists(path))
+			FileUtils::deleteFile(path);
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("Could not remove temporary Gaussian PLY '" + path + "': " + e.what());
+	}
+}
 
 
 AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* settings_, Reference<ResourceManager> resource_manager_, IMFDXGIDeviceManager* dev_manager_,
 	glare::TaskManager* main_task_manager_, glare::TaskManager* high_priority_task_manager_)
 :	settings(settings_),
+	gaussian_splat_progress_dialog(NULL),
 	resource_manager(resource_manager_),
 	base_dir_path(base_dir_path_),
 	dev_manager(dev_manager_),
@@ -109,6 +130,8 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 
 AddObjectDialog::~AddObjectDialog()
 {
+	cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
+
 	settings->setValue("AddObjectDialog/geometry", saveGeometry());
 
 	settings->setValue("AddObjectDialog/tabIndex", this->tabWidget->currentIndex());
@@ -117,6 +140,10 @@ AddObjectDialog::~AddObjectDialog()
 
 void AddObjectDialog::shutdownGL()
 {
+	// Keep a completed temporary PLY alive until MainWindow has synchronously
+	// copied it in GUIClient::createObject(). The destructor removes it.
+	cancelGaussianSplatConversion(/*delete_temporary_output=*/false);
+
 	// Make sure we have set the gl context to current as we destroy objectPreviewGLWidget.
 	this->objectPreviewGLWidget->makeCurrent();
 
@@ -143,6 +170,8 @@ void AddObjectDialog::modelSelected(QListWidgetItem* selected_item)
 {
 	if(this->listWidget->currentItem())
 	{
+		cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
+
 		const std::string model = QtUtils::toStdString(this->listWidget->currentItem()->text());
 
 		this->listWidget->setCurrentItem(NULL);
@@ -158,6 +187,8 @@ void AddObjectDialog::modelSelected(QListWidgetItem* selected_item)
 
 void AddObjectDialog::modelDoubleClicked(QListWidgetItem* selected_item)
 {
+	cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
+
 	const std::string model = QtUtils::toStdString(selected_item->text());
 	const std::string model_path = base_dir_path + "/data/resources/models/" + model + ".obj";
 	this->result_path = model_path;
@@ -167,6 +198,8 @@ void AddObjectDialog::modelDoubleClicked(QListWidgetItem* selected_item)
 
 void AddObjectDialog::filenameChanged(QString& filename)
 {
+	cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
+
 	const std::string path = QtUtils::toIndString(filename);
 	this->result_path = path;
 
@@ -217,26 +250,33 @@ void AddObjectDialog::loadModelIntoPreview(const std::string& local_path)
 
 		if(GaussianSplatAsset::hasSupportedExtension(local_path))
 		{
-			MemMappedFile file(local_path);
-			const GaussianSplatDataRef data = GaussianSplatDecoder::decode(
-				local_path,
-				ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
-			);
-			if(gaussian_splat_preview_program.isNull())
-				gaussian_splat_preview_program = GaussianSplatRenderer::makeProgram(
-					*objectPreviewGLWidget->opengl_engine,
-					base_dir_path
+			try
+			{
+				MemMappedFile file(local_path);
+				const GaussianSplatDataRef splat_data = GaussianSplatDecoder::decode(
+					local_path,
+					ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
 				);
-			const OpenGLTextureRef data_texture =
-				GaussianSplatRenderer::makeDataTexture(*objectPreviewGLWidget->opengl_engine, *data);
-			preview_gl_ob = GaussianSplatRenderer::makeObject(
-				*objectPreviewGLWidget->opengl_engine,
-				*data,
-				data_texture,
-				gaussian_splat_preview_program.ptr(),
-				Matrix4f::identity()
-			);
-			loaded_materials.push_back(new WorldMaterial());
+				setGaussianSplatPreviewObject(splat_data);
+			}
+			catch(glare::Exception& e)
+			{
+				const GaussianSplatAsset::Format format = GaussianSplatAsset::detectFormat(local_path);
+				const bool can_use_converter =
+					format == GaussianSplatAsset::Format::Ply || // Direct first; compressed PLY is often named just .ply.
+					format == GaussianSplatAsset::Format::CompressedPly ||
+					format == GaussianSplatAsset::Format::KSplat ||
+					format == GaussianSplatAsset::Format::SPZ || // Native v4 first; converter covers other supported SPZ versions.
+					format == GaussianSplatAsset::Format::SOG ||
+					format == GaussianSplatAsset::Format::LCC ||
+					format == GaussianSplatAsset::Format::LCC2;
+				if(can_use_converter)
+				{
+					startGaussianSplatConversion(local_path, e.what());
+					return;
+				}
+				throw;
+			}
 		}
 		else if(ImageDecoding::hasSupportedImageExtension(local_path))
 		{
@@ -273,15 +313,7 @@ void AddObjectDialog::loadModelIntoPreview(const std::string& local_path)
 		else
 			throw glare::Exception("file did not have a supported image or model extension: '" + getExtension(local_path) + "'");
 
-		// Try and load textures
-		tryLoadTexturesForPreviewOb(preview_gl_ob, this->loaded_materials, objectPreviewGLWidget->opengl_engine.ptr(), *texture_server, this);
-
-		// Offset object vertically so it rests on the ground plane.
-		const js::AABBox cur_aabb_ws = preview_gl_ob->mesh_data->aabb_os.transformedAABBFast(preview_gl_ob->ob_to_world_matrix);
-		const float z_trans = -cur_aabb_ws.min_[2];
-		preview_gl_ob->ob_to_world_matrix = ::leftTranslateAffine3(Vec4f(0, 0, z_trans, 0), preview_gl_ob->ob_to_world_matrix);
-
-		objectPreviewGLWidget->opengl_engine->addObject(preview_gl_ob);
+		finishPreviewObject();
 	}
 	catch(Indigo::IndigoException& e)
 	{
@@ -295,6 +327,192 @@ void AddObjectDialog::loadModelIntoPreview(const std::string& local_path)
 
 		QtUtils::showErrorMessageDialog(QtUtils::toQString(e.what()), this);
 	}
+}
+
+
+void AddObjectDialog::setGaussianSplatPreviewObject(const GaussianSplatDataRef& splat_data)
+{
+	if(gaussian_splat_preview_program.isNull())
+		gaussian_splat_preview_program = GaussianSplatRenderer::makeProgram(
+			*objectPreviewGLWidget->opengl_engine,
+			base_dir_path
+		);
+	const OpenGLTextureRef data_texture =
+		GaussianSplatRenderer::makeDataTexture(*objectPreviewGLWidget->opengl_engine, *splat_data);
+	preview_gl_ob = GaussianSplatRenderer::makeObject(
+		*objectPreviewGLWidget->opengl_engine,
+		*splat_data,
+		data_texture,
+		gaussian_splat_preview_program.ptr(),
+		Matrix4f::identity()
+	);
+	loaded_materials.push_back(new WorldMaterial());
+}
+
+
+void AddObjectDialog::finishPreviewObject()
+{
+	// Try and load textures
+	tryLoadTexturesForPreviewOb(preview_gl_ob, this->loaded_materials, objectPreviewGLWidget->opengl_engine.ptr(), *texture_server, this);
+
+	// Offset object vertically so it rests on the ground plane.
+	const js::AABBox cur_aabb_ws = preview_gl_ob->mesh_data->aabb_os.transformedAABBFast(preview_gl_ob->ob_to_world_matrix);
+	const float z_trans = -cur_aabb_ws.min_[2];
+	preview_gl_ob->ob_to_world_matrix = ::leftTranslateAffine3(Vec4f(0, 0, z_trans, 0), preview_gl_ob->ob_to_world_matrix);
+
+	objectPreviewGLWidget->opengl_engine->addObject(preview_gl_ob);
+}
+
+
+void AddObjectDialog::startGaussianSplatConversion(const std::string& local_path, const std::string& native_error)
+{
+	cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
+
+	GaussianSplatCEFConverter::Config config;
+	config.input_path = local_path;
+	config.converter_script_path =
+		GaussianSplatCEFConverter::packagedConverterScriptPath(base_dir_path + "/data/resources");
+	config.webp_wasm_path =
+		GaussianSplatCEFConverter::packagedWebPWasmPath(base_dir_path + "/data/resources");
+	config.output_path = GaussianSplatCEFConverter::makeTemporaryOutputPath();
+
+	try
+	{
+		gaussian_splat_converter = new GaussianSplatCEFConverter();
+		gaussian_splat_converter->start(config);
+		gaussian_splat_temporary_output_path = config.output_path;
+
+		gaussian_splat_progress_dialog = new QProgressDialog(
+			tr("Converting Gaussian splat to a native PLY..."),
+			tr("Cancel"),
+			0,
+			1000,
+			this
+		);
+		gaussian_splat_progress_dialog->setWindowTitle(tr("Gaussian splat conversion"));
+		gaussian_splat_progress_dialog->setWindowModality(Qt::WindowModal);
+		gaussian_splat_progress_dialog->setAutoClose(false);
+		gaussian_splat_progress_dialog->setAutoReset(false);
+		gaussian_splat_progress_dialog->setMinimumDuration(0);
+		gaussian_splat_progress_dialog->show();
+		if(buttonBox->button(QDialogButtonBox::Ok))
+			buttonBox->button(QDialogButtonBox::Ok)->setEnabled(false);
+
+		conPrint(
+			"Native Gaussian decoder requested the hidden converter for '" +
+			local_path + "': " + native_error
+		);
+	}
+	catch(glare::Exception& e)
+	{
+		gaussian_splat_converter = NULL;
+		deleteAddObjectGaussianTemporaryFile(config.output_path);
+		gaussian_splat_temporary_output_path.clear();
+		throw glare::Exception(
+			"Native Gaussian decode failed: " + native_error +
+			"\nHidden converter could not start: " + e.what()
+		);
+	}
+}
+
+
+void AddObjectDialog::processGaussianSplatConversion()
+{
+	if(gaussian_splat_converter.isNull())
+		return;
+
+	gaussian_splat_converter->think();
+
+	if(gaussian_splat_progress_dialog)
+	{
+		if(gaussian_splat_progress_dialog->wasCanceled())
+		{
+			cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
+			loaded_materials.clear();
+			return;
+		}
+
+		const std::string stage = gaussian_splat_converter->progressStage();
+		gaussian_splat_progress_dialog->setLabelText(
+			tr("Converting Gaussian splat: %1").arg(QtUtils::toQString(stage.empty() ? "working" : stage))
+		);
+		gaussian_splat_progress_dialog->setValue(
+			(int)(myClamp(gaussian_splat_converter->progressValue(), 0.0, 1.0) * 1000.0)
+		);
+	}
+
+	if(!gaussian_splat_converter->isFinished())
+		return;
+
+	const Reference<GaussianSplatCEFConverter> finished_converter = gaussian_splat_converter;
+	gaussian_splat_converter = NULL;
+	closeGaussianSplatProgressDialog();
+
+	if(finished_converter->state() == GaussianSplatCEFConverter::State_Failed)
+	{
+		const std::string error = finished_converter->errorMessage();
+		deleteAddObjectGaussianTemporaryFile(gaussian_splat_temporary_output_path);
+		gaussian_splat_temporary_output_path.clear();
+		loaded_materials.clear();
+		QtUtils::showErrorMessageDialog(QtUtils::toQString(error), this);
+		return;
+	}
+
+	try
+	{
+		objectPreviewGLWidget->makeCurrent();
+		MemMappedFile file(finished_converter->outputPath());
+		const GaussianSplatDataRef splat_data = GaussianSplatDecoder::decode(
+			"metasiberia-runtime.ply",
+			ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
+		);
+		setGaussianSplatPreviewObject(splat_data);
+		finishPreviewObject();
+
+		gaussian_splat_temporary_output_path = finished_converter->outputPath();
+		result_path = gaussian_splat_temporary_output_path;
+	}
+	catch(glare::Exception& e)
+	{
+		loaded_materials.clear();
+		deleteAddObjectGaussianTemporaryFile(gaussian_splat_temporary_output_path);
+		gaussian_splat_temporary_output_path.clear();
+		result_path.clear();
+		QtUtils::showErrorMessageDialog(
+			QtUtils::toQString("Converted Gaussian PLY could not be loaded: " + e.what()),
+			this
+		);
+	}
+}
+
+
+void AddObjectDialog::cancelGaussianSplatConversion(bool delete_temporary_output)
+{
+	if(gaussian_splat_converter.nonNull())
+	{
+		gaussian_splat_converter->cancel();
+		gaussian_splat_converter = NULL;
+	}
+	closeGaussianSplatProgressDialog();
+
+	if(delete_temporary_output && !gaussian_splat_temporary_output_path.empty())
+	{
+		deleteAddObjectGaussianTemporaryFile(gaussian_splat_temporary_output_path);
+		gaussian_splat_temporary_output_path.clear();
+	}
+}
+
+
+void AddObjectDialog::closeGaussianSplatProgressDialog()
+{
+	if(gaussian_splat_progress_dialog)
+	{
+		gaussian_splat_progress_dialog->hide();
+		delete gaussian_splat_progress_dialog;
+		gaussian_splat_progress_dialog = NULL;
+	}
+	if(buttonBox->button(QDialogButtonBox::Ok))
+		buttonBox->button(QDialogButtonBox::Ok)->setEnabled(true);
 }
 
 
@@ -385,6 +603,7 @@ void AddObjectDialog::urlChanged(const QString& filename)
 	const URLString url = toURLString(QtUtils::toStdString(urlLineEdit->text()));
 	if(url != last_url)
 	{
+		cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
 		last_url = url;
 		
 
@@ -423,6 +642,8 @@ void AddObjectDialog::closeEvent(QCloseEvent* event)
 
 void AddObjectDialog::timerEvent(QTimerEvent* event)
 {
+	processGaussianSplatConversion();
+
 	// Once the OpenGL widget has initialised, we can add the model.
 	//if(objectPreviewGLWidget->opengl_engine->initSucceeded() && !loaded_model)
 	//{

@@ -27,6 +27,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "URLParser.h"
 #include "LoadModelTask.h"
 #include "LoadGaussianSplatTask.h"
+#include "GaussianSplatCEFConverter.h"
 #include "GaussianSplatRenderer.h"
 #include "VoxelEditorData.h"
 #include "BuildScatteringInfoTask.h"
@@ -2297,6 +2298,7 @@ void GUIClient::shutdown()
 	script_messages.clear();
 
 	default_array_tex = nullptr;
+	cancelGaussianSplatConversions();
 	gaussian_splat_texture_cache.clear();
 	gaussian_splat_data_cache.clear();
 	gaussian_splats_processing.clear();
@@ -12631,6 +12633,244 @@ inline static SubClass* checkedDowncastPtr(ThreadMessage* msg)
 }
 
 
+static bool canUseGaussianSplatCEFConverter(GaussianSplatAsset::Format format)
+{
+	return
+		format == GaussianSplatAsset::Format::Ply || // Direct first; some compressed PLY files still use plain .ply.
+		format == GaussianSplatAsset::Format::CompressedPly ||
+		format == GaussianSplatAsset::Format::KSplat ||
+		format == GaussianSplatAsset::Format::SPZ || // Native v4 first; converter covers other supported SPZ versions.
+		format == GaussianSplatAsset::Format::SOG ||
+		format == GaussianSplatAsset::Format::LCC ||
+		format == GaussianSplatAsset::Format::LCC2;
+}
+
+
+static void deleteGaussianTemporaryFile(const std::string& path)
+{
+	if(path.empty())
+		return;
+	try
+	{
+		if(FileUtils::fileExists(path))
+			FileUtils::deleteFile(path);
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("Could not remove temporary Gaussian PLY '" + path + "': " + e.what());
+	}
+}
+
+
+bool GUIClient::startRemoteGaussianSplatConversion(const URLString& splat_url, const std::string& native_error)
+{
+	if(!canUseGaussianSplatCEFConverter(GaussianSplatAsset::detectFormat(splat_url)))
+		return false;
+	if(gaussian_splat_remote_converters.count(splat_url) > 0)
+		return true;
+	if(!gaussian_splat_conversion_attempted.insert(splat_url).second)
+		return false;
+
+	const ResourceRef resource = resource_manager->getOrCreateResourceForURL(splat_url);
+	if(resource.isNull() || !resource_manager->isFileForURLPresent(splat_url))
+		throw glare::Exception("Downloaded Gaussian source is no longer available locally.");
+
+	GaussianSplatCEFConverter::Config config;
+	config.input_path = resource_manager->getLocalAbsPathForResource(*resource);
+	config.converter_script_path =
+		GaussianSplatCEFConverter::packagedConverterScriptPath(resources_dir_path);
+	config.webp_wasm_path =
+		GaussianSplatCEFConverter::packagedWebPWasmPath(resources_dir_path);
+	config.output_path = GaussianSplatCEFConverter::makeTemporaryOutputPath();
+
+	Reference<GaussianSplatCEFConverter> converter = new GaussianSplatCEFConverter();
+	try
+	{
+		converter->start(config);
+	}
+	catch(...)
+	{
+		deleteGaussianTemporaryFile(config.output_path);
+		throw;
+	}
+
+	gaussian_splat_remote_converters[splat_url] = converter;
+	gaussian_splats_processing.insert(splat_url);
+	showInfoNotification("Converting Gaussian splat '" + toStdString(splat_url) + "' for the native renderer...");
+	print(
+		"Native Gaussian decode failed for '" + toStdString(splat_url) +
+		"'; hidden conversion started: " + native_error
+	);
+	return true;
+}
+
+
+bool GUIClient::startCreateGaussianSplatConversion(const std::string& local_path, const std::string& native_error)
+{
+	if(!canUseGaussianSplatCEFConverter(GaussianSplatAsset::detectFormat(local_path)))
+		return false;
+
+	if(gaussian_splat_create_converter.nonNull())
+	{
+		const std::string old_output = gaussian_splat_create_converter->outputPath();
+		gaussian_splat_create_converter->cancel();
+		gaussian_splat_create_converter = NULL;
+		deleteGaussianTemporaryFile(old_output);
+	}
+
+	GaussianSplatCEFConverter::Config config;
+	config.input_path = local_path;
+	config.converter_script_path =
+		GaussianSplatCEFConverter::packagedConverterScriptPath(resources_dir_path);
+	config.webp_wasm_path =
+		GaussianSplatCEFConverter::packagedWebPWasmPath(resources_dir_path);
+	config.output_path = GaussianSplatCEFConverter::makeTemporaryOutputPath();
+
+	gaussian_splat_create_converter = new GaussianSplatCEFConverter();
+	try
+	{
+		gaussian_splat_create_converter->start(config);
+	}
+	catch(...)
+	{
+		gaussian_splat_create_converter = NULL;
+		deleteGaussianTemporaryFile(config.output_path);
+		throw;
+	}
+
+	gaussian_splat_create_source_path = local_path;
+	gaussian_splat_create_progress_stage.clear();
+	showInfoNotification("Converting Gaussian splat before creating the object...");
+	print(
+		"Hidden conversion started for local Gaussian asset '" + local_path +
+		"': " + native_error
+	);
+	return true;
+}
+
+
+void GUIClient::processGaussianSplatConversions()
+{
+	if(gaussian_splat_create_converter.nonNull())
+	{
+		gaussian_splat_create_converter->think();
+		const std::string stage = gaussian_splat_create_converter->progressStage();
+		if(!stage.empty() && stage != gaussian_splat_create_progress_stage)
+		{
+			gaussian_splat_create_progress_stage = stage;
+			print(
+				"Gaussian conversion '" + gaussian_splat_create_source_path + "': " +
+				stage + " (" + doubleToStringNDecimalPlaces(gaussian_splat_create_converter->progressValue() * 100.0, 0) + "%)"
+			);
+		}
+
+		if(gaussian_splat_create_converter->isFinished())
+		{
+			const Reference<GaussianSplatCEFConverter> converter = gaussian_splat_create_converter;
+			const std::string source_path = gaussian_splat_create_source_path;
+			const std::string output_path = converter->outputPath();
+			gaussian_splat_create_converter = NULL;
+			gaussian_splat_create_source_path.clear();
+			gaussian_splat_create_progress_stage.clear();
+
+			if(converter->state() == GaussianSplatCEFConverter::State_Succeeded)
+			{
+				try
+				{
+					// Validate once before re-entering createModelObject(), so a
+					// broken converter result cannot recursively trigger fallback.
+					MemMappedFile file(output_path);
+					GaussianSplatDecoder::decode(
+						"metasiberia-runtime.ply",
+						ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
+					);
+					if(createModelObject(output_path))
+						showInfoNotification("Gaussian splat object created.");
+				}
+				catch(glare::Exception& e)
+				{
+					const std::string message =
+						"Could not create converted Gaussian splat '" + source_path + "': " + e.what();
+					print(message);
+					showErrorNotification(message);
+				}
+			}
+			else
+			{
+				const std::string message =
+					"Could not convert Gaussian splat '" + source_path + "': " +
+					converter->errorMessage();
+				print(message);
+				showErrorNotification(message);
+			}
+			deleteGaussianTemporaryFile(output_path);
+		}
+	}
+
+	for(auto it = gaussian_splat_remote_converters.begin(); it != gaussian_splat_remote_converters.end();)
+	{
+		const URLString splat_url = it->first;
+		const Reference<GaussianSplatCEFConverter> converter = it->second;
+		converter->think();
+		if(!converter->isFinished())
+		{
+			++it;
+			continue;
+		}
+
+		const std::string output_path = converter->outputPath();
+		it = gaussian_splat_remote_converters.erase(it);
+
+		GaussianSplatLoadedThreadMessage converted_message;
+		converted_message.splat_url = splat_url;
+		if(converter->state() == GaussianSplatCEFConverter::State_Succeeded)
+		{
+			try
+			{
+				MemMappedFile file(output_path);
+				converted_message.data = GaussianSplatDecoder::decode(
+					"metasiberia-runtime.ply",
+					ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
+				);
+			}
+			catch(glare::Exception& e)
+			{
+				converted_message.error_message =
+					"Converted Gaussian PLY could not be decoded: " + e.what();
+			}
+		}
+		else
+			converted_message.error_message = converter->errorMessage();
+
+		deleteGaussianTemporaryFile(output_path);
+		handleGaussianSplatLoaded(&converted_message);
+	}
+}
+
+
+void GUIClient::cancelGaussianSplatConversions()
+{
+	if(gaussian_splat_create_converter.nonNull())
+	{
+		const std::string output_path = gaussian_splat_create_converter->outputPath();
+		gaussian_splat_create_converter->cancel();
+		gaussian_splat_create_converter = NULL;
+		deleteGaussianTemporaryFile(output_path);
+	}
+	gaussian_splat_create_source_path.clear();
+	gaussian_splat_create_progress_stage.clear();
+
+	for(auto& entry : gaussian_splat_remote_converters)
+	{
+		const std::string output_path = entry.second->outputPath();
+		entry.second->cancel();
+		deleteGaussianTemporaryFile(output_path);
+	}
+	gaussian_splat_remote_converters.clear();
+	gaussian_splat_conversion_attempted.clear();
+}
+
+
 void GUIClient::handleGaussianSplatLoaded(GaussianSplatLoadedThreadMessage* loaded_message)
 {
 	const URLString splat_url = loaded_message->splat_url;
@@ -12639,9 +12879,20 @@ void GUIClient::handleGaussianSplatLoaded(GaussianSplatLoadedThreadMessage* load
 	auto waiting_it = loading_gaussian_splat_URL_to_world_ob_UID_map.find(splat_url);
 	if(!loaded_message->error_message.empty())
 	{
+		std::string combined_error = loaded_message->error_message;
+		try
+		{
+			if(startRemoteGaussianSplatConversion(splat_url, loaded_message->error_message))
+				return;
+		}
+		catch(glare::Exception& e)
+		{
+			combined_error += "\nHidden converter could not start: " + e.what();
+		}
+
 		const std::string message =
 			"Could not load Gaussian splat '" + toStdString(splat_url) + "': " +
-			loaded_message->error_message;
+			combined_error;
 		print(message);
 		showErrorNotification(message);
 		if(waiting_it != loading_gaussian_splat_URL_to_world_ob_UID_map.end())
@@ -12699,6 +12950,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 {
 	PERFORMANCEAPI_INSTRUMENT("handle msgs");
 	ZoneScopedN("handle msgs"); // Tracy profiler
+
+	// Hidden CEF conversion must be created and polled on this main/UI thread.
+	processGaussianSplatConversions();
 
 	// Remove any messages from the message queue, store in temp_msgs.
 	this->msg_queue.dequeueAnyQueuedItems(temp_msgs);
@@ -18891,6 +19145,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	// Clear textures_processing set etc.
 	textures_processing.clear();
 	models_processing.clear();
+	cancelGaussianSplatConversions();
 	gaussian_splats_processing.clear();
 	loading_gaussian_splat_URL_to_world_ob_UID_map.clear();
 	audio_processing.clear();
@@ -23164,7 +23419,7 @@ void GUIClient::createImageObject(const std::string& local_image_path)
 
 
 // A model path has been drag-and-dropped or pasted.
-void GUIClient::createModelObject(const std::string& local_model_path)
+bool GUIClient::createModelObject(const std::string& local_model_path)
 {
 	const Vec3d ob_pos = cam_controller.getFirstPersonPosition() + cam_controller.getForwardsVec() * 2.0f;
 
@@ -23177,25 +23432,55 @@ void GUIClient::createModelObject(const std::string& local_model_path)
 			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
 		else
 			showErrorNotification("You can only create objects in a parcel that you have write permissions for.");
-		return;
+		return false;
 	}
 
 	if(GaussianSplatAsset::hasSupportedExtension(local_model_path))
 	{
+		const GaussianSplatAsset::Format format = GaussianSplatAsset::detectFormat(local_model_path);
+		const bool direct_native_format =
+			format == GaussianSplatAsset::Format::Ply ||
+			format == GaussianSplatAsset::Format::Splat ||
+			format == GaussianSplatAsset::Format::SPZ;
+
+		if(!direct_native_format)
+		{
+			if(startCreateGaussianSplatConversion(
+				local_model_path,
+				"The selected Gaussian container requires normalisation to binary PLY."))
+				return false;
+			throw glare::Exception("No decoder is available for the selected Gaussian splat container.");
+		}
+
 		std::vector<WorldMaterialRef> materials;
 		materials.push_back(new WorldMaterial());
-		createObject(
-			local_model_path,
-			/*loaded_mesh=*/BatchedMeshRef(),
-			/*loaded_mesh_is_image_cube=*/false,
-			glare::AllocatorVector<Voxel, 16>(),
-			ob_pos,
-			Vec3f(1.f),
-			Vec3f(0, 0, 1),
-			0.f,
-			materials
-		);
-		return;
+		try
+		{
+			createObject(
+				local_model_path,
+				/*loaded_mesh=*/BatchedMeshRef(),
+				/*loaded_mesh_is_image_cube=*/false,
+				glare::AllocatorVector<Voxel, 16>(),
+				ob_pos,
+				Vec3f(1.f),
+				Vec3f(0, 0, 1),
+				0.f,
+				materials
+			);
+			return true;
+		}
+		catch(glare::Exception& e)
+		{
+			// Keep common PLY and SPZ/SPLAT on their native path. A plain .ply
+			// filename can nevertheless contain PlayCanvas compressed PLY, and
+			// the native SPZ decoder intentionally handles only v4. Both get a
+			// fallback after the native decoder has tried them.
+			if((format == GaussianSplatAsset::Format::Ply ||
+				format == GaussianSplatAsset::Format::SPZ) &&
+				startCreateGaussianSplatConversion(local_model_path, e.what()))
+				return false;
+			throw;
+		}
 	}
 
 	ModelLoading::MakeGLObjectResults results;
@@ -23216,6 +23501,7 @@ void GUIClient::createModelObject(const std::string& local_model_path)
 		results.angle,
 		results.materials
 	);
+	return true;
 }
 
 

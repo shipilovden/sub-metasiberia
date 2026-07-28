@@ -64388,15 +64388,18 @@ fn main(
 	    });
 	};
 
-	const convertUrlToPlyUrl = async (inputUrl, progress = () => {}) => {
+	const convertUrlToPlyBytes = async (inputUrl, progress = () => {}) => {
 	    const { baseUrl, filename } = splitUrl(inputUrl);
-	    return convertSourceToUrl({
+	    return convertSourceToBytes({
 	        fileSystem: new UrlReadFileSystem(baseUrl),
 	        filename,
 	        outputName: 'metasiberia-runtime.ply',
 	        progress
 	    });
 	};
+
+	const convertUrlToPlyUrl = async (inputUrl, progress = () => {}) =>
+	    createUrlResult(await convertUrlToPlyBytes(inputUrl, progress));
 
 	const toUint8Array = async (value) => {
 	    if (value instanceof Uint8Array) {
@@ -64646,6 +64649,7 @@ fn main(
 	        'sog', 'lcc', 'lcc2', 'meta.json', 'lod-meta.json'
 	    ]),
 	    convertToViewerUrl,
+	    convertUrlToPlyBytes,
 	    convertUrlToPlyUrl,
 	    convertFileToPlyBytes,
 	    convertFilesToPlyBytes,
