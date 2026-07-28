@@ -17,6 +17,7 @@ class QSettings;
 struct GLObject;
 struct IMFDXGIDeviceManager;
 class TextureServer;
+class OpenGLProgram;
 
 
 /*=====================================================================
@@ -58,6 +59,7 @@ private:
 	QSettings* settings;
 
 	Reference<GLObject> preview_gl_ob;
+	Reference<OpenGLProgram> gaussian_splat_preview_program;
 
 public:
 	std::string result_path;

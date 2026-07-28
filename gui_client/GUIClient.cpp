@@ -26,6 +26,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "URLWhitelist.h"
 #include "URLParser.h"
 #include "LoadModelTask.h"
+#include "LoadGaussianSplatTask.h"
+#include "GaussianSplatRenderer.h"
 #include "VoxelEditorData.h"
 #include "BuildScatteringInfoTask.h"
 #include "LoadTextureTask.h"
@@ -62,6 +64,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "../shared/ImageDecoding.h"
 #include "../shared/MessageUtils.h"
 #include "../shared/FileTypes.h"
+#include "../shared/GaussianSplatAsset.h"
+#include "../shared/GaussianSplatData.h"
 #include "../shared/LuaScriptEvaluator.h"
 #include "../shared/SubstrataLuaVM.h"
 #include "../shared/ObjectEventHandlers.h"
@@ -2293,6 +2297,10 @@ void GUIClient::shutdown()
 	script_messages.clear();
 
 	default_array_tex = nullptr;
+	gaussian_splat_texture_cache.clear();
+	gaussian_splat_data_cache.clear();
+	gaussian_splats_processing.clear();
+	loading_gaussian_splat_URL_to_world_ob_UID_map.clear();
 
 	misc_info_ui.destroy();
 
@@ -3186,7 +3194,14 @@ bool GUIClient::isResourceCurrentlyNeededForObjectGivenIsDependency(const URLStr
 
 	const string_view extension = getExtensionStringView(url);
 
-	if(ImageDecoding::isSupportedImageExtension(extension))
+	if(GaussianSplatAsset::hasSupportedExtension(url))
+	{
+		if(gaussian_splats_processing.count(url) > 0)
+			return false;
+		if(gaussian_splat_data_cache.count(url) > 0)
+			return false;
+	}
+	else if(ImageDecoding::isSupportedImageExtension(extension))
 	{
 		// If it's already loaded into the opengl engine, don't download it.
 		ResourceRef resource = resource_manager->getOrCreateResourceForURL(url); // NOTE: don't want to add resource here ideally.
@@ -3277,7 +3292,8 @@ bool GUIClient::isResourceCurrentlyNeededForObject(const URLString& url, const W
 	WorldObject::GetDependencyOptions options;
 	options.use_basis = this->server_has_basis_textures;
 	options.include_lightmaps = this->use_lightmaps;
-	options.get_optimised_mesh = this->server_has_optimised_meshes;
+	options.get_optimised_mesh = this->server_has_optimised_meshes &&
+		!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
 	options.opt_mesh_version = this->server_opt_mesh_version;
 	options.allocator = &arena_allocator;
 
@@ -3369,7 +3385,8 @@ void GUIClient::startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_l
 	WorldObject::GetDependencyOptions options;
 	options.use_basis = this->server_has_basis_textures;
 	options.include_lightmaps = this->use_lightmaps;
-	options.get_optimised_mesh = this->server_has_optimised_meshes;
+	options.get_optimised_mesh = this->server_has_optimised_meshes &&
+		!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
 	options.opt_mesh_version = this->server_opt_mesh_version;
 	options.allocator = &arena_allocator;
 
@@ -4064,6 +4081,11 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 
 	const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 	const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
+	const bool is_gaussian_splat =
+		ob->object_type == WorldObject::ObjectType_Generic &&
+		GaussianSplatAsset::hasSupportedExtension(ob->model_url);
+	if(is_gaussian_splat)
+		ob->max_model_lod_level = 0;
 	
 	// If we have a model loaded, that is not the placeholder model, and it has the correct LOD level, we don't need to do anything.
 	//if(ob->opengl_engine_ob.nonNull() && !ob->using_placeholder_model && (ob->loaded_model_lod_level == ob_model_lod_level) && (ob->/*loaded_lod_level*/loading_lod_level == ob_lod_level))
@@ -4745,7 +4767,39 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 			//}
 
 
-			if(!ob->model_url.empty() && 
+			if(is_gaussian_splat)
+			{
+				bool added_opengl_ob = false;
+				auto cached_data_it = gaussian_splat_data_cache.find(ob->model_url);
+				if(cached_data_it != gaussian_splat_data_cache.end())
+				{
+					loadPresentGaussianSplat(ob, cached_data_it->second, world_state_lock);
+					added_opengl_ob = true;
+				}
+				else
+				{
+					loading_gaussian_splat_URL_to_world_ob_UID_map[ob->model_url].insert(ob->uid);
+					if(resource_manager->isFileForURLPresent(ob->model_url))
+					{
+						const bool just_added = gaussian_splats_processing.insert(ob->model_url).second;
+						if(just_added)
+						{
+							Reference<LoadGaussianSplatTask> task = new LoadGaussianSplatTask();
+							task->splat_url = ob->model_url;
+							task->resource = resource_manager->getOrCreateResourceForURL(ob->model_url);
+							task->resource_manager = resource_manager;
+							task->result_msg_queue = &msg_queue;
+							load_item_queue.enqueueItem(/*key=*/ob->model_url, *ob, task, max_dist_for_ob_model_lod_level);
+						}
+						else
+							load_item_queue.checkUpdateItemPosition(/*key=*/ob->model_url, *ob);
+					}
+				}
+
+				ob->loading_or_loaded_model_lod_level = 0;
+				load_placeholder = !added_opengl_ob;
+			}
+			else if(!ob->model_url.empty() &&
 				(ob->loading_or_loaded_model_lod_level != ob_model_lod_level))  // We may already have the correct LOD model loaded, don't reload if so.
 				// (The object LOD level might have changed, but the model LOD level may be the same due to max model lod level, for example for simple cube models.)
 			{
@@ -4855,6 +4909,78 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 	{
 		print("Error while loading object with UID " + ob->uid.toString() + ", model_url='" + toStdString(ob->model_url) + "': " + e.what());
 	}
+}
+
+
+void GUIClient::loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDataRef& splat_data, WorldStateLock& /*world_state_lock*/)
+{
+	if(splat_data.isNull() || splat_data->splats.empty())
+		throw glare::Exception("Decoded Gaussian splat data is empty.");
+
+	// Keep the Gaussian program lazy: a shader/driver limitation for this
+	// optional renderer must never prevent the normal client from starting.
+	if(gaussian_splat_shader_prog.isNull())
+		gaussian_splat_shader_prog = GaussianSplatRenderer::makeProgram(*opengl_engine, base_dir_path);
+
+	removeAndDeleteGLAndPhysicsObjectsForOb(*ob);
+	ob->setAABBOS(splat_data->aabb_os);
+
+	OpenGLTextureRef data_texture;
+	auto texture_it = gaussian_splat_texture_cache.find(ob->model_url);
+	if(texture_it != gaussian_splat_texture_cache.end())
+		data_texture = texture_it->second;
+	else
+	{
+		data_texture = GaussianSplatRenderer::makeDataTexture(*opengl_engine, *splat_data);
+		gaussian_splat_texture_cache[ob->model_url] = data_texture;
+	}
+
+	ob->opengl_engine_ob = GaussianSplatRenderer::makeObject(
+		*opengl_engine,
+		*splat_data,
+		data_texture,
+		gaussian_splat_shader_prog.ptr(),
+		obToWorldMatrix(*ob)
+	);
+
+	// A conservative, non-collidable AABB proxy keeps native picking,
+	// selection and transform gizmos working without making splats solid.
+	const Vec4f span4 = splat_data->aabb_os.span();
+	const Vec3f proxy_scale(
+		myMax(span4[0], 0.001f),
+		myMax(span4[1], 0.001f),
+		myMax(span4[2], 0.001f)
+	);
+	const Vec3f proxy_translation(
+		splat_data->aabb_os.min_[0],
+		splat_data->aabb_os.min_[1],
+		splat_data->aabb_os.min_[2]
+	);
+	ob->physics_object = new PhysicsObject(/*collidable=*/false);
+	ob->physics_object->shape = PhysicsWorld::createScaledAndTranslatedShapeForShape(unit_cube_shape, proxy_translation, proxy_scale);
+	ob->physics_object->is_sensor = ob->isSensor();
+	ob->physics_object->userdata = ob;
+	ob->physics_object->userdata_type = 0;
+	ob->physics_object->ob_uid = ob->uid;
+	ob->physics_object->pos = ob->pos.toVec4fPoint();
+	ob->physics_object->rot = Quatf::fromAxisAndAngle(normalise(ob->axis), ob->angle);
+	ob->physics_object->scale = useScaleForWorldOb(ob->scale);
+	ob->physics_object->dynamic = false;
+	ob->physics_object->kinematic = false;
+	ob->physics_object->mass = ob->mass;
+	ob->physics_object->friction = ob->friction;
+	ob->physics_object->restitution = ob->restitution;
+
+	opengl_engine->addObject(ob->opengl_engine_ob);
+	physics_world->addObject(ob->physics_object);
+
+	ob->max_model_lod_level = 0;
+	ob->loading_or_loaded_model_lod_level = 0;
+	ob->loading_or_loaded_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
+	ob->using_placeholder_model = false;
+
+	if(this->selected_ob == ob)
+		opengl_engine->selectObject(ob->opengl_engine_ob);
 }
 
 
@@ -12505,6 +12631,61 @@ inline static SubClass* checkedDowncastPtr(ThreadMessage* msg)
 }
 
 
+void GUIClient::handleGaussianSplatLoaded(GaussianSplatLoadedThreadMessage* loaded_message)
+{
+	const URLString splat_url = loaded_message->splat_url;
+	gaussian_splats_processing.erase(splat_url);
+
+	auto waiting_it = loading_gaussian_splat_URL_to_world_ob_UID_map.find(splat_url);
+	if(!loaded_message->error_message.empty())
+	{
+		const std::string message =
+			"Could not load Gaussian splat '" + toStdString(splat_url) + "': " +
+			loaded_message->error_message;
+		print(message);
+		showErrorNotification(message);
+		if(waiting_it != loading_gaussian_splat_URL_to_world_ob_UID_map.end())
+			loading_gaussian_splat_URL_to_world_ob_UID_map.erase(waiting_it);
+		return;
+	}
+
+	if(loaded_message->data.isNull())
+	{
+		showErrorNotification("Gaussian splat decoder returned no data for '" + toStdString(splat_url) + "'.");
+		if(waiting_it != loading_gaussian_splat_URL_to_world_ob_UID_map.end())
+			loading_gaussian_splat_URL_to_world_ob_UID_map.erase(waiting_it);
+		return;
+	}
+
+	gaussian_splat_data_cache[splat_url] = loaded_message->data;
+	if(waiting_it == loading_gaussian_splat_URL_to_world_ob_UID_map.end() || world_state.isNull())
+		return;
+
+	WorldStateLock lock(world_state->mutex);
+	for(const UID& uid : waiting_it->second)
+	{
+		auto object_it = world_state->objects.find(uid);
+		if(object_it != world_state->objects.end())
+		{
+			WorldObject* ob = object_it.getValue().ptr();
+			if(ob->in_proximity && ob->model_url == splat_url &&
+				GaussianSplatAsset::hasSupportedExtension(ob->model_url))
+			{
+				try
+				{
+					loadPresentGaussianSplat(ob, loaded_message->data, lock);
+				}
+				catch(glare::Exception& e)
+				{
+					print("Error while presenting Gaussian splat '" + toStdString(splat_url) + "': " + e.what());
+				}
+			}
+		}
+	}
+	loading_gaussian_splat_URL_to_world_ob_UID_map.erase(waiting_it);
+}
+
+
 
 // Enable error on implicit fallthrough in switch statement.  We want to catch this error because it's a bad bug that could cause a crash.
 #ifdef _WIN32
@@ -12551,6 +12732,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			else
 				model_loaded_messages_to_process.push_back(loaded_msg);
 		}
+		break;
+		case Msg_GaussianSplatLoadedThreadMessage:
+			handleGaussianSplatLoaded(checkedDowncastPtr<GaussianSplatLoadedThreadMessage>(msg));
 		break;
 		case Msg_TextureLoadedThreadMessage:
 		{
@@ -13872,7 +14056,8 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 								WorldObject::GetDependencyOptions options;
 								options.use_basis = use_basis_textures_for_ob;
 								options.include_lightmaps = this->use_lightmaps;
-								options.get_optimised_mesh = this->server_has_optimised_meshes;
+								options.get_optimised_mesh = this->server_has_optimised_meshes &&
+									!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
 								options.opt_mesh_version = this->server_opt_mesh_version;
 								options.allocator = &arena_allocator;
 
@@ -14007,6 +14192,26 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 										if(ob->audio_source_url == URL)
 											loadAudioForObject(ob, m->loaded_buffer);
 									}
+								}
+							}
+							else if(GaussianSplatAsset::hasSupportedExtension(URL) ||
+								GaussianSplatAsset::hasSupportedExtension(local_path))
+							{
+								if(gaussian_splats_processing.insert(URL).second)
+								{
+									Reference<LoadGaussianSplatTask> task = new LoadGaussianSplatTask();
+									task->splat_url = URL;
+									task->resource = resource;
+									task->loaded_buffer = m->loaded_buffer;
+									task->resource_manager = resource_manager;
+									task->result_msg_queue = &msg_queue;
+									load_item_queue.enqueueItem(
+										/*key=*/URL,
+										pos.toVec4fPoint(),
+										size_factor,
+										task,
+										/*max task dist=*/std::numeric_limits<float>::infinity()
+									);
 								}
 							}
 							else if(ModelLoading::hasSupportedModelExtension(local_path)) // Else we didn't download a texture, but maybe a model:
@@ -15962,7 +16167,26 @@ void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded
 	WorldObjectRef new_world_object = new WorldObject();
 
 	js::AABBox aabb_os;
-	if(loaded_mesh.nonNull())
+	if(GaussianSplatAsset::hasSupportedExtension(mesh_path))
+	{
+		MemMappedFile file(mesh_path);
+		const GaussianSplatDataRef splat_data = GaussianSplatDecoder::decode(
+			mesh_path,
+			ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
+		);
+		const uint64 model_hash = FileChecksum::fileChecksum(mesh_path);
+		const URLString splat_URL = ResourceManager::URLForPathAndHash(mesh_path, model_hash);
+		if(!resource_manager->isFileForURLPresent(splat_URL))
+			resource_manager->copyLocalFileToResourceDir(mesh_path, splat_URL);
+
+		new_world_object->model_url = splat_URL;
+		new_world_object->object_type = WorldObject::ObjectType_Generic;
+		new_world_object->max_model_lod_level = 0;
+		BitUtils::setBit(new_world_object->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH);
+		aabb_os = splat_data->aabb_os;
+		gaussian_splat_data_cache[splat_URL] = splat_data;
+	}
+	else if(loaded_mesh.nonNull())
 	{
 		// If the user wants to load a mesh that is not a bmesh file already, convert it to bmesh.
 		std::string bmesh_disk_path;
@@ -18667,6 +18891,8 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	// Clear textures_processing set etc.
 	textures_processing.clear();
 	models_processing.clear();
+	gaussian_splats_processing.clear();
+	loading_gaussian_splat_URL_to_world_ob_UID_map.clear();
 	audio_processing.clear();
 	script_content_processing.clear();
 }
@@ -22693,6 +22919,20 @@ void GUIClient::reloadShaders()
 	try
 	{
 		makeShaders();
+
+		if(gaussian_splat_shader_prog.nonNull())
+		{
+			try
+			{
+				gaussian_splat_shader_prog = GaussianSplatRenderer::makeProgram(*opengl_engine, base_dir_path);
+			}
+			catch(glare::Exception& e)
+			{
+				// Keep the last working Gaussian program.  Reloading this
+				// optional shader must not break the rest of the client.
+				conPrint("Error while reloading Gaussian splat shader: " + e.what());
+			}
+		}
 	
 		// Assign new portal shader to portal objects
 		{
@@ -22706,6 +22946,17 @@ void GUIClient::reloadShaders()
 					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].shader_prog = this->portal_shader_prog;
 					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].transparent = true;
 					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].auto_assign_shader = false;
+					opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
+				}
+				else if(ob->opengl_engine_ob &&
+					ob->object_type == WorldObject::ObjectType_Generic &&
+					GaussianSplatAsset::hasSupportedExtension(ob->model_url) &&
+					gaussian_splat_shader_prog.nonNull() &&
+					!ob->opengl_engine_ob->materials.empty())
+				{
+					ob->opengl_engine_ob->materials[0].shader_prog = gaussian_splat_shader_prog;
+					ob->opengl_engine_ob->materials[0].transparent = true;
+					ob->opengl_engine_ob->materials[0].auto_assign_shader = false;
 					opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
 				}
 			}
@@ -22926,6 +23177,24 @@ void GUIClient::createModelObject(const std::string& local_model_path)
 			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
 		else
 			showErrorNotification("You can only create objects in a parcel that you have write permissions for.");
+		return;
+	}
+
+	if(GaussianSplatAsset::hasSupportedExtension(local_model_path))
+	{
+		std::vector<WorldMaterialRef> materials;
+		materials.push_back(new WorldMaterial());
+		createObject(
+			local_model_path,
+			/*loaded_mesh=*/BatchedMeshRef(),
+			/*loaded_mesh_is_image_cube=*/false,
+			glare::AllocatorVector<Voxel, 16>(),
+			ob_pos,
+			Vec3f(1.f),
+			Vec3f(0, 0, 1),
+			0.f,
+			materials
+		);
 		return;
 	}
 

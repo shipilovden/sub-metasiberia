@@ -211,6 +211,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/EmbeddedBrowser.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/EmbeddedBrowser.h
 ${CMAKE_SOURCE_DIR}/gui_client/GestureUI.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GestureUI.h
+${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatRenderer.cpp
+${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatRenderer.h
 ${CMAKE_SOURCE_DIR}/gui_client/GUIClient.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GUIClient.h
 ${CMAKE_SOURCE_DIR}/gui_client/HashedObGrid.h
@@ -227,6 +229,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/LoadAudioTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadAudioTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadItemQueue.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadItemQueue.h
+${CMAKE_SOURCE_DIR}/gui_client/LoadGaussianSplatTask.cpp
+${CMAKE_SOURCE_DIR}/gui_client/LoadGaussianSplatTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadModelTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadModelTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadScriptTask.cpp
@@ -633,6 +637,8 @@ SET(shared_files
 ../shared/FileTypes.h
 ../shared/GaussianSplatAsset.cpp
 ../shared/GaussianSplatAsset.h
+../shared/GaussianSplatData.cpp
+../shared/GaussianSplatData.h
 ../shared/GroundPatch.cpp
 ../shared/GroundPatch.h
 ../shared/LODGeneration.cpp
@@ -1019,6 +1025,8 @@ endif() # end if not emscripten.
 include(${GLARE_CORE_TRUNK_DIR_ENV}/opengl/opengl.cmake)
 
 set(substrata_shaders
+../shaders/gaussian_splat_frag_shader.glsl
+../shaders/gaussian_splat_vert_shader.glsl
 ../shaders/parcel_frag_shader.glsl
 ../shaders/parcel_vert_shader.glsl
 ../shaders/portal_frag_shader.glsl

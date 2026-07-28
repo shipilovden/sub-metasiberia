@@ -7,10 +7,13 @@ Copyright Glare Technologies Limited 2022 -
 
 
 #include "ModelLoading.h"
+#include "GaussianSplatRenderer.h"
 #include "MeshBuilding.h"
 #include "NetDownloadResourcesThread.h"
 #include "../shared/LODGeneration.h"
 #include "../shared/ImageDecoding.h"
+#include "../shared/GaussianSplatAsset.h"
+#include "../shared/GaussianSplatData.h"
 #include "../dll/include/IndigoMesh.h"
 #include "../dll/include/IndigoException.h"
 #include "../simpleraytracer/raymesh.h"
@@ -19,6 +22,7 @@ Copyright Glare Technologies Limited 2022 -
 #include "../utils/StringUtils.h"
 #include "../utils/ConPrint.h"
 #include "../utils/TaskManager.h"
+#include "../utils/MemMappedFile.h"
 #include "../indigo/TextureServer.h"
 #include "../qt/QtUtils.h"
 #include <QtWidgets/QMessageBox>
@@ -50,7 +54,10 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	this->tabWidget->setCurrentIndex(settings->value("AddObjectDialog/tabIndex").toInt());
 
 	this->avatarSelectWidget->setType(FileSelectWidget::Type_File);
-	this->avatarSelectWidget->setFilter("Supported files (*.obj *.gltf *.glb *.vox *.stl *.igmesh *.jpg *.jpeg *.png *.gif *.exr *.ktx *.ktx2 *.basis *.tif *.tiff *.bmp *.tga *.webp);;All files (*.*)");
+	this->avatarSelectWidget->setFilter(
+		"Supported files (*.obj *.gltf *.glb *.vox *.stl *.igmesh *.ply *.compressed.ply *.splat *.ksplat *.spz *.sog *.lcc *.lcc2 "
+		"*.jpg *.jpeg *.png *.gif *.exr *.ktx *.ktx2 *.basis *.tif *.tiff *.bmp *.tga *.webp);;All files (*.*)"
+	);
 	//this->avatarSelectWidget->setFilename(settings->value("AddObjectDialogPath").toString());
 
 	connect(this->listWidget, SIGNAL(itemClicked(QListWidgetItem*)), this, SLOT(modelSelected(QListWidgetItem*)));
@@ -114,6 +121,7 @@ void AddObjectDialog::shutdownGL()
 	this->objectPreviewGLWidget->makeCurrent();
 
 	preview_gl_ob = NULL;
+	gaussian_splat_preview_program = NULL;
 	objectPreviewGLWidget->shutdown();
 }
 
@@ -192,6 +200,8 @@ void AddObjectDialog::loadModelIntoPreview(const std::string& local_path)
 	this->ob_cam_up_translation = 0;
 
 	this->loaded_materials.clear();
+	this->loaded_mesh = NULL;
+	this->loaded_voxels.clear();
 	this->scale = Vec3f(1.f);
 	this->axis = Vec3f(0, 0, 1);
 	this->angle = 0;
@@ -205,7 +215,30 @@ void AddObjectDialog::loadModelIntoPreview(const std::string& local_path)
 			objectPreviewGLWidget->opengl_engine->removeObject(preview_gl_ob);
 		}
 
-		if(ImageDecoding::hasSupportedImageExtension(local_path))
+		if(GaussianSplatAsset::hasSupportedExtension(local_path))
+		{
+			MemMappedFile file(local_path);
+			const GaussianSplatDataRef data = GaussianSplatDecoder::decode(
+				local_path,
+				ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
+			);
+			if(gaussian_splat_preview_program.isNull())
+				gaussian_splat_preview_program = GaussianSplatRenderer::makeProgram(
+					*objectPreviewGLWidget->opengl_engine,
+					base_dir_path
+				);
+			const OpenGLTextureRef data_texture =
+				GaussianSplatRenderer::makeDataTexture(*objectPreviewGLWidget->opengl_engine, *data);
+			preview_gl_ob = GaussianSplatRenderer::makeObject(
+				*objectPreviewGLWidget->opengl_engine,
+				*data,
+				data_texture,
+				gaussian_splat_preview_program.ptr(),
+				Matrix4f::identity()
+			);
+			loaded_materials.push_back(new WorldMaterial());
+		}
+		else if(ImageDecoding::hasSupportedImageExtension(local_path))
 		{
 			// Load image to get aspect ratio of image.
 			// We will scale our model so it has the same aspect ratio.

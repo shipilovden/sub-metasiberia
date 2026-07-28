@@ -43,6 +43,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../opengl/AsyncGeometryUploader.h"
 #include "../shared/WorldObject.h"
 #include "../shared/GearItem.h"
+#include "../shared/GaussianSplatData.h"
 #include "../shared/LuaScriptEvaluator.h"
 #include "../shared/ScriptTimerQueue.h"
 #include "../settings/SettingsStore.h"
@@ -73,6 +74,7 @@ class URLWidget;
 class VideoReader;
 class GearInventoryUI;
 class ModelLoadedThreadMessage;
+class GaussianSplatLoadedThreadMessage;
 class TextureLoadedThreadMessage;
 struct tls_config;
 class SubstrataVideoReaderCallback;
@@ -387,6 +389,8 @@ public:
 	void makeShaders();
 	Avatar* getOurAvatar(WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
 	void loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
+	void loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDataRef& splat_data, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
+	void handleGaussianSplatLoaded(GaussianSplatLoadedThreadMessage* loaded_message);
 	void loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, int voxel_subsample_factor, WorldStateLock& world_state_lock);
 	void loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
 	void loadPresentGearModel(const GearItem* item, EquippedGearGraphics* equipped_gear_graphics, Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
@@ -789,6 +793,7 @@ public:
 
 	Reference<OpenGLProgram> parcel_shader_prog;
 	Reference<OpenGLProgram> portal_shader_prog;
+	Reference<OpenGLProgram> gaussian_splat_shader_prog;
 
 	StandardPrintOutput print_output;
 	//glare::TaskManager* task_manager; // General purpose task manager, for quick/blocking multithreaded builds of stuff. Currently just used for LODGeneration::generateLODTexturesForMaterialsIfNotPresent(). Lazily created.
@@ -1001,6 +1006,10 @@ public:
 	std::unordered_map<URLString, DownloadingResourceInfo, URLStringHasher> URL_to_downloading_info; // Map from URL to info about the resource, for currently downloading resources.
 
 	std::map<ModelProcessingKey, std::set<UID>> loading_model_URL_to_world_ob_UID_map;
+	std::map<URLString, GaussianSplatDataRef> gaussian_splat_data_cache;
+	std::map<URLString, OpenGLTextureRef> gaussian_splat_texture_cache;
+	std::set<URLString> gaussian_splats_processing;
+	std::map<URLString, std::set<UID>> loading_gaussian_splat_URL_to_world_ob_UID_map;
 	std::unordered_map<URLString, std::set<UID>, URLStringHasher> loading_model_URL_to_avatar_UID_map;
 	std::unordered_map<URLString, std::vector<WorldMaterialRef>, URLStringHasher> gltf_extracted_materials_by_url; // Extracted GLB materials for bot avatars, keyed by lod_model_url
 

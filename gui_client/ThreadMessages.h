@@ -13,6 +13,7 @@ Copyright Glare Technologies Limited 2025 -
 enum GuiClientThreadMessages
 {
 	Msg_ModelLoadedThreadMessage,
+	Msg_GaussianSplatLoadedThreadMessage,
 	Msg_TextureLoadedThreadMessage,
 	Msg_AudioLoadedThreadMessage,
 	Msg_ScriptLoadedThreadMessage,
