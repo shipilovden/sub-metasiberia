@@ -765,7 +765,12 @@ void GaussianSplatCEFConverter::start(const Config& config)
 	state->config = config;
 	state->state = State_Running;
 	state->canonical_input_path = FileUtils::getCanonicalPath(config.input_path);
-	state->canonical_input_dir = FileUtils::getCanonicalPath(FileUtils::getDirectory(state->canonical_input_path));
+	// canonical_input_path is already resolved.  On Windows, asking
+	// FileUtils::getCanonicalPath() to open its parent as if it were a regular
+	// file fails with ERROR_ACCESS_DENIED because directory handles require
+	// FILE_FLAG_BACKUP_SEMANTICS.  Deriving the parent from the canonical file
+	// keeps the same sidecar containment boundary without reopening a directory.
+	state->canonical_input_dir = FileUtils::getDirectory(state->canonical_input_path);
 	state->main_virtual_filename = normaliseVirtualPath(FileUtils::getFilename(state->canonical_input_path));
 
 	state->explicit_files[state->main_virtual_filename] = state->canonical_input_path;

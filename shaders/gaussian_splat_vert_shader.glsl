@@ -34,12 +34,12 @@ vec4 loadSplatTexel(int linear_index)
 
 float loadSplatFloat(int record_base, int scalar_index)
 {
-	vec4 packed = loadSplatTexel(record_base + 4 + scalar_index / 4);
-	int component = scalar_index - (scalar_index / 4) * 4;
-	if(component == 0) return packed.x;
-	if(component == 1) return packed.y;
-	if(component == 2) return packed.z;
-	return packed.w;
+	vec4 packed_value = loadSplatTexel(record_base + 4 + scalar_index / 4);
+	int lane_index = scalar_index - (scalar_index / 4) * 4;
+	if(lane_index == 0) return packed_value.x;
+	if(lane_index == 1) return packed_value.y;
+	if(lane_index == 2) return packed_value.z;
+	return packed_value.w;
 }
 
 
