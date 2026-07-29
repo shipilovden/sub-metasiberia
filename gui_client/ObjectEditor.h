@@ -150,6 +150,7 @@ private:
 	void retranslateDynamicPortalUI();
 	void createGaussianSplatEditorUI();
 	void retranslateDynamicGaussianSplatUI();
+	void applyGaussianSplatPreset(const QString& preset);
 	void setGaussianSplatControlsFromContent(const std::string& content);
 	struct GaussianSplatRenderSettings gaussianSplatControlsToSettings() const;
 	void createParticleEditorUI();
@@ -223,8 +224,13 @@ private:
 	QGroupBox* gaussianSplatGroupBox;
 	QLabel* gaussianSplatPresetLabel;
 	QComboBox* gaussianSplatPresetComboBox;
+	QPushButton* gaussianSplatResetPushButton;
+	QLabel* gaussianSplatSHDetailLabel;
+	QComboBox* gaussianSplatSHDetailComboBox;
 	QLabel* gaussianSplatOpacityLabel;
 	RealControl* gaussianSplatOpacitySpinBox;
+	QLabel* gaussianSplatMinimumSourceOpacityLabel;
+	RealControl* gaussianSplatMinimumSourceOpacitySpinBox;
 	QLabel* gaussianSplatBrightnessLabel;
 	RealControl* gaussianSplatBrightnessSpinBox;
 	QLabel* gaussianSplatRadiusLabel;

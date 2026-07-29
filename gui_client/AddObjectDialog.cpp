@@ -149,6 +149,7 @@ void AddObjectDialog::shutdownGL()
 	this->objectPreviewGLWidget->makeCurrent();
 
 	preview_gl_ob = NULL;
+	gaussian_splat_preview_render_object = NULL;
 	gaussian_splat_preview_program = NULL;
 	objectPreviewGLWidget->shutdown();
 }
@@ -236,6 +237,7 @@ void AddObjectDialog::loadModelIntoPreview(const std::string& local_path)
 	this->loaded_materials.clear();
 	this->loaded_mesh = NULL;
 	this->loaded_voxels.clear();
+	this->gaussian_splat_preview_render_object = NULL;
 	this->scale = Vec3f(1.f);
 	this->axis = Vec3f(0, 0, 1);
 	this->angle = 0;
@@ -340,12 +342,18 @@ void AddObjectDialog::setGaussianSplatPreviewObject(const GaussianSplatDataRef& 
 		);
 	const OpenGLTextureRef data_texture =
 		GaussianSplatRenderer::makeDataTexture(*objectPreviewGLWidget->opengl_engine, *splat_data);
-	preview_gl_ob = GaussianSplatRenderer::makeObject(
+	gaussian_splat_preview_render_object = GaussianSplatRenderer::makeObject(
 		*objectPreviewGLWidget->opengl_engine,
-		*splat_data,
+		splat_data,
 		data_texture,
 		gaussian_splat_preview_program.ptr(),
 		Matrix4f::identity()
+	);
+	preview_gl_ob = gaussian_splat_preview_render_object->gl_object;
+	gaussian_splat_preview_render_object->updateDepthSort(
+		objectPreviewGLWidget->cameraForwardsWS(),
+		preview_gl_ob->ob_to_world_matrix,
+		/*force=*/true
 	);
 	loaded_materials.push_back(new WorldMaterial());
 }
@@ -644,6 +652,11 @@ void AddObjectDialog::closeEvent(QCloseEvent* event)
 void AddObjectDialog::timerEvent(QTimerEvent* event)
 {
 	processGaussianSplatConversion();
+	if(gaussian_splat_preview_render_object.nonNull() && preview_gl_ob.nonNull())
+		gaussian_splat_preview_render_object->updateDepthSort(
+			objectPreviewGLWidget->cameraForwardsWS(),
+			preview_gl_ob->ob_to_world_matrix
+		);
 
 	// Once the OpenGL widget has initialised, we can add the model.
 	//if(objectPreviewGLWidget->opengl_engine->initSucceeded() && !loaded_model)

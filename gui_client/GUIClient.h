@@ -30,6 +30,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "WorldState.h"
 #include "URLWhitelist.h"
 #include "XRSession.h"
+#include "GaussianSplatRenderer.h"
 #include "EmscriptenResourceDownloader.h"
 #include "UploadResourceThread.h"
 #include "ScriptedObjectProximityChecker.h"
@@ -391,6 +392,7 @@ public:
 	Avatar* getOurAvatar(WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
 	void loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
 	void loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDataRef& splat_data, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
+	void updateGaussianSplatDepthSorting();
 	void handleGaussianSplatLoaded(GaussianSplatLoadedThreadMessage* loaded_message);
 	bool startRemoteGaussianSplatConversion(const URLString& splat_url, const std::string& native_error);
 	bool startCreateGaussianSplatConversion(const std::string& local_path, const std::string& native_error);
@@ -1015,6 +1017,7 @@ public:
 	std::map<ModelProcessingKey, std::set<UID>> loading_model_URL_to_world_ob_UID_map;
 	std::map<URLString, GaussianSplatDataRef> gaussian_splat_data_cache;
 	std::map<std::string, OpenGLTextureRef> gaussian_splat_texture_cache;
+	std::map<UID, GaussianSplatRenderObjectRef> gaussian_splat_render_objects;
 	std::set<URLString> gaussian_splats_processing;
 	std::map<URLString, std::set<UID>> loading_gaussian_splat_URL_to_world_ob_UID_map;
 	std::map<URLString, Reference<GaussianSplatCEFConverter>> gaussian_splat_remote_converters;

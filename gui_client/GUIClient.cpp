@@ -2303,6 +2303,7 @@ void GUIClient::shutdown()
 	cancelGaussianSplatConversions();
 	gaussian_splat_texture_cache.clear();
 	gaussian_splat_data_cache.clear();
+	gaussian_splat_render_objects.clear();
 	gaussian_splats_processing.clear();
 	loading_gaussian_splat_URL_to_world_ob_UID_map.clear();
 
@@ -3065,6 +3066,8 @@ static void removeAnimatedTextureUse(GLObject& ob, AnimatedTextureManager& anima
 
 void GUIClient::removeAndDeleteGLObjectsForOb(WorldObject& ob)
 {
+	gaussian_splat_render_objects.erase(ob.uid);
+
 	auto label_it = scientific_molecule_label_gl_obs.find(ob.uid);
 	if(label_it != scientific_molecule_label_gl_obs.end())
 	{
@@ -4943,13 +4946,20 @@ void GUIClient::loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDat
 		gaussian_splat_texture_cache[texture_cache_key] = data_texture;
 	}
 
-	ob->opengl_engine_ob = GaussianSplatRenderer::makeObject(
+	const GaussianSplatRenderObjectRef render_object = GaussianSplatRenderer::makeObject(
 		*opengl_engine,
-		*render_data,
+		render_data,
 		data_texture,
 		gaussian_splat_shader_prog.ptr(),
 		obToWorldMatrix(*ob)
 	);
+	render_object->updateDepthSort(
+		cam_controller.getForwardsVec().toVec4fVector(),
+		obToWorldMatrix(*ob),
+		/*force=*/true
+	);
+	ob->opengl_engine_ob = render_object->gl_object;
+	gaussian_splat_render_objects[ob->uid] = render_object;
 
 	// A conservative, non-collidable AABB proxy keeps native picking,
 	// selection and transform gizmos working without making splats solid.
@@ -4989,6 +4999,66 @@ void GUIClient::loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDat
 
 	if(this->selected_ob == ob)
 		opengl_engine->selectObject(ob->opengl_engine_ob);
+}
+
+
+void GUIClient::updateGaussianSplatDepthSorting()
+{
+	if(world_state.isNull() || gaussian_splat_render_objects.empty())
+		return;
+
+	struct PendingSort
+	{
+		GaussianSplatRenderObjectRef render_object;
+		Matrix4f object_to_world;
+	};
+	std::vector<PendingSort> pending_sorts;
+	pending_sorts.reserve(gaussian_splat_render_objects.size());
+
+	{
+		WorldStateLock lock(world_state->mutex);
+		for(auto it = gaussian_splat_render_objects.begin(); it != gaussian_splat_render_objects.end();)
+		{
+			auto object_it = world_state->objects.find(it->first);
+			if(object_it == world_state->objects.end())
+			{
+				it = gaussian_splat_render_objects.erase(it);
+				continue;
+			}
+
+			WorldObject* ob = object_it.getValue().ptr();
+			if(ob->opengl_engine_ob != it->second->gl_object)
+			{
+				it = gaussian_splat_render_objects.erase(it);
+				continue;
+			}
+
+			PendingSort pending;
+			pending.render_object = it->second;
+			pending.object_to_world = obToWorldMatrix(*ob);
+			pending_sorts.push_back(pending);
+			++it;
+		}
+	}
+
+	Vec4f camera_forward_ws = cam_controller.getForwardsVec().toVec4fVector();
+	// In XR the headset can turn independently of the desktop/avatar camera.
+	// Use the latest tracked centre-head orientation so the next stereo frame
+	// receives an HMD-correct splat order (the pose is one frame old at most).
+	if(xr_session && xr_session->isSessionRunning())
+	{
+		const XRTrackedPoseState& head_pose = xr_session->getHeadPoseState();
+		if(head_pose.orientation_valid)
+		{
+			camera_forward_ws = head_pose.object_to_world_matrix.getColumn(1);
+			camera_forward_ws[3] = 0.f;
+		}
+	}
+	for(size_t i = 0; i < pending_sorts.size(); ++i)
+		pending_sorts[i].render_object->updateDepthSort(
+			camera_forward_ws,
+			pending_sorts[i].object_to_world
+		);
 }
 
 
@@ -15326,6 +15396,11 @@ void GUIClient::updateVoxelEditMarkers(const MouseCursorState& mouse_cursor_stat
 		opengl_engine->removeObject(this->voxel_edit_face_marker);
 		voxel_edit_face_marker_in_engine = false;
 	}
+
+	// Exact Gaussian source-over compositing requires the splats to follow the
+	// active camera direction.  The renderer internally skips work until the
+	// direction changes by roughly two degrees.
+	updateGaussianSplatDepthSorting();
 }
 
 
@@ -19176,6 +19251,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	textures_processing.clear();
 	models_processing.clear();
 	cancelGaussianSplatConversions();
+	gaussian_splat_render_objects.clear();
 	gaussian_splats_processing.clear();
 	loading_gaussian_splat_URL_to_world_ob_UID_map.clear();
 	audio_processing.clear();
@@ -23247,7 +23323,8 @@ void GUIClient::reloadShaders()
 					!ob->opengl_engine_ob->materials.empty())
 				{
 					ob->opengl_engine_ob->materials[0].shader_prog = gaussian_splat_shader_prog;
-					ob->opengl_engine_ob->materials[0].transparent = true;
+					ob->opengl_engine_ob->materials[0].transparent = false;
+					ob->opengl_engine_ob->materials[0].alpha_blend = true;
 					ob->opengl_engine_ob->materials[0].auto_assign_shader = false;
 					opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
 				}

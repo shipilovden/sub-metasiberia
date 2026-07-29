@@ -1,7 +1,16 @@
 // Native Gaussian splat vertex shader.  Each instance expands a unit quad
 // into the screen-space footprint of one anisotropic 3D Gaussian.
 
+#if defined(GL_ES)
+// WebGL's engine-wide default is mediump.  Sorted source indices and large
+// world/covariance calculations require full 32-bit float precision.
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+#endif
+
 in vec3 position_in;
+in mat4 instance_matrix_in;
 
 out vec2 gaussian_coord;
 out vec3 splat_colour;
@@ -20,6 +29,79 @@ vec4 loadSplatTexel(int linear_index)
 {
 	ivec2 size = textureSize(albedo_texture, 0);
 	return texelFetch(albedo_texture, ivec2(linear_index % size.x, linear_index / size.x), 0);
+}
+
+
+float loadSplatFloat(int record_base, int scalar_index)
+{
+	vec4 packed = loadSplatTexel(record_base + 4 + scalar_index / 4);
+	int component = scalar_index - (scalar_index / 4) * 4;
+	if(component == 0) return packed.x;
+	if(component == 1) return packed.y;
+	if(component == 2) return packed.z;
+	return packed.w;
+}
+
+
+vec3 displaySRGBToLinear(vec3 colour)
+{
+	bvec3 low = lessThanEqual(colour, vec3(0.04045));
+	vec3 low_value = colour / 12.92;
+	vec3 high_value = pow((colour + 0.055) / 1.055, vec3(2.4));
+	return mix(high_value, low_value, low);
+}
+
+
+vec3 evaluateSphericalHarmonics(
+	int record_base,
+	int sh_degree,
+	vec3 base_colour,
+	vec3 direction_os)
+{
+	if(sh_degree <= 0)
+		return base_colour;
+
+	int coefficients_per_channel =
+		sh_degree == 1 ? 3 :
+		(sh_degree == 2 ? 8 : 15);
+
+	float x = direction_os.x;
+	float y = direction_os.y;
+	float z = direction_os.z;
+	float basis[15];
+	basis[0] = -0.4886025119029199 * y;
+	basis[1] =  0.4886025119029199 * z;
+	basis[2] = -0.4886025119029199 * x;
+
+	if(sh_degree >= 2)
+	{
+		basis[3] =  1.0925484305920792 * x * y;
+		basis[4] = -1.0925484305920792 * y * z;
+		basis[5] =  0.31539156525252005 * (2.0 * z * z - x * x - y * y);
+		basis[6] = -1.0925484305920792 * x * z;
+		basis[7] =  0.5462742152960396 * (x * x - y * y);
+	}
+	if(sh_degree >= 3)
+	{
+		basis[8]  = -0.5900435899266435 * y * (3.0 * x * x - y * y);
+		basis[9]  =  2.890611442640554 * x * y * z;
+		basis[10] = -0.4570457994644658 * y * (4.0 * z * z - x * x - y * y);
+		basis[11] =  0.3731763325901154 * z * (2.0 * z * z - 3.0 * x * x - 3.0 * y * y);
+		basis[12] = -0.4570457994644658 * x * (4.0 * z * z - x * x - y * y);
+		basis[13] =  1.445305721320277 * z * (x * x - y * y);
+		basis[14] = -0.5900435899266435 * x * (x * x - 3.0 * y * y);
+	}
+
+	vec3 result = base_colour;
+	for(int coefficient = 0; coefficient < 15; ++coefficient)
+	{
+		if(coefficient >= coefficients_per_channel)
+			break;
+		result.r += basis[coefficient] * loadSplatFloat(record_base, coefficient);
+		result.g += basis[coefficient] * loadSplatFloat(record_base, coefficients_per_channel + coefficient);
+		result.b += basis[coefficient] * loadSplatFloat(record_base, coefficients_per_channel * 2 + coefficient);
+	}
+	return result;
 }
 
 
@@ -47,12 +129,15 @@ void hideInstance()
 
 void main()
 {
-	int base = gl_InstanceID * 4;
+	vec4 metadata = loadSplatTexel(0);
+	int texels_per_splat = int(metadata.x + 0.5);
+	int sh_degree = int(metadata.y + 0.5);
+	int splat_index = int(instance_matrix_in[0][0] + 0.5);
+	int base = 1 + splat_index * texels_per_splat;
 	vec4 centre_opacity = loadSplatTexel(base + 0);
 	vec3 scale = max(abs(loadSplatTexel(base + 1).xyz), vec3(1.0e-7));
 	vec4 rotation = loadSplatTexel(base + 2);
 	vec4 colour_cutoff = loadSplatTexel(base + 3);
-	vec3 colour = max(colour_cutoff.rgb, vec3(0.0));
 
 	vec4 centre_ws = per_object_data.model_matrix * vec4(centre_opacity.xyz, 1.0);
 	vec4 centre_cs = view_matrix * centre_ws;
@@ -62,6 +147,21 @@ void main()
 		hideInstance();
 		return;
 	}
+
+	vec3 camera_to_centre_ws = normalize(centre_ws.xyz - campos_ws.xyz);
+	// normal_matrix is proportional to inverse-transpose(model), therefore
+	// its transpose maps a world-space direction back to object space.  The
+	// unknown determinant factor disappears during normalization.
+	vec3 camera_to_centre_os = normalize(
+		transpose(mat3(per_object_data.normal_matrix)) * camera_to_centre_ws
+	);
+	vec3 display_colour = evaluateSphericalHarmonics(
+		base,
+		sh_degree,
+		colour_cutoff.rgb,
+		camera_to_centre_os
+	);
+	vec3 colour = displaySRGBToLinear(clamp(display_colour, vec3(0.0), vec3(1.0)));
 
 	// A is the camera-space covariance square-root, including object scale.
 	mat3 model_view_linear = mat3(view_matrix * per_object_data.model_matrix);

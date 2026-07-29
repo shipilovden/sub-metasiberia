@@ -20,6 +20,7 @@ class TextureServer;
 class OpenGLProgram;
 class GaussianSplatCEFConverter;
 class GaussianSplatData;
+class GaussianSplatRenderObject;
 class QProgressDialog;
 
 
@@ -68,6 +69,7 @@ private:
 	QSettings* settings;
 
 	Reference<GLObject> preview_gl_ob;
+	Reference<GaussianSplatRenderObject> gaussian_splat_preview_render_object;
 	Reference<OpenGLProgram> gaussian_splat_preview_program;
 	Reference<GaussianSplatCEFConverter> gaussian_splat_converter;
 	QProgressDialog* gaussian_splat_progress_dialog;

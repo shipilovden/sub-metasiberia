@@ -27,6 +27,7 @@ namespace
 static const size_t MAX_HEADER_SIZE_B = 1024 * 1024;
 static const size_t MAX_SPLAT_COUNT = 4000000;
 static const float SH_C0 = 0.28209479177387814347f;
+static const size_t SH_REST_COMPONENT_COUNTS[] = { 0, 9, 24, 45 };
 
 
 static float readFloatLE(const uint8* p)
@@ -88,19 +89,20 @@ static float logistic(float value)
 }
 
 
-static float srgbToLinear(float value)
+static float shDCToDisplay(float dc)
 {
-	value = myClamp(value, 0.f, 1.f);
-	return value <= 0.04045f ? value / 12.92f : std::pow((value + 0.055f) / 1.055f, 2.4f);
+	// SH-DC reconstructs the base display-space colour.  Do not clamp here:
+	// directional terms are added by the renderer before the final clamp and
+	// display-to-linear conversion.
+	return 0.5f + SH_C0 * dc;
 }
 
 
-static float shDCToLinear(float dc)
+static size_t shRestComponentCount(const int degree)
 {
-	// 3DGS PLY/SPZ DC terms reconstruct display-space RGB.  Our renderer data
-	// texture stores linear RGB because the OpenGL material pipeline blends and
-	// shades in linear space.
-	return srgbToLinear(myClamp(0.5f + SH_C0 * dc, 0.f, 1.f));
+	if(degree < 0 || degree > 3)
+		throw glare::Exception("Gaussian splat SH degree must be between 0 and 3.");
+	return SH_REST_COMPONENT_COUNTS[degree];
 }
 
 
@@ -339,6 +341,41 @@ static GaussianSplatDataRef decodePly(ArrayRef<uint8> data)
 	const PlyProperty& dc_1_prop = requireProperty(properties, "f_dc_1");
 	const PlyProperty& dc_2_prop = requireProperty(properties, "f_dc_2");
 
+	std::vector<const PlyProperty*> sh_properties;
+	std::vector<bool> sh_property_seen;
+	for(const PlyProperty& property : vertex_properties)
+	{
+		static const std::string SH_PROPERTY_PREFIX = "f_rest_";
+		if(!hasPrefix(property.name, SH_PROPERTY_PREFIX))
+			continue;
+
+		const std::string index_s = property.name.substr(SH_PROPERTY_PREFIX.size());
+		char* parse_end = NULL;
+		const unsigned long index = std::strtoul(index_s.c_str(), &parse_end, 10);
+		if(index_s.empty() || parse_end == index_s.c_str() || *parse_end != '\0' || index > 45)
+			throw glare::Exception("3DGS PLY has a malformed spherical-harmonics property '" + property.name + "'.");
+		if(sh_properties.size() <= index)
+		{
+			sh_properties.resize(index + 1, NULL);
+			sh_property_seen.resize(index + 1, false);
+		}
+		if(sh_property_seen[index])
+			throw glare::Exception("3DGS PLY has duplicate spherical-harmonics property '" + property.name + "'.");
+		sh_properties[index] = &property;
+		sh_property_seen[index] = true;
+	}
+
+	for(size_t i=0; i<sh_property_seen.size(); ++i)
+		if(!sh_property_seen[i])
+			throw glare::Exception("3DGS PLY spherical-harmonics properties must be consecutive from f_rest_0.");
+
+	int sh_degree = -1;
+	for(int degree=0; degree<=3; ++degree)
+		if(sh_properties.size() == shRestComponentCount(degree))
+			sh_degree = degree;
+	if(sh_degree < 0)
+		throw glare::Exception("3DGS PLY must contain exactly 0, 9, 24, or 45 f_rest spherical-harmonics properties.");
+
 	auto read_property = [](const uint8* record, const PlyProperty& property) -> float
 	{
 		const double value = readPlyScalar(record + property.offset, property.type);
@@ -349,7 +386,9 @@ static GaussianSplatDataRef decodePly(ArrayRef<uint8> data)
 
 	GaussianSplatDataRef result = new GaussianSplatData();
 	result->source_format = GaussianSplatAsset::Format::Ply;
+	result->sh_degree = sh_degree;
 	result->splats.resize(vertex_count);
+	result->spherical_harmonics.resize(vertex_count * sh_properties.size());
 	result->aabb_os = js::AABBox::emptyAABBox();
 
 	const uint8* const payload = data.data() + header_end;
@@ -374,10 +413,14 @@ static GaussianSplatDataRef decodePly(ArrayRef<uint8> data)
 		splat.rotation_z = read_property(record, rot_3_prop);
 		normaliseQuaternion(splat);
 
-		splat.colour_r = shDCToLinear(read_property(record, dc_0_prop));
-		splat.colour_g = shDCToLinear(read_property(record, dc_1_prop));
-		splat.colour_b = shDCToLinear(read_property(record, dc_2_prop));
+		splat.colour_r = shDCToDisplay(read_property(record, dc_0_prop));
+		splat.colour_g = shDCToDisplay(read_property(record, dc_1_prop));
+		splat.colour_b = shDCToDisplay(read_property(record, dc_2_prop));
 		splat.reserved_1 = 0.f;
+
+		for(size_t component=0; component<sh_properties.size(); ++component)
+			result->spherical_harmonics[i * sh_properties.size() + component] =
+				read_property(record, *sh_properties[component]);
 
 		enlargeAABBForSplat(result->aabb_os, splat);
 	}
@@ -398,6 +441,7 @@ static GaussianSplatDataRef decodeSplat(ArrayRef<uint8> data)
 
 	GaussianSplatDataRef result = new GaussianSplatData();
 	result->source_format = GaussianSplatAsset::Format::Splat;
+	result->sh_degree = 0;
 	result->splats.resize(splat_count);
 	result->aabb_os = js::AABBox::emptyAABBox();
 
@@ -413,9 +457,9 @@ static GaussianSplatDataRef decodeSplat(ArrayRef<uint8> data)
 		splat.scale_z = myClamp(std::fabs(clampFinite(readFloatLE(record + 20), -1.0e6f, 1.0e6f, "scale")), 1.0e-6f, 1.0e6f);
 		splat.reserved_0 = 0.f;
 
-		splat.colour_r = srgbToLinear((float)record[24] * (1.f / 255.f));
-		splat.colour_g = srgbToLinear((float)record[25] * (1.f / 255.f));
-		splat.colour_b = srgbToLinear((float)record[26] * (1.f / 255.f));
+		splat.colour_r = (float)record[24] * (1.f / 255.f);
+		splat.colour_g = (float)record[25] * (1.f / 255.f);
+		splat.colour_b = (float)record[26] * (1.f / 255.f);
 		splat.opacity = (float)record[27] * (1.f / 255.f);
 
 		// The common .splat stream stores quaternion as w, x, y, z bytes.
@@ -511,10 +555,13 @@ static GaussianSplatDataRef decodeSpz(ArrayRef<uint8> data)
 	const std::vector<uint8>& colours = streams[2];
 	const std::vector<uint8>& scales = streams[3];
 	const std::vector<uint8>& rotations = streams[4];
+	const std::vector<uint8>* harmonics = sh_degree > 0 ? &streams[5] : NULL;
 
 	GaussianSplatDataRef result = new GaussianSplatData();
 	result->source_format = GaussianSplatAsset::Format::SPZ;
+	result->sh_degree = (int)sh_degree;
 	result->splats.resize(splat_count);
+	result->spherical_harmonics.resize(splat_count * harmonics_count);
 	result->aabb_os = js::AABBox::emptyAABBox();
 	const float position_scale = 1.f / (float)(1u << fractional_bits);
 	static const float INV_SPZ_COLOUR_SCALE = 1.f / 0.15f;
@@ -561,10 +608,19 @@ static GaussianSplatDataRef decodeSpz(ArrayRef<uint8> data)
 		const float dc_r = ((float)colours[i * 3 + 0] * (1.f / 255.f) - 0.5f) * INV_SPZ_COLOUR_SCALE;
 		const float dc_g = ((float)colours[i * 3 + 1] * (1.f / 255.f) - 0.5f) * INV_SPZ_COLOUR_SCALE;
 		const float dc_b = ((float)colours[i * 3 + 2] * (1.f / 255.f) - 0.5f) * INV_SPZ_COLOUR_SCALE;
-		splat.colour_r = shDCToLinear(dc_r);
-		splat.colour_g = shDCToLinear(dc_g);
-		splat.colour_b = shDCToLinear(dc_b);
+		splat.colour_r = shDCToDisplay(dc_r);
+		splat.colour_g = shDCToDisplay(dc_g);
+		splat.colour_b = shDCToDisplay(dc_b);
 		splat.reserved_1 = 0.f;
+
+		const size_t coefficients_per_channel = harmonics_count / 3;
+		for(size_t component=0; component<harmonics_count; ++component)
+		{
+			const size_t channel = component % 3;
+			const size_t coefficient = component / 3;
+			result->spherical_harmonics[i * harmonics_count + channel * coefficients_per_channel + coefficient] =
+				((float)(*harmonics)[i * harmonics_count + component] - 128.f) * (1.f / 128.f);
+		}
 
 		enlargeAABBForSplat(result->aabb_os, splat);
 	}
@@ -575,29 +631,34 @@ static GaussianSplatDataRef decodeSpz(ArrayRef<uint8> data)
 
 
 GaussianSplatData::GaussianSplatData()
-:	aabb_os(js::AABBox::emptyAABBox()),
+:	sh_degree(0),
+	aabb_os(js::AABBox::emptyAABBox()),
 	source_format(GaussianSplatAsset::Format::Unknown)
 {}
 
 
 GaussianSplatRenderSettings::GaussianSplatRenderSettings()
-:	opacity_multiplier(2.25f),
+:	opacity_multiplier(1.0f),
 	brightness(1.0f),
 	radius_multiplier(1.0f),
 	saturation(1.0f),
 	contrast(1.0f),
-	alpha_cutoff(1.0f / 255.0f)
+	alpha_cutoff(1.0f / 255.0f),
+	minimum_source_opacity(0.0f),
+	sh_degree_override(-1)
 {}
 
 
 bool GaussianSplatRenderSettings::isDefault() const
 {
-	return std::fabs(opacity_multiplier - 2.25f) < 1.0e-6f &&
+	return std::fabs(opacity_multiplier - 1.0f) < 1.0e-6f &&
 		std::fabs(brightness - 1.0f) < 1.0e-6f &&
 		std::fabs(radius_multiplier - 1.0f) < 1.0e-6f &&
 		std::fabs(saturation - 1.0f) < 1.0e-6f &&
 		std::fabs(contrast - 1.0f) < 1.0e-6f &&
-		std::fabs(alpha_cutoff - (1.0f / 255.0f)) < 1.0e-6f;
+		std::fabs(alpha_cutoff - (1.0f / 255.0f)) < 1.0e-6f &&
+		std::fabs(minimum_source_opacity) < 1.0e-6f &&
+		sh_degree_override == -1;
 }
 
 
@@ -608,7 +669,9 @@ std::string GaussianSplatRenderSettings::cacheKeySuffix() const
 		";radius=" + toString(radius_multiplier) +
 		";saturation=" + toString(saturation) +
 		";contrast=" + toString(contrast) +
-		";cutoff=" + toString(alpha_cutoff);
+		";cutoff=" + toString(alpha_cutoff) +
+		";source_opacity=" + toString(minimum_source_opacity) +
+		";sh_degree=" + toString(sh_degree_override);
 }
 
 
@@ -653,6 +716,10 @@ GaussianSplatRenderSettings GaussianSplatRenderSettings::fromContent(const std::
 			settings.contrast = myClamp(value, 0.10f, 4.0f);
 		else if(key == "alpha_cutoff")
 			settings.alpha_cutoff = myClamp(value, 0.0f, 0.25f);
+		else if(key == "minimum_source_opacity")
+			settings.minimum_source_opacity = myClamp(value, 0.0f, 1.0f);
+		else if(key == "sh_degree_override")
+			settings.sh_degree_override = myClamp((int)::atoi(value_s.c_str()), -1, 3);
 	}
 
 	return settings;
@@ -668,6 +735,8 @@ std::string GaussianSplatRenderSettings::serialiseToContent(const GaussianSplatR
 	settings.saturation = myClamp(settings.saturation, 0.0f, 3.0f);
 	settings.contrast = myClamp(settings.contrast, 0.10f, 4.0f);
 	settings.alpha_cutoff = myClamp(settings.alpha_cutoff, 0.0f, 0.25f);
+	settings.minimum_source_opacity = myClamp(settings.minimum_source_opacity, 0.0f, 1.0f);
+	settings.sh_degree_override = myClamp(settings.sh_degree_override, -1, 3);
 
 	return std::string(GAUSSIAN_SPLAT_SETTINGS_PREFIX) + "\n" +
 		"opacity_multiplier=" + toString(settings.opacity_multiplier) + "\n" +
@@ -675,7 +744,9 @@ std::string GaussianSplatRenderSettings::serialiseToContent(const GaussianSplatR
 		"radius_multiplier=" + toString(settings.radius_multiplier) + "\n" +
 		"saturation=" + toString(settings.saturation) + "\n" +
 		"contrast=" + toString(settings.contrast) + "\n" +
-		"alpha_cutoff=" + toString(settings.alpha_cutoff) + "\n";
+		"alpha_cutoff=" + toString(settings.alpha_cutoff) + "\n" +
+		"minimum_source_opacity=" + toString(settings.minimum_source_opacity) + "\n" +
+		"sh_degree_override=" + toString(settings.sh_degree_override) + "\n";
 }
 
 
@@ -688,27 +759,56 @@ GaussianSplatDataRef GaussianSplatRenderSettings::applyToData(const GaussianSpla
 	settings.saturation = myClamp(settings.saturation, 0.0f, 3.0f);
 	settings.contrast = myClamp(settings.contrast, 0.10f, 4.0f);
 	settings.alpha_cutoff = myClamp(settings.alpha_cutoff, 0.0f, 0.25f);
+	settings.minimum_source_opacity = myClamp(settings.minimum_source_opacity, 0.0f, 1.0f);
+	settings.sh_degree_override = myClamp(settings.sh_degree_override, -1, 3);
 
-	if(settings.isDefault())
-	{
-		GaussianSplatDataRef result = new GaussianSplatData();
-		result->source_format = source.source_format;
-		result->splats = source.splats;
-		result->aabb_os = source.aabb_os;
-		return result;
-	}
+	if(source.sh_degree < 0 || source.sh_degree > 3)
+		throw glare::Exception("Gaussian splat source has an invalid SH degree.");
+	const size_t source_sh_component_count = shRestComponentCount(source.sh_degree);
+	if(source.spherical_harmonics.size() != source.splats.size() * source_sh_component_count)
+		throw glare::Exception("Gaussian splat source has an invalid spherical-harmonics payload.");
+
+	const int result_sh_degree = settings.sh_degree_override < 0 ?
+		source.sh_degree :
+		myMin(source.sh_degree, settings.sh_degree_override);
+	const size_t result_sh_component_count = shRestComponentCount(result_sh_degree);
+	const size_t source_coefficients_per_channel = source_sh_component_count / 3;
+	const size_t result_coefficients_per_channel = result_sh_component_count / 3;
 
 	GaussianSplatDataRef result = new GaussianSplatData();
 	result->source_format = source.source_format;
+	result->sh_degree = result_sh_degree;
 	result->splats = source.splats;
+	result->spherical_harmonics.resize(source.splats.size() * result_sh_component_count);
 	result->aabb_os = js::AABBox::emptyAABBox();
 
-	for(GaussianSplat& splat : result->splats)
+	for(size_t splat_index=0; splat_index<result->splats.size(); ++splat_index)
 	{
-		splat.opacity = myClamp(1.0f - std::exp(-splat.opacity * settings.opacity_multiplier), 0.f, 0.9995f);
+		GaussianSplat& splat = result->splats[splat_index];
+		const float source_opacity = myClamp(splat.opacity, 0.f, 1.f);
+		if(source_opacity < settings.minimum_source_opacity)
+			splat.opacity = 0.f;
+		else
+			splat.opacity = myClamp(
+				1.0f - std::pow(myMax(0.f, 1.0f - source_opacity), settings.opacity_multiplier),
+				0.f,
+				1.f
+			);
 		splat.scale_x = myClamp(splat.scale_x * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
 		splat.scale_y = myClamp(splat.scale_y * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
 		splat.scale_z = myClamp(splat.scale_z * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
+
+		for(size_t channel=0; channel<3; ++channel)
+			for(size_t coefficient=0; coefficient<result_coefficients_per_channel; ++coefficient)
+				result->spherical_harmonics[
+					splat_index * result_sh_component_count +
+					channel * result_coefficients_per_channel +
+					coefficient
+				] = source.spherical_harmonics[
+					splat_index * source_sh_component_count +
+					channel * source_coefficients_per_channel +
+					coefficient
+				];
 
 		float r = splat.colour_r;
 		float g = splat.colour_g;
@@ -720,9 +820,26 @@ GaussianSplatDataRef GaussianSplatRenderSettings::applyToData(const GaussianSpla
 		r = 0.5f + (r - 0.5f) * settings.contrast;
 		g = 0.5f + (g - 0.5f) * settings.contrast;
 		b = 0.5f + (b - 0.5f) * settings.contrast;
-		splat.colour_r = myClamp(r * settings.brightness, 0.f, 16.f);
-		splat.colour_g = myClamp(g * settings.brightness, 0.f, 16.f);
-		splat.colour_b = myClamp(b * settings.brightness, 0.f, 16.f);
+		splat.colour_r = r * settings.brightness;
+		splat.colour_g = g * settings.brightness;
+		splat.colour_b = b * settings.brightness;
+
+		for(size_t coefficient=0; coefficient<result_coefficients_per_channel; ++coefficient)
+		{
+			const size_t base = splat_index * result_sh_component_count;
+			float sh_r = result->spherical_harmonics[base + coefficient];
+			float sh_g = result->spherical_harmonics[base + result_coefficients_per_channel + coefficient];
+			float sh_b = result->spherical_harmonics[base + 2 * result_coefficients_per_channel + coefficient];
+			const float sh_luminance = 0.2126f * sh_r + 0.7152f * sh_g + 0.0722f * sh_b;
+			sh_r = sh_luminance + (sh_r - sh_luminance) * settings.saturation;
+			sh_g = sh_luminance + (sh_g - sh_luminance) * settings.saturation;
+			sh_b = sh_luminance + (sh_b - sh_luminance) * settings.saturation;
+			const float sh_scale = settings.contrast * settings.brightness;
+			result->spherical_harmonics[base + coefficient] = sh_r * sh_scale;
+			result->spherical_harmonics[base + result_coefficients_per_channel + coefficient] = sh_g * sh_scale;
+			result->spherical_harmonics[base + 2 * result_coefficients_per_channel + coefficient] = sh_b * sh_scale;
+		}
+
 		splat.reserved_1 = settings.alpha_cutoff;
 		enlargeAABBForSplat(result->aabb_os, splat);
 	}
@@ -783,6 +900,15 @@ void GaussianSplatDecoder::test()
 		"property float f_dc_0\n"
 		"property float f_dc_1\n"
 		"property float f_dc_2\n"
+		"property float f_rest_0\n"
+		"property float f_rest_1\n"
+		"property float f_rest_2\n"
+		"property float f_rest_3\n"
+		"property float f_rest_4\n"
+		"property float f_rest_5\n"
+		"property float f_rest_6\n"
+		"property float f_rest_7\n"
+		"property float f_rest_8\n"
 		"end_header\n";
 	std::vector<uint8> ply_bytes(header.begin(), header.end());
 	auto append_float = [&ply_bytes](float value)
@@ -805,9 +931,13 @@ void GaussianSplatDecoder::test()
 	append_float(0.f);
 	append_float(0.f);
 	append_float(0.f);
+	for(int i=0; i<9; ++i)
+		append_float((float)(i + 1) * 0.01f);
 
 	const GaussianSplatDataRef ply = decode("scene.ply", ArrayRef<uint8>(ply_bytes.data(), ply_bytes.size()));
 	testAssert(ply->source_format == GaussianSplatAsset::Format::Ply);
+	testAssert(ply->sh_degree == 1);
+	testAssert(ply->spherical_harmonics.size() == 9);
 	testAssert(ply->splats.size() == 1);
 	testAssert(epsEqual(ply->splats[0].position_x, 1.f));
 	testAssert(epsEqual(ply->splats[0].position_y, 2.f));
@@ -816,6 +946,8 @@ void GaussianSplatDecoder::test()
 	testAssert(epsEqual(ply->splats[0].scale_x, 1.f));
 	testAssert(epsEqual(ply->splats[0].rotation_w, 1.f));
 	testAssert(epsEqual(ply->splats[0].colour_r, 0.5f));
+	testAssert(epsEqual(ply->spherical_harmonics[0], 0.01f));
+	testAssert(epsEqual(ply->spherical_harmonics[8], 0.09f));
 
 	std::vector<uint8> splat_bytes(32, 0);
 	auto write_float = [&splat_bytes](size_t offset, float value)
@@ -839,13 +971,51 @@ void GaussianSplatDecoder::test()
 
 	const GaussianSplatDataRef splat = decode("scene.splat", ArrayRef<uint8>(splat_bytes.data(), splat_bytes.size()));
 	testAssert(splat->source_format == GaussianSplatAsset::Format::Splat);
+	testAssert(splat->sh_degree == 0);
+	testAssert(splat->spherical_harmonics.empty());
 	testAssert(splat->splats.size() == 1);
 	testAssert(epsEqual(splat->splats[0].position_x, -1.f));
 	testAssert(epsEqual(splat->splats[0].scale_y, 0.5f));
 	testAssert(epsEqual(splat->splats[0].colour_r, 1.f));
 	testAssert(epsEqual(splat->splats[0].colour_g, 0.f));
+	testAssert(epsEqual(splat->splats[0].colour_b, 128.f / 255.f));
 	testAssert(epsEqual(splat->splats[0].opacity, 192.f / 255.f));
 	testAssert(epsEqual(splat->splats[0].rotation_w, 1.f));
+
+	GaussianSplatRenderSettings default_settings;
+	testAssert(default_settings.isDefault());
+	testAssert(epsEqual(default_settings.opacity_multiplier, 1.f));
+	const GaussianSplatDataRef default_tuned = GaussianSplatRenderSettings::applyToData(*ply, default_settings);
+	testAssert(default_tuned->sh_degree == 1);
+	testAssert(default_tuned->spherical_harmonics.size() == 9);
+	testAssert(epsEqual(default_tuned->splats[0].opacity, 0.5f));
+	testAssert(epsEqual(default_tuned->spherical_harmonics[8], 0.09f));
+
+	GaussianSplatRenderSettings tuned_settings;
+	tuned_settings.opacity_multiplier = 2.f;
+	tuned_settings.sh_degree_override = 0;
+	const GaussianSplatDataRef tuned = GaussianSplatRenderSettings::applyToData(*ply, tuned_settings);
+	testAssert(tuned->sh_degree == 0);
+	testAssert(tuned->spherical_harmonics.empty());
+	testAssert(epsEqual(tuned->splats[0].opacity, 0.75f));
+
+	tuned_settings.minimum_source_opacity = 0.6f;
+	const GaussianSplatDataRef filtered = GaussianSplatRenderSettings::applyToData(*ply, tuned_settings);
+	testAssert(epsEqual(filtered->splats[0].opacity, 0.f));
+
+	tuned_settings.minimum_source_opacity = 0.1f;
+	tuned_settings.sh_degree_override = 1;
+	const std::string settings_content = GaussianSplatRenderSettings::serialiseToContent(tuned_settings);
+	const GaussianSplatRenderSettings parsed_settings = GaussianSplatRenderSettings::fromContent(settings_content);
+	testAssert(epsEqual(parsed_settings.minimum_source_opacity, 0.1f));
+	testAssert(parsed_settings.sh_degree_override == 1);
+	testAssert(epsEqual(parsed_settings.opacity_multiplier, 2.f));
+
+	const GaussianSplatRenderSettings old_v1_settings =
+		GaussianSplatRenderSettings::fromContent("gaussian_splat_settings_v1\nbrightness=0.8\n");
+	testAssert(epsEqual(old_v1_settings.opacity_multiplier, 1.f));
+	testAssert(epsEqual(old_v1_settings.minimum_source_opacity, 0.f));
+	testAssert(old_v1_settings.sh_degree_override == -1);
 
 	bool got_extensible_error = false;
 	try

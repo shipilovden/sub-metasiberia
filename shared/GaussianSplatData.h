@@ -20,7 +20,11 @@ Canonical CPU representation and bounded decoders for Gaussian splats.
 //   texel 0: position.xyz, opacity
 //   texel 1: scale.xyz, reserved
 //   texel 2: quaternion.xyzw
-//   texel 3: linear RGB, reserved
+//   texel 3: display-space SH-DC RGB, reserved
+//
+// colour_* is intentionally not clamped or converted to linear space here.
+// Directional SH terms must be added first; the renderer clamps and converts
+// the reconstructed display colour to linear space afterwards.
 struct GaussianSplat
 {
 	float position_x, position_y, position_z, opacity;
@@ -36,6 +40,11 @@ public:
 	GaussianSplatData();
 
 	std::vector<GaussianSplat> splats;
+	// Source SH degree (0 through 3).  spherical_harmonics stores the f_rest
+	// values for each splat consecutively, channel-major within each splat:
+	// R coefficients, then G coefficients, then B coefficients.
+	int sh_degree;
+	std::vector<float> spherical_harmonics;
 	js::AABBox aabb_os;
 	GaussianSplatAsset::Format source_format;
 };
@@ -56,6 +65,9 @@ struct GaussianSplatRenderSettings
 	float saturation;
 	float contrast;
 	float alpha_cutoff;
+	float minimum_source_opacity;
+	// -1 preserves the source degree; 0 through 3 cap it explicitly.
+	int sh_degree_override;
 
 	bool isDefault() const;
 	std::string cacheKeySuffix() const;
