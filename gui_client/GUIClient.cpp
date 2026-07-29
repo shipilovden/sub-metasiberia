@@ -4926,22 +4926,26 @@ void GUIClient::loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDat
 	if(gaussian_splat_shader_prog.isNull())
 		gaussian_splat_shader_prog = GaussianSplatRenderer::makeProgram(*opengl_engine, base_dir_path);
 
+	const GaussianSplatRenderSettings render_settings = GaussianSplatRenderSettings::fromContent(ob->content);
+	const GaussianSplatDataRef render_data = GaussianSplatRenderSettings::applyToData(*splat_data, render_settings);
+
 	removeAndDeleteGLAndPhysicsObjectsForOb(*ob);
-	ob->setAABBOS(splat_data->aabb_os);
+	ob->setAABBOS(render_data->aabb_os);
 
 	OpenGLTextureRef data_texture;
-	auto texture_it = gaussian_splat_texture_cache.find(ob->model_url);
+	const std::string texture_cache_key = toStdString(ob->model_url) + render_settings.cacheKeySuffix();
+	auto texture_it = gaussian_splat_texture_cache.find(texture_cache_key);
 	if(texture_it != gaussian_splat_texture_cache.end())
 		data_texture = texture_it->second;
 	else
 	{
-		data_texture = GaussianSplatRenderer::makeDataTexture(*opengl_engine, *splat_data);
-		gaussian_splat_texture_cache[ob->model_url] = data_texture;
+		data_texture = GaussianSplatRenderer::makeDataTexture(*opengl_engine, *render_data);
+		gaussian_splat_texture_cache[texture_cache_key] = data_texture;
 	}
 
 	ob->opengl_engine_ob = GaussianSplatRenderer::makeObject(
 		*opengl_engine,
-		*splat_data,
+		*render_data,
 		data_texture,
 		gaussian_splat_shader_prog.ptr(),
 		obToWorldMatrix(*ob)
@@ -4949,16 +4953,16 @@ void GUIClient::loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDat
 
 	// A conservative, non-collidable AABB proxy keeps native picking,
 	// selection and transform gizmos working without making splats solid.
-	const Vec4f span4 = splat_data->aabb_os.span();
+	const Vec4f span4 = render_data->aabb_os.span();
 	const Vec3f proxy_scale(
 		myMax(span4[0], 0.001f),
 		myMax(span4[1], 0.001f),
 		myMax(span4[2], 0.001f)
 	);
 	const Vec3f proxy_translation(
-		splat_data->aabb_os.min_[0],
-		splat_data->aabb_os.min_[1],
-		splat_data->aabb_os.min_[2]
+		render_data->aabb_os.min_[0],
+		render_data->aabb_os.min_[1],
+		render_data->aabb_os.min_[2]
 	);
 	ob->physics_object = new PhysicsObject(/*collidable=*/false);
 	ob->physics_object->shape = PhysicsWorld::createScaledAndTranslatedShapeForShape(unit_cube_shape, proxy_translation, proxy_scale);
@@ -18034,6 +18038,30 @@ void GUIClient::objectEdited()
 			BitUtils::zeroBit(this->selected_ob->changed_flags, WorldObject::MODEL_URL_CHANGED);
 			BitUtils::zeroBit(this->selected_ob->changed_flags, WorldObject::DYNAMIC_CHANGED);
 			BitUtils::zeroBit(this->selected_ob->changed_flags, WorldObject::PHYSICS_VALUE_CHANGED);
+		}
+
+		const bool gaussian_splat_graphics_rebuild_needed =
+			!text_graphics_rebuild_needed &&
+			(selected_ob->object_type == WorldObject::ObjectType_Generic) &&
+			GaussianSplatAsset::hasSupportedExtension(selected_ob->model_url) &&
+			(
+				BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::CONTENT_CHANGED) ||
+				BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::MODEL_URL_CHANGED)
+			);
+
+		if(gaussian_splat_graphics_rebuild_needed)
+		{
+			const auto cache_it = gaussian_splat_data_cache.find(selected_ob->model_url);
+			if(cache_it != gaussian_splat_data_cache.end())
+			{
+				WorldStateLock lock(this->world_state->mutex);
+				loadPresentGaussianSplat(selected_ob.ptr(), cache_it->second, lock);
+				if(selected_ob->opengl_engine_ob.nonNull())
+					opengl_engine->selectObject(selected_ob->opengl_engine_ob);
+
+				BitUtils::zeroBit(this->selected_ob->changed_flags, WorldObject::CONTENT_CHANGED);
+				BitUtils::zeroBit(this->selected_ob->changed_flags, WorldObject::MODEL_URL_CHANGED);
+			}
 		}
 
 		if(!text_graphics_rebuild_needed && (BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::MODEL_URL_CHANGED) || 

@@ -148,6 +148,10 @@ private:
 	void retranslateDynamicAudioPlayerUI();
 	void createPortalEditorUI();
 	void retranslateDynamicPortalUI();
+	void createGaussianSplatEditorUI();
+	void retranslateDynamicGaussianSplatUI();
+	void setGaussianSplatControlsFromContent(const std::string& content);
+	struct GaussianSplatRenderSettings gaussianSplatControlsToSettings() const;
 	void createParticleEditorUI();
 	void retranslateDynamicParticleUI();
 	void loadCustomParticlePresets();
@@ -178,6 +182,7 @@ private:
 	bool syncing_audio_playlist_widget;
 	bool editing_audio_player_webview;
 	bool editing_particle_emitter;
+	bool editing_gaussian_splat;
 
 	QCheckBox* audioShuffleCheckBox;
 	QLabel* audioActivationDistanceLabel;
@@ -214,6 +219,17 @@ private:
 	QPushButton* portalClearTargetPushButton;
 	QPushButton* portalHelpPushButton;
 	QLabel* portalTipLabel;
+
+	QGroupBox* gaussianSplatGroupBox;
+	QLabel* gaussianSplatPresetLabel;
+	QComboBox* gaussianSplatPresetComboBox;
+	QLabel* gaussianSplatOpacityLabel;
+	RealControl* gaussianSplatOpacitySpinBox;
+	QLabel* gaussianSplatBrightnessLabel;
+	RealControl* gaussianSplatBrightnessSpinBox;
+	QLabel* gaussianSplatRadiusLabel;
+	RealControl* gaussianSplatRadiusSpinBox;
+	QLabel* gaussianSplatTipLabel;
 
 	QGroupBox* particleGroupBox;
 	QPushButton* particleHelpPushButton;

@@ -12,6 +12,7 @@ Canonical CPU representation and bounded decoders for Gaussian splats.
 #include <utils/ThreadSafeRefCounted.h>
 #include <physics/jscol_aabbox.h>
 
+#include <string>
 #include <vector>
 
 
@@ -40,6 +41,27 @@ public:
 };
 
 typedef Reference<GaussianSplatData> GaussianSplatDataRef;
+
+
+// Per-object render tuning.  Stored in WorldObject::content for Gaussian
+// objects, so existing servers and older clients can preserve it without
+// needing a new network object type.
+struct GaussianSplatRenderSettings
+{
+	GaussianSplatRenderSettings();
+
+	float opacity_multiplier;
+	float brightness;
+	float radius_multiplier;
+
+	bool isDefault() const;
+	std::string cacheKeySuffix() const;
+
+	static bool isSettingsContent(const std::string& content);
+	static GaussianSplatRenderSettings fromContent(const std::string& content);
+	static std::string serialiseToContent(const GaussianSplatRenderSettings& settings);
+	static GaussianSplatDataRef applyToData(const GaussianSplatData& source, const GaussianSplatRenderSettings& settings);
+};
 
 
 namespace GaussianSplatDecoder

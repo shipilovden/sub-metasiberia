@@ -69,6 +69,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "PhotoVideoSettingsPanel.h"
 #include "DocumentEditorPanel.h"
 #include "../qt/FlowLayout.h"
+#include "../shared/GaussianSplatAsset.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
 #include "../shared/LODGeneration.h"
@@ -3943,6 +3944,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 	const bool is_tree_editor = TreeObject::isTreeObject(ob);
 	const bool is_voxel_editor = ob.object_type == WorldObject::ObjectType_VoxelGroup;
 	const bool is_particle_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
+	const bool is_gaussian_splat_editor = (ob.object_type == WorldObject::ObjectType_Generic) && GaussianSplatAsset::hasSupportedExtension(ob.model_url);
 	const bool is_portal_editor = ob.object_type == WorldObject::ObjectType_Portal;
 
 	if(is_scientific_editor && scientific_object_editor)
@@ -3977,7 +3979,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 	}
 
-	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_cultural_editor ? tr("Cultural Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor")))))));
+	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_cultural_editor ? tr("Cultural Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_gaussian_splat_editor ? QString::fromUtf8("Редактор GaussianSplats") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))))))));
 	if(ui->editorDockWidget->toggleViewAction())
 		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }

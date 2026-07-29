@@ -15,6 +15,7 @@ GaussianSplatData.cpp
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <sstream>
@@ -91,6 +92,15 @@ static float srgbToLinear(float value)
 {
 	value = myClamp(value, 0.f, 1.f);
 	return value <= 0.04045f ? value / 12.92f : std::pow((value + 0.055f) / 1.055f, 2.4f);
+}
+
+
+static float shDCToLinear(float dc)
+{
+	// 3DGS PLY/SPZ DC terms reconstruct display-space RGB.  Our renderer data
+	// texture stores linear RGB because the OpenGL material pipeline blends and
+	// shades in linear space.
+	return srgbToLinear(myClamp(0.5f + SH_C0 * dc, 0.f, 1.f));
 }
 
 
@@ -364,9 +374,9 @@ static GaussianSplatDataRef decodePly(ArrayRef<uint8> data)
 		splat.rotation_z = read_property(record, rot_3_prop);
 		normaliseQuaternion(splat);
 
-		splat.colour_r = myClamp(0.5f + SH_C0 * read_property(record, dc_0_prop), 0.f, 1.f);
-		splat.colour_g = myClamp(0.5f + SH_C0 * read_property(record, dc_1_prop), 0.f, 1.f);
-		splat.colour_b = myClamp(0.5f + SH_C0 * read_property(record, dc_2_prop), 0.f, 1.f);
+		splat.colour_r = shDCToLinear(read_property(record, dc_0_prop));
+		splat.colour_g = shDCToLinear(read_property(record, dc_1_prop));
+		splat.colour_b = shDCToLinear(read_property(record, dc_2_prop));
 		splat.reserved_1 = 0.f;
 
 		enlargeAABBForSplat(result->aabb_os, splat);
@@ -551,9 +561,9 @@ static GaussianSplatDataRef decodeSpz(ArrayRef<uint8> data)
 		const float dc_r = ((float)colours[i * 3 + 0] * (1.f / 255.f) - 0.5f) * INV_SPZ_COLOUR_SCALE;
 		const float dc_g = ((float)colours[i * 3 + 1] * (1.f / 255.f) - 0.5f) * INV_SPZ_COLOUR_SCALE;
 		const float dc_b = ((float)colours[i * 3 + 2] * (1.f / 255.f) - 0.5f) * INV_SPZ_COLOUR_SCALE;
-		splat.colour_r = myClamp(0.5f + SH_C0 * dc_r, 0.f, 1.f);
-		splat.colour_g = myClamp(0.5f + SH_C0 * dc_g, 0.f, 1.f);
-		splat.colour_b = myClamp(0.5f + SH_C0 * dc_b, 0.f, 1.f);
+		splat.colour_r = shDCToLinear(dc_r);
+		splat.colour_g = shDCToLinear(dc_g);
+		splat.colour_b = shDCToLinear(dc_b);
 		splat.reserved_1 = 0.f;
 
 		enlargeAABBForSplat(result->aabb_os, splat);
@@ -568,6 +578,121 @@ GaussianSplatData::GaussianSplatData()
 :	aabb_os(js::AABBox::emptyAABBox()),
 	source_format(GaussianSplatAsset::Format::Unknown)
 {}
+
+
+GaussianSplatRenderSettings::GaussianSplatRenderSettings()
+:	opacity_multiplier(1.35f),
+	brightness(1.0f),
+	radius_multiplier(1.0f)
+{}
+
+
+bool GaussianSplatRenderSettings::isDefault() const
+{
+	return std::fabs(opacity_multiplier - 1.35f) < 1.0e-6f &&
+		std::fabs(brightness - 1.0f) < 1.0e-6f &&
+		std::fabs(radius_multiplier - 1.0f) < 1.0e-6f;
+}
+
+
+std::string GaussianSplatRenderSettings::cacheKeySuffix() const
+{
+	return "#gs:opacity=" + toString(opacity_multiplier) +
+		";brightness=" + toString(brightness) +
+		";radius=" + toString(radius_multiplier);
+}
+
+
+static const char* GAUSSIAN_SPLAT_SETTINGS_PREFIX = "gaussian_splat_settings_v1";
+
+
+bool GaussianSplatRenderSettings::isSettingsContent(const std::string& content)
+{
+	return hasPrefix(content, GAUSSIAN_SPLAT_SETTINGS_PREFIX);
+}
+
+
+GaussianSplatRenderSettings GaussianSplatRenderSettings::fromContent(const std::string& content)
+{
+	GaussianSplatRenderSettings settings;
+	if(!isSettingsContent(content))
+		return settings;
+
+	std::istringstream stream(content);
+	std::string line;
+	while(std::getline(stream, line))
+	{
+		if(!line.empty() && line.back() == '\r')
+			line.pop_back();
+
+		const size_t eq_pos = line.find('=');
+		if(eq_pos == std::string::npos)
+			continue;
+		const std::string key = line.substr(0, eq_pos);
+		const std::string value_s = line.substr(eq_pos + 1);
+		const float value = (float)::atof(value_s.c_str());
+
+		if(key == "opacity_multiplier")
+			settings.opacity_multiplier = myClamp(value, 0.05f, 8.0f);
+		else if(key == "brightness")
+			settings.brightness = myClamp(value, 0.05f, 4.0f);
+		else if(key == "radius_multiplier")
+			settings.radius_multiplier = myClamp(value, 0.10f, 4.0f);
+	}
+
+	return settings;
+}
+
+
+std::string GaussianSplatRenderSettings::serialiseToContent(const GaussianSplatRenderSettings& settings_)
+{
+	GaussianSplatRenderSettings settings = settings_;
+	settings.opacity_multiplier = myClamp(settings.opacity_multiplier, 0.05f, 8.0f);
+	settings.brightness = myClamp(settings.brightness, 0.05f, 4.0f);
+	settings.radius_multiplier = myClamp(settings.radius_multiplier, 0.10f, 4.0f);
+
+	return std::string(GAUSSIAN_SPLAT_SETTINGS_PREFIX) + "\n" +
+		"opacity_multiplier=" + toString(settings.opacity_multiplier) + "\n" +
+		"brightness=" + toString(settings.brightness) + "\n" +
+		"radius_multiplier=" + toString(settings.radius_multiplier) + "\n";
+}
+
+
+GaussianSplatDataRef GaussianSplatRenderSettings::applyToData(const GaussianSplatData& source, const GaussianSplatRenderSettings& settings_)
+{
+	GaussianSplatRenderSettings settings = settings_;
+	settings.opacity_multiplier = myClamp(settings.opacity_multiplier, 0.05f, 8.0f);
+	settings.brightness = myClamp(settings.brightness, 0.05f, 4.0f);
+	settings.radius_multiplier = myClamp(settings.radius_multiplier, 0.10f, 4.0f);
+
+	if(settings.isDefault())
+	{
+		GaussianSplatDataRef result = new GaussianSplatData();
+		result->source_format = source.source_format;
+		result->splats = source.splats;
+		result->aabb_os = source.aabb_os;
+		return result;
+	}
+
+	GaussianSplatDataRef result = new GaussianSplatData();
+	result->source_format = source.source_format;
+	result->splats = source.splats;
+	result->aabb_os = js::AABBox::emptyAABBox();
+
+	for(GaussianSplat& splat : result->splats)
+	{
+		splat.opacity = myClamp(splat.opacity * settings.opacity_multiplier, 0.f, 0.9995f);
+		splat.scale_x = myClamp(splat.scale_x * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
+		splat.scale_y = myClamp(splat.scale_y * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
+		splat.scale_z = myClamp(splat.scale_z * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
+		splat.colour_r = myClamp(splat.colour_r * settings.brightness, 0.f, 16.f);
+		splat.colour_g = myClamp(splat.colour_g * settings.brightness, 0.f, 16.f);
+		splat.colour_b = myClamp(splat.colour_b * settings.brightness, 0.f, 16.f);
+		enlargeAABBForSplat(result->aabb_os, splat);
+	}
+
+	return result;
+}
 
 
 GaussianSplatDataRef GaussianSplatDecoder::decode(const string_view source_name, ArrayRef<uint8> data)

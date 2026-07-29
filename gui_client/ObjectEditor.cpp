@@ -24,6 +24,8 @@
 #include "../qt/SignalBlocker.h"
 #include "../qt/QtUtils.h"
 #include "../qt/RealControl.h"
+#include "../shared/GaussianSplatAsset.h"
+#include "../shared/GaussianSplatData.h"
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QMouseEvent>
@@ -588,6 +590,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	syncing_audio_playlist_widget(false),
 	editing_audio_player_webview(false),
 	editing_particle_emitter(false),
+	editing_gaussian_splat(false),
 	audioShuffleCheckBox(NULL),
 	audioActivationDistanceLabel(NULL),
 	audioActivationDistanceSpinBox(NULL),
@@ -622,6 +625,16 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	portalClearTargetPushButton(NULL),
 	portalHelpPushButton(NULL),
 	portalTipLabel(NULL),
+	gaussianSplatGroupBox(NULL),
+	gaussianSplatPresetLabel(NULL),
+	gaussianSplatPresetComboBox(NULL),
+	gaussianSplatOpacityLabel(NULL),
+	gaussianSplatOpacitySpinBox(NULL),
+	gaussianSplatBrightnessLabel(NULL),
+	gaussianSplatBrightnessSpinBox(NULL),
+	gaussianSplatRadiusLabel(NULL),
+	gaussianSplatRadiusSpinBox(NULL),
+	gaussianSplatTipLabel(NULL),
 	particleGroupBox(NULL),
 	particleHelpPushButton(NULL),
 	particlePresetLabel(NULL),
@@ -1017,6 +1030,9 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	createPortalEditorUI();
 	retranslateDynamicPortalUI();
 
+	createGaussianSplatEditorUI();
+	retranslateDynamicGaussianSplatUI();
+
 	createParticleEditorUI();
 	retranslateDynamicParticleUI();
 }
@@ -1045,6 +1061,7 @@ void ObjectEditor::changeEvent(QEvent* event)
 		this->retranslateUi(this);
 		retranslateDynamicAudioPlayerUI();
 		retranslateDynamicPortalUI();
+		retranslateDynamicGaussianSplatUI();
 		retranslateDynamicParticleUI();
 	}
 
@@ -1239,6 +1256,99 @@ void ObjectEditor::retranslateDynamicPortalUI()
 	this->portalMapWorldPushButton->setToolTip(tr_portal("Set this portal to travel to the map world."));
 	this->portalClearTargetPushButton->setToolTip(tr_portal("Clear the destination so the portal is visibly unfinished and cannot mislead players."));
 	this->portalHelpPushButton->setToolTip(tr_portal("Open portal design help and a list of missing professional features."));
+}
+
+
+void ObjectEditor::createGaussianSplatEditorUI()
+{
+	if(this->gaussianSplatGroupBox)
+		return;
+
+	this->gaussianSplatGroupBox = new QGroupBox(this);
+	QGridLayout* grid = new QGridLayout(this->gaussianSplatGroupBox);
+	grid->setContentsMargins(8, 8, 8, 8);
+	grid->setHorizontalSpacing(8);
+	grid->setVerticalSpacing(6);
+	grid->setColumnMinimumWidth(0, 120);
+	grid->setColumnStretch(0, 0);
+	grid->setColumnStretch(1, 1);
+
+	int row = 0;
+	this->gaussianSplatPresetLabel = new QLabel(this->gaussianSplatGroupBox);
+	this->gaussianSplatPresetComboBox = new QComboBox(this->gaussianSplatGroupBox);
+	this->gaussianSplatPresetComboBox->addItem(QStringLiteral("SuperSplat"), QStringLiteral("supersplat"));
+	configureDockComboBox(this->gaussianSplatPresetComboBox, 12, 220);
+	grid->addWidget(this->gaussianSplatPresetLabel, row, 0);
+	grid->addWidget(this->gaussianSplatPresetComboBox, row++, 1);
+
+	auto add_real_control = [this, grid, &row](QLabel*& label_out, double min_val, double max_val, double step, double slider_min, double slider_max, int slider_steps) -> RealControl*
+	{
+		label_out = new QLabel(this->gaussianSplatGroupBox);
+		RealControl* control = new RealControl(this->gaussianSplatGroupBox);
+		control->setMinimum(min_val);
+		control->setMaximum(max_val);
+		control->setSingleStep(step);
+		control->setSliderMinimum(slider_min);
+		control->setSliderMaximum(slider_max);
+		control->setSliderSteps(slider_steps);
+		grid->addWidget(label_out, row, 0);
+		grid->addWidget(control, row++, 1);
+		connect(control, SIGNAL(valueChanged(double)), this, SIGNAL(objectChanged()));
+		return control;
+	};
+
+	this->gaussianSplatOpacitySpinBox = add_real_control(this->gaussianSplatOpacityLabel, 0.05, 8.0, 0.05, 0.05, 4.0, 160);
+	this->gaussianSplatBrightnessSpinBox = add_real_control(this->gaussianSplatBrightnessLabel, 0.05, 4.0, 0.05, 0.05, 2.0, 80);
+	this->gaussianSplatRadiusSpinBox = add_real_control(this->gaussianSplatRadiusLabel, 0.10, 4.0, 0.02, 0.10, 2.0, 95);
+
+	this->gaussianSplatTipLabel = new QLabel(this->gaussianSplatGroupBox);
+	this->gaussianSplatTipLabel->setWordWrap(true);
+	this->gaussianSplatTipLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+	grid->addWidget(this->gaussianSplatTipLabel, row++, 0, 1, 2);
+
+	this->verticalLayout->addWidget(this->gaussianSplatGroupBox);
+	this->gaussianSplatGroupBox->hide();
+
+	connect(this->gaussianSplatPresetComboBox, SIGNAL(currentIndexChanged(int)), this, SIGNAL(objectChanged()));
+}
+
+
+void ObjectEditor::retranslateDynamicGaussianSplatUI()
+{
+	if(!this->gaussianSplatGroupBox)
+		return;
+
+	const RuntimeTranslation::UILanguage ui_language = currentUILanguageForObjectEditor(this->settings);
+	auto tr_gaussian = [ui_language](const char* source_text)
+	{
+		return translateObjectEditorRuntimeText(ui_language, source_text);
+	};
+
+	this->gaussianSplatGroupBox->setTitle(QString::fromUtf8("Редактор GaussianSplats"));
+	this->gaussianSplatPresetLabel->setText(tr_gaussian("Preset"));
+	this->gaussianSplatOpacityLabel->setText(tr_gaussian("Density / Opacity"));
+	this->gaussianSplatBrightnessLabel->setText(tr_gaussian("Brightness"));
+	this->gaussianSplatRadiusLabel->setText(tr_gaussian("Splat Radius"));
+	this->gaussianSplatTipLabel->setText(tr_gaussian("Gaussian splats are translucent surfels, not ordinary triangle meshes. Use density for solidity, radius for softness/detail, and brightness only after density looks right."));
+}
+
+
+void ObjectEditor::setGaussianSplatControlsFromContent(const std::string& content)
+{
+	const GaussianSplatRenderSettings settings = GaussianSplatRenderSettings::fromContent(content);
+	SignalBlocker::setValue(this->gaussianSplatOpacitySpinBox, settings.opacity_multiplier);
+	SignalBlocker::setValue(this->gaussianSplatBrightnessSpinBox, settings.brightness);
+	SignalBlocker::setValue(this->gaussianSplatRadiusSpinBox, settings.radius_multiplier);
+}
+
+
+GaussianSplatRenderSettings ObjectEditor::gaussianSplatControlsToSettings() const
+{
+	GaussianSplatRenderSettings settings;
+	settings.opacity_multiplier = (float)this->gaussianSplatOpacitySpinBox->value();
+	settings.brightness = (float)this->gaussianSplatBrightnessSpinBox->value();
+	settings.radius_multiplier = (float)this->gaussianSplatRadiusSpinBox->value();
+	return settings;
 }
 
 
@@ -2234,6 +2344,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->editing_object_type = ob.object_type;
 	this->editing_audio_player_webview = ob.isAudioPlayerWebView();
 	this->editing_particle_emitter = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
+	this->editing_gaussian_splat = (ob.object_type == WorldObject::ObjectType_Generic) && GaussianSplatAsset::hasSupportedExtension(ob.model_url);
 	const RuntimeTranslation::UILanguage ui_language = currentUILanguageForObjectEditor(this->settings);
 
 	//this->objectTypeLabel->setText(QtUtils::toQString(ob_type + " (UID: " + ob.uid.toString() + ")"));
@@ -2289,6 +2400,8 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	syncAudioPlaylistWidgetFromContent(ob.content);
 	if(this->editing_particle_emitter)
 		setParticleControlsFromContent(ob.content);
+	if(this->editing_gaussian_splat)
+		setGaussianSplatControlsFromContent(ob.content);
 	{
 		SignalBlocker b(this->fontComboBox);
 		// Set font combobox to the object's font
@@ -2363,7 +2476,19 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->cameraGroupBox->hide();
 	this->cameraScreenGroupBox->hide();
 	
-	if(this->editing_particle_emitter)
+	if(this->editing_gaussian_splat)
+	{
+		this->materialsGroupBox->hide();
+		this->lightmapGroupBox->hide();
+		this->modelLabel->show();
+		this->modelFileSelectWidget->show();
+		this->spotlightGroupBox->hide();
+		this->seatGroupBox->hide();
+		this->audioGroupBox->hide();
+		this->physicsSettingsGroupBox->show();
+		this->videoGroupBox->hide();
+	}
+	else if(this->editing_particle_emitter)
 	{
 		this->materialsGroupBox->show();
 		this->lightmapGroupBox->hide();
@@ -2513,6 +2638,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	}
 
 	this->particleGroupBox->setVisible(this->editing_particle_emitter);
+	this->gaussianSplatGroupBox->setVisible(this->editing_gaussian_splat);
 	this->portalGroupBox->setVisible(ob.object_type == WorldObject::ObjectType_Portal);
 
 	if(ob.object_type != WorldObject::ObjectType_Hypercard)
@@ -2595,6 +2721,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	const bool is_audio_player = ob.isAudioPlayerWebView();
 	const bool is_portal = ob.isPortal();
 	const bool is_particle_emitter = this->editing_particle_emitter;
+	const bool is_gaussian_splat = this->editing_gaussian_splat;
 	auto tr_object_editor = [ui_language](const char* source_text)
 	{
 		return translateObjectEditorRuntimeText(ui_language, source_text);
@@ -2602,15 +2729,15 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->audioGroupBox->setTitle(is_audio_player ? tr_object_editor("Audio Player") : tr_object_editor("Audio"));
 	this->label_9->setVisible(!is_audio_player);
 	this->widget_5->setVisible(!is_audio_player);
-	this->label_12->setVisible(!is_audio_player && !is_particle_emitter);
-	this->contentTextEdit->setVisible(!is_audio_player && !is_particle_emitter);
-	this->fontLabel->setVisible(!is_audio_player && !is_portal && !is_particle_emitter);
-	this->fontComboBox->setVisible(!is_audio_player && !is_portal && !is_particle_emitter);
+	this->label_12->setVisible(!is_audio_player && !is_particle_emitter && !is_gaussian_splat);
+	this->contentTextEdit->setVisible(!is_audio_player && !is_particle_emitter && !is_gaussian_splat);
+	this->fontLabel->setVisible(!is_audio_player && !is_portal && !is_particle_emitter && !is_gaussian_splat);
+	this->fontComboBox->setVisible(!is_audio_player && !is_portal && !is_particle_emitter && !is_gaussian_splat);
 	this->label_14->setVisible(!is_audio_player);
 	this->audioFileWidget->setVisible(!is_audio_player);
-	this->targetURLLabel->setVisible(!is_audio_player && !is_particle_emitter);
-	this->targetURLLineEdit->setVisible(!is_audio_player && !is_particle_emitter);
-	this->visitURLLabel->setVisible(!is_audio_player && !is_portal && !is_particle_emitter && !ob.target_url.empty());
+	this->targetURLLabel->setVisible(!is_audio_player && !is_particle_emitter && !is_gaussian_splat);
+	this->targetURLLineEdit->setVisible(!is_audio_player && !is_particle_emitter && !is_gaussian_splat);
+	this->visitURLLabel->setVisible(!is_audio_player && !is_portal && !is_particle_emitter && !is_gaussian_splat && !ob.target_url.empty());
 	this->audioShuffleCheckBox->setVisible(is_audio_player);
 	this->audioActivationDistanceLabel->setVisible(is_audio_player);
 	this->audioActivationDistanceSpinBox->setVisible(is_audio_player);
@@ -2735,13 +2862,16 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 	ob_out.model_url = new_model_url;
 	checkStringSize(ob_out.model_url, WorldObject::MAX_URL_SIZE);
 
+	const bool is_gaussian_splat = this->editing_gaussian_splat || ((ob_out.object_type == WorldObject::ObjectType_Generic) && GaussianSplatAsset::hasSupportedExtension(ob_out.model_url));
+
 	const std::string new_script =  QtUtils::toIndString(this->scriptTextEdit->toPlainText());
 	if(ob_out.script != new_script)
 		ob_out.changed_flags |= WorldObject::SCRIPT_CHANGED;
 	ob_out.script = new_script;
 	checkStringSize(ob_out.script, WorldObject::MAX_SCRIPT_SIZE);
 
-	const std::string new_content = is_particle_emitter ? ParticleEmitterSettings::serialiseToContent(particleControlsToSettings()) : QtUtils::toIndString(this->contentTextEdit->toPlainText());
+	const std::string new_content = is_gaussian_splat ? GaussianSplatRenderSettings::serialiseToContent(gaussianSplatControlsToSettings()) :
+		(is_particle_emitter ? ParticleEmitterSettings::serialiseToContent(particleControlsToSettings()) : QtUtils::toIndString(this->contentTextEdit->toPlainText()));
 	if(ob_out.content != new_content)
 		ob_out.changed_flags |= WorldObject::CONTENT_CHANGED;
 	ob_out.content = new_content;

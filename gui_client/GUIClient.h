@@ -1014,7 +1014,7 @@ public:
 
 	std::map<ModelProcessingKey, std::set<UID>> loading_model_URL_to_world_ob_UID_map;
 	std::map<URLString, GaussianSplatDataRef> gaussian_splat_data_cache;
-	std::map<URLString, OpenGLTextureRef> gaussian_splat_texture_cache;
+	std::map<std::string, OpenGLTextureRef> gaussian_splat_texture_cache;
 	std::set<URLString> gaussian_splats_processing;
 	std::map<URLString, std::set<UID>> loading_gaussian_splat_URL_to_world_ob_UID_map;
 	std::map<URLString, Reference<GaussianSplatCEFConverter>> gaussian_splat_remote_converters;
