@@ -28,8 +28,6 @@ SET(shared_files
 ../shared/FileTypes.h
 ../shared/GaussianSplatAsset.cpp
 ../shared/GaussianSplatAsset.h
-../shared/GaussianSplatData.cpp
-../shared/GaussianSplatData.h
 ../shared/LODGeneration.cpp
 ../shared/LODGeneration.h
 ../shared/MessageUtils.h
