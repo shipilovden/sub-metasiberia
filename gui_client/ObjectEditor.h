@@ -229,6 +229,12 @@ private:
 	RealControl* gaussianSplatBrightnessSpinBox;
 	QLabel* gaussianSplatRadiusLabel;
 	RealControl* gaussianSplatRadiusSpinBox;
+	QLabel* gaussianSplatSaturationLabel;
+	RealControl* gaussianSplatSaturationSpinBox;
+	QLabel* gaussianSplatContrastLabel;
+	RealControl* gaussianSplatContrastSpinBox;
+	QLabel* gaussianSplatAlphaCutoffLabel;
+	RealControl* gaussianSplatAlphaCutoffSpinBox;
 	QLabel* gaussianSplatTipLabel;
 
 	QGroupBox* particleGroupBox;

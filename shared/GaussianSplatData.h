@@ -53,6 +53,9 @@ struct GaussianSplatRenderSettings
 	float opacity_multiplier;
 	float brightness;
 	float radius_multiplier;
+	float saturation;
+	float contrast;
+	float alpha_cutoff;
 
 	bool isDefault() const;
 	std::string cacheKeySuffix() const;

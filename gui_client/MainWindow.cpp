@@ -3979,7 +3979,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 	}
 
-	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_cultural_editor ? tr("Cultural Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_gaussian_splat_editor ? QString::fromUtf8("Редактор GaussianSplats") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))))))));
+	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_cultural_editor ? tr("Cultural Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_gaussian_splat_editor ? tr("GaussianSplats Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))))))));
 	if(ui->editorDockWidget->toggleViewAction())
 		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }

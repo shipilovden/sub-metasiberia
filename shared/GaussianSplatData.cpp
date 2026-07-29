@@ -581,17 +581,23 @@ GaussianSplatData::GaussianSplatData()
 
 
 GaussianSplatRenderSettings::GaussianSplatRenderSettings()
-:	opacity_multiplier(1.35f),
+:	opacity_multiplier(2.25f),
 	brightness(1.0f),
-	radius_multiplier(1.0f)
+	radius_multiplier(1.0f),
+	saturation(1.0f),
+	contrast(1.0f),
+	alpha_cutoff(1.0f / 255.0f)
 {}
 
 
 bool GaussianSplatRenderSettings::isDefault() const
 {
-	return std::fabs(opacity_multiplier - 1.35f) < 1.0e-6f &&
+	return std::fabs(opacity_multiplier - 2.25f) < 1.0e-6f &&
 		std::fabs(brightness - 1.0f) < 1.0e-6f &&
-		std::fabs(radius_multiplier - 1.0f) < 1.0e-6f;
+		std::fabs(radius_multiplier - 1.0f) < 1.0e-6f &&
+		std::fabs(saturation - 1.0f) < 1.0e-6f &&
+		std::fabs(contrast - 1.0f) < 1.0e-6f &&
+		std::fabs(alpha_cutoff - (1.0f / 255.0f)) < 1.0e-6f;
 }
 
 
@@ -599,7 +605,10 @@ std::string GaussianSplatRenderSettings::cacheKeySuffix() const
 {
 	return "#gs:opacity=" + toString(opacity_multiplier) +
 		";brightness=" + toString(brightness) +
-		";radius=" + toString(radius_multiplier);
+		";radius=" + toString(radius_multiplier) +
+		";saturation=" + toString(saturation) +
+		";contrast=" + toString(contrast) +
+		";cutoff=" + toString(alpha_cutoff);
 }
 
 
@@ -633,11 +642,17 @@ GaussianSplatRenderSettings GaussianSplatRenderSettings::fromContent(const std::
 		const float value = (float)::atof(value_s.c_str());
 
 		if(key == "opacity_multiplier")
-			settings.opacity_multiplier = myClamp(value, 0.05f, 8.0f);
+			settings.opacity_multiplier = myClamp(value, 0.05f, 32.0f);
 		else if(key == "brightness")
 			settings.brightness = myClamp(value, 0.05f, 4.0f);
 		else if(key == "radius_multiplier")
 			settings.radius_multiplier = myClamp(value, 0.10f, 4.0f);
+		else if(key == "saturation")
+			settings.saturation = myClamp(value, 0.0f, 3.0f);
+		else if(key == "contrast")
+			settings.contrast = myClamp(value, 0.10f, 4.0f);
+		else if(key == "alpha_cutoff")
+			settings.alpha_cutoff = myClamp(value, 0.0f, 0.25f);
 	}
 
 	return settings;
@@ -647,23 +662,32 @@ GaussianSplatRenderSettings GaussianSplatRenderSettings::fromContent(const std::
 std::string GaussianSplatRenderSettings::serialiseToContent(const GaussianSplatRenderSettings& settings_)
 {
 	GaussianSplatRenderSettings settings = settings_;
-	settings.opacity_multiplier = myClamp(settings.opacity_multiplier, 0.05f, 8.0f);
+	settings.opacity_multiplier = myClamp(settings.opacity_multiplier, 0.05f, 32.0f);
 	settings.brightness = myClamp(settings.brightness, 0.05f, 4.0f);
 	settings.radius_multiplier = myClamp(settings.radius_multiplier, 0.10f, 4.0f);
+	settings.saturation = myClamp(settings.saturation, 0.0f, 3.0f);
+	settings.contrast = myClamp(settings.contrast, 0.10f, 4.0f);
+	settings.alpha_cutoff = myClamp(settings.alpha_cutoff, 0.0f, 0.25f);
 
 	return std::string(GAUSSIAN_SPLAT_SETTINGS_PREFIX) + "\n" +
 		"opacity_multiplier=" + toString(settings.opacity_multiplier) + "\n" +
 		"brightness=" + toString(settings.brightness) + "\n" +
-		"radius_multiplier=" + toString(settings.radius_multiplier) + "\n";
+		"radius_multiplier=" + toString(settings.radius_multiplier) + "\n" +
+		"saturation=" + toString(settings.saturation) + "\n" +
+		"contrast=" + toString(settings.contrast) + "\n" +
+		"alpha_cutoff=" + toString(settings.alpha_cutoff) + "\n";
 }
 
 
 GaussianSplatDataRef GaussianSplatRenderSettings::applyToData(const GaussianSplatData& source, const GaussianSplatRenderSettings& settings_)
 {
 	GaussianSplatRenderSettings settings = settings_;
-	settings.opacity_multiplier = myClamp(settings.opacity_multiplier, 0.05f, 8.0f);
+	settings.opacity_multiplier = myClamp(settings.opacity_multiplier, 0.05f, 32.0f);
 	settings.brightness = myClamp(settings.brightness, 0.05f, 4.0f);
 	settings.radius_multiplier = myClamp(settings.radius_multiplier, 0.10f, 4.0f);
+	settings.saturation = myClamp(settings.saturation, 0.0f, 3.0f);
+	settings.contrast = myClamp(settings.contrast, 0.10f, 4.0f);
+	settings.alpha_cutoff = myClamp(settings.alpha_cutoff, 0.0f, 0.25f);
 
 	if(settings.isDefault())
 	{
@@ -681,13 +705,25 @@ GaussianSplatDataRef GaussianSplatRenderSettings::applyToData(const GaussianSpla
 
 	for(GaussianSplat& splat : result->splats)
 	{
-		splat.opacity = myClamp(splat.opacity * settings.opacity_multiplier, 0.f, 0.9995f);
+		splat.opacity = myClamp(1.0f - std::exp(-splat.opacity * settings.opacity_multiplier), 0.f, 0.9995f);
 		splat.scale_x = myClamp(splat.scale_x * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
 		splat.scale_y = myClamp(splat.scale_y * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
 		splat.scale_z = myClamp(splat.scale_z * settings.radius_multiplier, 1.0e-8f, 1.0e8f);
-		splat.colour_r = myClamp(splat.colour_r * settings.brightness, 0.f, 16.f);
-		splat.colour_g = myClamp(splat.colour_g * settings.brightness, 0.f, 16.f);
-		splat.colour_b = myClamp(splat.colour_b * settings.brightness, 0.f, 16.f);
+
+		float r = splat.colour_r;
+		float g = splat.colour_g;
+		float b = splat.colour_b;
+		const float luminance = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+		r = luminance + (r - luminance) * settings.saturation;
+		g = luminance + (g - luminance) * settings.saturation;
+		b = luminance + (b - luminance) * settings.saturation;
+		r = 0.5f + (r - 0.5f) * settings.contrast;
+		g = 0.5f + (g - 0.5f) * settings.contrast;
+		b = 0.5f + (b - 0.5f) * settings.contrast;
+		splat.colour_r = myClamp(r * settings.brightness, 0.f, 16.f);
+		splat.colour_g = myClamp(g * settings.brightness, 0.f, 16.f);
+		splat.colour_b = myClamp(b * settings.brightness, 0.f, 16.f);
+		splat.reserved_1 = settings.alpha_cutoff;
 		enlargeAABBForSplat(result->aabb_os, splat);
 	}
 

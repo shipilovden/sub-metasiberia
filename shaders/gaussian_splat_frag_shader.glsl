@@ -1,6 +1,7 @@
 in vec2 gaussian_coord;
 in vec3 splat_colour;
 in float splat_opacity;
+in float splat_alpha_cutoff;
 
 #if ORDER_INDEPENDENT_TRANSPARENCY
 layout(location = 0) out vec4 transmittance_out;
@@ -13,7 +14,7 @@ layout(location = 0) out vec4 colour_out;
 void main()
 {
 	float alpha = splat_opacity * exp(-0.5 * dot(gaussian_coord, gaussian_coord));
-	if(alpha < (1.0 / 255.0))
+	if(alpha < splat_alpha_cutoff)
 		discard;
 	alpha = min(alpha, 0.9995);
 

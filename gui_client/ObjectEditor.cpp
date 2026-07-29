@@ -634,6 +634,12 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	gaussianSplatBrightnessSpinBox(NULL),
 	gaussianSplatRadiusLabel(NULL),
 	gaussianSplatRadiusSpinBox(NULL),
+	gaussianSplatSaturationLabel(NULL),
+	gaussianSplatSaturationSpinBox(NULL),
+	gaussianSplatContrastLabel(NULL),
+	gaussianSplatContrastSpinBox(NULL),
+	gaussianSplatAlphaCutoffLabel(NULL),
+	gaussianSplatAlphaCutoffSpinBox(NULL),
 	gaussianSplatTipLabel(NULL),
 	particleGroupBox(NULL),
 	particleHelpPushButton(NULL),
@@ -1277,6 +1283,8 @@ void ObjectEditor::createGaussianSplatEditorUI()
 	this->gaussianSplatPresetLabel = new QLabel(this->gaussianSplatGroupBox);
 	this->gaussianSplatPresetComboBox = new QComboBox(this->gaussianSplatGroupBox);
 	this->gaussianSplatPresetComboBox->addItem(QStringLiteral("SuperSplat"), QStringLiteral("supersplat"));
+	this->gaussianSplatPresetComboBox->addItem(QStringLiteral("Solid Metasiberia"), QStringLiteral("solid"));
+	this->gaussianSplatPresetComboBox->addItem(QStringLiteral("Clean Edges"), QStringLiteral("clean_edges"));
 	configureDockComboBox(this->gaussianSplatPresetComboBox, 12, 220);
 	grid->addWidget(this->gaussianSplatPresetLabel, row, 0);
 	grid->addWidget(this->gaussianSplatPresetComboBox, row++, 1);
@@ -1297,9 +1305,12 @@ void ObjectEditor::createGaussianSplatEditorUI()
 		return control;
 	};
 
-	this->gaussianSplatOpacitySpinBox = add_real_control(this->gaussianSplatOpacityLabel, 0.05, 8.0, 0.05, 0.05, 4.0, 160);
+	this->gaussianSplatOpacitySpinBox = add_real_control(this->gaussianSplatOpacityLabel, 0.05, 32.0, 0.05, 0.05, 8.0, 318);
 	this->gaussianSplatBrightnessSpinBox = add_real_control(this->gaussianSplatBrightnessLabel, 0.05, 4.0, 0.05, 0.05, 2.0, 80);
 	this->gaussianSplatRadiusSpinBox = add_real_control(this->gaussianSplatRadiusLabel, 0.10, 4.0, 0.02, 0.10, 2.0, 95);
+	this->gaussianSplatSaturationSpinBox = add_real_control(this->gaussianSplatSaturationLabel, 0.0, 3.0, 0.05, 0.0, 2.0, 80);
+	this->gaussianSplatContrastSpinBox = add_real_control(this->gaussianSplatContrastLabel, 0.10, 4.0, 0.05, 0.10, 2.5, 96);
+	this->gaussianSplatAlphaCutoffSpinBox = add_real_control(this->gaussianSplatAlphaCutoffLabel, 0.0, 0.25, 0.001, 0.0, 0.08, 80);
 
 	this->gaussianSplatTipLabel = new QLabel(this->gaussianSplatGroupBox);
 	this->gaussianSplatTipLabel->setWordWrap(true);
@@ -1309,7 +1320,42 @@ void ObjectEditor::createGaussianSplatEditorUI()
 	this->verticalLayout->addWidget(this->gaussianSplatGroupBox);
 	this->gaussianSplatGroupBox->hide();
 
-	connect(this->gaussianSplatPresetComboBox, SIGNAL(currentIndexChanged(int)), this, SIGNAL(objectChanged()));
+	connect(this->gaussianSplatPresetComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index)
+	{
+		if(index < 0)
+			return;
+
+		const QString preset = this->gaussianSplatPresetComboBox->itemData(index).toString();
+		if(preset == QStringLiteral("solid"))
+		{
+			SignalBlocker::setValue(this->gaussianSplatOpacitySpinBox, 7.0);
+			SignalBlocker::setValue(this->gaussianSplatBrightnessSpinBox, 0.85);
+			SignalBlocker::setValue(this->gaussianSplatRadiusSpinBox, 0.95);
+			SignalBlocker::setValue(this->gaussianSplatSaturationSpinBox, 1.15);
+			SignalBlocker::setValue(this->gaussianSplatContrastSpinBox, 1.35);
+			SignalBlocker::setValue(this->gaussianSplatAlphaCutoffSpinBox, 0.008);
+		}
+		else if(preset == QStringLiteral("clean_edges"))
+		{
+			SignalBlocker::setValue(this->gaussianSplatOpacitySpinBox, 5.0);
+			SignalBlocker::setValue(this->gaussianSplatBrightnessSpinBox, 0.90);
+			SignalBlocker::setValue(this->gaussianSplatRadiusSpinBox, 0.85);
+			SignalBlocker::setValue(this->gaussianSplatSaturationSpinBox, 1.10);
+			SignalBlocker::setValue(this->gaussianSplatContrastSpinBox, 1.25);
+			SignalBlocker::setValue(this->gaussianSplatAlphaCutoffSpinBox, 0.018);
+		}
+		else
+		{
+			SignalBlocker::setValue(this->gaussianSplatOpacitySpinBox, 2.25);
+			SignalBlocker::setValue(this->gaussianSplatBrightnessSpinBox, 1.0);
+			SignalBlocker::setValue(this->gaussianSplatRadiusSpinBox, 1.0);
+			SignalBlocker::setValue(this->gaussianSplatSaturationSpinBox, 1.0);
+			SignalBlocker::setValue(this->gaussianSplatContrastSpinBox, 1.0);
+			SignalBlocker::setValue(this->gaussianSplatAlphaCutoffSpinBox, 1.0 / 255.0);
+		}
+
+		emit objectChanged();
+	});
 }
 
 
@@ -1324,31 +1370,43 @@ void ObjectEditor::retranslateDynamicGaussianSplatUI()
 		return translateObjectEditorRuntimeText(ui_language, source_text);
 	};
 
-	this->gaussianSplatGroupBox->setTitle(QString::fromUtf8("Редактор GaussianSplats"));
+	this->gaussianSplatGroupBox->setTitle(tr_gaussian("GaussianSplats Editor"));
 	this->gaussianSplatPresetLabel->setText(tr_gaussian("Preset"));
+	this->gaussianSplatPresetComboBox->setItemText(0, tr_gaussian("SuperSplat"));
+	this->gaussianSplatPresetComboBox->setItemText(1, tr_gaussian("Solid Metasiberia"));
+	this->gaussianSplatPresetComboBox->setItemText(2, tr_gaussian("Clean Edges"));
 	this->gaussianSplatOpacityLabel->setText(tr_gaussian("Density / Opacity"));
 	this->gaussianSplatBrightnessLabel->setText(tr_gaussian("Brightness"));
 	this->gaussianSplatRadiusLabel->setText(tr_gaussian("Splat Radius"));
-	this->gaussianSplatTipLabel->setText(tr_gaussian("Gaussian splats are translucent surfels, not ordinary triangle meshes. Use density for solidity, radius for softness/detail, and brightness only after density looks right."));
+	this->gaussianSplatSaturationLabel->setText(tr_gaussian("Saturation"));
+	this->gaussianSplatContrastLabel->setText(tr_gaussian("Contrast"));
+	this->gaussianSplatAlphaCutoffLabel->setText(tr_gaussian("Edge Cutoff"));
+	this->gaussianSplatTipLabel->setText(tr_gaussian("Gaussian splats are translucent surfels, not ordinary triangle meshes. Use density for solidity, edge cutoff to remove haze, radius for softness/detail, then tune contrast and brightness."));
 }
 
 
 void ObjectEditor::setGaussianSplatControlsFromContent(const std::string& content)
 {
-	const GaussianSplatRenderSettings settings = GaussianSplatRenderSettings::fromContent(content);
-	SignalBlocker::setValue(this->gaussianSplatOpacitySpinBox, settings.opacity_multiplier);
-	SignalBlocker::setValue(this->gaussianSplatBrightnessSpinBox, settings.brightness);
-	SignalBlocker::setValue(this->gaussianSplatRadiusSpinBox, settings.radius_multiplier);
+	const GaussianSplatRenderSettings render_settings = GaussianSplatRenderSettings::fromContent(content);
+	SignalBlocker::setValue(this->gaussianSplatOpacitySpinBox, render_settings.opacity_multiplier);
+	SignalBlocker::setValue(this->gaussianSplatBrightnessSpinBox, render_settings.brightness);
+	SignalBlocker::setValue(this->gaussianSplatRadiusSpinBox, render_settings.radius_multiplier);
+	SignalBlocker::setValue(this->gaussianSplatSaturationSpinBox, render_settings.saturation);
+	SignalBlocker::setValue(this->gaussianSplatContrastSpinBox, render_settings.contrast);
+	SignalBlocker::setValue(this->gaussianSplatAlphaCutoffSpinBox, render_settings.alpha_cutoff);
 }
 
 
 GaussianSplatRenderSettings ObjectEditor::gaussianSplatControlsToSettings() const
 {
-	GaussianSplatRenderSettings settings;
-	settings.opacity_multiplier = (float)this->gaussianSplatOpacitySpinBox->value();
-	settings.brightness = (float)this->gaussianSplatBrightnessSpinBox->value();
-	settings.radius_multiplier = (float)this->gaussianSplatRadiusSpinBox->value();
-	return settings;
+	GaussianSplatRenderSettings render_settings;
+	render_settings.opacity_multiplier = (float)this->gaussianSplatOpacitySpinBox->value();
+	render_settings.brightness = (float)this->gaussianSplatBrightnessSpinBox->value();
+	render_settings.radius_multiplier = (float)this->gaussianSplatRadiusSpinBox->value();
+	render_settings.saturation = (float)this->gaussianSplatSaturationSpinBox->value();
+	render_settings.contrast = (float)this->gaussianSplatContrastSpinBox->value();
+	render_settings.alpha_cutoff = (float)this->gaussianSplatAlphaCutoffSpinBox->value();
+	return render_settings;
 }
 
 
@@ -3192,6 +3250,14 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->portalMainWorldPushButton->setEnabled(editable);
 	this->portalMapWorldPushButton->setEnabled(editable);
 	this->portalClearTargetPushButton->setEnabled(editable);
+
+	this->gaussianSplatPresetComboBox->setEnabled(editable);
+	this->gaussianSplatOpacitySpinBox->setReadOnly(!editable);
+	this->gaussianSplatBrightnessSpinBox->setReadOnly(!editable);
+	this->gaussianSplatRadiusSpinBox->setReadOnly(!editable);
+	this->gaussianSplatSaturationSpinBox->setReadOnly(!editable);
+	this->gaussianSplatContrastSpinBox->setReadOnly(!editable);
+	this->gaussianSplatAlphaCutoffSpinBox->setReadOnly(!editable);
 
 	this->cameraEnabledCheckBox->setEnabled(editable);
 	this->cameraFOVYDoubleSpinBox->setReadOnly(!editable);

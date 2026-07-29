@@ -38,6 +38,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Reset Layout", "Сбросить раскладку");
 	add("MainWindow", "Enter Fullscreen Mode", "Полноэкранный режим");
 	add("MainWindow", "Editor", "Редактор");
+	add("MainWindow", "GaussianSplats Editor", "Редактор GaussianSplats");
 	add("MainWindow", "Material Browser", "Браузер материалов");
 	add("MainWindow", "Environment", "Окружение");
 	add("MainWindow", "World Settings", "Настройки мира");
@@ -474,6 +475,18 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("ObjectEditor", " deg/s", " град/с");
 	add("ObjectEditor", " m^2", " м^2");
 	add("ObjectEditor", " kg", " кг");
+	add("ObjectEditor", "GaussianSplats Editor", "Редактор GaussianSplats");
+	add("ObjectEditor", "Preset", "Пресет");
+	add("ObjectEditor", "SuperSplat", "SuperSplat");
+	add("ObjectEditor", "Solid Metasiberia", "Плотная Метасибирь");
+	add("ObjectEditor", "Clean Edges", "Чистые края");
+	add("ObjectEditor", "Density / Opacity", "Плотность / непрозрачность");
+	add("ObjectEditor", "Brightness", "Яркость");
+	add("ObjectEditor", "Splat Radius", "Радиус splat");
+	add("ObjectEditor", "Saturation", "Насыщенность");
+	add("ObjectEditor", "Contrast", "Контраст");
+	add("ObjectEditor", "Edge Cutoff", "Обрезка дымки");
+	add("ObjectEditor", "Gaussian splats are translucent surfels, not ordinary triangle meshes. Use density for solidity, edge cutoff to remove haze, radius for softness/detail, then tune contrast and brightness.", "Gaussian splats — это полупрозрачные surfel-точки, а не обычные треугольные модели. Для цельности используйте плотность, для удаления дымки — обрезку края, радиус — для мягкости/деталей, затем настраивайте контраст и яркость.");
 	add("ObjectEditor", "built-in sprite", "встроенный спрайт");
 	add("ObjectEditor", "local sprite", "локальный спрайт");
 	add("ObjectEditor", "shared sprite", "общий спрайт");

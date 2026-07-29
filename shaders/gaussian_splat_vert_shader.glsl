@@ -6,6 +6,7 @@ in vec3 position_in;
 out vec2 gaussian_coord;
 out vec3 splat_colour;
 out float splat_opacity;
+out float splat_alpha_cutoff;
 
 uniform sampler2D albedo_texture;
 
@@ -40,6 +41,7 @@ void hideInstance()
 	gaussian_coord = vec2(100.0);
 	splat_colour = vec3(0.0);
 	splat_opacity = 0.0;
+	splat_alpha_cutoff = 1.0 / 255.0;
 }
 
 
@@ -49,7 +51,8 @@ void main()
 	vec4 centre_opacity = loadSplatTexel(base + 0);
 	vec3 scale = max(abs(loadSplatTexel(base + 1).xyz), vec3(1.0e-7));
 	vec4 rotation = loadSplatTexel(base + 2);
-	vec3 colour = max(loadSplatTexel(base + 3).rgb, vec3(0.0));
+	vec4 colour_cutoff = loadSplatTexel(base + 3);
+	vec3 colour = max(colour_cutoff.rgb, vec3(0.0));
 
 	vec4 centre_ws = per_object_data.model_matrix * vec4(centre_opacity.xyz, 1.0);
 	vec4 centre_cs = view_matrix * centre_ws;
@@ -103,4 +106,5 @@ void main()
 	gaussian_coord = local * 3.0;
 	splat_colour = colour;
 	splat_opacity = clamp(centre_opacity.w, 0.0, 0.9995);
+	splat_alpha_cutoff = max(colour_cutoff.w, 1.0 / 255.0);
 }

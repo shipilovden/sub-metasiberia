@@ -119,7 +119,7 @@ GLObjectRef GaussianSplatRenderer::makeObject(
 
 	OpenGLMaterial material;
 	material.transparent = true;
-	material.alpha_blend = true;
+	material.alpha_blend = false;
 	material.simple_double_sided = true;
 	material.cast_shadows = false;
 	material.allow_alpha_test = false;
