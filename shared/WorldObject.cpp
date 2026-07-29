@@ -162,9 +162,26 @@ void forEachAudioPlayerPlaylistURL(const WorldObject& ob, Fn&& fn)
 }
 
 
+void resetWorldMaterialToDefaults(WorldMaterial& mat)
+{
+	mat.name.clear();
+	mat.colour_rgb = Colour3f(0.85f);
+	mat.colour_texture_url = URLString();
+	mat.emission_rgb = Colour3f(0.85f);
+	mat.emission_texture_url = URLString();
+	mat.normal_map_url = URLString();
+	mat.roughness = ScalarVal(0.5f);
+	mat.metallic_fraction = ScalarVal(0.0f);
+	mat.opacity = ScalarVal(1.0f);
+	mat.tex_matrix = Matrix2f::identity();
+	mat.emission_lum_flux_or_lum = 0;
+	mat.flags = 0;
+}
+
+
 void setPortalInnerRimMaterialDefaults(WorldMaterial& mat)
 {
-	mat = WorldMaterial();
+	resetWorldMaterialToDefaults(mat);
 	mat.name = "Portal Inner Rim";
 	mat.colour_rgb = Colour3f(216 / 255.f, 207 / 255.f, 140 / 255.f);
 	mat.emission_rgb = mat.colour_rgb;
@@ -175,7 +192,7 @@ void setPortalInnerRimMaterialDefaults(WorldMaterial& mat)
 
 void setPortalArchMaterialDefaults(WorldMaterial& mat)
 {
-	mat = WorldMaterial();
+	resetWorldMaterialToDefaults(mat);
 	mat.name = "Portal Arch Body";
 	mat.colour_rgb = Colour3f(1.f);
 	mat.emission_rgb = Colour3f(0.85f);
@@ -200,7 +217,7 @@ void setPortalThresholdMaterialDefaults(WorldMaterial& mat)
 
 void setPortalEffectMaterialDefaults(WorldMaterial& mat)
 {
-	mat = WorldMaterial();
+	resetWorldMaterialToDefaults(mat);
 	mat.name = "Portal Effect";
 	mat.colour_rgb = Colour3f(1.f);
 	mat.emission_rgb = Colour3f(1.f);

@@ -77,6 +77,7 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	this->avatarSelectWidget->setType(FileSelectWidget::Type_File);
 	this->avatarSelectWidget->setFilter(
 		"Supported files (*.obj *.gltf *.glb *.vox *.stl *.igmesh *.ply *.compressed.ply *.splat *.ksplat *.spz *.sog *.lcc *.lcc2 "
+		"meta.json lod-meta.json "
 		"*.jpg *.jpeg *.png *.gif *.exr *.ktx *.ktx2 *.basis *.tif *.tiff *.bmp *.tga *.webp);;All files (*.*)"
 	);
 	//this->avatarSelectWidget->setFilename(settings->value("AddObjectDialogPath").toString());

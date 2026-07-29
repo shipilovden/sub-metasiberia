@@ -21,6 +21,17 @@ static string_view pathWithoutQueryOrFragment(string_view path)
 Format detectFormat(string_view path)
 {
 	const string_view extension_path = pathWithoutQueryOrFragment(path);
+	const std::string lowercase_path = toLowerCase(
+		std::string(extension_path.data(), extension_path.size())
+	);
+	const size_t basename_pos = lowercase_path.find_last_of("/\\");
+	const std::string basename = basename_pos == std::string::npos ?
+		lowercase_path : lowercase_path.substr(basename_pos + 1);
+
+	// SplatTransform's unbundled SOG entry points use these exact filenames.
+	// Do not classify arbitrary JSON files as Gaussian resources.
+	if(basename == "meta.json" || basename == "lod-meta.json")
+		return Format::SOG;
 
 	// Check the composite extension first: it is a distinct container despite
 	// also ending in ".ply".
@@ -146,6 +157,11 @@ void test()
 	testAssert(detectFormat("scene.ksplat") == Format::KSplat);
 	testAssert(detectFormat("scene.spz") == Format::SPZ);
 	testAssert(detectFormat("scene.sog") == Format::SOG);
+	testAssert(detectFormat("meta.json") == Format::SOG);
+	testAssert(detectFormat("assets/META.JSON?token=1") == Format::SOG);
+	testAssert(detectFormat("assets/lod-meta.json#scene") == Format::SOG);
+	testAssert(detectFormat("other.json") == Format::Unknown);
+	testAssert(detectFormat("meta.json.backup") == Format::Unknown);
 	testAssert(detectFormat("scene.lcc") == Format::LCC);
 	testAssert(detectFormat("scene.lcc2") == Format::LCC2);
 	testAssert(detectFormat("scene.ply.txt") == Format::Unknown);

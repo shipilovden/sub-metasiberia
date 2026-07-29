@@ -44,7 +44,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
 #include "ScientificObjectSettings.h"
+#if !defined(EMSCRIPTEN)
 #include "PeriodicTable.h"
+#endif
 #include "MapWorldLayer.h"
 #include "MapWorldUtils.h"
 #include "Scripting.h"
@@ -22291,15 +22293,22 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 						std::ostringstream card;
 						if((scientific_settings.info_card_mode == "atom" || scientific_settings.info_card_mode == "selection") && selected_atom)
 						{
+							std::string element_name("element");
+#if !defined(EMSCRIPTEN)
 							const PeriodicElementRecord* element = PeriodicTableModel::elementBySymbol(QString::fromStdString(selected_atom->element));
-							card << selected_atom->element << " — " << (element ? element->name.toStdString() : std::string("element")) << "\n";
+							if(element)
+								element_name = element->name.toStdString();
+#endif
+							card << selected_atom->element << " — " << element_name << "\n";
 							card << "Atom index: " << selected_atom->source_id << "\n";
+#if !defined(EMSCRIPTEN)
 							if(element)
 							{
 								card << "Atomic number: " << element->atomic_number << "\n";
 								card << "Atomic mass: " << element->atomic_mass.toStdString() << " u\n";
 								card << "Category: " << element->category.toStdString() << "\n";
 							}
+#endif
 							card << "Charge: " << selected_atom->formal_charge << "\n";
 							card << "Coordinates: " << selected_atom->pos.x << ", " << selected_atom->pos.y << ", " << selected_atom->pos.z;
 						}

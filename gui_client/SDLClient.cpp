@@ -49,6 +49,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <SDL_syswm.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
+#include <exception>
 #include <string>
 #if EMSCRIPTEN
 #include <emscripten.h>
@@ -171,6 +172,12 @@ static bool show_imgui_info_window = false;
 Reference<RenderStatsWidget> CPU_render_stats_widget;
 Reference<RenderStatsWidget> GPU_render_stats_widget;
 
+#if EMSCRIPTEN
+static std::string gaussian_splat_web_status =
+	"Ready. Supported: PLY, compressed PLY, SPLAT, KSPLAT, SPZ, SOG, LCC and LCC2.";
+static bool gaussian_splat_web_status_is_error = false;
+#endif
+
 
 static double cur_canvas_css_W = 800; // Current device-independent pixel width.  Canvas element css width in WebGL.
 static double cur_canvas_css_H = 800;
@@ -220,6 +227,175 @@ EM_JS(char*, getTranslatedShaderSource, (int32_t nm), {
 	}
 	else {
 		return 0;
+	}
+});
+
+// Open a browser file/folder picker and normalise the selected Gaussian
+// container to ordinary binary PLY before handing it to the native renderer.
+// Keeping conversion here means the Emscripten client and the Qt/CEF client
+// use the same audited, self-hosted converter bundle.
+EM_JS(void, openGaussianSplatFileDialog, (int directory_mode), {
+	const setStatus = (message, isError) => {
+		if (Module && Module.ccall) {
+			Module.ccall(
+				"setGaussianSplatWebStatus",
+				null,
+				["string", "number"],
+				[String(message || ""), isError ? 1 : 0]
+			);
+		}
+	};
+
+	const loadConverter = async () => {
+		const existing = window.MetasiberiaGaussianSplatConverter ||
+			window.MetasiberiaSplatConverter;
+		if (existing)
+			return existing;
+
+		if (!window.__metasiberiaGaussianConverterPromise) {
+			window.__metasiberiaGaussianConverterPromise = new Promise((resolve, reject) => {
+				const script = document.createElement("script");
+				script.src = "/files/gaussian_splat_converter.js";
+				script.async = true;
+				script.onload = () => {
+					const converter = window.MetasiberiaGaussianSplatConverter ||
+						window.MetasiberiaSplatConverter;
+					if (converter)
+						resolve(converter);
+					else
+						reject(new Error("Gaussian converter loaded without exposing its API."));
+				};
+				script.onerror = () => reject(
+					new Error("Could not load the self-hosted Gaussian converter.")
+				);
+				document.head.appendChild(script);
+			});
+		}
+		return window.__metasiberiaGaussianConverterPromise;
+	};
+
+	const statusForProgress = (progress) => {
+		const stage = progress && progress.stage ? progress.stage : "working";
+		const value = progress && Number.isFinite(progress.value)
+			? Math.round(progress.value * (progress.value <= 1 ? 100 : 1))
+			: null;
+		const labels = {
+			read: "Reading Gaussian Splat",
+			convert: "Converting Gaussian Splat",
+			write: "Writing canonical PLY",
+			ready: "Preparing 3D object"
+		};
+		return (labels[stage] || "Processing Gaussian Splat") +
+			(value === null ? "..." : `... ${Math.max(0, Math.min(100, value))}%`);
+	};
+
+	try {
+		if (typeof document === "undefined")
+			throw new Error("The browser file picker is unavailable.");
+		if (window.__metasiberiaGaussianUploadBusy) {
+			setStatus("A Gaussian Splat is already being converted. Please wait.", true);
+			return;
+		}
+
+		const inputId = directory_mode
+			? "metasiberia-gaussian-directory-input"
+			: "metasiberia-gaussian-file-input";
+		let input = document.getElementById(inputId);
+		if (!input) {
+			input = document.createElement("input");
+			input.id = inputId;
+			input.type = "file";
+			input.multiple = true;
+			input.style.display = "none";
+			if (directory_mode) {
+				input.setAttribute("webkitdirectory", "");
+				input.setAttribute("directory", "");
+			} else {
+				input.accept =
+					".ply,.compressed.ply,.splat,.ksplat,.spz,.sog,.lcc,.lcc2,.json,.webp";
+			}
+			document.body.appendChild(input);
+		}
+
+		input.onchange = async () => {
+			let converted = null;
+			let dataPtr = 0;
+			let ownsBusy = false;
+			try {
+				const files = Array.from(input.files || []);
+				if (files.length === 0)
+					return;
+				if (window.__metasiberiaGaussianUploadBusy)
+					throw new Error("A Gaussian Splat is already being converted.");
+				window.__metasiberiaGaussianUploadBusy = true;
+				ownsBusy = true;
+
+				setStatus("Loading Gaussian converter...", false);
+				const converter = await loadConverter();
+				const progress = (value) => setStatus(statusForProgress(value), false);
+
+				if (files.length > 1 || directory_mode) {
+					if (typeof converter.convertFilesToPlyBytes !== "function")
+						throw new Error(
+							"This converter build cannot load a Gaussian sidecar folder."
+						);
+					converted = await converter.convertFilesToPlyBytes(
+						files,
+						undefined,
+						progress
+					);
+				} else {
+					if (typeof converter.convertFileToPlyBytes !== "function")
+						throw new Error("This converter build lacks the file conversion API.");
+					converted = await converter.convertFileToPlyBytes(
+						files[0],
+						files[0].name,
+						progress
+					);
+				}
+
+				const bytes = converted && converted.bytes
+					? converted.bytes
+					: null;
+				if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0)
+					throw new Error("Gaussian conversion returned no PLY data.");
+				if (bytes.byteLength > 0x7fffffff)
+					throw new Error("Converted Gaussian Splat is too large for this web client.");
+
+				dataPtr = Module._malloc(bytes.byteLength);
+				if (!dataPtr)
+					throw new Error("Not enough browser memory for the converted Gaussian Splat.");
+				Module.HEAPU8.set(bytes, dataPtr);
+
+				const created = Module.ccall(
+					"processGaussianSplatFile",
+					"number",
+					["number", "number", "string"],
+					[
+						dataPtr,
+						bytes.byteLength,
+						(converted && converted.filename) || "metasiberia-runtime.ply"
+					]
+				);
+				if (!created)
+					throw new Error("The Gaussian Splat object was not created.");
+				setStatus("Gaussian Splat uploaded. Select it to edit its transform.", false);
+			} catch (error) {
+				console.error("Gaussian Splat upload failed:", error);
+				setStatus(error && error.message ? error.message : String(error), true);
+			} finally {
+				if (dataPtr)
+					Module._free(dataPtr);
+				if (ownsBusy)
+					window.__metasiberiaGaussianUploadBusy = false;
+				input.value = "";
+			}
+		};
+
+		input.click();
+	} catch (error) {
+		console.error("Failed to open Gaussian Splat picker:", error);
+		setStatus(error && error.message ? error.message : String(error), true);
 	}
 });
 
@@ -1338,6 +1514,33 @@ static void doOneMainLoopIter()
 
 				ImGui::TextUnformatted(last_diagnostics.c_str());
 			}
+
+#if EMSCRIPTEN
+			ImGui::SetNextItemOpen(true, ImGuiCond_FirstUseEver);
+			if(ImGui::CollapsingHeader("Gaussian splats"))
+			{
+				if(ImGui::Button("Add Gaussian splat file..."))
+					openGaussianSplatFileDialog(/*directory_mode=*/0);
+
+				ImGui::SameLine();
+				if(ImGui::Button("Add sidecar folder..."))
+					openGaussianSplatFileDialog(/*directory_mode=*/1);
+
+				ImGui::TextWrapped(
+					"PLY, compressed PLY, SPLAT, KSPLAT, SPZ, bundled/unbundled SOG, "
+					"LCC and LCC2 are supported. For meta.json/lod-meta.json or nested "
+					"LCC data choose the whole sidecar folder."
+				);
+				if(gaussian_splat_web_status_is_error)
+					ImGui::TextColored(
+						ImVec4(1.f, 0.35f, 0.3f, 1.f),
+						"%s",
+						gaussian_splat_web_status.c_str()
+					);
+				else
+					ImGui::TextWrapped("%s", gaussian_splat_web_status.c_str());
+			}
+#endif
 		}
 		ImGui::End();
 		
@@ -1388,6 +1591,94 @@ static std::string sanitiseString(const std::string& s)
 		if(!::isAlphaNumeric(s[i]))
 			res[i] = '_';
 	return res;
+}
+
+
+// Called by the browser-side Gaussian converter to update the ImGui panel.
+extern "C"
+#if EMSCRIPTEN
+EMSCRIPTEN_KEEPALIVE
+#endif
+void setGaussianSplatWebStatus(const char* message, int is_error)
+{
+#if EMSCRIPTEN
+	gaussian_splat_web_status = message ? std::string(message) : std::string();
+	gaussian_splat_web_status_is_error = is_error != 0;
+#else
+	static_cast<void>(message);
+	static_cast<void>(is_error);
+#endif
+}
+
+
+// processGaussianSplatFile is called after the browser converter has
+// normalised any supported Gaussian container to ordinary binary PLY.
+extern "C"
+#if EMSCRIPTEN
+EMSCRIPTEN_KEEPALIVE
+#endif
+int processGaussianSplatFile(unsigned char* data, int length, const char* filename_)
+{
+	if(!gui_client)
+		return 0;
+
+	try
+	{
+		if(!data || length <= 0)
+			throw glare::Exception("The converted Gaussian Splat is empty.");
+
+		const std::string filename = filename_ ? std::string(filename_) : std::string();
+		const std::string extension = getExtension(filename);
+		if(!hasExtension(filename, "ply") && !hasExtension(filename, "splat"))
+			throw glare::Exception("The browser converter did not return a supported PLY/SPLAT payload.");
+
+		const std::string basename = sanitiseString(removeDotAndExtension(filename));
+		const std::string local_path =
+			"/tmp/" + (basename.empty() ? std::string("metasiberia_gaussian") : basename) +
+			"_gaussian." + extension;
+		FileUtils::writeEntireFile(local_path, (const char*)data, length);
+
+		if(!gui_client->createModelObject(local_path))
+			return 0;
+#if EMSCRIPTEN
+		gaussian_splat_web_status =
+			"Gaussian Splat created. Select it and use the transform controls to move, rotate or scale it.";
+		gaussian_splat_web_status_is_error = false;
+#endif
+		return 1;
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("processGaussianSplatFile error: " + e.what());
+		gui_client->showErrorNotification(e.what());
+#if EMSCRIPTEN
+		gaussian_splat_web_status = e.what();
+		gaussian_splat_web_status_is_error = true;
+#endif
+		return 0;
+	}
+	catch(std::exception& e)
+	{
+		const std::string message = "Gaussian Splat creation failed: " + std::string(e.what());
+		conPrint(message);
+		gui_client->showErrorNotification(message);
+#if EMSCRIPTEN
+		gaussian_splat_web_status = message;
+		gaussian_splat_web_status_is_error = true;
+#endif
+		return 0;
+	}
+	catch(...)
+	{
+		const std::string message = "Gaussian Splat creation failed with an unknown error.";
+		conPrint(message);
+		gui_client->showErrorNotification(message);
+#if EMSCRIPTEN
+		gaussian_splat_web_status = message;
+		gaussian_splat_web_status_is_error = true;
+#endif
+		return 0;
+	}
 }
 
 

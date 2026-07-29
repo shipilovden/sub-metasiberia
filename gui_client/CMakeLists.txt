@@ -237,6 +237,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/LoadModelTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadModelTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadScriptTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadScriptTask.h
+${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.cpp
+${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadTextureTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadTextureTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/MakeHypercardTextureTask.cpp
@@ -377,8 +379,6 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/BotEditorWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.h
-		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.h
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectEditor.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectEditor.h
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectSettings.cpp
@@ -1320,7 +1320,7 @@ endif()
 if(USE_SDL)
 	include_directories(${SDL_BUILD_DIR}/include/SDL2)
 	
-	if(WIN32)
+	if(WIN32 OR EMSCRIPTEN)
 		include_directories(${SDL_BUILD_DIR}/include-config-release/SDL2) # For SDL_config.h.  NOTE: SDL_config.h seems to be the same for both Debug and Release configs, at least on Windows.
 	else()
 		include_directories(${SDL_BUILD_DIR}/include-config-/SDL2)
@@ -1369,7 +1369,7 @@ if(EMSCRIPTEN)
 		"-sPTHREAD_POOL_SIZE=30" # See calculation above
 		"-sSTACK_SIZE=262144"
 		"-sEXPORTED_RUNTIME_METHODS=ccall" # Needed to be able to call into C++ from JS.  Used in emscripten_browser_clipboard.
-		"-sEXPORTED_FUNCTIONS=_processAvatarModelFile,_processGestureAnimationFile,_malloc,_free,_main"
+		"-sEXPORTED_FUNCTIONS=_processAvatarModelFile,_processGestureAnimationFile,_processGaussianSplatFile,_setGaussianSplatWebStatus,_malloc,_free,_main"
 		"-lwebsocket.js" # To use emscripten websockets API: https://emscripten.org/docs/porting/networking.html#emscripten-websockets-api
 		--use-preload-cache # Cache the preloaded data in IndexedDB for subsequent page visits.
 		--preload-file data # Use preloaded data, read it from the 'data' directory in the Emscripten build dir.

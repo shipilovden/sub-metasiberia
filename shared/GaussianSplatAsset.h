@@ -26,8 +26,10 @@ enum class Format
 
 Format detectFormat(string_view path);
 
-// Supported container names. Rendering is deliberately kept in the native
-// client; this helper only protects the shared upload/resource boundary.
+// Supported container names, including the exact `meta.json` and
+// `lod-meta.json` entry points used by unbundled/streamed SOG. Rendering is
+// deliberately kept in the client; this helper also protects the shared
+// upload/resource boundary.
 bool hasSupportedExtension(string_view path);
 
 // Validate the beginning of an INRIA-style 3DGS PLY header. The complete
