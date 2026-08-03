@@ -896,11 +896,12 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 
 	// World settings
 	add("WorldSettingsWidget", "New terrain section", "Новая секция рельефа");
-	add("WorldSettingsWidget", "detail col map 0 (rock) URL", "URL карты цвета detail 0 (камень)");
-	add("WorldSettingsWidget", "detail col map 1 (sediment) URL", "URL карты цвета detail 1 (осадок)");
+	add("WorldSettingsWidget", "detail col map 0 (reserved) URL", "URL карты цвета detail 0 (зарезервировано)");
+	add("WorldSettingsWidget", "detail col map 1 (base ground) URL", "URL карты цвета detail 1 (основной грунт)");
 	add("WorldSettingsWidget", "detail col map 2 (vegetation) URL", "URL карты цвета detail 2 (растительность)");
-	add("WorldSettingsWidget", "detail col map 3 URL", "URL карты цвета detail 3");
-	add("WorldSettingsWidget", "detail height map 0 (rock) URL", "URL карты высот detail 0 (камень)");
+	add("WorldSettingsWidget", "detail col map 3 (reserved) URL", "URL карты цвета detail 3 (зарезервировано)");
+	add("WorldSettingsWidget", "detail height map 0 (rock micro-height) URL", "URL карты высот detail 0 (микрорельеф камня)");
+	add("WorldSettingsWidget", "Metasiberia currently renders colour map 1 as base ground and colour map 2 as vegetation. Colour maps 0/3 are reserved; height map 0 adds rock micro-relief. TerrainGen EXR uses terrain height scale 1.0.", "Сейчас Metasiberia отображает карту цвета 1 как основной грунт, а карту 2 — как растительность. Карты цвета 0/3 зарезервированы; карта высот 0 добавляет микрорельеф камня. Для EXR из TerrainGen масштаб высоты рельефа равен 1.0.");
 	add("WorldSettingsWidget", "terrain section width", "Ширина секции рельефа");
 	add("WorldSettingsWidget", "default terrain z", "Базовая высота рельефа (z)");
 	add("WorldSettingsWidget", "terrain height scale", "Масштаб высоты рельефа");

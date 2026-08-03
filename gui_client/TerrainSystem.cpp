@@ -758,7 +758,9 @@ Colour4f TerrainSystem::evalTerrainMask(float p_x, float p_y) const
 	if(section.maskmap.isNull())
 		return Colour4f(1,0,0,0);
 
-	return section.maskmap->vec3Sample(nx, 1.f - ny, /*wrap=*/false);
+	const float section_nx = nx - Maths::floorToInt(nx);
+	const float section_ny = ny - Maths::floorToInt(ny);
+	return section.maskmap->vec3Sample(section_nx, 1.f - section_ny, /*wrap=*/false);
 }
 
 
@@ -776,9 +778,16 @@ float TerrainSystem::evalTreeMask(float p_x, float p_y) const
 		return 1;
 	const TerrainDataSection& section = terrain_data_sections[section_x + section_y*TERRAIN_DATA_SECTION_RES]; // terrain_data_sections.elem(section_x, section_y);
 	if(section.treemaskmap.isNull())
-		return 1; // If there is no tree mask map, trees are allowed by default.
+	{
+		// With no configured mask, preserve the historical "trees allowed" default.
+		// If a mask was configured but is still missing/failed to load, fail closed:
+		// rendering trees everywhere would make a valid black/white mask look ignored.
+		return section.tree_mask_map_path.empty() ? 1.f : 0.f;
+	}
 
-	return section.treemaskmap->sampleSingleChannelTiled(nx, 1.f - ny, /*channel=*/0);
+	const float section_nx = nx - Maths::floorToInt(nx);
+	const float section_ny = ny - Maths::floorToInt(ny);
+	return section.treemaskmap->sampleSingleChannelTiled(section_nx, 1.f - section_ny, /*channel=*/0);
 }
 
 

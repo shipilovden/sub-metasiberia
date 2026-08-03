@@ -103,12 +103,6 @@ TerrainScattering::~TerrainScattering()
 }
 
 
-// Scale factor for world-space -> heightmap UV conversion.
-// Its reciprocal is the width of the terrain in metres.
-static const float terrain_section_w = 8 * 1024;
-static const float terrain_scale_factor = 1.f / terrain_section_w;
-
-
 // Needs to match ChunkInfo in build_imposters_compute_shader.glsl
 struct ShaderChunkInfo
 {
@@ -1720,6 +1714,8 @@ static void bindTextureUnitToSampler(const OpenGLTexture& texture, int texture_u
 void TerrainScattering::updateGridScatterChunkWithComputeShader(int chunk_x_index, int chunk_y_index, GridScatter& grid_scatter, GridScatterChunk& chunk)
 {
 	// See if there is any vegetation on this chunk, by checking all pixels on the mask map that the section covers
+	const float terrain_section_w = myMax(8.f, terrain_system->spec.terrain_section_width_m);
+	const float terrain_scale_factor = 1.f / terrain_section_w;
 
 	// First, compute terrain section this chunk lies on:
 	const float centre_p_x = (chunk_x_index + 0.5f) * grid_scatter.chunk_width; // world space x coordinate in metres at centre of chunk

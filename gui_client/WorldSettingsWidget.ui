@@ -42,7 +42,7 @@
    <item row="2" column="0">
     <widget class="QLabel" name="fghghdfgfg">
      <property name="text">
-      <string>detail col map 0 (rock) URL</string>
+       <string>detail col map 0 (reserved) URL</string>
      </property>
     </widget>
    </item>
@@ -52,7 +52,7 @@
    <item row="3" column="0">
     <widget class="QLabel" name="label">
      <property name="text">
-      <string>detail col map 1 (sediment) URL</string>
+       <string>detail col map 1 (base ground) URL</string>
      </property>
     </widget>
    </item>
@@ -72,7 +72,7 @@
    <item row="5" column="0">
     <widget class="QLabel" name="label_3">
      <property name="text">
-      <string>detail col map 3 URL</string>
+       <string>detail col map 3 (reserved) URL</string>
      </property>
     </widget>
    </item>
@@ -82,28 +82,22 @@
    <item row="6" column="0">
     <widget class="QLabel" name="label_4">
      <property name="text">
-      <string>detail height map 0 (rock) URL</string>
+       <string>detail height map 0 (rock micro-height) URL</string>
      </property>
     </widget>
    </item>
    <item row="6" column="1">
     <widget class="FileSelectWidget" name="detailHeightMapURLs0FileSelectWidget"/>
    </item>
-   <item row="7" column="1">
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
+   <item row="7" column="0" colspan="2">
+    <widget class="QLabel" name="terrainMaterialHelpLabel">
+     <property name="text">
+      <string>Metasiberia currently renders colour map 1 as base ground and colour map 2 as vegetation. Colour maps 0/3 are reserved; height map 0 adds rock micro-relief. TerrainGen EXR uses terrain height scale 1.0.</string>
      </property>
-     <property name="sizeType">
-      <enum>QSizePolicy::Fixed</enum>
+     <property name="wordWrap">
+      <bool>true</bool>
      </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>10</height>
-      </size>
-     </property>
-    </spacer>
+    </widget>
    </item>
    <item row="8" column="0">
     <widget class="QLabel" name="label_5">
@@ -121,7 +115,7 @@
       <double>8.000000000000000</double>
      </property>
      <property name="maximum">
-      <double>1000000000000000000000.000000000000000</double>
+       <double>1000000.000000000000000</double>
      </property>
     </widget>
    </item>

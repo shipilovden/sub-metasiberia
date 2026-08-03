@@ -23097,7 +23097,7 @@ void GUIClient::updateGroundPlane()
 			if(!spec.detail_col_map_URLs[i].empty())
 				use_detail_col_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_col_map_URLs[i])) + "basis")) : spec.detail_col_map_URLs[i];
 			if(!spec.detail_height_map_URLs[i].empty())
-				use_detail_col_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_height_map_URLs[i])) + "basis")) : spec.detail_height_map_URLs[i];
+				use_detail_height_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_height_map_URLs[i])) + "basis")) : spec.detail_height_map_URLs[i];
 		}
 
 		for(int i=0; i<4; ++i)
@@ -23169,10 +23169,9 @@ void GUIClient::updateGroundPlane()
 
 		for(int i=0; i<4; ++i)
 		{
-			if(i == 0) // TEMP: don't load detail colour + height map 0 (rock), as it's not used currently in the terrain shader (see phong_frag_shader.glsl #if TERRAIN section)
-				continue; 
-
-			if(!use_detail_col_map_URLs[i].empty())
+			// Detail colour 0 is still reserved by the current terrain shader, but
+			// detail height 0 is sampled by TerrainSystem on the CPU.
+			if(i != 0 && !use_detail_col_map_URLs[i].empty())
 			{
 				DownloadingResourceInfo info;
 				info.texture_params = detail_colourmap_tex_params;
@@ -23223,10 +23222,7 @@ void GUIClient::updateGroundPlane()
 
 		for(int i=0; i<4; ++i)
 		{
-			if(i == 0) // TEMP: don't load detail colour + height map 0 (rock), as it's not used currently in the terrain shader (see phong_frag_shader.glsl #if TERRAIN section)
-				continue; 
-
-			if(!use_detail_col_map_URLs[i].empty() && this->resource_manager->isFileForURLPresent(use_detail_col_map_URLs[i]))
+			if(i != 0 && !use_detail_col_map_URLs[i].empty() && this->resource_manager->isFileForURLPresent(use_detail_col_map_URLs[i]))
 				load_item_queue.enqueueItem(use_detail_col_map_URLs[i], Vec4f(0,0,0,1), aabb_ws_longest_len, 
 					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_spec.detail_col_map_paths[i], this->resource_manager->getOrCreateResourceForURL(use_detail_col_map_URLs[i]), 
 						detail_colourmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread), 
