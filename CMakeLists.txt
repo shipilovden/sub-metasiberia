@@ -183,9 +183,22 @@ if(CEF_SUPPORT)
 	set(cef_required_files "include/cef_app.h")
 	if(WIN32)
 		list(APPEND cef_required_files
+			"Debug/libcef.lib"
+			"Debug/libcef.dll"
 			"Release/libcef.lib"
 			"Release/libcef.dll"
+			"libcef_dll_build/libcef_dll_wrapper/Debug/libcef_dll_wrapper.lib"
 			"libcef_dll_build/libcef_dll_wrapper/Release/libcef_dll_wrapper.lib"
+		)
+	elseif(APPLE)
+		list(APPEND cef_required_files
+			"libcef_dll_build/libcef_dll_wrapper/libcef_dll_wrapper.a"
+		)
+	else()
+		list(APPEND cef_required_files
+			"Debug/libcef.so"
+			"Release/libcef.so"
+			"libcef_dll_build/libcef_dll_wrapper/libcef_dll_wrapper.a"
 		)
 	endif()
 
