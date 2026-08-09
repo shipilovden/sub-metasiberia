@@ -6,6 +6,7 @@ Copyright Glare Technologies Limited 2024 -
 
 
 #include "GUIClient.h"
+#include "../shared/MetasiberiaPaths.h"
 #include "SDLUIInterface.h"
 #if EMSCRIPTEN
 #include <settings/EmscriptenSettingsStore.h>
@@ -298,7 +299,7 @@ int main(int argc, char** argv)
 		mem_usage_sampling_timer = new Timer();
 		last_update_URL_timer = new Timer();
 
-		const std::string appdata_path = PlatformUtils::getOrCreateAppDataDirectory("Cyberspace");
+		const std::string appdata_path = MetasiberiaPaths::getClientAppDataDirectory();
 
 #if EMSCRIPTEN
 		Reference<EmscriptenSettingsStore> settings_store = new EmscriptenSettingsStore();

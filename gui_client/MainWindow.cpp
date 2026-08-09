@@ -71,6 +71,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../qt/FlowLayout.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
+#include "../shared/MetasiberiaPaths.h"
 #include "../shared/LODGeneration.h"
 #include "../shared/ImageDecoding.h"
 #include "../shared/MessageUtils.h"
@@ -226,6 +227,25 @@ static const Colour4f PARCEL_OUTLINE_COLOUR    = Colour4f::fromHTMLHexString("f0
 static std::vector<std::string> qt_debug_msgs;
 
 static FileOutStream* log_file = nullptr;
+
+
+static void migrateLegacyQtSettings(QSettings& metasiberia_settings)
+{
+	const QString migration_key = "migration/legacy_cyberspace_settings_imported_v1";
+	if(metasiberia_settings.value(migration_key, false).toBool())
+		return;
+
+	QSettings legacy_settings("Glare Technologies", "Cyberspace");
+	const QStringList legacy_keys = legacy_settings.allKeys();
+	for(const QString& key : legacy_keys)
+		if(!metasiberia_settings.contains(key))
+			metasiberia_settings.setValue(key, legacy_settings.value(key));
+
+	metasiberia_settings.setValue(migration_key, true);
+	metasiberia_settings.sync();
+}
+
+
 static const double XR_COMPANION_UPDATE_PERIOD_S = 1.0 / 20.0;
 static const char* const QT_THEME_SETTINGS_KEY = "setting/qt_theme_name";
 static const char* const UI_LANGUAGE_SETTINGS_KEY = "setting/ui_language";
@@ -1675,7 +1695,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 {
 	ZoneScoped; // Tracy profiler
 
-	settings = new QSettings("Glare Technologies", "Cyberspace");
+	settings = new QSettings("Glare Technologies", "Metasiberia");
+	migrateLegacyQtSettings(*settings);
 
 	credential_manager.loadFromSettings(*settings);
 
@@ -12035,7 +12056,7 @@ std::string MainWindow::showOpenFileDialog(const std::string& caption, const std
 {
 	QString previous_file = "";
 
-	QSettings local_settings("Glare Technologies", "Cyberspace");
+	QSettings local_settings("Glare Technologies", "Metasiberia");
 
 	std::string filter; // e.g. "Images (*.png *.xpm *.jpg);;Text files (*.txt);;XML files (*.xml)"  (see https://doc.qt.io/qt-6/qfiledialog.html)
 	for(size_t i=0; i<file_type_filters.size(); ++i)
@@ -12285,7 +12306,7 @@ int main(int argc, char *argv[])
 
 
 		const std::string cyberspace_base_dir_path = PlatformUtils::getResourceDirectoryPath();
-		const std::string appdata_path = PlatformUtils::getOrCreateAppDataDirectory("Cyberspace");
+		const std::string appdata_path = MetasiberiaPaths::getClientAppDataDirectory();
 
 		try
 		{

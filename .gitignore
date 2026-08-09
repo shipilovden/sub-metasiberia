@@ -4,5 +4,11 @@ local_backups/
 # Legacy Emscripten build tree
 emscripten_build3/
 
+# Local generated build trees and IDE state
+build/
+emscripten_build/
+emscripten_build2/
+.qtcreator/
+
 # Local XR captures and test recordings
 vr_screenshots/

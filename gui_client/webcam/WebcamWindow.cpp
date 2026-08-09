@@ -4,6 +4,7 @@ WebcamWindow.cpp
 Copyright Glare Technologies Limited 2024 -
 =====================================================================*/
 #include "webcam/WebcamWindow.h"
+#include "../../shared/MetasiberiaPaths.h"
 
 #include "webcam/WebcamVideoView.h"
 #include "webcam/WebcamControlPanel.h"
@@ -409,7 +410,7 @@ void WebcamWindow::onCameraIndexChanged(int)
 
 QString WebcamWindow::getWebcamSaveDirectory() const
 {
-	std::string dir = PlatformUtils::getOrCreateAppDataDirectory("Cyberspace");
+	std::string dir = MetasiberiaPaths::getClientAppDataDirectory();
 	QString path = QString::fromStdString(dir) + "/screenshots";
 	if (!QDir().exists(path))
 		QDir().mkpath(path);

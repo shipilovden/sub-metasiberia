@@ -95,7 +95,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Go to Main World", "Перейти в главный мир");
 	add("MainWindow", "Go to Personal World", "Перейти в персональный мир");
 	add("MainWindow", "Go to Cryptovoxels World", "Перейти в мир Cryptovoxels");
-	add("MainWindow", "Go to Substrata", "Перейти в Substrata");
+	add("MainWindow", "Go to Legacy Substrata", "Перейти в старый Substrata");
 	add("MainWindow", "Go to Metasiberia", "Перейти в Metasiberia");
 	add("MainWindow", "Go to Shki-Nvkz", "Перейти в Shki-Nvkz");
 	add("MainWindow", "Go to Map", "Перейти в карту");

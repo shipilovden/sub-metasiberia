@@ -21,6 +21,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "ChatBot.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
+#include "../shared/MetasiberiaPaths.h"
 #include "../shared/MessageUtils.h"
 #include "../shared/SubstrataLuaVM.h"
 #include "../shared/ObjectEventHandlers.h"
@@ -223,10 +224,16 @@ static void enqueueMessageToBroadcast(SocketBufferOutStream& packet_buffer, std:
 }
 
 
-// Throws glare::Exception on failure.
-static ServerCredentials parseServerCredentials(const std::string& server_state_dir)
+static std::string getServerStateFilePath(const std::string& server_state_dir, const char* metasiberia_filename, const char* legacy_filename)
 {
-	const std::string path = server_state_dir + "/substrata_server_credentials.txt";
+	const std::string metasiberia_path = server_state_dir + "/" + metasiberia_filename;
+	return FileUtils::fileExists(metasiberia_path) ? metasiberia_path : server_state_dir + "/" + legacy_filename;
+}
+
+
+// Throws glare::Exception on failure.
+static ServerCredentials parseServerCredentials(const std::string& path)
+{
 
 	const std::string contents = FileUtils::readEntireFileTextMode(path);
 
@@ -276,7 +283,7 @@ static ServerConfig parseServerConfig(const std::string& config_path)
 	config.enable_registration					= XMLParseUtils::parseBoolWithDefault(root_elem, "enable_registration", /*default val=*/true);
 	config.AI_model_id							= XMLParseUtils::parseStringWithDefault(root_elem, "AI_model_id", /*default val=*/"xai/grok-4-1-fast-non-reasoning");
 	config.shared_LLM_prompt_part				= XMLParseUtils::parseStringWithDefault(root_elem, "shared_LLM_prompt_part", /*default val=*/
-		std::string("You are a helpful bot in the Substrata Metaverse.\n") +
+		std::string("You are a helpful bot in the Metasiberia metaverse.\n") +
 		std::string("When a user first talks to you, wave hello to them using the perform_wave_gesture tool function, or bow to them using the perform_bow_gesture tool function.\n") +
 		std::string("Bear in mind that other users may chat to each other while standing near you, in which case you don't need to say anything.\n") +
 		std::string("You MUST start each response with either [SPEAK] or [SILENT].  After the [SPEAK] prefix the chat message should follow, for example: '[SPEAK] Hello there user, how are you?'.\n") +
@@ -328,7 +335,7 @@ int main(int argc, char *argv[])
 		fatalError("Failed to set SIGINT signal handler: " + PlatformUtils::getLastErrorString());
 #endif
 
-	conPrint("Substrata server v" + ::cyberspace_version);
+	conPrint("Metasiberia server v" + ::cyberspace_version);
 
 	try
 	{
@@ -364,8 +371,7 @@ int main(int argc, char *argv[])
 		const int listen_port = 7600; // Listen port for sub protocol
 
 #if defined(_WIN32)
-		const std::string substrata_appdata_dir = PlatformUtils::getOrCreateAppDataDirectory("Substrata");
-		const std::string server_state_dir = substrata_appdata_dir + "/server_data";
+		const std::string server_state_dir = MetasiberiaPaths::getWindowsServerStateDirectory();
 #else
 		const std::string home_dir = PlatformUtils::getEnvironmentVariable("HOME");
 		const std::string server_state_dir = home_dir + "/cyberspace_server_state";
@@ -377,7 +383,7 @@ int main(int argc, char *argv[])
 		// Parse server config, if present:
 		ServerConfig server_config;
 		{
-			const std::string config_path = server_state_dir + "/substrata_server_config.xml";
+			const std::string config_path = getServerStateFilePath(server_state_dir, "metasiberia_server_config.xml", "substrata_server_config.xml");
 			if(FileUtils::fileExists(config_path))
 			{
 				conPrint("Parsing server config from '" + config_path + "'...");
@@ -393,7 +399,8 @@ int main(int argc, char *argv[])
 		// Parse server credentials
 		try
 		{
-			const ServerCredentials server_credentials = parseServerCredentials(server_state_dir);
+			const std::string credentials_path = getServerStateFilePath(server_state_dir, "metasiberia_server_credentials.txt", "substrata_server_credentials.txt");
+			const ServerCredentials server_credentials = parseServerCredentials(credentials_path);
 			server.world_state->server_credentials = server_credentials;
 		}
 		catch(glare::Exception& e)

@@ -646,6 +646,7 @@ SET(shared_files
 ../shared/UID.h
 ../shared/UserID.h
 ../shared/Version.h
+../shared/MetasiberiaPaths.h
 ../shared/WorldObject.cpp
 ../shared/WorldObject.h
 ../shared/WorldMaterial.cpp

@@ -352,7 +352,7 @@ void renderTermsOfUse(ServerAllWorldsState& world_state, const web::RequestInfo&
 
 void renderAboutParcelSales(ServerAllWorldsState& world_state, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
-	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Parcel sales in Substrata");
+	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Historical Substrata parcel-sales guide");
 
 	page += "<h2>Dutch Auctions</h2>";
 
@@ -485,7 +485,7 @@ void renderFAQ(ServerAllWorldsState& world_state, const web::RequestInfo& reques
 
 void renderAboutScripting(ServerAllWorldsState& world_state, WebDataStore& data_store, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
-	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Scripting in Substrata");
+	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Historical Substrata scripting reference");
 	
 	Reference<WebDataStoreFile> store_file = data_store.getFragmentFile("about_scripting.htmlfrag");
 	if(store_file.nonNull())
@@ -517,7 +517,7 @@ void renderGenericPage(ServerAllWorldsState& world_state, WebDataStore& data_sto
 
 void renderAboutSubstrataPage(ServerAllWorldsState& world_state, WebDataStore& data_store, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
-	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Our vision for Substrata");
+	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Historical Substrata documentation");
 
 	Reference<WebDataStoreFile> store_file = data_store.getFragmentFile("about_substrata.htmlfrag");
 	if(store_file.nonNull())
@@ -533,7 +533,7 @@ void renderAboutSubstrataPage(ServerAllWorldsState& world_state, WebDataStore& d
 
 void renderRunningYourOwnServerPage(ServerAllWorldsState& world_state, WebDataStore& data_store, const web::RequestInfo& request_info, web::ReplyInfo& reply_info)
 {
-	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Running your own Substrata Server");
+	std::string page = WebServerResponseUtils::standardHeader(world_state, request_info, /*page title=*/"Historical Substrata server guide");
 
 	Reference<WebDataStoreFile> store_file = data_store.getFragmentFile("running_your_own_server.htmlfrag");
 	if(store_file.nonNull())

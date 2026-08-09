@@ -29,6 +29,7 @@ SET(shared_files
 ../shared/LODGeneration.cpp
 ../shared/LODGeneration.h
 ../shared/MessageUtils.h
+../shared/MetasiberiaPaths.h
 ../shared/Parcel.cpp
 ../shared/Parcel.h
 ../shared/ParcelID.h

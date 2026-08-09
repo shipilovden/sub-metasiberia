@@ -3,7 +3,8 @@ cmake_minimum_required (VERSION 3.5)
 # set a dummy project name, so we can detect the bitness
 project (dummy)
 
-set(PROJECT_NAME "substrata")
+# Product/project identity.  Target names stay unchanged for build and runtime compatibility.
+set(PROJECT_NAME "metasiberia")
 
 # detect bitness, vs version
 if(WIN32)

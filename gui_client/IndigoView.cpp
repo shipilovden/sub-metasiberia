@@ -4,6 +4,7 @@ IndigoView.cpp
 Copyright Glare Technologies Limited 2024 -
 =====================================================================*/
 #include "IndigoView.h"
+#include "../shared/MetasiberiaPaths.h"
 
 
 #if INDIGO_SUPPORT
@@ -456,7 +457,7 @@ void IndigoView::saveSceneToDisk()
 	{
 		conPrint("Saving scene to disk...");
 
-		const std::string scene_path = PlatformUtils::getOrCreateAppDataDirectory("Cyberspace") + "/indigo_scenes/scene.igs";
+		const std::string scene_path = MetasiberiaPaths::getClientAppDataDirectory() + "/indigo_scenes/scene.igs";
 		FileUtils::createDirsForPath(scene_path);
 
 		Indigo::SceneNodeRoot::WriteToXmlFileOptions options;

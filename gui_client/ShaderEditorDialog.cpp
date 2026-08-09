@@ -45,7 +45,7 @@ ShaderEditorDialog::ShaderEditorDialog(QWidget* parent, std::string base_dir_pat
 	this->buildOutputTextEdit    ->shader_editor_dialog = this;
 	this->executionOutputTextEdit->shader_editor_dialog = this;
 
-	QSettings settings("Glare Technologies", "Cyberspace");
+	QSettings settings("Glare Technologies", "Metasiberia");
 	this->restoreGeometry(settings.value("shadereditor/geometry").toByteArray());
 
 	emit_shader_changed_timer = new QTimer(this);
@@ -192,7 +192,7 @@ void ShaderEditorDialog::closeEvent(QCloseEvent* event)
 	if(text_has_changed)
 		emit shaderChanged();
 
-	QSettings settings("Glare Technologies", "Cyberspace");
+	QSettings settings("Glare Technologies", "Metasiberia");
 	settings.setValue("shadereditor/geometry", saveGeometry());
 
 	event->accept();
