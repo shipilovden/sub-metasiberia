@@ -1,4 +1,4 @@
-﻿# ❄️ Metasiberia - metaverse from Siberia ❄️
+# ❄️ Metasiberia - metaverse from Siberia ❄️
 
 [![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](https://isocpp.org/)
 [![Build](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
@@ -23,8 +23,6 @@ Metasiberia is a virtual world project inspired by and based on the open-source 
 - **🏠 Website**: [https://metasiberia.com/](https://metasiberia.com/)
 
 The public website at `metasiberia.com` is hosted separately. This repository contains the native/web clients, game server, and the server-site/admin implementation served at `vr.metasiberia.com`.
-
-![](docs/images/metasiberia.png)
 
 ## Community and Support
 
