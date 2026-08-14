@@ -85,13 +85,34 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 void WorldSettingsWidget::createSculptingTab()
 {
 	// Move the existing generated form into the first tab without changing its
-	// widget object names or the already implemented terrain-map controls.
+	// widget object names or the already implemented terrain-map controls.  The
+	// generated UI uses a QFormLayout; transferring the layout object itself
+	// leaves its child widgets owned by the old top-level widget on Qt 5.  Move
+	// each form item instead, preserving its row/role and therefore the complete
+	// original world-settings form.
 	QLayout* existing_layout = this->layout();
-	QWidget* world_tab = new QWidget();
-	if(existing_layout)
+	QWidget* world_tab = new QWidget(this);
+	QFormLayout* world_form_layout = new QFormLayout(world_tab);
+	if(QFormLayout* old_form_layout = dynamic_cast<QFormLayout*>(existing_layout))
 	{
-		existing_layout->setParent(world_tab);
-		world_tab->setLayout(existing_layout);
+		world_form_layout->setFieldGrowthPolicy(old_form_layout->fieldGrowthPolicy());
+		world_form_layout->setFormAlignment(old_form_layout->formAlignment());
+		world_form_layout->setLabelAlignment(old_form_layout->labelAlignment());
+		world_form_layout->setHorizontalSpacing(old_form_layout->horizontalSpacing());
+		world_form_layout->setVerticalSpacing(old_form_layout->verticalSpacing());
+		int left_margin, top_margin, right_margin, bottom_margin;
+		old_form_layout->getContentsMargins(&left_margin, &top_margin, &right_margin, &bottom_margin);
+		world_form_layout->setContentsMargins(left_margin, top_margin, right_margin, bottom_margin);
+
+		for(int i=old_form_layout->count()-1; i>=0; --i)
+		{
+			int row;
+			QFormLayout::ItemRole role;
+			old_form_layout->getItemPosition(i, &row, &role);
+			QLayoutItem* item = old_form_layout->takeAt(i);
+			world_form_layout->setItem(row, role, item);
+		}
+		delete old_form_layout;
 	}
 
 	settings_tabs = new QTabWidget(this);
