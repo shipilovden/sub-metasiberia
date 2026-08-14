@@ -229,6 +229,15 @@ void AddObjectPreviewWidget::paintGL()
 }
 
 
+Vec4f AddObjectPreviewWidget::cameraForwardsWS() const
+{
+	return GeometrySampling::dirForSphericalCoords(
+		-cam_phi + Maths::pi_2<float>(),
+		Maths::pi<float>() - cam_theta
+	);
+}
+
+
 void AddObjectPreviewWidget::keyPressEvent(QKeyEvent* e)
 {
 }

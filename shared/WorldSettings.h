@@ -29,6 +29,17 @@ struct TerrainSpecSection
 	URLString heightmap_URL;
 	URLString mask_map_URL;
 	URLString tree_mask_map_URL;
+	URLString road_mask_map_URL;
+	URLString building_mask_map_URL;
+
+	// A set bit means that the corresponding map is not used for rendering.
+	// Zero keeps all maps enabled, including for worlds written by older clients.
+	static const uint32 HEIGHTMAP_DISABLED_FLAG = 1;
+	static const uint32 MASK_MAP_DISABLED_FLAG = 2;
+	static const uint32 TREE_MASK_MAP_DISABLED_FLAG = 4;
+	static const uint32 ROAD_MASK_MAP_DISABLED_FLAG = 8;
+	static const uint32 BUILDING_MASK_MAP_DISABLED_FLAG = 16;
+	uint32 disabled_map_flags;
 };
 
 struct TerrainSpec
@@ -45,7 +56,19 @@ struct TerrainSpec
 	float water_z;
 	float default_terrain_z;
 
+	// A set bit disables the corresponding detail map while retaining its URL,
+	// so it can be switched back on without selecting the file again.
+	static const uint32 DETAIL_COL_MAP_0_DISABLED_FLAG = 1;
+	static const uint32 DETAIL_COL_MAP_1_DISABLED_FLAG = 2;
+	static const uint32 DETAIL_COL_MAP_2_DISABLED_FLAG = 4;
+	static const uint32 DETAIL_COL_MAP_3_DISABLED_FLAG = 8;
+	static const uint32 DETAIL_HEIGHT_MAP_0_DISABLED_FLAG = 16;
+	uint32 disabled_detail_map_flags;
+
 	static const uint32 WATER_ENABLED_FLAG = 1;
+	// Use the heightmap values directly, without procedural vegetation/rock displacement.
+	// This is required when the terrain represents a digital twin.
+	static const uint32 EXACT_HEIGHTMAP_FLAG = 2;
 	uint32 flags;
 };
 

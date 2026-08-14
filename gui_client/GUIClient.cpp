@@ -26,6 +26,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "URLWhitelist.h"
 #include "URLParser.h"
 #include "LoadModelTask.h"
+#include "LoadGaussianSplatTask.h"
+#include "GaussianSplatCEFConverter.h"
+#include "GaussianSplatRenderer.h"
 #include "VoxelEditorData.h"
 #include "BuildScatteringInfoTask.h"
 #include "LoadTextureTask.h"
@@ -41,7 +44,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
 #include "ScientificObjectSettings.h"
+#if !defined(EMSCRIPTEN)
 #include "PeriodicTable.h"
+#endif
 #include "MapWorldLayer.h"
 #include "MapWorldUtils.h"
 #include "Scripting.h"
@@ -62,6 +67,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "../shared/ImageDecoding.h"
 #include "../shared/MessageUtils.h"
 #include "../shared/FileTypes.h"
+#include "../shared/GaussianSplatAsset.h"
+#include "../shared/GaussianSplatData.h"
 #include "../shared/LuaScriptEvaluator.h"
 #include "../shared/SubstrataLuaVM.h"
 #include "../shared/ObjectEventHandlers.h"
@@ -97,6 +104,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../networking/Networking.h"
 #include "../networking/URL.h"
 #include "../graphics/ImageMap.h"
+#include "../graphics/EXRDecoder.h"
 #include "../graphics/SRGBUtils.h"
 #include "../graphics/BasisDecoder.h"
 #include "../graphics/PNGDecoder.h"
@@ -984,6 +992,12 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	only_load_most_important_obs(false)
 {
 	ZoneScoped; // Tracy profiler
+	terrain_sculpt_mode_enabled = false;
+	terrain_sculpt_tool = TerrainSculptTool_Ridge;
+	terrain_sculpt_brush_radius_m = 32.f;
+	terrain_sculpt_strength_m = 1.f;
+	terrain_sculpt_stroke_active = false;
+	terrain_sculpt_have_last_hit = false;
 
 	resources_dir_path = base_dir_path + "/data/resources";
 
@@ -2293,6 +2307,12 @@ void GUIClient::shutdown()
 	script_messages.clear();
 
 	default_array_tex = nullptr;
+	cancelGaussianSplatConversions();
+	gaussian_splat_texture_cache.clear();
+	gaussian_splat_data_cache.clear();
+	gaussian_splat_render_objects.clear();
+	gaussian_splats_processing.clear();
+	loading_gaussian_splat_URL_to_world_ob_UID_map.clear();
 
 	misc_info_ui.destroy();
 
@@ -3053,6 +3073,8 @@ static void removeAnimatedTextureUse(GLObject& ob, AnimatedTextureManager& anima
 
 void GUIClient::removeAndDeleteGLObjectsForOb(WorldObject& ob)
 {
+	gaussian_splat_render_objects.erase(ob.uid);
+
 	auto label_it = scientific_molecule_label_gl_obs.find(ob.uid);
 	if(label_it != scientific_molecule_label_gl_obs.end())
 	{
@@ -3186,7 +3208,14 @@ bool GUIClient::isResourceCurrentlyNeededForObjectGivenIsDependency(const URLStr
 
 	const string_view extension = getExtensionStringView(url);
 
-	if(ImageDecoding::isSupportedImageExtension(extension))
+	if(GaussianSplatAsset::hasSupportedExtension(url))
+	{
+		if(gaussian_splats_processing.count(url) > 0)
+			return false;
+		if(gaussian_splat_data_cache.count(url) > 0)
+			return false;
+	}
+	else if(ImageDecoding::isSupportedImageExtension(extension))
 	{
 		// If it's already loaded into the opengl engine, don't download it.
 		ResourceRef resource = resource_manager->getOrCreateResourceForURL(url); // NOTE: don't want to add resource here ideally.
@@ -3277,7 +3306,8 @@ bool GUIClient::isResourceCurrentlyNeededForObject(const URLString& url, const W
 	WorldObject::GetDependencyOptions options;
 	options.use_basis = this->server_has_basis_textures;
 	options.include_lightmaps = this->use_lightmaps;
-	options.get_optimised_mesh = this->server_has_optimised_meshes;
+	options.get_optimised_mesh = this->server_has_optimised_meshes &&
+		!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
 	options.opt_mesh_version = this->server_opt_mesh_version;
 	options.allocator = &arena_allocator;
 
@@ -3369,7 +3399,8 @@ void GUIClient::startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_l
 	WorldObject::GetDependencyOptions options;
 	options.use_basis = this->server_has_basis_textures;
 	options.include_lightmaps = this->use_lightmaps;
-	options.get_optimised_mesh = this->server_has_optimised_meshes;
+	options.get_optimised_mesh = this->server_has_optimised_meshes &&
+		!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
 	options.opt_mesh_version = this->server_opt_mesh_version;
 	options.allocator = &arena_allocator;
 
@@ -4064,6 +4095,11 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 
 	const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 	const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
+	const bool is_gaussian_splat =
+		ob->object_type == WorldObject::ObjectType_Generic &&
+		GaussianSplatAsset::hasSupportedExtension(ob->model_url);
+	if(is_gaussian_splat)
+		ob->max_model_lod_level = 0;
 	
 	// If we have a model loaded, that is not the placeholder model, and it has the correct LOD level, we don't need to do anything.
 	//if(ob->opengl_engine_ob.nonNull() && !ob->using_placeholder_model && (ob->loaded_model_lod_level == ob_model_lod_level) && (ob->/*loaded_lod_level*/loading_lod_level == ob_lod_level))
@@ -4745,7 +4781,39 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 			//}
 
 
-			if(!ob->model_url.empty() && 
+			if(is_gaussian_splat)
+			{
+				bool added_opengl_ob = false;
+				auto cached_data_it = gaussian_splat_data_cache.find(ob->model_url);
+				if(cached_data_it != gaussian_splat_data_cache.end())
+				{
+					loadPresentGaussianSplat(ob, cached_data_it->second, world_state_lock);
+					added_opengl_ob = true;
+				}
+				else
+				{
+					loading_gaussian_splat_URL_to_world_ob_UID_map[ob->model_url].insert(ob->uid);
+					if(resource_manager->isFileForURLPresent(ob->model_url))
+					{
+						const bool just_added = gaussian_splats_processing.insert(ob->model_url).second;
+						if(just_added)
+						{
+							Reference<LoadGaussianSplatTask> task = new LoadGaussianSplatTask();
+							task->splat_url = ob->model_url;
+							task->resource = resource_manager->getOrCreateResourceForURL(ob->model_url);
+							task->resource_manager = resource_manager;
+							task->result_msg_queue = &msg_queue;
+							load_item_queue.enqueueItem(/*key=*/ob->model_url, *ob, task, max_dist_for_ob_model_lod_level);
+						}
+						else
+							load_item_queue.checkUpdateItemPosition(/*key=*/ob->model_url, *ob);
+					}
+				}
+
+				ob->loading_or_loaded_model_lod_level = 0;
+				load_placeholder = !added_opengl_ob;
+			}
+			else if(!ob->model_url.empty() &&
 				(ob->loading_or_loaded_model_lod_level != ob_model_lod_level))  // We may already have the correct LOD model loaded, don't reload if so.
 				// (The object LOD level might have changed, but the model LOD level may be the same due to max model lod level, for example for simple cube models.)
 			{
@@ -4855,6 +4923,149 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 	{
 		print("Error while loading object with UID " + ob->uid.toString() + ", model_url='" + toStdString(ob->model_url) + "': " + e.what());
 	}
+}
+
+
+void GUIClient::loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDataRef& splat_data, WorldStateLock& /*world_state_lock*/)
+{
+	if(splat_data.isNull() || splat_data->splats.empty())
+		throw glare::Exception("Decoded Gaussian splat data is empty.");
+
+	// Keep the Gaussian program lazy: a shader/driver limitation for this
+	// optional renderer must never prevent the normal client from starting.
+	if(gaussian_splat_shader_prog.isNull())
+		gaussian_splat_shader_prog = GaussianSplatRenderer::makeProgram(*opengl_engine, base_dir_path);
+
+	const GaussianSplatRenderSettings render_settings = GaussianSplatRenderSettings::fromContent(ob->content);
+	const GaussianSplatDataRef render_data = GaussianSplatRenderSettings::applyToData(*splat_data, render_settings);
+
+	removeAndDeleteGLAndPhysicsObjectsForOb(*ob);
+	ob->setAABBOS(render_data->aabb_os);
+
+	OpenGLTextureRef data_texture;
+	const std::string texture_cache_key = toStdString(ob->model_url) + render_settings.cacheKeySuffix();
+	auto texture_it = gaussian_splat_texture_cache.find(texture_cache_key);
+	if(texture_it != gaussian_splat_texture_cache.end())
+		data_texture = texture_it->second;
+	else
+	{
+		data_texture = GaussianSplatRenderer::makeDataTexture(*opengl_engine, *render_data);
+		gaussian_splat_texture_cache[texture_cache_key] = data_texture;
+	}
+
+	const GaussianSplatRenderObjectRef render_object = GaussianSplatRenderer::makeObject(
+		*opengl_engine,
+		render_data,
+		data_texture,
+		gaussian_splat_shader_prog.ptr(),
+		obToWorldMatrix(*ob)
+	);
+	render_object->updateDepthSort(
+		cam_controller.getForwardsVec().toVec4fVector(),
+		obToWorldMatrix(*ob),
+		/*force=*/true
+	);
+	ob->opengl_engine_ob = render_object->gl_object;
+	gaussian_splat_render_objects[ob->uid] = render_object;
+
+	// A conservative, non-collidable AABB proxy keeps native picking,
+	// selection and transform gizmos working without making splats solid.
+	const Vec4f span4 = render_data->aabb_os.span();
+	const Vec3f proxy_scale(
+		myMax(span4[0], 0.001f),
+		myMax(span4[1], 0.001f),
+		myMax(span4[2], 0.001f)
+	);
+	const Vec3f proxy_translation(
+		render_data->aabb_os.min_[0],
+		render_data->aabb_os.min_[1],
+		render_data->aabb_os.min_[2]
+	);
+	ob->physics_object = new PhysicsObject(/*collidable=*/false);
+	ob->physics_object->shape = PhysicsWorld::createScaledAndTranslatedShapeForShape(unit_cube_shape, proxy_translation, proxy_scale);
+	ob->physics_object->is_sensor = ob->isSensor();
+	ob->physics_object->userdata = ob;
+	ob->physics_object->userdata_type = 0;
+	ob->physics_object->ob_uid = ob->uid;
+	ob->physics_object->pos = ob->pos.toVec4fPoint();
+	ob->physics_object->rot = Quatf::fromAxisAndAngle(normalise(ob->axis), ob->angle);
+	ob->physics_object->scale = useScaleForWorldOb(ob->scale);
+	ob->physics_object->dynamic = false;
+	ob->physics_object->kinematic = false;
+	ob->physics_object->mass = ob->mass;
+	ob->physics_object->friction = ob->friction;
+	ob->physics_object->restitution = ob->restitution;
+
+	opengl_engine->addObject(ob->opengl_engine_ob);
+	physics_world->addObject(ob->physics_object);
+
+	ob->max_model_lod_level = 0;
+	ob->loading_or_loaded_model_lod_level = 0;
+	ob->loading_or_loaded_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
+	ob->using_placeholder_model = false;
+
+	if(this->selected_ob == ob)
+		opengl_engine->selectObject(ob->opengl_engine_ob);
+}
+
+
+void GUIClient::updateGaussianSplatDepthSorting()
+{
+	if(world_state.isNull() || gaussian_splat_render_objects.empty())
+		return;
+
+	struct PendingSort
+	{
+		GaussianSplatRenderObjectRef render_object;
+		Matrix4f object_to_world;
+	};
+	std::vector<PendingSort> pending_sorts;
+	pending_sorts.reserve(gaussian_splat_render_objects.size());
+
+	{
+		WorldStateLock lock(world_state->mutex);
+		for(auto it = gaussian_splat_render_objects.begin(); it != gaussian_splat_render_objects.end();)
+		{
+			auto object_it = world_state->objects.find(it->first);
+			if(object_it == world_state->objects.end())
+			{
+				it = gaussian_splat_render_objects.erase(it);
+				continue;
+			}
+
+			WorldObject* ob = object_it.getValue().ptr();
+			if(ob->opengl_engine_ob != it->second->gl_object)
+			{
+				it = gaussian_splat_render_objects.erase(it);
+				continue;
+			}
+
+			PendingSort pending;
+			pending.render_object = it->second;
+			pending.object_to_world = obToWorldMatrix(*ob);
+			pending_sorts.push_back(pending);
+			++it;
+		}
+	}
+
+	Vec4f camera_forward_ws = cam_controller.getForwardsVec().toVec4fVector();
+	// In XR the headset can turn independently of the desktop/avatar camera.
+	// Use the latest tracked centre-head orientation so the next stereo frame
+	// receives an HMD-correct splat order (the pose is one frame old at most).
+	if(xr_session && xr_session->isSessionRunning())
+	{
+		const XRTrackedPoseState& head_pose = xr_session->getHeadPoseState();
+		if(head_pose.orientation_valid)
+		{
+			camera_forward_ws = head_pose.object_to_world_matrix.getColumn(1);
+			camera_forward_ws[3] = 0.f;
+		}
+	}
+	for(size_t i = 0; i < pending_sorts.size(); ++i)
+		pending_sorts[i].render_object->updateDepthSort(
+			camera_forward_ws,
+			pending_sorts[i].object_to_world
+		);
 }
 
 
@@ -8914,6 +9125,167 @@ void GUIClient::setFlyModeEnabled(bool enabled)
 }
 
 
+void GUIClient::setTerrainSculptModeEnabled(bool enabled)
+{
+	if(enabled == terrain_sculpt_mode_enabled)
+		return;
+
+	if(enabled)
+	{
+		if(!terrain_system.nonNull())
+		{
+			if(ui_interface)
+				ui_interface->showHTMLMessageBox("Скульптинг", "Рельеф ещё не загружен.");
+			return;
+		}
+		if(!connectedToUsersWorldOrGodUser())
+		{
+			if(ui_interface)
+				ui_interface->showHTMLMessageBox("Скульптинг", "У вас нет прав на изменение рельефа этого мира.");
+			return;
+		}
+
+		terrain_sculpt_mode_enabled = true;
+		terrain_sculpt_have_last_hit = false;
+		terrain_sculpt_stroke_active = false;
+		cam_controller.freeCameraModeSelected();
+	}
+	else
+	{
+		if(terrain_sculpt_stroke_active && terrain_system.nonNull())
+			terrain_system->endSculptStroke();
+		terrain_sculpt_stroke_active = false;
+		terrain_sculpt_have_last_hit = false;
+		saveTerrainSculptingChanges();
+		terrain_sculpt_mode_enabled = false;
+		cam_controller.standardCameraModeSelected();
+	}
+}
+
+
+void GUIClient::setTerrainSculptTool(int tool)
+{
+	terrain_sculpt_tool = (TerrainSculptTool)myClamp(tool, (int)TerrainSculptTool_Ridge, (int)TerrainSculptTool_SoftRaise);
+}
+
+
+void GUIClient::setTerrainSculptBrushSettings(float radius_m, float strength_m)
+{
+	terrain_sculpt_brush_radius_m = myClamp(radius_m, 0.25f, 4096.f);
+	terrain_sculpt_strength_m = myClamp(strength_m, 0.01f, 100.f);
+}
+
+
+void GUIClient::undoTerrainSculpt()
+{
+	if(terrain_system.nonNull() && terrain_sculpt_mode_enabled)
+	{
+		terrain_sculpt_stroke_active = false;
+		terrain_sculpt_have_last_hit = false;
+		terrain_system->undoSculpt();
+	}
+}
+
+
+void GUIClient::redoTerrainSculpt()
+{
+	if(terrain_system.nonNull() && terrain_sculpt_mode_enabled)
+	{
+		terrain_sculpt_stroke_active = false;
+		terrain_sculpt_have_last_hit = false;
+		terrain_system->redoSculpt();
+	}
+}
+
+
+bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_stroke)
+{
+	if(!terrain_sculpt_mode_enabled || terrain_system.isNull())
+		return false;
+
+	const Vec4f origin4 = cam_controller.getPosition().toVec4fPoint();
+	const Vec4f direction4 = getDirForPixelTrace(cursor_pos.x, cursor_pos.y);
+	const Vec3d origin(origin4[0], origin4[1], origin4[2]);
+	const Vec3d direction(direction4[0], direction4[1], direction4[2]);
+	Vec3d hit_pos;
+	if(!terrain_system->traceRay(origin, direction, hit_pos))
+		return false;
+
+	if(start_stroke && !terrain_sculpt_stroke_active)
+	{
+		terrain_system->beginSculptStroke();
+		terrain_sculpt_stroke_active = true;
+		terrain_sculpt_have_last_hit = false;
+	}
+	if(!terrain_sculpt_stroke_active)
+		return false;
+
+	if(terrain_sculpt_have_last_hit)
+	{
+		const double dx = hit_pos.x - terrain_sculpt_last_hit.x;
+		const double dy = hit_pos.y - terrain_sculpt_last_hit.y;
+		if(dx * dx + dy * dy < (double)(terrain_sculpt_brush_radius_m * 0.2f) * (double)(terrain_sculpt_brush_radius_m * 0.2f))
+			return true;
+	}
+
+	terrain_system->sculptAtWorld(hit_pos, (TerrainSculptTool)terrain_sculpt_tool, terrain_sculpt_brush_radius_m, terrain_sculpt_strength_m);
+	terrain_sculpt_last_hit = hit_pos;
+	terrain_sculpt_have_last_hit = true;
+	return true;
+}
+
+
+void GUIClient::saveTerrainSculptingChanges()
+{
+	if(terrain_system.isNull() || !terrain_system->hasSculptedHeightmaps() || !resource_manager)
+		return;
+
+	std::vector<TerrainSculptedHeightmap> maps;
+	terrain_system->getSculptedHeightmaps(maps);
+	WorldSettings new_world_settings;
+	new_world_settings.copyNetworkStateFrom(connected_world_settings);
+	bool changed = false;
+	EXRDecoder::SaveOptions save_options;
+	save_options.compression_method = EXRDecoder::CompressionMethod_PIZ;
+	save_options.bit_depth = EXRDecoder::BitDepth_32;
+
+	for(size_t i=0; i<maps.size(); ++i)
+	{
+		const std::string temp_path = PlatformUtils::getTempDirPath() + "/metasiberia_terrain_sculpt_" + toString(frame_num) + "_" + toString(i) + ".exr";
+		try
+		{
+			EXRDecoder::saveImageToEXR(*maps[i].map, temp_path, "", save_options);
+			const URLString new_url = resource_manager->copyLocalFileToResourceDirAndReturnURL(temp_path);
+			for(size_t section_i=0; section_i<new_world_settings.terrain_spec.section_specs.size(); ++section_i)
+			{
+				TerrainSpecSection& section = new_world_settings.terrain_spec.section_specs[section_i];
+				if(section.x == maps[i].x && section.y == maps[i].y)
+				{
+					section.heightmap_URL = new_url;
+					changed = true;
+					break;
+				}
+			}
+			if(FileUtils::fileExists(temp_path))
+				FileUtils::deleteFile(temp_path);
+		}
+		catch(const glare::Exception& e)
+		{
+			conPrint(std::string("Could not save sculpted terrain: ") + e.what());
+			if(FileUtils::fileExists(temp_path))
+				FileUtils::deleteFile(temp_path);
+		}
+	}
+
+	if(changed)
+	{
+		worldSettingsChangedFromUI(new_world_settings);
+		if(ui_interface)
+			ui_interface->updateWorldSettingsUIFromWorldSettings();
+	}
+}
+
+
 bool GUIClient::onlyLoadMostImportantObjectsDefaultValue()
 {
 	assert(opengl_engine);
@@ -12505,6 +12877,310 @@ inline static SubClass* checkedDowncastPtr(ThreadMessage* msg)
 }
 
 
+static bool canUseGaussianSplatCEFConverter(GaussianSplatAsset::Format format)
+{
+	return
+		format == GaussianSplatAsset::Format::Ply || // Direct first; some compressed PLY files still use plain .ply.
+		format == GaussianSplatAsset::Format::CompressedPly ||
+		format == GaussianSplatAsset::Format::KSplat ||
+		format == GaussianSplatAsset::Format::SPZ || // Native v4 first; converter covers other supported SPZ versions.
+		format == GaussianSplatAsset::Format::SOG ||
+		format == GaussianSplatAsset::Format::LCC ||
+		format == GaussianSplatAsset::Format::LCC2;
+}
+
+
+static void deleteGaussianTemporaryFile(const std::string& path)
+{
+	if(path.empty())
+		return;
+	try
+	{
+		if(FileUtils::fileExists(path))
+			FileUtils::deleteFile(path);
+	}
+	catch(glare::Exception& e)
+	{
+		conPrint("Could not remove temporary Gaussian PLY '" + path + "': " + e.what());
+	}
+}
+
+
+bool GUIClient::startRemoteGaussianSplatConversion(const URLString& splat_url, const std::string& native_error)
+{
+	if(!canUseGaussianSplatCEFConverter(GaussianSplatAsset::detectFormat(splat_url)))
+		return false;
+	if(gaussian_splat_remote_converters.count(splat_url) > 0)
+		return true;
+	if(!gaussian_splat_conversion_attempted.insert(splat_url).second)
+		return false;
+
+	const ResourceRef resource = resource_manager->getOrCreateResourceForURL(splat_url);
+	if(resource.isNull() || !resource_manager->isFileForURLPresent(splat_url))
+		throw glare::Exception("Downloaded Gaussian source is no longer available locally.");
+
+	GaussianSplatCEFConverter::Config config;
+	config.input_path = resource_manager->getLocalAbsPathForResource(*resource);
+	config.converter_script_path =
+		GaussianSplatCEFConverter::packagedConverterScriptPath(resources_dir_path);
+	config.webp_wasm_path =
+		GaussianSplatCEFConverter::packagedWebPWasmPath(resources_dir_path);
+	config.output_path = GaussianSplatCEFConverter::makeTemporaryOutputPath();
+
+	Reference<GaussianSplatCEFConverter> converter = new GaussianSplatCEFConverter();
+	try
+	{
+		converter->start(config);
+	}
+	catch(...)
+	{
+		deleteGaussianTemporaryFile(config.output_path);
+		throw;
+	}
+
+	gaussian_splat_remote_converters[splat_url] = converter;
+	gaussian_splats_processing.insert(splat_url);
+	showInfoNotification("Converting Gaussian splat '" + toStdString(splat_url) + "' for the native renderer...");
+	print(
+		"Native Gaussian decode failed for '" + toStdString(splat_url) +
+		"'; hidden conversion started: " + native_error
+	);
+	return true;
+}
+
+
+bool GUIClient::startCreateGaussianSplatConversion(const std::string& local_path, const std::string& native_error)
+{
+	if(!canUseGaussianSplatCEFConverter(GaussianSplatAsset::detectFormat(local_path)))
+		return false;
+
+	if(gaussian_splat_create_converter.nonNull())
+	{
+		const std::string old_output = gaussian_splat_create_converter->outputPath();
+		gaussian_splat_create_converter->cancel();
+		gaussian_splat_create_converter = NULL;
+		deleteGaussianTemporaryFile(old_output);
+	}
+
+	GaussianSplatCEFConverter::Config config;
+	config.input_path = local_path;
+	config.converter_script_path =
+		GaussianSplatCEFConverter::packagedConverterScriptPath(resources_dir_path);
+	config.webp_wasm_path =
+		GaussianSplatCEFConverter::packagedWebPWasmPath(resources_dir_path);
+	config.output_path = GaussianSplatCEFConverter::makeTemporaryOutputPath();
+
+	gaussian_splat_create_converter = new GaussianSplatCEFConverter();
+	try
+	{
+		gaussian_splat_create_converter->start(config);
+	}
+	catch(...)
+	{
+		gaussian_splat_create_converter = NULL;
+		deleteGaussianTemporaryFile(config.output_path);
+		throw;
+	}
+
+	gaussian_splat_create_source_path = local_path;
+	gaussian_splat_create_progress_stage.clear();
+	showInfoNotification("Converting Gaussian splat before creating the object...");
+	print(
+		"Hidden conversion started for local Gaussian asset '" + local_path +
+		"': " + native_error
+	);
+	return true;
+}
+
+
+void GUIClient::processGaussianSplatConversions()
+{
+	if(gaussian_splat_create_converter.nonNull())
+	{
+		gaussian_splat_create_converter->think();
+		const std::string stage = gaussian_splat_create_converter->progressStage();
+		if(!stage.empty() && stage != gaussian_splat_create_progress_stage)
+		{
+			gaussian_splat_create_progress_stage = stage;
+			print(
+				"Gaussian conversion '" + gaussian_splat_create_source_path + "': " +
+				stage + " (" + doubleToStringNDecimalPlaces(gaussian_splat_create_converter->progressValue() * 100.0, 0) + "%)"
+			);
+		}
+
+		if(gaussian_splat_create_converter->isFinished())
+		{
+			const Reference<GaussianSplatCEFConverter> converter = gaussian_splat_create_converter;
+			const std::string source_path = gaussian_splat_create_source_path;
+			const std::string output_path = converter->outputPath();
+			gaussian_splat_create_converter = NULL;
+			gaussian_splat_create_source_path.clear();
+			gaussian_splat_create_progress_stage.clear();
+
+			if(converter->state() == GaussianSplatCEFConverter::State_Succeeded)
+			{
+				try
+				{
+					// Validate once before re-entering createModelObject(), so a
+					// broken converter result cannot recursively trigger fallback.
+					MemMappedFile file(output_path);
+					GaussianSplatDecoder::decode(
+						"metasiberia-runtime.ply",
+						ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
+					);
+					if(createModelObject(output_path))
+						showInfoNotification("Gaussian splat object created.");
+				}
+				catch(glare::Exception& e)
+				{
+					const std::string message =
+						"Could not create converted Gaussian splat '" + source_path + "': " + e.what();
+					print(message);
+					showErrorNotification(message);
+				}
+			}
+			else
+			{
+				const std::string message =
+					"Could not convert Gaussian splat '" + source_path + "': " +
+					converter->errorMessage();
+				print(message);
+				showErrorNotification(message);
+			}
+			deleteGaussianTemporaryFile(output_path);
+		}
+	}
+
+	for(auto it = gaussian_splat_remote_converters.begin(); it != gaussian_splat_remote_converters.end();)
+	{
+		const URLString splat_url = it->first;
+		const Reference<GaussianSplatCEFConverter> converter = it->second;
+		converter->think();
+		if(!converter->isFinished())
+		{
+			++it;
+			continue;
+		}
+
+		const std::string output_path = converter->outputPath();
+		it = gaussian_splat_remote_converters.erase(it);
+
+		GaussianSplatLoadedThreadMessage converted_message;
+		converted_message.splat_url = splat_url;
+		if(converter->state() == GaussianSplatCEFConverter::State_Succeeded)
+		{
+			try
+			{
+				MemMappedFile file(output_path);
+				converted_message.data = GaussianSplatDecoder::decode(
+					"metasiberia-runtime.ply",
+					ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
+				);
+			}
+			catch(glare::Exception& e)
+			{
+				converted_message.error_message =
+					"Converted Gaussian PLY could not be decoded: " + e.what();
+			}
+		}
+		else
+			converted_message.error_message = converter->errorMessage();
+
+		deleteGaussianTemporaryFile(output_path);
+		handleGaussianSplatLoaded(&converted_message);
+	}
+}
+
+
+void GUIClient::cancelGaussianSplatConversions()
+{
+	if(gaussian_splat_create_converter.nonNull())
+	{
+		const std::string output_path = gaussian_splat_create_converter->outputPath();
+		gaussian_splat_create_converter->cancel();
+		gaussian_splat_create_converter = NULL;
+		deleteGaussianTemporaryFile(output_path);
+	}
+	gaussian_splat_create_source_path.clear();
+	gaussian_splat_create_progress_stage.clear();
+
+	for(auto& entry : gaussian_splat_remote_converters)
+	{
+		const std::string output_path = entry.second->outputPath();
+		entry.second->cancel();
+		deleteGaussianTemporaryFile(output_path);
+	}
+	gaussian_splat_remote_converters.clear();
+	gaussian_splat_conversion_attempted.clear();
+}
+
+
+void GUIClient::handleGaussianSplatLoaded(GaussianSplatLoadedThreadMessage* loaded_message)
+{
+	const URLString splat_url = loaded_message->splat_url;
+	gaussian_splats_processing.erase(splat_url);
+
+	auto waiting_it = loading_gaussian_splat_URL_to_world_ob_UID_map.find(splat_url);
+	if(!loaded_message->error_message.empty())
+	{
+		std::string combined_error = loaded_message->error_message;
+		try
+		{
+			if(startRemoteGaussianSplatConversion(splat_url, loaded_message->error_message))
+				return;
+		}
+		catch(glare::Exception& e)
+		{
+			combined_error += "\nHidden converter could not start: " + e.what();
+		}
+
+		const std::string message =
+			"Could not load Gaussian splat '" + toStdString(splat_url) + "': " +
+			combined_error;
+		print(message);
+		showErrorNotification(message);
+		if(waiting_it != loading_gaussian_splat_URL_to_world_ob_UID_map.end())
+			loading_gaussian_splat_URL_to_world_ob_UID_map.erase(waiting_it);
+		return;
+	}
+
+	if(loaded_message->data.isNull())
+	{
+		showErrorNotification("Gaussian splat decoder returned no data for '" + toStdString(splat_url) + "'.");
+		if(waiting_it != loading_gaussian_splat_URL_to_world_ob_UID_map.end())
+			loading_gaussian_splat_URL_to_world_ob_UID_map.erase(waiting_it);
+		return;
+	}
+
+	gaussian_splat_data_cache[splat_url] = loaded_message->data;
+	if(waiting_it == loading_gaussian_splat_URL_to_world_ob_UID_map.end() || world_state.isNull())
+		return;
+
+	WorldStateLock lock(world_state->mutex);
+	for(const UID& uid : waiting_it->second)
+	{
+		auto object_it = world_state->objects.find(uid);
+		if(object_it != world_state->objects.end())
+		{
+			WorldObject* ob = object_it.getValue().ptr();
+			if(ob->in_proximity && ob->model_url == splat_url &&
+				GaussianSplatAsset::hasSupportedExtension(ob->model_url))
+			{
+				try
+				{
+					loadPresentGaussianSplat(ob, loaded_message->data, lock);
+				}
+				catch(glare::Exception& e)
+				{
+					print("Error while presenting Gaussian splat '" + toStdString(splat_url) + "': " + e.what());
+				}
+			}
+		}
+	}
+	loading_gaussian_splat_URL_to_world_ob_UID_map.erase(waiting_it);
+}
+
+
 
 // Enable error on implicit fallthrough in switch statement.  We want to catch this error because it's a bad bug that could cause a crash.
 #ifdef _WIN32
@@ -12518,6 +13194,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 {
 	PERFORMANCEAPI_INSTRUMENT("handle msgs");
 	ZoneScopedN("handle msgs"); // Tracy profiler
+
+	// Hidden CEF conversion must be created and polled on this main/UI thread.
+	processGaussianSplatConversions();
 
 	// Remove any messages from the message queue, store in temp_msgs.
 	this->msg_queue.dequeueAnyQueuedItems(temp_msgs);
@@ -12551,6 +13230,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			else
 				model_loaded_messages_to_process.push_back(loaded_msg);
 		}
+		break;
+		case Msg_GaussianSplatLoadedThreadMessage:
+			handleGaussianSplatLoaded(checkedDowncastPtr<GaussianSplatLoadedThreadMessage>(msg));
 		break;
 		case Msg_TextureLoadedThreadMessage:
 		{
@@ -13872,7 +14554,8 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 								WorldObject::GetDependencyOptions options;
 								options.use_basis = use_basis_textures_for_ob;
 								options.include_lightmaps = this->use_lightmaps;
-								options.get_optimised_mesh = this->server_has_optimised_meshes;
+								options.get_optimised_mesh = this->server_has_optimised_meshes &&
+									!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
 								options.opt_mesh_version = this->server_opt_mesh_version;
 								options.allocator = &arena_allocator;
 
@@ -14007,6 +14690,26 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 										if(ob->audio_source_url == URL)
 											loadAudioForObject(ob, m->loaded_buffer);
 									}
+								}
+							}
+							else if(GaussianSplatAsset::hasSupportedExtension(URL) ||
+								GaussianSplatAsset::hasSupportedExtension(local_path))
+							{
+								if(gaussian_splats_processing.insert(URL).second)
+								{
+									Reference<LoadGaussianSplatTask> task = new LoadGaussianSplatTask();
+									task->splat_url = URL;
+									task->resource = resource;
+									task->loaded_buffer = m->loaded_buffer;
+									task->resource_manager = resource_manager;
+									task->result_msg_queue = &msg_queue;
+									load_item_queue.enqueueItem(
+										/*key=*/URL,
+										pos.toVec4fPoint(),
+										size_factor,
+										task,
+										/*max task dist=*/std::numeric_limits<float>::infinity()
+									);
 								}
 							}
 							else if(ModelLoading::hasSupportedModelExtension(local_path)) // Else we didn't download a texture, but maybe a model:
@@ -14861,6 +15564,11 @@ void GUIClient::updateVoxelEditMarkers(const MouseCursorState& mouse_cursor_stat
 		opengl_engine->removeObject(this->voxel_edit_face_marker);
 		voxel_edit_face_marker_in_engine = false;
 	}
+
+	// Exact Gaussian source-over compositing requires the splats to follow the
+	// active camera direction.  The renderer internally skips work until the
+	// direction changes by roughly two degrees.
+	updateGaussianSplatDepthSorting();
 }
 
 
@@ -15962,7 +16670,26 @@ void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded
 	WorldObjectRef new_world_object = new WorldObject();
 
 	js::AABBox aabb_os;
-	if(loaded_mesh.nonNull())
+	if(GaussianSplatAsset::hasSupportedExtension(mesh_path))
+	{
+		MemMappedFile file(mesh_path);
+		const GaussianSplatDataRef splat_data = GaussianSplatDecoder::decode(
+			mesh_path,
+			ArrayRef<uint8>((const uint8*)file.fileData(), file.fileSize())
+		);
+		const uint64 model_hash = FileChecksum::fileChecksum(mesh_path);
+		const URLString splat_URL = ResourceManager::URLForPathAndHash(mesh_path, model_hash);
+		if(!resource_manager->isFileForURLPresent(splat_URL))
+			resource_manager->copyLocalFileToResourceDir(mesh_path, splat_URL);
+
+		new_world_object->model_url = splat_URL;
+		new_world_object->object_type = WorldObject::ObjectType_Generic;
+		new_world_object->max_model_lod_level = 0;
+		BitUtils::setBit(new_world_object->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH);
+		aabb_os = splat_data->aabb_os;
+		gaussian_splat_data_cache[splat_URL] = splat_data;
+	}
+	else if(loaded_mesh.nonNull())
 	{
 		// If the user wants to load a mesh that is not a bmesh file already, convert it to bmesh.
 		std::string bmesh_disk_path;
@@ -17556,6 +18283,30 @@ void GUIClient::objectEdited()
 			BitUtils::zeroBit(this->selected_ob->changed_flags, WorldObject::PHYSICS_VALUE_CHANGED);
 		}
 
+		const bool gaussian_splat_graphics_rebuild_needed =
+			!text_graphics_rebuild_needed &&
+			(selected_ob->object_type == WorldObject::ObjectType_Generic) &&
+			GaussianSplatAsset::hasSupportedExtension(selected_ob->model_url) &&
+			(
+				BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::CONTENT_CHANGED) ||
+				BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::MODEL_URL_CHANGED)
+			);
+
+		if(gaussian_splat_graphics_rebuild_needed)
+		{
+			const auto cache_it = gaussian_splat_data_cache.find(selected_ob->model_url);
+			if(cache_it != gaussian_splat_data_cache.end())
+			{
+				WorldStateLock lock(this->world_state->mutex);
+				loadPresentGaussianSplat(selected_ob.ptr(), cache_it->second, lock);
+				if(selected_ob->opengl_engine_ob.nonNull())
+					opengl_engine->selectObject(selected_ob->opengl_engine_ob);
+
+				BitUtils::zeroBit(this->selected_ob->changed_flags, WorldObject::CONTENT_CHANGED);
+				BitUtils::zeroBit(this->selected_ob->changed_flags, WorldObject::MODEL_URL_CHANGED);
+			}
+		}
+
 		if(!text_graphics_rebuild_needed && (BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::MODEL_URL_CHANGED) || 
 			(BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::DYNAMIC_CHANGED) || BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::PHYSICS_VALUE_CHANGED)) ||
 			physics_rebuild_needed_for_script_enabling))
@@ -18667,6 +19418,10 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	// Clear textures_processing set etc.
 	textures_processing.clear();
 	models_processing.clear();
+	cancelGaussianSplatConversions();
+	gaussian_splat_render_objects.clear();
+	gaussian_splats_processing.clear();
+	loading_gaussian_splat_URL_to_world_ob_UID_map.clear();
 	audio_processing.clear();
 	script_content_processing.clear();
 }
@@ -19522,6 +20277,16 @@ void GUIClient::mousePressed(MouseEvent& e)
 		}
 	}
 
+	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Left)
+	{
+		if(applyTerrainSculptAtCursor(e.cursor_pos, /*start_stroke=*/true))
+		{
+			e.accepted = true;
+			ui_interface->setCamRotationOnMouseDragEnabled(false);
+			return;
+		}
+	}
+
 	ui_interface->setCamRotationOnMouseDragEnabled(true);
 
 	// Trace through scene to see if we are clicking on a web-view.  Send mousePressed events to the web view if so.
@@ -19906,6 +20671,16 @@ void GUIClient::mouseReleased(MouseEvent& e)
 			minimap->handleMouseRelease(e);
 		if(e.accepted)
 			return;
+	}
+
+	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Left)
+	{
+		if(terrain_sculpt_stroke_active && terrain_system.nonNull())
+			terrain_system->endSculptStroke();
+		terrain_sculpt_stroke_active = false;
+		terrain_sculpt_have_last_hit = false;
+		e.accepted = true;
+		return;
 	}
 
 	// If we were dragging an object along a movement axis, we have released the mouse button and hence finished the movement.  un-grab the axis.
@@ -20921,6 +21696,17 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 		}
 	}
 
+	if(terrain_sculpt_mode_enabled &&
+		BitUtils::isBitSet(mouse_event.button_state, (uint32)MouseButton::Left) &&
+		terrain_sculpt_stroke_active)
+	{
+		if(applyTerrainSculptAtCursor(mouse_event.cursor_pos, /*start_stroke=*/false))
+		{
+			mouse_event.accepted = true;
+			return;
+		}
+	}
+
 	if(!ui_interface->isCursorHidden() && !isXRActive())
 		updateInfoUIForMousePosition(mouse_event.cursor_pos, mouse_event.gl_coords, &mouse_event, /*cursor_is_mouse_cursor=*/true);
 
@@ -21810,15 +22596,22 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 						std::ostringstream card;
 						if((scientific_settings.info_card_mode == "atom" || scientific_settings.info_card_mode == "selection") && selected_atom)
 						{
+							std::string element_name("element");
+#if !defined(EMSCRIPTEN)
 							const PeriodicElementRecord* element = PeriodicTableModel::elementBySymbol(QString::fromStdString(selected_atom->element));
-							card << selected_atom->element << " — " << (element ? element->name.toStdString() : std::string("element")) << "\n";
+							if(element)
+								element_name = element->name.toStdString();
+#endif
+							card << selected_atom->element << " — " << element_name << "\n";
 							card << "Atom index: " << selected_atom->source_id << "\n";
+#if !defined(EMSCRIPTEN)
 							if(element)
 							{
 								card << "Atomic number: " << element->atomic_number << "\n";
 								card << "Atomic mass: " << element->atomic_mass.toStdString() << " u\n";
 								card << "Category: " << element->category.toStdString() << "\n";
 							}
+#endif
 							card << "Charge: " << selected_atom->formal_charge << "\n";
 							card << "Coordinates: " << selected_atom->pos.x << ", " << selected_atom->pos.y << ", " << selected_atom->pos.z;
 						}
@@ -22487,12 +23280,16 @@ void GUIClient::updateGroundPlane()
 		{
 			path_spec.section_specs[i].x = spec.section_specs[i].x;
 			path_spec.section_specs[i].y = spec.section_specs[i].y;
-			if(!spec.section_specs[i].heightmap_URL.empty())
+			if(!spec.section_specs[i].heightmap_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG))
 				path_spec.section_specs[i].heightmap_path = resource_manager->pathForURL(spec.section_specs[i].heightmap_URL);
-			if(!spec.section_specs[i].mask_map_URL.empty())
+			if(!spec.section_specs[i].mask_map_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::MASK_MAP_DISABLED_FLAG))
 				path_spec.section_specs[i].mask_map_path  = resource_manager->pathForURL(spec.section_specs[i].mask_map_URL);
-			if(!spec.section_specs[i].tree_mask_map_URL.empty())
+			if(!spec.section_specs[i].tree_mask_map_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::TREE_MASK_MAP_DISABLED_FLAG))
 				path_spec.section_specs[i].tree_mask_map_path  = resource_manager->pathForURL(spec.section_specs[i].tree_mask_map_URL);
+			if(!spec.section_specs[i].road_mask_map_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::ROAD_MASK_MAP_DISABLED_FLAG))
+				path_spec.section_specs[i].road_mask_map_path  = resource_manager->pathForURL(spec.section_specs[i].road_mask_map_URL);
+			if(!spec.section_specs[i].building_mask_map_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::BUILDING_MASK_MAP_DISABLED_FLAG))
+				path_spec.section_specs[i].building_mask_map_path = resource_manager->pathForURL(spec.section_specs[i].building_mask_map_URL);
 		}
 
 		// Convert to .basis extensions if the server supports basis generation of terrain detail maps.
@@ -22500,10 +23297,10 @@ void GUIClient::updateGroundPlane()
 		URLString use_detail_height_map_URLs[4];
 		for(int i=0; i<4; ++i)
 		{
-			if(!spec.detail_col_map_URLs[i].empty())
+			if(!spec.detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i))
 				use_detail_col_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_col_map_URLs[i])) + "basis")) : spec.detail_col_map_URLs[i];
-			if(!spec.detail_height_map_URLs[i].empty())
-				use_detail_col_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_height_map_URLs[i])) + "basis")) : spec.detail_height_map_URLs[i];
+			if(!spec.detail_height_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << (4 + i)))
+				use_detail_height_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_height_map_URLs[i])) + "basis")) : spec.detail_height_map_URLs[i];
 		}
 
 		for(int i=0; i<4; ++i)
@@ -22544,7 +23341,7 @@ void GUIClient::updateGroundPlane()
 			const TerrainSpecSection& section_spec = spec.section_specs[i];
 			const Vec4f centroid_ws(section_spec.x  * terrain_section_width_m, section_spec.y  * terrain_section_width_m, 0, 1);
 
-			if(!section_spec.heightmap_URL.empty())
+			if(!section_spec.heightmap_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG))
 			{
 				DownloadingResourceInfo info;
 				info.texture_params = heightmap_tex_params;
@@ -22553,7 +23350,7 @@ void GUIClient::updateGroundPlane()
 				info.used_by_terrain = true;
 				startDownloadingResource(section_spec.heightmap_URL, centroid_ws, aabb_ws_longest_len, info);
 			}
-			if(!section_spec.mask_map_URL.empty())
+			if(!section_spec.mask_map_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::MASK_MAP_DISABLED_FLAG))
 			{
 				DownloadingResourceInfo info;
 				info.texture_params = maskmap_tex_params;
@@ -22562,7 +23359,7 @@ void GUIClient::updateGroundPlane()
 				info.used_by_terrain = true;
 				startDownloadingResource(section_spec.mask_map_URL, centroid_ws, aabb_ws_longest_len, info);
 			}
-			if(!section_spec.tree_mask_map_URL.empty())
+			if(!section_spec.tree_mask_map_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::TREE_MASK_MAP_DISABLED_FLAG))
 			{
 				DownloadingResourceInfo info;
 				info.texture_params = maskmap_tex_params;
@@ -22571,14 +23368,31 @@ void GUIClient::updateGroundPlane()
 				info.used_by_terrain = true;
 				startDownloadingResource(section_spec.tree_mask_map_URL, centroid_ws, aabb_ws_longest_len, info);
 			}
+			if(!section_spec.road_mask_map_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::ROAD_MASK_MAP_DISABLED_FLAG))
+			{
+				DownloadingResourceInfo info;
+				info.texture_params = maskmap_tex_params;
+				info.pos = Vec3d(centroid_ws);
+				info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(aabb_ws_longest_len, /*importance_factor=*/1.f);
+				info.used_by_terrain = true;
+				startDownloadingResource(section_spec.road_mask_map_URL, centroid_ws, aabb_ws_longest_len, info);
+			}
+			if(!section_spec.building_mask_map_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::BUILDING_MASK_MAP_DISABLED_FLAG))
+			{
+				DownloadingResourceInfo info;
+				info.texture_params = maskmap_tex_params;
+				info.pos = Vec3d(centroid_ws);
+				info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(aabb_ws_longest_len, /*importance_factor=*/1.f);
+				info.used_by_terrain = true;
+				startDownloadingResource(section_spec.building_mask_map_URL, centroid_ws, aabb_ws_longest_len, info);
+			}
 		}
 
 		for(int i=0; i<4; ++i)
 		{
-			if(i == 0) // TEMP: don't load detail colour + height map 0 (rock), as it's not used currently in the terrain shader (see phong_frag_shader.glsl #if TERRAIN section)
-				continue; 
-
-			if(!use_detail_col_map_URLs[i].empty())
+			// Detail colour 0 is still reserved by the current terrain shader, but
+			// detail height 0 is sampled by TerrainSystem on the CPU.
+			if(i != 0 && !use_detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i))
 			{
 				DownloadingResourceInfo info;
 				info.texture_params = detail_colourmap_tex_params;
@@ -22587,7 +23401,7 @@ void GUIClient::updateGroundPlane()
 				info.used_by_terrain = true;
 				startDownloadingResource(use_detail_col_map_URLs[i], /*centroid_ws=*/Vec4f(0,0,0,1), aabb_ws_longest_len, info);
 			}
-			if(!use_detail_height_map_URLs[i].empty())
+			if(!use_detail_height_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << (4 + i)))
 			{
 				DownloadingResourceInfo info;
 				info.texture_params = heightmap_tex_params;
@@ -22608,37 +23422,46 @@ void GUIClient::updateGroundPlane()
 
 			const Vec4f centroid_ws(section_spec.x  * terrain_section_width_m, section_spec.y  * terrain_section_width_m, 0, 1);
 			
-			if(!section_spec.heightmap_URL.empty() && this->resource_manager->isFileForURLPresent(section_spec.heightmap_URL))
+			if(!section_spec.heightmap_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG) && this->resource_manager->isFileForURLPresent(section_spec.heightmap_URL))
 				load_item_queue.enqueueItem(section_spec.heightmap_URL, centroid_ws, aabb_ws_longest_len, 
 					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_section.heightmap_path, this->resource_manager->getOrCreateResourceForURL(section_spec.heightmap_URL),
 						heightmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread), 
 					/*max_dist_for_ob_lod_level=*/std::numeric_limits<float>::max(), /*importance_factor=*/1.f);
 
-			if(!section_spec.mask_map_URL.empty() && this->resource_manager->isFileForURLPresent(section_spec.mask_map_URL))
+			if(!section_spec.mask_map_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::MASK_MAP_DISABLED_FLAG) && this->resource_manager->isFileForURLPresent(section_spec.mask_map_URL))
 				load_item_queue.enqueueItem(section_spec.mask_map_URL, centroid_ws, aabb_ws_longest_len, 
 					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_section.mask_map_path, this->resource_manager->getOrCreateResourceForURL(section_spec.mask_map_URL),
 						maskmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread), 
 					/*max_dist_for_ob_lod_level=*/std::numeric_limits<float>::max(), /*importance_factor=*/1.f);
 
-			if(!section_spec.tree_mask_map_URL.empty() && this->resource_manager->isFileForURLPresent(section_spec.tree_mask_map_URL))
+			if(!section_spec.tree_mask_map_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::TREE_MASK_MAP_DISABLED_FLAG) && this->resource_manager->isFileForURLPresent(section_spec.tree_mask_map_URL))
 				load_item_queue.enqueueItem(section_spec.tree_mask_map_URL, centroid_ws, aabb_ws_longest_len, 
 					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_section.tree_mask_map_path, this->resource_manager->getOrCreateResourceForURL(section_spec.tree_mask_map_URL), 
 						maskmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread), 
+					/*max_dist_for_ob_lod_level=*/std::numeric_limits<float>::max(), /*importance_factor=*/1.f);
+
+			if(!section_spec.road_mask_map_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::ROAD_MASK_MAP_DISABLED_FLAG) && this->resource_manager->isFileForURLPresent(section_spec.road_mask_map_URL))
+				load_item_queue.enqueueItem(section_spec.road_mask_map_URL, centroid_ws, aabb_ws_longest_len,
+					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_section.road_mask_map_path, this->resource_manager->getOrCreateResourceForURL(section_spec.road_mask_map_URL),
+						maskmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread),
+					/*max_dist_for_ob_lod_level=*/std::numeric_limits<float>::max(), /*importance_factor=*/1.f);
+
+			if(!section_spec.building_mask_map_URL.empty() && !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::BUILDING_MASK_MAP_DISABLED_FLAG) && this->resource_manager->isFileForURLPresent(section_spec.building_mask_map_URL))
+				load_item_queue.enqueueItem(section_spec.building_mask_map_URL, centroid_ws, aabb_ws_longest_len,
+					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_section.building_mask_map_path, this->resource_manager->getOrCreateResourceForURL(section_spec.building_mask_map_URL),
+						maskmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread),
 					/*max_dist_for_ob_lod_level=*/std::numeric_limits<float>::max(), /*importance_factor=*/1.f);
 		}
 
 		for(int i=0; i<4; ++i)
 		{
-			if(i == 0) // TEMP: don't load detail colour + height map 0 (rock), as it's not used currently in the terrain shader (see phong_frag_shader.glsl #if TERRAIN section)
-				continue; 
-
-			if(!use_detail_col_map_URLs[i].empty() && this->resource_manager->isFileForURLPresent(use_detail_col_map_URLs[i]))
+			if(i != 0 && !use_detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i) && this->resource_manager->isFileForURLPresent(use_detail_col_map_URLs[i]))
 				load_item_queue.enqueueItem(use_detail_col_map_URLs[i], Vec4f(0,0,0,1), aabb_ws_longest_len, 
 					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_spec.detail_col_map_paths[i], this->resource_manager->getOrCreateResourceForURL(use_detail_col_map_URLs[i]), 
 						detail_colourmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread), 
 					/*max_dist_for_ob_lod_level=*/std::numeric_limits<float>::max(), /*importance_factor=*/1.f);
 
-			if(!use_detail_height_map_URLs[i].empty() && this->resource_manager->isFileForURLPresent(use_detail_height_map_URLs[i]))
+			if(!use_detail_height_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << (4 + i)) && this->resource_manager->isFileForURLPresent(use_detail_height_map_URLs[i]))
 				load_item_queue.enqueueItem(use_detail_height_map_URLs[i], Vec4f(0,0,0,1), aabb_ws_longest_len, 
 					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_spec.detail_height_map_paths[i], this->resource_manager->getOrCreateResourceForURL(use_detail_height_map_URLs[i]), 
 						heightmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread), 
@@ -22693,6 +23516,20 @@ void GUIClient::reloadShaders()
 	try
 	{
 		makeShaders();
+
+		if(gaussian_splat_shader_prog.nonNull())
+		{
+			try
+			{
+				gaussian_splat_shader_prog = GaussianSplatRenderer::makeProgram(*opengl_engine, base_dir_path);
+			}
+			catch(glare::Exception& e)
+			{
+				// Keep the last working Gaussian program.  Reloading this
+				// optional shader must not break the rest of the client.
+				conPrint("Error while reloading Gaussian splat shader: " + e.what());
+			}
+		}
 	
 		// Assign new portal shader to portal objects
 		{
@@ -22706,6 +23543,18 @@ void GUIClient::reloadShaders()
 					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].shader_prog = this->portal_shader_prog;
 					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].transparent = true;
 					ob->opengl_engine_ob->materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX].auto_assign_shader = false;
+					opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
+				}
+				else if(ob->opengl_engine_ob &&
+					ob->object_type == WorldObject::ObjectType_Generic &&
+					GaussianSplatAsset::hasSupportedExtension(ob->model_url) &&
+					gaussian_splat_shader_prog.nonNull() &&
+					!ob->opengl_engine_ob->materials.empty())
+				{
+					ob->opengl_engine_ob->materials[0].shader_prog = gaussian_splat_shader_prog;
+					ob->opengl_engine_ob->materials[0].transparent = false;
+					ob->opengl_engine_ob->materials[0].alpha_blend = true;
+					ob->opengl_engine_ob->materials[0].auto_assign_shader = false;
 					opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
 				}
 			}
@@ -22913,7 +23762,7 @@ void GUIClient::createImageObject(const std::string& local_image_path)
 
 
 // A model path has been drag-and-dropped or pasted.
-void GUIClient::createModelObject(const std::string& local_model_path)
+bool GUIClient::createModelObject(const std::string& local_model_path)
 {
 	const Vec3d ob_pos = cam_controller.getFirstPersonPosition() + cam_controller.getForwardsVec() * 2.0f;
 
@@ -22926,7 +23775,55 @@ void GUIClient::createModelObject(const std::string& local_model_path)
 			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
 		else
 			showErrorNotification("You can only create objects in a parcel that you have write permissions for.");
-		return;
+		return false;
+	}
+
+	if(GaussianSplatAsset::hasSupportedExtension(local_model_path))
+	{
+		const GaussianSplatAsset::Format format = GaussianSplatAsset::detectFormat(local_model_path);
+		const bool direct_native_format =
+			format == GaussianSplatAsset::Format::Ply ||
+			format == GaussianSplatAsset::Format::Splat ||
+			format == GaussianSplatAsset::Format::SPZ;
+
+		if(!direct_native_format)
+		{
+			if(startCreateGaussianSplatConversion(
+				local_model_path,
+				"The selected Gaussian container requires normalisation to binary PLY."))
+				return false;
+			throw glare::Exception("No decoder is available for the selected Gaussian splat container.");
+		}
+
+		std::vector<WorldMaterialRef> materials;
+		materials.push_back(new WorldMaterial());
+		try
+		{
+			createObject(
+				local_model_path,
+				/*loaded_mesh=*/BatchedMeshRef(),
+				/*loaded_mesh_is_image_cube=*/false,
+				glare::AllocatorVector<Voxel, 16>(),
+				ob_pos,
+				Vec3f(1.f),
+				Vec3f(0, 0, 1),
+				0.f,
+				materials
+			);
+			return true;
+		}
+		catch(glare::Exception& e)
+		{
+			// Keep common PLY and SPZ/SPLAT on their native path. A plain .ply
+			// filename can nevertheless contain PlayCanvas compressed PLY, and
+			// the native SPZ decoder intentionally handles only v4. Both get a
+			// fallback after the native decoder has tried them.
+			if((format == GaussianSplatAsset::Format::Ply ||
+				format == GaussianSplatAsset::Format::SPZ) &&
+				startCreateGaussianSplatConversion(local_model_path, e.what()))
+				return false;
+			throw;
+		}
 	}
 
 	ModelLoading::MakeGLObjectResults results;
@@ -22947,6 +23844,7 @@ void GUIClient::createModelObject(const std::string& local_model_path)
 		results.angle,
 		results.materials
 	);
+	return true;
 }
 
 

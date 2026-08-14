@@ -24,6 +24,8 @@
 #include "../qt/SignalBlocker.h"
 #include "../qt/QtUtils.h"
 #include "../qt/RealControl.h"
+#include "../shared/GaussianSplatAsset.h"
+#include "../shared/GaussianSplatData.h"
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QMouseEvent>
@@ -588,6 +590,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	syncing_audio_playlist_widget(false),
 	editing_audio_player_webview(false),
 	editing_particle_emitter(false),
+	editing_gaussian_splat(false),
 	audioShuffleCheckBox(NULL),
 	audioActivationDistanceLabel(NULL),
 	audioActivationDistanceSpinBox(NULL),
@@ -622,6 +625,27 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	portalClearTargetPushButton(NULL),
 	portalHelpPushButton(NULL),
 	portalTipLabel(NULL),
+	gaussianSplatGroupBox(NULL),
+	gaussianSplatPresetLabel(NULL),
+	gaussianSplatPresetComboBox(NULL),
+	gaussianSplatResetPushButton(NULL),
+	gaussianSplatSHDetailLabel(NULL),
+	gaussianSplatSHDetailComboBox(NULL),
+	gaussianSplatOpacityLabel(NULL),
+	gaussianSplatOpacitySpinBox(NULL),
+	gaussianSplatMinimumSourceOpacityLabel(NULL),
+	gaussianSplatMinimumSourceOpacitySpinBox(NULL),
+	gaussianSplatBrightnessLabel(NULL),
+	gaussianSplatBrightnessSpinBox(NULL),
+	gaussianSplatRadiusLabel(NULL),
+	gaussianSplatRadiusSpinBox(NULL),
+	gaussianSplatSaturationLabel(NULL),
+	gaussianSplatSaturationSpinBox(NULL),
+	gaussianSplatContrastLabel(NULL),
+	gaussianSplatContrastSpinBox(NULL),
+	gaussianSplatAlphaCutoffLabel(NULL),
+	gaussianSplatAlphaCutoffSpinBox(NULL),
+	gaussianSplatTipLabel(NULL),
 	particleGroupBox(NULL),
 	particleHelpPushButton(NULL),
 	particlePresetLabel(NULL),
@@ -1017,6 +1041,9 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	createPortalEditorUI();
 	retranslateDynamicPortalUI();
 
+	createGaussianSplatEditorUI();
+	retranslateDynamicGaussianSplatUI();
+
 	createParticleEditorUI();
 	retranslateDynamicParticleUI();
 }
@@ -1045,6 +1072,7 @@ void ObjectEditor::changeEvent(QEvent* event)
 		this->retranslateUi(this);
 		retranslateDynamicAudioPlayerUI();
 		retranslateDynamicPortalUI();
+		retranslateDynamicGaussianSplatUI();
 		retranslateDynamicParticleUI();
 	}
 
@@ -1239,6 +1267,232 @@ void ObjectEditor::retranslateDynamicPortalUI()
 	this->portalMapWorldPushButton->setToolTip(tr_portal("Set this portal to travel to the map world."));
 	this->portalClearTargetPushButton->setToolTip(tr_portal("Clear the destination so the portal is visibly unfinished and cannot mislead players."));
 	this->portalHelpPushButton->setToolTip(tr_portal("Open portal design help and a list of missing professional features."));
+}
+
+
+void ObjectEditor::createGaussianSplatEditorUI()
+{
+	if(this->gaussianSplatGroupBox)
+		return;
+
+	this->gaussianSplatGroupBox = new QGroupBox(this);
+	QGridLayout* grid = new QGridLayout(this->gaussianSplatGroupBox);
+	grid->setContentsMargins(8, 8, 8, 8);
+	grid->setHorizontalSpacing(8);
+	grid->setVerticalSpacing(6);
+	grid->setColumnMinimumWidth(0, 120);
+	grid->setColumnStretch(0, 0);
+	grid->setColumnStretch(1, 1);
+
+	int row = 0;
+	this->gaussianSplatPresetLabel = new QLabel(this->gaussianSplatGroupBox);
+	this->gaussianSplatPresetComboBox = new QComboBox(this->gaussianSplatGroupBox);
+	this->gaussianSplatPresetComboBox->addItem(QStringLiteral("Original / SuperSplat default"), QStringLiteral("original"));
+	this->gaussianSplatPresetComboBox->addItem(QStringLiteral("Clean Haze"), QStringLiteral("clean_haze"));
+	this->gaussianSplatPresetComboBox->addItem(QStringLiteral("Metasiberia Clear"), QStringLiteral("metasiberia_clear"));
+	configureDockComboBox(this->gaussianSplatPresetComboBox, 12, 220);
+	this->gaussianSplatResetPushButton = new QPushButton(this->gaussianSplatGroupBox);
+	QHBoxLayout* preset_layout = new QHBoxLayout();
+	preset_layout->setContentsMargins(0, 0, 0, 0);
+	preset_layout->setSpacing(6);
+	preset_layout->addWidget(this->gaussianSplatPresetComboBox, 1);
+	preset_layout->addWidget(this->gaussianSplatResetPushButton);
+	grid->addWidget(this->gaussianSplatPresetLabel, row, 0);
+	grid->addLayout(preset_layout, row++, 1);
+
+	this->gaussianSplatSHDetailLabel = new QLabel(this->gaussianSplatGroupBox);
+	this->gaussianSplatSHDetailComboBox = new QComboBox(this->gaussianSplatGroupBox);
+	this->gaussianSplatSHDetailComboBox->addItem(QStringLiteral("Auto"), -1);
+	this->gaussianSplatSHDetailComboBox->addItem(QStringLiteral("DC only"), 0);
+	this->gaussianSplatSHDetailComboBox->addItem(QStringLiteral("Degree 1"), 1);
+	this->gaussianSplatSHDetailComboBox->addItem(QStringLiteral("Degree 2"), 2);
+	this->gaussianSplatSHDetailComboBox->addItem(QStringLiteral("Degree 3"), 3);
+	configureDockComboBox(this->gaussianSplatSHDetailComboBox, 12, 220);
+	grid->addWidget(this->gaussianSplatSHDetailLabel, row, 0);
+	grid->addWidget(this->gaussianSplatSHDetailComboBox, row++, 1);
+
+	auto add_real_control = [this, grid, &row](QLabel*& label_out, double min_val, double max_val, double step, double slider_min, double slider_max, int slider_steps) -> RealControl*
+	{
+		label_out = new QLabel(this->gaussianSplatGroupBox);
+		RealControl* control = new RealControl(this->gaussianSplatGroupBox);
+		control->setMinimum(min_val);
+		control->setMaximum(max_val);
+		control->setSingleStep(step);
+		control->setSliderMinimum(slider_min);
+		control->setSliderMaximum(slider_max);
+		control->setSliderSteps(slider_steps);
+		grid->addWidget(label_out, row, 0);
+		grid->addWidget(control, row++, 1);
+		connect(control, SIGNAL(valueChanged(double)), this, SIGNAL(objectChanged()));
+		return control;
+	};
+
+	this->gaussianSplatOpacitySpinBox = add_real_control(this->gaussianSplatOpacityLabel, 0.05, 32.0, 0.05, 0.05, 8.0, 318);
+	this->gaussianSplatMinimumSourceOpacitySpinBox = add_real_control(this->gaussianSplatMinimumSourceOpacityLabel, 0.0, 1.0, 0.005, 0.0, 0.25, 100);
+	this->gaussianSplatBrightnessSpinBox = add_real_control(this->gaussianSplatBrightnessLabel, 0.05, 4.0, 0.05, 0.05, 2.0, 80);
+	this->gaussianSplatRadiusSpinBox = add_real_control(this->gaussianSplatRadiusLabel, 0.10, 4.0, 0.02, 0.10, 2.0, 95);
+	this->gaussianSplatSaturationSpinBox = add_real_control(this->gaussianSplatSaturationLabel, 0.0, 3.0, 0.05, 0.0, 2.0, 80);
+	this->gaussianSplatContrastSpinBox = add_real_control(this->gaussianSplatContrastLabel, 0.10, 4.0, 0.05, 0.10, 2.5, 96);
+	this->gaussianSplatAlphaCutoffSpinBox = add_real_control(this->gaussianSplatAlphaCutoffLabel, 0.0, 0.25, 0.001, 0.0, 0.08, 80);
+
+	this->gaussianSplatTipLabel = new QLabel(this->gaussianSplatGroupBox);
+	this->gaussianSplatTipLabel->setWordWrap(true);
+	this->gaussianSplatTipLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+	grid->addWidget(this->gaussianSplatTipLabel, row++, 0, 1, 2);
+
+	this->verticalLayout->addWidget(this->gaussianSplatGroupBox);
+	this->gaussianSplatGroupBox->hide();
+
+	connect(this->gaussianSplatPresetComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index)
+	{
+		if(index < 0)
+			return;
+
+		applyGaussianSplatPreset(this->gaussianSplatPresetComboBox->itemData(index).toString());
+		emit objectChanged();
+	});
+
+	connect(this->gaussianSplatResetPushButton, &QPushButton::clicked, this, [this]()
+	{
+		SignalBlocker::setCurrentIndex(this->gaussianSplatPresetComboBox, 0);
+		applyGaussianSplatPreset(QStringLiteral("original"));
+		emit objectChanged();
+	});
+
+	connect(this->gaussianSplatSHDetailComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int)
+	{
+		SignalBlocker::setCurrentIndex(this->gaussianSplatPresetComboBox, -1);
+		emit objectChanged();
+	});
+
+	RealControl* const gaussian_controls[] = {
+		this->gaussianSplatOpacitySpinBox,
+		this->gaussianSplatMinimumSourceOpacitySpinBox,
+		this->gaussianSplatBrightnessSpinBox,
+		this->gaussianSplatRadiusSpinBox,
+		this->gaussianSplatSaturationSpinBox,
+		this->gaussianSplatContrastSpinBox,
+		this->gaussianSplatAlphaCutoffSpinBox
+	};
+	for(RealControl* control : gaussian_controls)
+		connect(control, &RealControl::valueChanged, this, [this](double)
+		{
+			SignalBlocker::setCurrentIndex(this->gaussianSplatPresetComboBox, -1);
+		});
+}
+
+
+void ObjectEditor::applyGaussianSplatPreset(const QString& preset)
+{
+	const bool clean_haze = preset == QStringLiteral("clean_haze");
+	const bool metasiberia_clear = preset == QStringLiteral("metasiberia_clear");
+
+	SignalBlocker::setValue(this->gaussianSplatOpacitySpinBox, metasiberia_clear ? 1.25 : 1.0);
+	SignalBlocker::setValue(this->gaussianSplatMinimumSourceOpacitySpinBox, (clean_haze || metasiberia_clear) ? 0.08 : 0.0);
+	SignalBlocker::setValue(this->gaussianSplatBrightnessSpinBox, 1.0);
+	SignalBlocker::setValue(this->gaussianSplatRadiusSpinBox, 1.0);
+	SignalBlocker::setValue(this->gaussianSplatSaturationSpinBox, 1.0);
+	SignalBlocker::setValue(this->gaussianSplatContrastSpinBox, 1.0);
+	SignalBlocker::setValue(this->gaussianSplatAlphaCutoffSpinBox, 1.0 / 255.0);
+	SignalBlocker::setCurrentIndex(this->gaussianSplatSHDetailComboBox, 0); // Auto
+}
+
+
+void ObjectEditor::retranslateDynamicGaussianSplatUI()
+{
+	if(!this->gaussianSplatGroupBox)
+		return;
+
+	const RuntimeTranslation::UILanguage ui_language = currentUILanguageForObjectEditor(this->settings);
+	auto tr_gaussian = [ui_language](const char* source_text)
+	{
+		return translateObjectEditorRuntimeText(ui_language, source_text);
+	};
+
+	this->gaussianSplatGroupBox->setTitle(tr_gaussian("GaussianSplats Editor"));
+	this->gaussianSplatPresetLabel->setText(tr_gaussian("Preset"));
+	this->gaussianSplatPresetComboBox->setItemText(0, tr_gaussian("Original / SuperSplat default"));
+	this->gaussianSplatPresetComboBox->setItemText(1, tr_gaussian("Clean Haze"));
+	this->gaussianSplatPresetComboBox->setItemText(2, tr_gaussian("Metasiberia Clear"));
+	this->gaussianSplatResetPushButton->setText(tr_gaussian("Reset to Original"));
+	this->gaussianSplatSHDetailLabel->setText(tr_gaussian("SH Detail"));
+	this->gaussianSplatSHDetailComboBox->setItemText(0, tr_gaussian("Auto"));
+	this->gaussianSplatSHDetailComboBox->setItemText(1, tr_gaussian("DC only"));
+	this->gaussianSplatSHDetailComboBox->setItemText(2, tr_gaussian("Degree 1"));
+	this->gaussianSplatSHDetailComboBox->setItemText(3, tr_gaussian("Degree 2"));
+	this->gaussianSplatSHDetailComboBox->setItemText(4, tr_gaussian("Degree 3"));
+	this->gaussianSplatOpacityLabel->setText(tr_gaussian("Density / Opacity"));
+	this->gaussianSplatMinimumSourceOpacityLabel->setText(tr_gaussian("Minimum Source Opacity"));
+	this->gaussianSplatBrightnessLabel->setText(tr_gaussian("Brightness"));
+	this->gaussianSplatRadiusLabel->setText(tr_gaussian("Splat Radius"));
+	this->gaussianSplatSaturationLabel->setText(tr_gaussian("Saturation"));
+	this->gaussianSplatContrastLabel->setText(tr_gaussian("Contrast"));
+	this->gaussianSplatAlphaCutoffLabel->setText(tr_gaussian("Edge Alpha Clip"));
+	this->gaussianSplatTipLabel->setText(tr_gaussian("Start with Original to preserve the source. Minimum Source Opacity removes weak source splats and haze; Edge Alpha Clip only trims transparent pixels around each rendered splat. SH Detail limits view-dependent colour detail."));
+
+	const QString preset_tip = tr_gaussian("Choose a safe starting look. Presets only change render controls and never rewrite the source asset.");
+	this->gaussianSplatPresetLabel->setToolTip(preset_tip);
+	this->gaussianSplatPresetComboBox->setToolTip(preset_tip);
+	this->gaussianSplatResetPushButton->setToolTip(tr_gaussian("Restore Original / SuperSplat defaults: density 1, identity colour and radius, no source-opacity filter, automatic SH detail and a 1/255 edge alpha clip."));
+
+	const QString sh_tip = tr_gaussian("Limits spherical-harmonic colour detail. Auto preserves every SH degree available in the source; lower degrees reduce view-dependent detail and can look steadier.");
+	this->gaussianSplatSHDetailLabel->setToolTip(sh_tip);
+	this->gaussianSplatSHDetailComboBox->setToolTip(sh_tip);
+
+	const QString source_opacity_tip = tr_gaussian("Drops source splats below this original opacity before rendering. Increase it slowly to remove haze and floaters; high values can erase fine geometry.");
+	this->gaussianSplatMinimumSourceOpacityLabel->setToolTip(source_opacity_tip);
+	this->gaussianSplatMinimumSourceOpacitySpinBox->setToolTip(source_opacity_tip);
+
+	const QString edge_clip_tip = tr_gaussian("Discards very transparent pixels only at the soft edge of each rendered splat. It does not remove source splats; raise it carefully to sharpen silhouettes.");
+	this->gaussianSplatAlphaCutoffLabel->setToolTip(edge_clip_tip);
+	this->gaussianSplatAlphaCutoffSpinBox->setToolTip(edge_clip_tip);
+}
+
+
+void ObjectEditor::setGaussianSplatControlsFromContent(const std::string& content)
+{
+	const GaussianSplatRenderSettings render_settings = GaussianSplatRenderSettings::fromContent(content);
+	SignalBlocker::setValue(this->gaussianSplatOpacitySpinBox, render_settings.opacity_multiplier);
+	SignalBlocker::setValue(this->gaussianSplatMinimumSourceOpacitySpinBox, render_settings.minimum_source_opacity);
+	SignalBlocker::setValue(this->gaussianSplatBrightnessSpinBox, render_settings.brightness);
+	SignalBlocker::setValue(this->gaussianSplatRadiusSpinBox, render_settings.radius_multiplier);
+	SignalBlocker::setValue(this->gaussianSplatSaturationSpinBox, render_settings.saturation);
+	SignalBlocker::setValue(this->gaussianSplatContrastSpinBox, render_settings.contrast);
+	SignalBlocker::setValue(this->gaussianSplatAlphaCutoffSpinBox, render_settings.alpha_cutoff);
+	const int sh_index = this->gaussianSplatSHDetailComboBox->findData(render_settings.sh_degree_override);
+	SignalBlocker::setCurrentIndex(this->gaussianSplatSHDetailComboBox, sh_index >= 0 ? sh_index : 0);
+
+	auto approximately_equal = [](float a, float b) { return std::fabs(a - b) < 1.0e-5f; };
+	const bool identity_appearance =
+		approximately_equal(render_settings.brightness, 1.0f) &&
+		approximately_equal(render_settings.radius_multiplier, 1.0f) &&
+		approximately_equal(render_settings.saturation, 1.0f) &&
+		approximately_equal(render_settings.contrast, 1.0f) &&
+		approximately_equal(render_settings.alpha_cutoff, 1.0f / 255.0f) &&
+		render_settings.sh_degree_override == -1;
+	int preset_index = -1;
+	if(identity_appearance && approximately_equal(render_settings.opacity_multiplier, 1.0f) && approximately_equal(render_settings.minimum_source_opacity, 0.0f))
+		preset_index = 0;
+	else if(identity_appearance && approximately_equal(render_settings.opacity_multiplier, 1.0f) && approximately_equal(render_settings.minimum_source_opacity, 0.08f))
+		preset_index = 1;
+	else if(identity_appearance && approximately_equal(render_settings.opacity_multiplier, 1.25f) && approximately_equal(render_settings.minimum_source_opacity, 0.08f))
+		preset_index = 2;
+	SignalBlocker::setCurrentIndex(this->gaussianSplatPresetComboBox, preset_index);
+}
+
+
+GaussianSplatRenderSettings ObjectEditor::gaussianSplatControlsToSettings() const
+{
+	GaussianSplatRenderSettings render_settings;
+	render_settings.opacity_multiplier = (float)this->gaussianSplatOpacitySpinBox->value();
+	render_settings.minimum_source_opacity = (float)this->gaussianSplatMinimumSourceOpacitySpinBox->value();
+	render_settings.brightness = (float)this->gaussianSplatBrightnessSpinBox->value();
+	render_settings.radius_multiplier = (float)this->gaussianSplatRadiusSpinBox->value();
+	render_settings.saturation = (float)this->gaussianSplatSaturationSpinBox->value();
+	render_settings.contrast = (float)this->gaussianSplatContrastSpinBox->value();
+	render_settings.alpha_cutoff = (float)this->gaussianSplatAlphaCutoffSpinBox->value();
+	render_settings.sh_degree_override = this->gaussianSplatSHDetailComboBox->currentData().toInt();
+	return render_settings;
 }
 
 
@@ -2234,6 +2488,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->editing_object_type = ob.object_type;
 	this->editing_audio_player_webview = ob.isAudioPlayerWebView();
 	this->editing_particle_emitter = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
+	this->editing_gaussian_splat = (ob.object_type == WorldObject::ObjectType_Generic) && GaussianSplatAsset::hasSupportedExtension(ob.model_url);
 	const RuntimeTranslation::UILanguage ui_language = currentUILanguageForObjectEditor(this->settings);
 
 	//this->objectTypeLabel->setText(QtUtils::toQString(ob_type + " (UID: " + ob.uid.toString() + ")"));
@@ -2289,6 +2544,8 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	syncAudioPlaylistWidgetFromContent(ob.content);
 	if(this->editing_particle_emitter)
 		setParticleControlsFromContent(ob.content);
+	if(this->editing_gaussian_splat)
+		setGaussianSplatControlsFromContent(ob.content);
 	{
 		SignalBlocker b(this->fontComboBox);
 		// Set font combobox to the object's font
@@ -2363,7 +2620,19 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->cameraGroupBox->hide();
 	this->cameraScreenGroupBox->hide();
 	
-	if(this->editing_particle_emitter)
+	if(this->editing_gaussian_splat)
+	{
+		this->materialsGroupBox->hide();
+		this->lightmapGroupBox->hide();
+		this->modelLabel->show();
+		this->modelFileSelectWidget->show();
+		this->spotlightGroupBox->hide();
+		this->seatGroupBox->hide();
+		this->audioGroupBox->hide();
+		this->physicsSettingsGroupBox->show();
+		this->videoGroupBox->hide();
+	}
+	else if(this->editing_particle_emitter)
 	{
 		this->materialsGroupBox->show();
 		this->lightmapGroupBox->hide();
@@ -2513,6 +2782,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	}
 
 	this->particleGroupBox->setVisible(this->editing_particle_emitter);
+	this->gaussianSplatGroupBox->setVisible(this->editing_gaussian_splat);
 	this->portalGroupBox->setVisible(ob.object_type == WorldObject::ObjectType_Portal);
 
 	if(ob.object_type != WorldObject::ObjectType_Hypercard)
@@ -2595,6 +2865,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	const bool is_audio_player = ob.isAudioPlayerWebView();
 	const bool is_portal = ob.isPortal();
 	const bool is_particle_emitter = this->editing_particle_emitter;
+	const bool is_gaussian_splat = this->editing_gaussian_splat;
 	auto tr_object_editor = [ui_language](const char* source_text)
 	{
 		return translateObjectEditorRuntimeText(ui_language, source_text);
@@ -2602,15 +2873,15 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->audioGroupBox->setTitle(is_audio_player ? tr_object_editor("Audio Player") : tr_object_editor("Audio"));
 	this->label_9->setVisible(!is_audio_player);
 	this->widget_5->setVisible(!is_audio_player);
-	this->label_12->setVisible(!is_audio_player && !is_particle_emitter);
-	this->contentTextEdit->setVisible(!is_audio_player && !is_particle_emitter);
-	this->fontLabel->setVisible(!is_audio_player && !is_portal && !is_particle_emitter);
-	this->fontComboBox->setVisible(!is_audio_player && !is_portal && !is_particle_emitter);
+	this->label_12->setVisible(!is_audio_player && !is_particle_emitter && !is_gaussian_splat);
+	this->contentTextEdit->setVisible(!is_audio_player && !is_particle_emitter && !is_gaussian_splat);
+	this->fontLabel->setVisible(!is_audio_player && !is_portal && !is_particle_emitter && !is_gaussian_splat);
+	this->fontComboBox->setVisible(!is_audio_player && !is_portal && !is_particle_emitter && !is_gaussian_splat);
 	this->label_14->setVisible(!is_audio_player);
 	this->audioFileWidget->setVisible(!is_audio_player);
-	this->targetURLLabel->setVisible(!is_audio_player && !is_particle_emitter);
-	this->targetURLLineEdit->setVisible(!is_audio_player && !is_particle_emitter);
-	this->visitURLLabel->setVisible(!is_audio_player && !is_portal && !is_particle_emitter && !ob.target_url.empty());
+	this->targetURLLabel->setVisible(!is_audio_player && !is_particle_emitter && !is_gaussian_splat);
+	this->targetURLLineEdit->setVisible(!is_audio_player && !is_particle_emitter && !is_gaussian_splat);
+	this->visitURLLabel->setVisible(!is_audio_player && !is_portal && !is_particle_emitter && !is_gaussian_splat && !ob.target_url.empty());
 	this->audioShuffleCheckBox->setVisible(is_audio_player);
 	this->audioActivationDistanceLabel->setVisible(is_audio_player);
 	this->audioActivationDistanceSpinBox->setVisible(is_audio_player);
@@ -2735,13 +3006,16 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 	ob_out.model_url = new_model_url;
 	checkStringSize(ob_out.model_url, WorldObject::MAX_URL_SIZE);
 
+	const bool is_gaussian_splat = this->editing_gaussian_splat || ((ob_out.object_type == WorldObject::ObjectType_Generic) && GaussianSplatAsset::hasSupportedExtension(ob_out.model_url));
+
 	const std::string new_script =  QtUtils::toIndString(this->scriptTextEdit->toPlainText());
 	if(ob_out.script != new_script)
 		ob_out.changed_flags |= WorldObject::SCRIPT_CHANGED;
 	ob_out.script = new_script;
 	checkStringSize(ob_out.script, WorldObject::MAX_SCRIPT_SIZE);
 
-	const std::string new_content = is_particle_emitter ? ParticleEmitterSettings::serialiseToContent(particleControlsToSettings()) : QtUtils::toIndString(this->contentTextEdit->toPlainText());
+	const std::string new_content = is_gaussian_splat ? GaussianSplatRenderSettings::serialiseToContent(gaussianSplatControlsToSettings()) :
+		(is_particle_emitter ? ParticleEmitterSettings::serialiseToContent(particleControlsToSettings()) : QtUtils::toIndString(this->contentTextEdit->toPlainText()));
 	if(ob_out.content != new_content)
 		ob_out.changed_flags |= WorldObject::CONTENT_CHANGED;
 	ob_out.content = new_content;
@@ -3062,6 +3336,17 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->portalMainWorldPushButton->setEnabled(editable);
 	this->portalMapWorldPushButton->setEnabled(editable);
 	this->portalClearTargetPushButton->setEnabled(editable);
+
+	this->gaussianSplatPresetComboBox->setEnabled(editable);
+	this->gaussianSplatResetPushButton->setEnabled(editable);
+	this->gaussianSplatSHDetailComboBox->setEnabled(editable);
+	this->gaussianSplatOpacitySpinBox->setReadOnly(!editable);
+	this->gaussianSplatMinimumSourceOpacitySpinBox->setReadOnly(!editable);
+	this->gaussianSplatBrightnessSpinBox->setReadOnly(!editable);
+	this->gaussianSplatRadiusSpinBox->setReadOnly(!editable);
+	this->gaussianSplatSaturationSpinBox->setReadOnly(!editable);
+	this->gaussianSplatContrastSpinBox->setReadOnly(!editable);
+	this->gaussianSplatAlphaCutoffSpinBox->setReadOnly(!editable);
 
 	this->cameraEnabledCheckBox->setEnabled(editable);
 	this->cameraFOVYDoubleSpinBox->setReadOnly(!editable);

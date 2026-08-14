@@ -30,5 +30,12 @@ void TerrainSpecSectionWidget::updateControlsEditable(bool editable)
 	heightmapURLFileSelectWidget->setReadOnly(!editable);
 	maskMapURLFileSelectWidget->setReadOnly(!editable);
 	treeMaskMapURLFileSelectWidget->setReadOnly(!editable);
+	roadMaskMapURLFileSelectWidget->setReadOnly(!editable);
+	buildingMaskMapURLFileSelectWidget->setReadOnly(!editable);
+	heightmapEnabledCheckBox->setEnabled(editable);
+	maskMapEnabledCheckBox->setEnabled(editable);
+	treeMaskMapEnabledCheckBox->setEnabled(editable);
+	roadMaskMapEnabledCheckBox->setEnabled(editable);
+	buildingMaskMapEnabledCheckBox->setEnabled(editable);
 	removeTerrainSectionPushButton->setEnabled(editable);
 }

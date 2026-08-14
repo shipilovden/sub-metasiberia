@@ -17,6 +17,11 @@ class QSettings;
 struct GLObject;
 struct IMFDXGIDeviceManager;
 class TextureServer;
+class OpenGLProgram;
+class GaussianSplatCEFConverter;
+class GaussianSplatData;
+class GaussianSplatRenderObject;
+class QProgressDialog;
 
 
 /*=====================================================================
@@ -52,12 +57,23 @@ private:
 	virtual void timerEvent(QTimerEvent* event);
 
 	void loadModelIntoPreview(const std::string& local_path);
+	void setGaussianSplatPreviewObject(const Reference<GaussianSplatData>& splat_data);
+	void finishPreviewObject();
+	void startGaussianSplatConversion(const std::string& local_path, const std::string& native_error);
+	void processGaussianSplatConversion();
+	void cancelGaussianSplatConversion(bool delete_temporary_output);
+	void closeGaussianSplatProgressDialog();
 
 	void shutdownGL();
 
 	QSettings* settings;
 
 	Reference<GLObject> preview_gl_ob;
+	Reference<GaussianSplatRenderObject> gaussian_splat_preview_render_object;
+	Reference<OpenGLProgram> gaussian_splat_preview_program;
+	Reference<GaussianSplatCEFConverter> gaussian_splat_converter;
+	QProgressDialog* gaussian_splat_progress_dialog;
+	std::string gaussian_splat_temporary_output_path;
 
 public:
 	std::string result_path;

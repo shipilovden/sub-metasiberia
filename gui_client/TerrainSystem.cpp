@@ -30,11 +30,68 @@ Copyright Glare Technologies Limited 2023 -
 #include "meshoptimizer/src/meshoptimizer.h"
 #include "../dll/include/IndigoMesh.h"
 #include <tracy/Tracy.hpp>
+#include <algorithm>
+#include <functional>
+#include <limits>
 
 
+// Build a single RGBA decal texture from TerrainGen's independent grayscale
+// reference masks.  The alpha channel controls coverage; the RGB colour keeps
+// roads and building footprints visually distinct from the terrain materials.
+static float sampleReferenceMaskAtPixel(const Map2D* mask, size_t x, size_t y, size_t output_width, size_t output_height)
+{
+	if(!mask)
+		return 0.f;
+
+	// TerrainGen exports ordinary 8-bit PNGs.  Read those pixels directly so
+	// applying a 1024^2 mask never performs millions of expensive filtered
+	// samples on the UI/render thread.
+	if(const ImageMapUInt8* image = dynamic_cast<const ImageMapUInt8*>(mask))
+	{
+		const size_t source_width = image->getWidth();
+		const size_t source_height = image->getHeight();
+		if(source_width > 0 && source_height > 0 && image->getN() > 0)
+		{
+			const size_t source_x = std::min(x * source_width / output_width, source_width - 1);
+			const size_t source_y = std::min(y * source_height / output_height, source_height - 1);
+			return (float)image->getPixel(source_x, source_y)[0] * (1.f / 255.f);
+		}
+	}
+
+	const float u = ((float)x + 0.5f) / (float)output_width;
+	const float v = ((float)y + 0.5f) / (float)output_height;
+	return mask->sampleSingleChannelHighQual(u, v, /*channel=*/0, /*wrap=*/false);
+}
+
+static ImageMapUInt8Ref makeReferenceMaskOverlay(const Map2D* mask, uint8 red, uint8 green, uint8 blue, float alpha_scale)
+{
+	if(!mask || mask->getMapWidth() == 0 || mask->getMapHeight() == 0)
+		return ImageMapUInt8Ref();
+
+	const size_t width = mask->getMapWidth();
+	const size_t height = mask->getMapHeight();
+	ImageMapUInt8Ref overlay = new ImageMapUInt8(width, height, 4);
+
+	for(size_t y=0; y<height; ++y)
+	for(size_t x=0; x<width; ++x)
+	{
+		const float alpha = std::min(1.f, std::max(0.f, sampleReferenceMaskAtPixel(mask, x, y, width, height) * alpha_scale));
+
+		uint8* const pixel = overlay->getPixel(x, y);
+		pixel[0] = red;
+		pixel[1] = green;
+		pixel[2] = blue;
+		pixel[3] = (uint8)(alpha * 255.f + 0.5f);
+	}
+
+	return overlay;
+}
 TerrainSystem::TerrainSystem()
 {
 	num_uncompleted_tasks = 0;
+	reference_mask_camera_z = 0.f;
+	sculpt_stroke_active = false;
+	sculpt_geometry_rebuild_pending = false;
 }
 
 
@@ -236,6 +293,7 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 
 	terrain_section_w = spec_.terrain_section_width_m;
 	terrain_scale_factor = 1.f / spec_.terrain_section_width_m;
+	reference_mask_camera_z = (float)campos.z;
 
 	next_id = 0;
 
@@ -271,6 +329,8 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 			terrain_data_sections[dest_x + dest_y*TERRAIN_DATA_SECTION_RES].heightmap_path = section_spec.heightmap_path;
 			terrain_data_sections[dest_x + dest_y*TERRAIN_DATA_SECTION_RES].mask_map_path  = section_spec.mask_map_path;
 			terrain_data_sections[dest_x + dest_y*TERRAIN_DATA_SECTION_RES].tree_mask_map_path  = section_spec.tree_mask_map_path;
+			terrain_data_sections[dest_x + dest_y*TERRAIN_DATA_SECTION_RES].road_mask_map_path  = section_spec.road_mask_map_path;
+			terrain_data_sections[dest_x + dest_y*TERRAIN_DATA_SECTION_RES].building_mask_map_path = section_spec.building_mask_map_path;
 		}
 	}
 
@@ -413,6 +473,121 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 	terrain_scattering.init(base_dir_path, this, opengl_engine_, physics_world, biome_manager_, campos, bump_allocator);
 }
 
+void TerrainSystem::updateReferenceMaskOverlay(int section_x, int section_y, TerrainDataSection& section)
+{
+	if(section.road_mask_decal_gl_ob.nonNull())
+	{
+		opengl_engine->removeObject(section.road_mask_decal_gl_ob);
+		section.road_mask_decal_gl_ob = NULL;
+	}
+	if(section.building_mask_decal_gl_ob.nonNull())
+	{
+		opengl_engine->removeObject(section.building_mask_decal_gl_ob);
+		section.building_mask_decal_gl_ob = NULL;
+	}
+	section.road_mask_gl_tex = NULL;
+	section.building_mask_gl_tex = NULL;
+
+	TextureParams texture_params;
+	texture_params.use_sRGB = false;
+	texture_params.allow_compression = false;
+	// Reference masks are raster images.  Bilinear filtering removes the
+	// visible 4 m / pixel stair-steps when a 2048 px mask covers an 8192 m
+	// terrain section.  Mipmaps stay disabled so the lines do not disappear
+	// when the camera is close to the terrain.
+	texture_params.filtering = OpenGLTexture::Filtering_Bilinear;
+	texture_params.wrapping = OpenGLTexture::Wrapping_Clamp;
+	texture_params.use_mipmaps = false;
+
+	// Terrain decals are projected onto the already-rendered terrain.  The
+	// decal renderer needs the camera to remain outside the projection cube;
+	// keep its top just below the current camera and update it as the camera
+	// moves.  The terrain visible from the camera is then inside the cube.
+	const float min_z = spec.default_terrain_z - 1000.f;
+	const float max_z = std::max(min_z + 1.f, reference_mask_camera_z - 1.f);
+
+	const float z_depth = std::max(1.f, max_z - min_z);
+	const float z_centre = (min_z + max_z) * 0.5f;
+
+	auto create_decal = [&](const OpenGLTextureRef& texture) -> GLObjectRef
+	{
+		if(texture.isNull())
+			return GLObjectRef();
+
+		GLObjectRef decal_ob = opengl_engine->allocateObject();
+		decal_ob->mesh_data = opengl_engine->getCubeMeshData();
+		decal_ob->materials.resize(1);
+		decal_ob->materials[0].albedo_linear_rgb = Colour3f(1.f);
+		decal_ob->materials[0].albedo_texture = texture;
+		decal_ob->materials[0].simple_double_sided = true;
+		decal_ob->materials[0].cast_shadows = false;
+		decal_ob->materials[0].decal = true;
+		decal_ob->ob_to_world_matrix =
+			Matrix4f::translationMatrix(section_x * terrain_section_w, section_y * terrain_section_w, z_centre) *
+			Matrix4f::scaleMatrix(terrain_section_w, terrain_section_w, z_depth) *
+			Matrix4f::translationMatrix(-0.5f, -0.5f, -0.5f);
+		opengl_engine->addObject(decal_ob);
+		return decal_ob;
+	};
+
+	// Keep the two masks as separate decals.  A building mask must not replace
+	// or recolour road pixels in the combined image.
+	if(section.building_maskmap.nonNull())
+	{
+		ImageMapUInt8Ref building_overlay = makeReferenceMaskOverlay(section.building_maskmap.ptr(), 210, 125, 32, 0.78f);
+		if(building_overlay.nonNull())
+		{
+			const size_t key_hash = std::hash<std::string>()(std::string("building|") + std::string(section.building_mask_map_path.begin(), section.building_mask_map_path.end()));
+			const OpenGLTextureKey texture_key = OpenGLTextureKey("__terrain_building_mask_" + toString(section_x) + "_" + toString(section_y) + "_" + toString(key_hash));
+			section.building_mask_gl_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(texture_key, *building_overlay, texture_params);
+			section.building_mask_decal_gl_ob = create_decal(section.building_mask_gl_tex);
+		}
+	}
+
+	if(section.road_maskmap.nonNull())
+	{
+		ImageMapUInt8Ref road_overlay = makeReferenceMaskOverlay(section.road_maskmap.ptr(), 24, 24, 24, 0.95f);
+		if(road_overlay.nonNull())
+		{
+			const size_t key_hash = std::hash<std::string>()(std::string("road|") + std::string(section.road_mask_map_path.begin(), section.road_mask_map_path.end()));
+			const OpenGLTextureKey texture_key = OpenGLTextureKey("__terrain_road_mask_" + toString(section_x) + "_" + toString(section_y) + "_" + toString(key_hash));
+			section.road_mask_gl_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(texture_key, *road_overlay, texture_params);
+			section.road_mask_decal_gl_ob = create_decal(section.road_mask_gl_tex);
+		}
+	}
+}
+
+
+void TerrainSystem::updateReferenceMaskDecalTransforms(float camera_z)
+{
+	reference_mask_camera_z = camera_z;
+
+	const float min_z = spec.default_terrain_z - 1000.f;
+	const float max_z = std::max(min_z + 1.f, reference_mask_camera_z - 1.f);
+	const float z_depth = std::max(1.f, max_z - min_z);
+	const float z_centre = (min_z + max_z) * 0.5f;
+
+	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
+	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
+	{
+		TerrainDataSection& section = terrain_data_sections[x + y*TERRAIN_DATA_SECTION_RES];
+		const Matrix4f decal_transform =
+			Matrix4f::translationMatrix((x - TERRAIN_SECTION_OFFSET) * terrain_section_w, (y - TERRAIN_SECTION_OFFSET) * terrain_section_w, z_centre) *
+			Matrix4f::scaleMatrix(terrain_section_w, terrain_section_w, z_depth) *
+			Matrix4f::translationMatrix(-0.5f, -0.5f, -0.5f);
+		if(section.road_mask_decal_gl_ob.nonNull())
+		{
+			section.road_mask_decal_gl_ob->ob_to_world_matrix = decal_transform;
+			opengl_engine->setObjectTransformData(*section.road_mask_decal_gl_ob);
+		}
+		if(section.building_mask_decal_gl_ob.nonNull())
+		{
+			section.building_mask_decal_gl_ob->ob_to_world_matrix = decal_transform;
+			opengl_engine->setObjectTransformData(*section.building_mask_decal_gl_ob);
+		}
+	}
+}
+
 
 void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2DRef& map)
 {
@@ -442,12 +617,14 @@ void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2
 	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
 	{
 		TerrainDataSection& section = terrain_data_sections[x + y*TERRAIN_DATA_SECTION_RES];
+		bool reference_mask_changed = false;
 
 		if(section.heightmap_path == path)
 		{
 			section.heightmap = map;
 			section.heightmap_gl_tex = opengl_engine->getTextureIfLoaded(OpenGLTextureKey(path));
 			terrain_needs_rebuild = true;
+			reference_mask_changed = true;
 		}
 		if(section.mask_map_path == path)
 		{
@@ -460,6 +637,19 @@ void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2
 			section.treemaskmap = map;
 			terrain_needs_rebuild = true;
 		}
+		if(section.road_mask_map_path == path)
+		{
+			section.road_maskmap = map;
+			reference_mask_changed = true;
+		}
+		if(section.building_mask_map_path == path)
+		{
+			section.building_maskmap = map;
+			reference_mask_changed = true;
+		}
+
+		if(reference_mask_changed)
+			updateReferenceMaskOverlay(x - TERRAIN_SECTION_OFFSET, y - TERRAIN_SECTION_OFFSET, section);
 	}
 
 	if(terrain_needs_rebuild)
@@ -494,6 +684,10 @@ bool TerrainSystem::isTextureUsedByTerrain(const OpenGLTextureKey& path) const
 			return true;
 		if(section.tree_mask_map_path == path)
 			return true;
+		if(section.road_mask_map_path == path)
+			return true;
+		if(section.building_mask_map_path == path)
+			return true;
 	}
 
 	return false;
@@ -509,6 +703,317 @@ void TerrainSystem::rebuildScattering()
 void TerrainSystem::invalidateVegetationMap(const js::AABBox& aabb_ws)
 {
 	terrain_scattering.invalidateVegetationMap(aabb_ws);
+}
+
+
+ImageMapFloatRef TerrainSystem::makeEditableHeightmap(TerrainDataSection& section)
+{
+	if(section.sculpt_heightmap.nonNull())
+		return section.sculpt_heightmap;
+
+	const ImageMapFloat* source = dynamic_cast<const ImageMapFloat*>(section.heightmap.ptr());
+	if(!source || source->getN() == 0)
+		return ImageMapFloatRef();
+
+	ImageMapFloatRef editable = new ImageMapFloat(source->getWidth(), source->getHeight(), source->getN());
+	std::copy(source->getData(), source->getData() + source->getDataSize(), editable->getData());
+	editable->setGamma(source->getGamma());
+	section.sculpt_heightmap = editable;
+	section.heightmap = editable;
+	return editable;
+}
+
+
+TerrainDataSection* TerrainSystem::getSectionForSculptCoords(int section_x, int section_y)
+{
+	const int array_x = section_x + TERRAIN_SECTION_OFFSET;
+	const int array_y = section_y + TERRAIN_SECTION_OFFSET;
+	if(array_x < 0 || array_x >= TERRAIN_DATA_SECTION_RES || array_y < 0 || array_y >= TERRAIN_DATA_SECTION_RES)
+		return NULL;
+	return &terrain_data_sections[array_x + array_y * TERRAIN_DATA_SECTION_RES];
+}
+
+
+const TerrainDataSection* TerrainSystem::getSectionForSculptCoords(int section_x, int section_y) const
+{
+	const int array_x = section_x + TERRAIN_SECTION_OFFSET;
+	const int array_y = section_y + TERRAIN_SECTION_OFFSET;
+	if(array_x < 0 || array_x >= TERRAIN_DATA_SECTION_RES || array_y < 0 || array_y >= TERRAIN_DATA_SECTION_RES)
+		return NULL;
+	return &terrain_data_sections[array_x + array_y * TERRAIN_DATA_SECTION_RES];
+}
+
+
+void TerrainSystem::applySculptPatch(const TerrainSculptPatch& patch, bool use_after_values)
+{
+	TerrainDataSection* section = getSectionForSculptCoords(patch.section_x, patch.section_y);
+	if(!section)
+		return;
+	ImageMapFloatRef map = makeEditableHeightmap(*section);
+	if(map.isNull())
+		return;
+
+	const std::vector<float>& values = use_after_values ? patch.after : patch.before;
+	if(values.size() != (size_t)(patch.width * patch.height) || map->getN() == 0)
+		return;
+
+	for(int y=0; y<patch.height; ++y)
+	for(int x=0; x<patch.width; ++x)
+		map->getPixel((size_t)(patch.x0 + x), (size_t)(patch.y0 + y))[0] = values[(size_t)(x + y * patch.width)];
+}
+
+
+void TerrainSystem::beginSculptStroke()
+{
+	current_sculpt_stroke.patches.clear();
+	sculpt_stroke_active = true;
+}
+
+
+void TerrainSystem::endSculptStroke()
+{
+	if(!sculpt_stroke_active)
+		return;
+
+	if(!current_sculpt_stroke.patches.empty())
+	{
+		sculpt_undo_stack.push_back(std::move(current_sculpt_stroke));
+		if(sculpt_undo_stack.size() > 8)
+			sculpt_undo_stack.erase(sculpt_undo_stack.begin());
+		sculpt_redo_stack.clear();
+	}
+	current_sculpt_stroke.patches.clear();
+	sculpt_stroke_active = false;
+}
+
+
+bool TerrainSystem::sculptAtWorld(const Vec3d& hit_pos, TerrainSculptTool tool, float radius_m, float strength_m)
+{
+	if(!sculpt_stroke_active)
+		beginSculptStroke();
+
+	radius_m = myClamp(radius_m, 0.25f, terrain_section_w * 0.5f);
+	strength_m = myClamp(strength_m, 0.001f, 1000.f);
+	if(!isFinite(radius_m) || !isFinite(strength_m))
+		return false;
+
+	const double min_nx = (hit_pos.x - radius_m) / terrain_section_w + 0.5;
+	const double max_nx = (hit_pos.x + radius_m) / terrain_section_w + 0.5;
+	const double min_ny = (hit_pos.y - radius_m) / terrain_section_w + 0.5;
+	const double max_ny = (hit_pos.y + radius_m) / terrain_section_w + 0.5;
+	const int min_section_x = Maths::floorToInt(min_nx);
+	const int max_section_x = Maths::floorToInt(max_nx);
+	const int min_section_y = Maths::floorToInt(min_ny);
+	const int max_section_y = Maths::floorToInt(max_ny);
+	bool changed = false;
+
+	for(int section_y=min_section_y; section_y<=max_section_y; ++section_y)
+	for(int section_x=min_section_x; section_x<=max_section_x; ++section_x)
+	{
+		TerrainDataSection* section = getSectionForSculptCoords(section_x, section_y);
+		if(!section)
+			continue;
+		ImageMapFloatRef map = makeEditableHeightmap(*section);
+		if(map.isNull() || map->getWidth() < 2 || map->getHeight() < 2)
+			continue;
+
+		const int width = (int)map->getWidth();
+		const int height = (int)map->getHeight();
+		const float section_u = (float)(hit_pos.x / terrain_section_w + 0.5 - section_x);
+		const float section_v = (float)(hit_pos.y / terrain_section_w + 0.5 - section_y);
+		const float pixel_cx = section_u * (width - 1);
+		const float pixel_cy = (1.f - section_v) * (height - 1);
+		const float pixel_radius_x = radius_m / terrain_section_w * (width - 1);
+		const float pixel_radius_y = radius_m / terrain_section_w * (height - 1);
+		const int x0 = myMax(0, (int)std::floor(pixel_cx - pixel_radius_x) - 1);
+		const int x1 = myMin(width - 1, (int)std::ceil(pixel_cx + pixel_radius_x) + 1);
+		const int y0 = myMax(0, (int)std::floor(pixel_cy - pixel_radius_y) - 1);
+		const int y1 = myMin(height - 1, (int)std::ceil(pixel_cy + pixel_radius_y) + 1);
+		if(x1 < x0 || y1 < y0)
+			continue;
+		bool section_changed = false;
+
+		TerrainSculptPatch patch;
+		patch.section_x = section_x;
+		patch.section_y = section_y;
+		patch.x0 = x0;
+		patch.y0 = y0;
+		patch.width = x1 - x0 + 1;
+		patch.height = y1 - y0 + 1;
+		patch.before.resize((size_t)patch.width * patch.height);
+		patch.after.resize((size_t)patch.width * patch.height);
+
+		for(int y=y0; y<=y1; ++y)
+		for(int x=x0; x<=x1; ++x)
+		{
+			const float px_u = (float)x / (float)(width - 1);
+			const float py_v = (float)y / (float)(height - 1);
+			const float world_x = (section_x + px_u - 0.5f) * terrain_section_w;
+			const float world_y = (section_y + (1.f - py_v) - 0.5f) * terrain_section_w;
+			const float dx = world_x - (float)hit_pos.x;
+			const float dy = world_y - (float)hit_pos.y;
+			const float dist = std::sqrt(dx * dx + dy * dy);
+			const float t = myClamp(dist / radius_m, 0.f, 1.f);
+			const float falloff = (t >= 1.f) ? 0.f : (1.f - t) * (1.f - t) * (2.f * t + 1.f);
+			float amount = strength_m * falloff;
+			if(tool == TerrainSculptTool_Lower)
+				amount = -amount;
+			else if(tool == TerrainSculptTool_SoftRaise)
+				amount *= 0.45f * falloff;
+			else if(tool == TerrainSculptTool_Ridge)
+				amount *= 0.35f + 0.65f * falloff;
+
+			const size_t patch_i = (size_t)((x - x0) + (y - y0) * patch.width);
+			const float old_height = map->getPixel((size_t)x, (size_t)y)[0];
+			patch.before[patch_i] = old_height;
+			patch.after[patch_i] = old_height + amount;
+			map->getPixel((size_t)x, (size_t)y)[0] = patch.after[patch_i];
+			if(std::fabs(amount) > 1.0e-6f)
+			{
+				changed = true;
+				section_changed = true;
+			}
+		}
+
+		if(section_changed)
+			current_sculpt_stroke.patches.push_back(std::move(patch));
+	}
+
+	if(changed)
+		sculpt_geometry_rebuild_pending = true;
+	return changed;
+}
+
+
+bool TerrainSystem::canUndoSculpt() const
+{
+	return !sculpt_undo_stack.empty() || (sculpt_stroke_active && !current_sculpt_stroke.patches.empty());
+}
+
+
+bool TerrainSystem::canRedoSculpt() const
+{
+	return !sculpt_redo_stack.empty();
+}
+
+
+bool TerrainSystem::undoSculpt()
+{
+	endSculptStroke();
+	if(sculpt_undo_stack.empty())
+		return false;
+
+	TerrainSculptStroke stroke = std::move(sculpt_undo_stack.back());
+	sculpt_undo_stack.pop_back();
+	for(auto it=stroke.patches.rbegin(); it!=stroke.patches.rend(); ++it)
+		applySculptPatch(*it, /*use_after_values=*/false);
+	sculpt_redo_stack.push_back(std::move(stroke));
+	sculpt_geometry_rebuild_pending = true;
+	return true;
+}
+
+
+bool TerrainSystem::redoSculpt()
+{
+	endSculptStroke();
+	if(sculpt_redo_stack.empty())
+		return false;
+
+	TerrainSculptStroke stroke = std::move(sculpt_redo_stack.back());
+	sculpt_redo_stack.pop_back();
+	for(const TerrainSculptPatch& patch : stroke.patches)
+		applySculptPatch(patch, /*use_after_values=*/true);
+	sculpt_undo_stack.push_back(std::move(stroke));
+	sculpt_geometry_rebuild_pending = true;
+	return true;
+}
+
+
+bool TerrainSystem::hasSculptedHeightmaps() const
+{
+	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
+	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
+		if(terrain_data_sections[x + y * TERRAIN_DATA_SECTION_RES].sculpt_heightmap.nonNull())
+			return true;
+	return false;
+}
+
+
+void TerrainSystem::getSculptedHeightmaps(std::vector<TerrainSculptedHeightmap>& maps_out) const
+{
+	maps_out.clear();
+	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
+	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
+	{
+		const TerrainDataSection& section = terrain_data_sections[x + y * TERRAIN_DATA_SECTION_RES];
+		if(section.sculpt_heightmap.nonNull())
+		{
+			TerrainSculptedHeightmap result;
+			result.x = x - TERRAIN_SECTION_OFFSET;
+			result.y = y - TERRAIN_SECTION_OFFSET;
+			result.map = section.sculpt_heightmap;
+			maps_out.push_back(result);
+		}
+	}
+}
+
+
+bool TerrainSystem::traceRay(const Vec3d& origin, const Vec3d& direction, Vec3d& hit_pos_out) const
+{
+	if(direction.length2() < 1.0e-12)
+		return false;
+
+	const double max_t = 50000.0;
+	const int num_steps = 768;
+	const double step = max_t / (double)num_steps;
+	auto signed_height = [&](double t) -> double
+	{
+		const Vec3d p = origin + direction * t;
+		return p.z - evalTerrainHeight((float)p.x, (float)p.y, 0.f);
+	};
+
+	double last_t = 0.0;
+	double last_value = signed_height(last_t);
+	if(last_value <= 0.0)
+	{
+		hit_pos_out = origin;
+		return true;
+	}
+
+	for(int i=1; i<=num_steps; ++i)
+	{
+		const double cur_t = step * (double)i;
+		const double cur_value = signed_height(cur_t);
+		if(last_value >= 0.0 && cur_value <= 0.0)
+		{
+			double lo = last_t;
+			double hi = cur_t;
+			for(int j=0; j<12; ++j)
+			{
+				const double mid = (lo + hi) * 0.5;
+				if(signed_height(mid) > 0.0)
+					lo = mid;
+				else
+					hi = mid;
+			}
+			hit_pos_out = origin + direction * hi;
+			return true;
+		}
+		last_t = cur_t;
+		last_value = cur_value;
+	}
+	return false;
+}
+
+
+void TerrainSystem::rebuildAfterSculptIfNeeded()
+{
+	if(!sculpt_geometry_rebuild_pending || root_node.isNull())
+		return;
+
+	removeSubtree(root_node.ptr(), root_node->old_subtree_gl_obs, root_node->old_subtree_phys_obs);
+	terrain_scattering.rebuild();
+	sculpt_geometry_rebuild_pending = false;
 }
 
 
@@ -570,11 +1075,25 @@ void TerrainSystem::shutdown()
 	for(size_t i=0; i<water_gl_obs.size(); ++i)
 		opengl_engine->removeObject(water_gl_obs[i]);
 	water_gl_obs.clear();
+
+	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
+	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
+	{
+		TerrainDataSection& section = terrain_data_sections[x + y*TERRAIN_DATA_SECTION_RES];
+		if(section.road_mask_decal_gl_ob.nonNull())
+			opengl_engine->removeObject(section.road_mask_decal_gl_ob);
+		if(section.building_mask_decal_gl_ob.nonNull())
+			opengl_engine->removeObject(section.building_mask_decal_gl_ob);
+		section.road_mask_decal_gl_ob = NULL;
+		section.building_mask_decal_gl_ob = NULL;
+		section.road_mask_gl_tex = NULL;
+		section.building_mask_gl_tex = NULL;
+	}
 }
-
-
 void TerrainSystem::updateCampos(const Vec3d& campos, glare::StackAllocator& bump_allocator)
 {
+	rebuildAfterSculptIfNeeded();
+	updateReferenceMaskDecalTransforms((float)campos.z);
 	updateSubtree(root_node.ptr(), campos);
 
 	terrain_scattering.updateCampos(campos, bump_allocator);
@@ -758,7 +1277,9 @@ Colour4f TerrainSystem::evalTerrainMask(float p_x, float p_y) const
 	if(section.maskmap.isNull())
 		return Colour4f(1,0,0,0);
 
-	return section.maskmap->vec3Sample(nx, 1.f - ny, /*wrap=*/false);
+	const float section_nx = nx - Maths::floorToInt(nx);
+	const float section_ny = ny - Maths::floorToInt(ny);
+	return section.maskmap->vec3Sample(section_nx, 1.f - section_ny, /*wrap=*/false);
 }
 
 
@@ -776,9 +1297,16 @@ float TerrainSystem::evalTreeMask(float p_x, float p_y) const
 		return 1;
 	const TerrainDataSection& section = terrain_data_sections[section_x + section_y*TERRAIN_DATA_SECTION_RES]; // terrain_data_sections.elem(section_x, section_y);
 	if(section.treemaskmap.isNull())
-		return 1; // If there is no tree mask map, trees are allowed by default.
+	{
+		// With no configured mask, preserve the historical "trees allowed" default.
+		// If a mask was configured but is still missing/failed to load, fail closed:
+		// rendering trees everywhere would make a valid black/white mask look ignored.
+		return section.tree_mask_map_path.empty() ? 1.f : 0.f;
+	}
 
-	return section.treemaskmap->sampleSingleChannelTiled(nx, 1.f - ny, /*channel=*/0);
+	const float section_nx = nx - Maths::floorToInt(nx);
+	const float section_ny = ny - Maths::floorToInt(ny);
+	return section.treemaskmap->sampleSingleChannelTiled(section_nx, 1.f - section_ny, /*channel=*/0);
 }
 
 
@@ -823,9 +1351,12 @@ float TerrainSystem::evalTerrainHeight(float p_x, float p_y, float quad_w) const
 	//terrain_h = -300 + seaside_factor * 300 + non_flatten_factor * myMax(MIN_TERRAIN_Z, heightmap_terrain_z);// + detail_h;
 
 	//terrain_h = myMax(MIN_TERRAIN_Z, -300 + seaside_factor * 300 + non_flatten_factor * heightmap_terrain_z);// + detail_h;
-	float terrain_h = /*-300 + seaside_factor * 300 +*/ myMax(-100000.f, /*non_flatten_factor **/ heightmap_terrain_z * spec.terrain_height_scale);// + detail_h;
+	const bool exact_heightmap = BitUtils::isBitSet(spec.flags, TerrainSpec::EXACT_HEIGHTMAP_FLAG);
+	float terrain_h = exact_heightmap ?
+		heightmap_terrain_z * spec.terrain_height_scale :
+		myMax(-100000.f, /*non_flatten_factor **/ heightmap_terrain_z * spec.terrain_height_scale);// + detail_h;
 
-	if(terrain_h > MIN_TERRAIN_Z) // Don't apply fine noise on the seafloor.
+	if(!exact_heightmap && terrain_h > MIN_TERRAIN_Z) // Don't apply fine noise on the seafloor.
 	{
 		// 
 		//const float noise_xy_scale = 1 / 200.f;

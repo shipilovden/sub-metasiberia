@@ -30,6 +30,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "EmojiUtils.h"
 #include "TestSuite.h"
 #include "TerrainSystem.h"
+#include "WorldSettingsWidget.h"
 #include "GuiClientApplication.h"
 #include "LoginDialog.h"
 #include "SignUpDialog.h"
@@ -69,6 +70,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "PhotoVideoSettingsPanel.h"
 #include "DocumentEditorPanel.h"
 #include "../qt/FlowLayout.h"
+#include "../shared/GaussianSplatAsset.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
 #include "../shared/MetasiberiaPaths.h"
@@ -2578,6 +2580,26 @@ void MainWindow::initialiseUI()
 	connect(voxel_editor_panel, &VoxelEditorPanel::selectionClearRequested, this, [this]() { gui_client.clearVoxelSelection(); });
 	connect(ui->parcelEditor, SIGNAL(parcelChanged()), this, SLOT(parcelEditedSlot()));
 	connect(ui->worldSettingsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(worldSettingsChangedSlot()));
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingModeChangedSignal, this, [this](bool enabled)
+	{
+		gui_client.setTerrainSculptModeEnabled(enabled);
+	});
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingToolChangedSignal, this, [this](int tool)
+	{
+		gui_client.setTerrainSculptTool(tool);
+	});
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingBrushSettingsChangedSignal, this, [this](float radius_m, float strength_m)
+	{
+		gui_client.setTerrainSculptBrushSettings(radius_m, strength_m);
+	});
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingUndoSignal, this, [this]()
+	{
+		gui_client.undoTerrainSculpt();
+	});
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingRedoSignal, this, [this]()
+	{
+		gui_client.redoTerrainSculpt();
+	});
 	connect(user_details, SIGNAL(logInClicked()), this, SLOT(on_actionLogIn_triggered()));
 	connect(user_details, SIGNAL(logOutClicked()), this, SLOT(on_actionLogOut_triggered()));
 	connect(user_details, SIGNAL(signUpClicked()), this, SLOT(on_actionSignUp_triggered()));
@@ -3964,6 +3986,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 	const bool is_tree_editor = TreeObject::isTreeObject(ob);
 	const bool is_voxel_editor = ob.object_type == WorldObject::ObjectType_VoxelGroup;
 	const bool is_particle_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
+	const bool is_gaussian_splat_editor = (ob.object_type == WorldObject::ObjectType_Generic) && GaussianSplatAsset::hasSupportedExtension(ob.model_url);
 	const bool is_portal_editor = ob.object_type == WorldObject::ObjectType_Portal;
 
 	if(is_scientific_editor && scientific_object_editor)
@@ -3998,7 +4021,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 	}
 
-	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_cultural_editor ? tr("Cultural Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor")))))));
+	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_cultural_editor ? tr("Cultural Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_gaussian_splat_editor ? tr("GaussianSplats Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))))))));
 	if(ui->editorDockWidget->toggleViewAction())
 		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }

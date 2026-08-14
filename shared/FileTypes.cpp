@@ -4,6 +4,7 @@ FileTypes.cpp
 Copyright Glare Technologies Limited 2022 -
 =====================================================================*/
 #include "FileTypes.h"
+#include "GaussianSplatAsset.h"
 
 
 #include "../gui_client/ModelLoading.h"
@@ -17,6 +18,7 @@ bool FileTypes::hasSupportedExtension(const string_view path)
 
 	return
 		ModelLoading::hasSupportedModelExtension(path) ||
+		GaussianSplatAsset::hasSupportedExtension(path) ||
 		ImageDecoding::hasSupportedImageExtension(path) ||
 		webp_allowed_for_upload_and_transfer ||
 		hasAudioFileExtension(path) ||

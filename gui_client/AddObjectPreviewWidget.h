@@ -41,6 +41,7 @@ public:
 
 	void init(const std::string& base_dir_path_, QSettings* settings_, Reference<TextureServer> texture_server, glare::TaskManager* main_task_manager, glare::TaskManager* high_priority_task_manager);
 	void shutdown();
+	Vec4f cameraForwardsWS() const;
 
 protected:
 	virtual void initializeGL() override;

@@ -70,6 +70,7 @@ WorldSettings::WorldSettings()
 	terrain_spec.terrain_height_scale = 1.f;
 	terrain_spec.water_z = -4;
 	terrain_spec.default_terrain_z = 0;
+	terrain_spec.disabled_detail_map_flags = 0;
 	terrain_spec.flags = 0;
 
 	sun_phi = 1.f;
@@ -104,6 +105,10 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 			URLs_out.insert(DependencyURL(section_spec.mask_map_URL));
 		if(!section_spec.tree_mask_map_URL.empty())
 			URLs_out.insert(DependencyURL(section_spec.tree_mask_map_URL));
+		if(!section_spec.road_mask_map_URL.empty())
+			URLs_out.insert(DependencyURL(section_spec.road_mask_map_URL));
+		if(!section_spec.building_mask_map_URL.empty())
+			URLs_out.insert(DependencyURL(section_spec.building_mask_map_URL));
 	}
 
 	for(int i=0; i<4; ++i)
@@ -116,7 +121,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 }
 
 
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 6;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 8;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -162,6 +167,21 @@ void WorldSettings::writeToStream(OutStream& stream) const
 	buffer.writeFloat(terrain_spec.terrain_height_scale); // New in v5
 
 	fog_settings.writeToStream(buffer);
+
+	// New in v7: append independent reference masks after the v1-v6 payload.
+	// Keeping the extension at the end lets older servers read all legacy fields
+	// correctly and skip the additional bytes.
+	for(size_t i=0; i<terrain_spec.section_specs.size(); ++i)
+	{
+		const TerrainSpecSection& section_spec = terrain_spec.section_specs[i];
+		buffer.writeStringLengthFirst(section_spec.road_mask_map_URL);
+		buffer.writeStringLengthFirst(section_spec.building_mask_map_URL);
+	}
+
+	// New in v8: append map enable/disable flags after the v1-v7 payload.
+	for(size_t i=0; i<terrain_spec.section_specs.size(); ++i)
+		buffer.writeUInt32(terrain_spec.section_specs[i].disabled_map_flags);
+	buffer.writeUInt32(terrain_spec.disabled_detail_map_flags);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
@@ -212,6 +232,9 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 		section_spec.y = buffer_stream.readInt32();
 		section_spec.heightmap_URL = buffer_stream.readStringLengthFirst(/*max_string_length=*/1024);
 		section_spec.mask_map_URL  = buffer_stream.readStringLengthFirst(/*max_string_length=*/1024);
+		section_spec.disabled_map_flags = 0;
+		section_spec.road_mask_map_URL.clear();
+		section_spec.building_mask_map_URL.clear();
 	}
 
 	for(int i=0; i<4; ++i)
@@ -248,6 +271,24 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 	if(version >= 6)
 		readFogWorldSettingsFromStream(buffer_stream, settings.fog_settings);
 
+	if(version >= 7 && !buffer_stream.endOfStream())
+	{
+		for(uint32 i=0; i<num_section_specs; ++i)
+		{
+			TerrainSpecSection& section_spec = settings.terrain_spec.section_specs[i];
+			section_spec.road_mask_map_URL = buffer_stream.readStringLengthFirst(/*max_string_length=*/1024);
+			section_spec.building_mask_map_URL = buffer_stream.readStringLengthFirst(/*max_string_length=*/1024);
+		}
+	}
+
+	settings.terrain_spec.disabled_detail_map_flags = 0;
+	if(version >= 8 && !buffer_stream.endOfStream())
+	{
+		for(uint32 i=0; i<num_section_specs; ++i)
+			settings.terrain_spec.section_specs[i].disabled_map_flags = buffer_stream.readUInt32();
+		settings.terrain_spec.disabled_detail_map_flags = buffer_stream.readUInt32();
+	}
+
 	// We effectively skip any remaining data we have not processed by discarding buffer_stream.
 }
 
@@ -268,6 +309,7 @@ bool TerrainSpec::operator==(const TerrainSpec& other) const
 		terrain_height_scale == other.terrain_height_scale &&
 		water_z == other.water_z &&
 		default_terrain_z == other.default_terrain_z &&
+		disabled_detail_map_flags == other.disabled_detail_map_flags &&
 		flags == other.flags;
 }
 
@@ -279,5 +321,8 @@ bool TerrainSpecSection::operator==(const TerrainSpecSection& other) const
 		y == other.y &&
 		heightmap_URL == other.heightmap_URL &&
 		mask_map_URL == other.mask_map_URL &&
-		tree_mask_map_URL == other.tree_mask_map_URL;
+		tree_mask_map_URL == other.tree_mask_map_URL &&
+		road_mask_map_URL == other.road_mask_map_URL &&
+		building_mask_map_URL == other.building_mask_map_URL &&
+		disabled_map_flags == other.disabled_map_flags;
 }

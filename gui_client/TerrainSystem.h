@@ -12,6 +12,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <opengl/IncludeOpenGL.h>
 #include <opengl/OpenGLTexture.h>
 #include <opengl/OpenGLEngine.h>
+#include <graphics/ImageMap.h>
 #include <utils/RefCounted.h>
 #include <utils/Reference.h>
 #include <utils/Array2D.h>
@@ -43,6 +44,8 @@ struct TerrainPathSpecSection
 	OpenGLTextureKey heightmap_path;
 	OpenGLTextureKey mask_map_path;
 	OpenGLTextureKey tree_mask_map_path;
+	OpenGLTextureKey road_mask_map_path;
+	OpenGLTextureKey building_mask_map_path;
 };
 
 struct TerrainPathSpec
@@ -61,18 +64,43 @@ struct TerrainPathSpec
 //-------------------------- End Specification of Terrain --------------------------
 
 
+enum TerrainSculptTool
+{
+	TerrainSculptTool_Ridge = 0,
+	TerrainSculptTool_Raise,
+	TerrainSculptTool_Lower,
+	TerrainSculptTool_SoftRaise
+};
+
+
+struct TerrainSculptedHeightmap
+{
+	int x, y;
+	ImageMapFloatRef map;
+};
+
+
 struct TerrainDataSection
 {
 	OpenGLTextureKey heightmap_path;
 	OpenGLTextureKey mask_map_path;
 	OpenGLTextureKey tree_mask_map_path;
+	OpenGLTextureKey road_mask_map_path;
+	OpenGLTextureKey building_mask_map_path;
 
 	Map2DRef heightmap;
+	ImageMapFloatRef sculpt_heightmap;
 	OpenGLTextureRef heightmap_gl_tex;
 	Map2DRef maskmap;
 	OpenGLTextureRef mask_gl_tex;
 
 	Map2DRef treemaskmap;
+	Map2DRef road_maskmap;
+	Map2DRef building_maskmap;
+	OpenGLTextureRef road_mask_gl_tex;
+	OpenGLTextureRef building_mask_gl_tex;
+	GLObjectRef road_mask_decal_gl_ob;
+	GLObjectRef building_mask_decal_gl_ob;
 };
 
 
@@ -180,6 +208,18 @@ public:
 
 	void invalidateVegetationMap(const js::AABBox& aabb_ws);
 
+	// Native terrain sculpting.  All calls are made on the GUI/render thread.
+	bool traceRay(const Vec3d& origin, const Vec3d& direction, Vec3d& hit_pos_out) const;
+	void beginSculptStroke();
+	void endSculptStroke();
+	bool sculptAtWorld(const Vec3d& hit_pos, TerrainSculptTool tool, float radius_m, float strength_m);
+	bool canUndoSculpt() const;
+	bool canRedoSculpt() const;
+	bool undoSculpt();
+	bool redoSculpt();
+	bool hasSculptedHeightmaps() const;
+	void getSculptedHeightmaps(std::vector<TerrainSculptedHeightmap>& maps_out) const;
+
 	bool isTerrainFullyBuilt();
 
 	std::string getDiagnostics() const;
@@ -199,6 +239,15 @@ private:
 	void insertPendingMeshesForSubtree(TerrainNode* node);
 	bool areAllParentSubtreesBuilt(TerrainNode* node);
 	void removeAllNodeDataForSubtree(TerrainNode* node);
+	void updateReferenceMaskOverlay(int section_x, int section_y, TerrainDataSection& section);
+	void updateReferenceMaskDecalTransforms(float camera_z);
+	void rebuildAfterSculptIfNeeded();
+	ImageMapFloatRef makeEditableHeightmap(TerrainDataSection& section);
+	TerrainDataSection* getSectionForSculptCoords(int section_x, int section_y);
+	const TerrainDataSection* getSectionForSculptCoords(int section_x, int section_y) const;
+	struct TerrainSculptPatch;
+	struct TerrainSculptStroke;
+	void applySculptPatch(const TerrainSculptPatch& patch, bool use_after_values);
 
 	GLARE_DISABLE_COPY(TerrainSystem);
 
@@ -232,12 +281,32 @@ private:
 
 	TerrainPathSpec spec;
 
+	struct TerrainSculptPatch
+	{
+		int section_x, section_y;
+		int x0, y0, width, height;
+		std::vector<float> before;
+		std::vector<float> after;
+	};
+
+	struct TerrainSculptStroke
+	{
+		std::vector<TerrainSculptPatch> patches;
+	};
+
+	std::vector<TerrainSculptStroke> sculpt_undo_stack;
+	std::vector<TerrainSculptStroke> sculpt_redo_stack;
+	TerrainSculptStroke current_sculpt_stroke;
+	bool sculpt_stroke_active;
+	bool sculpt_geometry_rebuild_pending;
+
 	// Scale factor for world-space -> heightmap UV conversion.
 	// Its reciprocal is the width of the terrain in metres.
 	float terrain_section_w;
 	float terrain_scale_factor;
 
 	std::vector<GLObjectRef> water_gl_obs;
+	float reference_mask_camera_z;
 
 	glare::AtomicInt num_uncompleted_tasks;
 };

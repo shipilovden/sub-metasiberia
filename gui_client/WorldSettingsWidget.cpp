@@ -16,7 +16,18 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtCore/QEvent>
 #include <QtCore/QObject>
 #include <QtGui/QMouseEvent>
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QFormLayout>
+#include <QtWidgets/QGridLayout>
+#include <QtWidgets/QGroupBox>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QToolButton>
+#include <QtWidgets/QVBoxLayout>
 #include <algorithm>
 
 
@@ -25,9 +36,22 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	main_window(NULL),
 	terrain_section_resize_drag_active(false),
 	terrain_section_resize_drag_start_global_y(0),
-	terrain_section_resize_drag_start_height(0)
+	terrain_section_resize_drag_start_height(0),
+	settings_tabs(NULL),
+	sculpting_tab(NULL),
+	sculpting_basic_accordion_button(NULL),
+	sculpting_basic_panel(NULL),
+	sculpting_mode_check_box(NULL),
+	sculpting_radius_spin_box(NULL),
+	sculpting_strength_spin_box(NULL),
+	sculpting_undo_button(NULL),
+	sculpting_redo_button(NULL),
+	sculpting_status_label(NULL)
 {
 	setupUi(this);
+	for(int i=0; i<4; ++i)
+		sculpting_tool_buttons[i] = NULL;
+	createSculptingTab();
 
 	connect(this->newTerrainSectionPushButton, SIGNAL(clicked()), this, SLOT(newTerrainSectionPushButtonClicked()));
 
@@ -45,11 +69,153 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	connect(this->layer0HeightScaleSpinBox,     SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->layer1ASpinBox,               SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->layer1HeightScaleSpinBox,     SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->detailColMapURLs0EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(this->detailColMapURLs1EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(this->detailColMapURLs2EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(this->detailColMapURLs3EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(this->detailHeightMapURLs0EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 
 	terrainSectionScrollArea->setMouseTracking(true);
 	terrainSectionScrollArea->viewport()->setMouseTracking(true);
 	terrainSectionScrollArea->installEventFilter(this);
 	terrainSectionScrollArea->viewport()->installEventFilter(this);
+}
+
+
+void WorldSettingsWidget::createSculptingTab()
+{
+	// Move the existing generated form into the first tab without changing its
+	// widget object names or the already implemented terrain-map controls.
+	QLayout* existing_layout = this->layout();
+	QWidget* world_tab = new QWidget();
+	if(existing_layout)
+	{
+		existing_layout->setParent(world_tab);
+		world_tab->setLayout(existing_layout);
+	}
+
+	settings_tabs = new QTabWidget(this);
+	settings_tabs->addTab(world_tab, tr("Мир"));
+
+	sculpting_tab = new QWidget(settings_tabs);
+	QVBoxLayout* sculpting_layout = new QVBoxLayout(sculpting_tab);
+
+	sculpting_mode_check_box = new QCheckBox(sculpting_tab);
+	sculpting_mode_check_box->setText(tr("Включить режим скульптинга"));
+	sculpting_layout->addWidget(sculpting_mode_check_box);
+
+	QHBoxLayout* history_layout = new QHBoxLayout();
+	sculpting_undo_button = new QPushButton(sculpting_tab);
+	sculpting_undo_button->setText(tr("Undo"));
+	sculpting_redo_button = new QPushButton(sculpting_tab);
+	sculpting_redo_button->setText(tr("Redo"));
+	history_layout->addWidget(sculpting_undo_button);
+	history_layout->addWidget(sculpting_redo_button);
+	sculpting_layout->addLayout(history_layout);
+
+	QFormLayout* brush_layout = new QFormLayout();
+	sculpting_radius_spin_box = new QDoubleSpinBox(sculpting_tab);
+	sculpting_radius_spin_box->setRange(0.25, 4096.0);
+	sculpting_radius_spin_box->setValue(32.0);
+	sculpting_radius_spin_box->setDecimals(2);
+	sculpting_radius_spin_box->setSuffix(tr(" m"));
+	brush_layout->addRow(tr("Радиус кисти"), sculpting_radius_spin_box);
+
+	sculpting_strength_spin_box = new QDoubleSpinBox(sculpting_tab);
+	sculpting_strength_spin_box->setRange(0.01, 100.0);
+	sculpting_strength_spin_box->setValue(1.0);
+	sculpting_strength_spin_box->setDecimals(2);
+	sculpting_strength_spin_box->setSuffix(tr(" m"));
+	brush_layout->addRow(tr("Сила"), sculpting_strength_spin_box);
+	sculpting_layout->addLayout(brush_layout);
+
+	sculpting_basic_accordion_button = new QToolButton(sculpting_tab);
+	sculpting_basic_accordion_button->setText(tr("Базовые"));
+	sculpting_basic_accordion_button->setCheckable(true);
+	sculpting_basic_accordion_button->setChecked(true);
+	sculpting_basic_accordion_button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	sculpting_basic_accordion_button->setArrowType(Qt::DownArrow);
+	sculpting_layout->addWidget(sculpting_basic_accordion_button);
+
+	sculpting_basic_panel = new QWidget(sculpting_tab);
+	QGridLayout* basic_grid = new QGridLayout(sculpting_basic_panel);
+	const QString tool_names[4] = { tr("Хребет"), tr("Поднять"), tr("Опустить"), tr("Мягкий подъём") };
+	for(int i=0; i<4; ++i)
+	{
+		sculpting_tool_buttons[i] = new QPushButton(sculpting_basic_panel);
+		sculpting_tool_buttons[i]->setText(tool_names[i]);
+		sculpting_tool_buttons[i]->setCheckable(true);
+		sculpting_tool_buttons[i]->setAutoExclusive(true);
+		sculpting_tool_buttons[i]->setProperty("sculptTool", i);
+		basic_grid->addWidget(sculpting_tool_buttons[i], i / 2, i % 2);
+		connect(sculpting_tool_buttons[i], &QPushButton::clicked, this, [this, i]() { emit sculptingToolChangedSignal(i); });
+	}
+	sculpting_tool_buttons[0]->setChecked(true);
+	sculpting_layout->addWidget(sculpting_basic_panel);
+
+	sculpting_status_label = new QLabel(sculpting_tab);
+	sculpting_status_label->setWordWrap(true);
+	sculpting_status_label->setText(tr("Свободная камера включается вместе с режимом. ЛКМ по рельефу — применить кисть."));
+	sculpting_layout->addWidget(sculpting_status_label);
+	sculpting_layout->addStretch(1);
+
+	settings_tabs->addTab(sculpting_tab, tr("Скульптинг"));
+	QVBoxLayout* root_layout = new QVBoxLayout(this);
+	root_layout->setContentsMargins(0, 0, 0, 0);
+	root_layout->addWidget(settings_tabs);
+
+	connect(sculpting_mode_check_box, &QCheckBox::toggled, this, [this](bool enabled)
+	{
+		setSculptingControlsEnabled(enabled && (!main_window || main_window->connectedToUsersWorldOrGodUser()));
+		emit sculptingModeChangedSignal(enabled);
+	});
+	connect(sculpting_radius_spin_box, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double)
+	{
+		emit sculptingBrushSettingsChangedSignal((float)sculpting_radius_spin_box->value(), (float)sculpting_strength_spin_box->value());
+	});
+	connect(sculpting_strength_spin_box, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double)
+	{
+		emit sculptingBrushSettingsChangedSignal((float)sculpting_radius_spin_box->value(), (float)sculpting_strength_spin_box->value());
+	});
+	connect(sculpting_undo_button, &QPushButton::clicked, this, [this]() { emit sculptingUndoSignal(); });
+	connect(sculpting_redo_button, &QPushButton::clicked, this, [this]() { emit sculptingRedoSignal(); });
+	connect(sculpting_basic_accordion_button, &QToolButton::toggled, this, [this](bool expanded)
+	{
+		sculpting_basic_panel->setVisible(expanded);
+		sculpting_basic_accordion_button->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+	});
+
+	setSculptingControlsEnabled(false);
+}
+
+
+void WorldSettingsWidget::setSculptingControlsEnabled(bool enabled)
+{
+	if(!sculpting_basic_panel)
+		return;
+	sculpting_basic_panel->setEnabled(enabled);
+	sculpting_radius_spin_box->setEnabled(enabled);
+	sculpting_strength_spin_box->setEnabled(enabled);
+	sculpting_undo_button->setEnabled(enabled);
+	sculpting_redo_button->setEnabled(enabled);
+	sculpting_status_label->setEnabled(enabled);
+}
+
+
+void WorldSettingsWidget::retranslateSculptingTab()
+{
+	if(!settings_tabs)
+		return;
+	settings_tabs->setTabText(0, tr("Мир"));
+	settings_tabs->setTabText(1, tr("Скульптинг"));
+	sculpting_mode_check_box->setText(tr("Включить режим скульптинга"));
+	sculpting_undo_button->setText(tr("Undo"));
+	sculpting_redo_button->setText(tr("Redo"));
+	sculpting_basic_accordion_button->setText(tr("Базовые"));
+	sculpting_status_label->setText(tr("Свободная камера включается вместе с режимом. ЛКМ по рельефу — применить кисть."));
+	const QString tool_names[4] = { tr("Хребет"), tr("Поднять"), tr("Опустить"), tr("Мягкий подъём") };
+	for(int i=0; i<4; ++i)
+		sculpting_tool_buttons[i]->setText(tool_names[i]);
 }
 
 
@@ -68,6 +234,7 @@ void WorldSettingsWidget::init(MainWindow* main_window_)
 void WorldSettingsWidget::retranslateUiText()
 {
 	retranslateUi(this);
+	retranslateSculptingTab();
 
 	QLayout* sections_layout = terrainSectionScrollAreaWidgetContents->layout();
 	if(!sections_layout)
@@ -198,26 +365,44 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 		new_section_widget->heightmapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.heightmap_URL));
 		new_section_widget->maskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.mask_map_URL));
 		new_section_widget->treeMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.tree_mask_map_URL));
+		new_section_widget->roadMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.road_mask_map_URL));
+		new_section_widget->buildingMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.building_mask_map_URL));
+		SignalBlocker::setChecked(new_section_widget->heightmapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG));
+		SignalBlocker::setChecked(new_section_widget->maskMapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::MASK_MAP_DISABLED_FLAG));
+		SignalBlocker::setChecked(new_section_widget->treeMaskMapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::TREE_MASK_MAP_DISABLED_FLAG));
+		SignalBlocker::setChecked(new_section_widget->roadMaskMapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::ROAD_MASK_MAP_DISABLED_FLAG));
+		SignalBlocker::setChecked(new_section_widget->buildingMaskMapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::BUILDING_MASK_MAP_DISABLED_FLAG));
 
 		const bool editable = main_window->connectedToUsersWorldOrGodUser();
 		new_section_widget->updateControlsEditable(editable);
 
 		terrainSectionScrollAreaWidgetContents->layout()->addWidget(new_section_widget);
 		connect(new_section_widget, SIGNAL(removeButtonClickedSignal()), this, SLOT(removeTerrainSectionButtonClickedSlot()));
+		connect(new_section_widget->heightmapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+		connect(new_section_widget->maskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+		connect(new_section_widget->treeMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+		connect(new_section_widget->roadMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+		connect(new_section_widget->buildingMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	}
 
 	detailColMapURLs0FileSelectWidget->setFilename(QtUtils::toQString(world_settings.terrain_spec.detail_col_map_URLs[0]));
 	detailColMapURLs1FileSelectWidget->setFilename(QtUtils::toQString(world_settings.terrain_spec.detail_col_map_URLs[1]));
 	detailColMapURLs2FileSelectWidget->setFilename(QtUtils::toQString(world_settings.terrain_spec.detail_col_map_URLs[2]));
 	detailColMapURLs3FileSelectWidget->setFilename(QtUtils::toQString(world_settings.terrain_spec.detail_col_map_URLs[3]));
+	SignalBlocker::setChecked(detailColMapURLs0EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_COL_MAP_0_DISABLED_FLAG));
+	SignalBlocker::setChecked(detailColMapURLs1EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_COL_MAP_1_DISABLED_FLAG));
+	SignalBlocker::setChecked(detailColMapURLs2EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_COL_MAP_2_DISABLED_FLAG));
+	SignalBlocker::setChecked(detailColMapURLs3EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_COL_MAP_3_DISABLED_FLAG));
 
 	detailHeightMapURLs0FileSelectWidget->setFilename(QtUtils::toQString(world_settings.terrain_spec.detail_height_map_URLs[0]));
+	SignalBlocker::setChecked(detailHeightMapURLs0EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_HEIGHT_MAP_0_DISABLED_FLAG));
 
 	terrainSectionWidthDoubleSpinBox->setValue(world_settings.terrain_spec.terrain_section_width_m);
 	terrainHeightScaleDoubleSpinBox->setValue(world_settings.terrain_spec.terrain_height_scale);
 	defaultTerrainZDoubleSpinBox->setValue(world_settings.terrain_spec.default_terrain_z);
 	waterZDoubleSpinBox->setValue(world_settings.terrain_spec.water_z);
 	waterCheckBox->setChecked(BitUtils::isBitSet(world_settings.terrain_spec.flags, TerrainSpec::WATER_ENABLED_FLAG));
+	exactHeightmapCheckBox->setChecked(BitUtils::isBitSet(world_settings.terrain_spec.flags, TerrainSpec::EXACT_HEIGHTMAP_FLAG));
 
 	SignalBlocker::setValue(this->sunThetaSettingRealControl, ::radToDegree(world_settings.sun_theta));
 	SignalBlocker::setValue(this->sunPhiSettingRealControl,   ::radToDegree(world_settings.sun_phi));
@@ -265,6 +450,14 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 			section.heightmap_URL = getURLForFileSelectWidget(section_widget->heightmapURLFileSelectWidget);
 			section.mask_map_URL = getURLForFileSelectWidget(section_widget->maskMapURLFileSelectWidget);
 			section.tree_mask_map_URL = getURLForFileSelectWidget(section_widget->treeMaskMapURLFileSelectWidget);
+			section.road_mask_map_URL = getURLForFileSelectWidget(section_widget->roadMaskMapURLFileSelectWidget);
+			section.building_mask_map_URL = getURLForFileSelectWidget(section_widget->buildingMaskMapURLFileSelectWidget);
+			section.disabled_map_flags =
+				(section_widget->heightmapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG) |
+				(section_widget->maskMapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::MASK_MAP_DISABLED_FLAG) |
+				(section_widget->treeMaskMapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::TREE_MASK_MAP_DISABLED_FLAG) |
+				(section_widget->roadMaskMapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::ROAD_MASK_MAP_DISABLED_FLAG) |
+				(section_widget->buildingMaskMapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::BUILDING_MASK_MAP_DISABLED_FLAG);
 
 			world_settings_out.terrain_spec.section_specs.push_back(section);
 		}
@@ -274,6 +467,12 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.terrain_spec.detail_col_map_URLs[1] = getURLForFileSelectWidget(detailColMapURLs1FileSelectWidget);
 	world_settings_out.terrain_spec.detail_col_map_URLs[2] = getURLForFileSelectWidget(detailColMapURLs2FileSelectWidget);
 	world_settings_out.terrain_spec.detail_col_map_URLs[3] = getURLForFileSelectWidget(detailColMapURLs3FileSelectWidget);
+	world_settings_out.terrain_spec.disabled_detail_map_flags =
+		(detailColMapURLs0EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_COL_MAP_0_DISABLED_FLAG) |
+		(detailColMapURLs1EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_COL_MAP_1_DISABLED_FLAG) |
+		(detailColMapURLs2EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_COL_MAP_2_DISABLED_FLAG) |
+		(detailColMapURLs3EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_COL_MAP_3_DISABLED_FLAG) |
+		(detailHeightMapURLs0EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_HEIGHT_MAP_0_DISABLED_FLAG);
 
 	world_settings_out.terrain_spec.detail_height_map_URLs[0] = getURLForFileSelectWidget(detailHeightMapURLs0FileSelectWidget);
 
@@ -281,7 +480,9 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.terrain_spec.terrain_height_scale = (float)terrainHeightScaleDoubleSpinBox->value();
 	world_settings_out.terrain_spec.default_terrain_z = (float)defaultTerrainZDoubleSpinBox->value();
 	world_settings_out.terrain_spec.water_z = (float)waterZDoubleSpinBox->value();
-	world_settings_out.terrain_spec.flags = (waterCheckBox->isChecked() ? TerrainSpec::WATER_ENABLED_FLAG : 0);
+	world_settings_out.terrain_spec.flags =
+		(waterCheckBox->isChecked() ? TerrainSpec::WATER_ENABLED_FLAG : 0) |
+		(exactHeightmapCheckBox->isChecked() ? TerrainSpec::EXACT_HEIGHTMAP_FLAG : 0);
 
 	world_settings_out.sun_theta = ::degreeToRad(this->sunThetaSettingRealControl->value());
 	world_settings_out.sun_phi   = ::degreeToRad(this->sunPhiSettingRealControl  ->value());
@@ -310,8 +511,14 @@ void WorldSettingsWidget::updateControlsEditable()
 	detailColMapURLs1FileSelectWidget->setReadOnly(!editable);
 	detailColMapURLs2FileSelectWidget->setReadOnly(!editable);
 	detailColMapURLs3FileSelectWidget->setReadOnly(!editable);
-	
+	detailColMapURLs0EnabledCheckBox->setEnabled(editable);
+	detailColMapURLs1EnabledCheckBox->setEnabled(editable);
+	detailColMapURLs2EnabledCheckBox->setEnabled(editable);
+	detailColMapURLs3EnabledCheckBox->setEnabled(editable);
+
 	detailHeightMapURLs0FileSelectWidget->setReadOnly(!editable);
+	detailHeightMapURLs0EnabledCheckBox->setEnabled(editable);
+	exactHeightmapCheckBox->setEnabled(editable);
 
 	terrainSectionWidthDoubleSpinBox->setReadOnly(!editable);
 	terrainHeightScaleDoubleSpinBox->setReadOnly(!editable);
@@ -327,6 +534,11 @@ void WorldSettingsWidget::updateControlsEditable()
 	layer1HeightScaleSpinBox->setReadOnly(!editable);
 
 	applyPushButton->setEnabled(editable);
+	if(sculpting_mode_check_box)
+	{
+		sculpting_mode_check_box->setEnabled(editable);
+		setSculptingControlsEnabled(editable && sculpting_mode_check_box->isChecked());
+	}
 }
 
 
@@ -337,6 +549,11 @@ void WorldSettingsWidget::newTerrainSectionPushButtonClicked()
 	terrainSectionScrollAreaWidgetContents->layout()->addWidget(new_section_widget);
 
 	connect(new_section_widget, SIGNAL(removeButtonClickedSignal()), this, SLOT(removeTerrainSectionButtonClickedSlot()));
+	connect(new_section_widget->heightmapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(new_section_widget->maskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(new_section_widget->treeMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(new_section_widget->roadMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(new_section_widget->buildingMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 }
 
 

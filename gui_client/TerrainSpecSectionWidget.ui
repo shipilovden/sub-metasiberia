@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>904</width>
-    <height>177</height>
+    <height>225</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -56,7 +56,24 @@
     </widget>
    </item>
    <item row="2" column="1">
-    <widget class="FileSelectWidget" name="heightmapURLFileSelectWidget"/>
+    <widget class="QWidget" name="heightmapRowWidget">
+     <layout class="QHBoxLayout" name="heightmapRowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="heightmapEnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="FileSelectWidget" name="heightmapURLFileSelectWidget"/>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item row="4" column="0">
     <widget class="QLabel" name="label_2">
@@ -66,9 +83,80 @@
     </widget>
    </item>
    <item row="4" column="1">
-    <widget class="FileSelectWidget" name="maskMapURLFileSelectWidget"/>
+    <widget class="QWidget" name="maskMapRowWidget">
+     <layout class="QHBoxLayout" name="maskMapRowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="maskMapEnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="FileSelectWidget" name="maskMapURLFileSelectWidget"/>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="6" column="0">
+    <widget class="QLabel" name="label_6">
+     <property name="text">
+      <string>Road reference mask URL</string>
+     </property>
+    </widget>
    </item>
    <item row="6" column="1">
+    <widget class="QWidget" name="roadMaskMapRowWidget">
+     <layout class="QHBoxLayout" name="roadMaskMapRowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="roadMaskMapEnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="FileSelectWidget" name="roadMaskMapURLFileSelectWidget"/>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="7" column="0">
+    <widget class="QLabel" name="label_7">
+     <property name="text">
+      <string>Building reference mask URL</string>
+     </property>
+    </widget>
+   </item>
+   <item row="7" column="1">
+    <widget class="QWidget" name="buildingMaskMapRowWidget">
+     <layout class="QHBoxLayout" name="buildingMaskMapRowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="buildingMaskMapEnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="FileSelectWidget" name="buildingMaskMapURLFileSelectWidget"/>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="8" column="1">
     <widget class="QPushButton" name="removeTerrainSectionPushButton">
      <property name="text">
       <string>Remove</string>
@@ -76,7 +164,24 @@
     </widget>
    </item>
    <item row="5" column="1">
-    <widget class="FileSelectWidget" name="treeMaskMapURLFileSelectWidget"/>
+    <widget class="QWidget" name="treeMaskMapRowWidget">
+     <layout class="QHBoxLayout" name="treeMaskMapRowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="treeMaskMapEnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="FileSelectWidget" name="treeMaskMapURLFileSelectWidget"/>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item row="5" column="0">
     <widget class="QLabel" name="label_5">

@@ -30,6 +30,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "WorldState.h"
 #include "URLWhitelist.h"
 #include "XRSession.h"
+#include "GaussianSplatRenderer.h"
 #include "EmscriptenResourceDownloader.h"
 #include "UploadResourceThread.h"
 #include "ScriptedObjectProximityChecker.h"
@@ -43,6 +44,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../opengl/AsyncGeometryUploader.h"
 #include "../shared/WorldObject.h"
 #include "../shared/GearItem.h"
+#include "../shared/GaussianSplatData.h"
 #include "../shared/LuaScriptEvaluator.h"
 #include "../shared/ScriptTimerQueue.h"
 #include "../settings/SettingsStore.h"
@@ -73,6 +75,8 @@ class URLWidget;
 class VideoReader;
 class GearInventoryUI;
 class ModelLoadedThreadMessage;
+class GaussianSplatLoadedThreadMessage;
+class GaussianSplatCEFConverter;
 class TextureLoadedThreadMessage;
 struct tls_config;
 class SubstrataVideoReaderCallback;
@@ -278,6 +282,8 @@ public:
 	void doObjectSelectionTraceForMouseEvent(MouseEvent& e);
 	void updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2f& gl_coords, MouseEvent* mouse_event, bool cursor_is_mouse_cursor);
 	void mouseMoved(MouseEvent& mouse_event);
+	bool applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_stroke);
+	void saveTerrainSculptingChanges();
 	void onMouseWheelEvent(MouseWheelEvent& e);
 	void gamepadButtonXChanged(bool pressed);
 	void gamepadButtonAChanged(bool pressed);
@@ -387,6 +393,13 @@ public:
 	void makeShaders();
 	Avatar* getOurAvatar(WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
 	void loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
+	void loadPresentGaussianSplat(WorldObject* ob, const GaussianSplatDataRef& splat_data, WorldStateLock& world_state_lock) REQUIRES(world_state->mutex);
+	void updateGaussianSplatDepthSorting();
+	void handleGaussianSplatLoaded(GaussianSplatLoadedThreadMessage* loaded_message);
+	bool startRemoteGaussianSplatConversion(const URLString& splat_url, const std::string& native_error);
+	bool startCreateGaussianSplatConversion(const std::string& local_path, const std::string& native_error);
+	void processGaussianSplatConversions();
+	void cancelGaussianSplatConversions();
 	void loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, int voxel_subsample_factor, WorldStateLock& world_state_lock);
 	void loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
 	void loadPresentGearModel(const GearItem* item, EquippedGearGraphics* equipped_gear_graphics, Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data);
@@ -497,7 +510,9 @@ public:
 		const glare::AllocatorVector<Voxel, 16>& decompressed_voxels, const Vec3d& ob_pos, const Vec3f& scale, const Vec3f& axis, float angle, const std::vector<WorldMaterialRef>& materials);
 	void createObjectLoadedFromXML(WorldObjectRef ob, PrintOutput& use_print_output);
 	void createImageObject(const std::string& local_image_path);
-	void createModelObject(const std::string& local_model_path);
+	// Returns true only when the object was created synchronously. Unsupported
+	// Gaussian containers start an asynchronous hidden conversion and return false.
+	bool createModelObject(const std::string& local_model_path);
 	void createImageObjectForWidthAndHeight(const std::string& local_image_path, int w, int h, bool has_alpha);
 
 	void keyPressed(KeyEvent& e);
@@ -555,6 +570,11 @@ public:
 	void appendXRTraceSample();
 
 	void setFlyModeEnabled(bool enabled);
+	void setTerrainSculptModeEnabled(bool enabled);
+	void setTerrainSculptTool(int tool);
+	void setTerrainSculptBrushSettings(float radius_m, float strength_m);
+	void undoTerrainSculpt();
+	void redoTerrainSculpt();
 
 	void enableMaterialisationEffectOnOb(WorldObject& ob);
 	void enableMaterialisationEffectOnAvatar(Avatar& ob);
@@ -789,6 +809,7 @@ public:
 
 	Reference<OpenGLProgram> parcel_shader_prog;
 	Reference<OpenGLProgram> portal_shader_prog;
+	Reference<OpenGLProgram> gaussian_splat_shader_prog;
 
 	StandardPrintOutput print_output;
 	//glare::TaskManager* task_manager; // General purpose task manager, for quick/blocking multithreaded builds of stuff. Currently just used for LODGeneration::generateLODTexturesForMaterialsIfNotPresent(). Lazily created.
@@ -1001,6 +1022,16 @@ public:
 	std::unordered_map<URLString, DownloadingResourceInfo, URLStringHasher> URL_to_downloading_info; // Map from URL to info about the resource, for currently downloading resources.
 
 	std::map<ModelProcessingKey, std::set<UID>> loading_model_URL_to_world_ob_UID_map;
+	std::map<URLString, GaussianSplatDataRef> gaussian_splat_data_cache;
+	std::map<std::string, OpenGLTextureRef> gaussian_splat_texture_cache;
+	std::map<UID, GaussianSplatRenderObjectRef> gaussian_splat_render_objects;
+	std::set<URLString> gaussian_splats_processing;
+	std::map<URLString, std::set<UID>> loading_gaussian_splat_URL_to_world_ob_UID_map;
+	std::map<URLString, Reference<GaussianSplatCEFConverter>> gaussian_splat_remote_converters;
+	std::set<URLString> gaussian_splat_conversion_attempted;
+	Reference<GaussianSplatCEFConverter> gaussian_splat_create_converter;
+	std::string gaussian_splat_create_source_path;
+	std::string gaussian_splat_create_progress_stage;
 	std::unordered_map<URLString, std::set<UID>, URLStringHasher> loading_model_URL_to_avatar_UID_map;
 	std::unordered_map<URLString, std::vector<WorldMaterialRef>, URLStringHasher> gltf_extracted_materials_by_url; // Extracted GLB materials for bot avatars, keyed by lod_model_url
 
@@ -1049,6 +1080,13 @@ public:
 
 	Reference<TerrainSystem> terrain_system;
 	Reference<TerrainDecalManager> terrain_decal_manager;
+	bool terrain_sculpt_mode_enabled;
+	int terrain_sculpt_tool;
+	float terrain_sculpt_brush_radius_m;
+	float terrain_sculpt_strength_m;
+	bool terrain_sculpt_stroke_active;
+	bool terrain_sculpt_have_last_hit;
+	Vec3d terrain_sculpt_last_hit;
 
 	Reference<ParticleManager> particle_manager;
 

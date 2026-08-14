@@ -42,22 +42,52 @@
    <item row="2" column="0">
     <widget class="QLabel" name="fghghdfgfg">
      <property name="text">
-      <string>detail col map 0 (rock) URL</string>
+       <string>detail col map 0 (reserved) URL</string>
      </property>
     </widget>
    </item>
    <item row="2" column="1">
-    <widget class="FileSelectWidget" name="detailColMapURLs0FileSelectWidget"/>
+    <widget class="QWidget" name="detailColMapURLs0RowWidget">
+     <layout class="QHBoxLayout" name="detailColMapURLs0RowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="detailColMapURLs0EnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item><widget class="FileSelectWidget" name="detailColMapURLs0FileSelectWidget"/></item>
+     </layout>
+    </widget>
    </item>
    <item row="3" column="0">
     <widget class="QLabel" name="label">
      <property name="text">
-      <string>detail col map 1 (sediment) URL</string>
+       <string>detail col map 1 (base ground) URL</string>
      </property>
     </widget>
    </item>
    <item row="3" column="1">
-    <widget class="FileSelectWidget" name="detailColMapURLs1FileSelectWidget"/>
+    <widget class="QWidget" name="detailColMapURLs1RowWidget">
+     <layout class="QHBoxLayout" name="detailColMapURLs1RowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="detailColMapURLs1EnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item><widget class="FileSelectWidget" name="detailColMapURLs1FileSelectWidget"/></item>
+     </layout>
+    </widget>
    </item>
    <item row="4" column="0">
     <widget class="QLabel" name="label_2">
@@ -67,43 +97,82 @@
     </widget>
    </item>
    <item row="4" column="1">
-    <widget class="FileSelectWidget" name="detailColMapURLs2FileSelectWidget"/>
+    <widget class="QWidget" name="detailColMapURLs2RowWidget">
+     <layout class="QHBoxLayout" name="detailColMapURLs2RowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="detailColMapURLs2EnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item><widget class="FileSelectWidget" name="detailColMapURLs2FileSelectWidget"/></item>
+     </layout>
+    </widget>
    </item>
    <item row="5" column="0">
     <widget class="QLabel" name="label_3">
      <property name="text">
-      <string>detail col map 3 URL</string>
+       <string>detail col map 3 (reserved) URL</string>
      </property>
     </widget>
    </item>
    <item row="5" column="1">
-    <widget class="FileSelectWidget" name="detailColMapURLs3FileSelectWidget"/>
+    <widget class="QWidget" name="detailColMapURLs3RowWidget">
+     <layout class="QHBoxLayout" name="detailColMapURLs3RowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="detailColMapURLs3EnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item><widget class="FileSelectWidget" name="detailColMapURLs3FileSelectWidget"/></item>
+     </layout>
+    </widget>
    </item>
    <item row="6" column="0">
     <widget class="QLabel" name="label_4">
      <property name="text">
-      <string>detail height map 0 (rock) URL</string>
+       <string>detail height map 0 (rock micro-height) URL</string>
      </property>
     </widget>
    </item>
    <item row="6" column="1">
-    <widget class="FileSelectWidget" name="detailHeightMapURLs0FileSelectWidget"/>
+    <widget class="QWidget" name="detailHeightMapURLs0RowWidget">
+     <layout class="QHBoxLayout" name="detailHeightMapURLs0RowLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QCheckBox" name="detailHeightMapURLs0EnabledCheckBox">
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>Enable or disable this map</string></property>
+        <property name="text"><string/></property>
+       </widget>
+      </item>
+      <item><widget class="FileSelectWidget" name="detailHeightMapURLs0FileSelectWidget"/></item>
+     </layout>
+    </widget>
    </item>
-   <item row="7" column="1">
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
+   <item row="7" column="0" colspan="2">
+    <widget class="QLabel" name="terrainMaterialHelpLabel">
+     <property name="text">
+      <string>Metasiberia currently renders colour map 1 as base ground and colour map 2 as vegetation. Colour maps 0/3 are reserved; height map 0 adds rock micro-relief. TerrainGen EXR uses terrain height scale 1.0.</string>
      </property>
-     <property name="sizeType">
-      <enum>QSizePolicy::Fixed</enum>
+     <property name="wordWrap">
+      <bool>true</bool>
      </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>10</height>
-      </size>
-     </property>
-    </spacer>
+    </widget>
    </item>
    <item row="8" column="0">
     <widget class="QLabel" name="label_5">
@@ -121,7 +190,7 @@
       <double>8.000000000000000</double>
      </property>
      <property name="maximum">
-      <double>1000000000000000000000.000000000000000</double>
+       <double>1000000.000000000000000</double>
      </property>
     </widget>
    </item>
@@ -159,6 +228,23 @@
      </property>
      <property name="value">
       <double>1.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="13" column="0">
+    <widget class="QLabel" name="label_19">
+     <property name="text">
+      <string>exact heightmap (digital twin)</string>
+     </property>
+    </widget>
+   </item>
+   <item row="13" column="1">
+   <widget class="QCheckBox" name="exactHeightmapCheckBox">
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+     <property name="text">
+      <string>use EXR heights without procedural displacement</string>
      </property>
     </widget>
    </item>

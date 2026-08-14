@@ -47,6 +47,8 @@ public:
 
 	static bool isValidURL(const URLString& URL);
 
+	static void test();
+
 	// Will create a new Resource object with state NotPresent if not already inserted.
 	ResourceRef getOrCreateResourceForURL(const URLString& URL); // Threadsafe
 

@@ -10,6 +10,9 @@ Copyright Glare Technologies Limited 2023 -
 #include "ServerLuaScriptTests.h"
 #include "ServerWorldState.h"
 #include "SubEvent.h"
+#include "../shared/GaussianSplatAsset.h"
+#include "../shared/GaussianSplatData.h"
+#include "../shared/ResourceManager.h"
 #include "../shared/WorldObject.h"
 #include "../shared/RateLimiter.h"
 #include "../shared/LODGeneration.h"
@@ -104,6 +107,9 @@ void ServerTestSuite::test()
 	Timer timer;
 
 	runTest([&]() { glare::testArray();													});
+	runTest([&]() { GaussianSplatAsset::test();											});
+	runTest([&]() { GaussianSplatDecoder::test();										});
+	runTest([&]() { ResourceManager::test();												});
 	runTest([&]() { BasisDecoder::test();												});
 	runTest([&]() { WorldObject::test();												});
 	runTest([&]() { testLRUCache();														});

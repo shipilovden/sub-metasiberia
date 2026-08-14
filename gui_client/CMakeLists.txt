@@ -211,6 +211,10 @@ ${CMAKE_SOURCE_DIR}/gui_client/EmbeddedBrowser.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/EmbeddedBrowser.h
 ${CMAKE_SOURCE_DIR}/gui_client/GestureUI.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GestureUI.h
+${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatCEFConverter.cpp
+${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatCEFConverter.h
+${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatRenderer.cpp
+${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatRenderer.h
 ${CMAKE_SOURCE_DIR}/gui_client/GUIClient.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GUIClient.h
 ${CMAKE_SOURCE_DIR}/gui_client/HashedObGrid.h
@@ -227,10 +231,14 @@ ${CMAKE_SOURCE_DIR}/gui_client/LoadAudioTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadAudioTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadItemQueue.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadItemQueue.h
+${CMAKE_SOURCE_DIR}/gui_client/LoadGaussianSplatTask.cpp
+${CMAKE_SOURCE_DIR}/gui_client/LoadGaussianSplatTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadModelTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadModelTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadScriptTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadScriptTask.h
+${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.cpp
+${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.h
 ${CMAKE_SOURCE_DIR}/gui_client/LoadTextureTask.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/LoadTextureTask.h
 ${CMAKE_SOURCE_DIR}/gui_client/MakeHypercardTextureTask.cpp
@@ -371,8 +379,6 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/BotEditorWidget.h
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.h
-		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.cpp
-		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectSettings.h
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectEditor.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectEditor.h
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectSettings.cpp
@@ -631,6 +637,10 @@ SET(shared_files
 ../shared/ImageDecoding.h
 ../shared/FileTypes.cpp
 ../shared/FileTypes.h
+../shared/GaussianSplatAsset.cpp
+../shared/GaussianSplatAsset.h
+../shared/GaussianSplatData.cpp
+../shared/GaussianSplatData.h
 ../shared/GroundPatch.cpp
 ../shared/GroundPatch.h
 ../shared/LODGeneration.cpp
@@ -1018,6 +1028,8 @@ endif() # end if not emscripten.
 include(${GLARE_CORE_TRUNK_DIR_ENV}/opengl/opengl.cmake)
 
 set(substrata_shaders
+../shaders/gaussian_splat_frag_shader.glsl
+../shaders/gaussian_splat_vert_shader.glsl
 ../shaders/parcel_frag_shader.glsl
 ../shaders/parcel_vert_shader.glsl
 ../shaders/portal_frag_shader.glsl
@@ -1309,7 +1321,7 @@ endif()
 if(USE_SDL)
 	include_directories(${SDL_BUILD_DIR}/include/SDL2)
 	
-	if(WIN32)
+	if(WIN32 OR EMSCRIPTEN)
 		include_directories(${SDL_BUILD_DIR}/include-config-release/SDL2) # For SDL_config.h.  NOTE: SDL_config.h seems to be the same for both Debug and Release configs, at least on Windows.
 	else()
 		include_directories(${SDL_BUILD_DIR}/include-config-/SDL2)
@@ -1358,7 +1370,7 @@ if(EMSCRIPTEN)
 		"-sPTHREAD_POOL_SIZE=30" # See calculation above
 		"-sSTACK_SIZE=262144"
 		"-sEXPORTED_RUNTIME_METHODS=ccall" # Needed to be able to call into C++ from JS.  Used in emscripten_browser_clipboard.
-		"-sEXPORTED_FUNCTIONS=_processAvatarModelFile,_processGestureAnimationFile,_malloc,_free,_main"
+		"-sEXPORTED_FUNCTIONS=_processAvatarModelFile,_processGestureAnimationFile,_processGaussianSplatFile,_setGaussianSplatWebStatus,_malloc,_free,_main"
 		"-lwebsocket.js" # To use emscripten websockets API: https://emscripten.org/docs/porting/networking.html#emscripten-websockets-api
 		--use-preload-cache # Cache the preloaded data in IndexedDB for subsequent page visits.
 		--preload-file data # Use preloaded data, read it from the 'data' directory in the Emscripten build dir.

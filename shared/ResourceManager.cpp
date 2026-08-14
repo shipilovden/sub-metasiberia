@@ -18,6 +18,9 @@ Generated at 2016-01-12 12:22:34 +1300
 #include <FileOutStream.h>
 #include <IncludeXXHash.h>
 #include <tracy/Tracy.hpp>
+#if BUILD_TESTS
+#include <TestUtils.h>
+#endif
 
 
 ResourceManager::ResourceManager(const std::string& base_resource_dir_, const std::string& resources_db_path_)
@@ -70,7 +73,9 @@ const URLString ResourceManager::URLForPathAndHash(const std::string& path, uint
 {
 	const std::string filename = FileUtils::getFilename(path);
 
-	const std::string extension = ::getExtension(filename);
+	// Preserve the composite extension so downstream format detection can
+	// distinguish compressed PLY from an ordinary INRIA PLY resource.
+	const std::string extension = hasExtension(filename, "compressed.ply") ? "compressed.ply" : ::getExtension(filename);
 	
 	// NOTE: should really removeDotAndExtension() on filename below, but will change the file -> URL mapping, which will probably break something, or cause redundant uploads etc.
 	return toURLString(sanitiseString(filename) + "_" + toString(hash) + "." + extension);
@@ -81,7 +86,7 @@ const URLString ResourceManager::URLForPathAndHashAndEpoch(const std::string& pa
 {
 	const std::string filename = FileUtils::getFilename(path);
 
-	const std::string extension = ::getExtension(filename);
+	const std::string extension = hasExtension(filename, "compressed.ply") ? "compressed.ply" : ::getExtension(filename);
 
 	return toURLString(sanitiseString(removeDotAndExtension(filename)) + "_" + toString(hash) + "_" + toString(epoch) + "." + extension);
 }
@@ -494,3 +499,22 @@ void ResourceManager::saveToDisk()
 		throw glare::Exception(e.what());
 	}
 }
+
+
+#if BUILD_TESTS
+
+
+void ResourceManager::test()
+{
+	conPrint("ResourceManager::test()");
+
+	testAssert(URLForPathAndHash("C:/assets/scene.ply", 123) == "scene_ply_123.ply");
+	testAssert(URLForPathAndHash("C:/assets/scene.compressed.ply", 123) == "scene_compressed_ply_123.compressed.ply");
+	testAssert(URLForPathAndHash("C:/assets/SCENE.COMPRESSED.PLY", 123) == "SCENE_COMPRESSED_PLY_123.compressed.ply");
+	testAssert(URLForPathAndHashAndEpoch("C:/assets/scene.compressed.ply", 123, 7) == "scene_compressed_123_7.compressed.ply");
+
+	conPrint("ResourceManager::test() done");
+}
+
+
+#endif // BUILD_TESTS

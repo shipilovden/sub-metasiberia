@@ -38,6 +38,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Reset Layout", "Сбросить раскладку");
 	add("MainWindow", "Enter Fullscreen Mode", "Полноэкранный режим");
 	add("MainWindow", "Editor", "Редактор");
+	add("MainWindow", "GaussianSplats Editor", "Редактор GaussianSplats");
 	add("MainWindow", "Material Browser", "Браузер материалов");
 	add("MainWindow", "Environment", "Окружение");
 	add("MainWindow", "World Settings", "Настройки мира");
@@ -95,7 +96,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Go to Main World", "Перейти в главный мир");
 	add("MainWindow", "Go to Personal World", "Перейти в персональный мир");
 	add("MainWindow", "Go to Cryptovoxels World", "Перейти в мир Cryptovoxels");
-	add("MainWindow", "Go to Legacy Substrata", "Перейти в старый Substrata");
+	add("MainWindow", "Go to Substrata", "Перейти в Substrata");
 	add("MainWindow", "Go to Metasiberia", "Перейти в Metasiberia");
 	add("MainWindow", "Go to Shki-Nvkz", "Перейти в Shki-Nvkz");
 	add("MainWindow", "Go to Map", "Перейти в карту");
@@ -474,6 +475,31 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("ObjectEditor", " deg/s", " град/с");
 	add("ObjectEditor", " m^2", " м^2");
 	add("ObjectEditor", " kg", " кг");
+	add("ObjectEditor", "GaussianSplats Editor", "Редактор GaussianSplats");
+	add("ObjectEditor", "Preset", "Пресет");
+	add("ObjectEditor", "Original / SuperSplat default", "Оригинал / стандарт SuperSplat");
+	add("ObjectEditor", "Clean Haze", "Убрать дымку");
+	add("ObjectEditor", "Metasiberia Clear", "Метасибирь: чётко");
+	add("ObjectEditor", "Reset to Original", "Сбросить к оригиналу");
+	add("ObjectEditor", "SH Detail", "Детализация SH");
+	add("ObjectEditor", "Auto", "Авто");
+	add("ObjectEditor", "DC only", "Только DC");
+	add("ObjectEditor", "Degree 1", "Степень 1");
+	add("ObjectEditor", "Degree 2", "Степень 2");
+	add("ObjectEditor", "Degree 3", "Степень 3");
+	add("ObjectEditor", "Density / Opacity", "Плотность / непрозрачность");
+	add("ObjectEditor", "Minimum Source Opacity", "Мин. исходная непрозрачность");
+	add("ObjectEditor", "Brightness", "Яркость");
+	add("ObjectEditor", "Splat Radius", "Радиус splat");
+	add("ObjectEditor", "Saturation", "Насыщенность");
+	add("ObjectEditor", "Contrast", "Контраст");
+	add("ObjectEditor", "Edge Alpha Clip", "Альфа-обрезка края");
+	add("ObjectEditor", "Start with Original to preserve the source. Minimum Source Opacity removes weak source splats and haze; Edge Alpha Clip only trims transparent pixels around each rendered splat. SH Detail limits view-dependent colour detail.", "Начните с пресета «Оригинал», чтобы сохранить исходный вид. «Мин. исходная непрозрачность» удаляет слабые исходные splat-точки и дымку; «Альфа-обрезка края» лишь подрезает прозрачные пиксели вокруг каждой отрисованной точки. «Детализация SH» ограничивает зависящие от угла обзора цветовые детали.");
+	add("ObjectEditor", "Choose a safe starting look. Presets only change render controls and never rewrite the source asset.", "Выберите безопасный начальный вид. Пресеты меняют только параметры отрисовки и никогда не перезаписывают исходный файл.");
+	add("ObjectEditor", "Restore Original / SuperSplat defaults: density 1, identity colour and radius, no source-opacity filter, automatic SH detail and a 1/255 edge alpha clip.", "Восстанавливает настройки «Оригинал / SuperSplat»: плотность 1, исходные цвет и радиус, без фильтра исходной непрозрачности, автоматическую детализацию SH и альфа-обрезку края 1/255.");
+	add("ObjectEditor", "Limits spherical-harmonic colour detail. Auto preserves every SH degree available in the source; lower degrees reduce view-dependent detail and can look steadier.", "Ограничивает цветовую детализацию сферических гармоник. «Авто» сохраняет все степени SH из исходника; меньшие степени снижают зависящие от угла обзора детали и могут выглядеть стабильнее.");
+	add("ObjectEditor", "Drops source splats below this original opacity before rendering. Increase it slowly to remove haze and floaters; high values can erase fine geometry.", "До отрисовки удаляет исходные splat-точки с непрозрачностью ниже этого значения. Повышайте медленно, чтобы убрать дымку и плавающие артефакты: большие значения могут стереть тонкую геометрию.");
+	add("ObjectEditor", "Discards very transparent pixels only at the soft edge of each rendered splat. It does not remove source splats; raise it carefully to sharpen silhouettes.", "Отбрасывает только почти прозрачные пиксели на мягком краю каждой отрисованной splat-точки. Исходные точки не удаляются; повышайте осторожно, чтобы сделать силуэт чётче.");
 	add("ObjectEditor", "built-in sprite", "встроенный спрайт");
 	add("ObjectEditor", "local sprite", "локальный спрайт");
 	add("ObjectEditor", "shared sprite", "общий спрайт");
@@ -870,14 +896,17 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 
 	// World settings
 	add("WorldSettingsWidget", "New terrain section", "Новая секция рельефа");
-	add("WorldSettingsWidget", "detail col map 0 (rock) URL", "URL карты цвета detail 0 (камень)");
-	add("WorldSettingsWidget", "detail col map 1 (sediment) URL", "URL карты цвета detail 1 (осадок)");
+	add("WorldSettingsWidget", "detail col map 0 (reserved) URL", "URL карты цвета detail 0 (зарезервировано)");
+	add("WorldSettingsWidget", "detail col map 1 (base ground) URL", "URL карты цвета detail 1 (основной грунт)");
 	add("WorldSettingsWidget", "detail col map 2 (vegetation) URL", "URL карты цвета detail 2 (растительность)");
-	add("WorldSettingsWidget", "detail col map 3 URL", "URL карты цвета detail 3");
-	add("WorldSettingsWidget", "detail height map 0 (rock) URL", "URL карты высот detail 0 (камень)");
+	add("WorldSettingsWidget", "detail col map 3 (reserved) URL", "URL карты цвета detail 3 (зарезервировано)");
+	add("WorldSettingsWidget", "detail height map 0 (rock micro-height) URL", "URL карты высот detail 0 (микрорельеф камня)");
+	add("WorldSettingsWidget", "Metasiberia currently renders colour map 1 as base ground and colour map 2 as vegetation. Colour maps 0/3 are reserved; height map 0 adds rock micro-relief. TerrainGen EXR uses terrain height scale 1.0.", "Сейчас Metasiberia отображает карту цвета 1 как основной грунт, а карту 2 — как растительность. Карты цвета 0/3 зарезервированы; карта высот 0 добавляет микрорельеф камня. Для EXR из TerrainGen масштаб высоты рельефа равен 1.0.");
 	add("WorldSettingsWidget", "terrain section width", "Ширина секции рельефа");
 	add("WorldSettingsWidget", "default terrain z", "Базовая высота рельефа (z)");
 	add("WorldSettingsWidget", "terrain height scale", "Масштаб высоты рельефа");
+	add("WorldSettingsWidget", "exact heightmap (digital twin)", "Точная карта высот (цифровой двойник)");
+	add("WorldSettingsWidget", "use EXR heights without procedural displacement", "Использовать высоты EXR без процедурного смещения");
 	add("WorldSettingsWidget", "water z coord", "Координата воды по z");
 	add("WorldSettingsWidget", "water", "Вода");
 	add("WorldSettingsWidget", "Apply", "Применить");
@@ -893,6 +922,8 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("TerrainSpecSectionWidget", "Height map URL", "URL карты высот");
 	add("TerrainSpecSectionWidget", "Mask map URL", "URL карты маски");
 	add("TerrainSpecSectionWidget", "Tree mask map URL", "URL карты маски деревьев");
+	add("TerrainSpecSectionWidget", "Road reference mask URL", "URL справочной маски дорог");
+	add("TerrainSpecSectionWidget", "Building reference mask URL", "URL справочной маски домов");
 	add("TerrainSpecSectionWidget", "Remove", "Удалить");
 
 	// Environment options
