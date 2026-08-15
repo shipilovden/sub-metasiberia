@@ -17,6 +17,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/Reference.h>
 #include <utils/Array2D.h>
 #include <utils/StackAllocator.h>
+#include <utils/Mutex.h>
 #include <maths/Matrix4f.h>
 #include <maths/vec3.h>
 #include <string>
@@ -299,6 +300,11 @@ private:
 	TerrainSculptStroke current_sculpt_stroke;
 	bool sculpt_stroke_active;
 	bool sculpt_geometry_rebuild_pending;
+
+	// Terrain chunks are generated on worker threads while sculpting changes an
+	// ImageMapFloat on the GUI thread.  A generated chunk must see one complete
+	// heightmap state, never a map while a brush is changing its pixels.
+	mutable Mutex heightmaps_mutex;
 
 	// Scale factor for world-space -> heightmap UV conversion.
 	// Its reciprocal is the width of the terrain in metres.

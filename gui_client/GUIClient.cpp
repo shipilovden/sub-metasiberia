@@ -9410,7 +9410,9 @@ bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_s
 			return true;
 	}
 
-	terrain_system->sculptAtWorld(hit_pos, (TerrainSculptTool)terrain_sculpt_tool, terrain_sculpt_brush_radius_m, terrain_sculpt_strength_m);
+	if(!terrain_system->sculptAtWorld(hit_pos, (TerrainSculptTool)terrain_sculpt_tool, terrain_sculpt_brush_radius_m, terrain_sculpt_strength_m))
+		return false;
+
 	terrain_sculpt_last_hit = hit_pos;
 	terrain_sculpt_have_last_hit = true;
 	return true;
@@ -20472,12 +20474,13 @@ void GUIClient::mousePressed(MouseEvent& e)
 
 	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Left)
 	{
-		if(applyTerrainSculptAtCursor(e.cursor_pos, /*start_stroke=*/true))
-		{
-			e.accepted = true;
-			ui_interface->setCamRotationOnMouseDragEnabled(false);
-			return;
-		}
+		// A sculpt click always belongs to the sculpt tool.  In particular, if a
+		// terrain map is temporarily unavailable, do not let the same click fall
+		// through to object selection or camera dragging.
+		applyTerrainSculptAtCursor(e.cursor_pos, /*start_stroke=*/true);
+		e.accepted = true;
+		ui_interface->setCamRotationOnMouseDragEnabled(false);
+		return;
 	}
 
 	ui_interface->setCamRotationOnMouseDragEnabled(true);
@@ -21904,11 +21907,9 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 		BitUtils::isBitSet(mouse_event.button_state, (uint32)MouseButton::Left) &&
 		terrain_sculpt_stroke_active)
 	{
-		if(applyTerrainSculptAtCursor(mouse_event.cursor_pos, /*start_stroke=*/false))
-		{
-			mouse_event.accepted = true;
-			return;
-		}
+		applyTerrainSculptAtCursor(mouse_event.cursor_pos, /*start_stroke=*/false);
+		mouse_event.accepted = true;
+		return;
 	}
 	else if(terrain_sculpt_mode_enabled)
 	{

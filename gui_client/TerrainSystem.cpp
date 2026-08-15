@@ -15,6 +15,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "../shared/ImageDecoding.h"
 #include "../shared/WorldSettings.h"
 #include <utils/TaskManager.h>
+#include <utils/Lock.h>
 #include <utils/FileUtils.h>
 #include <utils/ContainerUtils.h>
 #include <utils/RuntimeCheck.h>
@@ -593,6 +594,7 @@ void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2
 {
 	// conPrint("TerrainSystem::handleTextureLoaded(): path: '" + toStdString(path) + "'");
 	ZoneScoped; // Tracy profiler
+	Lock heightmap_lock(heightmaps_mutex);
 
 	assert(opengl_engine->isOpenGLTextureInsertedForKey(OpenGLTextureKey(path)));
 
@@ -781,6 +783,11 @@ void TerrainSystem::endSculptStroke()
 		if(sculpt_undo_stack.size() > 8)
 			sculpt_undo_stack.erase(sculpt_undo_stack.begin());
 		sculpt_redo_stack.clear();
+
+		// Rebuild once per completed brush stroke.  Rebuilding after every mouse
+		// move launches overlapping background mesh tasks, which can otherwise
+		// observe different states of the editable heightmap.
+		sculpt_geometry_rebuild_pending = true;
 	}
 	current_sculpt_stroke.patches.clear();
 	sculpt_stroke_active = false;
@@ -789,13 +796,18 @@ void TerrainSystem::endSculptStroke()
 
 bool TerrainSystem::sculptAtWorld(const Vec3d& hit_pos, TerrainSculptTool tool, float radius_m, float strength_m)
 {
-	if(!sculpt_stroke_active)
-		beginSculptStroke();
-
 	radius_m = myClamp(radius_m, 0.25f, terrain_section_w * 0.5f);
 	strength_m = myClamp(strength_m, 0.001f, 1000.f);
 	if(!isFinite(radius_m) || !isFinite(strength_m))
 		return false;
+
+	// makeTerrainChunkMesh() reads these maps on worker threads.  Hold the
+	// same lock for the entire stamp so the mesh builder cannot receive a
+	// partially written float map or a half-swapped editable map reference.
+	Lock heightmap_lock(heightmaps_mutex);
+
+	if(!sculpt_stroke_active)
+		beginSculptStroke();
 
 	const double min_nx = (hit_pos.x - radius_m) / terrain_section_w + 0.5;
 	const double max_nx = (hit_pos.x + radius_m) / terrain_section_w + 0.5;
@@ -822,7 +834,12 @@ bool TerrainSystem::sculptAtWorld(const Vec3d& hit_pos, TerrainSculptTool tool, 
 		const float section_u = (float)(hit_pos.x / terrain_section_w + 0.5 - section_x);
 		const float section_v = (float)(hit_pos.y / terrain_section_w + 0.5 - section_y);
 		const float pixel_cx = section_u * (width - 1);
-		const float pixel_cy = (1.f - section_v) * (height - 1);
+		// ImageMap::sampleSingleChannelHighQual() flips its input V coordinate
+		// before addressing raw pixels.  evalTerrainHeight() therefore passes
+		// (1 - section_v), which resolves to the raw row section_v.  Use that
+		// same row here: applying a second flip mirrors a sculpt stamp across the
+		// section and makes the terrain change away from the brush cursor.
+		const float pixel_cy = section_v * (height - 1);
 		const float pixel_radius_x = radius_m / terrain_section_w * (width - 1);
 		const float pixel_radius_y = radius_m / terrain_section_w * (height - 1);
 		const int x0 = myMax(0, (int)std::floor(pixel_cx - pixel_radius_x) - 1);
@@ -849,7 +866,7 @@ bool TerrainSystem::sculptAtWorld(const Vec3d& hit_pos, TerrainSculptTool tool, 
 			const float px_u = (float)x / (float)(width - 1);
 			const float py_v = (float)y / (float)(height - 1);
 			const float world_x = (section_x + px_u - 0.5f) * terrain_section_w;
-			const float world_y = (section_y + (1.f - py_v) - 0.5f) * terrain_section_w;
+			const float world_y = (section_y + py_v - 0.5f) * terrain_section_w;
 			const float dx = world_x - (float)hit_pos.x;
 			const float dy = world_y - (float)hit_pos.y;
 			const float dist = std::sqrt(dx * dx + dy * dy);
@@ -879,8 +896,6 @@ bool TerrainSystem::sculptAtWorld(const Vec3d& hit_pos, TerrainSculptTool tool, 
 			current_sculpt_stroke.patches.push_back(std::move(patch));
 	}
 
-	if(changed)
-		sculpt_geometry_rebuild_pending = true;
 	return changed;
 }
 
@@ -903,6 +918,7 @@ bool TerrainSystem::undoSculpt()
 	if(sculpt_undo_stack.empty())
 		return false;
 
+	Lock heightmap_lock(heightmaps_mutex);
 	TerrainSculptStroke stroke = std::move(sculpt_undo_stack.back());
 	sculpt_undo_stack.pop_back();
 	for(auto it=stroke.patches.rbegin(); it!=stroke.patches.rend(); ++it)
@@ -919,6 +935,7 @@ bool TerrainSystem::redoSculpt()
 	if(sculpt_redo_stack.empty())
 		return false;
 
+	Lock heightmap_lock(heightmaps_mutex);
 	TerrainSculptStroke stroke = std::move(sculpt_redo_stack.back());
 	sculpt_redo_stack.pop_back();
 	for(const TerrainSculptPatch& patch : stroke.patches)
@@ -931,6 +948,7 @@ bool TerrainSystem::redoSculpt()
 
 bool TerrainSystem::hasSculptedHeightmaps() const
 {
+	Lock heightmap_lock(heightmaps_mutex);
 	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
 	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
 		if(terrain_data_sections[x + y * TERRAIN_DATA_SECTION_RES].sculpt_heightmap.nonNull())
@@ -941,6 +959,7 @@ bool TerrainSystem::hasSculptedHeightmaps() const
 
 void TerrainSystem::getSculptedHeightmaps(std::vector<TerrainSculptedHeightmap>& maps_out) const
 {
+	Lock heightmap_lock(heightmaps_mutex);
 	maps_out.clear();
 	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
 	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
@@ -1482,6 +1501,12 @@ float TerrainSystem::evalTerrainHeight(float p_x, float p_y, float quad_w) const
 
 void TerrainSystem::makeTerrainChunkMesh(float chunk_x, float chunk_y, float chunk_w, bool build_physics_ob, TerrainChunkData& chunk_data_out) const
 {
+	// Keep all height queries for this generated mesh on one immutable map
+	// state.  In particular, sculptAtWorld() may copy-on-write the source map
+	// before updating its pixels, so locking only individual reads is not
+	// sufficient to guarantee a coherent chunk.
+	Lock heightmap_lock(heightmaps_mutex);
+
 	//Timer timer;
 	/*
 	 
