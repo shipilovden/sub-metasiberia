@@ -122,6 +122,7 @@ public:
 	virtual void hideCursor() = 0;
 
 	virtual void setCamRotationOnMouseDragEnabled(bool enabled) = 0; // Do we want mouse click + dragging to move the camera?
+	virtual void setCamRotationOnRightMouseDragEnabled(bool enabled) {} // Optional right-button camera rotation mode (used by terrain sculpting).
 
 	virtual void setKeyboardCameraMoveEnabled(bool enabled) = 0; // Do we want WASD keys etc. to move the camera?  We don't want this while e.g. we enter text into a webview.
 	virtual bool isKeyboardCameraMoveEnabled() = 0;

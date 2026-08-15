@@ -283,6 +283,10 @@ public:
 	void updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2f& gl_coords, MouseEvent* mouse_event, bool cursor_is_mouse_cursor);
 	void mouseMoved(MouseEvent& mouse_event);
 	bool applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_stroke);
+	bool getTerrainSculptCursorHit(const Vec2i& cursor_pos, Vec3d& hit_pos_out) const;
+	void updateTerrainSculptBrushOverlay(const Vec2i& cursor_pos);
+	void ensureTerrainSculptBrushOverlay();
+	void hideTerrainSculptBrushOverlay();
 	void saveTerrainSculptingChanges();
 	void onMouseWheelEvent(MouseWheelEvent& e);
 	void gamepadButtonXChanged(bool pressed);
@@ -1087,6 +1091,10 @@ public:
 	bool terrain_sculpt_stroke_active;
 	bool terrain_sculpt_have_last_hit;
 	Vec3d terrain_sculpt_last_hit;
+	Reference<OpenGLMeshRenderData> terrain_sculpt_brush_mesh_data;
+	GLObjectRef terrain_sculpt_brush_gl_ob;
+	GLObjectRef terrain_sculpt_falloff_gl_ob;
+	bool terrain_sculpt_brush_in_engine;
 
 	Reference<ParticleManager> particle_manager;
 

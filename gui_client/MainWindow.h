@@ -422,6 +422,7 @@ public:
 	virtual void showAvatarSettings() override;
 
 	virtual void setCamRotationOnMouseDragEnabled(bool enabled) override;
+	virtual void setCamRotationOnRightMouseDragEnabled(bool enabled) override;
 	virtual bool isCursorHidden() override;
 	virtual void hideCursor() override;
 

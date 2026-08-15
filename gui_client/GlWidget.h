@@ -53,6 +53,7 @@ public:
 	void setCameraController(CameraController* cam_controller_);
 
 	void setCamRotationOnMouseDragEnabled(bool enabled) { cam_rot_on_mouse_move_enabled = enabled; }
+	void setCamRotationOnRightMouseDragEnabled(bool enabled) { cam_rot_on_right_mouse_move_enabled = enabled; }
 	void setKeyboardCameraMoveEnabled(bool enabled) { cam_move_on_key_input_enabled = enabled; }
 	bool isKeyboardCameraMoveEnabled() { return cam_move_on_key_input_enabled; }
 	void hideCursor();
@@ -119,6 +120,7 @@ private:
 
 	//Timer fps_timer;
 	bool cam_rot_on_mouse_move_enabled;
+	bool cam_rot_on_right_mouse_move_enabled;
 	bool cam_move_on_key_input_enabled;
 
 	std::string initialisation_error_msg;

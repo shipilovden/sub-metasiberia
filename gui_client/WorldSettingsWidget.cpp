@@ -93,8 +93,9 @@ void WorldSettingsWidget::createSculptingTab()
 	QLayout* existing_layout = this->layout();
 	QWidget* world_tab = new QWidget(this);
 	QFormLayout* world_form_layout = new QFormLayout(world_tab);
-	if(QFormLayout* old_form_layout = dynamic_cast<QFormLayout*>(existing_layout))
+	if(existing_layout)
 	{
+		QFormLayout* old_form_layout = static_cast<QFormLayout*>(existing_layout);
 		world_form_layout->setFieldGrowthPolicy(old_form_layout->fieldGrowthPolicy());
 		world_form_layout->setFormAlignment(old_form_layout->formAlignment());
 		world_form_layout->setLabelAlignment(old_form_layout->labelAlignment());
@@ -110,6 +111,8 @@ void WorldSettingsWidget::createSculptingTab()
 			QFormLayout::ItemRole role;
 			old_form_layout->getItemPosition(i, &row, &role);
 			QLayoutItem* item = old_form_layout->takeAt(i);
+			if(QWidget* item_widget = item->widget())
+				item_widget->setParent(world_tab);
 			world_form_layout->setItem(row, role, item);
 		}
 		delete old_form_layout;

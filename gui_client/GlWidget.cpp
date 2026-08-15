@@ -100,6 +100,7 @@ GlWidget::GlWidget(QWidget *parent)
 #endif
 	cam_controller(NULL),
 	cam_rot_on_mouse_move_enabled(true),
+	cam_rot_on_right_mouse_move_enabled(false),
 	cam_move_on_key_input_enabled(true),
 	near_draw_dist(0.22f), // As large as possible as we can get without clipping becoming apparent.
 	max_draw_dist(1000.f),
@@ -558,7 +559,9 @@ void GlWidget::showEvent(QShowEvent* e)
 void GlWidget::mouseMoveEvent(QMouseEvent* e)
 {
 	Qt::MouseButtons mb = e->buttons();
-	if(cam_rot_on_mouse_move_enabled && (cam_controller != NULL) && (mb & Qt::LeftButton))// && (e->modifiers() & Qt::AltModifier))
+	const bool rotate_with_left_button = cam_rot_on_mouse_move_enabled && (mb & Qt::LeftButton);
+	const bool rotate_with_right_button = cam_rot_on_right_mouse_move_enabled && (mb & Qt::RightButton);
+	if((rotate_with_left_button || rotate_with_right_button) && (cam_controller != NULL))// && (e->modifiers() & Qt::AltModifier))
 	{
 		/*switch(e->source())
 		{
@@ -578,7 +581,8 @@ void GlWidget::mouseMoveEvent(QMouseEvent* e)
 		// QCursor::setPos() seems to generate mouse move events, which we don't want to affect the camera.  Only rotate camera based on actual mouse movements.
 		if(e->source() == Qt::MouseEventNotSynthesized)
 		{
-			if(mb & Qt::LeftButton)  cam_controller->updateRotation(/*pitch_delta=*/delta.y(), /*heading_delta=*/delta.x()/* * shift_scale*/);
+			if(rotate_with_left_button || rotate_with_right_button)
+				cam_controller->updateRotation(/*pitch_delta=*/delta.y(), /*heading_delta=*/delta.x()/* * shift_scale*/);
 			//if(mb & Qt::MidButton)   cam_controller->update(Vec3d(delta.x(), 0, delta.y()) * shift_scale, Vec2d(0, 0));
 			//if(mb & Qt::RightButton) cam_controller->update(Vec3d(0, delta.y(), 0) * shift_scale, Vec2d(0, 0));
 		}

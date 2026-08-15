@@ -113,6 +113,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../indigo/TextureServer.h"
 #include <video/VideoReader.h>
 #include <opengl/OpenGLShader.h>
+#include <opengl/GLMeshBuilding.h>
 #include <opengl/MeshPrimitiveBuilding.h>
 #include <opengl/OpenGLUploadThread.h>
 #include <opengl/PBOPool.h>
@@ -998,6 +999,7 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	terrain_sculpt_strength_m = 1.f;
 	terrain_sculpt_stroke_active = false;
 	terrain_sculpt_have_last_hit = false;
+	terrain_sculpt_brush_in_engine = false;
 
 	resources_dir_path = base_dir_path + "/data/resources";
 
@@ -2225,6 +2227,10 @@ void GUIClient::makeShaders()
 void GUIClient::shutdown()
 {
 	// Destroy/close all OpenGL stuff, because once glWidget is destroyed, the OpenGL context is destroyed, so we can't free stuff properly.
+	hideTerrainSculptBrushOverlay();
+	terrain_sculpt_brush_gl_ob = NULL;
+	terrain_sculpt_falloff_gl_ob = NULL;
+	terrain_sculpt_brush_mesh_data = NULL;
 
 	this->msg_queue.clear();
 
@@ -9125,6 +9131,152 @@ void GUIClient::setFlyModeEnabled(bool enabled)
 }
 
 
+bool GUIClient::getTerrainSculptCursorHit(const Vec2i& cursor_pos, Vec3d& hit_pos_out) const
+{
+	if(!terrain_sculpt_mode_enabled || terrain_system.isNull())
+		return false;
+
+	const Vec4f origin4 = cam_controller.getPosition().toVec4fPoint();
+	const Vec4f direction4 = getDirForPixelTrace(cursor_pos.x, cursor_pos.y);
+	const Vec3d origin(origin4[0], origin4[1], origin4[2]);
+	const Vec3d direction(direction4[0], direction4[1], direction4[2]);
+	return terrain_system->traceRay(origin, direction, hit_pos_out);
+}
+
+
+void GUIClient::ensureTerrainSculptBrushOverlay()
+{
+	if(terrain_sculpt_brush_gl_ob.nonNull() || opengl_engine.isNull())
+		return;
+
+	if(terrain_sculpt_brush_mesh_data.isNull())
+	{
+		const int num_segments = 96;
+		const float inner_radius = 0.94f;
+		js::Vector<Vec3f, 16> vertices;
+		js::Vector<uint32, 16> indices;
+		vertices.reserve((size_t)num_segments * 2);
+		indices.reserve((size_t)num_segments * 6);
+
+		for(int i=0; i<num_segments; ++i)
+		{
+			const float a = (float)i * Maths::get2Pi<float>() / (float)num_segments;
+			vertices.push_back(Vec3f(std::cos(a), std::sin(a), 0.f));
+			vertices.push_back(Vec3f(std::cos(a) * inner_radius, std::sin(a) * inner_radius, 0.f));
+		}
+		for(int i=0; i<num_segments; ++i)
+		{
+			const uint32 next = (uint32)((i + 1) % num_segments);
+			const uint32 base = (uint32)i * 2;
+			const uint32 next_base = next * 2;
+			indices.push_back(base + 0);
+			indices.push_back(next_base + 0);
+			indices.push_back(next_base + 1);
+			indices.push_back(base + 0);
+			indices.push_back(next_base + 1);
+			indices.push_back(base + 1);
+		}
+
+		terrain_sculpt_brush_mesh_data = GLMeshBuilding::buildMeshRenderData(*opengl_engine->vert_buf_allocator, vertices, indices);
+	}
+
+	const auto make_brush_object = [this](const Colour3f& colour, float alpha) -> GLObjectRef
+	{
+		GLObjectRef object = opengl_engine->allocateObject();
+		object->mesh_data = terrain_sculpt_brush_mesh_data;
+		object->materials.resize(1);
+		object->materials[0].albedo_linear_rgb = colour;
+		object->materials[0].alpha = alpha;
+		object->materials[0].simple_double_sided = true;
+		object->materials[0].decal = true;
+		return object;
+	};
+
+	terrain_sculpt_brush_gl_ob = make_brush_object(Colour3f(1.f, 0.73f, 0.06f), 0.95f);
+	terrain_sculpt_falloff_gl_ob = make_brush_object(Colour3f(1.f, 0.95f, 0.45f), 0.9f);
+}
+
+
+void GUIClient::hideTerrainSculptBrushOverlay()
+{
+	if(!terrain_sculpt_brush_in_engine || opengl_engine.isNull())
+		return;
+
+	if(terrain_sculpt_brush_gl_ob.nonNull())
+		opengl_engine->removeObject(terrain_sculpt_brush_gl_ob);
+	if(terrain_sculpt_falloff_gl_ob.nonNull())
+		opengl_engine->removeObject(terrain_sculpt_falloff_gl_ob);
+	terrain_sculpt_brush_in_engine = false;
+}
+
+
+void GUIClient::updateTerrainSculptBrushOverlay(const Vec2i& cursor_pos)
+{
+	if(!terrain_sculpt_mode_enabled)
+	{
+		hideTerrainSculptBrushOverlay();
+		return;
+	}
+
+	Vec3d hit_pos;
+	if(!getTerrainSculptCursorHit(cursor_pos, hit_pos))
+	{
+		hideTerrainSculptBrushOverlay();
+		return;
+	}
+
+	ensureTerrainSculptBrushOverlay();
+	if(terrain_sculpt_brush_gl_ob.isNull() || terrain_sculpt_falloff_gl_ob.isNull())
+		return;
+
+	// Estimate the terrain normal from the same CPU height function used by the
+	// ray tracer.  This keeps the brush projected onto slopes instead of leaving
+	// it as a screen-space cursor.
+	const float sample_delta = myClamp(terrain_sculpt_brush_radius_m * 0.02f, 0.5f, 4.f);
+	const float h_l = terrain_system->evalTerrainHeight((float)hit_pos.x - sample_delta, (float)hit_pos.y, 0.f);
+	const float h_r = terrain_system->evalTerrainHeight((float)hit_pos.x + sample_delta, (float)hit_pos.y, 0.f);
+	const float h_d = terrain_system->evalTerrainHeight((float)hit_pos.x, (float)hit_pos.y - sample_delta, 0.f);
+	const float h_u = terrain_system->evalTerrainHeight((float)hit_pos.x, (float)hit_pos.y + sample_delta, 0.f);
+	Vec4f surface_normal = normalise(crossProduct(
+		Vec4f(2.f * sample_delta, 0.f, h_r - h_l, 0.f),
+		Vec4f(0.f, 2.f * sample_delta, h_u - h_d, 0.f)));
+	if(surface_normal[2] < 0.f)
+		surface_normal = Vec4f(-surface_normal[0], -surface_normal[1], -surface_normal[2], 0.f);
+
+	const Vec4f up(0.f, 0.f, 1.f, 0.f);
+	const float normal_dot = myClamp(dot(up, surface_normal), -1.f, 1.f);
+	Matrix4f surface_rotation = Matrix4f::identity();
+	if(normal_dot < 0.9999f)
+	{
+		if(normal_dot < -0.9999f)
+			surface_rotation = Matrix4f::rotationAroundXAxis(Maths::pi<float>());
+		else
+			surface_rotation = Matrix4f::rotationMatrix(normalise(crossProduct(up, surface_normal)), std::acos(normal_dot));
+	}
+
+	const Vec4f overlay_pos(
+		(float)hit_pos.x + surface_normal[0] * 0.06f,
+		(float)hit_pos.y + surface_normal[1] * 0.06f,
+		(float)hit_pos.z + surface_normal[2] * 0.06f,
+		1.f);
+	const Matrix4f base_transform = Matrix4f::translationMatrix(overlay_pos) * surface_rotation;
+	terrain_sculpt_brush_gl_ob->ob_to_world_matrix = base_transform * Matrix4f::uniformScaleMatrix(terrain_sculpt_brush_radius_m);
+	terrain_sculpt_falloff_gl_ob->ob_to_world_matrix = base_transform * Matrix4f::uniformScaleMatrix(terrain_sculpt_brush_radius_m * 0.45f);
+
+	if(!terrain_sculpt_brush_in_engine)
+	{
+		opengl_engine->addObject(terrain_sculpt_brush_gl_ob);
+		opengl_engine->addObject(terrain_sculpt_falloff_gl_ob);
+		terrain_sculpt_brush_in_engine = true;
+	}
+	else
+	{
+		opengl_engine->updateObjectTransformData(*terrain_sculpt_brush_gl_ob);
+		opengl_engine->updateObjectTransformData(*terrain_sculpt_falloff_gl_ob);
+	}
+}
+
+
 void GUIClient::setTerrainSculptModeEnabled(bool enabled)
 {
 	if(enabled == terrain_sculpt_mode_enabled)
@@ -9149,6 +9301,7 @@ void GUIClient::setTerrainSculptModeEnabled(bool enabled)
 		terrain_sculpt_have_last_hit = false;
 		terrain_sculpt_stroke_active = false;
 		cam_controller.freeCameraModeSelected();
+		ui_interface->setCamRotationOnRightMouseDragEnabled(true);
 	}
 	else
 	{
@@ -9158,6 +9311,8 @@ void GUIClient::setTerrainSculptModeEnabled(bool enabled)
 		terrain_sculpt_have_last_hit = false;
 		saveTerrainSculptingChanges();
 		terrain_sculpt_mode_enabled = false;
+		hideTerrainSculptBrushOverlay();
+		ui_interface->setCamRotationOnRightMouseDragEnabled(false);
 		cam_controller.standardCameraModeSelected();
 	}
 }
@@ -9203,13 +9358,10 @@ bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_s
 	if(!terrain_sculpt_mode_enabled || terrain_system.isNull())
 		return false;
 
-	const Vec4f origin4 = cam_controller.getPosition().toVec4fPoint();
-	const Vec4f direction4 = getDirForPixelTrace(cursor_pos.x, cursor_pos.y);
-	const Vec3d origin(origin4[0], origin4[1], origin4[2]);
-	const Vec3d direction(direction4[0], direction4[1], direction4[2]);
 	Vec3d hit_pos;
-	if(!terrain_system->traceRay(origin, direction, hit_pos))
+	if(!getTerrainSculptCursorHit(cursor_pos, hit_pos))
 		return false;
+	updateTerrainSculptBrushOverlay(cursor_pos);
 
 	if(start_stroke && !terrain_sculpt_stroke_active)
 	{
@@ -20273,8 +20425,19 @@ void GUIClient::mousePressed(MouseEvent& e)
 		if(e.accepted)
 		{
 			ui_interface->setCamRotationOnMouseDragEnabled(false); // If the user clicked on a UI widget, we don't want click+mouse dragging to move the camera.
+			ui_interface->setCamRotationOnRightMouseDragEnabled(false);
 			return;
 		}
+	}
+
+	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Right)
+	{
+		// In sculpt mode the right button is reserved for orbiting the free camera.
+		// The actual mouse-delta rotation is performed by GlWidget before this
+		// event reaches the scene/editor handlers.
+		ui_interface->setCamRotationOnRightMouseDragEnabled(true);
+		e.accepted = true;
+		return;
 	}
 
 	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Left)
@@ -20670,7 +20833,18 @@ void GUIClient::mouseReleased(MouseEvent& e)
 		if(!e.accepted && minimap)
 			minimap->handleMouseRelease(e);
 		if(e.accepted)
+		{
+			if(terrain_sculpt_mode_enabled && e.button == MouseButton::Right)
+				ui_interface->setCamRotationOnRightMouseDragEnabled(true);
 			return;
+		}
+	}
+
+	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Right)
+	{
+		ui_interface->setCamRotationOnRightMouseDragEnabled(false);
+		e.accepted = true;
+		return;
 	}
 
 	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Left)
@@ -21705,6 +21879,12 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 			mouse_event.accepted = true;
 			return;
 		}
+	}
+	else if(terrain_sculpt_mode_enabled)
+	{
+		// Keep the projected brush visible even when no stroke is active, and
+		// update it after a right-button camera orbit changes the view.
+		updateTerrainSculptBrushOverlay(mouse_event.cursor_pos);
 	}
 
 	if(!ui_interface->isCursorHidden() && !isXRActive())

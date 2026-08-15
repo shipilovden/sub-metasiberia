@@ -11413,6 +11413,12 @@ void MainWindow::setCamRotationOnMouseDragEnabled(bool enabled)
 }
 
 
+void MainWindow::setCamRotationOnRightMouseDragEnabled(bool enabled)
+{
+	ui->glWidget->setCamRotationOnRightMouseDragEnabled(enabled);
+}
+
+
 bool MainWindow::isCursorHidden()
 {
 	return ui->glWidget->isCursorHidden();
