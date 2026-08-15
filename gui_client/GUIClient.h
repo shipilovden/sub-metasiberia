@@ -285,6 +285,7 @@ public:
 	bool applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_stroke);
 	bool getTerrainSculptCursorHit(const Vec2i& cursor_pos, Vec3d& hit_pos_out) const;
 	void updateTerrainSculptBrushOverlay(const Vec2i& cursor_pos);
+	void updateTerrainSculptBrushOverlayAtHit(const Vec3d& hit_pos);
 	void ensureTerrainSculptBrushOverlay();
 	void hideTerrainSculptBrushOverlay();
 	void saveTerrainSculptingChanges();

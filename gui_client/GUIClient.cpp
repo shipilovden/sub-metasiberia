@@ -9188,12 +9188,11 @@ void GUIClient::ensureTerrainSculptBrushOverlay()
 		object->materials[0].albedo_linear_rgb = colour;
 		object->materials[0].alpha = alpha;
 		object->materials[0].simple_double_sided = true;
-		object->materials[0].decal = true;
 		return object;
 	};
 
-	terrain_sculpt_brush_gl_ob = make_brush_object(Colour3f(1.f, 0.73f, 0.06f), 0.95f);
-	terrain_sculpt_falloff_gl_ob = make_brush_object(Colour3f(1.f, 0.95f, 0.45f), 0.9f);
+	terrain_sculpt_brush_gl_ob = make_brush_object(Colour3f(1.f, 0.73f, 0.06f), 1.f);
+	terrain_sculpt_falloff_gl_ob = make_brush_object(Colour3f(1.f, 0.95f, 0.45f), 0.95f);
 }
 
 
@@ -9224,6 +9223,14 @@ void GUIClient::updateTerrainSculptBrushOverlay(const Vec2i& cursor_pos)
 		hideTerrainSculptBrushOverlay();
 		return;
 	}
+	updateTerrainSculptBrushOverlayAtHit(hit_pos);
+}
+
+
+void GUIClient::updateTerrainSculptBrushOverlayAtHit(const Vec3d& hit_pos)
+{
+	if(!terrain_sculpt_mode_enabled || terrain_system.isNull())
+		return;
 
 	ensureTerrainSculptBrushOverlay();
 	if(terrain_sculpt_brush_gl_ob.isNull() || terrain_sculpt_falloff_gl_ob.isNull())
@@ -9254,10 +9261,14 @@ void GUIClient::updateTerrainSculptBrushOverlay(const Vec2i& cursor_pos)
 			surface_rotation = Matrix4f::rotationMatrix(normalise(crossProduct(up, surface_normal)), std::acos(normal_dot));
 	}
 
+	// Keep the outline visibly above the rendered terrain.  A flat ring aligned
+	// only to the local normal can otherwise clip through neighbouring terrain
+	// samples, especially on a 32 m brush over a detailed heightmap.
+	const float overlay_bias = myClamp(terrain_sculpt_brush_radius_m * 0.03f, 0.4f, 2.f);
 	const Vec4f overlay_pos(
-		(float)hit_pos.x + surface_normal[0] * 0.06f,
-		(float)hit_pos.y + surface_normal[1] * 0.06f,
-		(float)hit_pos.z + surface_normal[2] * 0.06f,
+		(float)hit_pos.x + surface_normal[0] * overlay_bias,
+		(float)hit_pos.y + surface_normal[1] * overlay_bias,
+		(float)hit_pos.z + surface_normal[2] * overlay_bias,
 		1.f);
 	const Matrix4f base_transform = Matrix4f::translationMatrix(overlay_pos) * surface_rotation;
 	terrain_sculpt_brush_gl_ob->ob_to_world_matrix = base_transform * Matrix4f::uniformScaleMatrix(terrain_sculpt_brush_radius_m);
@@ -9361,7 +9372,11 @@ bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_s
 	Vec3d hit_pos;
 	if(!getTerrainSculptCursorHit(cursor_pos, hit_pos))
 		return false;
-	updateTerrainSculptBrushOverlay(cursor_pos);
+
+	// The brush visualisation and the edit must use exactly the same terrain
+	// intersection.  Do not trace again here: a moving/free camera could yield a
+	// different point between the two calculations.
+	updateTerrainSculptBrushOverlayAtHit(hit_pos);
 
 	if(start_stroke && !terrain_sculpt_stroke_active)
 	{
