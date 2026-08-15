@@ -1092,6 +1092,12 @@ public:
 	bool terrain_sculpt_stroke_active;
 	bool terrain_sculpt_have_last_hit;
 	Vec3d terrain_sculpt_last_hit;
+	// The displayed brush projection is the authoritative target for the next
+	// sculpt stamp.  Keeping this separately avoids using a slightly different
+	// mouse event (or camera state) for visual feedback and for the edit.
+	bool terrain_sculpt_brush_hit_valid;
+	Vec2i terrain_sculpt_brush_cursor_pos;
+	Vec3d terrain_sculpt_brush_hit_pos;
 	Reference<OpenGLMeshRenderData> terrain_sculpt_brush_mesh_data;
 	GLObjectRef terrain_sculpt_brush_gl_ob;
 	GLObjectRef terrain_sculpt_falloff_gl_ob;

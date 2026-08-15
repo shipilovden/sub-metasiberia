@@ -25,6 +25,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QSizePolicy>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
@@ -118,7 +119,41 @@ void WorldSettingsWidget::createSculptingTab()
 		delete old_form_layout;
 	}
 
+	// The world-settings dock is intentionally resizable.  Long map URLs must
+	// not force a fixed minimum width and crop the controls when the dock is
+	// narrowed: labels wrap and editable fields consume the available width.
+	world_tab->setMinimumWidth(0);
+	world_tab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+	world_form_layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+	world_form_layout->setRowWrapPolicy(QFormLayout::WrapLongRows);
+	world_form_layout->setLabelAlignment(Qt::AlignLeft | Qt::AlignTop);
+	for(int i=0; i<world_form_layout->count(); ++i)
+	{
+		int row;
+		QFormLayout::ItemRole role;
+		world_form_layout->getItemPosition(i, &row, &role);
+		QLayoutItem* item = world_form_layout->itemAt(i);
+		QWidget* item_widget = item ? item->widget() : NULL;
+		if(!item_widget)
+			continue;
+
+		item_widget->setMinimumWidth(0);
+		if(role == QFormLayout::LabelRole)
+		{
+			if(QLabel* label = qobject_cast<QLabel*>(item_widget))
+				label->setWordWrap(true);
+			item_widget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+		}
+		else
+			item_widget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+	}
+	terrainSectionScrollArea->setMinimumWidth(0);
+	terrainSectionScrollArea->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+	terrainSectionScrollAreaWidgetContents->setMinimumWidth(0);
+
 	settings_tabs = new QTabWidget(this);
+	settings_tabs->setMinimumWidth(0);
+	settings_tabs->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
 	settings_tabs->addTab(world_tab, tr("Мир"));
 
 	sculpting_tab = new QWidget(settings_tabs);

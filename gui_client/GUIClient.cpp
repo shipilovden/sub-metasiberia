@@ -999,6 +999,7 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	terrain_sculpt_strength_m = 1.f;
 	terrain_sculpt_stroke_active = false;
 	terrain_sculpt_have_last_hit = false;
+	terrain_sculpt_brush_hit_valid = false;
 	terrain_sculpt_brush_in_engine = false;
 
 	resources_dir_path = base_dir_path + "/data/resources";
@@ -9198,6 +9199,7 @@ void GUIClient::ensureTerrainSculptBrushOverlay()
 
 void GUIClient::hideTerrainSculptBrushOverlay()
 {
+	terrain_sculpt_brush_hit_valid = false;
 	if(!terrain_sculpt_brush_in_engine || opengl_engine.isNull())
 		return;
 
@@ -9223,6 +9225,9 @@ void GUIClient::updateTerrainSculptBrushOverlay(const Vec2i& cursor_pos)
 		hideTerrainSculptBrushOverlay();
 		return;
 	}
+	terrain_sculpt_brush_cursor_pos = cursor_pos;
+	terrain_sculpt_brush_hit_pos = hit_pos;
+	terrain_sculpt_brush_hit_valid = true;
 	updateTerrainSculptBrushOverlayAtHit(hit_pos);
 }
 
@@ -9310,6 +9315,7 @@ void GUIClient::setTerrainSculptModeEnabled(bool enabled)
 
 		terrain_sculpt_mode_enabled = true;
 		terrain_sculpt_have_last_hit = false;
+		terrain_sculpt_brush_hit_valid = false;
 		terrain_sculpt_stroke_active = false;
 		cam_controller.freeCameraModeSelected();
 		ui_interface->setCamRotationOnRightMouseDragEnabled(true);
@@ -9320,6 +9326,7 @@ void GUIClient::setTerrainSculptModeEnabled(bool enabled)
 			terrain_system->endSculptStroke();
 		terrain_sculpt_stroke_active = false;
 		terrain_sculpt_have_last_hit = false;
+		terrain_sculpt_brush_hit_valid = false;
 		saveTerrainSculptingChanges();
 		terrain_sculpt_mode_enabled = false;
 		hideTerrainSculptBrushOverlay();
@@ -9369,14 +9376,22 @@ bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_s
 	if(!terrain_sculpt_mode_enabled || terrain_system.isNull())
 		return false;
 
-	Vec3d hit_pos;
-	if(!getTerrainSculptCursorHit(cursor_pos, hit_pos))
-		return false;
+	const int cursor_dx = cursor_pos.x - terrain_sculpt_brush_cursor_pos.x;
+	const int cursor_dy = cursor_pos.y - terrain_sculpt_brush_cursor_pos.y;
+	if(!terrain_sculpt_brush_hit_valid || cursor_dx * cursor_dx + cursor_dy * cursor_dy > 16)
+	{
+		// A click can arrive without a preceding mouse-move event, or after the
+		// free camera has moved.  Refresh the displayed projection first, then
+		// use that exact cached point below.
+		updateTerrainSculptBrushOverlay(cursor_pos);
+		if(!terrain_sculpt_brush_hit_valid)
+			return false;
+	}
 
-	// The brush visualisation and the edit must use exactly the same terrain
-	// intersection.  Do not trace again here: a moving/free camera could yield a
-	// different point between the two calculations.
-	updateTerrainSculptBrushOverlayAtHit(hit_pos);
+	// The displayed brush projection is the sculpt target.  Never perform a
+	// second ray cast in this function: it would allow the visible cursor and
+	// edited heightmap pixel to drift apart.
+	const Vec3d hit_pos = terrain_sculpt_brush_hit_pos;
 
 	if(start_stroke && !terrain_sculpt_stroke_active)
 	{
