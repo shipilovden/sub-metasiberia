@@ -60,6 +60,7 @@ class DocumentEditorPanel;
 class TreeEditorPanel;
 class VoxelEditorPanel;
 class GearInventoryPanel;
+struct CulturalObjectSettings;
 
 
 class MainWindow final : public QMainWindow, public PrintOutput, public UIInterface
@@ -314,6 +315,7 @@ private:
 	void showChatUserContextMenu(UID avatar_uid, const QPoint& global_pos);
 	void showChatAttachmentMenu();
 	void showChatMoreSendMenu();
+	void createCulturalObject(const CulturalObjectSettings& settings, const std::string& success_message);
 	void sendPrivateChatMessageToSelectedUser();
 	void teleportNearSelectedChatUser();
 	void startMainTimer();

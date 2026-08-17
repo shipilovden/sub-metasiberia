@@ -72,6 +72,9 @@ struct CulturalObjectSettings
 	float card_scale;
 
 	std::string primary_image_url;
+	// The public catalogue URL is kept separately from primary_image_url.  Once
+	// cached, primary_image_url becomes a portable MetaSiberia resource URL.
+	std::string primary_image_source_url;
 	std::string high_resolution_image_url;
 	std::string iiif_manifest_url;
 	std::string model_3d_url;

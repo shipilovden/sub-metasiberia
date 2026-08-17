@@ -3195,6 +3195,16 @@ bool ScientificObjectEditor::posAndRot3DControlsEnabled() const
 }
 
 
+void ScientificObjectEditor::setPosAndRot3DControlsEnabled(bool enabled)
+{
+	if(show_3d_controls_checkbox)
+	{
+		const QSignalBlocker blocker(show_3d_controls_checkbox);
+		show_3d_controls_checkbox->setChecked(enabled);
+	}
+}
+
+
 bool ScientificObjectEditor::snapToGridChecked() const
 {
 	return snap_to_grid_checkbox && snap_to_grid_checkbox->isChecked();

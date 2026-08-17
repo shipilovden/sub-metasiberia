@@ -381,6 +381,8 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/ScientificObjectEditor.h
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectEditor.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectEditor.h
+		${CMAKE_SOURCE_DIR}/gui_client/CulturalApiClient.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/CulturalApiClient.h
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectSettings.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectSettings.h
 		${CMAKE_SOURCE_DIR}/gui_client/AnimationEditorPanel.cpp

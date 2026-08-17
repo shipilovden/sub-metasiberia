@@ -42,6 +42,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../opengl/TextureLoading.h"
 #include "../opengl/PBOAsyncTextureUploader.h"
 #include "../opengl/AsyncGeometryUploader.h"
+#include <opengl/TransformGizmo.h>
 #include "../shared/WorldObject.h"
 #include "../shared/GearItem.h"
 #include "../shared/GaussianSplatData.h"
@@ -61,6 +62,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <maths/PCG32.h>
 #include <maths/LineSegment4f.h>
 #include <networking/IPAddress.h>
+#include <QtCore/QString>
 #include <string>
 #include <map>
 #include <set>
@@ -257,6 +259,7 @@ public:
 	void summonCar();
 	void objectTransformEdited();
 	void objectEdited();
+	bool cacheCulturalPublicImage(const QString& source_url, URLString& resource_url_out, QString& error_out);
 	bool applyVoxelEditorTool(VoxelToolType tool, const VoxelToolInput& input, const VoxelToolSettings* settings_override = NULL);
 	bool applyVoxelProceduralGenerator(VoxelProceduralType type, const VoxelProceduralParams& params);
 	bool copyVoxelSelection();
@@ -505,6 +508,13 @@ public:
 	//----------------------- End ObLoadingCallbacks interface -----------------------
 
 	void tryToMoveObject(WorldObjectRef ob, /*const Matrix4f& tentative_new_to_world*/const Vec4f& desired_new_ob_pos);
+	void transformGizmoGrabStarted();
+	void transformGizmoGrabFinished();
+	void transformGizmoMove(const Vec4f& desired_new_ob_pos);
+	void transformGizmoRotate(const Vec4f& axis, float delta_angle);
+	void transformGizmoScaleUniform(float delta_scale);
+	void transformGizmoScalePlane(int plane_index, float delta_scale);
+	void transformGizmoScaleAxis(int axis_index, float delta_scale);
 	void doMoveObject(WorldObjectRef ob, const Vec3d& new_ob_pos, const js::AABBox& aabb_os) REQUIRES(world_state->mutex);
 	void doMoveAndRotateObject(WorldObjectRef ob, const Vec3d& new_ob_pos, const Vec3f& new_axis, float new_angle, const js::AABBox& aabb_os, bool summoning_object) REQUIRES(world_state->mutex);
 	bool rollbackSelectedObjectTransformAfterServerRejection();
@@ -746,6 +756,8 @@ public:
 
 	Reference<OpenGLMeshRenderData> image_cube_opengl_mesh; // For images, web-views etc.
 	PhysicsShape image_cube_shape;
+	URLString cultural_image_quad_model_url;
+	PhysicsShape cultural_image_quad_shape;
 
 	Reference<OpenGLMeshRenderData> spotlight_opengl_mesh;
 	PhysicsShape spotlight_shape;
@@ -801,6 +813,10 @@ public:
 	GLObjectRef rot_handle_arc_objects[3];
 
 	bool axis_and_rot_obs_enabled; // Are the axis arrow objects and rotation arcs inserted into the opengl engine? (and grabbable)
+	// The shared modern gizmo owns its own OpenGL handles for editable world
+	// objects.  Legacy arrows remain only for non-WorldObject parcel and bot
+	// editing paths.
+	Reference<TransformGizmo> transform_gizmo;
 
 	int grabbed_axis; // -1 if no axis grabbed, [0, 3) if grabbed a translation arrow, [3, 6) if grabbed a rotation arc.
 	Vec4f grabbed_point_ws; // Approximate point on arrow line we grabbed, in world space.

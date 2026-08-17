@@ -44,6 +44,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
 #include "ScientificObjectSettings.h"
+#include "CulturalApiClient.h"
+#include "CulturalObjectSettings.h"
 #if !defined(EMSCRIPTEN)
 #include "PeriodicTable.h"
 #endif
@@ -109,6 +111,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../graphics/BasisDecoder.h"
 #include "../graphics/PNGDecoder.h"
 #include "../graphics/TextRenderer.h"
+#include <QtGui/QImage>
 #include "../dll/include/IndigoMesh.h"
 #include "../indigo/TextureServer.h"
 #include <video/VideoReader.h>
@@ -120,6 +123,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <opengl/VBOPool.h>
 #include <opengl/OpenGLMeshRenderData.h>
 #include <opengl/SSAODebugging.h>
+#include <opengl/TransformGizmo.h>
 #include "../audio/AudioFileReader.h"
 #include <Escaping.h>
 #if !defined(EMSCRIPTEN)
@@ -192,6 +196,26 @@ static const Colour4f PARCEL_OUTLINE_COLOUR    = Colour4f::fromHTMLHexString("f0
 
 static const Colour3f axis_arrows_default_cols[]   = { Colour3f(0.6f,0.2f,0.2f), Colour3f(0.2f,0.6f,0.2f), Colour3f(0.2f,0.2f,0.6f) };
 static const Colour3f axis_arrows_mouseover_cols[] = { Colour3f(1,0.45f,0.3f),   Colour3f(0.3f,1,0.3f),    Colour3f(0.3f,0.45f,1) };
+
+
+// Bridge the renderer-agnostic TransformGizmo to the authoritative world
+// object editing path.  The gizmo never writes transforms by itself.
+class GUIClientTransformGizmoDelegate final : public GizmoDelegateInterface
+{
+public:
+	explicit GUIClientTransformGizmoDelegate(GUIClient* client_) : client(client_) {}
+
+	void onTranslationDrag(const Vec4f&, const Vec4f& desired_new_ob_pos) override { client->transformGizmoMove(desired_new_ob_pos); }
+	void onRotationDrag(const Vec4f& axis, float, float delta_angle) override { client->transformGizmoRotate(axis, delta_angle); }
+	void onGrabStart(bool) override { client->transformGizmoGrabStarted(); }
+	void onUniformScaleDrag(float delta_scale) override { client->transformGizmoScaleUniform(delta_scale); }
+	void onTwoAxisScaleDrag(int plane_index, float delta_scale) override { client->transformGizmoScalePlane(plane_index, delta_scale); }
+	void onAxisScaleDrag(int axis_index, float delta_scale) override { client->transformGizmoScaleAxis(axis_index, delta_scale); }
+	void onGrabEnd() override { client->transformGizmoGrabFinished(); }
+
+private:
+	GUIClient* client;
+};
 
 static const float DECAL_EDGE_AABB_WIDTH = 0.02f;
 
@@ -1725,6 +1749,18 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 		image_cube_shape = results.physics_shape;
 	}
 
+	// Cultural images use their own single-sided vertical Quad.  Unlike the
+	// general image cube, this is a flat painting surface with a transparent
+	// back face.
+	{
+		MeshBuilding::MeshBuildingResults results = MeshBuilding::makeImageQuad(*opengl_engine->vert_buf_allocator);
+		cultural_image_quad_shape = results.physics_shape;
+		const std::string bmesh_path = PlatformUtils::getTempDirPath() + "/metasiberia_cultural_image_quad.bmesh";
+		BatchedMeshRef bmesh = BatchedMesh::buildFromIndigoMesh(*results.indigo_mesh);
+		bmesh->writeToFile(bmesh_path);
+		cultural_image_quad_model_url = resource_manager->copyLocalFileToResourceDirAndReturnURL(bmesh_path);
+	}
+
 	// Make unit-cube raymesh (used for placeholder model)
 	unit_cube_shape = image_cube_shape;
 
@@ -2232,6 +2268,9 @@ void GUIClient::shutdown()
 	terrain_sculpt_brush_gl_ob = NULL;
 	terrain_sculpt_falloff_gl_ob = NULL;
 	terrain_sculpt_brush_mesh_data = NULL;
+	// TransformGizmo owns OpenGL objects, so release it while the context is
+	// still alive rather than leaving cleanup to the GUIClient destructor.
+	transform_gizmo = NULL;
 
 	this->msg_queue.clear();
 
@@ -2347,6 +2386,8 @@ void GUIClient::shutdown()
 	ground_quad_mesh_opengl_data = NULL;
 	hypercard_quad_opengl_mesh = NULL;
 	image_cube_opengl_mesh = NULL;
+	cultural_image_quad_model_url.clear();
+	cultural_image_quad_shape = PhysicsShape();
 	spotlight_opengl_mesh = NULL;
 	seat_opengl_mesh = NULL;
 	camera_opengl_mesh = NULL;
@@ -2877,7 +2918,29 @@ static inline bool isValidLightMapURL(OpenGLEngine& opengl_engine, const string_
 
 static bool shouldUseBasisTexturesForWorldObject(const WorldObject& ob, bool server_has_basis_textures)
 {
+	// Cultural API images are normalised into a PNG in the local resource store.
+	// They do not have server-generated BasisU / LOD derivative files at the
+	// point an exhibit is created, so requesting a .basis URL would leave the
+	// otherwise valid Quad with the white fallback material.  Keep cultural
+	// exhibits on their source image; this is deliberately scoped to them and
+	// does not change texture handling for ordinary world objects.
+	if(CulturalObjectSettings::isCulturalObjectContent(ob.content))
+		return false;
+
 	return server_has_basis_textures;
+}
+
+
+static bool shouldUseOptimisedMeshesForWorldObject(const WorldObject& ob, bool server_has_optimised_meshes)
+{
+	// The cultural image Quad is generated locally and deliberately has no
+	// server-side optimised-mesh derivative.  Requesting an _optN.bmesh here
+	// leaves the otherwise valid source Quad in the placeholder state forever.
+	// Keep the exception scoped to CulturalObject; regular models continue to
+	// use the server optimisation pipeline.
+	return server_has_optimised_meshes &&
+		!GaussianSplatAsset::hasSupportedExtension(ob.model_url) &&
+		!CulturalObjectSettings::isCulturalObjectContent(ob.content);
 }
 
 
@@ -3311,10 +3374,9 @@ bool GUIClient::isResourceCurrentlyNeededForObject(const URLString& url, const W
 	glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&arena_allocator);
 
 	WorldObject::GetDependencyOptions options;
-	options.use_basis = this->server_has_basis_textures;
+	options.use_basis = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
 	options.include_lightmaps = this->use_lightmaps;
-	options.get_optimised_mesh = this->server_has_optimised_meshes &&
-		!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
+	options.get_optimised_mesh = shouldUseOptimisedMeshesForWorldObject(*ob, this->server_has_optimised_meshes);
 	options.opt_mesh_version = this->server_opt_mesh_version;
 	options.allocator = &arena_allocator;
 
@@ -3404,10 +3466,9 @@ void GUIClient::startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_l
 	glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&arena_allocator);
 
 	WorldObject::GetDependencyOptions options;
-	options.use_basis = this->server_has_basis_textures;
+	options.use_basis = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
 	options.include_lightmaps = this->use_lightmaps;
-	options.get_optimised_mesh = this->server_has_optimised_meshes &&
-		!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
+	options.get_optimised_mesh = shouldUseOptimisedMeshesForWorldObject(*ob, this->server_has_optimised_meshes);
 	options.opt_mesh_version = this->server_opt_mesh_version;
 	options.allocator = &arena_allocator;
 
@@ -4828,8 +4889,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 
 				bool added_opengl_ob = false;
 
-				WorldObject::GetLODModelURLOptions options(/*get_optimised_mesh=*/this->server_has_optimised_meshes, this->server_opt_mesh_version);
-				options.get_optimised_mesh = this->server_has_optimised_meshes;
+				WorldObject::GetLODModelURLOptions options(/*get_optimised_mesh=*/shouldUseOptimisedMeshesForWorldObject(*ob, this->server_has_optimised_meshes), this->server_opt_mesh_version);
 				const URLString lod_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, options);
 
 				// print("Loading model for ob: UID: " + ob->uid.toString() + ", type: " + WorldObject::objectTypeString((WorldObject::ObjectType)ob->object_type) + ", lod_model_url: " + lod_model_url);
@@ -6558,8 +6618,23 @@ void GUIClient::updateSelectedObjectPlacementBeamAndGizmos()
 		if(opengl_engine->isObjectAdded(ob_placement_marker))
 			opengl_engine->updateObjectTransformData(*ob_placement_marker);
 
+		// The modern gizmo is the common transform control for every editable
+		// WorldObject.  Particle-specific handles remain available separately.
+		const bool use_transform_gizmo = ui_interface->posAndRot3DControlsEnabled() &&
+			objectModificationAllowed(*this->selected_ob);
+		if(use_transform_gizmo)
+		{
+			if(transform_gizmo.isNull())
+				transform_gizmo = new TransformGizmo(opengl_engine.ptr(), this->selected_ob->pos.toVec4fPoint());
+			transform_gizmo->update(this->selected_ob->pos.toVec4fPoint());
+		}
+		else if(transform_gizmo.nonNull())
+		{
+			transform_gizmo = NULL;
+		}
+
 		//----------------------- Place x, y, z axis arrows. -----------------------
-		if(axis_and_rot_obs_enabled)
+		if(axis_and_rot_obs_enabled && transform_gizmo.isNull())
 		{
 			const Vec4f use_ob_origin = opengl_ob->ob_to_world_matrix.getColumn(3);
 			const Vec4f cam_to_ob = use_ob_origin - cam_controller.getPosition().toVec4fPoint();
@@ -6913,6 +6988,105 @@ void GUIClient::tryToMoveObject(WorldObjectRef ob, /*const Matrix4f& tentative_n
 	else // else if new transfrom not valid
 	{
 		showErrorNotification("New object position is not valid - You can only move objects in a parcel that you have write permissions for.");
+	}
+}
+
+
+void GUIClient::transformGizmoGrabStarted()
+{
+	if(selected_ob.isNull() || !objectModificationAllowed(*selected_ob))
+		return;
+
+	// Keep the same rollback/undo transaction semantics as the legacy arrows.
+	// The gizmo only supplies a desired transform; GUIClient remains authoritative
+	// for permissions, physics, dirty flags, and server synchronisation.
+	have_selected_ob_transform_rollback = true;
+	selected_ob_transform_rollback_uid = selected_ob->uid;
+	selected_ob_transform_rollback_pos = selected_ob->pos;
+	selected_ob_transform_rollback_axis = selected_ob->axis;
+	selected_ob_transform_rollback_angle = selected_ob->angle;
+	selected_ob_transform_rollback_scale = selected_ob->scale;
+	ui_interface->setCamRotationOnMouseDragEnabled(false);
+	undo_buffer.startWorldObjectEdit(*selected_ob);
+}
+
+
+void GUIClient::transformGizmoGrabFinished()
+{
+	if(selected_ob.nonNull() && have_selected_ob_transform_rollback && selected_ob->uid == selected_ob_transform_rollback_uid)
+		undo_buffer.finishWorldObjectEdit(*selected_ob);
+
+	have_selected_ob_transform_rollback = false;
+	selected_ob_transform_rollback_uid = UID::invalidUID();
+	ui_interface->setCamRotationOnMouseDragEnabled(true);
+}
+
+
+void GUIClient::transformGizmoMove(const Vec4f& desired_new_ob_pos)
+{
+	if(selected_ob.nonNull())
+		tryToMoveObject(selected_ob, desired_new_ob_pos);
+}
+
+
+void GUIClient::transformGizmoRotate(const Vec4f& axis, float delta_angle)
+{
+	if(selected_ob.nonNull())
+		rotateObject(selected_ob, axis, delta_angle);
+}
+
+
+void GUIClient::transformGizmoScaleUniform(float delta_scale)
+{
+	if(selected_ob.isNull())
+		return;
+
+	const float factor = myClamp(delta_scale, 0.001f, 1000.f);
+	transformGizmoScaleAxis(0, factor);
+	transformGizmoScaleAxis(1, factor);
+	transformGizmoScaleAxis(2, factor);
+}
+
+
+void GUIClient::transformGizmoScalePlane(int plane_index, float delta_scale)
+{
+	if(selected_ob.isNull() || plane_index < 0 || plane_index >= 3)
+		return;
+
+	const float factor = myClamp(delta_scale, 0.001f, 1000.f);
+	for(int axis_index = 0; axis_index < 3; ++axis_index)
+		if(axis_index != plane_index)
+			transformGizmoScaleAxis(axis_index, factor);
+}
+
+
+void GUIClient::transformGizmoScaleAxis(int axis_index, float delta_scale)
+{
+	if(selected_ob.isNull() || axis_index < 0 || axis_index >= 3 || !objectModificationAllowedWithMsg(*selected_ob, "scale"))
+		return;
+
+	const float factor = myClamp(delta_scale, 0.001f, 1000.f);
+	selected_ob->scale[axis_index] = myClamp(selected_ob->scale[axis_index] * factor, 0.0001f, 1000000.f);
+	selected_ob->transformChanged();
+	selected_ob->last_modified_time = TimeStamp::currentTime();
+
+	const Matrix4f new_to_world = obToWorldMatrix(*selected_ob);
+	if(selected_ob->opengl_engine_ob.nonNull())
+	{
+		selected_ob->opengl_engine_ob->ob_to_world_matrix = new_to_world;
+		opengl_engine->updateObjectTransformData(*selected_ob->opengl_engine_ob);
+	}
+	if(selected_ob->physics_object.nonNull())
+	{
+		const Quatf rotation = Quatf::fromAxisAndAngle(normalise(selected_ob->axis.toVec4fVector()), selected_ob->angle);
+		physics_world->setNewObToWorldTransform(*selected_ob->physics_object, selected_ob->pos.toVec4fPoint(), rotation, useScaleForWorldOb(selected_ob->scale).toVec4fVector());
+	}
+
+	ui_interface->startObEditorTimerIfNotActive();
+	{
+		Lock lock(world_state->mutex);
+		selected_ob->from_local_transform_dirty = true;
+		world_state->dirty_from_local_objects.insert(selected_ob);
 	}
 }
 
@@ -13064,7 +13238,9 @@ inline static SubClass* checkedDowncastPtr(ThreadMessage* msg)
 static bool canUseGaussianSplatCEFConverter(GaussianSplatAsset::Format format)
 {
 	return
-		format == GaussianSplatAsset::Format::Ply || // Direct first; some compressed PLY files still use plain .ply.
+		// Plain .ply is handled by the native decoder.  Reserve the browser
+		// converter for explicitly non-native containers so a malformed PLY
+		// produces its decoder error rather than a converter crash.
 		format == GaussianSplatAsset::Format::CompressedPly ||
 		format == GaussianSplatAsset::Format::KSplat ||
 		format == GaussianSplatAsset::Format::SPZ || // Native v4 first; converter covers other supported SPZ versions.
@@ -14738,8 +14914,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 								WorldObject::GetDependencyOptions options;
 								options.use_basis = use_basis_textures_for_ob;
 								options.include_lightmaps = this->use_lightmaps;
-								options.get_optimised_mesh = this->server_has_optimised_meshes &&
-									!GaussianSplatAsset::hasSupportedExtension(ob->model_url);
+								options.get_optimised_mesh = shouldUseOptimisedMeshesForWorldObject(*ob, this->server_has_optimised_meshes);
 								options.opt_mesh_version = this->server_opt_mesh_version;
 								options.allocator = &arena_allocator;
 
@@ -18322,6 +18497,56 @@ void GUIClient::objectTransformEdited()
 
 }
 
+bool GUIClient::cacheCulturalPublicImage(const QString& source_url, URLString& resource_url_out, QString& error_out)
+{
+	resource_url_out.clear();
+	error_out.clear();
+	if(resource_manager.isNull())
+	{
+		error_out = QString::fromUtf8("Менеджер ресурсов ещё не инициализирован.");
+		return false;
+	}
+
+	QByteArray image_bytes;
+	if(!CulturalApiClient::downloadPublicImage(source_url, image_bytes, error_out))
+		return false;
+
+	QImage image;
+	if(!image.loadFromData(image_bytes) || image.isNull())
+	{
+		error_out = QString::fromUtf8("Источник вернул файл, который не удалось распознать как изображение.");
+		return false;
+	}
+
+	const qint64 num_pixels = (qint64)image.width() * (qint64)image.height();
+	if(image.width() > 16384 || image.height() > 16384 || num_pixels > 64LL * 1024LL * 1024LL)
+	{
+		error_out = QString::fromUtf8("Изображение слишком большое для безопасной загрузки в мир.");
+		return false;
+	}
+
+	// Normalise the download to PNG before placing it in the resource store.
+	// This keeps the resource extension truthful and avoids using an arbitrary
+	// remote filename as an in-world URL.
+	const std::string png_path = PlatformUtils::getTempDirPath() + "/metasiberia_cultural_public_image.png";
+	if(!image.save(QString::fromStdString(png_path), "PNG"))
+	{
+		error_out = QString::fromUtf8("Не удалось сохранить публичное изображение во временный PNG-файл.");
+		return false;
+	}
+
+	try
+	{
+		resource_url_out = resource_manager->copyLocalFileToResourceDirAndReturnURL(png_path);
+		return true;
+	}
+	catch(glare::Exception& e)
+	{
+		error_out = QString::fromUtf8("Не удалось добавить изображение в ресурсы мира: %1").arg(QString::fromStdString(e.what()));
+		return false;
+	}
+}
+
 
 // Object property (that is not a transform property) has been edited, e.g. by the object editor.
 void GUIClient::objectEdited()
@@ -18346,6 +18571,33 @@ void GUIClient::objectEdited()
 
 		//ui->objectEditor->toObject(*this->selected_ob); // Sets changed_flags on object as well.
 		ui_interface->objectEditorToObject(*this->selected_ob); // Sets changed_flags on object as well.
+
+		// A cultural record with a cached public image is always displayed as a
+		// flat, single-sided exhibit.  This also upgrades older cultural objects
+		// that were created before the Quad model existed.
+		if(this->selected_ob->object_type == WorldObject::ObjectType_Generic && CulturalObjectSettings::isCulturalObjectContent(this->selected_ob->content))
+		{
+			const CulturalObjectSettings cultural_settings = CulturalObjectSettings::fromContent(this->selected_ob->content);
+			if(cultural_settings.allow_display && !cultural_settings.primary_image_url.empty())
+			{
+				if(this->selected_ob->materials.empty())
+					this->selected_ob->materials.push_back(new WorldMaterial());
+
+				WorldMaterial& material = *this->selected_ob->materials[0];
+				material.colour_texture_url = URLString(cultural_settings.primary_image_url);
+				material.colour_rgb = Colour3f(1.f);
+				material.emission_rgb = Colour3f(0.f);
+				material.opacity = ScalarVal(1.f);
+				material.flags &= ~WorldMaterial::DOUBLE_SIDED_FLAG;
+
+				if(!cultural_image_quad_model_url.empty() && this->selected_ob->model_url != cultural_image_quad_model_url)
+				{
+					this->selected_ob->model_url = cultural_image_quad_model_url;
+					BitUtils::setBit(this->selected_ob->changed_flags, WorldObject::MODEL_URL_CHANGED);
+					this->selected_ob->setAABBOS(cultural_image_quad_shape.getAABBOS());
+				}
+			}
+		}
 
 		if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content))
 		{
@@ -19243,12 +19495,12 @@ void GUIClient::posAndRot3DControlsToggled(bool enabled)
 			if(have_edit_permissions)
 			{
 				for(int i = 0; i < NUM_AXIS_ARROWS; ++i)
-					opengl_engine->addObject(axis_arrow_objects[i]);
-
+					opengl_engine->removeObject(axis_arrow_objects[i]);
 				for(int i = 0; i < 3; ++i)
-					opengl_engine->addObject(rot_handle_arc_objects[i]);
-
-				axis_and_rot_obs_enabled = true;
+					opengl_engine->removeObject(rot_handle_arc_objects[i]);
+				axis_and_rot_obs_enabled = false;
+				if(transform_gizmo.isNull())
+					transform_gizmo = new TransformGizmo(opengl_engine.ptr(), this->selected_ob->pos.toVec4fPoint());
 			}
 		}
 		else if(selected_parcel.nonNull() && this->logged_in_user_id.valid() && isGodUser(this->logged_in_user_id))
@@ -19267,6 +19519,7 @@ void GUIClient::posAndRot3DControlsToggled(bool enabled)
 	}
 	else
 	{
+		transform_gizmo = NULL;
 		for(int i = 0; i < NUM_AXIS_ARROWS; ++i)
 			opengl_engine->removeObject(this->axis_arrow_objects[i]);
 
@@ -20608,6 +20861,17 @@ void GUIClient::mousePressed(MouseEvent& e)
 		if(have_edit_permissions) // The axis arrows and rotation arcs are only visible if we have object modification permissions.
 		{
 			const Vec2f mouse_pixel((float)e.cursor_pos.x, (float)e.cursor_pos.y);
+			if(transform_gizmo.nonNull())
+			{
+				GUIClientTransformGizmoDelegate delegate(this);
+				transform_gizmo->updateMouseoverHighlight(mouse_pixel);
+				if(e.button == MouseButton::Left && transform_gizmo->mousePressed(mouse_pixel, this->selected_ob->pos.toVec4fPoint(), &delegate))
+				{
+					e.accepted = true;
+					return;
+				}
+			}
+
 			if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content) &&
 				mouseOverParticleEmitterHandle(mouse_pixel, particle_emitter_direction_handle_vis_gl_ob, particle_emitter_direction_handle_pos_ws, /*closest_handle_pos_ws_out=*/this->grabbed_point_ws))
 			{
@@ -20886,6 +21150,14 @@ void GUIClient::mouseReleased(MouseEvent& e)
 			terrain_system->endSculptStroke();
 		terrain_sculpt_stroke_active = false;
 		terrain_sculpt_have_last_hit = false;
+		e.accepted = true;
+		return;
+	}
+
+	if(transform_gizmo.nonNull() && transform_gizmo->isGrabbed())
+	{
+		GUIClientTransformGizmoDelegate delegate(this);
+		transform_gizmo->mouseReleased(&delegate);
 		e.accepted = true;
 		return;
 	}
@@ -21916,6 +22188,20 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 		// Keep the projected brush visible even when no stroke is active, and
 		// update it after a right-button camera orbit changes the view.
 		updateTerrainSculptBrushOverlay(mouse_event.cursor_pos);
+	}
+
+	if(transform_gizmo.nonNull() && selected_ob.nonNull())
+	{
+		const Vec2f mouse_pixel((float)mouse_event.cursor_pos.x, (float)mouse_event.cursor_pos.y);
+		if(transform_gizmo->isGrabbed())
+		{
+			GUIClientTransformGizmoDelegate delegate(this);
+			const float grid_spacing = ui_interface->snapToGridCheckBoxChecked() ? (float)ui_interface->gridSpacing() : 0.f;
+			transform_gizmo->mouseMoved(mouse_pixel, selected_ob->pos.toVec4fPoint(), &delegate, grid_spacing);
+			mouse_event.accepted = true;
+			return;
+		}
+		transform_gizmo->updateMouseoverHighlight(mouse_pixel);
 	}
 
 	if(!ui_interface->isCursorHidden() && !isXRActive())
@@ -23064,12 +23350,11 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 		if(ui_interface->posAndRot3DControlsEnabled())
 		{
 			for(int i=0; i<NUM_AXIS_ARROWS; ++i)
-				opengl_engine->addObject(axis_arrow_objects[i]);
-
+				opengl_engine->removeObject(axis_arrow_objects[i]);
 			for(int i=0; i<3; ++i)
-				opengl_engine->addObject(rot_handle_arc_objects[i]);
-
-			axis_and_rot_obs_enabled = true;
+				opengl_engine->removeObject(rot_handle_arc_objects[i]);
+			axis_and_rot_obs_enabled = false;
+			transform_gizmo = new TransformGizmo(opengl_engine.ptr(), this->selected_ob->pos.toVec4fPoint());
 		}
 	}
 
@@ -23124,6 +23409,9 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 void GUIClient::deselectObject()
 {
 	cancelVoxelShapeTool();
+	// TransformGizmo owns render objects independently of selected_ob.  Clear it
+	// synchronously so it cannot remain attached to a deselected object.
+	transform_gizmo = NULL;
 	if(this->selected_ob.nonNull())
 	{
 		this->selected_ob->is_selected = false;

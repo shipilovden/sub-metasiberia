@@ -41,6 +41,11 @@ public:
 	// Loads mesh data into current OpenGL context.
 	static MeshBuildingResults makeImageCube(VertexBufferAllocator& allocator);
 
+	// Make one vertical, UV-mapped face for paintings and other cultural images.
+	// The mesh is intentionally one-sided; the material controls which side is
+	// visible through its normal culling state.
+	static MeshBuildingResults makeImageQuad(VertexBufferAllocator& allocator);
+
 	// Make a squashed cube mesh for seats (like a sandwich)
 	static MeshBuildingResults makeSeatMesh(VertexBufferAllocator& allocator);
 

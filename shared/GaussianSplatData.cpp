@@ -384,6 +384,25 @@ static GaussianSplatDataRef decodePly(ArrayRef<uint8> data)
 		return (float)value;
 	};
 
+	// A number of established Gaussian-splat exporters use +/-infinity for
+	// fully opaque/fully transparent splats after opacity optimisation.  The
+	// value is a logit, so the two infinities have an unambiguous, safe meaning.
+	// Keep rejecting NaNs and non-finite values in all other vertex properties:
+	// positions, scales, rotations and SH coefficients must remain finite.
+	auto read_opacity_property = [](const uint8* record, const PlyProperty& property) -> float
+	{
+		const double value = readPlyScalar(record + property.offset, property.type);
+		if(std::isnan(value) || value < -std::numeric_limits<float>::max() || value > std::numeric_limits<float>::max())
+		{
+			if(value == std::numeric_limits<double>::infinity())
+				return 80.f; // logistic(80) is effectively fully opaque.
+			if(value == -std::numeric_limits<double>::infinity())
+				return -80.f; // logistic(-80) is effectively fully transparent.
+			throw glare::Exception("3DGS PLY contains a NaN or out-of-range opacity value.");
+		}
+		return (float)value;
+	};
+
 	GaussianSplatDataRef result = new GaussianSplatData();
 	result->source_format = GaussianSplatAsset::Format::Ply;
 	result->sh_degree = sh_degree;
@@ -399,7 +418,7 @@ static GaussianSplatDataRef decodePly(ArrayRef<uint8> data)
 		splat.position_x = clampFinite(read_property(record, x_prop), -1.0e8f, 1.0e8f, "position");
 		splat.position_y = clampFinite(read_property(record, y_prop), -1.0e8f, 1.0e8f, "position");
 		splat.position_z = clampFinite(read_property(record, z_prop), -1.0e8f, 1.0e8f, "position");
-		splat.opacity = logistic(read_property(record, opacity_prop));
+		splat.opacity = logistic(read_opacity_property(record, opacity_prop));
 
 		splat.scale_x = std::exp(clampFinite(read_property(record, scale_0_prop), -20.f, 13.f, "scale"));
 		splat.scale_y = std::exp(clampFinite(read_property(record, scale_1_prop), -20.f, 13.f, "scale"));
@@ -948,6 +967,22 @@ void GaussianSplatDecoder::test()
 	testAssert(epsEqual(ply->splats[0].colour_r, 0.5f));
 	testAssert(epsEqual(ply->spherical_harmonics[0], 0.01f));
 	testAssert(epsEqual(ply->spherical_harmonics[8], 0.09f));
+
+	// Infinity is a valid optimised opacity logit in real-world 3DGS PLY files.
+	std::vector<uint8> infinite_opacity_ply = ply_bytes;
+	const float infinity = std::numeric_limits<float>::infinity();
+	std::memcpy(infinite_opacity_ply.data() + header.size() + 3 * sizeof(float), &infinity, sizeof(infinity));
+	const GaussianSplatDataRef infinite_opacity = decode(
+		"infinite-opacity.ply", ArrayRef<uint8>(infinite_opacity_ply.data(), infinite_opacity_ply.size())
+	);
+	testAssert(infinite_opacity->splats[0].opacity > 0.9999f);
+
+	const float negative_infinity = -std::numeric_limits<float>::infinity();
+	std::memcpy(infinite_opacity_ply.data() + header.size() + 3 * sizeof(float), &negative_infinity, sizeof(negative_infinity));
+	const GaussianSplatDataRef negative_infinite_opacity = decode(
+		"negative-infinite-opacity.ply", ArrayRef<uint8>(infinite_opacity_ply.data(), infinite_opacity_ply.size())
+	);
+	testAssert(negative_infinite_opacity->splats[0].opacity < 0.0001f);
 
 	std::vector<uint8> splat_bytes(32, 0);
 	auto write_float = [&splat_bytes](size_t offset, float value)

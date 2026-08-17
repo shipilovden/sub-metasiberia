@@ -266,7 +266,9 @@ void AddObjectDialog::loadModelIntoPreview(const std::string& local_path)
 			{
 				const GaussianSplatAsset::Format format = GaussianSplatAsset::detectFormat(local_path);
 				const bool can_use_converter =
-					format == GaussianSplatAsset::Format::Ply || // Direct first; compressed PLY is often named just .ply.
+					// Plain .ply is decoded natively.  If that decoder reports a
+					// problem, preserve its useful error instead of routing a valid
+					// 3DGS PLY through the fragile browser conversion fallback.
 					format == GaussianSplatAsset::Format::CompressedPly ||
 					format == GaussianSplatAsset::Format::KSplat ||
 					format == GaussianSplatAsset::Format::SPZ || // Native v4 first; converter covers other supported SPZ versions.

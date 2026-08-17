@@ -53,6 +53,7 @@ public:
 	void setControlsEnabled(bool enabled);
 	void setControlsEditable(bool editable);
 	bool posAndRot3DControlsEnabled() const;
+	void setPosAndRot3DControlsEnabled(bool enabled);
 	bool snapToGridChecked() const;
 	double gridSpacing() const;
 	bool handleSceneRay(const Vec4f& ray_origin_os, const Vec4f& ray_dir_os, bool show_context_menu, bool additive, const QPoint& global_pos);

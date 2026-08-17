@@ -34,6 +34,36 @@ Copyright Glare Technologies Limited 2022 -
 
 
 
+MeshBuilding::MeshBuildingResults MeshBuilding::makeImageQuad(VertexBufferAllocator& allocator)
+{
+	Indigo::MeshRef mesh = new Indigo::Mesh();
+	mesh->num_uv_mappings = 1;
+
+	// Same front-facing winding as the y=0 image face of makeImageCube(), but
+	// centred on the object origin so rotating a painting rotates around its
+	// visual centre rather than a lower corner.
+	mesh->addVertex(Indigo::Vec3f(-0.5f, 0.f, -0.5f));
+	mesh->addVertex(Indigo::Vec3f( 0.5f, 0.f, -0.5f));
+	mesh->addVertex(Indigo::Vec3f( 0.5f, 0.f,  0.5f));
+	mesh->addVertex(Indigo::Vec3f(-0.5f, 0.f,  0.5f));
+	mesh->uv_pairs.push_back(Indigo::Vec2f(0.f, 0.f));
+	mesh->uv_pairs.push_back(Indigo::Vec2f(1.f, 0.f));
+	mesh->uv_pairs.push_back(Indigo::Vec2f(1.f, 1.f));
+	mesh->uv_pairs.push_back(Indigo::Vec2f(0.f, 1.f));
+	const unsigned int first_triangle[] = { 0, 1, 2 };
+	const unsigned int second_triangle[] = { 0, 2, 3 };
+	mesh->addTriangle(first_triangle, first_triangle, 0);
+	mesh->addTriangle(second_triangle, second_triangle, 0);
+	mesh->endOfModel();
+
+	MeshBuildingResults results;
+	results.opengl_mesh_data = GLMeshBuilding::buildIndigoMesh(&allocator, mesh, /*skip opengl calls=*/false);
+	results.physics_shape = PhysicsWorld::createJoltShapeForIndigoMesh(*mesh, /*build_dynamic_physics_ob=*/false);
+	results.indigo_mesh = mesh;
+	return results;
+}
+
+
 MeshBuilding::MeshBuildingResults MeshBuilding::makeImageCube(VertexBufferAllocator& allocator)
 {
 	Indigo::MeshRef mesh = new Indigo::Mesh();

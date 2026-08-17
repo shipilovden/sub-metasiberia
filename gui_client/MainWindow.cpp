@@ -70,6 +70,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "PhotoVideoSettingsPanel.h"
 #include "DocumentEditorPanel.h"
 #include "../qt/FlowLayout.h"
+#include "../qt/SignalBlocker.h"
 #include "../shared/GaussianSplatAsset.h"
 #include "../shared/Protocol.h"
 #include "../shared/Version.h"
@@ -2468,6 +2469,18 @@ void MainWindow::initialiseUI()
 	scientific_object_editor->init(settings);
 	tree_editor_panel->init(settings, TreeObject::findBundledAssetRoot(base_dir_path));
 
+	// The world transform gizmo is a universal editor tool.  Keep every editor
+	// on the same state, including installations that previously saved one of
+	// the per-editor visibility checkboxes as disabled.
+	SignalBlocker::setChecked(ui->objectEditor->show3DControlsCheckBox, true);
+	scientific_object_editor->setPosAndRot3DControlsEnabled(true);
+	cultural_object_editor->setPosAndRot3DControlsEnabled(true);
+	settings->setValue("objectEditor/show3DControlsCheckBoxChecked", true);
+	settings->setValue("scientificObjectEditor/show3DControls", true);
+	settings->setValue("culturalObjectEditor/show3DControls", true);
+	settings->setValue("treeEditor/show3DControls", true);
+	settings->setValue("voxelEditor/show3DControls", true);
+
 	ui->diagnosticsWidget->init(settings);
 	connect(ui->diagnosticsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(diagnosticsWidgetChanged()));
 	connect(ui->diagnosticsWidget, SIGNAL(reloadTerrainSignal()), this, SLOT(diagnosticsReloadTerrain()));
@@ -2554,6 +2567,41 @@ void MainWindow::initialiseUI()
 	connect(scientific_object_editor, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
 	connect(cultural_object_editor, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
 	connect(cultural_object_editor, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
+	connect(cultural_object_editor, &CulturalObjectEditor::publicImageImportRequested, this, [this](const QString& source_url) {
+		URLString resource_url;
+		QString error;
+		const bool cached = gui_client.cacheCulturalPublicImage(source_url, resource_url, error);
+		cultural_object_editor->setCachedPrimaryImageURL(cached ? QtUtils::toQString(resource_url) : QString(), source_url, error);
+	});
+	connect(cultural_object_editor, &CulturalObjectEditor::addCulturalObjectRequested, this, [this](const QString& provider_id, const QString& record_id) {
+		QApplication::setOverrideCursor(Qt::WaitCursor);
+		CulturalApiRecord record;
+		QString error;
+		const bool fetched = CulturalApiClient::fetchRecord(provider_id, record_id, record, error);
+		if(!fetched)
+		{
+			QApplication::restoreOverrideCursor();
+			showErrorNotification(QtUtils::toStdString(QString::fromUtf8("Не удалось получить полную музейную запись: %1").arg(error)));
+			return;
+		}
+		CulturalObjectSettings settings = CulturalObjectEditor::settingsFromProviderRecord(record);
+		if(!settings.allow_display || settings.primary_image_source_url.empty())
+		{
+			QApplication::restoreOverrideCursor();
+			showErrorNotification("This catalogue record does not provide a confirmed public-domain image that can be displayed in the world.");
+			return;
+		}
+		URLString resource_url;
+		if(!gui_client.cacheCulturalPublicImage(QtUtils::toQString(settings.primary_image_source_url), resource_url, error))
+		{
+			QApplication::restoreOverrideCursor();
+			showErrorNotification(QtUtils::toStdString(QString::fromUtf8("Не удалось сохранить публичное изображение в ресурсы мира: %1").arg(error)));
+			return;
+		}
+		settings.primary_image_url = QtUtils::toStdString(QtUtils::toQString(resource_url));
+		QApplication::restoreOverrideCursor();
+		createCulturalObject(settings, "Added cultural object with its public museum image. Editor will open when the server confirms creation.");
+	});
 	connect(cultural_object_editor, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
 	connect(cultural_object_editor, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
 	connect(tree_editor_panel, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
@@ -4138,13 +4186,10 @@ double MainWindow::gridSpacing()
 
 bool MainWindow::posAndRot3DControlsEnabled()
 {
-	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
-		return scientific_object_editor->posAndRot3DControlsEnabled();
-	if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
-		return cultural_object_editor->posAndRot3DControlsEnabled();
-	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
-		return ui->objectEditor->posAndRot3DControlsEnabled();
-	return ui->objectEditor->posAndRot3DControlsEnabled();
+	// A selected object that the user may edit always exposes the common world
+	// transform gizmo.  GUIClient still performs the permission check before it
+	// creates the handles, so this cannot grant a transform capability.
+	return true;
 }
 
 
@@ -8982,31 +9027,78 @@ void MainWindow::on_actionAddScientificObject_triggered()
 }
 
 
-void MainWindow::on_actionAddCulturalObject_triggered()
+void MainWindow::createCulturalObject(const CulturalObjectSettings& settings, const std::string& success_message)
 {
-	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 2.0f - Vec3d(0, 0, 0.25);
-
+	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 2.0f;
 	bool ob_pos_in_parcel;
 	const bool have_creation_perms = gui_client.haveParcelObjectCreatePermissions(ob_pos, ob_pos_in_parcel);
 	if(!have_creation_perms)
 	{
-		if(ob_pos_in_parcel)
-			showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
-		else
-			showErrorNotification("You can only create cultural objects in a parcel that you have write permissions for.");
+		showErrorNotification(ob_pos_in_parcel ? "You do not have write permissions, and are not an admin for this parcel." : "You can only create cultural objects in a parcel that you have write permissions for.");
+		return;
+	}
+	if(gui_client.cultural_image_quad_model_url.empty())
+	{
+		showErrorNotification("Cultural image Quad is not ready yet. Wait for the 3D view to finish initialising.");
 		return;
 	}
 
-	URLString unit_cube_mesh_URL = "unit_cube_bmesh_7263660735544605926.bmesh";
-	if(!gui_client.resource_manager->isFileForURLPresent(unit_cube_mesh_URL))
+	CulturalObjectSettings cultural_settings = settings;
+	if(cultural_settings.uuid.empty())
+		cultural_settings.uuid = QtUtils::toStdString(QUuid::createUuid().toString(QUuid::WithoutBraces));
+	cultural_settings.modified_at = QtUtils::toStdString(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+	const std::string content = CulturalObjectSettings::serialiseToContent(cultural_settings);
+	if(content.size() > WorldObject::MAX_CONTENT_SIZE)
 	{
-		Reference<Indigo::Mesh> indigo_mesh = MeshBuilding::makeUnitCubeIndigoMesh();
-		BatchedMeshRef mesh = BatchedMesh::buildFromIndigoMesh(*indigo_mesh);
-		const std::string bmesh_disk_path = PlatformUtils::getTempDirPath() + "/unit_cube.bmesh";
-		mesh->writeToFile(bmesh_disk_path);
-		unit_cube_mesh_URL = gui_client.resource_manager->copyLocalFileToResourceDirAndReturnURL(bmesh_disk_path);
+		showErrorNotification("The cultural-object descriptor is too large. Long museum text must remain at the source URL.");
+		return;
 	}
 
+	WorldObjectRef new_world_object = new WorldObject();
+	new_world_object->uid = UID(0);
+	new_world_object->object_type = WorldObject::ObjectType_Generic;
+	new_world_object->pos = ob_pos;
+	new_world_object->axis = Vec3f(0, 0, 1);
+	new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>());
+	new_world_object->scale = Vec3f(1.5f);
+	new_world_object->max_model_lod_level = 0;
+	new_world_object->model_url = gui_client.cultural_image_quad_model_url;
+	new_world_object->content = content;
+	new_world_object->script = "-- Metasiberia CulturalObject v1\n";
+	new_world_object->setCollidable(false);
+	new_world_object->setDynamic(false);
+	new_world_object->setIsSensor(false);
+	new_world_object->materials.resize(1);
+	new_world_object->materials[0] = new WorldMaterial();
+	WorldMaterial& material = *new_world_object->materials[0];
+	material.name = "Cultural Object Preview";
+	material.roughness = ScalarVal(0.55f);
+	material.flags = 0; // The Cultural Quad has an intentionally transparent back face.
+	if(cultural_settings.allow_display && !cultural_settings.primary_image_url.empty())
+	{
+		material.colour_texture_url = URLString(cultural_settings.primary_image_url);
+		material.colour_rgb = Colour3f(1.f);
+		material.emission_rgb = Colour3f(0.f);
+		material.opacity = ScalarVal(1.f);
+	}
+	else
+	{
+		material.colour_rgb = Colour3f(0.42f, 0.20f, 0.06f);
+		material.emission_rgb = Colour3f(0.08f, 0.035f, 0.008f);
+		material.opacity = ScalarVal(0.94f);
+	}
+	new_world_object->setAABBOS(gui_client.cultural_image_quad_shape.getAABBOS());
+
+	MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+	new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
+	enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+	showInfoNotification(success_message);
+	gui_client.deselectObject();
+}
+
+
+void MainWindow::on_actionAddCulturalObject_triggered()
+{
 	CulturalObjectSettings cultural_settings = CulturalObjectSettings::defaultObject();
 	cultural_settings.uuid = QtUtils::toStdString(QUuid::createUuid().toString(QUuid::WithoutBraces));
 	cultural_settings.title = "Cultural Object";
@@ -9017,41 +9109,7 @@ void MainWindow::on_actionAddCulturalObject_triggered()
 	cultural_settings.source_mode = "manual";
 	cultural_settings.provider_id = "manual";
 	cultural_settings.retrieval_status = "idle";
-	cultural_settings.modified_at = QtUtils::toStdString(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
-
-	WorldObjectRef new_world_object = new WorldObject();
-	new_world_object->uid = UID(0);
-	new_world_object->object_type = WorldObject::ObjectType_Generic;
-	new_world_object->pos = ob_pos;
-	new_world_object->axis = Vec3f(0, 0, 1);
-	new_world_object->angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>());
-	new_world_object->scale = Vec3f(0.5f);
-	new_world_object->max_model_lod_level = 0;
-	new_world_object->model_url = unit_cube_mesh_URL;
-	new_world_object->content = CulturalObjectSettings::serialiseToContent(cultural_settings);
-	new_world_object->script = "-- Metasiberia CulturalObject v1\n";
-	new_world_object->setCollidable(false);
-	new_world_object->setDynamic(false);
-	new_world_object->setIsSensor(false);
-
-	new_world_object->materials.resize(1);
-	new_world_object->materials[0] = new WorldMaterial();
-	new_world_object->materials[0]->name = "Cultural Object Preview";
-	new_world_object->materials[0]->colour_rgb = Colour3f(0.42f, 0.20f, 0.06f);
-	new_world_object->materials[0]->emission_rgb = Colour3f(0.08f, 0.035f, 0.008f);
-	new_world_object->materials[0]->opacity = ScalarVal(0.94f);
-	new_world_object->materials[0]->roughness = ScalarVal(0.55f);
-	new_world_object->materials[0]->flags = WorldMaterial::DOUBLE_SIDED_FLAG;
-	new_world_object->setAABBOS(gui_client.image_cube_shape.getAABBOS());
-
-	{
-		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
-		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
-	}
-
-	showInfoNotification("Added cultural object. Editor will open when the server confirms creation.");
-	gui_client.deselectObject();
+	createCulturalObject(cultural_settings, "Added cultural object. Editor will open when the server confirms creation.");
 }
 
 
@@ -11168,8 +11226,17 @@ void MainWindow::removeLightmapSignalSlot()
 
 void MainWindow::posAndRot3DControlsToggledSlot()
 {
-	const bool enabled = posAndRot3DControlsEnabled();
-	gui_client.posAndRot3DControlsToggled(enabled);
+	// Existing editor checkboxes are retained for layout compatibility, but the
+	// world gizmo is universal.  Immediately restore the canonical enabled state
+	// if an older editor panel attempts to toggle it off.
+	const bool enabled = true;
+	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
+		scientific_object_editor->setPosAndRot3DControlsEnabled(true);
+	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
+		cultural_object_editor->setPosAndRot3DControlsEnabled(true);
+	else
+		SignalBlocker::setChecked(ui->objectEditor->show3DControlsCheckBox, true);
+	gui_client.posAndRot3DControlsToggled(/*enabled=*/true);
 	
 	if(active_editor_kind == ActiveEditor_Scientific)
 		settings->setValue("scientificObjectEditor/show3DControls", enabled);

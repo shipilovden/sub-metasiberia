@@ -38,10 +38,33 @@ static float floatValue(const QJsonObject& ob, const char* key, float fallback)
 
 static void putString(QJsonObject& ob, const char* key, const std::string& value)
 {
-	// Always overwrite known fields, including with an empty string.  The object
-	// may have been initialised from preserved forward-compatible JSON; skipping
-	// an empty value here would silently resurrect a value cleared in the UI.
-	ob.insert(QString::fromLatin1(key), qs(value));
+	// Always remove an empty value.  This also removes a stale value from a
+	// forward-compatible descriptor, while avoiding dozens of empty JSON keys in
+	// the 10 KiB WorldObject::content envelope.
+	const QString text = qs(value);
+	if(text.isEmpty())
+		ob.remove(QString::fromLatin1(key));
+	else
+		ob.insert(QString::fromLatin1(key), text);
+}
+
+
+static QString excerpt(const std::string& value, int max_characters)
+{
+	const QString text = qs(value);
+	if(text.size() <= max_characters)
+		return text;
+	return text.left(std::max(1, max_characters - 40)) + QString::fromUtf8("… [полная запись — в источнике]");
+}
+
+
+static void putBoundedString(QJsonObject& ob, const char* key, const std::string& value, int max_characters)
+{
+	const QString text = excerpt(value, max_characters);
+	if(text.isEmpty())
+		ob.remove(QString::fromLatin1(key));
+	else
+		ob.insert(QString::fromLatin1(key), text);
 }
 
 static void putPortableReference(QJsonObject& ob, const char* key, const std::string& value)
@@ -129,7 +152,7 @@ CulturalObjectSettings CulturalObjectSettings::fromContent(const std::string& co
 	READ_STRING(periods); READ_STRING(materials); READ_STRING(techniques); READ_STRING(styles); READ_STRING(genres); READ_STRING(functions); READ_STRING(subjects); READ_STRING(keywords);
 	READ_STRING(wikidata_id); READ_STRING(iiif_id); READ_STRING(museum_id); READ_STRING(europeana_id);
 	READ_STRING(card_title); READ_STRING(card_subtitle); READ_STRING(card_summary); READ_STRING(card_theme); READ_STRING(card_language); READ_STRING(card_visible_fields); READ_STRING(plaque_text);
-	READ_STRING(primary_image_url); READ_STRING(high_resolution_image_url); READ_STRING(iiif_manifest_url); READ_STRING(model_3d_url); READ_STRING(audio_url); READ_STRING(video_url);
+	READ_STRING(primary_image_url); READ_STRING(primary_image_source_url); READ_STRING(high_resolution_image_url); READ_STRING(iiif_manifest_url); READ_STRING(model_3d_url); READ_STRING(audio_url); READ_STRING(video_url);
 	READ_STRING(documents); READ_STRING(media_cache_key); READ_STRING(license_status); READ_STRING(rights_holder); READ_STRING(license_url); READ_STRING(attribution_text);
 	READ_STRING(provenance); READ_STRING(exhibitions); READ_STRING(restorations); READ_STRING(condition); READ_STRING(publications); READ_STRING(related_objects);
 	READ_STRING(exhibition_scene); READ_STRING(exhibition_room); READ_STRING(exhibition_zone); READ_STRING(placement); READ_STRING(frame_style); READ_STRING(pedestal_style); READ_STRING(case_style);
@@ -163,19 +186,21 @@ std::string CulturalObjectSettings::serialiseToContent(const CulturalObjectSetti
 	}
 	o.insert(QStringLiteral("schema_version"), std::max(1, s.schema_version));
 #define PUT_STRING(field) putString(o, #field, s.field)
-	PUT_STRING(uuid); PUT_STRING(title); PUT_STRING(object_type); PUT_STRING(cultural_category); PUT_STRING(description);
+#define PUT_BOUNDED(field, max_characters) putBoundedString(o, #field, s.field, max_characters)
+	PUT_STRING(uuid); PUT_STRING(title); PUT_STRING(object_type); PUT_STRING(cultural_category); PUT_BOUNDED(description, 1400);
 	PUT_STRING(source_mode); o.remove(QStringLiteral("local_file")); PUT_STRING(source_url); PUT_STRING(provider_id); PUT_STRING(provider_record_id); PUT_STRING(retrieval_status);
-	PUT_STRING(alternative_titles); PUT_STRING(creators); PUT_STRING(creation_date); PUT_STRING(country); PUT_STRING(place_of_creation); PUT_STRING(current_location);
-	PUT_STRING(collection); PUT_STRING(inventory_number); PUT_STRING(art_forms); PUT_STRING(museum_classifications); PUT_STRING(disciplines); PUT_STRING(cultures);
-	PUT_STRING(periods); PUT_STRING(materials); PUT_STRING(techniques); PUT_STRING(styles); PUT_STRING(genres); PUT_STRING(functions); PUT_STRING(subjects); PUT_STRING(keywords);
+	PUT_BOUNDED(alternative_titles, 700); PUT_BOUNDED(creators, 900); PUT_STRING(creation_date); PUT_STRING(country); PUT_STRING(place_of_creation); PUT_STRING(current_location);
+	PUT_STRING(collection); PUT_STRING(inventory_number); PUT_BOUNDED(art_forms, 700); PUT_BOUNDED(museum_classifications, 900); PUT_BOUNDED(disciplines, 700); PUT_STRING(cultures);
+	PUT_STRING(periods); PUT_STRING(materials); PUT_STRING(techniques); PUT_STRING(styles); PUT_STRING(genres); PUT_STRING(functions); PUT_BOUNDED(subjects, 900); PUT_STRING(keywords);
 	PUT_STRING(wikidata_id); PUT_STRING(iiif_id); PUT_STRING(museum_id); PUT_STRING(europeana_id);
-	PUT_STRING(card_title); PUT_STRING(card_subtitle); PUT_STRING(card_summary); PUT_STRING(card_theme); PUT_STRING(card_language); PUT_STRING(card_visible_fields); PUT_STRING(plaque_text);
-	PUT_STRING(primary_image_url); PUT_STRING(high_resolution_image_url); PUT_STRING(iiif_manifest_url); PUT_STRING(model_3d_url); PUT_STRING(audio_url); PUT_STRING(video_url);
-	PUT_STRING(documents); PUT_STRING(media_cache_key); PUT_STRING(license_status); PUT_STRING(rights_holder); PUT_STRING(license_url); PUT_STRING(attribution_text);
-	PUT_STRING(provenance); PUT_STRING(exhibitions); PUT_STRING(restorations); PUT_STRING(condition); PUT_STRING(publications); PUT_STRING(related_objects);
+	PUT_STRING(card_title); PUT_STRING(card_subtitle); PUT_BOUNDED(card_summary, 1000); PUT_STRING(card_theme); PUT_STRING(card_language); PUT_STRING(card_visible_fields); PUT_BOUNDED(plaque_text, 1000);
+	PUT_STRING(primary_image_url); PUT_STRING(primary_image_source_url); PUT_STRING(high_resolution_image_url); PUT_STRING(iiif_manifest_url); PUT_STRING(model_3d_url); PUT_STRING(audio_url); PUT_STRING(video_url);
+	PUT_BOUNDED(documents, 700); PUT_STRING(media_cache_key); PUT_STRING(license_status); PUT_STRING(rights_holder); PUT_STRING(license_url); PUT_BOUNDED(attribution_text, 900);
+	PUT_BOUNDED(provenance, 1000); PUT_BOUNDED(exhibitions, 1200); PUT_BOUNDED(restorations, 700); PUT_BOUNDED(condition, 700); PUT_BOUNDED(publications, 1200); PUT_BOUNDED(related_objects, 700);
 	PUT_STRING(exhibition_scene); PUT_STRING(exhibition_room); PUT_STRING(exhibition_zone); PUT_STRING(placement); PUT_STRING(frame_style); PUT_STRING(pedestal_style); PUT_STRING(case_style);
-	PUT_STRING(route_id); PUT_STRING(route_stop); PUT_STRING(next_object_uuid); PUT_STRING(curator_note); PUT_STRING(source_records_ref); putPortableReference(o, "raw_source_ref", s.raw_source_ref); PUT_STRING(modified_at);
+	PUT_STRING(route_id); PUT_STRING(route_stop); PUT_STRING(next_object_uuid); PUT_BOUNDED(curator_note, 700); PUT_STRING(source_records_ref); putPortableReference(o, "raw_source_ref", s.raw_source_ref); PUT_STRING(modified_at);
 #undef PUT_STRING
+#undef PUT_BOUNDED
 	putBool(o, "card_auto_open", s.card_auto_open); putBool(o, "card_open_on_click", s.card_open_on_click); putBool(o, "card_pinned", s.card_pinned); putFloat(o, "card_scale", s.card_scale);
 	putBool(o, "lazy_media_loading", s.lazy_media_loading); putBool(o, "allow_display", s.allow_display); putBool(o, "allow_download", s.allow_download);
 	putBool(o, "allow_modify", s.allow_modify); putBool(o, "allow_commercial_use", s.allow_commercial_use); putBool(o, "spotlight", s.spotlight);
