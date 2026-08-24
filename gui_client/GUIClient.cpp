@@ -2944,6 +2944,22 @@ static bool shouldUseOptimisedMeshesForWorldObject(const WorldObject& ob, bool s
 }
 
 
+static bool shouldUseOptimisedMeshesForAvatar(const URLString& model_url, bool server_has_optimised_meshes)
+{
+#if defined(__EMSCRIPTEN__)
+	// Web clients have no persistent source-model cache to fall back to when an
+	// advertised optimised derivative is absent.  Load these formats directly.
+	if(model_url != DEFAULT_AVATAR_MODEL_URL &&
+		(hasExtension(model_url, "bmesh") || hasExtension(model_url, "glb") || hasExtension(model_url, "gltf") || hasExtension(model_url, "vrm")))
+		return false;
+#else
+	(void)model_url;
+#endif
+
+	return server_has_optimised_meshes;
+}
+
+
 // Start loading texture, if present
 void GUIClient::startLoadingTextureIfPresent(const URLString& tex_url, const Vec4f& centroid_ws, float aabb_ws_longest_len, float max_task_dist, float importance_factor, 
 	const TextureParams& tex_params)
@@ -3514,7 +3530,7 @@ void GUIClient::startDownloadingResourcesForAvatar(Avatar* ob, int ob_lod_level,
 	glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&arena_allocator);
 
 	Avatar::GetDependencyOptions options;
-	options.get_optimised_mesh = this->server_has_optimised_meshes;
+	options.get_optimised_mesh = shouldUseOptimisedMeshesForAvatar(ob->avatar_settings.model_url, this->server_has_optimised_meshes);
 	options.use_basis = this->server_has_basis_textures;
 	options.opt_mesh_version = this->server_opt_mesh_version;
 
@@ -3546,6 +3562,7 @@ void GUIClient::startDownloadingResourcesForAvatar(Avatar* ob, int ob_lod_level,
 
 				DownloadingResourceInfo info;
 				info.texture_params.use_sRGB = url_info.use_sRGB;
+				info.build_physics_ob = false;
 				info.build_dynamic_physics_ob = false;
 				info.pos = ob->pos;
 				info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(/*aabb_ws_longest_len=*/1.8f, our_avatar_importance_factor);
@@ -5517,7 +5534,9 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 
 		bool added_opengl_ob = false;
 
-		WorldObject::GetLODModelURLOptions options(/*get_optimised_mesh=*/this->server_has_optimised_meshes, this->server_opt_mesh_version);
+		WorldObject::GetLODModelURLOptions options(
+			/*get_optimised_mesh=*/shouldUseOptimisedMeshesForAvatar(avatar->avatar_settings.model_url, this->server_has_optimised_meshes),
+			this->server_opt_mesh_version);
 		URLString lod_model_url = avatar_is_default_model ? DEFAULT_AVATAR_MODEL_URL : WorldObject::getLODModelURLForLevel(avatar->avatar_settings.model_url, ob_model_lod_level, options);
 		// If the optimised mesh is not available locally, fall back to the original URL so locally-uploaded bot avatars load immediately.
 		if(!avatar_is_default_model && lod_model_url != URLString(avatar->avatar_settings.model_url) &&

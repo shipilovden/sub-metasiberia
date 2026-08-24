@@ -5,10 +5,13 @@ in vec2 texture_coords;
 uniform float time;
 uniform vec3 colour;
 
-// TODO: handle case where ORDER_INDEPENDENT_TRANSPARENCY is disabled.
+#if ORDER_INDEPENDENT_TRANSPARENCY
 // Various outputs for order-independent transparency.
 layout(location = 0) out vec4 transmittance_out;
 layout(location = 1) out vec4 accum_out;
+#else
+layout(location = 0) out vec4 colour_out;
+#endif
 
 
 float gridFactor(float tiling, float w)
@@ -94,8 +97,14 @@ void main()
 	float edge_grid_factor = gridFactor(1.f, main_w);
 
 	float alpha = (1.0 - small_grid_factor * edge_grid_factor) * 1.1;
-	accum_out = vec4(colour.x * alpha, colour.y * alpha, colour.z * alpha, alpha);
+	vec4 grid_colour = vec4(colour.x * alpha, colour.y * alpha, colour.z * alpha, alpha);
+
+#if ORDER_INDEPENDENT_TRANSPARENCY
+	accum_out = grid_colour;
 
 	float T = 1.0;
 	transmittance_out = vec4(T, T, T, T);
+#else
+	colour_out = grid_colour;
+#endif
 }
