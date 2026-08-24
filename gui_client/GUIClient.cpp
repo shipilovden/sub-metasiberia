@@ -44,8 +44,10 @@ Copyright Glare Technologies Limited 2024 -
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
 #include "ScientificObjectSettings.h"
-#include "CulturalApiClient.h"
+#if !defined(USE_SDL)
 #include "CulturalObjectSettings.h"
+#include "CulturalApiClient.h"
+#endif
 #if !defined(EMSCRIPTEN)
 #include "PeriodicTable.h"
 #endif
@@ -111,7 +113,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "../graphics/BasisDecoder.h"
 #include "../graphics/PNGDecoder.h"
 #include "../graphics/TextRenderer.h"
+#if !defined(USE_SDL)
 #include <QtGui/QImage>
+#endif
 #include "../dll/include/IndigoMesh.h"
 #include "../indigo/TextureServer.h"
 #include <video/VideoReader.h>
@@ -2916,6 +2920,17 @@ static inline bool isValidLightMapURL(OpenGLEngine& opengl_engine, const string_
 }
 
 
+// The marker check is intentionally independent from CulturalObjectSettings:
+// that descriptor's JSON implementation is Qt-only, whereas model/texture
+// selection is shared with the SDL/Emscripten client.
+static bool isCulturalObjectContent(const std::string& content)
+{
+	static const char marker[] = "metasiberia_cultural_object_v1\n";
+	const size_t marker_len = sizeof(marker) - 1;
+	return content.size() >= marker_len && content.compare(0, marker_len, marker) == 0;
+}
+
+
 static bool shouldUseBasisTexturesForWorldObject(const WorldObject& ob, bool server_has_basis_textures)
 {
 	// Cultural API images are normalised into a PNG in the local resource store.
@@ -2924,7 +2939,7 @@ static bool shouldUseBasisTexturesForWorldObject(const WorldObject& ob, bool ser
 	// otherwise valid Quad with the white fallback material.  Keep cultural
 	// exhibits on their source image; this is deliberately scoped to them and
 	// does not change texture handling for ordinary world objects.
-	if(CulturalObjectSettings::isCulturalObjectContent(ob.content))
+	if(isCulturalObjectContent(ob.content))
 		return false;
 
 	return server_has_basis_textures;
@@ -2940,7 +2955,7 @@ static bool shouldUseOptimisedMeshesForWorldObject(const WorldObject& ob, bool s
 	// use the server optimisation pipeline.
 	return server_has_optimised_meshes &&
 		!GaussianSplatAsset::hasSupportedExtension(ob.model_url) &&
-		!CulturalObjectSettings::isCulturalObjectContent(ob.content);
+		!isCulturalObjectContent(ob.content);
 }
 
 
@@ -18516,6 +18531,10 @@ void GUIClient::objectTransformEdited()
 
 }
 
+// The Cultural Object editor is not compiled for the SDL/Emscripten client.
+// Keeping its Qt-only image handling behind the same guard preserves the
+// browser client's common GUIClient build.
+#if !defined(USE_SDL)
 bool GUIClient::cacheCulturalPublicImage(const QString& source_url, URLString& resource_url_out, QString& error_out)
 {
 	resource_url_out.clear();
@@ -18565,6 +18584,7 @@ bool GUIClient::cacheCulturalPublicImage(const QString& source_url, URLString& r
 		return false;
 	}
 }
+#endif
 
 
 // Object property (that is not a transform property) has been edited, e.g. by the object editor.
@@ -18591,6 +18611,7 @@ void GUIClient::objectEdited()
 		//ui->objectEditor->toObject(*this->selected_ob); // Sets changed_flags on object as well.
 		ui_interface->objectEditorToObject(*this->selected_ob); // Sets changed_flags on object as well.
 
+#if !defined(USE_SDL)
 		// A cultural record with a cached public image is always displayed as a
 		// flat, single-sided exhibit.  This also upgrades older cultural objects
 		// that were created before the Quad model existed.
@@ -18617,6 +18638,7 @@ void GUIClient::objectEdited()
 				}
 			}
 		}
+#endif
 
 		if(ParticleEmitterSettings::isParticleEmitterContent(this->selected_ob->content))
 		{

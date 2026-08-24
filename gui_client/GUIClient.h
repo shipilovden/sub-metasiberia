@@ -62,7 +62,9 @@ Copyright Glare Technologies Limited 2024 -
 #include <maths/PCG32.h>
 #include <maths/LineSegment4f.h>
 #include <networking/IPAddress.h>
+#if !defined(USE_SDL)
 #include <QtCore/QString>
+#endif
 #include <string>
 #include <map>
 #include <set>
@@ -259,7 +261,11 @@ public:
 	void summonCar();
 	void objectTransformEdited();
 	void objectEdited();
+	// The Cultural Object editor is Qt-only.  Keep its image-cache bridge out
+	// of the common SDL/Emscripten client interface.
+#if !defined(USE_SDL)
 	bool cacheCulturalPublicImage(const QString& source_url, URLString& resource_url_out, QString& error_out);
+#endif
 	bool applyVoxelEditorTool(VoxelToolType tool, const VoxelToolInput& input, const VoxelToolSettings* settings_override = NULL);
 	bool applyVoxelProceduralGenerator(VoxelProceduralType type, const VoxelProceduralParams& params);
 	bool copyVoxelSelection();
