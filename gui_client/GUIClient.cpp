@@ -26436,6 +26436,9 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 		scene->volumetric_cloud_settings.coverage = myClamp(sanitiseFinite(clouds.coverage, 0.48f), 0.f, 1.f);
 		scene->volumetric_cloud_settings.density = myMax(0.f, sanitiseFinite(clouds.density, 0.0012f));
 		scene->volumetric_cloud_settings.wind_speed = sanitiseFinite(clouds.wind_speed, 20.f);
+		scene->volumetric_cloud_settings.bottom_darkness = myClamp(sanitiseFinite(clouds.bottom_darkness, 0.4f), 0.f, 1.f);
+		scene->volumetric_cloud_settings.edge_softness = myClamp(sanitiseFinite(clouds.edge_softness, 0.55f), 0.f, 1.f);
+		scene->volumetric_cloud_settings.horizon_fade = myClamp(sanitiseFinite(clouds.horizon_fade, 0.75f), 0.f, 1.f);
 	}
 }
 
