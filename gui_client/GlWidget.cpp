@@ -309,6 +309,10 @@ void GlWidget::initializeGL()
 	engine_settings.shadow_mapping = shadows;
 	engine_settings.compress_textures = true;
 	engine_settings.depth_fog = true;
+	// Build the environment volumetric-cloud shader path.  It is runtime
+	// toggled from EnvironmentOptionsWidget, so enabling support here does not
+	// force clouds to be drawn when the user turns them off.
+	engine_settings.volumetric_clouds_support = true;
 	//engine_settings.use_final_image_buffer = bloom;
 	engine_settings.msaa_samples = use_MSAA ? 4 : -1;
 	engine_settings.max_tex_CPU_mem_usage = 1536 * 1024 * 1024ull; // Should be large enough that we have some spare room for the LRU texture cache.

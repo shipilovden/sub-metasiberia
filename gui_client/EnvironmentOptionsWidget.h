@@ -23,6 +23,12 @@ public:
 	void init(QSettings* settings_);
 	
 	bool getNorthernLightsEnabled() const;
+	bool getVolumetricCloudsEnabled() const;
+	double getCloudBottomZ() const;
+	double getCloudTopZ() const;
+	double getCloudCoverage() const;
+	double getCloudDensity() const;
+	double getCloudWindSpeed() const;
 
 signals:;
 	void settingChanged();

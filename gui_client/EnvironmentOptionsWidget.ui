@@ -2,12 +2,12 @@
 <ui version="4.0">
  <class>EnvironmentOptionsWidget</class>
  <widget class="QWidget" name="EnvironmentOptionsWidget">
-  <property name="geometry">
+   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
     <width>761</width>
-    <height>179</height>
+    <height>330</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -68,6 +68,98 @@
      </property>
      <property name="checked">
       <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="6" column="0">
+    <widget class="QCheckBox" name="volumetricCloudsCheckBox">
+     <property name="text">
+      <string>Volumetric clouds</string>
+     </property>
+    </widget>
+   </item>
+   <item row="7" column="0">
+    <widget class="QLabel" name="cloudBottomZLabel">
+     <property name="text">
+      <string>Cloud layer bottom</string>
+     </property>
+    </widget>
+   </item>
+   <item row="7" column="1">
+    <widget class="RealControl" name="cloudBottomZRealControl">
+     <property name="suffix">
+      <string> m</string>
+     </property>
+     <property name="maximum">
+      <double>100000.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="8" column="0">
+    <widget class="QLabel" name="cloudTopZLabel">
+     <property name="text">
+      <string>Cloud layer top</string>
+     </property>
+    </widget>
+   </item>
+   <item row="8" column="1">
+    <widget class="RealControl" name="cloudTopZRealControl">
+     <property name="suffix">
+      <string> m</string>
+     </property>
+     <property name="maximum">
+      <double>100000.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="9" column="0">
+    <widget class="QLabel" name="cloudCoverageLabel">
+     <property name="text">
+      <string>Cloud coverage</string>
+     </property>
+    </widget>
+   </item>
+   <item row="9" column="1">
+    <widget class="RealControl" name="cloudCoverageRealControl">
+     <property name="maximum">
+      <double>1.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.010000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="10" column="0">
+   <widget class="QLabel" name="cloudDensityLabel">
+     <property name="text">
+      <string>Cloud density</string>
+     </property>
+    </widget>
+   </item>
+   <item row="10" column="1">
+    <widget class="RealControl" name="cloudDensityRealControl">
+     <property name="maximum">
+      <double>0.020000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.000100000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="11" column="0">
+   <widget class="QLabel" name="cloudWindSpeedLabel">
+     <property name="text">
+      <string>Cloud wind speed</string>
+     </property>
+    </widget>
+   </item>
+   <item row="11" column="1">
+    <widget class="RealControl" name="cloudWindSpeedRealControl">
+     <property name="suffix">
+      <string> m/s</string>
+     </property>
+     <property name="maximum">
+      <double>200.000000000000000</double>
      </property>
     </widget>
    </item>
