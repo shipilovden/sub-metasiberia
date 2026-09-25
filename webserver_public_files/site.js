@@ -6,6 +6,14 @@
   var LANG_EN = "en";
 
   var exactMap = {
+    "Questions and Answers about Metasiberia": "\u0412\u043e\u043f\u0440\u043e\u0441\u044b \u0438 \u043e\u0442\u0432\u0435\u0442\u044b \u043e Metasiberia",
+    "F.A.Q.": "\u0412\u043e\u043f\u0440\u043e\u0441\u044b \u0438 \u043e\u0442\u0432\u0435\u0442\u044b",
+    "Craft virtually - Inspire reality": "\u0422\u0432\u043e\u0440\u0438 \u0432\u0438\u0440\u0442\u0443\u0430\u043b\u044c\u043d\u043e - \u0432\u0434\u043e\u0445\u043d\u043e\u0432\u043b\u044f\u0439 \u0440\u0435\u0430\u043b\u044c\u043d\u043e.",
+    "Metaverse from Siberia": "\u041c\u0435\u0442\u0430\u0432\u0441\u0435\u043b\u0435\u043d\u043d\u0430\u044f \u0438\u0437 \u0421\u0438\u0431\u0438\u0440\u0438",
+    "download Metasiberia beta": "\u0441\u043a\u0430\u0447\u0430\u0442\u044c Metasiberia beta",
+    "Webclient": "\u0432\u0435\u0431\u043a\u043b\u0438\u0435\u043d\u0442",
+    "Privacy Policy": "\u041f\u043e\u043b\u0438\u0442\u0438\u043a\u0430 \u043a\u043e\u043d\u0444\u0438\u0434\u0435\u043d\u0446\u0438\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u0438",
+    "Terms of Use": "\u0423\u0441\u043b\u043e\u0432\u0438\u044f \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u044f",
     "Log in": "\u0412\u0445\u043e\u0434",
     "log in": "\u0432\u043e\u0439\u0442\u0438",
     "Log out": "\u0412\u044b\u0439\u0442\u0438",
@@ -14,6 +22,7 @@
     "Terms": "\u0423\u0441\u043b\u043e\u0432\u0438\u044f",
     "I agree to the Terms": "\u042f \u043f\u0440\u0438\u043d\u0438\u043c\u0430\u044e \u0423\u0441\u043b\u043e\u0432\u0438\u044f",
     "You must accept Terms to sign up.": "\u0414\u043b\u044f \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u0438 \u043d\u0443\u0436\u043d\u043e \u043f\u0440\u0438\u043d\u044f\u0442\u044c \u0423\u0441\u043b\u043e\u0432\u0438\u044f.",
+    "You must consent to the processing of your personal data in accordance with the Privacy Policy.": "\u041d\u0443\u0436\u043d\u043e \u0434\u0430\u0442\u044c \u0441\u043e\u0433\u043b\u0430\u0441\u0438\u0435 \u043d\u0430 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0443 \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0445 \u0434\u0430\u043d\u043d\u044b\u0445 \u0432 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0438 \u0441 \u041f\u043e\u043b\u0438\u0442\u0438\u043a\u043e\u0439 \u043a\u043e\u043d\u0444\u0438\u0434\u0435\u043d\u0446\u0438\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u0438.",
     "This website uses cookies for login, language and basic security.": "\u042d\u0442\u043e\u0442 \u0441\u0430\u0439\u0442 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442 cookie \u0434\u043b\u044f \u0432\u0445\u043e\u0434\u0430, \u0432\u044b\u0431\u043e\u0440\u0430 \u044f\u0437\u044b\u043a\u0430 \u0438 \u0431\u0430\u0437\u043e\u0432\u043e\u0439 \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u0438.",
     "Learn more": "\u041f\u043e\u0434\u0440\u043e\u0431\u043d\u0435\u0435",
     "Forgot password?": "\u0417\u0430\u0431\u044b\u043b\u0438 \u043f\u0430\u0440\u043e\u043b\u044c?",
@@ -130,7 +139,7 @@
     "Worlds table": "\u0422\u0430\u0431\u043b\u0438\u0446\u0430 \u043c\u0438\u0440\u043e\u0432",
     "Created (UTC)": "\u0421\u043e\u0437\u0434\u0430\u043d (UTC)",
     "Community:": "\u0421\u043e\u043e\u0431\u0449\u0435\u0441\u0442\u0432\u043e:",
-    "Terms of use": "\u041f\u0440\u0430\u0432\u0438\u043b\u0430 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u044f",
+    "Terms of use": "\u0423\u0441\u043b\u043e\u0432\u0438\u044f \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u044f",
     "Caption:": "\u041f\u043e\u0434\u043f\u0438\u0441\u044c:",
     "Photo by": "\u0410\u0432\u0442\u043e\u0440",
     "Taken (UTC)": "\u0421\u043d\u044f\u0442\u043e (UTC)",
@@ -312,6 +321,19 @@
     }
   }
 
+  function translateDataAttributes(lang) {
+    var nodes = document.querySelectorAll("[data-msb-en][data-msb-ru]");
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      // Bilingual spans deliberately carry data-no-translate so the generic
+      // text walker does not translate their contents a second time.  They
+      // are still the targets of this common data-attribute pipeline.
+      if (el.getAttribute("data-no-translate") !== "1" && shouldSkipElement(el)) continue;
+      var value = lang === LANG_RU ? el.getAttribute("data-msb-ru") : el.getAttribute("data-msb-en");
+      if (value !== null) el.innerHTML = value;
+    }
+  }
+
   function translateInputValues(lang) {
     var controls = document.querySelectorAll("input[type='submit'], input[type='button']");
     for (var i = 0; i < controls.length; i++) {
@@ -353,6 +375,7 @@
   function applyLanguage(lang) {
     document.documentElement.setAttribute("lang", lang === LANG_RU ? LANG_RU : LANG_EN);
 
+    translateDataAttributes(lang);
     translateTextNodes(lang);
     translateInputValues(lang);
     translateAttributes(lang);
@@ -1139,52 +1162,35 @@
 
     var form = document.querySelector("form[action='signup_post'], form[action='/signup_post']");
     if (!form) return;
-    if (document.getElementById("msb-signup-terms-accepted")) return;
+    if (form.dataset.msbSignupGateInit === "1") return;
 
     var submit = form.querySelector("input[type='submit'], button[type='submit']");
     if (!submit) return;
 
-    var row = document.createElement("div");
-    row.className = "msb-signup-terms-row";
-
-    var checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.id = "msb-signup-terms-accepted";
-    checkbox.className = "msb-signup-terms-checkbox";
-    checkbox.name = "terms_accepted";
-    checkbox.value = "1";
-    checkbox.required = true;
-
-    var label = document.createElement("label");
-    label.className = "msb-signup-terms-label";
-    label.setAttribute("for", checkbox.id);
-    label.appendChild(document.createTextNode("I agree to the "));
-
-    var termsLink = document.createElement("a");
-    termsLink.href = "https://vr.metasiberia.com/terms";
-    termsLink.target = "_blank";
-    termsLink.rel = "noopener";
-    termsLink.textContent = "Terms of use";
-    label.appendChild(termsLink);
+    var termsCheckbox = document.getElementById("msb-signup-terms-accepted");
+    var privacyCheckbox = document.getElementById("msb-signup-privacy-accepted");
+    if (!termsCheckbox || !privacyCheckbox) return;
+    form.dataset.msbSignupGateInit = "1";
 
     var toggleSubmit = function () {
-      var allowed = !!checkbox.checked;
+      var allowed = !!termsCheckbox.checked && !!privacyCheckbox.checked;
       submit.disabled = !allowed;
       if (allowed) submit.classList.remove("msb-disabled-submit");
       else submit.classList.add("msb-disabled-submit");
     };
 
-    checkbox.addEventListener("change", toggleSubmit);
+    termsCheckbox.addEventListener("change", toggleSubmit);
+    privacyCheckbox.addEventListener("change", toggleSubmit);
     form.addEventListener("submit", function (e) {
-      if (checkbox.checked) return;
-      e.preventDefault();
-      window.alert("You must accept Terms to sign up.");
+      if (!termsCheckbox.checked) {
+        e.preventDefault();
+        window.alert("You must confirm that you have read and accepted the Terms of Use.");
+      } else if (!privacyCheckbox.checked) {
+        e.preventDefault();
+        window.alert("You must consent to the processing of your personal data in accordance with the Privacy Policy.");
+      }
     });
 
-    if (submit.parentNode) submit.parentNode.insertBefore(row, submit);
-    row.appendChild(submit);
-    row.appendChild(checkbox);
-    row.appendChild(label);
     toggleSubmit();
   }
 
@@ -1298,93 +1304,6 @@
     header.style.display = "none";
   }
 
-  function overrideTermsPage() {
-    if (currentPath() !== "/terms") return;
-    hidePageTopHeader();
-    document.title = "Условия использования";
-    replacePageContent(
-      '<h1>Metasiberia</h1>' +
-      '<h2>Условия обслуживания</h2>' +
-      '<p>Эти условия обслуживания применяются к веб-сайту metasiberia (по адресу vr.metasiberia.com) и виртуальному миру Metasiberia, который размещен на серверах Reg.ru и доступен через клиентское программное обеспечение.</p>' +
-      '<p>Они вместе составляют «Сервис».</p>' +
-      '<h2>Общие условия</h2>' +
-      '<p>Получая доступ или используя «Сервис», вы соглашаетесь соблюдать эти Условия.</p>' +
-      '<p>Если вы не согласны с какой-либо частью условий, вы не можете получить доступ к Сервису.</p>' +
-      '<p>Не допускается порнография и насилие.</p>' +
-      '<p>Содержимое парселя не должно серьезно и неблагоприятно влиять на производительность или функционирование сервера(ов) Metasiberia или клиента. (Например, не загружайте модели с чрезмерным количеством полигонов или разрешением текстур)</p>' +
-      '<p>Не пытайтесь намеренно вывести из строя или ухудшить работу сервера или клиентов других пользователей.</p>' +
-      '<p>Мы оставляем за собой право отказать в обслуживании любому человеку в любое время и по любой причине.</p>' +
-      '<p>Мы оставляем за собой право изменять условия обслуживания.</p>'
-    );
-  }
-
-  function overrideFAQPage() {
-    if (currentPath() !== "/faq") return;
-    hidePageTopHeader();
-    document.title = "Основные вопросы о Metasiberia";
-    replacePageContent(
-      '<h1>Основные вопросы о Metasiberia</h1>' +
-      '<h2>Что такое Metasiberia?</h2>' +
-      '<p>Metasiberia — это метавселеная. Здесь пользователи могут исследовать бескрайние просторы, общаться, играть и создавать свои уникальные территории в метавселенной.</p>' +
-      '<h2>Как войти в Метасибирь?</h2>' +
-      '<p>Адрес в клиенте: <a href="sub://vr.metasiberia.com">sub://vr.metasiberia.com</a></p>' +
-      '<p>Веб-режим: <a href="https://vr.metasiberia.com/webclient">https://vr.metasiberia.com/webclient</a></p>' +
-      '<p>Зарегистрируйтесь: <a href="https://vr.metasiberia.com/signup">https://vr.metasiberia.com/signup</a></p>' +
-      '<ol>' +
-      '<li>Скачайте и установите клиент виртуальных миров Substrata: Тут.</li>' +
-      '<li>В адресной строке введите <code>sub://vr.metasiberia.com</code> и нажмите Enter.</li>' +
-      '<li>В клиенте нажмите Log in (правый верхний угол) и введите логин/пароль.</li>' +
-      '<li>Назначьте Metasiberia стартовой локацией: в меню Go выберите Set current location as start location.</li>' +
-      '<li>Теперь ваш аватар всегда будет появляться в центре Metasiberia.</li>' +
-      '</ol>' +
-      '<h2>На чём основана Metasiberia?</h2>' +
-      '<p>Metasiberia — это проект, основанный на технологиях Substrata, разработанных Glare Technologies Limited. Эта же команда известна своими продуктами Indigo Renderer и Chaotica Fractals.</p>' +
-      '<h2>Почему Metasiberia, это метавселенная?</h2>' +
-      '<p>Metasiberia классифицируется как метавселенная, поскольку представляет собой интегрированную цифровую среду, объединяющую множество виртуальных пространств с высоким уровнем интерактивности и пользовательской автономии. С научной точки зрения, метавселенная — это устойчивая, коллективно используемая виртуальная реальность, которая функционирует как параллельная система, поддерживающая социальные, творческие и экономические взаимодействия. В Metasiberia это достигается через центральный мир, выступающий хабом для новых пользователей, и персональные территории (доступные по адресу sub://vr.metasiberia.com/имя_пользователя), где каждый может формировать собственное пространство.</p>' +
-      '<h2>Как приобрести участок в Metasiberia?</h2>' +
-      '<p>На данный момент покупка участков доступна только по индивидуальному запросу.</p>' +
-      '<p>В ближайшее время мы запустим магазин, где участки можно будет приобрести напрямую. Следите за обновлениями на нашем сайте и в социальных сетях.</p>' +
-      '<h2>Можно ли делиться правами на участок в Metasiberia?</h2>' +
-      '<p>Да, вы можете добавить других пользователей как "соавторов" вашего участка. Они смогут создавать, редактировать и удалять объекты на вашей территории.</p>' +
-      '<ol>' +
-      '<li>Войдите в аккаунт на сайте Metasiberia/admin panel/ log in.</li>' +
-      '<li>Перейдите к вашему участку на своей странице.</li>' +
-      '<li>Нажмите "Add writer" и укажите имя пользователя в Metasiberia.</li>' +
-      '<li>Также можно временно или постоянно открыть участок для общего редактирования, выбрав в редакторе объектов опцию "All writeable".</li>' +
-      '</ol>' +
-      '<h1>Создание и строительство в Metasiberia</h1>' +
-      '<h2>Как создавать объекты в Metasiberia?</h2>' +
-      '<p>Создавать объекты в центральном мире можно на участке, который вам принадлежит, или в песочнице (участок №31). В своей личной территории ограничений нет.</p>' +
-      '<p>Есть два способа:</p>' +
-      '<ol>' +
-      '<li>В клиенте выберите "Добавить модель / изображение / видео" и следуйте инструкциям.</li>' +
-      '<li>Создайте объект из вокселей внутри Metasiberia, выбрав "Добавить воксели".</li>' +
-      '</ol>' +
-      '<p>Поддерживаемые форматы:</p>' +
-      '<p>Модели: OBJ, GLTF, GLB, VOX, STL, IGMESH</p>' +
-      '<p>Изображения: JPG, PNG, GIF, TIF, EXR, KTX, KTX2</p>' +
-      '<p>Видео: MP4</p>' +
-      '<p>Пожалуйста, избегайте загрузки моделей с большим количеством полигонов или объёмных файлов, чтобы не ухудшить производительность для других пользователей.</p>' +
-      '<h2>Как работают воксели в Metasiberia?</h2>' +
-      '<p>Вы можете загрузить готовый воксель в поддерживаемом формате или создать его внутри Metasiberia.</p>' +
-      '<p>Для создания:</p>' +
-      '<ol>' +
-      '<li>Перейдите на участок, где у вас есть права редактирования, и выберите "Добавить воксели". Появится первый блок (серый куб).</li>' +
-      '<li>Всплывёт подсказка с инструкциями. Основное: Ctrl + левый клик добавляет новый воксель на поверхность выбранного куба. При наведении с зажатым Ctrl вы увидите, где появится новый блок.</li>' +
-      '<li>Воксели можно масштабировать в редакторе, меняя их размеры через параметр "Scale".</li>' +
-      '</ol>' +
-      '<h2>Как анимировать объекты в Metasiberia?</h2>' +
-      '<p>Анимация и скрипты в Metasiberia создаются с помощью языка программирования Lua. Подробности доступны на странице: о скриптах.</p>' +
-      '<p>Для настройки скрипта выберите объект в клиенте, откройте редактор и в разделе "Script" введите код. Редактировать можно только свои объекты.</p>' +
-      '<h2>Есть ли ограничения на контент в Metasiberia?</h2>' +
-      '<p>Да, контент "не для всех" (например, с сексуальным или насильственным подтекстом) запрещён. Подробности — в правилах использования.</p>' +
-      '<h1>Решение проблем</h1>' +
-      '<h2>У меня сложности с Metasiberia — где я могу получить помощь?</h2>' +
-      '<p>Лучше всего обратиться за помощью в наш <a href="https://vk.com/metasiberia_official" target="_blank" rel="noopener">Vk</a> или <a href="https://t.me/metasiberia_channel" target="_blank" rel="noopener">Telegram</a>.</p>' +
-      '<p><b>Metasiberia состоит из Substrata.</b></p>'
-    );
-  }
-
   document.addEventListener("DOMContentLoaded", function () {
     applyGlobalThemeClass();
     applyPageClasses();
@@ -1397,8 +1316,6 @@
     initSignupTermsGate();
     initRootCookieBanner();
     removeFooterBotStatusLink();
-    overrideTermsPage();
-    overrideFAQPage();
     ensureLangToggleButton();
     initAccordions();
     initSliders();

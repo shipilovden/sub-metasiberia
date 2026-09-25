@@ -468,7 +468,10 @@
 
 		// NOTE: Don't pre-seed icons here. They are now packaged in gui_client.data,
 		// and pre-creating the same files causes Emscripten preload ErrnoError (EEXIST).
-		installMetasiberiaButtonOverrides(Module);
+		// dir_pad.png is now packaged in gui_client.data.  Installing the old
+		// asynchronous override races package extraction and can create the same
+		// virtual file twice, aborting the entire Emscripten preload.
+		// installMetasiberiaButtonOverrides(Module);
 
 		Module.setStatus('Downloading...');
 

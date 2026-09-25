@@ -319,3 +319,8 @@ Full manual UI/server/reconnect, SDL/Web parity, deploy, commit and push were no
 # 2026-08-09
 
 - Added the compatibility-first Substrata → Metasiberia identity migration matrix.
+
+# 2026-08-27
+
+- Added [`METASIBERIA_WEBSITES.md`](../METASIBERIA_WEBSITES.md) as the canonical map for the separate static `metasiberia.com` site and server/web-admin site `vr.metasiberia.com`, including cross-site FAQ/Terms links and the REG.RU static deployment boundary.
+- Updated [`FIGMA_SITE_SYNC.md`](../FIGMA_SITE_SYNC.md) with the confirmed source path for the separate public website.

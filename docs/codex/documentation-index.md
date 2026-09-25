@@ -100,6 +100,7 @@ AGENTS содержат только routing и обязательные local r
 | --- | --- | --- |
 | Public entry | [README.md](../../README.md) | публичное описание; architecture details subordinate to docs/codex |
 | Production/server | [SERVERS_AND_EXCHANGE.md](../SERVERS_AND_EXCHANGE.md) | operational runbook + dated history; live-check before action |
+| Public Websites | [METASIBERIA_WEBSITES.md](../METASIBERIA_WEBSITES.md) | canonical boundary between `metasiberia.com` static site and `vr.metasiberia.com` server site; REG.RU workflow |
 | Release | [RELEASE_PIPELINE.md](../RELEASE_PIPELINE.md) | canonical manual release policy |
 | Security reporting | [SECURITY.md](../SECURITY.md) | vulnerability reporting, не full security design |
 | Chat | [CHAT_REDESIGN_PLAN_2026-06-30.md](../CHAT_REDESIGN_PLAN_2026-06-30.md) | canonical requirements + partial implementation plan |

@@ -48,6 +48,10 @@ Copyright Glare Technologies Limited 2016 -
 
 namespace
 {
+const size_t MAX_NUM_VOXELS = 1000000;
+const size_t MAX_COMPRESSED_VOXEL_DATA_SIZE = 1000000;
+
+
 bool hasAudioPlayerTrackLikeExtension(const std::string& lower_line)
 {
 	return
@@ -1295,20 +1299,30 @@ void readWorldObjectFromStream(RandomAccessInStream& stream, WorldObject& ob)
 		{
 			// Read num voxels
 			const uint32 num_voxels = stream.readUInt32();
-			if(num_voxels > 1000000)
+			if(num_voxels > MAX_NUM_VOXELS)
 				throw glare::Exception("Invalid num voxels: " + toString(num_voxels));
 
 			ob.getDecompressedVoxels().resize(num_voxels);
 
 			// Read voxel data
 			if(num_voxels > 0)
+			{
 				stream.readData(ob.getDecompressedVoxels().data(), sizeof(Voxel) * num_voxels);
+
+				// v9-v11 stored only the decompressed voxel array, whereas current
+				// disk and network writers serialise compressed_voxels.  Establish
+				// the current in-memory invariant immediately so a legacy object is
+				// not sent or subsequently saved as an empty voxel group.
+				ob.setCompressedVoxels(WorldObject::compressVoxelGroup(ob.getDecompressedVoxelGroup()));
+			}
+			else
+				ob.setCompressedVoxels(NULL);
 		}
 		else
 		{
 			// Read compressed voxel data
 			const uint32 voxel_data_size = stream.readUInt32();
-			if(voxel_data_size > 1000000)
+			if(voxel_data_size > MAX_COMPRESSED_VOXEL_DATA_SIZE)
 				throw glare::Exception("Invalid voxel_data_size: " + toString(voxel_data_size));
 
 			// Read voxel data
@@ -1487,7 +1501,7 @@ void WorldObject::copyNetworkStateFrom(const WorldObject& other)
 
 	creator_name = other.creator_name;
 
-	compressed_voxels = other.compressed_voxels;
+	setCompressedVoxels(other.compressed_voxels);
 
 	aabb_os = other.aabb_os;
 
@@ -1886,7 +1900,7 @@ void readWorldObjectFromNetworkStreamGivenUIDImpl(RandomAccessInStream& stream, 
 	{
 		// Read compressed voxel data
 		const uint32 voxel_data_size = stream.readUInt32();
-		if(voxel_data_size > 1000000)
+		if(voxel_data_size > MAX_COMPRESSED_VOXEL_DATA_SIZE)
 			throw glare::Exception("Invalid voxel_data_size (too large): " + toString(voxel_data_size));
 
 		// Read voxel data
@@ -2174,6 +2188,23 @@ struct GetMatIndex
 
 Reference<glare::SharedImmutableArray<uint8> > WorldObject::compressVoxelGroup(const VoxelGroup& group)
 {
+	if(group.voxels.size() > MAX_NUM_VOXELS)
+		throw glare::Exception("Too many voxels to compress: " + toString(group.voxels.size()));
+
+	// The mesh paths store material indices in a uint8 (255 is reserved for
+	// empty), and the supported coordinate range guarantees that relative
+	// positions below cannot overflow an int.  Validate here because legacy
+	// v9-v11 disk/clipboard records contain raw, untrusted Voxel bytes.
+	for(size_t i=0; i<group.voxels.size(); ++i)
+	{
+		const Voxel& voxel = group.voxels[i];
+		if(voxel.mat_index < 0 || voxel.mat_index >= 255)
+			throw glare::Exception("Invalid voxel material index: " + toString(voxel.mat_index));
+		if(voxel.pos.x < -32768 || voxel.pos.y < -32768 || voxel.pos.z < -32768 ||
+			voxel.pos.x >  32766 || voxel.pos.y >  32766 || voxel.pos.z >  32766)
+			throw glare::Exception("Invalid voxel position: " + voxel.pos.toString());
+	}
+
 	size_t max_bucket = 0;
 	for(size_t i=0; i<group.voxels.size(); ++i)
 		max_bucket = myMax<size_t>(max_bucket, group.voxels[i].mat_index);
@@ -2230,6 +2261,10 @@ Reference<glare::SharedImmutableArray<uint8> > WorldObject::compressVoxelGroup(c
 	const size_t compressed_size = ZSTD_compress(compressed_data.data(), compressed_data.size(), data.data(), data.dataSizeBytes(),
 		ZSTD_CLEVEL_DEFAULT // compression level
 	);
+	if(ZSTD_isError(compressed_size))
+		throw glare::Exception("Compression of voxel buffer failed: " + std::string(ZSTD_getErrorName(compressed_size)));
+	if(compressed_size > MAX_COMPRESSED_VOXEL_DATA_SIZE)
+		throw glare::Exception("Compressed voxel data is too large: " + toString(compressed_size));
 
 	compressed_data.resize(compressed_size);
 
@@ -2323,11 +2358,9 @@ void WorldObject::decompressVoxelGroup(const uint8* compressed_data, size_t comp
 void WorldObject::compressVoxels()
 {
 	if(!this->voxel_group.voxels.empty())
-	{
-		this->compressed_voxels = compressVoxelGroup(this->voxel_group);
-	}
+		setCompressedVoxels(compressVoxelGroup(this->voxel_group));
 	else
-		this->compressed_voxels = NULL;
+		setCompressedVoxels(NULL);
 }
 
 
@@ -2351,13 +2384,20 @@ void WorldObject::clearDecompressedVoxels()
 
 void WorldObject::setCompressedVoxels(Reference<glare::SharedImmutableArray<uint8>> v)
 {
-	compressed_voxels = v;
+	const uint64 new_hash = v ? XXH64(v->data(), v->size(), /*seed=*/1) : 0;
 
-	// Compute compressed_voxels_hash
-	if(compressed_voxels)
-		compressed_voxels_hash = XXH64(compressed_voxels->data(), compressed_voxels->size(), /*seed=*/1);
-	else
-		compressed_voxels_hash = 0;
+#if GUI_CLIENT
+	if(new_hash != compressed_voxels_hash)
+	{
+		// Any queued/loaded mesh represents the old voxel payload.  Force the
+		// loader to reconsider it even when the camera LOD did not change.
+		loading_or_loaded_model_lod_level = -10;
+		loading_or_loaded_lod_level = -10;
+	}
+#endif
+
+	compressed_voxels = v;
+	compressed_voxels_hash = new_hash;
 }
 
 
@@ -2640,6 +2680,94 @@ void WorldObject::test()
 
 	try
 	{
+		//--------------------------- Test compressed voxel hash/LOD invariants and validation ----------------------------
+		{
+			WorldObject voxel_ob;
+			voxel_ob.object_type = WorldObject::ObjectType_VoxelGroup;
+			voxel_ob.getDecompressedVoxels().push_back(Voxel(Vec3<int>(1, 2, 3), 0));
+#if GUI_CLIENT
+			voxel_ob.loading_or_loaded_lod_level = 1;
+			voxel_ob.loading_or_loaded_model_lod_level = 1;
+#endif
+			voxel_ob.compressVoxels();
+			testAssert(voxel_ob.getCompressedVoxels().nonNull());
+			testAssert(voxel_ob.compressed_voxels_hash == XXH64(voxel_ob.getCompressedVoxels()->data(), voxel_ob.getCompressedVoxels()->size(), 1));
+#if GUI_CLIENT
+			testAssert(voxel_ob.loading_or_loaded_lod_level == -10);
+			testAssert(voxel_ob.loading_or_loaded_model_lod_level == -10);
+#endif
+
+			voxel_ob.getDecompressedVoxels().clear();
+			voxel_ob.compressVoxels();
+			testAssert(voxel_ob.getCompressedVoxels().isNull());
+			testAssert(voxel_ob.compressed_voxels_hash == 0);
+
+			VoxelGroup invalid_group;
+			invalid_group.voxels.push_back(Voxel(Vec3<int>(0), -1));
+			try
+			{
+				WorldObject::compressVoxelGroup(invalid_group);
+				testAssert(false);
+			}
+			catch(const glare::Exception&) {}
+
+			invalid_group.voxels[0] = Voxel(Vec3<int>(32767, 0, 0), 0);
+			try
+			{
+				WorldObject::compressVoxelGroup(invalid_group);
+				testAssert(false);
+			}
+			catch(const glare::Exception&) {}
+		}
+
+		//--------------------------- Test migrating v11 raw voxels to the current compressed representation ----------------------------
+		{
+			const Voxel legacy_voxels[] = {
+				Voxel(Vec3<int>(1, 2, 3), 0),
+				Voxel(Vec3<int>(4, 5, 6), 1)
+			};
+			const TimeStamp timestamp = TimeStamp::currentTime();
+
+			BufferOutStream legacy_buf;
+			legacy_buf.writeUInt32(11);
+			::writeToStream(UID(8765), legacy_buf);
+			legacy_buf.writeUInt32((uint32)WorldObject::ObjectType_VoxelGroup);
+			legacy_buf.writeStringLengthFirst(""); // model_url
+			legacy_buf.writeUInt32(0); // materials
+			legacy_buf.writeStringLengthFirst(""); // script
+			legacy_buf.writeStringLengthFirst("legacy voxels"); // content
+			legacy_buf.writeStringLengthFirst(""); // target_url
+			::writeToStream(Vec3d(1.0, 2.0, 3.0), legacy_buf);
+			::writeToStream(Vec3f(0, 0, 1), legacy_buf);
+			legacy_buf.writeFloat(0.f);
+			::writeToStream(Vec3f(1.f), legacy_buf);
+			timestamp.writeToStream(legacy_buf);
+			::writeToStream(UserID(42), legacy_buf);
+			legacy_buf.writeUInt32(WorldObject::COLLIDABLE_FLAG);
+			legacy_buf.writeUInt32((uint32)(sizeof(legacy_voxels) / sizeof(legacy_voxels[0])));
+			legacy_buf.writeData(legacy_voxels, sizeof(legacy_voxels));
+
+			BufferInStream legacy_stream(ArrayRef<uint8>(legacy_buf.buf.data(), legacy_buf.buf.size()));
+			WorldObject migrated_ob;
+			readWorldObjectFromStream(legacy_stream, migrated_ob);
+			testAssert(migrated_ob.getCompressedVoxels().nonNull());
+			testAssert(!migrated_ob.getCompressedVoxels()->empty());
+			testAssert(migrated_ob.compressed_voxels_hash == XXH64(migrated_ob.getCompressedVoxels()->data(), migrated_ob.getCompressedVoxels()->size(), 1));
+
+			BufferOutStream network_buf;
+			migrated_ob.writeToNetworkStream(network_buf);
+			BufferInStream network_stream(ArrayRef<uint8>(network_buf.buf.data(), network_buf.buf.size()));
+			WorldObject network_ob;
+			network_ob.uid = readUIDFromStream(network_stream);
+			readWorldObjectFromNetworkStreamGivenUID(network_stream, network_ob);
+			network_ob.decompressVoxels();
+			testAssert(network_ob.getDecompressedVoxels().size() == 2);
+			testAssert(network_ob.getDecompressedVoxels()[0].pos == legacy_voxels[0].pos);
+			testAssert(network_ob.getDecompressedVoxels()[0].mat_index == legacy_voxels[0].mat_index);
+			testAssert(network_ob.getDecompressedVoxels()[1].pos == legacy_voxels[1].pos);
+			testAssert(network_ob.getDecompressedVoxels()[1].mat_index == legacy_voxels[1].mat_index);
+		}
+
 
 		//--------------------------- Test reading a v21 spotlight model ----------------------------
 		{

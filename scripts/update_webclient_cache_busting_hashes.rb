@@ -88,6 +88,43 @@ def doReplacementsForGeneratedFilesInDir(webclient_html_contents, output_dir, bu
 	return webclient_html_contents
 end
 
+def writeBrowserEntrypoints(output_dir, webclient_html_contents)
+	# Keep one tracked HTML template while producing both the embedded-server
+	# filename and the conventional Caddy directory entrypoint from identical,
+	# hash-pinned bytes.  Stage both files first, remove the public index before
+	# replacing anything, and publish a new index last.  Once the old index is
+	# invalidated, a later failure leaves it absent instead of partially updated.
+	webclient_path = output_dir + "/webclient.html"
+	index_path = output_dir + "/index.html"
+	lock_path = output_dir + "/.webclient-entrypoints.lock"
+	temp_suffix = ".tmp." + Process.pid.to_s
+	temp_webclient_path = webclient_path + temp_suffix
+	temp_index_path = index_path + temp_suffix
+
+	File.open(lock_path, File::RDWR | File::CREAT, 0644) do |lock_file|
+		raise "Could not lock browser entrypoints in " + output_dir unless lock_file.flock(File::LOCK_EX)
+		begin
+			File.binwrite(temp_webclient_path, webclient_html_contents)
+			File.binwrite(temp_index_path, webclient_html_contents)
+
+			puts "Publishing " + webclient_path + " and " + index_path + "..."
+			begin
+				File.delete(index_path)
+			rescue Errno::ENOENT
+			end
+			begin
+				File.delete(webclient_path)
+			rescue Errno::ENOENT
+			end
+			File.rename(temp_webclient_path, webclient_path)
+			File.rename(temp_index_path, index_path)
+		ensure
+			FileUtils.rm_f(temp_webclient_path)
+			FileUtils.rm_f(temp_index_path)
+		end
+	end
+end
+
 buttons_hash = computeHashForDir(substrata_dir + "/resources/buttons")
 
 #-------------------- Update webclient.html in output dir (not test_builds) with hashes of the various files, for cache-busting ----------------------
@@ -97,9 +134,7 @@ if(File.exist?(cyberspace_output + "/gui_client.data"))
 
 	webclient_html_contents = doReplacementsForGeneratedFilesInDir(webclient_html_contents, cyberspace_output, buttons_hash)
 
-	# Write updated webclient.html contents back to disk in the output directory.
-	puts "Writing to " + cyberspace_output + "/webclient.html..."
-	File.write(cyberspace_output + "/webclient.html", webclient_html_contents)
+	writeBrowserEntrypoints(cyberspace_output, webclient_html_contents)
 else
 	puts cyberspace_output + "/gui_client.data not found, skipping."
 end
@@ -112,9 +147,7 @@ if(File.exist?(cyberspace_output + "/test_builds/gui_client.data"))
 
 	webclient_html_contents = doReplacementsForGeneratedFilesInDir(webclient_html_contents, cyberspace_output + "/test_builds", buttons_hash)
 
-	# Write updated webclient.html contents back to disk in the output directory.
-	puts "Writing to " + cyberspace_output + "/test_builds/webclient.html..."
-	File.write(cyberspace_output + "/test_builds/webclient.html", webclient_html_contents)
+	writeBrowserEntrypoints(cyberspace_output + "/test_builds", webclient_html_contents)
 else
 	puts cyberspace_output + "/test_builds/gui_client.data not found, skipping."
 end

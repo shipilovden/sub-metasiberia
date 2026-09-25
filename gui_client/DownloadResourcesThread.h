@@ -29,6 +29,14 @@ struct tls_config;
 class DownloadingResourceQueue;
 
 
+class ResourceDownloadFailedMessage : public ThreadMessage
+{
+public:
+	ResourceDownloadFailedMessage(const URLString& URL_) : ThreadMessage(Msg_ResourceDownloadFailedMessage), URL(URL_) {}
+	URLString URL;
+};
+
+
 class ResourceDownloadedMessage : public ThreadMessage
 {
 public:

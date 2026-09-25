@@ -281,7 +281,7 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 
 	const std::string host_header = request.getHostHeader();
 	const std::string host_no_port = stripPort(host_header);
-	const std::string canonical_host; // Canonical hostname redirect is not configured in this server config.
+	const std::string canonical_host = "vr.metasiberia.com";
 
 	// If configured, redirect to the canonical hostname (preserving path + query).
 	// Leave localhost and empty Host header untouched (dev/testing).
@@ -683,7 +683,30 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 	else if(request.verb == "GET")
 	{
 		// Route GET request
-		if(request.path == "/")
+		if(request.path == "/robots.txt" || request.path == "/sitemap.xml" || request.path == "/google4db6916763b217c1.html")
+		{
+			// robots.txt and sitemap.xml are kept in public_files, but are exposed at
+			// the domain root where crawlers expect them.
+			const std::string filename = request.path.substr(1);
+			Reference<WebDataStoreFile> store_file;
+			{
+				Lock lock(data_store->mutex);
+				const auto lookup_res = data_store->public_files.find(filename);
+				if(lookup_res != data_store->public_files.end())
+					store_file = lookup_res->second;
+			}
+
+			if(store_file.nonNull())
+			{
+				const std::string content_type = request.path == "/sitemap.xml" ? "application/xml" : store_file->content_type;
+				web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, store_file->uncompressed_data.data(), store_file->uncompressed_data.size(), content_type);
+			}
+			else
+			{
+				web::ResponseUtils::writeHTTPNotFoundHeaderAndData(reply_info, "No such SEO file found");
+			}
+		}
+		else if(request.path == "/")
 		{
 			MainPageHandlers::renderRootPage(*this->world_state, *this->data_store, request, reply_info);
 		}

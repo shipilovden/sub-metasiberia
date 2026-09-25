@@ -46,6 +46,7 @@ enum GuiClientThreadMessages
 	Msg_GetFileMessage,
 	Msg_NewResourceOnServerMessage,
 	Msg_ResourceDownloadedMessage,
+	Msg_ResourceDownloadFailedMessage,
 	Msg_TerrainChunkGeneratedMsg,
 	Msg_WindNoiseLoaded,
 	Msg_UserGearListMessage,

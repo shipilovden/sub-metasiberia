@@ -232,6 +232,19 @@ static std::vector<std::string> qt_debug_msgs;
 static FileOutStream* log_file = nullptr;
 
 
+static void logLifecycleTiming(const char* stage, Timer& timer)
+{
+	const std::string message = std::string("Lifecycle: ") + stage + " took " + timer.elapsedStringMSWIthNSigFigs();
+	conPrint(message);
+	if(log_file)
+	{
+		log_file->getFileStream() << message << '\n';
+		log_file->flush();
+	}
+	timer.reset();
+}
+
+
 static void migrateLegacyQtSettings(QSettings& metasiberia_settings)
 {
 	const QString migration_key = "migration/legacy_cyberspace_settings_imported_v1";
@@ -1538,6 +1551,28 @@ private:
 };
 
 
+static void applyEditorDockTitleBarTheme(QDockWidget* dock_widget, const QPalette& palette)
+{
+	QWidget* title_bar = dock_widget ? dock_widget->titleBarWidget() : nullptr;
+	if(!title_bar || title_bar->objectName() != QStringLiteral("editorDockTitleBar"))
+		return;
+
+	const QColor background = palette.color(QPalette::Window);
+	const QColor foreground = palette.color(QPalette::WindowText);
+	const QColor hover = foreground.lightness() > background.lightness() ? background.lighter(132) : background.darker(104);
+	// Own the custom title's colours locally, including when the dock floats.
+	// Do not depend on reapplying the main-window stylesheet to refresh it.
+	const QString title_style = QString(
+		"QWidget#editorDockTitleBar { background: %1; color: %2; border: none; }"
+		"QLabel#editorDockTitleLabel { background: transparent; color: %2; border: none; }"
+		"QWidget#editorDockTitleBar QToolButton { background: transparent; color: %2; border: none; border-radius: 3px; padding: 1px; }"
+		"QWidget#editorDockTitleBar QToolButton:hover { background: %3; }")
+		.arg(background.name(QColor::HexRgb), foreground.name(QColor::HexRgb), hover.name(QColor::HexRgb));
+	if(title_bar->styleSheet() != title_style)
+		title_bar->setStyleSheet(title_style);
+}
+
+
 static void installEditorDockTitleBar(QDockWidget* dock_widget)
 {
 	if(!dock_widget)
@@ -1583,6 +1618,7 @@ static void installEditorDockTitleBar(QDockWidget* dock_widget)
 	QObject::connect(close_button, &QToolButton::clicked, dock_widget, [dock_widget]() { dock_widget->close(); });
 
 	dock_widget->setTitleBarWidget(title_bar);
+	applyEditorDockTitleBarTheme(dock_widget, QApplication::palette());
 }
 
 
@@ -2170,7 +2206,10 @@ void MainWindow::initialiseUI()
 		gui_client.resource_manager,
 		&gui_client.animation_manager,
 		&gui_client,
-		[this]() { ui->glWidget->makeCurrent(); }
+		[main_gl_widget = QPointer<GlWidget>(ui->glWidget)]() {
+			if(main_gl_widget)
+				main_gl_widget->makeCurrent();
+		}
 	);
 	avatar_dock_widget->setWidget(avatar_settings_widget);
 	addDockWidget(Qt::LeftDockWidgetArea, avatar_dock_widget);
@@ -2465,7 +2504,11 @@ void MainWindow::initialiseUI()
 
 	ui->worldSettingsWidget->init(this);
 
-	ui->objectEditor->init();
+	{
+		Timer stage_timer;
+		ui->objectEditor->init();
+		logLifecycleTiming("object editor initialisation", stage_timer);
+	}
 	scientific_object_editor->init(settings);
 	tree_editor_panel->init(settings, TreeObject::findBundledAssetRoot(base_dir_path));
 
@@ -2527,7 +2570,8 @@ void MainWindow::initialiseUI()
 		chat_emoji_tab_widget->setMinimumSize(900, 700);
 		popup_layout->addWidget(chat_emoji_tab_widget);
 
-		rebuildChatEmojiPopupContents();
+		// toggleChatEmojiPopup builds the current categories on demand. Building
+		// every hidden emoji button here only adds startup/layout/style work.
 		chat_emoji_popup->setMinimumSize(940, 780);
 		chat_emoji_popup->resize(940, 780);
 		connect(ui->chatEmojiButton, &QToolButton::clicked, this, &MainWindow::toggleChatEmojiPopup);
@@ -2719,7 +2763,9 @@ void MainWindow::initialiseUI()
 
 #ifdef _WIN32
 	// Create a GPU device.  Needed to get hardware accelerated video decoding and for hardware texture sharing for CEF.
+	Timer device_init_timer;
 	Direct3DUtils::createGPUDeviceAndMFDeviceManager(d3d_device, device_manager);
+	logLifecycleTiming("video device initialisation", device_init_timer);
 	gui_client.device_manager = device_manager.ptr;
 	gui_client.d3d_device = d3d_device.ptr;
 
@@ -2778,7 +2824,7 @@ void MainWindow::initialiseUI()
 }
 
 
-void MainWindow::initialiseThemesMenu()
+void MainWindow::initialiseThemesMenu(bool apply_saved_theme)
 {
 	if(!ui || !ui->menuThemes)
 		return;
@@ -2789,6 +2835,8 @@ void MainWindow::initialiseThemesMenu()
 		default_qt_style_name_set = !default_qt_style_name.empty();
 	}
 
+	const QString active_theme = theme_action_group && theme_action_group->checkedAction() ?
+		theme_action_group->checkedAction()->data().toString() : QString();
 	ui->menuThemes->clear();
 
 	if(theme_action_group)
@@ -2831,6 +2879,13 @@ void MainWindow::initialiseThemesMenu()
 	});
 
 	const std::string saved_theme = QtUtils::toStdString(settings->value(QT_THEME_SETTINGS_KEY, QString()).toString());
+	if(!apply_saved_theme)
+	{
+		// LanguageChange only rebuilds translated menu labels. Reapplying the
+		// palette/style here repolishes the entire UI again during startup.
+		updateThemesMenuCheckedState(QtUtils::toStdString(active_theme));
+		return;
+	}
 	if(saved_theme.empty())
 	{
 		default_theme_action->setChecked(true);
@@ -3019,7 +3074,7 @@ void MainWindow::refreshTranslatedUiText()
 		gui_client.gear_inventory_ui->refreshText(current_ui_language == RuntimeTranslation::UILanguage::Russian);
 
 	if(theme_action_group)
-		initialiseThemesMenu();
+		initialiseThemesMenu(/*apply_saved_theme=*/false);
 
 	configureEditAddSubmenu();
 	configureMainToolbarButtons();
@@ -3246,7 +3301,6 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_plain(ui->actionGo_to_CryptoVoxels_World, "boxes", QString::fromUtf8("▦"));
 	set_plain(ui->actionGo_to_Substrata_Server, "server", QString::fromUtf8("▤"));
 	set_accent(ui->actionGo_to_Metasiberia_Server, "snowflake", "#38BDF8", QString::fromUtf8("✣"));
-	set_plain(ui->actionGo_to_Shki_nvkz_Server, "radio-tower", QString::fromUtf8("⌁"));
 	set_plain(ui->actionGo_to_Map_World, "map", QString::fromUtf8("▱"));
 	set_accent(ui->menuGo_to_Favorites->menuAction(), "star", "#F59E0B", QString::fromUtf8("★"));
 	set_plain(ui->actionSet_Start_Location, "map-pin-house", QString::fromUtf8("⌂"));
@@ -3452,12 +3506,18 @@ void MainWindow::applyMainChromeThemeStylesheet()
 		"QToolTip { color: %1; background-color: %2; border: 1px solid %3; font-size: 9pt; padding: 6px; border-radius: 3px; }")
 		.arg(css(text), css(tooltip_background), css(border));
 
-	setStyleSheet(main_style);
-	qApp->setStyleSheet(tooltip_style);
+	// Retranslation also reaches here. Reapplying an identical stylesheet
+	// repolishes every descendant (including the entire restored chat history).
+	if(styleSheet() != main_style)
+		setStyleSheet(main_style);
+	if(qApp->styleSheet() != tooltip_style)
+		qApp->setStyleSheet(tooltip_style);
+	applyEditorDockTitleBarTheme(ui->editorDockWidget, palette);
 
 	if(ui->menubar)
 	{
-		ui->menubar->setStyleSheet(menu_bar_style);
+		if(ui->menubar->styleSheet() != menu_bar_style)
+			ui->menubar->setStyleSheet(menu_bar_style);
 		// Let QMenuBar derive its height from the styled 28 px items.  A fixed
 		// 28 px bar is too short once its own padding and bottom border are added;
 		// Qt then moves every action into the overflow chevron.
@@ -3465,13 +3525,13 @@ void MainWindow::applyMainChromeThemeStylesheet()
 		ui->menubar->updateGeometry();
 		const QList<QMenu*> menus = ui->menubar->findChildren<QMenu*>();
 		for(QMenu* menu : menus)
-			if(menu)
+			if(menu && menu->styleSheet() != menu_style)
 				menu->setStyleSheet(menu_style);
 	}
 
-	if(ui->toolBar)
+	if(ui->toolBar && ui->toolBar->styleSheet() != toolbar_style)
 		ui->toolBar->setStyleSheet(toolbar_style);
-	if(ui->statusbar)
+	if(ui->statusbar && ui->statusbar->styleSheet() != main_style)
 		ui->statusbar->setStyleSheet(main_style);
 }
 
@@ -3706,6 +3766,9 @@ MainWindow::~MainWindow()
 	if(gear_inventory_panel)
 		gear_inventory_panel->shutdownPreview();
 
+	if(avatar_settings_widget)
+		avatar_settings_widget->shutdownGL();
+
 	if(runtime_translator && QApplication::instance())
 		QApplication::instance()->removeTranslator(runtime_translator);
 
@@ -3734,6 +3797,11 @@ MainWindow::~MainWindow()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+	if(closing)
+	{
+		event->accept();
+		return;
+	}
 	// Don't try and close everything down while we're in the message loop in the chromium embedded framework (CEF) code,
 	// because that will try and close CEF down, which leads to problems.
 	// Instead set a flag (should_close), and close the mainwindow when we're back in the main message loop and not the CEF loop.
@@ -3744,9 +3812,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
 		return;
 	}
 
-	ui->glWidget->makeCurrent();
-	if(gear_inventory_panel)
-		gear_inventory_panel->shutdownPreview();
+	closing = true;
+	Timer shutdown_stage_timer;
 
 	// If we are in fullscreen mode, exit it before we save the window state.  This is because we want to start next time not in fullscreen mode.
 	if(this->isFullScreen())
@@ -3756,8 +3823,20 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	settings->setValue("mainwindow/geometry", saveGeometry());
 	settings->setValue("mainwindow/windowState", saveState());
 
+	// Respond to Close before joining workers and releasing GPU/browser data.
+	// Keep the GL widget alive until its context-dependent cleanup has finished.
+	hide();
+	logLifecycleTiming("close window", shutdown_stage_timer);
+
+	ui->glWidget->makeCurrent();
+	if(avatar_settings_widget)
+		avatar_settings_widget->shutdownGL();
+	if(gear_inventory_panel)
+		gear_inventory_panel->shutdownPreview();
+	ui->glWidget->makeCurrent();
 
 	gui_client.shutdown();
+	logLifecycleTiming("client shutdown", shutdown_stage_timer);
 
 	CPU_render_stats_widget = nullptr;
 	GPU_render_stats_widget = nullptr;
@@ -3765,14 +3844,15 @@ void MainWindow::closeEvent(QCloseEvent* event)
 
 	this->opengl_engine = NULL;
 	ui->glWidget->shutdown(); // Shuts down OpenGL Engine.
+	logLifecycleTiming("OpenGL shutdown", shutdown_stage_timer);
 
 	if(log_window) log_window->close();
 
 	in_CEF_message_loop = true;
 	CEF::shutdownCEF();
+	logLifecycleTiming("browser shutdown", shutdown_stage_timer);
 	in_CEF_message_loop = false;
 
-	this->closing = true;
 	QMainWindow::closeEvent(event);
 }
 
@@ -5320,6 +5400,9 @@ void MainWindow::notePrivateChatDialogFromPlainText(const QString& plain_text, b
 	if(incoming_message && count_unread)
 		dialog.unread_count++;
 
+	if(chat_loading_history)
+		return; // Refresh the dialog list once after the history batch.
+
 	refreshPrivateChatUnreadCount();
 	if(chat_tabs_bar && chat_tabs_bar->currentIndex() == 2 && !chat_private_conversation_open)
 		rebuildChatUserRows();
@@ -5936,6 +6019,10 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 	const int insert_index = myMax(0, chat_messages_list_layout->count() - 1);
 	chat_messages_list_layout->insertWidget(insert_index, message_row);
 	chat_message_counter++;
+	// Re-styling every earlier row for every restored message is quadratic
+	// and blocks startup/world changes for large histories. Refresh once below.
+	if(chat_loading_history)
+		return;
 	applyChatMessageDisplaySettings();
 	updateChatMessageVisibility();
 
@@ -6074,12 +6161,14 @@ void MainWindow::applyChatMessageDisplaySettings()
 	const QList<QFrame*> rows = chat_messages_scroll_area->findChildren<QFrame*>("chatMessageRow");
 	for(QFrame* row : rows)
 	{
-		row->setStyleSheet(chatMessageRowStyle(
+		const QString row_style = chatMessageRowStyle(
 			row->property("chatPrivateMessage").toBool(),
 			row->property("chatAttachmentMessage").toBool(),
 			row->property("chatSystemMessage").toBool(),
 			row->property("chatReplyMessage").toBool()
-		));
+		);
+		if(row->styleSheet() != row_style)
+			row->setStyleSheet(row_style);
 		if(QLayout* layout = row->layout())
 			layout->setContentsMargins(10, chat_compact_message_view ? 5 : 9, 10, chat_compact_message_view ? 5 : 9);
 	}
@@ -6764,6 +6853,9 @@ void MainWindow::clearChatMessageWidgets()
 
 void MainWindow::loadChatHistoryFromDisk()
 {
+	if(closing)
+		return;
+	Timer history_timer;
 	QFile file(chatHistoryFilePath());
 	if(!file.exists() || !file.open(QIODevice::ReadOnly))
 		return;
@@ -6797,7 +6889,16 @@ void MainWindow::loadChatHistoryFromDisk()
 
 	chat_loading_history = false;
 	refreshPrivateChatUnreadCount();
+	applyChatMessageDisplaySettings();
 	updateChatMessageVisibility();
+	if(chat_tabs_bar && chat_tabs_bar->currentIndex() == 2 && !chat_private_conversation_open)
+		rebuildChatUserRows();
+	if(chat_messages_scroll_area)
+		QTimer::singleShot(0, this, [this]() {
+			if(!closing && chat_messages_scroll_area && chat_messages_scroll_area->verticalScrollBar())
+				chat_messages_scroll_area->verticalScrollBar()->setValue(chat_messages_scroll_area->verticalScrollBar()->maximum());
+		});
+	logLifecycleTiming("chat history presentation", history_timer);
 }
 
 
@@ -6862,6 +6963,10 @@ void MainWindow::appendLocalChatAttachmentMessage(const QStringList& selected_fi
 
 void MainWindow::clearChatMessages()
 {
+	// Disconnect also calls this during shutdown. Rebuilding the entire chat
+	// just before destroying its widgets is both unnecessary and very costly.
+	if(closing)
+		return;
 	clearChatMessageWidgets();
 	loadChatHistoryFromDisk();
 }
@@ -6968,9 +7073,15 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 	Timer timerEvent_timer;
 
+	static bool first_timer_event = true;
+	const bool log_first_frame = first_timer_event;
+	first_timer_event = false;
+	Timer first_frame_stage_timer;
 	in_CEF_message_loop = true;
 	CEF::doMessageLoopWork();
 	in_CEF_message_loop = false;
+	if(log_first_frame)
+		logLifecycleTiming("first browser event processing", first_frame_stage_timer);
 
 
 	// SDL_GameControllerUpdate(); // SDL gamepad support
@@ -7005,6 +7116,8 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	mouse_cursor_state.alt_key_down = alt_key_down;
 	mouse_cursor_state.ctrl_key_down = ctrl_key_down;
 	gui_client.timerEvent(mouse_cursor_state);
+	if(log_first_frame)
+		logLifecycleTiming("first world update", first_frame_stage_timer);
 	ui->objectEditor->setParticleDiagnostics(gui_client.getSelectedParticleEmitterParticleCount(), gui_client.getTotalParticleCount());
 
 	// Update webcam dock (Qt).
@@ -7152,6 +7265,8 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 	if(GPU_render_stats_widget)
 		GPU_render_stats_widget->addFrameTime((float)opengl_engine->last_total_draw_GPU_time);
+	if(log_first_frame)
+		logLifecycleTiming("first frame draw", first_frame_stage_timer);
 }
 
 
@@ -9780,12 +9895,6 @@ void MainWindow::on_actionGo_to_Substrata_Server_triggered()
 void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
 {
 	visitSubURL("sub://vr.metasiberia.com/");
-}
-
-
-void MainWindow::on_actionGo_to_Shki_nvkz_Server_triggered()
-{
-	visitSubURL("sub://176.197.223.42/");
 }
 
 
@@ -12575,7 +12684,9 @@ int main(int argc, char *argv[])
 			// We want to call connectToServer as quickly as possible to hide the latency of setting up the TLS connection to the server.
 			// So do the bare minimum of initialisation, call connectToServer, then do the reset (setting up UI etc.)
 
+			Timer startup_stage_timer;
 			MainWindow mw(cyberspace_base_dir_path, appdata_path, parsed_args);
+			logLifecycleTiming("window construction", startup_stage_timer);
 			mw.minidump_sender = minidump_sender;
 
 			// If the user didn't explicitly specify a URL (e.g. on the command line), and there is a valid start location URL setting, use it.
@@ -12607,6 +12718,7 @@ int main(int argc, char *argv[])
 
 			// Do rest of initialisation now we have called connectToServer().
 			mw.gui_client.postConnectInitialise();
+			logLifecycleTiming("resource initialisation", startup_stage_timer);
 
 			bool enable_CEF = true;
 			try
@@ -12620,6 +12732,7 @@ int main(int argc, char *argv[])
 
 			if(enable_CEF)
 				CEF::initialiseCEF(cyberspace_base_dir_path, appdata_path);
+			logLifecycleTiming("browser initialisation", startup_stage_timer);
 
 			open_even_filter->main_window = &mw;
 
@@ -12630,6 +12743,7 @@ int main(int argc, char *argv[])
 				mw.test_screenshot_taking = true;
 
 			mw.initialiseUI();
+			logLifecycleTiming("UI initialisation", startup_stage_timer);
 
 			if(!enable_CEF)
 				mw.logMessage("!!!!! Disallowing CEF usage due to SUBSTRATA_ENABLE_CEF env var being set to false !!!!!");
@@ -12642,6 +12756,7 @@ int main(int argc, char *argv[])
 			}
 
 			mw.show(); // Calls glWidget->initializeGL() which initialises OpenGLEngine.
+			logLifecycleTiming("OpenGL initialisation", startup_stage_timer);
 
 			mw.raise();
 
@@ -12664,6 +12779,7 @@ int main(int argc, char *argv[])
 
 
 			mw.afterGLInitInitialise();
+			logLifecycleTiming("scene initialisation", startup_stage_timer);
 
 
 			app_exec_res = app.exec();

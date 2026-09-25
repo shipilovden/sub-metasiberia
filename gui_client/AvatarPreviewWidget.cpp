@@ -101,6 +101,8 @@ void AvatarPreviewWidget::init(const std::string& base_dir_path_, QSettings* set
 
 void AvatarPreviewWidget::shutdown()
 {
+	if(opengl_engine.isNull())
+		return;
 	// Make context current as we destroy the opengl enegine.
 	this->makeCurrent();
 
@@ -111,6 +113,8 @@ void AvatarPreviewWidget::shutdown()
 
 void AvatarPreviewWidget::resizeGL(int width_, int height_)
 {
+	if(opengl_engine.isNull())
+		return; // A late Qt resize can arrive after preview shutdown.
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called." (https://doc.qt.io/qt-5/qglwidget.html#resizeGL)
 
 	viewport_w = width_;
@@ -131,6 +135,8 @@ void AvatarPreviewWidget::resizeGL(int width_, int height_)
 
 void AvatarPreviewWidget::initializeGL()
 {
+	if(opengl_engine.isNull())
+		return;
 	assert(QGLContext::currentContext() == this->context()); // "There is no need to call makeCurrent() because this has already been done when this function is called."  (https://doc.qt.io/qt-5/qglwidget.html#initializeGL)
 
 	std::string data_dir = base_dir_path + "/data";

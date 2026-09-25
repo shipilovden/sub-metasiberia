@@ -38,7 +38,7 @@ public:
 	bool built_dynamic_physics_ob;
 
 	int subsample_factor; // Computed when loading voxels.
-	uint64 voxel_hash;
+	uint64 voxel_hash = 0;
 
 	// vert data offset = 0
 	size_t index_data_src_offset_B;
@@ -58,7 +58,7 @@ struct LoadModelTaskUploadingUserInfo : public UploadingUserInfo
 	bool built_dynamic_physics_ob;
 
 	int voxel_subsample_factor; // Computed when loading voxels.
-	uint64 voxel_hash;
+	uint64 voxel_hash = 0;
 
 	std::vector<WorldMaterialRef> extracted_gltf_materials;
 };
@@ -96,7 +96,7 @@ public:
 	bool build_dynamic_physics_ob; // If true, build a convex hull shape instead of a mesh physics shape.
 	
 	Reference<glare::SharedImmutableArray<uint8> > compressed_voxels;
-	uint64 voxel_hash;
+	uint64 voxel_hash = 0;
 	VoxelMeshMode voxel_mesh_mode;
 	js::Vector<bool> mat_transparent;
 	bool need_lightmap_uvs;

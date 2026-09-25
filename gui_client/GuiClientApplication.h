@@ -26,6 +26,7 @@ public:
 	
 	QString getOpenFilename();
 	void setOpenFilename(QString filename);
+	bool notify(QObject* receiver, QEvent* event) override;
 
 signals:;
 	void openFileOSX(const QString);

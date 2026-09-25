@@ -8,7 +8,7 @@
 - Production server site: `https://vr.metasiberia.com/`
 - Сервер: `metasiberia-server`, public IP `87.103.196.229`, LAN IP `192.168.0.30` (обновлено 2026-06-21)
 
-Публичный маркетинговый сайт `https://metasiberia.com/` размещён отдельно; его исходники в этом репозитории не подтверждены. Не смешивать его макеты с C++ server site и отдельными `/admin*` routes.
+Публичный маркетинговый сайт `https://metasiberia.com/` размещён отдельно; его source of truth — `C:\programming\Metasiberia official\Metasiberia one`. Не смешивать его макеты с C++ server site и отдельными `/admin*` routes; границы и deploy rules зафиксированы в [`METASIBERIA_WEBSITES.md`](METASIBERIA_WEBSITES.md).
 
 ## Что должно быть в Figma (минимум)
 Одна страница Figma = один “раздел” сайта. На каждом фрейме сверху подпись URL.

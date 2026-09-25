@@ -345,6 +345,42 @@ systemctl show metasiberia-server.service -p ActiveState -p SubState -p NRestart
 - Текущие production overrides должны указывать в active `/home/denshipilov/cyberspace_server_state/...`, а не в старый `/root/cyberspace_server_state/...`.
 - На Linux сервер использует inotify-watcher. Поэтому будущая подтверждённая синхронизация должна обновлять содержимое директорий *in-place* (без `mv`/rename самой директории), иначе watcher “теряет” обновления. Historical v2 script использовал для этого `rsync`, но от этого не становится current production workflow.
 
+### 9.2.1 Канонический workflow для web/admin Metasiberia
+
+Этот раздел относится к сайту `https://vr.metasiberia.com/` и встроенной web-админке. Он не относится к WebClient/Emscripten и не требует пересборки клиентских артефактов.
+
+Исходники в репозитории:
+- серверные HTML-страницы, маршруты FAQ/Terms/Privacy и админки: `C:\programming\substrata\webserver\MainPageHandlers.cpp` и связанные обработчики в `webserver/`;
+- общая локализация и browser-side поведение страниц: `C:\programming\substrata\webserver_public_files\site.js`;
+- публичный адрес сайта: `https://vr.metasiberia.com/`;
+- основные страницы: `/faq`, `/terms`, `/privacy`;
+- web-админка: `/admin`, `/admin_users`, `/admin_user/<id>`.
+
+Production paths на `metasiberia-server`:
+- source checkout: `/srv/metasiberia/src/sub-metasiberia`;
+- Linux build tree: `/srv/metasiberia/build/master`;
+- Linux server output: `/srv/metasiberia/output/test_builds/server`;
+- staged releases: `/srv/metasiberia/releases/master-<git-short>-<UTC-timestamp>/`;
+- active release: `/srv/metasiberia/releases/current`;
+- active public files: `/home/denshipilov/cyberspace_server_state/webserver_public_files/`;
+- active HTML fragments: `/home/denshipilov/cyberspace_server_state/webserver_fragments/`;
+- WebClient files: `/home/denshipilov/cyberspace_server_state/webclient/` (для web/admin deployment не изменять);
+- systemd unit: `metasiberia-server.service`; его `ExecStart` должен использовать `/srv/metasiberia/releases/current/server`.
+
+Правила выкладки:
+1. Перед началом зафиксировать текущие `readlink -f /srv/metasiberia/releases/current`, SHA256 active binary и production `webserver_public_files/site.js`.
+2. Сохранить backup текущего binary и `site.js` в `/srv/metasiberia/data/backups/<UTC-timestamp>/`; после копирования сверить SHA256 backup с исходными файлами.
+3. Выполнить `git diff --check`. Для изменённого `site.js` дополнительно выполнить `node --check webserver_public_files/site.js`.
+4. Если менялся `webserver/MainPageHandlers.cpp`, собирать только Linux target `server` в `/srv/metasiberia/build/master`; не собирать `client`, `gui_client`, WebClient, Emscripten и не запускать CMake/Ninja workflow для клиентских деревьев.
+5. Создать новый staged release в `/srv/metasiberia/releases/`, скопировать туда именно проверенный Linux ELF `server`, проверить его SHA256 и наличие ожидаемых текстовых маркеров страницы. Не использовать Windows `server.exe`.
+6. После проверки staged release обновить production `webserver_public_files/site.js` in-place; не переименовывать и не заменять каталоги `cyberspace_server_state` или `webserver_public_files`, поскольку watcher использует inotify.
+7. Переключить сначала `releases/current.next`, затем `releases/current` на новый release. До переключения убедиться, что target release содержит текущие изменения FAQ/Terms/Privacy, если они входят в scope.
+8. После переключения выполнить разрешённый оператором `sudo systemctl restart metasiberia-server.service`. Если restart выполняется вручную оператором, deployment считать ожидающим runtime-проверки до его завершения.
+9. После restart проверить `ActiveState`, `MainPID`, `NRestarts`, фактический target `readlink -f /srv/metasiberia/releases/current`, SHA256 текущего binary и production `site.js`.
+10. Выполнить HTTP smoke-check для `/faq`, `/terms` и `/privacy`. HTTP 200 сам по себе не подтверждает новую редакцию: дополнительно проверять ожидаемые текстовые маркеры и отдельно фиксировать runtime-проверку переключения RU/EN в браузере (выполнена или невозможна в текущей среде).
+
+Rollback: вернуть `/srv/metasiberia/releases/current` на предварительно зафиксированный рабочий release, восстановить production `site.js` из backup in-place и перезапустить `metasiberia-server.service`; затем повторить проверки из пункта 9. Не трогать при web/admin deployment `database`, `server_state.bin`, authentication, cookie/consent, WebClient и другие страницы вне scope.
+
 ### 9.3 Пользователи и “БД” (как сейчас устроено)
 Сервер хранит состояние (включая пользователей, парсели, сессии и т.п.) в файле базы:
 - `/home/denshipilov/cyberspace_server_state/server_state.bin`

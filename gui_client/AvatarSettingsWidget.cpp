@@ -109,6 +109,10 @@ AvatarSettingsWidget::~AvatarSettingsWidget()
 
 void AvatarSettingsWidget::shutdownGL()
 {
+	if(gl_shutdown)
+		return;
+	gl_shutdown = true;
+	tick_timer.stop();
 	// Make sure we have set the widget gl context to current as we destroy OpenGL stuff.
 	if(this->avatarPreviewGLWidget)
 	{
@@ -125,6 +129,7 @@ void AvatarSettingsWidget::shutdownGL()
 
 	if(make_main_gl_context_current)
 		make_main_gl_context_current();
+	make_main_gl_context_current = {};
 }
 
 
@@ -179,7 +184,7 @@ void AvatarSettingsWidget::onCloseClicked()
 
 void AvatarSettingsWidget::onTick()
 {
-	if(!avatarPreviewGLWidget)
+	if(gl_shutdown || !isVisible() || !avatarPreviewGLWidget)
 		return;
 
 	avatarPreviewGLWidget->makeCurrent();
@@ -247,6 +252,8 @@ void AvatarSettingsWidget::retranslateDynamicUi()
 
 void AvatarSettingsWidget::loadModelIntoPreview(const std::string& local_path, bool show_error_dialogs)
 {
+	if(gl_shutdown)
+		return;
 	const std::string use_local_path = local_path.empty() ?
 		(base_dir_path + "/data/resources/xbot_glb_3242545562312850498.bmesh") :
 		local_path;

@@ -31,9 +31,13 @@ public:
 
 	virtual void kill();
 
+	// Stop without draining. The owner must also interrupt any blocked socket I/O.
+	void cancel();
+
 private:
 	SocketInterfaceRef socket;
 	glare::AtomicInt should_die;
+	glare::AtomicInt cancelled;
 
 	Condition stuff_to_do_condition;
 	

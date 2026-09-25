@@ -131,12 +131,22 @@ void EmscriptenResourceDownloader::onResourceError(Reference<CurrentlyDownloadin
 	(*this->num_resources_downloading)--;
 
 	resource_manager->addToDownloadFailedURLs(downloading_resource->URL);
+	out_msg_queue->enqueue(new ResourceDownloadFailedMessage(downloading_resource->URL));
 
 	//ResourceRef resource = resource_manager->getOrCreateResourceForURL(downloading_resource->URL);
 	//resource->setState(Resource::State_NotPresent);
 
 	//conPrint("DownloadResourcesThread: Server couldn't send file '" + URL + "'");// (Result=" + toString(result) + ")");
 	out_msg_queue->enqueue(new LogMessage("Server couldn't send resource '" + std::string(downloading_resource->URL.begin(), downloading_resource->URL.end()) + "' (resource not found)")); // Send message back to GUIClient
+}
+
+
+bool EmscriptenResourceDownloader::isDownloadingURL(const URLString& URL) const
+{
+	for(const auto& active : downloading_resources)
+		if(active->URL == URL)
+			return true;
+	return false;
 }
 
 
@@ -164,7 +174,10 @@ void EmscriptenResourceDownloader::think()
 
 					// conPrint("EmscriptenResourceDownloader: considering URL " + URL + "...");
 
-					if(resource->getState() == Resource::State_NotPresent)
+					// Web resources stay NotPresent because their bytes are delivered in
+					// memory, not stored on disk.  Coalesce requests from fallback users
+					// against the active transfers as well as the pending queue.
+					if(!isDownloadingURL(URL) && resource->getState() == Resource::State_NotPresent)
 					{
 						if(gui_client->isDownloadingResourceCurrentlyNeeded(URL))
 						{

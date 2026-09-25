@@ -403,6 +403,19 @@ cmake --build build --target server -j 4
 
 ## Emscripten/webclient
 
+### Обязательный platform-boundary gate: Qt vs SDL/Emscripten
+
+`gui_client` имеет два compile contracts: Qt desktop (`USE_SDL=OFF`) и SDL/Emscripten (`USE_SDL=ON`). Успешная Windows Qt-сборка не доказывает, что Web-client собирается или работает.
+
+Перед Web-затрагивающей правкой в `gui_client/**`, общем коде или public headers обязательно:
+
+1. Проверить, что в SDL/common path не попали Qt-only headers, типы или API (`QString`, Qt JSON/image classes, QWidget editor/adapter и т. п.).
+2. Если Qt-only поведение необходимо, вынести его на Qt boundary. Когда guard оправдан, `#if !defined(USE_SDL)` должен окружать include, declaration/signature, member/inline reference, definition и call site. Guard только вокруг тела функции недостаточен.
+3. Выполнить изолированную Emscripten-сборку `gui_client` до запуска preload/hash scripts.
+4. Если configure/build не успешен, остановиться: не использовать предыдущий JS/WASM/data bundle, не считать функцию Web-ready и не выполнять Web deploy.
+
+Это обязательный regression gate после инцидента с Qt-зависимостью в общем `GUIClient` path. Публиковать можно только артефакты, созданные успешной Emscripten-сборкой из текущего source tree; после cache-busting сверить hashes HTML, JS, WASM и data.
+
 Source command shape из `docs/building.txt`:
 
 ```powershell
@@ -417,6 +430,15 @@ ruby C:\programming\substrata\scripts\make_emscripten_preload_data.rb C:\program
 cmake --build . --target gui_client
 ruby C:\programming\substrata\scripts\update_webclient_cache_busting_hashes.rb C:\programming\substrata
 ```
+
+Текущий канонический pipeline этого workspace:
+
+- source: `C:\programming\substrata`;
+- build: `C:\programming\substrata_emscripten_build_deploy_20260817`;
+- output: `C:\programming\substrata_output_emscripten_deploy_20260817\test_builds`;
+- browser entrypoint: `/webclient/` через junction `webclient -> test_builds` в output root.
+
+`update_webclient_cache_busting_hashes.rb` под per-output exclusive lock сначала создаёт оба entrypoint во временных файлах из одного tracked template с одинаковыми hash-pinned bytes, затем строго инвалидирует старый `index.html` и публикует новый `index.html` последним через rename в том же каталоге. После успешной invalidation любой последующий сбой оставляет entrypoint отсутствующим, а не частично обновлённым; параллельные updater-процессы не могут смешать поколения файлов. Preload script также удаляет старый generated `index.html` перед пересборкой, поэтому canonical pipeline не сохраняет stale entrypoint при прерывании.
 
 Класс: expensive/data-changing. Важно: preload script удаляет/создаёт `./data`, пишет в output и touch-ит внешний `GLARE_CORE_TRUNK_DIR/graphics/TextureData.cpp`; запускать только из изолированного build dir. Tracked `emscripten_build*` не считать portable source.
 

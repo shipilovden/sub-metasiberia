@@ -68,6 +68,7 @@ private:
 	Reference<GLObject> preview_gl_ob;
 
 	bool done_initial_load;
+	bool gl_shutdown = false;
 	QTimer tick_timer;
 
 public:

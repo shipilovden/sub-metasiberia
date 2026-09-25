@@ -6,7 +6,9 @@
 
 - Target `gui_client`; Qt entry `MainWindow.cpp::main`, SDL/Emscripten entry `SDLClient.cpp::main`.
 - `GUIClient` владеет общей world/network/resource/render логикой; Qt/SDL — UI boundaries.
-- Emscripten использует common/SDL path. Не вносить Qt dependency в общий код без compile guard.
+- Emscripten использует common/SDL path. В `GUIClient` и его публичных headers запрещены безусловные Qt include/type/JSON/image/widget dependencies: этот код компилируется и для `USE_SDL=ON`.
+- `#if !defined(USE_SDL)` должен закрывать **все** точки Qt-зависимости: include, declaration/signature, member/inline use, definition и call site. Guard только вокруг тела функции не защищает SDL/Web от Qt leakage.
+- Desktop-only editor/adapter выносить на Qt boundary; не добавлять Qt convenience code в common path ради одной платформы.
 
 ## Перед изменением
 
@@ -17,6 +19,7 @@
 ## Инварианты
 
 - `USE_SDL=OFF` — Qt; `ON` — SDL/Web path.
+- Qt build не является заменой SDL/Emscripten build. При правке shared `GUIClient` или его headers Web scope считается неподтверждённым до успешной изолированной Emscripten-сборки `gui_client`.
 - XR optional/native-only; desktop работает без runtime/SDK. Не лечить avatar visibility camera offset и не добавлять лишний full mirror render.
 - Map world Mercator scale не зависит от avatar altitude/MiniMap zoom.
 - Resource/Basis fallbacks учитывать desktop/web/XR и не возвращать white textures.
@@ -35,4 +38,4 @@
 
 ## Проверка
 
-Выбирать минимальную строку матрицы в [build-and-test.md](../docs/codex/build-and-test.md). UI требует compile + manual flow; shared/protocol change добавляет server. В docs-only задаче build/runtime не запускать.
+Выбирать минимальную строку матрицы в [build-and-test.md](../docs/codex/build-and-test.md). UI требует compile + manual flow; shared/protocol change добавляет server. Для общей правки, затрагивающей SDL/Web, обязательна изолированная Emscripten-сборка `gui_client`; без неё нельзя deploy/publish Web bundle. В docs-only задаче build/runtime не запускать.

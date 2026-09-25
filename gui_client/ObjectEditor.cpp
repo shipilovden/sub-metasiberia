@@ -51,6 +51,8 @@
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSizePolicy>
+#include <QtWidgets/QStyledItemDelegate>
+#include <QtWidgets/QStyle>
 #include <QtWidgets/QTextBrowser>
 #include <QtWidgets/QVBoxLayout>
 #include <QtCore/QTimer>
@@ -58,6 +60,8 @@
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
+#include <QtCore/QDebug>
+#include <QtCore/QThread>
 #include <QtWidgets/QColorDialog>
 #include <set>
 #include <stack>
@@ -423,6 +427,9 @@ namespace
 {
 
 
+const int fontPreviewPathRole = Qt::UserRole + 1;
+
+
 QIcon makeFontPreviewIcon(TextRendererRef renderer, const QString& preview_text, const std::string& font_path)
 {
 	try
@@ -458,6 +465,58 @@ QIcon makeFontPreviewIcon(TextRendererRef renderer, const QString& preview_text,
 		return QIcon();
 	}
 }
+
+
+// Generate previews only when the popup paints a visible row. In particular,
+// model data and sizeHint queries must not open fonts: Qt can query every row
+// while sizing the combo box, even when its popup has never been opened.
+class FontPreviewDelegate : public QStyledItemDelegate
+{
+public:
+	explicit FontPreviewDelegate(QAbstractItemView* view_) : QStyledItemDelegate(view_), view(view_) {}
+
+	void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+	{
+		Q_ASSERT(QThread::currentThread() == view->thread());
+		QStyleOptionViewItem preview_option(option);
+		initStyleOption(&preview_option, index);
+
+		const QString path = index.data(fontPreviewPathRole).toString();
+		if(!path.isEmpty() && view->viewport()->isVisible() && option.rect.intersects(view->viewport()->rect()))
+		{
+			auto it = previews.find(path);
+			if(it == previews.end())
+			{
+				QIcon icon;
+				try
+				{
+					if(renderer.isNull())
+						renderer = new TextRenderer();
+					icon = makeFontPreviewIcon(renderer, makeFontPreviewText(index.data(Qt::UserRole).toString()), QtUtils::toIndString(path));
+				}
+				catch(...)
+				{}
+				// Cache failures as well, so a bad font is not retried on every repaint.
+				it = previews.emplace(path, icon).first;
+			}
+			if(!it->second.isNull())
+			{
+				preview_option.icon = it->second;
+				preview_option.features |= QStyleOptionViewItem::HasDecoration;
+				preview_option.decorationSize = QSize(300, 32);
+			}
+		}
+
+		const QWidget* widget = option.widget;
+		QStyle* style = widget ? widget->style() : QApplication::style();
+		style->drawControl(QStyle::CE_ItemViewItem, &preview_option, painter, widget);
+	}
+
+private:
+	QAbstractItemView* view;
+	mutable TextRendererRef renderer;
+	mutable std::map<QString, QIcon> previews;
+};
 
 
 void addFontComboItem(QComboBox* combo, const QString& canonical_name, const QIcon& preview_icon)
@@ -1033,7 +1092,10 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	this->fontComboBox->setMinimumContentsLength(22);
 	this->fontComboBox->setIconSize(QSize(300, 32));
 	if(this->fontComboBox->view())
+	{
 		this->fontComboBox->view()->setTextElideMode(Qt::ElideNone);
+		this->fontComboBox->setItemDelegate(new FontPreviewDelegate(this->fontComboBox->view()));
+	}
 
 	retranslateDynamicAudioPlayerUI();
 	updateAudioPlaylistButtonsEnabled();
@@ -4597,6 +4659,11 @@ void ObjectEditor::setParticleDiagnostics(size_t selected_emitter_particle_count
 
 void ObjectEditor::loadAvailableFonts()
 {
+	Timer timer;
+	const QSignalBlocker signal_blocker(this->fontComboBox);
+	const QString previous_font = this->fontComboBox->currentIndex() >= 0 ?
+		fontNameForComboIndex(this->fontComboBox, this->fontComboBox->currentIndex()) : this->selected_font_name;
+
 	// Clear existing items
 	this->fontComboBox->clear();
 
@@ -4647,8 +4714,6 @@ void ObjectEditor::loadAvailableFonts()
 				
 				if(files.size() > 0)
 				{
-					TextRendererRef preview_renderer = new TextRenderer();
-
 					// Sort files by name
 					std::sort(files.begin(), files.end(), [](const QFileInfo& a, const QFileInfo& b) {
 						return a.baseName() < b.baseName();
@@ -4657,8 +4722,11 @@ void ObjectEditor::loadAvailableFonts()
 					for(const QFileInfo& file_info : files)
 					{
 						const QString font_name = file_info.baseName();
-						const QIcon preview_icon = makeFontPreviewIcon(preview_renderer, makeFontPreviewText(font_name), QtUtils::toIndString(file_info.absoluteFilePath()));
-						addFontComboItem(this->fontComboBox, font_name, preview_icon);
+						addFontComboItem(this->fontComboBox, font_name, QIcon());
+						const int index = this->fontComboBox->count() - 1;
+						this->fontComboBox->setItemData(index, file_info.absoluteFilePath(), fontPreviewPathRole);
+						// Keep row geometry stable before and after the preview is painted.
+						this->fontComboBox->setItemData(index, QSize(360, 36), Qt::SizeHintRole);
 					}
 					
 					if(this->fontComboBox->view())
@@ -4674,4 +4742,10 @@ void ObjectEditor::loadAvailableFonts()
 			// Continue to next path
 		}
 	}
+
+	const int previous_index = this->fontComboBox->findData(previous_font);
+	this->fontComboBox->setCurrentIndex(previous_index >= 0 ? previous_index : 0);
+	this->selected_font_name = fontNameForComboIndex(this->fontComboBox, this->fontComboBox->currentIndex());
+	qInfo("ObjectEditor::loadAvailableFonts: %d fonts listed, previews deferred, elapsed %.3f ms",
+		this->fontComboBox->count() - 1, timer.elapsed() * 1000.0);
 }

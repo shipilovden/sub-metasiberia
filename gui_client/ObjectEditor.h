@@ -140,7 +140,7 @@ private:
 	void updateInfoLabel(const WorldObject& ob);
 	void updateSpotlightColourButton();
 	void updateParticleColourButton();
-	void loadAvailableFonts();
+	void loadAvailableFonts(); // Lists names/paths only; popup paint lazily generates and caches previews.
 	void syncAudioPlaylistWidgetFromContent(const std::string& content);
 	void syncContentFromAudioPlaylistWidget();
 	void addAudioPlaylistEntry(const QString& value, bool make_current);
