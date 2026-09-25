@@ -926,8 +926,15 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("WorldSettingsWidget", "Cloud underside darkness", "Затемнённость нижней части облаков");
 	add("WorldSettingsWidget", "Cloud edge softness", "Мягкость краёв облаков");
 	add("WorldSettingsWidget", "Horizon cloud fade", "Затухание облаков у горизонта");
+	add("WorldSettingsWidget", "Cloud shape scale", "Масштаб формы облаков");
+	add("WorldSettingsWidget", "Cloud detail scale", "Масштаб деталей облаков");
+	add("WorldSettingsWidget", "Cloud draw distance", "Дальность отрисовки облаков");
+	add("WorldSettingsWidget", "Cloud wind direction", "Направление ветра облаков");
+	add("WorldSettingsWidget", "Cloud light scattering", "Рассеяние света облаками");
+	add("WorldSettingsWidget", "Cloud reflection in water", "Отражение облаков в воде");
 	add("WorldSettingsWidget", " m", " м");
 	add("WorldSettingsWidget", " m/s", " м/с");
+	add("WorldSettingsWidget", " deg", " град");
 
 	add("TerrainSpecSectionWidget", "Height map URL", "URL карты высот");
 	add("TerrainSpecSectionWidget", "Mask map URL", "URL карты маски");
