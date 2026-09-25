@@ -923,6 +923,9 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("WorldSettingsWidget", "Cloud coverage", "Покрытие облаков");
 	add("WorldSettingsWidget", "Cloud density", "Плотность облаков");
 	add("WorldSettingsWidget", "Cloud wind speed", "Скорость ветра облаков");
+	add("WorldSettingsWidget", "Cloud underside darkness", "Затемнённость нижней части облаков");
+	add("WorldSettingsWidget", "Cloud edge softness", "Мягкость краёв облаков");
+	add("WorldSettingsWidget", "Horizon cloud fade", "Затухание облаков у горизонта");
 	add("WorldSettingsWidget", " m", " м");
 	add("WorldSettingsWidget", " m/s", " м/с");
 

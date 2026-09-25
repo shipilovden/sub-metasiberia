@@ -76,6 +76,9 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	connect(this->cloudCoverageWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->cloudDensityWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->cloudWindSpeedWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudBottomDarknessWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudEdgeSoftnessWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudHorizonFadeWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs0EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs1EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs2EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
@@ -481,6 +484,9 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 	SignalBlocker::setValue(cloudCoverageWorldRealControl, world_settings.volumetric_cloud_settings.coverage);
 	SignalBlocker::setValue(cloudDensityWorldRealControl, world_settings.volumetric_cloud_settings.density);
 	SignalBlocker::setValue(cloudWindSpeedWorldRealControl, world_settings.volumetric_cloud_settings.wind_speed);
+	SignalBlocker::setValue(cloudBottomDarknessWorldRealControl, world_settings.volumetric_cloud_settings.bottom_darkness);
+	SignalBlocker::setValue(cloudEdgeSoftnessWorldRealControl, world_settings.volumetric_cloud_settings.edge_softness);
+	SignalBlocker::setValue(cloudHorizonFadeWorldRealControl, world_settings.volumetric_cloud_settings.horizon_fade);
 }
 
 
@@ -567,6 +573,9 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.volumetric_cloud_settings.coverage = (float)cloudCoverageWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.density = (float)cloudDensityWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.wind_speed = (float)cloudWindSpeedWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.bottom_darkness = (float)cloudBottomDarknessWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.edge_softness = (float)cloudEdgeSoftnessWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.horizon_fade = (float)cloudHorizonFadeWorldRealControl->value();
 }
 
 
@@ -615,6 +624,9 @@ void WorldSettingsWidget::updateControlsEditable()
 	cloudCoverageWorldRealControl->setEnabled(editable);
 	cloudDensityWorldRealControl->setEnabled(editable);
 	cloudWindSpeedWorldRealControl->setEnabled(editable);
+	cloudBottomDarknessWorldRealControl->setEnabled(editable);
+	cloudEdgeSoftnessWorldRealControl->setEnabled(editable);
+	cloudHorizonFadeWorldRealControl->setEnabled(editable);
 
 	applyPushButton->setEnabled(editable);
 	if(sculpting_mode_check_box)

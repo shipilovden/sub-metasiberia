@@ -98,6 +98,9 @@ struct VolumetricCloudWorldSettings
 	float coverage;
 	float density;
 	float wind_speed;
+	float bottom_darkness;
+	float edge_softness;
+	float horizon_fade;
 };
 
 

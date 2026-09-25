@@ -71,7 +71,10 @@ VolumetricCloudWorldSettings::VolumetricCloudWorldSettings()
 	top_z(2200.f),
 	coverage(0.48f),
 	density(0.0012f),
-	wind_speed(20.f)
+	wind_speed(20.f),
+	bottom_darkness(0.4f),
+	edge_softness(0.55f),
+	horizon_fade(0.75f)
 {}
 
 
@@ -133,7 +136,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 }
 
 
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 9;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 10;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -202,6 +205,9 @@ void WorldSettings::writeToStream(OutStream& stream) const
 	buffer.writeFloat(volumetric_cloud_settings.coverage);
 	buffer.writeFloat(volumetric_cloud_settings.density);
 	buffer.writeFloat(volumetric_cloud_settings.wind_speed);
+	buffer.writeFloat(volumetric_cloud_settings.bottom_darkness);
+	buffer.writeFloat(volumetric_cloud_settings.edge_softness);
+	buffer.writeFloat(volumetric_cloud_settings.horizon_fade);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
@@ -323,6 +329,15 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 		settings.volumetric_cloud_settings.coverage = buffer_stream.readFloat();
 		settings.volumetric_cloud_settings.density = buffer_stream.readFloat();
 		settings.volumetric_cloud_settings.wind_speed = buffer_stream.readFloat();
+
+		const size_t cloud_appearance_payload_size = sizeof(float) * 3;
+		const size_t appearance_remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
+		if(version >= 10 && appearance_remaining_bytes >= cloud_appearance_payload_size)
+		{
+			settings.volumetric_cloud_settings.bottom_darkness = buffer_stream.readFloat();
+			settings.volumetric_cloud_settings.edge_softness = buffer_stream.readFloat();
+			settings.volumetric_cloud_settings.horizon_fade = buffer_stream.readFloat();
+		}
 	}
 
 	// We effectively skip any remaining data we have not processed by discarding buffer_stream.

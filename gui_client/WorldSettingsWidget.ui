@@ -545,7 +545,58 @@
      </property>
     </widget>
    </item>
+   <item row="35" column="0">
+    <widget class="QLabel" name="cloudBottomDarknessWorldLabel">
+     <property name="text">
+      <string>Cloud underside darkness</string>
+     </property>
+    </widget>
+   </item>
    <item row="35" column="1">
+    <widget class="RealControl" name="cloudBottomDarknessWorldRealControl">
+     <property name="maximum">
+      <double>1.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.010000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="36" column="0">
+    <widget class="QLabel" name="cloudEdgeSoftnessWorldLabel">
+     <property name="text">
+      <string>Cloud edge softness</string>
+     </property>
+    </widget>
+   </item>
+   <item row="36" column="1">
+    <widget class="RealControl" name="cloudEdgeSoftnessWorldRealControl">
+     <property name="maximum">
+      <double>1.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.010000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="37" column="0">
+    <widget class="QLabel" name="cloudHorizonFadeWorldLabel">
+     <property name="text">
+      <string>Horizon cloud fade</string>
+     </property>
+    </widget>
+   </item>
+   <item row="37" column="1">
+    <widget class="RealControl" name="cloudHorizonFadeWorldRealControl">
+     <property name="maximum">
+      <double>1.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.010000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="38" column="1">
     <spacer name="verticalSpacer_6">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
