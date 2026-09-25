@@ -2531,12 +2531,8 @@ void MainWindow::initialiseUI()
 	ui->environmentOptionsWidget->init(settings);
 	connect(ui->environmentOptionsWidget, SIGNAL(settingChanged()), this, SLOT(environmentSettingChangedSlot()));
 
-	// Apply initial Northern Lights checkbox state to the active Qt scene.
-	if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene())
-	{
-		const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
-		ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
-	}
+	// Apply all persisted environment settings to the active Qt scene.
+	environmentSettingChangedSlot();
 
 	if(ui->chatEmojiButton)
 	{
@@ -11264,11 +11260,16 @@ void MainWindow::environmentSettingChangedSlot()
 
 		ui->glWidget->opengl_engine->setSunDir(sundir);
 
-		// Keep aurora rendering state in sync with the checkbox.
-		if(ui->glWidget->opengl_engine->getCurrentScene())
+		// Keep environment rendering state in sync with the controls.
+		if(OpenGLScene* const scene = ui->glWidget->opengl_engine->getCurrentScene())
 		{
-			const bool northern_lights_enabled = ui->environmentOptionsWidget->getNorthernLightsEnabled();
-			ui->glWidget->opengl_engine->getCurrentScene()->draw_aurora = northern_lights_enabled;
+			scene->draw_aurora = ui->environmentOptionsWidget->getNorthernLightsEnabled();
+			scene->draw_volumetric_clouds = ui->environmentOptionsWidget->getVolumetricCloudsEnabled();
+			scene->volumetric_cloud_settings.bottom_z = (float)ui->environmentOptionsWidget->getCloudBottomZ();
+			scene->volumetric_cloud_settings.top_z = (float)ui->environmentOptionsWidget->getCloudTopZ();
+			scene->volumetric_cloud_settings.coverage = (float)ui->environmentOptionsWidget->getCloudCoverage();
+			scene->volumetric_cloud_settings.density = (float)ui->environmentOptionsWidget->getCloudDensity();
+			scene->volumetric_cloud_settings.wind_speed = (float)ui->environmentOptionsWidget->getCloudWindSpeed();
 		}
 	}
 }
