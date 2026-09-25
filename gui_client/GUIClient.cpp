@@ -2267,6 +2267,12 @@ void GUIClient::makeShaders()
 
 void GUIClient::shutdown()
 {
+	// MainWindow/SDL explicitly shut down with a current GL context; the
+	// destructor must not repeat teardown after the UI/context has gone away.
+	if(shutdown_started)
+		return;
+	shutdown_started = true;
+	Timer shutdown_timer;
 	// Destroy/close all OpenGL stuff, because once glWidget is destroyed, the OpenGL context is destroyed, so we can't free stuff properly.
 	hideTerrainSculptBrushOverlay();
 	terrain_sculpt_brush_gl_ob = NULL;
@@ -2284,6 +2290,8 @@ void GUIClient::shutdown()
 	model_and_texture_loader_task_manager.waitForTasksToComplete();
 
 	opengl_worker_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: loader shutdown took " + shutdown_timer.elapsedStringMSWIthNSigFigs());
+	shutdown_timer.reset();
 
 	model_loaded_messages_to_process.clear();
 	texture_loaded_messages_to_process.clear();
@@ -2339,6 +2347,8 @@ void GUIClient::shutdown()
 
 	disconnectFromServerAndClearAllObjects();
 
+	conPrint("Lifecycle: world/network shutdown took " + shutdown_timer.elapsedStringMSWIthNSigFigs());
+	shutdown_timer.reset();
 	
 	if(biome_manager)
 	{
@@ -2513,9 +2523,8 @@ void GUIClient::startDownloadingResource(const URLString& url, const Vec4f& cent
 	//	return;
 
 	ResourceRef resource = resource_manager->getOrCreateResourceForURL(url);
-	if(resource->getState() != Resource::State_NotPresent) // If it is getting downloaded, or is downloaded:
+	if(resource->getState() == Resource::State_Present)
 	{
-		//conPrint("Already present or being downloaded, skipping...");
 		return;
 	}
 
@@ -2542,6 +2551,18 @@ void GUIClient::startDownloadingResource(const URLString& url, const Vec4f& cent
 			if(!resource_info.using_objects.using_object_uids.empty())
 				existing_info.using_objects.using_object_uids.push_back(resource_info.using_objects.using_object_uids[0]);
 		}
+
+		// Even an active download can acquire new consumers.  Merge them before
+		// returning, otherwise removing the first object can discard the result
+		// while another object/avatar is still waiting for the same original.
+		if(resource->getState() != Resource::State_NotPresent)
+			return;
+#if defined(EMSCRIPTEN)
+		// Do not leave a duplicate in the queue that could restart just after
+		// the Web callback removes the active transfer, before its bytes are handled.
+		if(emscripten_resource_downloader.isDownloadingURL(url))
+			return;
+#endif
 
 		if(hasPrefix(url, "http://") || hasPrefix(url, "https://"))
 		{
@@ -3053,6 +3074,37 @@ void GUIClient::startLoadingTextureForObjectOrAvatar(const UID& ob_uid, const UI
 	tex_params.use_sRGB = use_sRGB;
 	tex_params.allow_compression = allow_compression;
 	startLoadingTextureIfPresent(lod_tex_url, centroid_ws, aabb_ws_longest_len, use_max_dist_for_ob_lod_level, importance_factor, tex_params);
+
+	// Keep the desired LOD path and its completion subscription, so it can replace
+	// the fallback when the server finishes generating it.  A cached original is
+	// usable immediately; only download a full-size original after a LOD failure.
+	if(lod_tex_url != texture_url && !resource_manager->isFileForURLPresent(lod_tex_url) &&
+		!opengl_engine->isOpenGLTextureInsertedForKey(OpenGLTextureKey(resource_manager->pathForURL(lod_tex_url))))
+	{
+		const URLString original_url(texture_url, glare::STLArenaAllocator<char>());
+		const bool original_present = resource_manager->isFileForURLPresent(original_url);
+		if(original_present || resource_manager->isInDownloadFailedURLs(lod_tex_url))
+		{
+			if(ob_uid.valid())
+				loading_texture_URL_to_world_ob_UID_map[original_url].insert(ob_uid);
+			else if(avatar_uid.valid())
+				loading_texture_URL_to_avatar_UID_map[original_url].insert(avatar_uid);
+
+			startLoadingTextureIfPresent(original_url, centroid_ws, aabb_ws_longest_len, use_max_dist_for_ob_lod_level, importance_factor, tex_params);
+			if(!original_present && !opengl_engine->isOpenGLTextureInsertedForKey(OpenGLTextureKey(resource_manager->pathForURL(original_url))))
+			{
+				DownloadingResourceInfo info;
+				info.texture_params = tex_params;
+				info.pos = Vec3d(centroid_ws);
+				info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(aabb_ws_longest_len, importance_factor);
+				if(ob_uid.valid())
+					info.using_objects.using_object_uids.push_back(ob_uid);
+				else
+					info.used_by_other = true; // Avatar resource, as in startDownloadingResourcesForAvatar().
+				startDownloadingResource(original_url, centroid_ws, aabb_ws_longest_len, info);
+			}
+		}
+	}
 }
 
 
@@ -3414,8 +3466,25 @@ bool GUIClient::isResourceCurrentlyNeededForObject(const URLString& url, const W
 	DependencyURLSet dependency_URLs(std::less<DependencyURL>(), stl_arena_allocator);
 	ob->getDependencyURLSet(ob_lod_level, options, dependency_URLs);
 
-	if(dependency_URLs.count(DependencyURL(url)) == 0) // TODO: handle sRGB stuff. Current DependencyURL operator < doesn't take into account sRGB etc.
-		return false;
+	if(dependency_URLs.count(DependencyURL(url)) == 0) // Original textures are also dependencies when a generated LOD is missing.
+	{
+		bool is_fallback = false;
+		const WorldMaterial::GetURLOptions texture_options(options.use_basis, &arena_allocator);
+		for(size_t i=0; i<ob->materials.size() && !is_fallback; ++i)
+		{
+			const WorldMaterial& mat = *ob->materials[i];
+			const URLString* originals[] = { &mat.colour_texture_url, &mat.emission_texture_url, &mat.roughness.texture_url, &mat.normal_map_url };
+			for(size_t t=0; t<4; ++t)
+				if(url == *originals[t])
+				{
+					const URLString lod_url = mat.getLODTextureURLForLevel(texture_options, url, ob_lod_level, t == 0 && mat.colourTexHasAlpha());
+					if(lod_url != url && resource_manager->isInDownloadFailedURLs(lod_url))
+						is_fallback = true;
+				}
+		}
+		if(!is_fallback)
+			return false;
+	}
 	/*bool found = false;
 	for(auto it=dependency_URLs.begin(); it != dependency_URLs.end(); ++it)
 		if(it->URL == url)
@@ -3615,7 +3684,9 @@ static Reference<OpenGLTexture> getBestTextureLOD(const WorldMaterial& world_mat
 	if(tex.nonNull())
 		return tex;
 
-	return Reference<OpenGLTexture>();
+	// The source image is usable even when the preferred family is Basis and
+	// neither the Basis original nor its generated LODs exist on the server.
+	return opengl_engine.getTextureIfLoaded(base_tex_path);
 }
 
 
@@ -4194,6 +4265,18 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 		return;
 
 	const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
+	if((ob->object_type == WorldObject::ObjectType_VoxelGroup) &&
+		(ob->getCompressedVoxels().isNull() || ob->getCompressedVoxels()->empty()))
+	{
+		// Empty voxel groups have no renderable geometry.  They can occur in
+		// legacy world data, and may also arrive after the last voxel was removed.
+		// Remove any previously loaded representation, then retain the requested
+		// LOD markers so this object is not retried every frame.
+		removeAndDeleteGLAndPhysicsObjectsForOb(*ob);
+		ob->loading_or_loaded_lod_level = ob_lod_level;
+		ob->loading_or_loaded_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
+		return;
+	}
 	const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
 	const bool is_gaussian_splat =
 		ob->object_type == WorldObject::ObjectType_Generic &&
@@ -4753,9 +4836,6 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 			if(ob->loading_or_loaded_model_lod_level != ob_model_lod_level) // We may already have the correct LOD model loaded (or being loaded), don't reload if so.
 			{
 				ob->loading_or_loaded_model_lod_level = ob_model_lod_level;
-
-				if(!ob->getCompressedVoxels() || ob->getCompressedVoxels()->size() == 0)
-					throw glare::Exception("zero voxels");
 
 				const uint64 hash = ob->compressed_voxels_hash;
 				assert(hash == XXH64(ob->getCompressedVoxels()->data(), ob->getCompressedVoxels()->dataSizeBytes(), 1));
@@ -7524,7 +7604,11 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 
 				//ob->aabb_os = mesh_data->aabb_os;
 
-				if(ob->in_proximity)
+				const bool is_voxel_mesh = hasPrefix(lod_model_url, "__voxel__");
+				const bool voxel_data_matches = !is_voxel_mesh ||
+					((ob->object_type == WorldObject::ObjectType_VoxelGroup) && ob->getCompressedVoxels().nonNull() &&
+						!ob->getCompressedVoxels()->empty() && (ob->compressed_voxels_hash == voxel_hash));
+				if(ob->in_proximity && voxel_data_matches)
 				{
 					const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 					const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
@@ -7929,8 +8013,11 @@ void GUIClient::setOnlyLoadMostImportantObs(bool only_load_most_important_obs_)
 
 bool GUIClient::shouldDisableBasisTexturesForCurrentServer() const
 {
-	// Match legacy v0.0.19 behaviour for resource selection.
-	return false;
+	// This server advertises BasisU support but does not provide Basis derivatives
+	// for every user-uploaded avatar texture.  Request the original image so an
+	// otherwise valid avatar does not fall back to the white material.
+	const std::string host = toLowerCase(server_hostname);
+	return host == "vr.metasiberia.com";
 }
 
 
@@ -11916,60 +12003,9 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 		
 		if(world_state.nonNull())
 		{
+			enqueueDirtyWorldObjectUpdates(global_time);
+
 			Lock lock(this->world_state->mutex);
-
-			//============ Send any object updates needed ===========
-			for(auto it = this->world_state->dirty_from_local_objects.begin(); it != this->world_state->dirty_from_local_objects.end(); ++it)
-			{
-				WorldObject* world_ob = it->getPointer();
-				if(world_ob->from_local_other_dirty)
-				{
-					// Enqueue ObjectFullUpdate
-					MessageUtils::initPacket(scratch_packet, Protocol::ObjectFullUpdate);
-					world_ob->writeToNetworkStream(scratch_packet);
-
-					enqueueMessageToSend(*this->client_thread, scratch_packet);
-
-					world_ob->from_local_other_dirty = false;
-					world_ob->from_local_transform_dirty = false; // We sent all information, including transform, so transform is no longer dirty.
-					world_ob->from_local_physics_dirty = false;
-				}
-				else if(world_ob->from_local_transform_dirty)
-				{
-					// Enqueue ObjectTransformUpdate
-					MessageUtils::initPacket(scratch_packet, Protocol::ObjectTransformUpdate);
-					writeToStream(world_ob->uid, scratch_packet);
-					writeToStream(Vec3d(world_ob->pos), scratch_packet);
-					writeToStream(Vec3f(world_ob->axis), scratch_packet);
-					scratch_packet.writeFloat(world_ob->angle);
-					writeToStream(Vec3f(world_ob->scale), scratch_packet);
-
-					enqueueMessageToSend(*this->client_thread, scratch_packet);
-
-					world_ob->from_local_transform_dirty = false;
-				}
-				else if(world_ob->from_local_physics_dirty)
-				{
-					// Send ObjectPhysicsTransformUpdate packet
-					MessageUtils::initPacket(scratch_packet, Protocol::ObjectPhysicsTransformUpdate);
-					writeToStream(world_ob->uid, scratch_packet);
-					writeToStream(world_ob->pos, scratch_packet);
-
-					const Quatf rot = Quatf::fromAxisAndAngle(world_ob->axis, world_ob->angle);
-					scratch_packet.writeData(&rot.v.x, sizeof(float) * 4);
-
-					scratch_packet.writeData(world_ob->linear_vel.x, sizeof(float) * 3);
-					scratch_packet.writeData(world_ob->angular_vel.x, sizeof(float) * 3);
-
-					scratch_packet.writeDouble(global_time); // Write last_transform_client_time
-
-					enqueueMessageToSend(*this->client_thread, scratch_packet);
-
-					world_ob->from_local_physics_dirty = false;
-				}
-			}
-
-			this->world_state->dirty_from_local_objects.clear();
 
 			//============ Send any parcel updates needed ===========
 			for(auto it = this->world_state->dirty_from_local_parcels.begin(); it != this->world_state->dirty_from_local_parcels.end(); ++it)
@@ -12034,6 +12070,58 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	arena_allocator.clear();
 
 	frame_num++;
+}
+
+
+void GUIClient::enqueueDirtyWorldObjectUpdates(double global_time)
+{
+	if(world_state.isNull() || client_thread.isNull())
+		return;
+
+	Lock lock(this->world_state->mutex);
+	for(auto it = this->world_state->dirty_from_local_objects.begin(); it != this->world_state->dirty_from_local_objects.end(); ++it)
+	{
+		WorldObject* world_ob = it->getPointer();
+		if(world_ob->from_local_other_dirty)
+		{
+			MessageUtils::initPacket(scratch_packet, Protocol::ObjectFullUpdate);
+			world_ob->writeToNetworkStream(scratch_packet);
+			enqueueMessageToSend(*this->client_thread, scratch_packet);
+
+			world_ob->from_local_other_dirty = false;
+			world_ob->from_local_transform_dirty = false;
+			world_ob->from_local_physics_dirty = false;
+		}
+		else if(world_ob->from_local_transform_dirty)
+		{
+			MessageUtils::initPacket(scratch_packet, Protocol::ObjectTransformUpdate);
+			writeToStream(world_ob->uid, scratch_packet);
+			writeToStream(Vec3d(world_ob->pos), scratch_packet);
+			writeToStream(Vec3f(world_ob->axis), scratch_packet);
+			scratch_packet.writeFloat(world_ob->angle);
+			writeToStream(Vec3f(world_ob->scale), scratch_packet);
+			enqueueMessageToSend(*this->client_thread, scratch_packet);
+
+			world_ob->from_local_transform_dirty = false;
+		}
+		else if(world_ob->from_local_physics_dirty)
+		{
+			MessageUtils::initPacket(scratch_packet, Protocol::ObjectPhysicsTransformUpdate);
+			writeToStream(world_ob->uid, scratch_packet);
+			writeToStream(world_ob->pos, scratch_packet);
+
+			const Quatf rot = Quatf::fromAxisAndAngle(world_ob->axis, world_ob->angle);
+			scratch_packet.writeData(&rot.v.x, sizeof(float) * 4);
+			scratch_packet.writeData(world_ob->linear_vel.x, sizeof(float) * 3);
+			scratch_packet.writeData(world_ob->angular_vel.x, sizeof(float) * 3);
+			scratch_packet.writeDouble(global_time);
+			enqueueMessageToSend(*this->client_thread, scratch_packet);
+
+			world_ob->from_local_physics_dirty = false;
+		}
+	}
+
+	this->world_state->dirty_from_local_objects.clear();
 }
 
 
@@ -14866,35 +14954,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		{
 			// When the server wants a file from the client, it will send the client a GetFile protocol message.
 			const GetFileMessage* m = checkedDowncastPtr<const GetFileMessage>(msg);
-
-			if(ResourceManager::isValidURL(m->URL))
-			{
-				if(resource_manager->isFileForURLPresent(m->URL))
-				{
-					const std::string path = resource_manager->pathForURL(m->URL);
-					const std::string username = ui_interface->getUsernameForDomain(server_hostname);
-					const std::string password = ui_interface->getDecryptedPasswordForDomain(server_hostname);
-
-					this->num_resources_uploading++;
-#if EMSCRIPTEN
-					const size_t max_num_upload_threads = 1;
-#else
-					const size_t max_num_upload_threads = 4;
-#endif
-					if(resource_upload_thread_manager.getNumThreads() == 0)
-					{
-						for(size_t q=0; q<max_num_upload_threads; ++q)
-							resource_upload_thread_manager.addThread(new UploadResourceThread(&this->msg_queue, &upload_queue, server_hostname, server_port, username, password, this->client_tls_config, 
-								&this->num_resources_uploading));
-					}
-
-					upload_queue.enqueue(new ResourceToUpload(path, m->URL));
-
-					print("Received GetFileMessage, Uploading resource with URL '" + toStdString(m->URL) + "' to server.");
-				}
-				else
-					print("Could not upload resource with URL '" + toStdString(m->URL) + "' to server, not present on client.");
-			}
+			enqueueResourceUpload(m->URL);
 		}
 		break;
 		case Msg_NewResourceOnServerMessage:
@@ -14955,9 +15015,18 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 								DependencyURLSet URL_set(std::less<DependencyURL>(), stl_arena_allocator);
 								ob->getDependencyURLSet(ob_lod_level, options, URL_set);
 
-								if(URL_set.count(DependencyURL(m->URL)) != 0)
+								if(URL_set.count(DependencyURL(m->URL)) != 0 || isResourceCurrentlyNeededForObject(m->URL, ob))
 								{
-									downloading_info.texture_params.use_sRGB = true; // TEMP HACK
+									// Preserve the original fallback request's colour space/compression
+									// (normal and roughness maps must not be loaded as sRGB).
+									if(existing_download_info != URL_to_downloading_info.end())
+										downloading_info.texture_params = existing_download_info->second.texture_params;
+									else
+									{
+										auto dependency = URL_set.find(DependencyURL(m->URL));
+										if(dependency != URL_set.end())
+											downloading_info.texture_params.use_sRGB = dependency->use_sRGB;
+									}
 									downloading_info.build_dynamic_physics_ob = ob->isDynamic();
 									downloading_info.pos = ob->pos;
 									downloading_info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(ob->getAABBWSLongestLength(), /*importance_factor=*/1.f);
@@ -14991,7 +15060,10 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 								if(URL_set.count(DependencyURL(m->URL)) != 0)
 								{
-									downloading_info.texture_params.use_sRGB = true; // TEMP HACK
+									if(existing_download_info != URL_to_downloading_info.end())
+										downloading_info.texture_params = existing_download_info->second.texture_params;
+									else
+										downloading_info.texture_params.use_sRGB = URL_set.find(DependencyURL(m->URL))->use_sRGB;
 									downloading_info.build_physics_ob = false;
 									downloading_info.pos = av->pos;
 									downloading_info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(1.8f, /*importance_factor=*/1.f);
@@ -15013,6 +15085,46 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 
 							startDownloadingResource(m->URL, centroid_ws, aabb_ws_longest_len, downloading_info);
 						}
+					}
+				}
+			}
+		}
+		break;
+		case Msg_ResourceDownloadFailedMessage:
+		{
+			const URLString& url = checkedDowncastPtr<const ResourceDownloadFailedMessage>(msg)->URL;
+			if(world_state.nonNull())
+			{
+				WorldStateLock lock(world_state->mutex);
+				// Snapshot the subscribers: scheduling the fallback can rehash these maps.
+				auto obs = loading_texture_URL_to_world_ob_UID_map.find(url);
+				const std::set<UID> object_uids = obs != loading_texture_URL_to_world_ob_UID_map.end() ? obs->second : std::set<UID>();
+				for(const UID& uid : object_uids)
+				{
+					auto it = world_state->objects.find(uid);
+					if(it != world_state->objects.end())
+					{
+						WorldObject* ob = it.getValue().ptr();
+						if(ob->in_proximity && ob->current_lod_level >= -1)
+						{
+							const int lod = ob->current_lod_level;
+							startLoadingTexturesForObject(*ob, lod, ob->getMaxDistForLODLevel(lod), ob->getMaxDistForLODLevel(myMax(0, lod)));
+							assignLoadedOpenGLTexturesToMats(ob);
+						}
+					}
+				}
+				auto avs = loading_texture_URL_to_avatar_UID_map.find(url);
+				const std::set<UID> avatar_uids = avs != loading_texture_URL_to_avatar_UID_map.end() ? avs->second : std::set<UID>();
+				for(const UID& uid : avatar_uids)
+				{
+					auto it = world_state->avatars.find(uid);
+					if(it != world_state->avatars.end())
+					{
+						Avatar* av = it->second.ptr();
+						const int lod = av->getLODLevel(cam_controller.getPosition());
+						startLoadingTexturesForAvatar(*av, lod, av->getMaxDistForLODLevel(lod), av->isOurAvatar());
+						glare::ArenaFrame frame(arena_allocator);
+						assignLoadedOpenGLTexturesToAvatarMats(av, server_has_basis_textures, *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
 					}
 				}
 			}
@@ -18902,7 +19014,7 @@ void GUIClient::objectEdited()
 				const URLString local_path = URLs[i].URL;
 				const URLString URL = ResourceManager::URLForPathAndHash(toStdString(local_path), FileChecksum::fileChecksum(local_path));
 
-				// Copy model to local resources dir.
+				// Copy local resource to the resource dir. The server requests missing resources after the object update.
 				resource_manager->copyLocalFileToResourceDir(toStdString(local_path), URL);
 			}
 		}
@@ -18927,7 +19039,9 @@ void GUIClient::objectEdited()
 
 		startDownloadingResourcesForObject(this->selected_ob.ptr(), ob_lod_level);
 
-		if(selected_ob->model_url.empty() || resource_manager->isFileForURLPresent(selected_ob->model_url))
+		// The displayed mesh may be an optimised/LOD derivative, with no base
+		// model file in the cache.  Material edits update the loaded GL object
+		// directly and must not depend on the base file being present.
 		{
 			Matrix4f new_ob_to_world_matrix = obToWorldMatrix(*this->selected_ob);
 
@@ -18943,7 +19057,17 @@ void GUIClient::objectEdited()
 					new_ob_to_world_matrix,
 					edge_markers, 
 					new_ob_pos);
-				if(valid)
+				if(!valid)
+				{
+					// Reject only the transform; the edited material must still be
+					// displayed and saved on the original object.
+					selected_ob->setTransformAndHistory(old_pos, old_axis, old_angle);
+					selected_ob->scale = old_scale;
+					new_ob_to_world_matrix = obToWorldMatrix(*selected_ob);
+					new_ob_pos = old_pos;
+					ui_interface->startObEditorTimerIfNotActive();
+					showErrorNotification("New object transform is not valid - Object must be entirely in a parcel that you have write permissions for.");
+				}
 				{
 					new_ob_to_world_matrix.setColumn(3, new_ob_pos.toVec4fPoint());
 					selected_ob->setTransformAndHistory(new_ob_pos, this->selected_ob->axis, this->selected_ob->angle);
@@ -19301,11 +19425,6 @@ void GUIClient::objectEdited()
 					}
 
 
-					// Mark as from-local-dirty to send an object updated message to the server
-					this->selected_ob->from_local_other_dirty = true;
-					this->world_state->dirty_from_local_objects.insert(this->selected_ob);
-
-
 					//this->selected_ob->flags |= WorldObject::LIGHTMAP_NEEDS_COMPUTING_FLAG;
 					//objs_with_lightmap_rebuild_needed.insert(this->selected_ob);
 					//lightmap_flag_timer->start(/*msec=*/2000); // Trigger sending update-lightmap update flag message later.
@@ -19314,23 +19433,24 @@ void GUIClient::objectEdited()
 					// Update any instanced copies of object
 					//updateInstancedCopiesOfObject(this->selected_ob.ptr());
 				}
-				else // Else if new transform is not valid
-				{
-					selected_ob->setTransformAndHistory(old_pos, old_axis, old_angle);
-					selected_ob->scale = old_scale;
-					selected_ob->transformChanged();
-
-					opengl_ob->ob_to_world_matrix = obToWorldMatrix(*selected_ob);
-					opengl_engine->updateObjectTransformData(*opengl_ob);
-
-					if(selected_ob->physics_object)
-						physics_world->setNewObToWorldTransform(*selected_ob->physics_object, selected_ob->pos.toVec4fVector(), Quatf::fromAxisAndAngle(normalise(selected_ob->axis.toVec4fVector()), selected_ob->angle),
-							useScaleForWorldOb(selected_ob->scale).toVec4fVector());
-
-					ui_interface->startObEditorTimerIfNotActive();
-					showErrorNotification("New object transform is not valid - Object must be entirely in a parcel that you have write permissions for.");
-				}
 			}
+			else
+			{
+				// Without a loaded mesh we cannot validate a new transform. This
+				// property-edit path can still save materials on the existing one.
+				selected_ob->setTransformAndHistory(old_pos, old_axis, old_angle);
+				selected_ob->scale = old_scale;
+				selected_ob->transformChanged();
+			}
+		}
+
+		// Persist edited properties even when no render object is loaded.  If a
+		// transform was rejected above, it has already been restored; material
+		// edits still need to reach the authoritative world on the server.
+		{
+			Lock lock(this->world_state->mutex);
+			this->selected_ob->from_local_other_dirty = true;
+			this->world_state->dirty_from_local_objects.insert(this->selected_ob);
 		}
 
 		if(BitUtils::isBitSet(selected_ob->changed_flags, WorldObject::AUDIO_SOURCE_URL_CHANGED))
@@ -19756,14 +19876,15 @@ void GUIClient::visitSubURL(const std::string& URL, bool push_prev_URL_on_nav_st
 
 void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObjectRefs held by GUIClient.
 {
+	// Queue pending object edits before clearAllObjects() drops the dirty set.
+	enqueueDirtyWorldObjectUpdates(world_state.nonNull() ? world_state->getCurrentGlobalTime() : 0.0);
+
 	udp_socket = NULL;
 
 	load_item_queue.clear();
 	model_and_texture_loader_task_manager.cancelAndWaitForTasksToComplete(); 
 	model_loaded_messages_to_process.clear();
 	texture_loaded_messages_to_process.clear();
-
-	upload_queue.clear();
 
 	// Kill any existing threads connected to the server
 	net_resource_download_thread_manager.killThreadsBlocking();
@@ -19830,6 +19951,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	this->client_thread = NULL; // Need to make sure client_thread is destroyed, since it hangs on to a bunch of references.
 	resource_download_thread_manager.killThreadsBlocking();
 	resource_upload_thread_manager.killThreadsBlocking();
+	upload_queue.clear();
 
 	this->client_avatar_uid = UID::invalidUID();
 	this->server_protocol_version = 0;
@@ -20178,6 +20300,8 @@ void GUIClient::changeToDifferentWorld(const URLParseResults& parse_res)
 	applyMapLatLonURLPositionIfPresent(parse_res, spawn_pos);
 
 
+	// WorldState::clear() drops dirty_from_local_objects, so send edits first.
+	enqueueDirtyWorldObjectUpdates(world_state.nonNull() ? world_state->getCurrentGlobalTime() : 0.0);
 	clearAllObjects();
 
 
@@ -21722,6 +21846,7 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 	Lock lock(this->world_state->mutex);
 
 	ob->compressVoxels();
+	const int ob_lod_level = getEffectiveLODLevel(ob.ptr(), cam_controller.getPosition());
 
 	ob->last_modified_time = TimeStamp::currentTime(); // Gets set on server as well, this is just for updating the local display.
 
@@ -21749,8 +21874,6 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 	if(!ob->getDecompressedVoxels().empty())
 	{
 		const Matrix4f ob_to_world = obToWorldMatrix(*ob);
-
-		const int ob_lod_level = getEffectiveLODLevel(ob.ptr(), cam_controller.getPosition());
 
 		js::Vector<bool, 16> mat_transparent(ob->materials.size());
 		for(size_t i=0; i<ob->materials.size(); ++i)
@@ -21813,6 +21936,13 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 
 		ob->setAABBOS(gl_meshdata->aabb_os);
 	}
+
+	// compressVoxels() invalidates both markers.  This path rebuilds a
+	// non-empty group synchronously at full resolution; an empty group has no
+	// mesh but is fully handled for the current object LOD.
+	ob->loading_or_loaded_lod_level = ob_lod_level;
+	ob->loading_or_loaded_model_lod_level = ob->getDecompressedVoxels().empty() ?
+		myClamp(ob_lod_level, 0, ob->max_model_lod_level) : 0;
 
 	// Mark as from-local-dirty to send an object updated message to the server
 	ob->from_local_other_dirty = true;
@@ -25357,6 +25487,39 @@ std::string GUIClient::uploadLocalFileForBot(const std::string& local_abs_path)
 	const URLString url = ResourceManager::URLForPathAndHash(local_abs_path, hash);
 	resource_manager->copyLocalFileToResourceDir(local_abs_path, url);
 	return toStdString(url);
+}
+
+
+void GUIClient::enqueueResourceUpload(const URLString& resource_URL)
+{
+	if(connection_state == ServerConnectionState_NotConnected || !resource_manager || !ResourceManager::isValidURL(resource_URL))
+		return;
+
+	if(!resource_manager->isFileForURLPresent(resource_URL))
+	{
+		print("Could not upload resource with URL '" + toStdString(resource_URL) + "', not present on client.");
+		return;
+	}
+
+	const std::string path = resource_manager->pathForURL(resource_URL);
+	const std::string username = ui_interface->getUsernameForDomain(server_hostname);
+	const std::string password = ui_interface->getDecryptedPasswordForDomain(server_hostname);
+
+	num_resources_uploading++;
+#if EMSCRIPTEN
+	const size_t max_num_upload_threads = 1;
+#else
+	const size_t max_num_upload_threads = 4;
+#endif
+	if(resource_upload_thread_manager.getNumThreads() == 0)
+	{
+		for(size_t q=0; q<max_num_upload_threads; ++q)
+			resource_upload_thread_manager.addThread(new UploadResourceThread(&this->msg_queue, &upload_queue, server_hostname, server_port, username, password, this->client_tls_config,
+				&this->num_resources_uploading));
+	}
+
+	upload_queue.enqueue(new ResourceToUpload(path, resource_URL));
+	print("Uploading resource with URL '" + toStdString(resource_URL) + "' to server.");
 }
 
 

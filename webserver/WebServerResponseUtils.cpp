@@ -33,6 +33,116 @@ namespace WebServerResponseUtils
 const std::string CRLF = "\r\n";
 
 
+static bool isIndexablePublicPage(const std::string& path)
+{
+	return
+		path == "/" ||
+		path == "/faq" ||
+		path == "/terms" ||
+		path == "/privacy" ||
+		path == "/map" ||
+		path == "/photos" ||
+		path == "/news" ||
+		path == "/events" ||
+		path == "/about_parcel_sales" ||
+		path == "/about_scripting" ||
+		path == "/about_substrata" ||
+		path == "/running_your_own_server" ||
+		path == "/about_luau_scripting" ||
+		path == "/example_luau_scripts" ||
+		path == "/vehicle_scripting" ||
+		path == "/car_scripting";
+}
+
+
+static const char* getSEODescription(const std::string& path)
+{
+	if(path == "/faq")
+		return "Questions and answers about Metasiberia, its virtual spaces, digital twins, interoperability, content and support.";
+	if(path == "/terms")
+		return "Metasiberia Terms of Use for the web service and virtual world.";
+	if(path == "/privacy")
+		return "Metasiberia Privacy Policy describing personal-data and technical-data processing.";
+	if(path == "/map")
+		return "Explore the public Metasiberia world map and virtual territories.";
+	if(path == "/photos")
+		return "Public photos from the Metasiberia virtual world.";
+	if(path == "/news")
+		return "Metasiberia project news and updates.";
+	if(path == "/events")
+		return "Public events in the Metasiberia virtual world.";
+	if(path == "/about_parcel_sales")
+		return "Information about parcel sales in the Metasiberia and Substrata environment.";
+	if(path == "/about_scripting" || path == "/about_luau_scripting" || path == "/example_luau_scripts" || path == "/vehicle_scripting" || path == "/car_scripting")
+		return "Public scripting documentation for the Metasiberia and Substrata environment.";
+	if(path == "/about_substrata" || path == "/running_your_own_server")
+		return "Public technical documentation for the Metasiberia and Substrata platform.";
+	return "Metasiberia — an open platform for interactive 3D spaces and digital twins.";
+}
+
+
+static std::string jsonEscape(const std::string& value)
+{
+	std::string result;
+	result.reserve(value.size());
+	for(const unsigned char c : value)
+	{
+		switch(c)
+		{
+		case '\\': result += "\\\\"; break;
+		case '"':  result += "\\\""; break;
+		case '\n': result += "\\n"; break;
+		case '\r': result += "\\r"; break;
+		case '\t': result += "\\t"; break;
+		default:   result += static_cast<char>(c); break;
+		}
+	}
+	return result;
+}
+
+
+static std::string getSEOHeaderTags(const web::RequestInfo& request_info, const std::string& page_title)
+{
+	// The root page already has its own richer metadata block in MainPageHandlers.cpp.
+	if(request_info.path == "/")
+		return std::string();
+
+	if(!isIndexablePublicPage(request_info.path))
+		return "\t\t<meta name=\"robots\" content=\"noindex,nofollow,noarchive\" />\n";
+
+	const std::string canonical_url = "https://vr.metasiberia.com" + request_info.path;
+	const std::string image_url = "https://vr.metasiberia.com/files/main.png";
+	const std::string description = getSEODescription(request_info.path);
+	const std::string escaped_title = web::Escaping::HTMLEscape(page_title);
+	const std::string escaped_description = web::Escaping::HTMLEscape(description);
+	const std::string json_title = jsonEscape(page_title);
+	const std::string json_description = jsonEscape(description);
+
+	return
+		"\t\t<link rel=\"canonical\" href=\"" + canonical_url + "\" />\n"
+		"\t\t<link rel=\"sitemap\" type=\"application/xml\" href=\"https://vr.metasiberia.com/sitemap.xml\" />\n"
+		"\t\t<meta name=\"description\" content=\"" + escaped_description + "\" />\n"
+		"\t\t<meta name=\"robots\" content=\"index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1\" />\n"
+		"\t\t<meta property=\"og:site_name\" content=\"Metasiberia\" />\n"
+		"\t\t<meta property=\"og:type\" content=\"website\" />\n"
+		"\t\t<meta property=\"og:title\" content=\"" + escaped_title + "\" />\n"
+		"\t\t<meta property=\"og:description\" content=\"" + escaped_description + "\" />\n"
+		"\t\t<meta property=\"og:url\" content=\"" + canonical_url + "\" />\n"
+		"\t\t<meta property=\"og:image\" content=\"" + image_url + "\" />\n"
+		"\t\t<meta property=\"og:image:secure_url\" content=\"" + image_url + "\" />\n"
+		"\t\t<meta property=\"og:image:type\" content=\"image/png\" />\n"
+		"\t\t<meta property=\"og:image:width\" content=\"1731\" />\n"
+		"\t\t<meta property=\"og:image:height\" content=\"909\" />\n"
+		"\t\t<meta property=\"og:image:alt\" content=\"Metasiberia\" />\n"
+		"\t\t<meta name=\"twitter:card\" content=\"summary_large_image\" />\n"
+		"\t\t<meta name=\"twitter:title\" content=\"" + escaped_title + "\" />\n"
+		"\t\t<meta name=\"twitter:description\" content=\"" + escaped_description + "\" />\n"
+		"\t\t<meta name=\"twitter:image\" content=\"" + image_url + "\" />\n"
+		"\t\t<meta name=\"twitter:url\" content=\"" + canonical_url + "\" />\n"
+		"\t\t<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"WebPage\",\"name\":\"" + json_title + "\",\"url\":\"" + canonical_url + "\",\"description\":\"" + json_description + "\",\"isPartOf\":{\"@type\":\"WebSite\",\"name\":\"Metasiberia\",\"url\":\"https://vr.metasiberia.com/\"}}</script>\n";
+}
+
+
 const std::string standardHTMLHeader(WebDataStore& data_store, const web::RequestInfo& request_info, const std::string& page_title, const std::string& extra_header_tags)
 {
 	Lock lock(data_store.hash_mutex);
@@ -44,7 +154,7 @@ const std::string standardHTMLHeader(WebDataStore& data_store, const web::Reques
 	// The Content-Security-Policy could also be returned as a HTTP response header.
 	return
 		"<!DOCTYPE html>\n"
-		"<html>\n"
+		"<html lang=\"en\">\n"
 		"	<head>\n"
 		"		<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
 		"		<meta http-equiv=\"Content-Security-Policy\" content=\"frame-src youtube.com www.youtube.com player.vimeo.com vimeocdn.com; img-src 'self' i.ytimg.com i.vimeocdn.com; default-src 'self';\" />	\n" 
@@ -53,7 +163,8 @@ const std::string standardHTMLHeader(WebDataStore& data_store, const web::Reques
 		"		<script src=\"/files/site.js?hash=" + data_store.site_js_hash + "\" defer></script>\n"
 		"		<link rel=\"icon\" href=\"/files/favicon.ico\" sizes=\"any\">\n"
 		"		<link rel=\"icon\" type=\"image/png\" href=\"/files/favicon.png\">\n"
-		+ extra_header_tags + 
+		+ getSEOHeaderTags(request_info, page_title) +
+		extra_header_tags +
 		"	</head>\n";
 }
 
@@ -107,8 +218,8 @@ const std::string standardFooter(const web::RequestInfo& request_info, bool incl
 
 	page_out +=
 		"	<hr/>																						\n"
-		"	<div class=\"footer\"><a href=\"https://t.me/metasiberia_channel\" target=\"_blank\" rel=\"noopener noreferrer\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\" target=\"_blank\" rel=\"noopener noreferrer\">VK</a> | <a href=\"https://github.com/shipilovden/sub-metasiberia\" target=\"_blank\" rel=\"noopener noreferrer\">Github</a></div>	\n"
-		"	<div class=\"footer\"><a href=\"/faq\" target=\"_blank\" rel=\"noopener noreferrer\">F.A.Q.</a> | <a href=\"/terms\" target=\"_blank\" rel=\"noopener noreferrer\">Terms of use</a> | <a href=\"/map\" target=\"_blank\" rel=\"noopener noreferrer\">Map</a></div>				\n";
+		"	<div class=\"footer\"><a href=\"https://t.me/metasiberia_metaverse\" target=\"_blank\" rel=\"noopener noreferrer\">Telegram</a> | <a href=\"https://vk.com/metasiberia_official\" target=\"_blank\" rel=\"noopener noreferrer\">VK</a></div>	\n"
+		"	<div class=\"footer\"><a href=\"/faq\" target=\"_blank\" rel=\"noopener noreferrer\">F.A.Q.</a> | <a href=\"/terms\" target=\"_blank\" rel=\"noopener noreferrer\">Terms of use</a> | <a href=\"/privacy\" target=\"_blank\" rel=\"noopener noreferrer\">Privacy Policy</a> | <a href=\"/map\" target=\"_blank\" rel=\"noopener noreferrer\">Map</a></div>				\n";
 
 	page_out +=
 		"	</body>																						\n"

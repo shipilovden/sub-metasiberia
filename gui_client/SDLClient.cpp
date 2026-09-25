@@ -211,6 +211,16 @@ EM_JS(char*, getUserAgentString, (), {
 	return stringToNewUTF8(window.navigator.userAgent);
 });
 
+// High-DPI desktop browsers commonly report devicePixelRatio > 1 (for example,
+// Windows display scaling and Retina displays).  That must not select the
+// mobile low-memory renderer: it skips the final imaging pass, so linear
+// Gaussian-splat colours are presented directly to the canvas and look dark.
+EM_JS(int, isMobileBrowserDevice, (), {
+	const user_agent = navigator.userAgent || "";
+	return /Android|iPhone|iPad|iPod|Mobile/i.test(user_agent) ||
+		(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+});
+
 // From https://groups.google.com/g/angleproject/c/0ZuTYrgaXYw/m/UNdsgYLLCgAJ
 EM_JS(char*, getTranslatedShaderSource, (int32_t nm), {
 	var ext = GLctx.getExtension('WEBGL_debug_shaders');
@@ -531,8 +541,10 @@ int main(int argc, char** argv)
 #endif
 
 #if EMSCRIPTEN
-		// device_pixel_ratio > 1 is probably a mobile device
-		const bool low_memory_mode = device_pixel_ratio > 1.0;
+		// A high device pixel ratio alone identifies high-DPI desktops as well
+		// as mobile devices.  Keep the memory-saving path for genuine mobile
+		// browsers, but retain the final imaging pass on desktop WebGL.
+		const bool low_memory_mode = isMobileBrowserDevice() != 0;
 #else
 		const bool low_memory_mode = false;
 #endif

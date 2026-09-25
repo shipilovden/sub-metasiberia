@@ -31,9 +31,202 @@ Copyright Glare Technologies Limited 2024 -
 #include <networking/EmscriptenWebSocket.h>
 #endif
 #include <tracy/Tracy.hpp>
+#if defined(_WIN32)
+#include <ws2tcpip.h>
+#endif
+#if !defined(_WIN32) && !defined(EMSCRIPTEN)
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <errno.h>
+#endif
 
 
 static const size_t MAX_STRING_LEN = 10000;
+
+
+#if !defined(EMSCRIPTEN)
+// MySocket::connect() is blocking; SO_SNDTIMEO does not bound connect on Windows.
+// Keep the descriptor private until connected, polling cancellation at most every
+// 50 ms. Afterwards only the receiver closes it, under connection_mutex.
+static MySocketRef connectClientSocket(const IPAddress& ip, int port, const glare::AtomicInt& should_die)
+{
+	const int family = ip.getVersion() == IPAddress::Version_4 ? AF_INET : AF_INET6;
+	const MySocket::SOCKETHANDLE_TYPE handle = ::socket(family, SOCK_STREAM, IPPROTO_TCP);
+#if defined(_WIN32)
+	if(handle == INVALID_SOCKET)
+#else
+	if(handle < 0)
+#endif
+		throw MySocketExcep("Could not create client socket: " + Networking::getError());
+	MySocketRef tcp_socket = new MySocket(handle); // Own the descriptor on every error path.
+	tcp_socket->setUseNetworkByteOrder(false);
+	tcp_socket->setNoDelayEnabled(true);
+
+#if defined(_WIN32)
+	u_long nonblocking = 1;
+	if(ioctlsocket(handle, FIONBIO, &nonblocking) != 0)
+#else
+	const int flags = fcntl(handle, F_GETFL, 0);
+	if(flags < 0 || fcntl(handle, F_SETFL, flags | O_NONBLOCK) != 0)
+#endif
+		throw MySocketExcep("Could not set nonblocking connect: " + Networking::getError());
+
+	sockaddr_storage address;
+	ip.fillOutSockAddr(address, port);
+	const int address_size = family == AF_INET ? sizeof(sockaddr_in) : sizeof(sockaddr_in6);
+	Timer timer;
+	if(should_die)
+		throw MySocketExcep("Connection cancelled", MySocketExcep::ExcepType_BlockingCallCancelled);
+	if(::connect(handle, (const sockaddr*)&address, address_size) != 0)
+	{
+#if defined(_WIN32)
+		const int error = WSAGetLastError();
+		if(error != WSAEWOULDBLOCK && error != WSAEINPROGRESS)
+#else
+		const int error = errno;
+		if(error != EINPROGRESS && error != EINTR)
+#endif
+			throw MySocketExcep("Could not connect: " + Networking::getError(), MySocketExcep::ExcepType_ConnectionFailed);
+		while(true)
+		{
+			if(should_die)
+				throw MySocketExcep("Connection cancelled", MySocketExcep::ExcepType_BlockingCallCancelled);
+			if(timer.elapsed() >= 10.0)
+				throw MySocketExcep("TCP connect timed out", MySocketExcep::ExcepType_ConnectionFailed);
+#if defined(_WIN32)
+			WSAPOLLFD descriptor = { handle, POLLWRNORM, 0 };
+			const int ready = WSAPoll(&descriptor, 1, 50);
+#else
+			pollfd descriptor = { handle, POLLOUT, 0 };
+			const int ready = poll(&descriptor, 1, 50);
+			if(ready < 0 && errno == EINTR)
+				continue;
+#endif
+			if(ready < 0)
+				throw MySocketExcep("Connect poll failed: " + Networking::getError());
+			if(ready > 0)
+			{
+				int connect_error = 0;
+#if defined(_WIN32)
+				int error_size = sizeof(connect_error);
+#else
+				socklen_t error_size = sizeof(connect_error);
+#endif
+				if(getsockopt(handle, SOL_SOCKET, SO_ERROR, (char*)&connect_error, &error_size) != 0 || connect_error != 0 ||
+					(descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)))
+					throw MySocketExcep("TCP connect failed (socket error " + toString(connect_error) + ")", MySocketExcep::ExcepType_ConnectionFailed);
+				break;
+			}
+		}
+	}
+#if defined(_WIN32)
+	nonblocking = 0;
+	if(ioctlsocket(handle, FIONBIO, &nonblocking) != 0)
+#else
+	if(fcntl(handle, F_SETFL, flags) != 0)
+#endif
+		throw MySocketExcep("Could not restore blocking socket: " + Networking::getError());
+	return tcp_socket;
+}
+
+
+static void interruptClientSocket(MySocket& socket)
+{
+	::shutdown(socket.getSocketHandle(), 2); // SD_BOTH / SHUT_RDWR: prohibit new I/O.
+#if defined(_WIN32)
+	// shutdown alone does not release an already pending blocking Winsock recv/send.
+	// Cancel requests on the socket, not APCs on a possibly terminated thread. The
+	// descriptor remains owned until both threads have finished using it.
+	CancelIoEx((HANDLE)socket.getSocketHandle(), nullptr);
+#endif
+}
+#endif
+
+
+#if defined(CLIENT_TCP_CONNECT_TEST) && !defined(EMSCRIPTEN)
+// Standalone native transport check, separate from application startup.
+#include <future>
+#include <chrono>
+#include <cstdlib>
+
+int main()
+{
+	Clock::init();
+	Networking::init();
+	glare::AtomicInt stop;
+	{
+		MySocketRef listener = new MySocket();
+		listener->bindAndListen(0, false);
+		sockaddr_storage address;
+#if defined(_WIN32)
+		int size = sizeof(address);
+#else
+		socklen_t size = sizeof(address);
+#endif
+		if(getsockname(listener->getSocketHandle(), (sockaddr*)&address, &size) != 0)
+			std::abort();
+		const int port = Networking::getPortFromSockAddr(address);
+		for(const char* host : { "127.0.0.1", "::1" })
+		{
+			conPrint(std::string("Testing TCP transport: ") + host);
+			MySocketRef client = connectClientSocket(IPAddress(host), port, stop);
+			MySocketRef peer = listener->acceptConnection();
+			client->writeUInt32(123);
+			peer->setUseNetworkByteOrder(false);
+			if(peer->readUInt32() != 123)
+				std::abort();
+			conPrint("Connected; testing blocked read cancellation");
+			auto read = std::async(std::launch::async, [&] {
+				char byte;
+				try { client->readSomeBytes(&byte, 1); } catch(MySocketExcep&) {}
+			});
+			if(read.wait_for(std::chrono::milliseconds(50)) != std::future_status::timeout)
+				std::abort();
+			interruptClientSocket(*client);
+			if(read.wait_for(std::chrono::seconds(2)) != std::future_status::ready)
+				std::abort();
+			read.get();
+			client->ungracefulShutdown(); // Close only after I/O has returned.
+
+			client = connectClientSocket(IPAddress(host), port, stop);
+			peer = listener->acceptConnection();
+			const int small_buffer = 4096;
+			setsockopt(client->getSocketHandle(), SOL_SOCKET, SO_SNDBUF, (const char*)&small_buffer, sizeof(small_buffer));
+			std::vector<uint8> payload(16 * 1024 * 1024, 0);
+			auto write = std::async(std::launch::async, [&] {
+				try { client->writeData(payload.data(), payload.size()); } catch(MySocketExcep&) {}
+			});
+			if(write.wait_for(std::chrono::milliseconds(50)) != std::future_status::timeout)
+				std::abort();
+			interruptClientSocket(*client);
+			if(write.wait_for(std::chrono::seconds(2)) != std::future_status::ready)
+				std::abort();
+			write.get();
+			client->ungracefulShutdown();
+		}
+	}
+	// Documentation-only address: no protocol payload, cancel a pending TCP SYN.
+	auto pending = std::async(std::launch::async, [&] {
+		try { connectClientSocket(IPAddress("192.0.2.1"), 9, stop); }
+		catch(MySocketExcep& e) { return e.excepType() == MySocketExcep::ExcepType_BlockingCallCancelled; }
+		return false;
+	});
+	const bool was_pending = pending.wait_for(std::chrono::milliseconds(100)) == std::future_status::timeout;
+	Timer cancel_timer;
+	stop = glare::atomic_int(1);
+	if(pending.wait_for(std::chrono::seconds(2)) != std::future_status::ready)
+		std::abort();
+	const bool cancelled = pending.get();
+	if(was_pending && !cancelled)
+		std::abort();
+	conPrint(was_pending ? "Pending TCP connect cancelled in " + toString(cancel_timer.elapsed()) + " s" :
+		"Pending TCP test skipped: network rejected documentation address immediately");
+	Networking::shutdown();
+	conPrint("IPv4/IPv6 connect and interrupted read/write tests passed");
+}
+#else
 
 
 static void readChatBotClientInfoFields(RandomAccessInStream& msg_buffer, uint32 peer_protocol_version, std::string& name, std::string& prompt, AvatarSettings& avatar_settings,
@@ -313,12 +506,6 @@ ClientThread::ClientThread(ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_q
 	dstream(nullptr),
 	world_state(world_state_)
 {
-#if !defined(EMSCRIPTEN)
-	MySocketRef mysocket = new MySocket();
-	mysocket->setUseNetworkByteOrder(false);
-	socket = mysocket;
-#endif
-
 	dstream = ZSTD_createDStream();
 	if(!dstream)
 		throw glare::Exception("ZSTD_createDStream failed.");
@@ -339,36 +526,37 @@ void ClientThread::kill()
 		socket->startGracefulShutdown();
 #endif
 
-	client_sender_thread_manager.killThreadsNonBlocking();
-
-	should_die = glare::atomic_int(1);
+	{
+		Lock lock(data_to_send_mutex);
+		should_die = glare::atomic_int(1);
+		if(client_sender_thread.nonNull())
+			client_sender_thread->kill();
+	}
 	
 	event_fd.notify(); // Make the blocking readable call stop.
 }
 
 
-// This executes in the ClientThread context.
-// We call ungracefulShutdown() on the socket.  This results in any current blocking call returning with WSAEINTR ('blocking operation was interrupted by a call to WSACancelBlockingCall')
-#if defined(_WIN32)
-static void asyncProcedure(uint64 data)
-{
-	ClientThread* client_thread = (ClientThread*)data;
-	if(client_thread->socket.nonNull())
-		client_thread->socket->ungracefulShutdown();
-
-	client_thread->decRefCount();
-}
-#endif
-
-
 void ClientThread::killConnection()
 {
-#if defined(_WIN32)
-	this->incRefCount();
-	QueueUserAPC(asyncProcedure, this->getHandle(), /*data=*/(ULONG_PTR)this);
-#else
+#if defined(EMSCRIPTEN)
 	if(socket.nonNull())
 		socket->ungracefulShutdown();
+#else
+	kill();
+	{
+		Lock lock(data_to_send_mutex);
+		if(client_sender_thread.nonNull())
+			client_sender_thread->cancel();
+	}
+	Lock lock(connection_mutex);
+	connection_cancelled = true;
+	if(connected_socket.nonNull())
+	{
+		// Interrupt both directions without closing/reusing the descriptor or
+		// mutating MySocket/TLSSocket while another thread is using them. No APC needed.
+		interruptClientSocket(*connected_socket);
+	}
 #endif
 }
 
@@ -1759,10 +1947,55 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 
 void ClientThread::doRun()
 {
+	runConnection();
+
+#if !defined(EMSCRIPTEN)
+	// Stay in the outer ThreadManager until the nested sender AND TLS cleanup finish.
+	// Bound graceful draining even when a peer stops reading queued object updates.
+	kill();
+	Timer drain_timer;
+	while(client_sender_thread_manager.getNumThreads() > 0 && drain_timer.elapsed() < 0.5)
+		PlatformUtils::Sleep(5);
+	if(client_sender_thread_manager.getNumThreads() > 0)
+		killConnection();
+	// Join the retained sender even if it has already left its manager. Its thread
+	// epilogue must finish before we release the last references to the TLS socket.
+	{
+		Reference<ClientSenderThread> sender;
+		{
+			Lock lock(data_to_send_mutex);
+			sender = client_sender_thread;
+		}
+		if(sender.nonNull())
+			sender->join();
+	}
+
+	// Only the receiver closes the descriptor, after all sender I/O has stopped.
+	// Invalidate it before releasing TLS so its destructor cannot block in tls_close.
+	{
+		Lock lock(connection_mutex);
+		if(connected_socket.nonNull())
+			connected_socket->ungracefulShutdown();
+		connected_socket = nullptr;
+	}
+	{
+		Lock lock(data_to_send_mutex);
+		client_sender_thread = nullptr;
+		data_to_send.clear();
+	}
+	socket = nullptr;
+#endif
+}
+
+
+void ClientThread::runConnection()
+{
 	PlatformUtils::setCurrentThreadNameIfTestsEnabled("ClientThread");
 
 	try
 	{
+		if(should_die)
+			return;
 		// Do DNS resolution of server hostname
 		//Timer timer;
 #if EMSCRIPTEN
@@ -1784,7 +2017,15 @@ void ClientThread::doRun()
 		const std::string protocol = use_TLS ? "wss" : "ws";
 		socket.downcast<EmscriptenWebSocket>()->connect(protocol, hostname, /*port=*/use_TLS ? 443 : 80);
 #else
-		socket.downcast<MySocket>()->connect(server_ip, hostname, port);
+		if(should_die)
+			return;
+		socket = connectClientSocket(server_ip, port, should_die);
+		{
+			Lock lock(connection_mutex);
+			connected_socket = socket.downcast<MySocket>();
+			if(connection_cancelled || should_die)
+				return;
+		}
 
 		socket = new TLSSocket(socket.downcast<MySocket>(), config, hostname);
 #endif
@@ -1869,19 +2110,14 @@ void ClientThread::doRun()
 		Reference<ClientSenderThread> sender_thread = new ClientSenderThread(socket);
 		{
 			Lock lock(data_to_send_mutex);
+			// Publish only after transferring the old queue, preserving packet order.
+			sender_thread->enqueueDataToSend(data_to_send);
+			data_to_send.clear();
+			if(should_die)
+				sender_thread->kill();
+			client_sender_thread_manager.addThread(sender_thread);
 			this->client_sender_thread = sender_thread;
 		}
-		client_sender_thread_manager.addThread(sender_thread);
-
-		// Enqueue any data we have to send into the client_sender_thread queue.
-		js::Vector<uint8, 16> data_to_send_copy;
-		{
-			Lock lock(data_to_send_mutex);
-			data_to_send_copy = data_to_send;
-			data_to_send.clear();
-		}
-		
-		sender_thread->enqueueDataToSend(data_to_send_copy);
 #endif
 
 
@@ -1956,6 +2192,8 @@ void ClientThread::enqueueDataToSend(const ArrayRef<uint8> data)
 
 #else
 	Lock lock(data_to_send_mutex);
+	if(should_die)
+		return;
 
 	if(client_sender_thread.nonNull())
 		client_sender_thread->enqueueDataToSend(data);
@@ -1971,3 +2209,4 @@ void ClientThread::enqueueDataToSend(const ArrayRef<uint8> data)
 	}
 #endif
 }
+#endif // CLIENT_TCP_CONNECT_TEST

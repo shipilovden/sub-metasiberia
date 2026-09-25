@@ -80,6 +80,12 @@ end
 cyb_output_resources_dir             = cyberspace_output + "/data/resources"
 cyb_output_test_builds_resources_dir = cyberspace_output + "/test_builds/data/resources"
 
+# index.html is a generated, hash-pinned copy of webclient.html.  Remove any
+# previous copy before rebuilding so an interrupted build cannot leave Caddy
+# serving a stale entrypoint with a new or partially updated bundle.
+FileUtils.rm(cyberspace_output + "/index.html", :verbose=>true) if File.exist?(cyberspace_output + "/index.html")
+FileUtils.rm(cyberspace_output + "/test_builds/index.html", :verbose=>true) if File.exist?(cyberspace_output + "/test_builds/index.html")
+
 FileUtils.mkdir_p(cyb_output_resources_dir, :verbose => true)             if !File.exist?(cyb_output_resources_dir)             # Make cyberspace_output + "/data" dir if it doesn't exist already.
 FileUtils.mkdir_p(cyb_output_test_builds_resources_dir, :verbose => true) if !File.exist?(cyb_output_test_builds_resources_dir) # Make cyberspace_output + "/test_builds/data" dir if it doesn't exist already.
 

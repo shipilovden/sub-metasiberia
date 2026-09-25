@@ -318,6 +318,8 @@ public:
 	void requestGearPreviewResources();
 	void convertSelectedObjectToGearItem();
 	void createBot(const Vec3d& pos, float heading);
+	void enqueueDirtyWorldObjectUpdates(double global_time);
+	void enqueueResourceUpload(const URLString& resource_URL);
 	std::string uploadLocalFileForBot(const std::string& local_abs_path); // Copy local file to resources dir and return sub:// URL
 	std::string prepareAndUploadParticleSprite(const std::string& sprite_path); // Convert a local particle sprite path to a shared resource URL and enqueue upload.
 	std::string prepareAndUploadParticleAudio(const std::string& audio_path); // Convert a local particle audio path to a shared resource URL and enqueue upload.
@@ -1082,7 +1084,7 @@ public:
 	URLString cur_loading_lod_model_url;
 	int cur_loading_model_lod_level;
 	bool cur_loading_dynamic_physics_shape;
-	uint64 cur_loading_voxel_hash;
+	uint64 cur_loading_voxel_hash = 0;
 	int cur_loading_voxel_subsample_factor;
 	PhysicsShape cur_loading_physics_shape;
 
@@ -1378,7 +1380,7 @@ public:
 		bool dynamic_physics_shape;
 		PhysicsShape physics_shape;
 		int voxel_subsample_factor;
-		uint64 voxel_hash;
+		uint64 voxel_hash = 0;
 	};
 	
 
@@ -1415,4 +1417,5 @@ public:
 	bool ui_hidden;
 
 	bool only_load_most_important_obs;
+	bool shutdown_started = false;
 };

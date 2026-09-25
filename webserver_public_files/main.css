@@ -1587,26 +1587,37 @@ body.msb-control .msb-lang-toggle-button {
 	}
 }
 
-.msb-signup-terms-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	flex-wrap: wrap;
-	margin-top: 8px;
+.msb-signup-consents {
+	display: grid;
+	gap: 8px;
+	margin-top: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--msb-border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.45);
 }
 
-.msb-signup-terms-checkbox {
+.msb-signup-consent-row {
+	display: grid;
+	grid-template-columns: 16px minmax(0, 1fr);
+	align-items: start;
+	column-gap: 10px;
+}
+
+.msb-signup-consent-checkbox {
 	width: 16px;
 	height: 16px;
-	margin: 0;
+	margin: 2px 0 0;
 }
 
-.msb-signup-terms-label {
+.msb-signup-consent-label {
+	display: block;
 	font-size: 14px;
+	line-height: 1.45;
 	color: var(--msb-text-muted);
 }
 
-.msb-signup-terms-label a {
+.msb-signup-consent-label a {
 	font-weight: 600;
 }
 

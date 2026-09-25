@@ -1,0 +1,47 @@
+User-agent: *
+Allow: /
+
+# Authentication, account and administrative pages.
+Disallow: /login
+Disallow: /signup
+Disallow: /reset_password
+Disallow: /change_password
+Disallow: /account
+Disallow: /admin
+
+# Mutating forms and internal operations.
+Disallow: /edit_
+Disallow: /create_
+Disallow: /delete_
+Disallow: /add_
+Disallow: /remove_
+Disallow: /set_
+Disallow: /regenerate_
+Disallow: /make_
+Disallow: /claim_
+Disallow: /prove_
+Disallow: /logout
+Disallow: /login_post
+Disallow: /signup_post
+
+# Runtime, API, media and service endpoints.
+Disallow: /webclient
+Disallow: /visit
+Disallow: /gui_client.data
+Disallow: /resource/
+Disallow: /p/
+Disallow: /screenshot/
+Disallow: /photo_image/
+Disallow: /photo_midsize_image/
+Disallow: /photo_thumb_image/
+Disallow: /tile
+Disallow: /osm_tile/
+Disallow: /script_log
+Disallow: /secrets
+Disallow: /bot_status
+Disallow: /order/
+Disallow: /buy_
+Disallow: /ipn_listener
+Disallow: /coinbase_webhook
+
+Sitemap: https://vr.metasiberia.com/sitemap.xml

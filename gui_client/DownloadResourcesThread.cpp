@@ -297,6 +297,7 @@ void DownloadResourcesThread::doRun()
 
 							resource->setState(Resource::State_NotPresent);
 							//conPrint("DownloadResourcesThread: Server couldn't send file '" + URL + "' (Result=" + toString(result) + ")");
+							out_msg_queue->enqueue(new ResourceDownloadFailedMessage(URL));
 							out_msg_queue->enqueue(new LogMessage("Server couldn't send resource '" + std::string(URL.begin(), URL.end()) + "' (resource not found)"));
 						}
 

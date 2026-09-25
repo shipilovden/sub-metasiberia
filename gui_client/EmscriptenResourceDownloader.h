@@ -46,6 +46,7 @@ public:
 	void shutdown();
 
 	void think();
+	bool isDownloadingURL(const URLString& URL) const;
 
 
 	void onResourceLoad(Reference<CurrentlyDownloadingResource> res, void* buffer, unsigned int buffer_size_B);

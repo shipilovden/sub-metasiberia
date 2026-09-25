@@ -267,6 +267,7 @@ void renderSignUpPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 	const web::UnsafeString msg = request_info.getURLParam("msg");
 
 	page_out += "<body class=\"standard-body\">";
+	page_out += "<a href=\"/\"><img src=\"/files/logo_small.png\" alt=\"metasiberia logo\" class=\"substrata-logo-top-small\"/></a>";
 	page_out += "<h1>Sign Up</h1>";
 
 	if(world_state.isInReadOnlyMode())
@@ -296,9 +297,21 @@ void renderSignUpPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 		page_out += "<input id=\"new-password\"	autocomplete=\"new-password\"	required=\"required\"	type=\"password\"	name=\"password\">"; // See https://web.dev/sign-in-form-best-practices/#new-password
 		page_out += "</div>";
 
-		page_out += "<div class=\"msb-signup-terms-row\">";
-		page_out += "<input type=\"checkbox\" id=\"msb-signup-terms-accepted\" class=\"msb-signup-terms-checkbox\" name=\"terms_accepted\" value=\"1\" required=\"required\">";
-		page_out += "<label class=\"msb-signup-terms-label\" for=\"msb-signup-terms-accepted\">I have read and accept the <a href=\"https://vr.metasiberia.com/terms\" target=\"_blank\" rel=\"noopener\">Terms of use</a>.</label>";
+		page_out += "<div class=\"msb-signup-consents\" role=\"group\">";
+		page_out += "<div class=\"msb-signup-consent-row\">";
+		page_out += "<input type=\"checkbox\" id=\"msb-signup-terms-accepted\" class=\"msb-signup-consent-checkbox\" name=\"terms_accepted\" value=\"1\" required=\"required\">";
+		page_out += "<label class=\"msb-signup-consent-label\" for=\"msb-signup-terms-accepted\">";
+		page_out += "<span class=\"msb-signup-consent-text\" data-msb-en=\"I have read and accept the\" data-msb-ru=\"Я прочитал и принимаю\" data-no-translate=\"1\">I have read and accept the</span> ";
+		page_out += "<a href=\"/terms\" target=\"_blank\" rel=\"noopener\" data-msb-en=\"Terms of Use\" data-msb-ru=\"Условия использования\" data-no-translate=\"1\">Terms of Use</a>.";
+		page_out += "</label>";
+		page_out += "</div>";
+		page_out += "<div class=\"msb-signup-consent-row\">";
+		page_out += "<input type=\"checkbox\" id=\"msb-signup-privacy-accepted\" class=\"msb-signup-consent-checkbox\" name=\"privacy_accepted\" value=\"1\" required=\"required\">";
+		page_out += "<label class=\"msb-signup-consent-label\" for=\"msb-signup-privacy-accepted\">";
+		page_out += "<span class=\"msb-signup-consent-text\" data-msb-en=\"I consent to the processing of my personal data in accordance with the\" data-msb-ru=\"Я даю согласие на обработку моих персональных данных в соответствии с\" data-no-translate=\"1\">I consent to the processing of my personal data in accordance with the</span> ";
+		page_out += "<a href=\"/privacy\" target=\"_blank\" rel=\"noopener\" data-msb-en=\"Privacy Policy\" data-msb-ru=\"Политика конфиденциальности\" data-no-translate=\"1\">Privacy Policy</a>.";
+		page_out += "</label>";
+		page_out += "</div>";
 		page_out += "</div>";
 
 		page_out += "<input type=\"submit\" value=\"Sign Up\">";
@@ -340,6 +353,7 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 		const web::UnsafeString email			= request_info.getPostField("email");
 		const web::UnsafeString password		= request_info.getPostField("password");
 		const web::UnsafeString terms_accepted	= request_info.getPostField("terms_accepted");
+		const web::UnsafeString privacy_accepted	= request_info.getPostField("privacy_accepted");
 		const web::UnsafeString raw_return_URL	= request_info.getPostField("return");
 
 		/*conPrint("username:   '" + username.str() + "'");
@@ -352,7 +366,9 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 		if(password.str().size() < 6)
 			throw InvalidCredentialsExcep("Password is too short, must have at least 6 characters");
 		if(!termsAccepted(terms_accepted))
-			throw InvalidCredentialsExcep("You must confirm that you have read and accepted the Terms of use.");
+			throw InvalidCredentialsExcep("You must confirm that you have read and accepted the Terms of Use.");
+		if(!termsAccepted(privacy_accepted))
+			throw InvalidCredentialsExcep("You must consent to the processing of your personal data in accordance with the Privacy Policy.");
 
 		std::string return_URL = raw_return_URL.str();
 		if(return_URL.empty())

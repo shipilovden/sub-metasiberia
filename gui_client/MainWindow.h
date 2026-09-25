@@ -119,7 +119,6 @@ private slots:;
 	void on_actionGo_to_CryptoVoxels_World_triggered();
 	void on_actionGo_to_Substrata_Server_triggered();
 	void on_actionGo_to_Metasiberia_Server_triggered();
-	void on_actionGo_to_Shki_nvkz_Server_triggered();
 	void on_actionGo_to_Map_World_triggered();
 	void on_actionGo_to_Parcel_triggered();
 	void on_actionGo_to_Position_triggered();
@@ -322,7 +321,7 @@ private:
 	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
 private:
-	void initialiseThemesMenu();
+	void initialiseThemesMenu(bool apply_saved_theme = true);
 	void initialiseLanguageMenu();
 	void applyUILanguage(RuntimeTranslation::UILanguage language, bool persist_setting);
 	void refreshTranslatedUiText();

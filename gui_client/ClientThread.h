@@ -29,6 +29,7 @@ class ClientSenderThread;
 class WorldState;
 class WorldObject;
 class SocketInterface;
+class MySocket;
 struct tls_config;
 namespace glare { class FastPoolAllocator; }
 struct ZSTD_DCtx_s;
@@ -547,8 +548,11 @@ public:
 
 	virtual void kill() override;
 
+	// Nonblocking cancellation. Keep polling the owning ThreadManager before joining:
+	// DNS lookup may still be in progress and cannot be interrupted here.
 	void killConnection();
 private:
+	void runConnection();
 	void readAndHandleMessage(uint32 peer_protocol_version);
 	void handleObjectInitialSend(RandomAccessInStream& msg_stream);
 
@@ -563,9 +567,13 @@ private:
 	EventFD event_fd;
 	std::string hostname;
 	int port;
-public:
+	// Native: used only by the receiver (and the sender's own immutable reference).
 	Reference<SocketInterface> socket;
-private:
+#if !defined(EMSCRIPTEN)
+	Mutex connection_mutex;
+	Reference<MySocket> connected_socket GUARDED_BY(connection_mutex);
+	bool connection_cancelled GUARDED_BY(connection_mutex) = false;
+#endif
 	std::string initial_world_name;
 	struct tls_config* config;
 
