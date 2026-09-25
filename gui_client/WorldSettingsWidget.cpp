@@ -70,6 +70,12 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	connect(this->layer0HeightScaleSpinBox,     SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->layer1ASpinBox,               SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->layer1HeightScaleSpinBox,     SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->volumetricCloudsEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudBottomZWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudTopZWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudCoverageWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudDensityWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudWindSpeedWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs0EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs1EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs2EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
@@ -469,6 +475,12 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 	SignalBlocker::setValue(layer0HeightScaleSpinBox, world_settings.fog_settings.layer_0_scale_height);
 	SignalBlocker::setValue(layer1ASpinBox,           world_settings.fog_settings.layer_1_A);
 	SignalBlocker::setValue(layer1HeightScaleSpinBox, world_settings.fog_settings.layer_1_scale_height);
+	SignalBlocker::setChecked(volumetricCloudsEnabledCheckBox, world_settings.volumetric_cloud_settings.enabled);
+	SignalBlocker::setValue(cloudBottomZWorldRealControl, world_settings.volumetric_cloud_settings.bottom_z);
+	SignalBlocker::setValue(cloudTopZWorldRealControl, world_settings.volumetric_cloud_settings.top_z);
+	SignalBlocker::setValue(cloudCoverageWorldRealControl, world_settings.volumetric_cloud_settings.coverage);
+	SignalBlocker::setValue(cloudDensityWorldRealControl, world_settings.volumetric_cloud_settings.density);
+	SignalBlocker::setValue(cloudWindSpeedWorldRealControl, world_settings.volumetric_cloud_settings.wind_speed);
 }
 
 
@@ -549,6 +561,12 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.fog_settings.layer_0_scale_height = (float)layer0HeightScaleSpinBox->value();
 	world_settings_out.fog_settings.layer_1_A            = (float)layer1ASpinBox->value();
 	world_settings_out.fog_settings.layer_1_scale_height = (float)layer1HeightScaleSpinBox->value();
+	world_settings_out.volumetric_cloud_settings.enabled = volumetricCloudsEnabledCheckBox->isChecked();
+	world_settings_out.volumetric_cloud_settings.bottom_z = (float)cloudBottomZWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.top_z = (float)cloudTopZWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.coverage = (float)cloudCoverageWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.density = (float)cloudDensityWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.wind_speed = (float)cloudWindSpeedWorldRealControl->value();
 }
 
 
@@ -591,6 +609,12 @@ void WorldSettingsWidget::updateControlsEditable()
 	layer0HeightScaleSpinBox->setReadOnly(!editable);
 	layer1ASpinBox->setReadOnly(!editable);
 	layer1HeightScaleSpinBox->setReadOnly(!editable);
+	volumetricCloudsEnabledCheckBox->setEnabled(editable);
+	cloudBottomZWorldRealControl->setEnabled(editable);
+	cloudTopZWorldRealControl->setEnabled(editable);
+	cloudCoverageWorldRealControl->setEnabled(editable);
+	cloudDensityWorldRealControl->setEnabled(editable);
+	cloudWindSpeedWorldRealControl->setEnabled(editable);
 
 	applyPushButton->setEnabled(editable);
 	if(sculpting_mode_check_box)

@@ -26417,6 +26417,9 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 	auto sanitiseScaleHeight = [](float value) -> float {
 		return (!isFinite(value)) ? 1.f : myMax(0.01f, value);
 	};
+	auto sanitiseFinite = [](float value, float fallback) -> float {
+		return isFinite(value) ? value : fallback;
+	};
 
 	OpenGLScene* const scene = opengl_engine->getCurrentScene();
 	if(scene)
@@ -26425,6 +26428,14 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 		scene->fog_settings.layer_0_B = 1.f / sanitiseScaleHeight(this->connected_world_settings.fog_settings.layer_0_scale_height);
 		scene->fog_settings.layer_1_A = sanitiseA(this->connected_world_settings.fog_settings.layer_1_A);
 		scene->fog_settings.layer_1_B = 1.f / sanitiseScaleHeight(this->connected_world_settings.fog_settings.layer_1_scale_height);
+
+		const VolumetricCloudWorldSettings& clouds = this->connected_world_settings.volumetric_cloud_settings;
+		scene->draw_volumetric_clouds = clouds.enabled;
+		scene->volumetric_cloud_settings.bottom_z = sanitiseFinite(clouds.bottom_z, 1000.f);
+		scene->volumetric_cloud_settings.top_z = sanitiseFinite(clouds.top_z, 2200.f);
+		scene->volumetric_cloud_settings.coverage = myClamp(sanitiseFinite(clouds.coverage, 0.48f), 0.f, 1.f);
+		scene->volumetric_cloud_settings.density = myMax(0.f, sanitiseFinite(clouds.density, 0.0012f));
+		scene->volumetric_cloud_settings.wind_speed = sanitiseFinite(clouds.wind_speed, 20.f);
 	}
 }
 

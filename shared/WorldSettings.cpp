@@ -64,6 +64,17 @@ void readFogWorldSettingsFromStream(RandomAccessInStream& stream, FogWorldSettin
 }
 
 
+VolumetricCloudWorldSettings::VolumetricCloudWorldSettings()
+:
+	enabled(true),
+	bottom_z(1000.f),
+	top_z(2200.f),
+	coverage(0.48f),
+	density(0.0012f),
+	wind_speed(20.f)
+{}
+
+
 WorldSettings::WorldSettings()
 {
 	terrain_spec.terrain_section_width_m = 8192;
@@ -90,6 +101,7 @@ void WorldSettings::clear()
 	terrain_spec = TerrainSpec();
 
 	fog_settings = FogWorldSettings();
+	volumetric_cloud_settings = VolumetricCloudWorldSettings();
 }
 
 
@@ -121,7 +133,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 }
 
 
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 8;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 9;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -183,6 +195,14 @@ void WorldSettings::writeToStream(OutStream& stream) const
 		buffer.writeUInt32(terrain_spec.section_specs[i].disabled_map_flags);
 	buffer.writeUInt32(terrain_spec.disabled_detail_map_flags);
 
+	// New in v9: volumetric cloud settings are part of the world state.
+	buffer.writeUInt32(volumetric_cloud_settings.enabled ? 1u : 0u);
+	buffer.writeFloat(volumetric_cloud_settings.bottom_z);
+	buffer.writeFloat(volumetric_cloud_settings.top_z);
+	buffer.writeFloat(volumetric_cloud_settings.coverage);
+	buffer.writeFloat(volumetric_cloud_settings.density);
+	buffer.writeFloat(volumetric_cloud_settings.wind_speed);
+
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
 	std::memcpy(buffer.buf.data() + sizeof(uint32), &buffer_size, sizeof(uint32));
@@ -200,6 +220,7 @@ void WorldSettings::copyNetworkStateFrom(const WorldSettings& other)
 	sun_phi   = other.sun_phi;
 
 	fog_settings = other.fog_settings;
+	volumetric_cloud_settings = other.volumetric_cloud_settings;
 }
 
 
@@ -287,6 +308,21 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 		for(uint32 i=0; i<num_section_specs; ++i)
 			settings.terrain_spec.section_specs[i].disabled_map_flags = buffer_stream.readUInt32();
 		settings.terrain_spec.disabled_detail_map_flags = buffer_stream.readUInt32();
+	}
+
+	// Defaults keep worlds written by older clients compatible.  The cloud
+	// extension is appended after all v8 fields so old readers can ignore it.
+	settings.volumetric_cloud_settings = VolumetricCloudWorldSettings();
+	const size_t volumetric_cloud_payload_size = sizeof(uint32) + sizeof(float) * 5;
+	const size_t remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
+	if(version >= 9 && remaining_bytes >= volumetric_cloud_payload_size)
+	{
+		settings.volumetric_cloud_settings.enabled = buffer_stream.readUInt32() != 0;
+		settings.volumetric_cloud_settings.bottom_z = buffer_stream.readFloat();
+		settings.volumetric_cloud_settings.top_z = buffer_stream.readFloat();
+		settings.volumetric_cloud_settings.coverage = buffer_stream.readFloat();
+		settings.volumetric_cloud_settings.density = buffer_stream.readFloat();
+		settings.volumetric_cloud_settings.wind_speed = buffer_stream.readFloat();
 	}
 
 	// We effectively skip any remaining data we have not processed by discarding buffer_stream.
