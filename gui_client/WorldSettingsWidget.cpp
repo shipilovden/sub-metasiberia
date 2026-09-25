@@ -83,8 +83,18 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	connect(this->cloudDetailPeriodWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->cloudMaxMarchDistWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->cloudWindDirectionWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudDirectSunWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudSkyLightWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudSunsetResponseWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudGroundContributionWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudPhaseGWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudPhaseBlendWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudMultiScatteringWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->cloudScatteringWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterCloudReflectionEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->cloudWaterReflectionWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterCloudReflectionSamplesWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterCloudReflectionFadeWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs0EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs1EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs2EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
@@ -490,15 +500,25 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 	SignalBlocker::setValue(cloudCoverageWorldRealControl, world_settings.volumetric_cloud_settings.coverage);
 	SignalBlocker::setValue(cloudDensityWorldRealControl, world_settings.volumetric_cloud_settings.density);
 	SignalBlocker::setValue(cloudWindSpeedWorldRealControl, world_settings.volumetric_cloud_settings.wind_speed);
-	SignalBlocker::setValue(cloudBottomDarknessWorldRealControl, world_settings.volumetric_cloud_settings.bottom_darkness);
 	SignalBlocker::setValue(cloudEdgeSoftnessWorldRealControl, world_settings.volumetric_cloud_settings.edge_softness);
 	SignalBlocker::setValue(cloudHorizonFadeWorldRealControl, world_settings.volumetric_cloud_settings.horizon_fade);
 	SignalBlocker::setValue(cloudShapePeriodWorldRealControl, world_settings.volumetric_cloud_settings.shape_period);
 	SignalBlocker::setValue(cloudDetailPeriodWorldRealControl, world_settings.volumetric_cloud_settings.detail_period);
 	SignalBlocker::setValue(cloudMaxMarchDistWorldRealControl, world_settings.volumetric_cloud_settings.max_march_dist);
 	SignalBlocker::setValue(cloudWindDirectionWorldRealControl, world_settings.volumetric_cloud_settings.wind_direction_deg);
-	SignalBlocker::setValue(cloudScatteringWorldRealControl, world_settings.volumetric_cloud_settings.scattering_scale);
-	SignalBlocker::setValue(cloudWaterReflectionWorldRealControl, world_settings.volumetric_cloud_settings.water_reflection_strength);
+	SignalBlocker::setValue(cloudDirectSunWorldRealControl, world_settings.cloud_lighting_settings.direct_sun_strength);
+	SignalBlocker::setValue(cloudSkyLightWorldRealControl, world_settings.cloud_lighting_settings.sky_light_strength);
+	SignalBlocker::setValue(cloudSunsetResponseWorldRealControl, world_settings.cloud_lighting_settings.sunset_response);
+	SignalBlocker::setValue(cloudGroundContributionWorldRealControl, world_settings.cloud_lighting_settings.ground_contribution);
+	SignalBlocker::setValue(cloudBottomDarknessWorldRealControl, world_settings.cloud_lighting_settings.underside_darkness);
+	SignalBlocker::setValue(cloudPhaseGWorldRealControl, world_settings.cloud_lighting_settings.phase_g);
+	SignalBlocker::setValue(cloudPhaseBlendWorldRealControl, world_settings.cloud_lighting_settings.phase_blend);
+	SignalBlocker::setValue(cloudMultiScatteringWorldRealControl, world_settings.cloud_lighting_settings.multi_scattering);
+	SignalBlocker::setValue(cloudScatteringWorldRealControl, world_settings.cloud_lighting_settings.scattering_scale);
+	SignalBlocker::setChecked(waterCloudReflectionEnabledCheckBox, world_settings.water_reflection_settings.cloud_reflection_enabled);
+	SignalBlocker::setValue(cloudWaterReflectionWorldRealControl, world_settings.water_reflection_settings.cloud_reflection_strength);
+	SignalBlocker::setValue(waterCloudReflectionSamplesWorldRealControl, world_settings.water_reflection_settings.cloud_reflection_samples);
+	SignalBlocker::setValue(waterCloudReflectionFadeWorldRealControl, world_settings.water_reflection_settings.cloud_reflection_fade);
 }
 
 
@@ -585,15 +605,25 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.volumetric_cloud_settings.coverage = (float)cloudCoverageWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.density = (float)cloudDensityWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.wind_speed = (float)cloudWindSpeedWorldRealControl->value();
-	world_settings_out.volumetric_cloud_settings.bottom_darkness = (float)cloudBottomDarknessWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.edge_softness = (float)cloudEdgeSoftnessWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.horizon_fade = (float)cloudHorizonFadeWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.shape_period = (float)cloudShapePeriodWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.detail_period = (float)cloudDetailPeriodWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.max_march_dist = (float)cloudMaxMarchDistWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.wind_direction_deg = (float)cloudWindDirectionWorldRealControl->value();
-	world_settings_out.volumetric_cloud_settings.scattering_scale = (float)cloudScatteringWorldRealControl->value();
-	world_settings_out.volumetric_cloud_settings.water_reflection_strength = (float)cloudWaterReflectionWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.direct_sun_strength = (float)cloudDirectSunWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.sky_light_strength = (float)cloudSkyLightWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.sunset_response = (float)cloudSunsetResponseWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.ground_contribution = (float)cloudGroundContributionWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.underside_darkness = (float)cloudBottomDarknessWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.phase_g = (float)cloudPhaseGWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.phase_blend = (float)cloudPhaseBlendWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.multi_scattering = (float)cloudMultiScatteringWorldRealControl->value();
+	world_settings_out.cloud_lighting_settings.scattering_scale = (float)cloudScatteringWorldRealControl->value();
+	world_settings_out.water_reflection_settings.cloud_reflection_enabled = waterCloudReflectionEnabledCheckBox->isChecked();
+	world_settings_out.water_reflection_settings.cloud_reflection_strength = (float)cloudWaterReflectionWorldRealControl->value();
+	world_settings_out.water_reflection_settings.cloud_reflection_samples = (float)waterCloudReflectionSamplesWorldRealControl->value();
+	world_settings_out.water_reflection_settings.cloud_reflection_fade = (float)waterCloudReflectionFadeWorldRealControl->value();
 }
 
 
@@ -649,8 +679,18 @@ void WorldSettingsWidget::updateControlsEditable()
 	cloudDetailPeriodWorldRealControl->setEnabled(editable);
 	cloudMaxMarchDistWorldRealControl->setEnabled(editable);
 	cloudWindDirectionWorldRealControl->setEnabled(editable);
+	cloudDirectSunWorldRealControl->setEnabled(editable);
+	cloudSkyLightWorldRealControl->setEnabled(editable);
+	cloudSunsetResponseWorldRealControl->setEnabled(editable);
+	cloudGroundContributionWorldRealControl->setEnabled(editable);
+	cloudPhaseGWorldRealControl->setEnabled(editable);
+	cloudPhaseBlendWorldRealControl->setEnabled(editable);
+	cloudMultiScatteringWorldRealControl->setEnabled(editable);
 	cloudScatteringWorldRealControl->setEnabled(editable);
+	waterCloudReflectionEnabledCheckBox->setEnabled(editable);
 	cloudWaterReflectionWorldRealControl->setEnabled(editable);
+	waterCloudReflectionSamplesWorldRealControl->setEnabled(editable);
+	waterCloudReflectionFadeWorldRealControl->setEnabled(editable);
 
 	applyPushButton->setEnabled(editable);
 	if(sculpting_mode_check_box)

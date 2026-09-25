@@ -72,15 +72,36 @@ VolumetricCloudWorldSettings::VolumetricCloudWorldSettings()
 	coverage(0.48f),
 	density(0.0012f),
 	wind_speed(20.f),
-	bottom_darkness(0.4f),
 	edge_softness(0.55f),
 	horizon_fade(0.75f),
 	shape_period(10000.f),
 	detail_period(1200.f),
 	max_march_dist(40000.f),
-	wind_direction_deg(20.f),
-	scattering_scale(1.f),
-	water_reflection_strength(0.65f)
+	wind_direction_deg(20.f)
+{}
+
+
+CloudLightingWorldSettings::CloudLightingWorldSettings()
+:
+	direct_sun_strength(1.f),
+	sky_light_strength(1.f),
+	sunset_response(1.f),
+	ground_contribution(0.18f),
+	ground_albedo(0.35f, 0.32f, 0.28f),
+	phase_g(0.55f),
+	phase_blend(0.2f),
+	multi_scattering(0.25f),
+	underside_darkness(0.4f),
+	scattering_scale(1.f)
+{}
+
+
+WaterReflectionWorldSettings::WaterReflectionWorldSettings()
+:
+	cloud_reflection_enabled(true),
+	cloud_reflection_strength(0.65f),
+	cloud_reflection_samples(24.f),
+	cloud_reflection_fade(0.75f)
 {}
 
 
@@ -111,6 +132,8 @@ void WorldSettings::clear()
 
 	fog_settings = FogWorldSettings();
 	volumetric_cloud_settings = VolumetricCloudWorldSettings();
+	cloud_lighting_settings = CloudLightingWorldSettings();
+	water_reflection_settings = WaterReflectionWorldSettings();
 }
 
 
@@ -142,7 +165,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 }
 
 
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 11;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 12;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -211,15 +234,35 @@ void WorldSettings::writeToStream(OutStream& stream) const
 	buffer.writeFloat(volumetric_cloud_settings.coverage);
 	buffer.writeFloat(volumetric_cloud_settings.density);
 	buffer.writeFloat(volumetric_cloud_settings.wind_speed);
-	buffer.writeFloat(volumetric_cloud_settings.bottom_darkness);
+	buffer.writeFloat(cloud_lighting_settings.underside_darkness); // Legacy v10 slot.
 	buffer.writeFloat(volumetric_cloud_settings.edge_softness);
 	buffer.writeFloat(volumetric_cloud_settings.horizon_fade);
 	buffer.writeFloat(volumetric_cloud_settings.shape_period);
 	buffer.writeFloat(volumetric_cloud_settings.detail_period);
 	buffer.writeFloat(volumetric_cloud_settings.max_march_dist);
 	buffer.writeFloat(volumetric_cloud_settings.wind_direction_deg);
-	buffer.writeFloat(volumetric_cloud_settings.scattering_scale);
-	buffer.writeFloat(volumetric_cloud_settings.water_reflection_strength);
+	buffer.writeFloat(cloud_lighting_settings.scattering_scale); // Legacy v11 slot.
+	buffer.writeFloat(water_reflection_settings.cloud_reflection_strength); // Legacy v11 slot.
+
+	// New in v12: keep cloud lighting and water reflection settings in their
+	// own extensions.  The legacy slots above remain populated so older clients
+	// still render a sensible version of the world.
+	buffer.writeFloat(cloud_lighting_settings.direct_sun_strength);
+	buffer.writeFloat(cloud_lighting_settings.sky_light_strength);
+	buffer.writeFloat(cloud_lighting_settings.sunset_response);
+	buffer.writeFloat(cloud_lighting_settings.ground_contribution);
+	buffer.writeFloat(cloud_lighting_settings.ground_albedo.r);
+	buffer.writeFloat(cloud_lighting_settings.ground_albedo.g);
+	buffer.writeFloat(cloud_lighting_settings.ground_albedo.b);
+	buffer.writeFloat(cloud_lighting_settings.phase_g);
+	buffer.writeFloat(cloud_lighting_settings.phase_blend);
+	buffer.writeFloat(cloud_lighting_settings.multi_scattering);
+	buffer.writeFloat(cloud_lighting_settings.underside_darkness);
+	buffer.writeFloat(cloud_lighting_settings.scattering_scale);
+	buffer.writeUInt32(water_reflection_settings.cloud_reflection_enabled ? 1u : 0u);
+	buffer.writeFloat(water_reflection_settings.cloud_reflection_strength);
+	buffer.writeFloat(water_reflection_settings.cloud_reflection_samples);
+	buffer.writeFloat(water_reflection_settings.cloud_reflection_fade);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
@@ -239,6 +282,8 @@ void WorldSettings::copyNetworkStateFrom(const WorldSettings& other)
 
 	fog_settings = other.fog_settings;
 	volumetric_cloud_settings = other.volumetric_cloud_settings;
+	cloud_lighting_settings = other.cloud_lighting_settings;
+	water_reflection_settings = other.water_reflection_settings;
 }
 
 
@@ -331,6 +376,8 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 	// Defaults keep worlds written by older clients compatible.  The cloud
 	// extension is appended after all v8 fields so old readers can ignore it.
 	settings.volumetric_cloud_settings = VolumetricCloudWorldSettings();
+	settings.cloud_lighting_settings = CloudLightingWorldSettings();
+	settings.water_reflection_settings = WaterReflectionWorldSettings();
 	const size_t volumetric_cloud_payload_size = sizeof(uint32) + sizeof(float) * 5;
 	const size_t remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
 	if(version >= 9 && remaining_bytes >= volumetric_cloud_payload_size)
@@ -346,7 +393,7 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 		const size_t appearance_remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
 		if(version >= 10 && appearance_remaining_bytes >= cloud_appearance_payload_size)
 		{
-			settings.volumetric_cloud_settings.bottom_darkness = buffer_stream.readFloat();
+			settings.cloud_lighting_settings.underside_darkness = buffer_stream.readFloat();
 			settings.volumetric_cloud_settings.edge_softness = buffer_stream.readFloat();
 			settings.volumetric_cloud_settings.horizon_fade = buffer_stream.readFloat();
 
@@ -358,8 +405,38 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 				settings.volumetric_cloud_settings.detail_period = buffer_stream.readFloat();
 				settings.volumetric_cloud_settings.max_march_dist = buffer_stream.readFloat();
 				settings.volumetric_cloud_settings.wind_direction_deg = buffer_stream.readFloat();
-				settings.volumetric_cloud_settings.scattering_scale = buffer_stream.readFloat();
-				settings.volumetric_cloud_settings.water_reflection_strength = buffer_stream.readFloat();
+				settings.cloud_lighting_settings.scattering_scale = buffer_stream.readFloat();
+				settings.water_reflection_settings.cloud_reflection_strength = buffer_stream.readFloat();
+
+				// v12 appends the new grouped settings.  Every extension is read
+				// only when its complete payload is available.
+				const size_t cloud_lighting_payload_size = sizeof(float) * 12;
+				const size_t lighting_remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
+				if(version >= 12 && lighting_remaining_bytes >= cloud_lighting_payload_size)
+				{
+					settings.cloud_lighting_settings.direct_sun_strength = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.sky_light_strength = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.sunset_response = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.ground_contribution = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.ground_albedo.r = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.ground_albedo.g = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.ground_albedo.b = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.phase_g = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.phase_blend = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.multi_scattering = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.underside_darkness = buffer_stream.readFloat();
+					settings.cloud_lighting_settings.scattering_scale = buffer_stream.readFloat();
+
+					const size_t water_reflection_payload_size = sizeof(uint32) + sizeof(float) * 3;
+					const size_t reflection_remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
+					if(reflection_remaining_bytes >= water_reflection_payload_size)
+					{
+						settings.water_reflection_settings.cloud_reflection_enabled = buffer_stream.readUInt32() != 0;
+						settings.water_reflection_settings.cloud_reflection_strength = buffer_stream.readFloat();
+						settings.water_reflection_settings.cloud_reflection_samples = buffer_stream.readFloat();
+						settings.water_reflection_settings.cloud_reflection_fade = buffer_stream.readFloat();
+					}
+				}
 			}
 		}
 	}
