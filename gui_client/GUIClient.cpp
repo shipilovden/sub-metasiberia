@@ -3466,6 +3466,17 @@ bool GUIClient::isResourceCurrentlyNeededForObject(const URLString& url, const W
 	DependencyURLSet dependency_URLs(std::less<DependencyURL>(), stl_arena_allocator);
 	ob->getDependencyURLSet(ob_lod_level, options, dependency_URLs);
 
+	// The base model is also a valid dependency while the server-side optimised model is
+	// unavailable. This is the fallback requested by loadModelForObject(), so do not discard
+	// its download-completion message as an unrelated resource.
+	const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
+	WorldObject::GetLODModelURLOptions model_url_options(options.get_optimised_mesh, options.opt_mesh_version);
+	model_url_options.allocator = options.allocator;
+	const URLString desired_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, model_url_options);
+	if(url == ob->model_url && desired_model_url != ob->model_url &&
+	   !resource_manager->isFileForURLPresent(desired_model_url))
+		return true;
+
 	if(dependency_URLs.count(DependencyURL(url)) == 0) // Original textures are also dependencies when a generated LOD is missing.
 	{
 		bool is_fallback = false;
@@ -3575,6 +3586,27 @@ void GUIClient::startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_l
 	DependencyURLSet dependency_URLs(std::less<DependencyURL>(), stl_arena_allocator);
 
 	ob->getDependencyURLSet(ob_lod_level, options, dependency_URLs);
+
+	// Optimised meshes may not exist yet while the server is generating them. Request the base
+	// model as well, so the object can be displayed immediately and upgraded later.
+	if(options.get_optimised_mesh && !ob->model_url.empty() && !FileUtils::fileExists(ob->model_url))
+	{
+		const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
+		WorldObject::GetLODModelURLOptions model_url_options(options.get_optimised_mesh, options.opt_mesh_version);
+		model_url_options.allocator = options.allocator;
+		const URLString desired_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, model_url_options);
+		if(desired_model_url != ob->model_url &&
+		   !resource_manager->isFileForURLPresent(desired_model_url) &&
+		   !resource_manager->isFileForURLPresent(ob->model_url))
+		{
+			DownloadingResourceInfo info;
+			info.build_dynamic_physics_ob = ob->isDynamic();
+			info.pos = ob->pos;
+			info.size_factor = LoadItemQueueItem::sizeFactorForAABBWS(ob->getAABBWSLongestLength(), /*importance_factor=*/1.f);
+			info.using_objects.using_object_uids.push_back(ob->uid);
+			startDownloadingResource(URLString(ob->model_url.begin(), ob->model_url.end()), ob->getCentroidWS(), ob->getAABBWSLongestLength(), info);
+		}
+	}
 
 	for(auto it = dependency_URLs.begin(); it != dependency_URLs.end(); ++it)
 	{
@@ -5002,7 +5034,14 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				bool added_opengl_ob = false;
 
 				WorldObject::GetLODModelURLOptions options(/*get_optimised_mesh=*/shouldUseOptimisedMeshesForWorldObject(*ob, this->server_has_optimised_meshes), this->server_opt_mesh_version);
-				const URLString lod_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, options);
+				const URLString desired_lod_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, options);
+				URLString lod_model_url = desired_lod_model_url;
+
+				// Optimised meshes are generated asynchronously on the server. Use the base mesh while the
+				// requested optimised resource is not available locally, so a newly added object is visible
+				// immediately instead of showing only the placeholder.
+				if(lod_model_url != ob->model_url && !resource_manager->isFileForURLPresent(lod_model_url))
+					lod_model_url = ob->model_url;
 
 				// print("Loading model for ob: UID: " + ob->uid.toString() + ", type: " + WorldObject::objectTypeString((WorldObject::ObjectType)ob->object_type) + ", lod_model_url: " + lod_model_url);
 
@@ -5048,6 +5087,9 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				// If the mesh wasn't loaded onto the GPU yet, add this object to the wait list, for when the mesh is loaded.
 				if(!added_opengl_ob)
 					this->loading_model_URL_to_world_ob_UID_map[ModelProcessingKey(lod_model_url, ob->isDynamic())].insert(ob->uid);
+				if(!added_opengl_ob && lod_model_url != desired_lod_model_url &&
+				   !resource_manager->isFileForURLPresent(desired_lod_model_url))
+					this->loading_model_URL_to_world_ob_UID_map[ModelProcessingKey(desired_lod_model_url, ob->isDynamic())].insert(ob->uid);
 
 				load_placeholder = !added_opengl_ob;
 			}
@@ -7612,10 +7654,19 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 				{
 					const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
 					const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
-								
-					// Check the object wants this particular LOD level model right now:
-					//const std::string current_desired_model_LOD_URL = ob->getLODModelURLForLevel(ob->model_url, ob_model_lod_level);
-					if(/*(current_desired_model_LOD_URL == lod_model_url)*/(ob_model_lod_level == loaded_model_lod_level) && (ob->isDynamic() == dynamic_physics_shape))
+
+					WorldObject::GetLODModelURLOptions options(
+						/*get_optimised_mesh=*/shouldUseOptimisedMeshesForWorldObject(*ob, this->server_has_optimised_meshes),
+						this->server_opt_mesh_version);
+					const URLString current_desired_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, options);
+					const bool is_current_desired_model = current_desired_model_url == lod_model_url;
+					const bool is_available_base_fallback = lod_model_url == ob->model_url &&
+						current_desired_model_url != lod_model_url &&
+						!resource_manager->isFileForURLPresent(current_desired_model_url);
+
+					// Accept the requested LOD, or the base mesh while the requested optimised mesh is absent.
+					if((is_current_desired_model || is_available_base_fallback) &&
+						(ob_model_lod_level == loaded_model_lod_level) && (ob->isDynamic() == dynamic_physics_shape))
 					{
 						try
 						{
