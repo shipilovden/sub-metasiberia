@@ -79,6 +79,12 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	connect(this->cloudBottomDarknessWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->cloudEdgeSoftnessWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->cloudHorizonFadeWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudShapePeriodWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudDetailPeriodWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudMaxMarchDistWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudWindDirectionWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudScatteringWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->cloudWaterReflectionWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs0EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs1EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs2EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
@@ -487,6 +493,12 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 	SignalBlocker::setValue(cloudBottomDarknessWorldRealControl, world_settings.volumetric_cloud_settings.bottom_darkness);
 	SignalBlocker::setValue(cloudEdgeSoftnessWorldRealControl, world_settings.volumetric_cloud_settings.edge_softness);
 	SignalBlocker::setValue(cloudHorizonFadeWorldRealControl, world_settings.volumetric_cloud_settings.horizon_fade);
+	SignalBlocker::setValue(cloudShapePeriodWorldRealControl, world_settings.volumetric_cloud_settings.shape_period);
+	SignalBlocker::setValue(cloudDetailPeriodWorldRealControl, world_settings.volumetric_cloud_settings.detail_period);
+	SignalBlocker::setValue(cloudMaxMarchDistWorldRealControl, world_settings.volumetric_cloud_settings.max_march_dist);
+	SignalBlocker::setValue(cloudWindDirectionWorldRealControl, world_settings.volumetric_cloud_settings.wind_direction_deg);
+	SignalBlocker::setValue(cloudScatteringWorldRealControl, world_settings.volumetric_cloud_settings.scattering_scale);
+	SignalBlocker::setValue(cloudWaterReflectionWorldRealControl, world_settings.volumetric_cloud_settings.water_reflection_strength);
 }
 
 
@@ -576,6 +588,12 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.volumetric_cloud_settings.bottom_darkness = (float)cloudBottomDarknessWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.edge_softness = (float)cloudEdgeSoftnessWorldRealControl->value();
 	world_settings_out.volumetric_cloud_settings.horizon_fade = (float)cloudHorizonFadeWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.shape_period = (float)cloudShapePeriodWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.detail_period = (float)cloudDetailPeriodWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.max_march_dist = (float)cloudMaxMarchDistWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.wind_direction_deg = (float)cloudWindDirectionWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.scattering_scale = (float)cloudScatteringWorldRealControl->value();
+	world_settings_out.volumetric_cloud_settings.water_reflection_strength = (float)cloudWaterReflectionWorldRealControl->value();
 }
 
 
@@ -627,6 +645,12 @@ void WorldSettingsWidget::updateControlsEditable()
 	cloudBottomDarknessWorldRealControl->setEnabled(editable);
 	cloudEdgeSoftnessWorldRealControl->setEnabled(editable);
 	cloudHorizonFadeWorldRealControl->setEnabled(editable);
+	cloudShapePeriodWorldRealControl->setEnabled(editable);
+	cloudDetailPeriodWorldRealControl->setEnabled(editable);
+	cloudMaxMarchDistWorldRealControl->setEnabled(editable);
+	cloudWindDirectionWorldRealControl->setEnabled(editable);
+	cloudScatteringWorldRealControl->setEnabled(editable);
+	cloudWaterReflectionWorldRealControl->setEnabled(editable);
 
 	applyPushButton->setEnabled(editable);
 	if(sculpting_mode_check_box)

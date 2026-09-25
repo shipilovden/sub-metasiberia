@@ -74,7 +74,13 @@ VolumetricCloudWorldSettings::VolumetricCloudWorldSettings()
 	wind_speed(20.f),
 	bottom_darkness(0.4f),
 	edge_softness(0.55f),
-	horizon_fade(0.75f)
+	horizon_fade(0.75f),
+	shape_period(10000.f),
+	detail_period(1200.f),
+	max_march_dist(40000.f),
+	wind_direction_deg(20.f),
+	scattering_scale(1.f),
+	water_reflection_strength(0.65f)
 {}
 
 
@@ -136,7 +142,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 }
 
 
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 10;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 11;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -208,6 +214,12 @@ void WorldSettings::writeToStream(OutStream& stream) const
 	buffer.writeFloat(volumetric_cloud_settings.bottom_darkness);
 	buffer.writeFloat(volumetric_cloud_settings.edge_softness);
 	buffer.writeFloat(volumetric_cloud_settings.horizon_fade);
+	buffer.writeFloat(volumetric_cloud_settings.shape_period);
+	buffer.writeFloat(volumetric_cloud_settings.detail_period);
+	buffer.writeFloat(volumetric_cloud_settings.max_march_dist);
+	buffer.writeFloat(volumetric_cloud_settings.wind_direction_deg);
+	buffer.writeFloat(volumetric_cloud_settings.scattering_scale);
+	buffer.writeFloat(volumetric_cloud_settings.water_reflection_strength);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
@@ -337,6 +349,18 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 			settings.volumetric_cloud_settings.bottom_darkness = buffer_stream.readFloat();
 			settings.volumetric_cloud_settings.edge_softness = buffer_stream.readFloat();
 			settings.volumetric_cloud_settings.horizon_fade = buffer_stream.readFloat();
+
+			const size_t cloud_render_payload_size = sizeof(float) * 6;
+			const size_t render_remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
+			if(version >= 11 && render_remaining_bytes >= cloud_render_payload_size)
+			{
+				settings.volumetric_cloud_settings.shape_period = buffer_stream.readFloat();
+				settings.volumetric_cloud_settings.detail_period = buffer_stream.readFloat();
+				settings.volumetric_cloud_settings.max_march_dist = buffer_stream.readFloat();
+				settings.volumetric_cloud_settings.wind_direction_deg = buffer_stream.readFloat();
+				settings.volumetric_cloud_settings.scattering_scale = buffer_stream.readFloat();
+				settings.volumetric_cloud_settings.water_reflection_strength = buffer_stream.readFloat();
+			}
 		}
 	}
 

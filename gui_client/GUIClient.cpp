@@ -26439,6 +26439,12 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 		scene->volumetric_cloud_settings.bottom_darkness = myClamp(sanitiseFinite(clouds.bottom_darkness, 0.4f), 0.f, 1.f);
 		scene->volumetric_cloud_settings.edge_softness = myClamp(sanitiseFinite(clouds.edge_softness, 0.55f), 0.f, 1.f);
 		scene->volumetric_cloud_settings.horizon_fade = myClamp(sanitiseFinite(clouds.horizon_fade, 0.75f), 0.f, 1.f);
+		scene->volumetric_cloud_settings.shape_period = myClamp(sanitiseFinite(clouds.shape_period, 10000.f), 100.f, 100000.f);
+		scene->volumetric_cloud_settings.detail_period = myClamp(sanitiseFinite(clouds.detail_period, 1200.f), 50.f, 10000.f);
+		scene->volumetric_cloud_settings.max_march_dist = myClamp(sanitiseFinite(clouds.max_march_dist, 40000.f), 100.f, 100000.f);
+		scene->volumetric_cloud_settings.wind_direction_deg = myClamp(sanitiseFinite(clouds.wind_direction_deg, 20.f), 0.f, 360.f);
+		scene->volumetric_cloud_settings.scattering_scale = myClamp(sanitiseFinite(clouds.scattering_scale, 1.f), 0.f, 2.f);
+		scene->volumetric_cloud_settings.water_reflection_strength = myClamp(sanitiseFinite(clouds.water_reflection_strength, 0.65f), 0.f, 1.f);
 	}
 }
 

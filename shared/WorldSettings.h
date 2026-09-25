@@ -101,6 +101,12 @@ struct VolumetricCloudWorldSettings
 	float bottom_darkness;
 	float edge_softness;
 	float horizon_fade;
+	float shape_period;
+	float detail_period;
+	float max_march_dist;
+	float wind_direction_deg;
+	float scattering_scale;
+	float water_reflection_strength;
 };
 
 

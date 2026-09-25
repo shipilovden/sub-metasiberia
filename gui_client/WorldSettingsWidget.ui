@@ -596,7 +596,121 @@
      </property>
     </widget>
    </item>
+   <item row="38" column="0">
+    <widget class="QLabel" name="cloudShapePeriodWorldLabel">
+     <property name="text">
+      <string>Cloud shape scale</string>
+     </property>
+    </widget>
+   </item>
    <item row="38" column="1">
+    <widget class="RealControl" name="cloudShapePeriodWorldRealControl">
+     <property name="suffix">
+      <string> m</string>
+     </property>
+     <property name="minimum">
+      <double>100.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>100000.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="39" column="0">
+    <widget class="QLabel" name="cloudDetailPeriodWorldLabel">
+     <property name="text">
+      <string>Cloud detail scale</string>
+     </property>
+    </widget>
+   </item>
+   <item row="39" column="1">
+    <widget class="RealControl" name="cloudDetailPeriodWorldRealControl">
+     <property name="suffix">
+      <string> m</string>
+     </property>
+     <property name="minimum">
+      <double>50.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>10000.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="40" column="0">
+    <widget class="QLabel" name="cloudMaxMarchDistWorldLabel">
+     <property name="text">
+      <string>Cloud draw distance</string>
+     </property>
+    </widget>
+   </item>
+   <item row="40" column="1">
+    <widget class="RealControl" name="cloudMaxMarchDistWorldRealControl">
+     <property name="suffix">
+      <string> m</string>
+     </property>
+     <property name="minimum">
+      <double>100.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>100000.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="41" column="0">
+    <widget class="QLabel" name="cloudWindDirectionWorldLabel">
+     <property name="text">
+      <string>Cloud wind direction</string>
+     </property>
+    </widget>
+   </item>
+   <item row="41" column="1">
+    <widget class="RealControl" name="cloudWindDirectionWorldRealControl">
+     <property name="suffix">
+      <string> deg</string>
+     </property>
+     <property name="maximum">
+      <double>360.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>1.000000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="42" column="0">
+    <widget class="QLabel" name="cloudScatteringWorldLabel">
+     <property name="text">
+      <string>Cloud light scattering</string>
+     </property>
+    </widget>
+   </item>
+   <item row="42" column="1">
+    <widget class="RealControl" name="cloudScatteringWorldRealControl">
+     <property name="maximum">
+      <double>2.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.010000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="43" column="0">
+    <widget class="QLabel" name="cloudWaterReflectionWorldLabel">
+     <property name="text">
+      <string>Cloud reflection in water</string>
+     </property>
+    </widget>
+   </item>
+   <item row="43" column="1">
+    <widget class="RealControl" name="cloudWaterReflectionWorldRealControl">
+     <property name="maximum">
+      <double>1.000000000000000</double>
+     </property>
+     <property name="singleStep">
+      <double>0.010000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item row="44" column="1">
     <spacer name="verticalSpacer_6">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
