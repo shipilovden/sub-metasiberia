@@ -693,14 +693,14 @@
      </property>
     </widget>
    </item>
-   <item row="43" column="0">
+   <item row="54" column="0">
     <widget class="QLabel" name="cloudWaterReflectionWorldLabel">
      <property name="text">
-      <string>Cloud reflection in water</string>
+      <string>Reflection strength</string>
      </property>
     </widget>
    </item>
-   <item row="43" column="1">
+   <item row="54" column="1">
     <widget class="RealControl" name="cloudWaterReflectionWorldRealControl">
      <property name="maximum">
       <double>1.000000000000000</double>
@@ -710,7 +710,7 @@
      </property>
     </widget>
    </item>
-   <item row="44" column="1">
+   <item row="56" column="1">
     <spacer name="verticalSpacer_6">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -722,6 +722,126 @@
       </size>
      </property>
     </spacer>
+   </item>
+   <item row="43" column="0">
+    <widget class="QLabel" name="cloudLightingSectionLabel">
+     <property name="text">
+      <string>Cloud lighting and sunset</string>
+     </property>
+    </widget>
+   </item>
+   <item row="44" column="0">
+    <widget class="QLabel" name="cloudDirectSunWorldLabel">
+     <property name="text">
+      <string>Direct sunlight</string>
+     </property>
+    </widget>
+   </item>
+   <item row="44" column="1">
+    <widget class="RealControl" name="cloudDirectSunWorldRealControl">
+     <property name="maximum"><double>4.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="45" column="0">
+    <widget class="QLabel" name="cloudSkyLightWorldLabel">
+     <property name="text"><string>Sky light</string></property>
+    </widget>
+   </item>
+   <item row="45" column="1">
+    <widget class="RealControl" name="cloudSkyLightWorldRealControl">
+     <property name="maximum"><double>4.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="46" column="0">
+    <widget class="QLabel" name="cloudSunsetResponseWorldLabel">
+     <property name="text"><string>Sunset colour response</string></property>
+    </widget>
+   </item>
+   <item row="46" column="1">
+    <widget class="RealControl" name="cloudSunsetResponseWorldRealControl">
+     <property name="maximum"><double>4.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="47" column="0">
+    <widget class="QLabel" name="cloudGroundContributionWorldLabel">
+     <property name="text"><string>Ground light contribution</string></property>
+    </widget>
+   </item>
+   <item row="47" column="1">
+    <widget class="RealControl" name="cloudGroundContributionWorldRealControl">
+     <property name="maximum"><double>2.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="48" column="0">
+    <widget class="QLabel" name="cloudPhaseGWorldLabel">
+     <property name="text"><string>Forward scattering</string></property>
+    </widget>
+   </item>
+   <item row="48" column="1">
+    <widget class="RealControl" name="cloudPhaseGWorldRealControl">
+     <property name="minimum"><double>-0.850000000000000</double></property>
+     <property name="maximum"><double>0.850000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="49" column="0">
+    <widget class="QLabel" name="cloudPhaseBlendWorldLabel">
+     <property name="text"><string>Phase blend</string></property>
+    </widget>
+   </item>
+   <item row="49" column="1">
+    <widget class="RealControl" name="cloudPhaseBlendWorldRealControl">
+     <property name="maximum"><double>1.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="50" column="0">
+    <widget class="QLabel" name="cloudMultiScatteringWorldLabel">
+     <property name="text"><string>Multiple scattering</string></property>
+    </widget>
+   </item>
+   <item row="50" column="1">
+    <widget class="RealControl" name="cloudMultiScatteringWorldRealControl">
+     <property name="maximum"><double>1.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="51" column="0">
+    <widget class="QLabel" name="waterReflectionSectionLabel">
+     <property name="text"><string>Water reflections</string></property>
+    </widget>
+   </item>
+   <item row="52" column="0">
+    <widget class="QCheckBox" name="waterCloudReflectionEnabledCheckBox">
+     <property name="text"><string>Reflect clouds in water</string></property>
+    </widget>
+   </item>
+   <item row="53" column="0">
+    <widget class="QLabel" name="waterCloudReflectionSamplesWorldLabel">
+     <property name="text"><string>Reflection quality</string></property>
+    </widget>
+   </item>
+   <item row="53" column="1">
+    <widget class="RealControl" name="waterCloudReflectionSamplesWorldRealControl">
+     <property name="minimum"><double>8.000000000000000</double></property>
+     <property name="maximum"><double>48.000000000000000</double></property>
+     <property name="singleStep"><double>1.000000000000000</double></property>
+    </widget>
+   </item>
+   <item row="55" column="0">
+    <widget class="QLabel" name="waterCloudReflectionFadeWorldLabel">
+     <property name="text"><string>Reflection horizon fade</string></property>
+    </widget>
+   </item>
+   <item row="55" column="1">
+    <widget class="RealControl" name="waterCloudReflectionFadeWorldRealControl">
+     <property name="maximum"><double>1.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
    </item>
   </layout>
  </widget>

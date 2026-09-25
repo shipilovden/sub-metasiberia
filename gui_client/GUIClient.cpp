@@ -26430,21 +26430,37 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 		scene->fog_settings.layer_1_B = 1.f / sanitiseScaleHeight(this->connected_world_settings.fog_settings.layer_1_scale_height);
 
 		const VolumetricCloudWorldSettings& clouds = this->connected_world_settings.volumetric_cloud_settings;
+		const CloudLightingWorldSettings& cloud_lighting = this->connected_world_settings.cloud_lighting_settings;
+		const WaterReflectionWorldSettings& water_reflection = this->connected_world_settings.water_reflection_settings;
 		scene->draw_volumetric_clouds = clouds.enabled;
 		scene->volumetric_cloud_settings.bottom_z = sanitiseFinite(clouds.bottom_z, 1000.f);
 		scene->volumetric_cloud_settings.top_z = sanitiseFinite(clouds.top_z, 2200.f);
 		scene->volumetric_cloud_settings.coverage = myClamp(sanitiseFinite(clouds.coverage, 0.48f), 0.f, 1.f);
 		scene->volumetric_cloud_settings.density = myMax(0.f, sanitiseFinite(clouds.density, 0.0012f));
 		scene->volumetric_cloud_settings.wind_speed = sanitiseFinite(clouds.wind_speed, 20.f);
-		scene->volumetric_cloud_settings.bottom_darkness = myClamp(sanitiseFinite(clouds.bottom_darkness, 0.4f), 0.f, 1.f);
 		scene->volumetric_cloud_settings.edge_softness = myClamp(sanitiseFinite(clouds.edge_softness, 0.55f), 0.f, 1.f);
 		scene->volumetric_cloud_settings.horizon_fade = myClamp(sanitiseFinite(clouds.horizon_fade, 0.75f), 0.f, 1.f);
 		scene->volumetric_cloud_settings.shape_period = myClamp(sanitiseFinite(clouds.shape_period, 10000.f), 100.f, 100000.f);
 		scene->volumetric_cloud_settings.detail_period = myClamp(sanitiseFinite(clouds.detail_period, 1200.f), 50.f, 10000.f);
 		scene->volumetric_cloud_settings.max_march_dist = myClamp(sanitiseFinite(clouds.max_march_dist, 40000.f), 100.f, 100000.f);
 		scene->volumetric_cloud_settings.wind_direction_deg = myClamp(sanitiseFinite(clouds.wind_direction_deg, 20.f), 0.f, 360.f);
-		scene->volumetric_cloud_settings.scattering_scale = myClamp(sanitiseFinite(clouds.scattering_scale, 1.f), 0.f, 2.f);
-		scene->volumetric_cloud_settings.water_reflection_strength = myClamp(sanitiseFinite(clouds.water_reflection_strength, 0.65f), 0.f, 1.f);
+		scene->cloud_lighting_settings.direct_sun_strength = myClamp(sanitiseFinite(cloud_lighting.direct_sun_strength, 1.f), 0.f, 4.f);
+		scene->cloud_lighting_settings.sky_light_strength = myClamp(sanitiseFinite(cloud_lighting.sky_light_strength, 1.f), 0.f, 4.f);
+		scene->cloud_lighting_settings.sunset_response = myClamp(sanitiseFinite(cloud_lighting.sunset_response, 1.f), 0.f, 4.f);
+		scene->cloud_lighting_settings.ground_contribution = myClamp(sanitiseFinite(cloud_lighting.ground_contribution, 0.18f), 0.f, 2.f);
+		scene->cloud_lighting_settings.ground_albedo = Colour3f(
+			myClamp(sanitiseFinite(cloud_lighting.ground_albedo.r, 0.35f), 0.f, 1.f),
+			myClamp(sanitiseFinite(cloud_lighting.ground_albedo.g, 0.32f), 0.f, 1.f),
+			myClamp(sanitiseFinite(cloud_lighting.ground_albedo.b, 0.28f), 0.f, 1.f));
+		scene->cloud_lighting_settings.phase_g = myClamp(sanitiseFinite(cloud_lighting.phase_g, 0.55f), -0.85f, 0.85f);
+		scene->cloud_lighting_settings.phase_blend = myClamp(sanitiseFinite(cloud_lighting.phase_blend, 0.2f), 0.f, 1.f);
+		scene->cloud_lighting_settings.multi_scattering = myClamp(sanitiseFinite(cloud_lighting.multi_scattering, 0.25f), 0.f, 1.f);
+		scene->cloud_lighting_settings.underside_darkness = myClamp(sanitiseFinite(cloud_lighting.underside_darkness, 0.4f), 0.f, 1.f);
+		scene->cloud_lighting_settings.scattering_scale = myClamp(sanitiseFinite(cloud_lighting.scattering_scale, 1.f), 0.f, 2.f);
+		scene->water_reflection_settings.cloud_reflection_enabled = water_reflection.cloud_reflection_enabled;
+		scene->water_reflection_settings.cloud_reflection_strength = myClamp(sanitiseFinite(water_reflection.cloud_reflection_strength, 0.65f), 0.f, 1.f);
+		scene->water_reflection_settings.cloud_reflection_samples = myClamp(sanitiseFinite(water_reflection.cloud_reflection_samples, 24.f), 8.f, 48.f);
+		scene->water_reflection_settings.cloud_reflection_fade = myClamp(sanitiseFinite(water_reflection.cloud_reflection_fade, 0.75f), 0.f, 1.f);
 	}
 }
 

@@ -10,6 +10,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "TimeStamp.h"
 #include <vec3.h>
 #include <vec2.h>
+#include <graphics/colour3.h>
 #include <OutStream.h>
 #include <InStream.h>
 #include <DatabaseKey.h>
@@ -98,15 +99,43 @@ struct VolumetricCloudWorldSettings
 	float coverage;
 	float density;
 	float wind_speed;
-	float bottom_darkness;
 	float edge_softness;
 	float horizon_fade;
 	float shape_period;
 	float detail_period;
 	float max_march_dist;
 	float wind_direction_deg;
+};
+
+
+// Lighting controls are kept separate from the cloud shape and animation
+// controls so that the same atmosphere can be lit consistently at different
+// times of day without mixing it with water rendering settings.
+struct CloudLightingWorldSettings
+{
+	CloudLightingWorldSettings();
+
+	float direct_sun_strength;
+	float sky_light_strength;
+	float sunset_response;
+	float ground_contribution;
+	Colour3f ground_albedo;
+	float phase_g;
+	float phase_blend;
+	float multi_scattering;
+	float underside_darkness;
 	float scattering_scale;
-	float water_reflection_strength;
+};
+
+
+struct WaterReflectionWorldSettings
+{
+	WaterReflectionWorldSettings();
+
+	bool cloud_reflection_enabled;
+	float cloud_reflection_strength;
+	float cloud_reflection_samples;
+	float cloud_reflection_fade;
 };
 
 
@@ -139,6 +168,8 @@ public:
 
 	FogWorldSettings fog_settings;
 	VolumetricCloudWorldSettings volumetric_cloud_settings;
+	CloudLightingWorldSettings cloud_lighting_settings;
+	WaterReflectionWorldSettings water_reflection_settings;
 
 	DatabaseKey database_key;
 	bool db_dirty; // If true, there is a change that has not been saved to the DB.
