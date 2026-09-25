@@ -88,6 +88,19 @@ struct FogWorldSettings
 void readFogWorldSettingsFromStream(RandomAccessInStream& stream, FogWorldSettings& fog_settings_out);
 
 
+struct VolumetricCloudWorldSettings
+{
+	VolumetricCloudWorldSettings();
+
+	bool enabled;
+	float bottom_z;
+	float top_z;
+	float coverage;
+	float density;
+	float wind_speed;
+};
+
+
 /*=====================================================================
 WorldSettings
 -------------
@@ -116,6 +129,7 @@ public:
 	float sun_phi;
 
 	FogWorldSettings fog_settings;
+	VolumetricCloudWorldSettings volumetric_cloud_settings;
 
 	DatabaseKey database_key;
 	bool db_dirty; // If true, there is a change that has not been saved to the DB.

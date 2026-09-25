@@ -917,6 +917,14 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("WorldSettingsWidget", "Layer 0 height scale", "Масштаб высоты слоя 0");
 	add("WorldSettingsWidget", "Layer 1 thickness", "Плотность слоя 1");
 	add("WorldSettingsWidget", "Layer 1 height scale", "Масштаб высоты слоя 1");
+	add("WorldSettingsWidget", "Volumetric clouds", "Объёмные облака");
+	add("WorldSettingsWidget", "Cloud layer bottom", "Нижняя граница облаков");
+	add("WorldSettingsWidget", "Cloud layer top", "Верхняя граница облаков");
+	add("WorldSettingsWidget", "Cloud coverage", "Покрытие облаков");
+	add("WorldSettingsWidget", "Cloud density", "Плотность облаков");
+	add("WorldSettingsWidget", "Cloud wind speed", "Скорость ветра облаков");
+	add("WorldSettingsWidget", " m", " м");
+	add("WorldSettingsWidget", " m/s", " м/с");
 
 	add("TerrainSpecSectionWidget", "Height map URL", "URL карты высот");
 	add("TerrainSpecSectionWidget", "Mask map URL", "URL карты маски");

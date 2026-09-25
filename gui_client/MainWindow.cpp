@@ -2374,6 +2374,8 @@ void MainWindow::initialiseUI()
 	ui->objectEditor->settings = settings;
 	ui->editorDockWidget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 	installEditorDockTitleBar(ui->editorDockWidget);
+	installEditorDockTitleBar(ui->environmentDockWidget);
+	installEditorDockTitleBar(ui->worldSettingsDockWidget);
 	ui->editorDockWidget->setMinimumWidth(360);
 	ui->scrollArea->setWidgetResizable(true);
 	ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -3509,6 +3511,8 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	if(qApp->styleSheet() != tooltip_style)
 		qApp->setStyleSheet(tooltip_style);
 	applyEditorDockTitleBarTheme(ui->editorDockWidget, palette);
+	applyEditorDockTitleBarTheme(ui->environmentDockWidget, palette);
+	applyEditorDockTitleBarTheme(ui->worldSettingsDockWidget, palette);
 
 	if(ui->menubar)
 	{
@@ -11264,12 +11268,6 @@ void MainWindow::environmentSettingChangedSlot()
 		if(OpenGLScene* const scene = ui->glWidget->opengl_engine->getCurrentScene())
 		{
 			scene->draw_aurora = ui->environmentOptionsWidget->getNorthernLightsEnabled();
-			scene->draw_volumetric_clouds = ui->environmentOptionsWidget->getVolumetricCloudsEnabled();
-			scene->volumetric_cloud_settings.bottom_z = (float)ui->environmentOptionsWidget->getCloudBottomZ();
-			scene->volumetric_cloud_settings.top_z = (float)ui->environmentOptionsWidget->getCloudTopZ();
-			scene->volumetric_cloud_settings.coverage = (float)ui->environmentOptionsWidget->getCloudCoverage();
-			scene->volumetric_cloud_settings.density = (float)ui->environmentOptionsWidget->getCloudDensity();
-			scene->volumetric_cloud_settings.wind_speed = (float)ui->environmentOptionsWidget->getCloudWindSpeed();
 		}
 	}
 }
