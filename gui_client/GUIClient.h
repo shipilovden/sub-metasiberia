@@ -545,6 +545,8 @@ public:
 
 	void disconnectFromServerAndClearAllObjects(); // Remove any WorldObjectRefs held by MainWindow.
 	void clearAllObjects();
+	Vec3d getSafeSeatExitEyePosition(const WorldObject& seat_ob) const;
+	bool findSurfaceEyePosition(const Vec3d& candidate_pos, JPH::BodyID ignore_body_id, Vec3d& eye_pos_out) const;
 
 	void connectToServer(const URLParseResults& url_results);
 	void changeToDifferentWorld(const URLParseResults& url_results);
