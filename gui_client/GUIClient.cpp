@@ -10758,6 +10758,14 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	}
 
 	handleMessages(global_time, cur_time);
+
+	// Once the new world's settings have arrived, allow the character controller
+	// to settle onto the streamed surface even if the user has not pressed a
+	// movement key.  Previously gravity stayed disabled indefinitely after a
+	// reconnect, leaving a slightly misaligned avatar suspended in the air.
+	if(received_world_settings_since_connect_or_world_change &&
+		seat_sitting_on.isNull() && vehicle_controller_inside.isNull())
+		player_physics.setGravityEnabled(true);
 	
 	// Evaluate scripts on objects
 	{
@@ -19925,6 +19933,83 @@ void GUIClient::visitSubURL(const std::string& URL, bool push_prev_URL_on_nav_st
 }
 
 
+bool GUIClient::findSurfaceEyePosition(const Vec3d& candidate_pos, JPH::BodyID ignore_body_id, Vec3d& eye_pos_out) const
+{
+	// Start well above the candidate and find the actual supporting surface.  This
+	// avoids placing the avatar at a hard-coded world-space height after a seat
+	// transition or a reconnect.
+	const Vec4f ray_origin((float)candidate_pos.x, (float)candidate_pos.y, (float)candidate_pos.z + 5.f, 1.f);
+	const Vec4f ray_direction(0, 0, -1, 0);
+
+	if(physics_world.nonNull())
+	{
+		RayTraceResult trace_results;
+		physics_world->traceRay(ray_origin, ray_direction, /*max_t=*/20.f, ignore_body_id, trace_results);
+		if(trace_results.hit_object && trace_results.hit_normal_ws[2] > 0.25f)
+		{
+			eye_pos_out = candidate_pos;
+			eye_pos_out.z = (double)ray_origin[2] - trace_results.hit_t + PlayerPhysics::getEyeHeight();
+			return true;
+		}
+	}
+
+	// Terrain can be available before its physics bodies have finished loading.
+	// Use its heightmap as a fallback so the initial placement does not remain
+	// suspended while waiting for physics streaming.
+	if(terrain_system.nonNull())
+	{
+		Vec3d terrain_hit_pos;
+		if(terrain_system->traceRay(toVec3d(ray_origin), Vec3d(0, 0, -1), terrain_hit_pos))
+		{
+			eye_pos_out = candidate_pos;
+			eye_pos_out.z = terrain_hit_pos.z + PlayerPhysics::getEyeHeight();
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+Vec3d GUIClient::getSafeSeatExitEyePosition(const WorldObject& seat_ob) const
+{
+	const Matrix4f ob_to_world = obToWorldMatrix(seat_ob);
+	// Seat space uses +Y as the direction the sitter faces and +X as right.
+	// Exit in front of the seat first, rather than stepping out to its side.
+	const Vec4f seat_forward_ws = normalise(ob_to_world * Vec4f(0, 1, 0, 0));
+	const Vec4f seat_right_ws = normalise(ob_to_world * Vec4f(1, 0, 0, 0));
+	const Vec4f seat_pos_ws = ob_to_world * Vec4f(0, 0, 0, 1);
+
+	const JPH::BodyID ignore_body_id = seat_ob.physics_object.nonNull() ? seat_ob.physics_object->jolt_body_id : JPH::BodyID();
+	const float exit_offset = 0.8f;
+	const float exit_trace_height = 2.0f;
+
+	// Prefer the front of the seat.  The opposite side and lateral directions are
+	// fallbacks for seats placed close to walls or other blocking geometry.
+	const Vec4f exit_directions[] = {
+		seat_forward_ws,
+		-seat_forward_ws,
+		seat_right_ws,
+		-seat_right_ws
+	};
+	for(const Vec4f& exit_direction : exit_directions)
+	{
+		Vec3d candidate_pos = toVec3d(seat_pos_ws + exit_direction * exit_offset);
+		candidate_pos.z = (double)seat_pos_ws[2] + exit_trace_height;
+
+		Vec3d surface_eye_pos;
+		if(findSurfaceEyePosition(candidate_pos, ignore_body_id, surface_eye_pos))
+			return surface_eye_pos;
+	}
+
+	// If the surface is not loaded yet, return a safe position above the seat and
+	// let the now-enabled gravity settle the character when physics becomes ready.
+	Vec3d fallback_pos = toVec3d(seat_pos_ws + seat_forward_ws * exit_offset);
+	fallback_pos.z = myMax((double)seat_pos_ws[2] + exit_trace_height, (double)PlayerPhysics::getEyeHeight());
+	return fallback_pos;
+}
+
+
 void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObjectRefs held by GUIClient.
 {
 	// Queue pending object edits before clearAllObjects() drops the dirty set.
@@ -20095,6 +20180,14 @@ void GUIClient::clearAllObjects()
 	vehicle_controller_inside = NULL;
 	vehicle_controllers.clear();
 	seat_sitting_on = nullptr;
+	// A reconnect/world transition must never carry the reduced sitting shape
+	// into the new world.  The initial gravity grace period is re-enabled once
+	// the new world's settings have been received.
+	if(physics_world.nonNull())
+	{
+		player_physics.setStandingShape(*physics_world);
+		player_physics.setGravityEnabled(false);
+	}
 
 
 	if(world_state)
@@ -20234,6 +20327,8 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 	if(parse_res.parsed_z)
 		spawn_pos.z = parse_res.z;
 	applyMapLatLonURLPositionIfPresent(parse_res, spawn_pos);
+	if(seat_sitting_on.nonNull())
+		spawn_pos = getSafeSeatExitEyePosition(*seat_sitting_on);
 
 	//-------------------------------- Do disconnect process --------------------------------
 	disconnectFromServerAndClearAllObjects();
@@ -20349,6 +20444,8 @@ void GUIClient::changeToDifferentWorld(const URLParseResults& parse_res)
 	if(parse_res.parsed_z)
 		spawn_pos.z = parse_res.z;
 	applyMapLatLonURLPositionIfPresent(parse_res, spawn_pos);
+	if(seat_sitting_on.nonNull())
+		spawn_pos = getSafeSeatExitEyePosition(*seat_sitting_on);
 
 
 	// WorldState::clear() drops dirty_from_local_objects, so send edits first.
@@ -24640,18 +24737,12 @@ void GUIClient::useActionTriggered(bool use_mouse_cursor)
 
 		seat_sitting_on = nullptr; // Clear the currently_sitting_on_seat reference
 
-		// Set standing physics shape
+		// Set standing physics shape and place the avatar on the real supporting
+		// surface instead of using a fixed world-space height.
 		player_physics.setStandingShape(*physics_world);
-
-		// Get up position - move player slightly to the side of the seat
-		const Matrix4f ob_to_world = obToWorldMatrix(*seat_ob);
-		const Vec4f seat_right_ws = ob_to_world * Vec4f(1,0,0,0); // Right direction in world space
-		const Vec4f seat_pos_ws = ob_to_world * Vec4f(0,0,0,1); // Seat position in world space
-
-		Vec4f new_player_pos = seat_pos_ws + normalise(seat_right_ws) * 1.0f + Vec4f(0,0,1.7f,0); // Move to the right and up
-		new_player_pos[2] = myMax(new_player_pos[2], 1.67f); // Make sure above ground
-
-		player_physics.setEyePosition(Vec3d(new_player_pos), /*linear vel=*/Vec4f(0,0,0,0));
+		player_physics.setGravityEnabled(true);
+		const Vec3d new_player_pos = getSafeSeatExitEyePosition(*seat_ob);
+		player_physics.setEyePosition(new_player_pos, /*linear vel=*/Vec4f(0,0,0,0));
 
 		// Only send seat messages if server supports them.
 		if((this->connection_state == ServerConnectionState_Connected) && (this->server_protocol_version >= 49))
@@ -26845,9 +26936,14 @@ void GUIClient::keyPressed(KeyEvent& e)
 		URLParseResults url_parse_results;
 		url_parse_results.hostname = this->server_hostname;
 		url_parse_results.worldname = this->server_worldname;
-		url_parse_results.x = this->cam_controller.getPosition().x;
-		url_parse_results.y = this->cam_controller.getPosition().y;
-		url_parse_results.z = this->cam_controller.getPosition().z;
+		// In third-person mode getPosition() is the external camera position,
+		// which is several metres behind and above the avatar.  Reconnecting to
+		// that point makes the avatar appear to float after F5.  Preserve the
+		// actual avatar/first-person position instead.
+		const Vec3d avatar_pos = this->cam_controller.getFirstPersonPosition();
+		url_parse_results.x = avatar_pos.x;
+		url_parse_results.y = avatar_pos.y;
+		url_parse_results.z = avatar_pos.z;
 		url_parse_results.parsed_x = url_parse_results.parsed_y = url_parse_results.parsed_z = true;
 		url_parse_results.heading =  Maths::doubleMod(::radToDegree(this->cam_controller.getAngles().x), 360.0);
 
