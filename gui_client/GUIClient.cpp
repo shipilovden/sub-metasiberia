@@ -26432,6 +26432,7 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 		const VolumetricCloudWorldSettings& clouds = this->connected_world_settings.volumetric_cloud_settings;
 		const CloudLightingWorldSettings& cloud_lighting = this->connected_world_settings.cloud_lighting_settings;
 		const WaterReflectionWorldSettings& water_reflection = this->connected_world_settings.water_reflection_settings;
+		const WaterSurfaceWorldSettings& water_surface = this->connected_world_settings.water_surface_settings;
 		scene->draw_volumetric_clouds = clouds.enabled;
 		scene->volumetric_cloud_settings.bottom_z = sanitiseFinite(clouds.bottom_z, 1000.f);
 		scene->volumetric_cloud_settings.top_z = sanitiseFinite(clouds.top_z, 2200.f);
@@ -26461,6 +26462,19 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 		scene->water_reflection_settings.cloud_reflection_strength = myClamp(sanitiseFinite(water_reflection.cloud_reflection_strength, 0.65f), 0.f, 1.f);
 		scene->water_reflection_settings.cloud_reflection_samples = myClamp(sanitiseFinite(water_reflection.cloud_reflection_samples, 24.f), 8.f, 48.f);
 		scene->water_reflection_settings.cloud_reflection_fade = myClamp(sanitiseFinite(water_reflection.cloud_reflection_fade, 0.75f), 0.f, 1.f);
+		scene->water_surface_settings.wave_amplitude = myClamp(sanitiseFinite(water_surface.wave_amplitude, 0.45f), 0.f, 10.f);
+		scene->water_surface_settings.wave_length = myClamp(sanitiseFinite(water_surface.wave_length, 28.f), 0.5f, 500.f);
+		scene->water_surface_settings.wave_steepness = myClamp(sanitiseFinite(water_surface.wave_steepness, 0.18f), 0.f, 1.f);
+		scene->water_surface_settings.wave_speed = myClamp(sanitiseFinite(water_surface.wave_speed, 1.0f), 0.f, 8.f);
+		scene->water_surface_settings.wave_direction_deg = myClamp(sanitiseFinite(water_surface.wave_direction_deg, 68.4f), 0.f, 360.f);
+		scene->water_surface_settings.wave_direction_spread_deg = myClamp(sanitiseFinite(water_surface.wave_direction_spread_deg, 25.f), 0.f, 180.f);
+		scene->water_surface_settings.secondary_wave_scale = myClamp(sanitiseFinite(water_surface.secondary_wave_scale, 0.18f), 0.f, 1.f);
+		scene->water_surface_settings.surf_enabled = water_surface.surf_enabled;
+		scene->water_surface_settings.surf_strength = myClamp(sanitiseFinite(water_surface.surf_strength, 0.28f), 0.f, 2.f);
+		scene->water_surface_settings.shoreline_width = myClamp(sanitiseFinite(water_surface.shoreline_width, 0.45f), 0.1f, 100.f);
+		scene->water_surface_settings.foam_scale = myClamp(sanitiseFinite(water_surface.foam_scale, 1.6f), 0.05f, 10.f);
+		scene->water_surface_settings.foam_speed = myClamp(sanitiseFinite(water_surface.foam_speed, 0.15f), 0.f, 5.f);
+		scene->water_surface_settings.foam_fade = myClamp(sanitiseFinite(water_surface.foam_fade, 0.75f), 0.f, 1.f);
 	}
 }
 

@@ -57,6 +57,7 @@ protected slots:
 	void applySettingsSlot();
 
 	void settingsChangedSlot();
+	void waterSurfEnabledToggledSlot(bool enabled);
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
@@ -69,6 +70,7 @@ private:
 	void createSculptingTab();
 	void setSculptingControlsEnabled(bool enabled);
 	void retranslateSculptingTab();
+	void applyRecommendedWaterSurfSettings();
 
 	//std::vector<TerrainSpecSectionWidget*> section_widgets;
 	MainWindow* main_window;
