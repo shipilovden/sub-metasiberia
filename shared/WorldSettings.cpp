@@ -66,7 +66,7 @@ void readFogWorldSettingsFromStream(RandomAccessInStream& stream, FogWorldSettin
 
 VolumetricCloudWorldSettings::VolumetricCloudWorldSettings()
 :
-	enabled(true),
+	enabled(false),
 	bottom_z(1000.f),
 	top_z(2200.f),
 	coverage(0.48f),
@@ -98,10 +98,28 @@ CloudLightingWorldSettings::CloudLightingWorldSettings()
 
 WaterReflectionWorldSettings::WaterReflectionWorldSettings()
 :
-	cloud_reflection_enabled(true),
+	cloud_reflection_enabled(false),
 	cloud_reflection_strength(0.65f),
 	cloud_reflection_samples(24.f),
 	cloud_reflection_fade(0.75f)
+{}
+
+
+WaterSurfaceWorldSettings::WaterSurfaceWorldSettings()
+:
+	wave_amplitude(0.45f),
+	wave_length(28.f),
+	wave_steepness(0.18f),
+	wave_speed(1.0f),
+	wave_direction_deg(68.4f),
+	wave_direction_spread_deg(25.f),
+	secondary_wave_scale(0.18f),
+	surf_enabled(false),
+	surf_strength(0.28f),
+	shoreline_width(0.45f),
+	foam_scale(1.6f),
+	foam_speed(0.15f),
+	foam_fade(0.75f)
 {}
 
 
@@ -134,6 +152,7 @@ void WorldSettings::clear()
 	volumetric_cloud_settings = VolumetricCloudWorldSettings();
 	cloud_lighting_settings = CloudLightingWorldSettings();
 	water_reflection_settings = WaterReflectionWorldSettings();
+	water_surface_settings = WaterSurfaceWorldSettings();
 }
 
 
@@ -165,7 +184,9 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 }
 
 
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 12;
+// v14 marks the new presentation defaults.  The payload is unchanged; the
+// version lets readers distinguish old v13 defaults from explicit settings.
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 14;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -264,6 +285,21 @@ void WorldSettings::writeToStream(OutStream& stream) const
 	buffer.writeFloat(water_reflection_settings.cloud_reflection_samples);
 	buffer.writeFloat(water_reflection_settings.cloud_reflection_fade);
 
+	// New in v13: physically based surface waves and near-shore surf settings.
+	buffer.writeFloat(water_surface_settings.wave_amplitude);
+	buffer.writeFloat(water_surface_settings.wave_length);
+	buffer.writeFloat(water_surface_settings.wave_steepness);
+	buffer.writeFloat(water_surface_settings.wave_speed);
+	buffer.writeFloat(water_surface_settings.wave_direction_deg);
+	buffer.writeFloat(water_surface_settings.wave_direction_spread_deg);
+	buffer.writeFloat(water_surface_settings.secondary_wave_scale);
+	buffer.writeUInt32(water_surface_settings.surf_enabled ? 1u : 0u);
+	buffer.writeFloat(water_surface_settings.surf_strength);
+	buffer.writeFloat(water_surface_settings.shoreline_width);
+	buffer.writeFloat(water_surface_settings.foam_scale);
+	buffer.writeFloat(water_surface_settings.foam_speed);
+	buffer.writeFloat(water_surface_settings.foam_fade);
+
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
 	std::memcpy(buffer.buf.data() + sizeof(uint32), &buffer_size, sizeof(uint32));
@@ -284,6 +320,7 @@ void WorldSettings::copyNetworkStateFrom(const WorldSettings& other)
 	volumetric_cloud_settings = other.volumetric_cloud_settings;
 	cloud_lighting_settings = other.cloud_lighting_settings;
 	water_reflection_settings = other.water_reflection_settings;
+	water_surface_settings = other.water_surface_settings;
 }
 
 
@@ -378,6 +415,7 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 	settings.volumetric_cloud_settings = VolumetricCloudWorldSettings();
 	settings.cloud_lighting_settings = CloudLightingWorldSettings();
 	settings.water_reflection_settings = WaterReflectionWorldSettings();
+	settings.water_surface_settings = WaterSurfaceWorldSettings();
 	const size_t volumetric_cloud_payload_size = sizeof(uint32) + sizeof(float) * 5;
 	const size_t remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
 	if(version >= 9 && remaining_bytes >= volumetric_cloud_payload_size)
@@ -435,10 +473,69 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 						settings.water_reflection_settings.cloud_reflection_strength = buffer_stream.readFloat();
 						settings.water_reflection_settings.cloud_reflection_samples = buffer_stream.readFloat();
 						settings.water_reflection_settings.cloud_reflection_fade = buffer_stream.readFloat();
+
+						const size_t water_surface_payload_size = sizeof(float) * 7 + sizeof(uint32) + sizeof(float) * 5;
+						const size_t water_surface_remaining_bytes = buffer_stream.buf.size() - buffer_stream.getReadIndex();
+						if(version >= 13 && water_surface_remaining_bytes >= water_surface_payload_size)
+						{
+							settings.water_surface_settings.wave_amplitude = buffer_stream.readFloat();
+							settings.water_surface_settings.wave_length = buffer_stream.readFloat();
+							settings.water_surface_settings.wave_steepness = buffer_stream.readFloat();
+							settings.water_surface_settings.wave_speed = buffer_stream.readFloat();
+							settings.water_surface_settings.wave_direction_deg = buffer_stream.readFloat();
+							settings.water_surface_settings.wave_direction_spread_deg = buffer_stream.readFloat();
+							settings.water_surface_settings.secondary_wave_scale = buffer_stream.readFloat();
+							settings.water_surface_settings.surf_enabled = buffer_stream.readUInt32() != 0;
+							settings.water_surface_settings.surf_strength = buffer_stream.readFloat();
+							settings.water_surface_settings.shoreline_width = buffer_stream.readFloat();
+							settings.water_surface_settings.foam_scale = buffer_stream.readFloat();
+							settings.water_surface_settings.foam_speed = buffer_stream.readFloat();
+							settings.water_surface_settings.foam_fade = buffer_stream.readFloat();
+						}
 					}
 				}
 			}
 		}
+	}
+
+	// Migrate worlds written with the old v13 presentation defaults.  Only a
+	// complete match is migrated, so a world with an intentional custom value
+	// keeps that value.
+	if(version < WORLDSETTINGS_SERIALISATION_VERSION)
+	{
+		const VolumetricCloudWorldSettings& clouds = settings.volumetric_cloud_settings;
+		const bool legacy_cloud_defaults =
+			clouds.enabled &&
+			clouds.bottom_z == 1000.f && clouds.top_z == 2200.f &&
+			clouds.coverage == 0.48f && clouds.density == 0.0012f &&
+			clouds.wind_speed == 20.f && clouds.edge_softness == 0.55f &&
+			clouds.horizon_fade == 0.75f && clouds.shape_period == 10000.f &&
+			clouds.detail_period == 1200.f && clouds.max_march_dist == 40000.f &&
+			clouds.wind_direction_deg == 20.f;
+		if(legacy_cloud_defaults)
+			settings.volumetric_cloud_settings.enabled = false;
+
+		const WaterReflectionWorldSettings& reflection = settings.water_reflection_settings;
+		const bool legacy_reflection_defaults =
+			reflection.cloud_reflection_enabled &&
+			reflection.cloud_reflection_strength == 0.65f &&
+			reflection.cloud_reflection_samples == 24.f &&
+			reflection.cloud_reflection_fade == 0.75f;
+		if(legacy_reflection_defaults)
+			settings.water_reflection_settings.cloud_reflection_enabled = false;
+
+		const WaterSurfaceWorldSettings& water = settings.water_surface_settings;
+		const bool legacy_water_defaults =
+			water.wave_amplitude == 0.35f && water.wave_length == 28.f &&
+			water.wave_steepness == 0.32f && water.wave_speed == 1.f &&
+			water.wave_direction_deg == 20.f &&
+			water.wave_direction_spread_deg == 35.f &&
+			water.secondary_wave_scale == 0.35f && water.surf_enabled &&
+			water.surf_strength == 0.38f && water.shoreline_width == 0.1f &&
+			water.foam_scale == 1.f && water.foam_speed == 0.12f &&
+			water.foam_fade == 0.f;
+		if(legacy_water_defaults)
+			settings.water_surface_settings = WaterSurfaceWorldSettings();
 	}
 
 	// We effectively skip any remaining data we have not processed by discarding buffer_stream.

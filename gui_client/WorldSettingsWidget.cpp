@@ -95,6 +95,19 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	connect(this->cloudWaterReflectionWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->waterCloudReflectionSamplesWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->waterCloudReflectionFadeWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterWaveAmplitudeWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterWaveLengthWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterWaveSteepnessWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterWaveSpeedWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterWaveDirectionWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterWaveSpreadWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterSecondaryWaveScaleWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterSurfEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(waterSurfEnabledToggledSlot(bool)));
+	connect(this->waterSurfStrengthWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterShorelineWidthWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterFoamScaleWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterFoamSpeedWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
+	connect(this->waterFoamFadeWorldRealControl, SIGNAL(valueChanged(double)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs0EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs1EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(this->detailColMapURLs2EnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
@@ -519,6 +532,19 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 	SignalBlocker::setValue(cloudWaterReflectionWorldRealControl, world_settings.water_reflection_settings.cloud_reflection_strength);
 	SignalBlocker::setValue(waterCloudReflectionSamplesWorldRealControl, world_settings.water_reflection_settings.cloud_reflection_samples);
 	SignalBlocker::setValue(waterCloudReflectionFadeWorldRealControl, world_settings.water_reflection_settings.cloud_reflection_fade);
+	SignalBlocker::setValue(waterWaveAmplitudeWorldRealControl, world_settings.water_surface_settings.wave_amplitude);
+	SignalBlocker::setValue(waterWaveLengthWorldRealControl, world_settings.water_surface_settings.wave_length);
+	SignalBlocker::setValue(waterWaveSteepnessWorldRealControl, world_settings.water_surface_settings.wave_steepness);
+	SignalBlocker::setValue(waterWaveSpeedWorldRealControl, world_settings.water_surface_settings.wave_speed);
+	SignalBlocker::setValue(waterWaveDirectionWorldRealControl, world_settings.water_surface_settings.wave_direction_deg);
+	SignalBlocker::setValue(waterWaveSpreadWorldRealControl, world_settings.water_surface_settings.wave_direction_spread_deg);
+	SignalBlocker::setValue(waterSecondaryWaveScaleWorldRealControl, world_settings.water_surface_settings.secondary_wave_scale);
+	SignalBlocker::setChecked(waterSurfEnabledCheckBox, world_settings.water_surface_settings.surf_enabled);
+	SignalBlocker::setValue(waterSurfStrengthWorldRealControl, world_settings.water_surface_settings.surf_strength);
+	SignalBlocker::setValue(waterShorelineWidthWorldRealControl, world_settings.water_surface_settings.shoreline_width);
+	SignalBlocker::setValue(waterFoamScaleWorldRealControl, world_settings.water_surface_settings.foam_scale);
+	SignalBlocker::setValue(waterFoamSpeedWorldRealControl, world_settings.water_surface_settings.foam_speed);
+	SignalBlocker::setValue(waterFoamFadeWorldRealControl, world_settings.water_surface_settings.foam_fade);
 }
 
 
@@ -624,6 +650,19 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.water_reflection_settings.cloud_reflection_strength = (float)cloudWaterReflectionWorldRealControl->value();
 	world_settings_out.water_reflection_settings.cloud_reflection_samples = (float)waterCloudReflectionSamplesWorldRealControl->value();
 	world_settings_out.water_reflection_settings.cloud_reflection_fade = (float)waterCloudReflectionFadeWorldRealControl->value();
+	world_settings_out.water_surface_settings.wave_amplitude = (float)waterWaveAmplitudeWorldRealControl->value();
+	world_settings_out.water_surface_settings.wave_length = (float)waterWaveLengthWorldRealControl->value();
+	world_settings_out.water_surface_settings.wave_steepness = (float)waterWaveSteepnessWorldRealControl->value();
+	world_settings_out.water_surface_settings.wave_speed = (float)waterWaveSpeedWorldRealControl->value();
+	world_settings_out.water_surface_settings.wave_direction_deg = (float)waterWaveDirectionWorldRealControl->value();
+	world_settings_out.water_surface_settings.wave_direction_spread_deg = (float)waterWaveSpreadWorldRealControl->value();
+	world_settings_out.water_surface_settings.secondary_wave_scale = (float)waterSecondaryWaveScaleWorldRealControl->value();
+	world_settings_out.water_surface_settings.surf_enabled = waterSurfEnabledCheckBox->isChecked();
+	world_settings_out.water_surface_settings.surf_strength = (float)waterSurfStrengthWorldRealControl->value();
+	world_settings_out.water_surface_settings.shoreline_width = (float)waterShorelineWidthWorldRealControl->value();
+	world_settings_out.water_surface_settings.foam_scale = (float)waterFoamScaleWorldRealControl->value();
+	world_settings_out.water_surface_settings.foam_speed = (float)waterFoamSpeedWorldRealControl->value();
+	world_settings_out.water_surface_settings.foam_fade = (float)waterFoamFadeWorldRealControl->value();
 }
 
 
@@ -691,6 +730,19 @@ void WorldSettingsWidget::updateControlsEditable()
 	cloudWaterReflectionWorldRealControl->setEnabled(editable);
 	waterCloudReflectionSamplesWorldRealControl->setEnabled(editable);
 	waterCloudReflectionFadeWorldRealControl->setEnabled(editable);
+	waterWaveAmplitudeWorldRealControl->setEnabled(editable);
+	waterWaveLengthWorldRealControl->setEnabled(editable);
+	waterWaveSteepnessWorldRealControl->setEnabled(editable);
+	waterWaveSpeedWorldRealControl->setEnabled(editable);
+	waterWaveDirectionWorldRealControl->setEnabled(editable);
+	waterWaveSpreadWorldRealControl->setEnabled(editable);
+	waterSecondaryWaveScaleWorldRealControl->setEnabled(editable);
+	waterSurfEnabledCheckBox->setEnabled(editable);
+	waterSurfStrengthWorldRealControl->setEnabled(editable);
+	waterShorelineWidthWorldRealControl->setEnabled(editable);
+	waterFoamScaleWorldRealControl->setEnabled(editable);
+	waterFoamSpeedWorldRealControl->setEnabled(editable);
+	waterFoamFadeWorldRealControl->setEnabled(editable);
 
 	applyPushButton->setEnabled(editable);
 	if(sculpting_mode_check_box)
@@ -729,6 +781,33 @@ void WorldSettingsWidget::removeTerrainSectionButtonClickedSlot()
 void WorldSettingsWidget::applySettingsSlot()
 {
 	settingsChangedSlot();
+}
+
+
+void WorldSettingsWidget::waterSurfEnabledToggledSlot(bool enabled)
+{
+	if(enabled)
+		applyRecommendedWaterSurfSettings();
+	settingsChangedSlot();
+}
+
+
+void WorldSettingsWidget::applyRecommendedWaterSurfSettings()
+{
+	// A calm-water preset: the foam follows the same slow wave motion and stays
+	// narrow enough that enabling the checkbox gives a believable shoreline
+	// without requiring a second round of manual tuning.
+	SignalBlocker::setValue(waterWaveAmplitudeWorldRealControl, 0.45);
+	SignalBlocker::setValue(waterWaveLengthWorldRealControl, 28.0);
+	SignalBlocker::setValue(waterWaveSteepnessWorldRealControl, 0.18);
+	SignalBlocker::setValue(waterWaveSpeedWorldRealControl, 1.0);
+	SignalBlocker::setValue(waterWaveSpreadWorldRealControl, 25.0);
+	SignalBlocker::setValue(waterSecondaryWaveScaleWorldRealControl, 0.18);
+	SignalBlocker::setValue(waterSurfStrengthWorldRealControl, 0.28);
+	SignalBlocker::setValue(waterShorelineWidthWorldRealControl, 0.45);
+	SignalBlocker::setValue(waterFoamScaleWorldRealControl, 1.6);
+	SignalBlocker::setValue(waterFoamSpeedWorldRealControl, 0.15);
+	SignalBlocker::setValue(waterFoamFadeWorldRealControl, 0.75);
 }
 
 

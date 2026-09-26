@@ -139,6 +139,29 @@ struct WaterReflectionWorldSettings
 };
 
 
+// Surface-wave and shoreline settings.  The renderer evaluates a small,
+// deterministic Gerstner wave set and derives the near-shore foam from the
+// water depth returned by the existing screen-space water pass.
+struct WaterSurfaceWorldSettings
+{
+	WaterSurfaceWorldSettings();
+
+	float wave_amplitude;
+	float wave_length;
+	float wave_steepness;
+	float wave_speed;
+	float wave_direction_deg;
+	float wave_direction_spread_deg;
+	float secondary_wave_scale;
+	bool surf_enabled;
+	float surf_strength;
+	float shoreline_width;
+	float foam_scale;
+	float foam_speed;
+	float foam_fade;
+};
+
+
 /*=====================================================================
 WorldSettings
 -------------
@@ -170,6 +193,7 @@ public:
 	VolumetricCloudWorldSettings volumetric_cloud_settings;
 	CloudLightingWorldSettings cloud_lighting_settings;
 	WaterReflectionWorldSettings water_reflection_settings;
+	WaterSurfaceWorldSettings water_surface_settings;
 
 	DatabaseKey database_key;
 	bool db_dirty; // If true, there is a change that has not been saved to the DB.

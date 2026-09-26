@@ -843,6 +843,162 @@
      <property name="singleStep"><double>0.010000000000000</double></property>
     </widget>
    </item>
+   <item row="57" column="0">
+    <widget class="QLabel" name="waterSurfaceSectionLabel">
+     <property name="text"><string>Water surface and surf</string></property>
+    </widget>
+   </item>
+   <item row="58" column="0">
+    <widget class="QLabel" name="waterWaveAmplitudeWorldLabel">
+     <property name="text"><string>Wave height</string></property>
+    </widget>
+   </item>
+   <item row="58" column="1">
+    <widget class="RealControl" name="waterWaveAmplitudeWorldRealControl">
+     <property name="suffix"><string> m</string></property>
+     <property name="maximum"><double>10.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="59" column="0">
+    <widget class="QLabel" name="waterWaveLengthWorldLabel">
+     <property name="text"><string>Wavelength</string></property>
+    </widget>
+   </item>
+   <item row="59" column="1">
+    <widget class="RealControl" name="waterWaveLengthWorldRealControl">
+     <property name="suffix"><string> m</string></property>
+     <property name="minimum"><double>0.500000000000000</double></property>
+     <property name="maximum"><double>500.000000000000000</double></property>
+     <property name="singleStep"><double>0.500000000000000</double></property>
+    </widget>
+   </item>
+   <item row="60" column="0">
+    <widget class="QLabel" name="waterWaveSteepnessWorldLabel">
+     <property name="text"><string>Wave steepness</string></property>
+    </widget>
+   </item>
+   <item row="60" column="1">
+    <widget class="RealControl" name="waterWaveSteepnessWorldRealControl">
+     <property name="maximum"><double>1.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="61" column="0">
+    <widget class="QLabel" name="waterWaveSpeedWorldLabel">
+     <property name="text"><string>Wave speed</string></property>
+    </widget>
+   </item>
+   <item row="61" column="1">
+    <widget class="RealControl" name="waterWaveSpeedWorldRealControl">
+     <property name="suffix"><string> x</string></property>
+     <property name="maximum"><double>8.000000000000000</double></property>
+     <property name="singleStep"><double>0.050000000000000</double></property>
+    </widget>
+   </item>
+   <item row="62" column="0">
+    <widget class="QLabel" name="waterWaveDirectionWorldLabel">
+     <property name="text"><string>Wave direction</string></property>
+    </widget>
+   </item>
+   <item row="62" column="1">
+    <widget class="RealControl" name="waterWaveDirectionWorldRealControl">
+     <property name="suffix"><string> deg</string></property>
+     <property name="maximum"><double>360.000000000000000</double></property>
+     <property name="singleStep"><double>1.000000000000000</double></property>
+    </widget>
+   </item>
+   <item row="63" column="0">
+    <widget class="QLabel" name="waterWaveSpreadWorldLabel">
+     <property name="text"><string>Wave angular spread</string></property>
+    </widget>
+   </item>
+   <item row="63" column="1">
+    <widget class="RealControl" name="waterWaveSpreadWorldRealControl">
+     <property name="suffix"><string> deg</string></property>
+     <property name="maximum"><double>180.000000000000000</double></property>
+     <property name="singleStep"><double>1.000000000000000</double></property>
+    </widget>
+   </item>
+   <item row="64" column="0">
+    <widget class="QLabel" name="waterSecondaryWaveScaleWorldLabel">
+     <property name="text"><string>Secondary wave scale</string></property>
+    </widget>
+   </item>
+   <item row="64" column="1">
+    <widget class="RealControl" name="waterSecondaryWaveScaleWorldRealControl">
+     <property name="maximum"><double>1.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="66" column="0">
+    <widget class="QLabel" name="waterSurfSettingsSectionLabel">
+     <property name="text"><string>Shore surf and foam</string></property>
+    </widget>
+   </item>
+   <item row="67" column="0">
+    <widget class="QCheckBox" name="waterSurfEnabledCheckBox">
+     <property name="text"><string>Enable shore surf</string></property>
+    </widget>
+   </item>
+   <item row="68" column="0">
+    <widget class="QLabel" name="waterSurfStrengthWorldLabel">
+     <property name="text"><string>Surf strength</string></property>
+    </widget>
+   </item>
+   <item row="68" column="1">
+    <widget class="RealControl" name="waterSurfStrengthWorldRealControl">
+     <property name="maximum"><double>2.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="69" column="0">
+    <widget class="QLabel" name="waterShorelineWidthWorldLabel">
+     <property name="text"><string>Shoreline foam width</string></property>
+    </widget>
+   </item>
+   <item row="69" column="1">
+    <widget class="RealControl" name="waterShorelineWidthWorldRealControl">
+     <property name="suffix"><string> m</string></property>
+     <property name="minimum"><double>0.100000000000000</double></property>
+     <property name="maximum"><double>100.000000000000000</double></property>
+     <property name="singleStep"><double>0.100000000000000</double></property>
+    </widget>
+   </item>
+   <item row="70" column="0">
+    <widget class="QLabel" name="waterFoamScaleWorldLabel">
+     <property name="text"><string>Foam scale</string></property>
+    </widget>
+   </item>
+   <item row="70" column="1">
+    <widget class="RealControl" name="waterFoamScaleWorldRealControl">
+     <property name="minimum"><double>0.050000000000000</double></property>
+     <property name="maximum"><double>10.000000000000000</double></property>
+     <property name="singleStep"><double>0.050000000000000</double></property>
+    </widget>
+   </item>
+   <item row="71" column="0">
+    <widget class="QLabel" name="waterFoamSpeedWorldLabel">
+     <property name="text"><string>Foam speed</string></property>
+    </widget>
+   </item>
+   <item row="71" column="1">
+    <widget class="RealControl" name="waterFoamSpeedWorldRealControl">
+     <property name="maximum"><double>5.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
+   <item row="72" column="0">
+    <widget class="QLabel" name="waterFoamFadeWorldLabel">
+     <property name="text"><string>Foam fade</string></property>
+    </widget>
+   </item>
+   <item row="72" column="1">
+    <widget class="RealControl" name="waterFoamFadeWorldRealControl">
+     <property name="maximum"><double>1.000000000000000</double></property>
+     <property name="singleStep"><double>0.010000000000000</double></property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <customwidgets>

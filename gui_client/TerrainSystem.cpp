@@ -427,7 +427,10 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 			// Tessellate ground mesh, to avoid texture shimmer due to large quads.
 			GLObjectRef gl_ob = opengl_engine->allocateObject();
 			gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, spec.water_z) * Matrix4f::uniformScaleMatrix(large_water_quad_w) * Matrix4f::translationMatrix(-0.5f, -0.5f, 0);
-			gl_ob->mesh_data = MeshPrimitiveBuilding::makeQuadMesh(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,1,0,0), /*res=*/64);
+			// The central tile is the one normally seen around the player.  It needs
+			// enough vertices for the animated water displacement to move the
+			// shoreline instead of producing one rigid, flat plane.
+			gl_ob->mesh_data = MeshPrimitiveBuilding::makeQuadMesh(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,1,0,0), /*res=*/256);
 
 			gl_ob->materials.resize(1);
 			//gl_ob->materials[0].albedo_linear_rgb = Colour3f(0,0,1);
