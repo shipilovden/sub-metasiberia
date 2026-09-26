@@ -28,7 +28,10 @@ Metasiberia Beta v0.0.24 — Windows Qt-релиз с обновлённой м�
 - Канонический Windows Qt `RelWithDebInfo` target `gui_client` пересобирается в:
   `C:\programming\substrata_output_qt\vs2022\cyberspace_x64\RelWithDebInfo\gui_client.exe`.
 - Канонический Windows Qt `Release` target используется для локального installer runtime.
+- `Release\gui_client.exe`: 45,139,456 байт, SHA-256 `A5DA56F957D1F396719E8EA413D8F87DED4E2F08120BB4509E9861F200A93D0E`.
+- `RelWithDebInfo\gui_client.exe`: 81,868,800 байт, SHA-256 `81961904AE1E29077C968694B738D2FBF68B46526F04F679D3B073AD03F121FF`.
 - Installer создаётся локально через NSIS и не загружается в GitHub Release автоматически.
+- Локальный installer `MetasiberiaBeta-Setup-v0.0.24.exe`: 414,147,662 байт, SHA-256 `FDCF2B3CB4E380969C4AC0E49CDEB972FF2479E8A66C42D8940CA83EEBE7AC61`.
 - Installer не запускается в рамках автоматической release-подготовки; перед публикацией его должен проверить владелец релиза.
 - Emscripten/WebClient и production server в рамках этого Windows-релиза не публикуются и не считаются проверенными.
 
