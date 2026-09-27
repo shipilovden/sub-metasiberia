@@ -1055,6 +1055,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("AboutDialog", "Author: <b>Denis Shipilov</b>", "Автор: <b>Denis Shipilov</b>");
 	add("AboutDialog", "X: %1", "X: %1");
 	add("AboutDialog", "Open-source foundations", "Проекты и открытые компоненты");
+	add("AboutDialog", "The X Bot and Y Bot avatars were taken from %1.", "Аватары X Bot и Y Bot взяты с сайта %1.");
 	add("AboutDialog", "Interface icons are provided by %1.", "Иконки интерфейса взяты из проекта %1.");
 	add("AboutDialog", "Scientific data", "Научные данные");
 	add("UserDetailsWidget", "Log out", "Выйти");
