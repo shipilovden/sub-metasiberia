@@ -66,6 +66,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "ScientificObjectSettings.h"
 #include "CulturalObjectEditor.h"
 #include "CulturalObjectSettings.h"
+#include "SpotlightEditor.h"
 #include "AnimationEditorPanel.h"
 #include "PhotoVideoSettingsPanel.h"
 #include "DocumentEditorPanel.h"
@@ -1813,6 +1814,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	,document_editor_panel(NULL)
 	,scientific_object_editor(NULL)
 	,cultural_object_editor(NULL)
+	,spotlight_editor(NULL)
 	,tree_editor_panel(NULL)
 	,voxel_editor_panel(NULL)
 	,gear_inventory_panel(NULL)
@@ -2523,6 +2525,14 @@ void MainWindow::initialiseUI()
 	cultural_object_editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	ui->verticalLayout_4->addWidget(cultural_object_editor);
 	cultural_object_editor->hide();
+	spotlight_editor = new SpotlightEditor(ui->scrollAreaWidgetContents);
+	spotlight_editor->setObjectName(QStringLiteral("spotlightEditor"));
+	spotlight_editor->base_dir_path = base_dir_path;
+	spotlight_editor->settings = settings;
+	spotlight_editor->setMinimumWidth(340);
+	spotlight_editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	ui->verticalLayout_4->addWidget(spotlight_editor);
+	spotlight_editor->hide();
 	tree_editor_panel = new TreeEditorPanel(ui->scrollAreaWidgetContents);
 	tree_editor_panel->setObjectName(QStringLiteral("treeEditorPanel"));
 	tree_editor_panel->setMinimumWidth(360);
@@ -2637,6 +2647,7 @@ void MainWindow::initialiseUI()
 	{
 		Timer stage_timer;
 		ui->objectEditor->init();
+		spotlight_editor->init();
 		logLifecycleTiming("object editor initialisation", stage_timer);
 	}
 	scientific_object_editor->init(settings);
@@ -2646,6 +2657,7 @@ void MainWindow::initialiseUI()
 	// on the same state, including installations that previously saved one of
 	// the per-editor visibility checkboxes as disabled.
 	SignalBlocker::setChecked(ui->objectEditor->show3DControlsCheckBox, true);
+	SignalBlocker::setChecked(spotlight_editor->show3DControlsCheckBox, true);
 	scientific_object_editor->setPosAndRot3DControlsEnabled(true);
 	cultural_object_editor->setPosAndRot3DControlsEnabled(true);
 	settings->setValue("objectEditor/show3DControlsCheckBoxChecked", true);
@@ -2653,6 +2665,7 @@ void MainWindow::initialiseUI()
 	settings->setValue("culturalObjectEditor/show3DControls", true);
 	settings->setValue("treeEditor/show3DControls", true);
 	settings->setValue("voxelEditor/show3DControls", true);
+	settings->setValue("spotlightEditor/show3DControls", true);
 
 	ui->diagnosticsWidget->init(settings);
 	connect(ui->diagnosticsWidget, SIGNAL(settingsChangedSignal()), this, SLOT(diagnosticsWidgetChanged()));
@@ -2774,6 +2787,9 @@ void MainWindow::initialiseUI()
 	});
 	connect(cultural_object_editor, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
 	connect(cultural_object_editor, SIGNAL(deleteObjectRequested()), this, SLOT(on_actionDeleteObject_triggered()));
+	connect(spotlight_editor, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
+	connect(spotlight_editor, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
+	connect(spotlight_editor, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
 	connect(tree_editor_panel, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
 	connect(tree_editor_panel, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
 	connect(tree_editor_panel, SIGNAL(posAndRot3DControlsToggled()), this, SLOT(posAndRot3DControlsToggledSlot()));
@@ -2840,6 +2856,8 @@ void MainWindow::initialiseUI()
 	scientific_object_editor->hide();
 	cultural_object_editor->setControlsEnabled(false);
 	cultural_object_editor->hide();
+	spotlight_editor->setControlsEnabled(false);
+	spotlight_editor->hide();
 	tree_editor_panel->setControlsEnabled(false);
 	tree_editor_panel->hide();
 	voxel_editor_panel->setEditable(false);
@@ -4178,6 +4196,8 @@ void MainWindow::writeTransformMembersToObject(WorldObject& ob)
 		scientific_object_editor->writeTransformMembersToObject(ob);
 	else if(CulturalObjectSettings::isCulturalObjectContent(ob.content) && cultural_object_editor)
 		cultural_object_editor->writeTransformMembersToObject(ob);
+	else if(ob.object_type == WorldObject::ObjectType_Spotlight && spotlight_editor)
+		spotlight_editor->writeTransformMembersToObject(ob);
 	else
 		ui->objectEditor->writeTransformMembersToObject(ob);
 }
@@ -4189,6 +4209,8 @@ void MainWindow::objectLastModifiedUpdated(const WorldObject& ob)
 		scientific_object_editor->objectLastModifiedUpdated(ob);
 	else if(CulturalObjectSettings::isCulturalObjectContent(ob.content) && cultural_object_editor)
 		cultural_object_editor->objectLastModifiedUpdated(ob);
+	else if(ob.object_type == WorldObject::ObjectType_Spotlight && spotlight_editor)
+		spotlight_editor->objectLastModifiedUpdated(ob);
 	else
 		ui->objectEditor->objectLastModifiedUpdated(ob);
 }
@@ -4218,6 +4240,8 @@ void MainWindow::setObjectEditorControlsEditable(bool editable)
 		scientific_object_editor->setControlsEditable(editable);
 	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
 		cultural_object_editor->setControlsEditable(editable);
+	else if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+		spotlight_editor->setControlsEditable(editable);
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 	{
 		ui->objectEditor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
@@ -4242,6 +4266,7 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 {
 	const bool is_scientific_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ScientificObjectSettings::isScientificObjectContent(ob.content);
 	const bool is_cultural_editor = (ob.object_type == WorldObject::ObjectType_Generic) && CulturalObjectSettings::isCulturalObjectContent(ob.content);
+	const bool is_spotlight_editor = ob.object_type == WorldObject::ObjectType_Spotlight;
 	const bool is_tree_editor = TreeObject::isTreeObject(ob);
 	const bool is_voxel_editor = ob.object_type == WorldObject::ObjectType_VoxelGroup;
 	const bool is_particle_editor = (ob.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob.content);
@@ -4257,6 +4282,12 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 	{
 		active_editor_kind = ActiveEditor_Cultural;
 		cultural_object_editor->setFromObject(ob, ob_in_editing_users_world);
+	}
+	else if(is_spotlight_editor && spotlight_editor)
+	{
+		active_editor_kind = ActiveEditor_Spotlight;
+		spotlight_editor->setTextFontFeatureSupported(gui_client.server_protocol_version >= 51);
+		spotlight_editor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 	}
 	else if(is_tree_editor && tree_editor_panel)
 	{
@@ -4280,7 +4311,24 @@ void MainWindow::setObjectEditorFromOb(const WorldObject& ob, int selected_mat_i
 		ui->objectEditor->setFromObject(ob, selected_mat_index, ob_in_editing_users_world);
 	}
 
-	ui->editorDockWidget->setWindowTitle(is_scientific_editor ? tr("Scientific Object Editor") : (is_cultural_editor ? tr("Cultural Object Editor") : (is_tree_editor ? tr("Tree Editor") : (is_voxel_editor ? tr("Voxel Editor") : (is_particle_editor ? tr("Particle Editor") : (is_gaussian_splat_editor ? tr("GaussianSplats Editor") : (is_portal_editor ? tr("Portal Editor") : tr("Editor"))))))));
+	QString editor_title = tr("Editor");
+	if(is_scientific_editor)
+		editor_title = tr("Scientific Object Editor");
+	else if(is_cultural_editor)
+		editor_title = tr("Cultural Object Editor");
+	else if(is_spotlight_editor)
+		editor_title = tr("Редактор прожектора");
+	else if(is_tree_editor)
+		editor_title = tr("Tree Editor");
+	else if(is_voxel_editor)
+		editor_title = tr("Voxel Editor");
+	else if(is_particle_editor)
+		editor_title = tr("Particle Editor");
+	else if(is_gaussian_splat_editor)
+		editor_title = tr("GaussianSplats Editor");
+	else if(is_portal_editor)
+		editor_title = tr("Portal Editor");
+	ui->editorDockWidget->setWindowTitle(editor_title);
 	if(ui->editorDockWidget->toggleViewAction())
 		ui->editorDockWidget->toggleViewAction()->setText(ui->editorDockWidget->windowTitle());
 }
@@ -4292,6 +4340,8 @@ int MainWindow::getSelectedMatIndex()
 		return 0;
 	if(active_editor_kind == ActiveEditor_Cultural)
 		return 0;
+	if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+		return spotlight_editor->getSelectedMatIndex();
 	if(active_editor_kind == ActiveEditor_Tree)
 		return 0;
 	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel)
@@ -4306,6 +4356,8 @@ void MainWindow::objectEditorToObject(WorldObject& ob)
 		scientific_object_editor->toObject(ob);
 	else if((active_editor_kind == ActiveEditor_Cultural || CulturalObjectSettings::isCulturalObjectContent(ob.content)) && cultural_object_editor)
 		cultural_object_editor->toObject(ob);
+	else if((active_editor_kind == ActiveEditor_Spotlight || ob.object_type == WorldObject::ObjectType_Spotlight) && spotlight_editor)
+		spotlight_editor->toObject(ob);
 	else if((active_editor_kind == ActiveEditor_Tree || TreeObject::isTreeObject(ob)) && tree_editor_panel)
 	{
 		ui->objectEditor->writeTransformMembersToObject(ob);
@@ -4351,6 +4403,8 @@ void MainWindow::objectEditorObjectPickedUp()
 		scientific_object_editor->objectPickedUp();
 	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
 		cultural_object_editor->objectPickedUp();
+	else if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+		spotlight_editor->objectPickedUp();
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		ui->objectEditor->objectPickedUp();
 	else
@@ -4364,6 +4418,8 @@ void MainWindow::objectEditorObjectDropped()
 		scientific_object_editor->objectDropped();
 	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
 		cultural_object_editor->objectDropped();
+	else if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+		spotlight_editor->objectDropped();
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		ui->objectEditor->objectDropped();
 	else
@@ -4377,6 +4433,8 @@ bool MainWindow::snapToGridCheckBoxChecked()
 		return scientific_object_editor->snapToGridChecked();
 	if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
 		return cultural_object_editor->snapToGridChecked();
+	if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+		return spotlight_editor->snapToGridCheckBox->isChecked();
 	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		return ui->objectEditor->snapToGridCheckBox->isChecked();
 	return ui->objectEditor->snapToGridCheckBox->isChecked();
@@ -4389,6 +4447,8 @@ double MainWindow::gridSpacing()
 		return scientific_object_editor->gridSpacing();
 	if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
 		return cultural_object_editor->gridSpacing();
+	if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+		return spotlight_editor->gridSpacingDoubleSpinBox->value();
 	if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 		return ui->objectEditor->gridSpacingDoubleSpinBox->value();
 	return ui->objectEditor->gridSpacingDoubleSpinBox->value();
@@ -4415,6 +4475,8 @@ void MainWindow::showObjectEditor()
 		ui->objectEditor->hide();
 		if(cultural_object_editor)
 			cultural_object_editor->hide();
+		if(spotlight_editor)
+			spotlight_editor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
 		if(voxel_editor_panel)
@@ -4426,11 +4488,26 @@ void MainWindow::showObjectEditor()
 		ui->objectEditor->hide();
 		if(scientific_object_editor)
 			scientific_object_editor->hide();
+		if(spotlight_editor)
+			spotlight_editor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
 		if(voxel_editor_panel)
 			voxel_editor_panel->hide();
 		cultural_object_editor->show();
+	}
+	else if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+	{
+		ui->objectEditor->hide();
+		if(scientific_object_editor)
+			scientific_object_editor->hide();
+		if(cultural_object_editor)
+			cultural_object_editor->hide();
+		if(tree_editor_panel)
+			tree_editor_panel->hide();
+		if(voxel_editor_panel)
+			voxel_editor_panel->hide();
+		spotlight_editor->show();
 	}
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 	{
@@ -4438,6 +4515,8 @@ void MainWindow::showObjectEditor()
 			scientific_object_editor->hide();
 		if(cultural_object_editor)
 			cultural_object_editor->hide();
+		if(spotlight_editor)
+			spotlight_editor->hide();
 		if(voxel_editor_panel)
 			voxel_editor_panel->hide();
 		ui->objectEditor->show();
@@ -4449,6 +4528,8 @@ void MainWindow::showObjectEditor()
 			scientific_object_editor->hide();
 		if(cultural_object_editor)
 			cultural_object_editor->hide();
+		if(spotlight_editor)
+			spotlight_editor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
 		ui->objectEditor->show();
@@ -4460,6 +4541,8 @@ void MainWindow::showObjectEditor()
 			scientific_object_editor->hide();
 		if(cultural_object_editor)
 			cultural_object_editor->hide();
+		if(spotlight_editor)
+			spotlight_editor->hide();
 		if(tree_editor_panel)
 			tree_editor_panel->hide();
 		if(voxel_editor_panel)
@@ -4475,6 +4558,8 @@ void MainWindow::setObjectEditorEnabled(bool enabled)
 		scientific_object_editor->setControlsEnabled(enabled);
 	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
 		cultural_object_editor->setControlsEnabled(enabled);
+	else if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+		spotlight_editor->setControlsEnabled(enabled);
 	else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 	{
 		ui->objectEditor->setEnabled(enabled);
@@ -10320,6 +10405,7 @@ void MainWindow::on_actionOpen_Gear_Inventory_triggered()
 	ui->botEditorWidget->hide();
 	if(scientific_object_editor) scientific_object_editor->hide();
 	if(cultural_object_editor) cultural_object_editor->hide();
+	if(spotlight_editor) spotlight_editor->hide();
 	if(tree_editor_panel) tree_editor_panel->hide();
 	if(voxel_editor_panel) voxel_editor_panel->hide();
 	active_editor_kind = ActiveEditor_GearInventory;
@@ -10453,6 +10539,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 		scientific_object_editor->hide();
 	if(cultural_object_editor)
 		cultural_object_editor->hide();
+	if(spotlight_editor)
+		spotlight_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
 	if(voxel_editor_panel)
@@ -10513,6 +10601,8 @@ void MainWindow::showBotEditor(uint64 bot_id, const UID& avatar_uid,
 		scientific_object_editor->hide();
 	if(cultural_object_editor)
 		cultural_object_editor->hide();
+	if(spotlight_editor)
+		spotlight_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
 	if(voxel_editor_panel)
@@ -10542,6 +10632,8 @@ void MainWindow::hideBotEditor()
 		scientific_object_editor->hide();
 	if(cultural_object_editor)
 		cultural_object_editor->hide();
+	if(spotlight_editor)
+		spotlight_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
 	if(voxel_editor_panel)
@@ -11473,6 +11565,8 @@ void MainWindow::posAndRot3DControlsToggledSlot()
 		scientific_object_editor->setPosAndRot3DControlsEnabled(true);
 	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
 		cultural_object_editor->setPosAndRot3DControlsEnabled(true);
+	else if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+		SignalBlocker::setChecked(spotlight_editor->show3DControlsCheckBox, true);
 	else
 		SignalBlocker::setChecked(ui->objectEditor->show3DControlsCheckBox, true);
 	gui_client.posAndRot3DControlsToggled(/*enabled=*/true);
@@ -11485,6 +11579,8 @@ void MainWindow::posAndRot3DControlsToggledSlot()
 		settings->setValue("treeEditor/show3DControls", enabled);
 	else if(active_editor_kind == ActiveEditor_Voxel)
 		settings->setValue("voxelEditor/show3DControls", enabled);
+	else if(active_editor_kind == ActiveEditor_Spotlight)
+		settings->setValue("spotlightEditor/show3DControls", enabled);
 	else
 		settings->setValue("objectEditor/show3DControlsCheckBoxChecked", enabled);
 }
@@ -11776,6 +11872,8 @@ void MainWindow::showParcelEditor()
 		scientific_object_editor->hide();
 	if(cultural_object_editor)
 		cultural_object_editor->hide();
+	if(spotlight_editor)
+		spotlight_editor->hide();
 	if(tree_editor_panel)
 		tree_editor_panel->hide();
 	if(voxel_editor_panel)
@@ -11945,6 +12043,8 @@ void MainWindow::updateObjectEditorObTransformSlot()
 			scientific_object_editor->setTransformFromObject(*gui_client.selected_ob);
 		else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
 			cultural_object_editor->setTransformFromObject(*gui_client.selected_ob);
+		else if(active_editor_kind == ActiveEditor_Spotlight && spotlight_editor)
+			spotlight_editor->setTransformFromObject(*gui_client.selected_ob);
 		else if(active_editor_kind == ActiveEditor_Tree && tree_editor_panel)
 			ui->objectEditor->setTransformFromObject(*gui_client.selected_ob);
 		else

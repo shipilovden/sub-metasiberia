@@ -40,7 +40,7 @@ public:
 
 	void init(); // settings should be set before this.
 
-	void setFromObject(const WorldObject& ob, int selected_mat_index, bool ob_in_editing_users_world);
+	virtual void setFromObject(const WorldObject& ob, int selected_mat_index, bool ob_in_editing_users_world);
 	void setTransformFromObject(const WorldObject& ob);
 	// Specialised editors may store their metadata in WorldObject::content while
 	// exposing a preserved legacy/user content value in the generic controls.
@@ -112,6 +112,7 @@ private slots:
 	void zScaleChanged(double val);
 	void linkScaleCheckBoxToggled(bool val);
 	void on_spotlightColourPushButton_clicked(bool checked);
+	void on_spotlightHousingColourPushButton_clicked(bool checked);
 	void onFontChanged(int index);
 	void audioPlaylistItemChanged(QListWidgetItem* item);
 	void audioPlaylistSelectionChanged();
@@ -139,6 +140,7 @@ private slots:
 private:
 	void updateInfoLabel(const WorldObject& ob);
 	void updateSpotlightColourButton();
+	void updateSpotlightHousingColourButton();
 	void updateParticleColourButton();
 	void loadAvailableFonts(); // Lists names/paths only; popup paint lazily generates and caches previews.
 	void syncAudioPlaylistWidgetFromContent(const std::string& content);
@@ -382,6 +384,7 @@ private:
 	QCheckBox* particleDieOnSurfaceCheckBox;
 
 	Colour3f spotlight_col;
+	Colour3f spotlight_housing_col;
 	Colour3f particle_col;
 	Colour3f particle_end_col;
 };
