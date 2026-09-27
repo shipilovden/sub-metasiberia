@@ -107,19 +107,19 @@ WaterReflectionWorldSettings::WaterReflectionWorldSettings()
 
 WaterSurfaceWorldSettings::WaterSurfaceWorldSettings()
 :
-	wave_amplitude(0.45f),
-	wave_length(28.f),
-	wave_steepness(0.18f),
-	wave_speed(1.0f),
+	wave_amplitude(0.65f),
+	wave_length(22.f),
+	wave_steepness(0.28f),
+	wave_speed(0.85f),
 	wave_direction_deg(68.4f),
-	wave_direction_spread_deg(25.f),
+	wave_direction_spread_deg(28.f),
 	secondary_wave_scale(0.18f),
 	surf_enabled(false),
-	surf_strength(0.28f),
-	shoreline_width(0.45f),
+	surf_strength(1.05f),
+	shoreline_width(2.4f),
 	foam_scale(1.6f),
-	foam_speed(0.15f),
-	foam_fade(0.75f)
+	foam_speed(0.45f),
+	foam_fade(0.68f)
 {}
 
 

@@ -72,6 +72,8 @@ public:
 
 	void initialiseUI();
 	void afterGLInitInitialise(); // Called after glWigget and OpenGLEngine has been initialised.
+	bool prepareGuestAvatarSelectionIfNeeded(const std::string& server_hostname);
+	void showGuestAvatarSelection();
 
 	void logAndConPrintMessage(const std::string& msg); // Print to console, and appends to LogWindow log display.
 

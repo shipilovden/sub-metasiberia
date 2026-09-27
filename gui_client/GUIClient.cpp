@@ -15,12 +15,14 @@ Copyright Glare Technologies Limited 2024 -
 #include "FloatingChatMessageUtils.h"
 #include "TerrainSystem.h"
 #include "TerrainDecalManager.h"
+#include "WaterWaveUtils.h"
 #include "LoadScriptTask.h"
 #include "UploadResourceThread.h"
 #include "DownloadResourcesThread.h"
 #include "NetDownloadResourcesThread.h"
 #include "ObjectPathController.h"
 #include "AvatarGraphics.h"
+#include "AvatarGroundingUtils.h"
 #include "WinterShaderEvaluator.h"
 #include "ClientUDPHandlerThread.h"
 #include "URLWhitelist.h"
@@ -228,6 +230,87 @@ static const float chunk_w = 128.f;
 static const float recip_chunk_w = 1.f / chunk_w;
 
 static const URLString DEFAULT_AVATAR_MODEL_URL = "xbot.bmesh"; // This file should be in the resources directory in the distribution.
+static const URLString GUEST_YBOT_MODEL_URL = "ybot.bmesh"; // Shipped with the client when the second guest avatar is available.
+static void enqueueMessageToSend(ClientThread& client_thread, SocketBufferOutStream& packet);
+
+
+static bool isBuiltInAvatarModelURL(const URLString& model_url)
+{
+	return model_url == DEFAULT_AVATAR_MODEL_URL || model_url == GUEST_YBOT_MODEL_URL;
+}
+
+
+static bool shouldUseBasisTexturesForAvatar(const URLString& model_url, bool server_has_basis_textures)
+{
+	return server_has_basis_textures && !isBuiltInAvatarModelURL(model_url);
+}
+
+
+static std::vector<WorldMaterialRef> makeBuiltInGuestAvatarMaterials(const URLString& model_url)
+{
+	std::vector<WorldMaterialRef> materials(2);
+	// The shipped bmeshes retain two material slots: joints (0), shell (1).
+	// Restore the source material factors, which are not stored in bmesh.
+	// Xbot: xbot.glb; Ybot: Y Bot.fbx (the supplied ybot.glb contains Xbot).
+	// Source base colours are linear; WorldMaterial stores sRGB colours.
+	const bool is_ybot = model_url == GUEST_YBOT_MODEL_URL;
+	const Colour3f joints_linear = is_ybot ? Colour3f(0.153551534f, 0.212893873f, 0.222217143f) : Colour3f(0.333333343f, 0.124528877f, 0.101014733f);
+	const Colour3f shell_linear = is_ybot ? Colour3f(0.096570008f, 0.421619803f, 0.522000015f) : Colour3f(0.837000012f, 0.302308023f, 0.263655007f);
+
+	materials[0] = new WorldMaterial();
+	materials[0]->colour_rgb = toNonLinearSRGB(joints_linear);
+	materials[0]->metallic_fraction.val = is_ybot ? 0.5f : 0.0f;
+	materials[0]->roughness.val = is_ybot ? 0.552786410f : 0.858578622f;
+	materials[0]->flags |= WorldMaterial::DOUBLE_SIDED_FLAG;
+
+	materials[1] = new WorldMaterial();
+	materials[1]->colour_rgb = toNonLinearSRGB(shell_linear);
+	materials[1]->metallic_fraction.val = 0.0f;
+	materials[1]->roughness.val = is_ybot ? 0.552786410f : 0.808291554f;
+	materials[1]->flags |= WorldMaterial::DOUBLE_SIDED_FLAG;
+	return materials;
+}
+
+
+static float getBuiltInGuestAvatarScale(const js::AABBox& aabb)
+{
+	float scale = 1.0f;
+	float span = aabb.axisLength(aabb.longestAxis());
+	if(!::isFinite(span))
+		return scale;
+
+	while(span >= 5.0f)
+	{
+		scale *= 0.1f;
+		span *= 0.1f;
+	}
+	while(span <= 0.01f)
+	{
+		scale *= 10.0f;
+		span *= 10.0f;
+	}
+	return scale;
+}
+
+
+static void applyBuiltInGuestAvatarTransform(Avatar& avatar, const Reference<OpenGLMeshRenderData>& mesh_data)
+{
+	if(mesh_data.isNull())
+		return;
+
+	const float scale = getBuiltInGuestAvatarScale(mesh_data->aabb_os);
+	const Matrix4f imported_model_transform =
+		Matrix4f::rotationMatrix(Vec4f(1, 0, 0, 0), Maths::pi_2<float>()) *
+		Matrix4f::scaleMatrix(scale, scale, scale);
+	// Avatar positions are eye positions.  The supplied bmeshes are y-up and
+	// their AABB records the actual model-space foot level, so anchor that
+	// level to eye-height instead of estimating it from optional eye bones.
+	const float model_floor_height = mesh_data->aabb_os.min_[1] * scale;
+	const float eye_height = AvatarGrounding::kDefaultAvatarEyeHeightM;
+	avatar.avatar_settings.pre_ob_to_world_matrix =
+		Matrix4f::translationMatrix(0, 0, -eye_height - model_floor_height) * imported_model_transform;
+}
+
 
 static const float MIN_SPOTLIGHT_CONE_ANGLE = 0.087266f;
 
@@ -927,6 +1010,9 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	world_settings_locally_dirty(false),
 	logged_in_user_id(UserID::invalidUserID()),
 	logged_in_user_flags(0),
+	guest_avatar_model_url(DEFAULT_AVATAR_MODEL_URL),
+	guest_avatar_selection_pending(false),
+	guest_avatar_selection_ready(true),
 	shown_object_modification_error_msg(false),
 	num_frames_since_fps_timer_reset(0),
 	last_fps(0),
@@ -1346,6 +1432,11 @@ void GUIClient::postConnectInitialise()
 	// Add default avatar mesh as an external resource.
 	if(resource_manager->getExistingResourceForURL(DEFAULT_AVATAR_MODEL_URL).isNull())
 		resource_manager->addExternalResource(/*URL=*/DEFAULT_AVATAR_MODEL_URL, /*local (abs) path=*/resources_dir_path + "/" + toStdString(DEFAULT_AVATAR_MODEL_URL));
+
+	// Add the second built-in guest avatar when it is present in the client distribution.
+	const std::string guest_ybot_path = resources_dir_path + "/" + toStdString(GUEST_YBOT_MODEL_URL);
+	if(FileUtils::fileExists(guest_ybot_path) && resource_manager->getExistingResourceForURL(GUEST_YBOT_MODEL_URL).isNull())
+		resource_manager->addExternalResource(/*URL=*/GUEST_YBOT_MODEL_URL, /*local (abs) path=*/guest_ybot_path);
 
 
 	// Add built-in animations as external resources
@@ -2036,6 +2127,52 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 	}
 
 	checkCreateManagersAndMinimap();
+}
+
+
+void GUIClient::setGuestAvatarModelURL(const URLString& model_url)
+{
+	if(!model_url.empty())
+		guest_avatar_model_url = model_url;
+}
+
+
+void GUIClient::setGuestAvatarSelectionPending(bool pending)
+{
+	guest_avatar_selection_pending = pending;
+	guest_avatar_selection_ready = !pending;
+}
+
+
+void GUIClient::setGuestAvatarSelectionReady()
+{
+	guest_avatar_selection_ready = true;
+	if(guest_avatar_selection_pending && connection_state == ServerConnectionState_Connected)
+		sendInitialAvatarCreateMessage();
+}
+
+
+void GUIClient::sendInitialAvatarCreateMessage()
+{
+	if(client_thread.isNull())
+		return;
+
+	MessageUtils::initPacket(scratch_packet, Protocol::CreateAvatar);
+
+	Vec3d avatar_pos;
+	Vec3d cam_angles;
+	getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
+	Avatar avatar;
+	avatar.uid = this->client_avatar_uid;
+	avatar.pos = avatar_pos;
+	avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
+	// An empty model URL is the established wire representation of Xbot;
+	// loadModelForAvatar() then applies its built-in materials and transform.
+	if(this->guest_avatar_model_url != DEFAULT_AVATAR_MODEL_URL)
+		avatar.avatar_settings.model_url = this->guest_avatar_model_url;
+	writeAvatarToNetworkStream(avatar, scratch_packet);
+
+	enqueueMessageToSend(*this->client_thread, scratch_packet);
 }
 
 
@@ -3168,19 +3305,20 @@ void GUIClient::startLoadingTexturesForAvatar(const Avatar& av, int ob_lod_level
 {
 	// Prioritise loading our avatar first.
 	const float our_avatar_importance_factor = our_avatar ? 1.0e4f : 1.f;
+	const bool use_basis_for_avatar_materials = shouldUseBasisTexturesForAvatar(av.avatar_settings.model_url, this->server_has_basis_textures);
 
 	// Process model materials - start loading any textures that are present on disk, and not already loaded and processed:
 	for(size_t i=0; i<av.avatar_settings.materials.size(); ++i)
 	{
 		const WorldMaterial* mat = av.avatar_settings.materials[i].ptr();
 		if(!mat->colour_texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->colour_texture_url, mat->colourTexHasAlpha(), /*use_sRGB=*/true, /*allow compression=*/true, /*use_basis=*/this->server_has_basis_textures);
+			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->colour_texture_url, mat->colourTexHasAlpha(), /*use_sRGB=*/true, /*allow compression=*/true, /*use_basis=*/use_basis_for_avatar_materials);
 		if(!mat->emission_texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->emission_texture_url, /*has_alpha=*/false, /*use_sRGB=*/true, /*allow compression=*/true, /*use_basis=*/this->server_has_basis_textures);
+			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->emission_texture_url, /*has_alpha=*/false, /*use_sRGB=*/true, /*allow compression=*/true, /*use_basis=*/use_basis_for_avatar_materials);
 		if(!mat->roughness.texture_url.empty())
-			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->roughness.texture_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/true, /*use_basis=*/this->server_has_basis_textures);
+			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->roughness.texture_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/true, /*use_basis=*/use_basis_for_avatar_materials);
 		if(!mat->normal_map_url.empty())
-			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->normal_map_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/false, /*use_basis=*/this->server_has_basis_textures);
+			startLoadingTextureForObjectOrAvatar(/*ob uid=*/UID::invalidUID(), av.uid, av.pos.toVec4fPoint(), /*aabb_ws_longest_len=*/1.8f, max_dist_for_ob_lod_level, max_dist_for_ob_lod_level, our_avatar_importance_factor, *mat, ob_lod_level, mat->normal_map_url, /*has_alpha=*/false, /*use_sRGB=*/false, /*allow compression=*/false, /*use_basis=*/use_basis_for_avatar_materials);
 	}
 
 	for(size_t gear_i=0; gear_i<av.equipped_gear.items.size(); ++gear_i)
@@ -5428,11 +5566,12 @@ void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const R
 	removeAndDeleteGLObjectForAvatar(*avatar);
 
 	const Matrix4f ob_to_world_matrix = obToWorldMatrix(*avatar);
+	const bool use_basis_for_avatar_materials = shouldUseBasisTexturesForAvatar(avatar->avatar_settings.model_url, this->server_has_basis_textures);
 
 	// Create gl and physics object now
 	glare::ArenaFrame frame(arena_allocator);
 	avatar->graphics.skinned_gl_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data->gl_meshdata, av_lod_level, avatar->avatar_settings.materials, /*lightmap_url=*/URLString(),
-		/*use_basis=*/this->server_has_basis_textures, *resource_manager, &arena_allocator, ob_to_world_matrix);
+		/*use_basis=*/use_basis_for_avatar_materials, *resource_manager, &arena_allocator, ob_to_world_matrix);
 
 	mesh_data->meshDataBecameUsed();
 	avatar->mesh_data = mesh_data; // Hang on to a reference to the mesh data, so when object-uses of it are removed, it can be removed from the MeshManager with meshDataBecameUnused().
@@ -5456,9 +5595,18 @@ void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const R
 		mesh_manager.meshMemoryAllocatedChanged(old_mem_usage, new_mem_usage);
 	}
 
+	// AvatarSettingsWidget uses the retargeted animation data when it computes
+	// the eye anchor.  Do the same for the built-in guest models, then refresh
+	// the already-created render object's transform.
+	if(isBuiltInAvatarModelURL(avatar->avatar_settings.model_url))
+	{
+		applyBuiltInGuestAvatarTransform(*avatar, mesh_data->gl_meshdata);
+		avatar->graphics.skinned_gl_ob->ob_to_world_matrix = obToWorldMatrix(*avatar);
+	}
+
 	avatar->graphics.build(avatar->our_avatar);
 
-	assignLoadedOpenGLTexturesToAvatarMats(avatar, /*use_basis=*/this->server_has_basis_textures, *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
+	assignLoadedOpenGLTexturesToAvatarMats(avatar, /*use_basis=*/use_basis_for_avatar_materials, *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
 
 	// Enable materialise effect if needed
 	const float current_time = (float)Clock::getTimeSinceInit();
@@ -5627,30 +5775,23 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 	Timer timer;
 	
 
-	// If the avatar model URL is empty, we will be using the default xbot model.  Need to make it be rotated from y-up to z-up, and assign materials.
+	// If the avatar model URL is empty, we will be using the default xbot model.
+	// Keep the local built-in avatar path equivalent to a GLB avatar import:
+	// it needs explicit material maps and a model-space-to-world transform.
 	if(avatar->avatar_settings.model_url.empty())
 	{
 		avatar->avatar_settings.model_url = DEFAULT_AVATAR_MODEL_URL;
-		avatar->avatar_settings.materials.resize(2);
-
-		avatar->avatar_settings.materials[0] = new WorldMaterial();
-		avatar->avatar_settings.materials[0]->colour_rgb = Avatar::defaultMat0Col();
-		avatar->avatar_settings.materials[0]->metallic_fraction.val = Avatar::default_mat0_metallic_frac;
-		avatar->avatar_settings.materials[0]->roughness.val = Avatar::default_mat0_roughness;
-
-		avatar->avatar_settings.materials[1] = new WorldMaterial();
-		avatar->avatar_settings.materials[1]->colour_rgb = Avatar::defaultMat1Col();
-		avatar->avatar_settings.materials[1]->metallic_fraction.val = Avatar::default_mat1_metallic_frac;
-
-		const float EYE_HEIGHT = 1.67f;
-		const Matrix4f to_z_up(Vec4f(1,0,0,0), Vec4f(0, 0, 1, 0), Vec4f(0, -1, 0, 0), Vec4f(0,0,0,1));
-		avatar->avatar_settings.pre_ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, -EYE_HEIGHT) * to_z_up;
+		avatar->avatar_settings.materials = makeBuiltInGuestAvatarMaterials(avatar->avatar_settings.model_url);
+	}
+	else if(isBuiltInAvatarModelURL(avatar->avatar_settings.model_url))
+	{
+		avatar->avatar_settings.materials = makeBuiltInGuestAvatarMaterials(avatar->avatar_settings.model_url);
 	}
 
 
 	try
 	{
-		const bool avatar_is_default_model = avatar->avatar_settings.model_url == DEFAULT_AVATAR_MODEL_URL;
+		const bool avatar_is_default_model = isBuiltInAvatarModelURL(avatar->avatar_settings.model_url);
 
 		// Start downloading any resources we don't have that the object uses.
 		if(!avatar_is_default_model) // Avoid downloading optimised version of default avatar; is already optimised.
@@ -5674,7 +5815,7 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 		WorldObject::GetLODModelURLOptions options(
 			/*get_optimised_mesh=*/shouldUseOptimisedMeshesForAvatar(avatar->avatar_settings.model_url, this->server_has_optimised_meshes),
 			this->server_opt_mesh_version);
-		URLString lod_model_url = avatar_is_default_model ? DEFAULT_AVATAR_MODEL_URL : WorldObject::getLODModelURLForLevel(avatar->avatar_settings.model_url, ob_model_lod_level, options);
+		URLString lod_model_url = avatar_is_default_model ? avatar->avatar_settings.model_url : WorldObject::getLODModelURLForLevel(avatar->avatar_settings.model_url, ob_model_lod_level, options);
 		// If the optimised mesh is not available locally, fall back to the original URL so locally-uploaded bot avatars load immediately.
 		if(!avatar_is_default_model && lod_model_url != URLString(avatar->avatar_settings.model_url) &&
 		   !resource_manager->isFileForURLPresent(lod_model_url) &&
@@ -5687,6 +5828,9 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 		Reference<MeshData> mesh_data = mesh_manager.getMeshData(lod_model_url);
 		if(mesh_data.nonNull())
 		{
+			if(avatar_is_default_model)
+				applyBuiltInGuestAvatarTransform(*avatar, mesh_data->gl_meshdata);
+
 			const bool is_meshdata_loaded_into_opengl = mesh_data->gl_meshdata->vbo_handle.valid();
 			if(is_meshdata_loaded_into_opengl)
 			{
@@ -7718,6 +7862,9 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 					{
 						try
 						{
+							if(isBuiltInAvatarModelURL(av->avatar_settings.model_url))
+								applyBuiltInGuestAvatarTransform(*av, the_mesh_data->gl_meshdata);
+
 							// If avatar has no materials (e.g. a bot with a custom GLB), assign extracted GLB materials
 							bool assigned_extracted = false;
 							if(av->avatar_settings.materials.empty())
@@ -9826,6 +9973,138 @@ bool GUIClient::onlyLoadMostImportantObjectsDefaultValue()
 		return true;
 #endif
 	return false;
+}
+
+
+void GUIClient::updateShoreSurfEffects()
+{
+	if(!world_state || !physics_world || !particle_manager || !opengl_engine)
+		return;
+	const auto& s = opengl_engine->getCurrentScene()->water_surface_settings;
+	if(!s.surf_enabled || s.surf_strength <= 0.f || s.wave_amplitude <= 0.f || s.wave_speed <= 0.f ||
+		!BitUtils::isBitSet(connected_world_settings.terrain_spec.flags, TerrainSpec::WATER_ENABLED_FLAG))
+	{
+		surf_impact_times.clear();
+		last_surf_effect_time = -1.0;
+		return;
+	}
+	const double now = opengl_engine->getCurrentTime();
+	if(now >= last_surf_effect_time && now - last_surf_effect_time < 0.15)
+		return;
+	last_surf_effect_time = now; // Never catch up in a burst after a stalled frame.
+	for(auto it = surf_impact_times.begin(); it != surf_impact_times.end();)
+		if(now - it->second > 10.0 || now < it->second) it = surf_impact_times.erase(it); else ++it;
+	if(particle_manager->getNumParticles() >= 1800)
+		return;
+
+	const float water_z = connected_world_settings.terrain_spec.water_z;
+	const float angle = s.wave_direction_deg * Maths::pi<float>() / 180.f;
+	const Vec4f dir(std::cos(angle), std::sin(angle), 0, 0);
+	const Vec4f tangent(-dir[1], dir[0], 0, 0);
+	const Vec4f camera = cam_controller.getPosition().toVec4fPoint();
+	const auto waveAt = [&](const Vec4f& p) {
+		if(terrain_system)
+		{
+			const float z = terrain_system->evalTerrainHeight(p[0], p[1], 2.f);
+			const float gx = (terrain_system->evalTerrainHeight(p[0]+2.f,p[1],2.f)-terrain_system->evalTerrainHeight(p[0]-2.f,p[1],2.f))*0.25f;
+			const float gy = (terrain_system->evalTerrainHeight(p[0],p[1]+2.f,2.f)-terrain_system->evalTerrainHeight(p[0],p[1]-2.f,2.f))*0.25f;
+			return WaterWaveUtils::sampleCoastal(p[0], p[1], now, s.wave_amplitude, s.wave_length, s.wave_speed,
+				angle, s.wave_direction_spread_deg * Maths::pi<float>() / 180.f, s.secondary_wave_scale, z-water_z, gx, gy);
+		}
+		return WaterWaveUtils::sample(p[0], p[1], now, s.wave_amplitude, s.wave_length, s.wave_speed,
+			angle, s.wave_direction_spread_deg * Maths::pi<float>() / 180.f, s.secondary_wave_scale);
+	};
+	int particle_budget = 64;
+	const auto splash = [&](const Vec4f& pos, const Vec4f& normal, float energy, int count) {
+		for(int i = 0; i < count && particle_budget > 0; ++i, --particle_budget)
+		{
+			Particle p;
+			p.pos = pos + normal * 0.07f;
+			p.vel = normal * (0.5f + rng.unitRandom()) * energy +
+				Vec4f((rng.unitRandom() - 0.5f) * 1.5f, (rng.unitRandom() - 0.5f) * 1.5f,
+					(0.7f + rng.unitRandom() * 1.8f) * energy, 0);
+			p.particle_type = Particle::ParticleType_Foam;
+			p.colour = Colour3f(0.85f);
+			p.width = 0.06f + rng.unitRandom() * 0.16f;
+			p.dwidth_dt = 0.16f;
+			p.dopacity_dt = -0.75f;
+			p.theta = rng.unitRandom() * Maths::get2Pi<float>();
+			p.die_when_hit_surface = true; // Existing splash system deposits foam on landing.
+			particle_manager->addParticle(p);
+		}
+	};
+
+	// Broad phase only chooses candidates; actual spray requires a mesh ray hit.
+	struct Candidate { UID uid; PhysicsObjectRef body; float distance; };
+	std::vector<Candidate> candidates;
+	{
+		WorldStateLock lock(world_state->mutex);
+		for(auto it = world_state->objects.valuesBegin(); it != world_state->objects.valuesEnd(); ++it)
+		{
+			WorldObject* ob = it.getValue().ptr();
+			if(!ob->physics_object || !ob->physics_object->collidable || ob->physics_object->is_sensor)
+				continue;
+			if((ob->getCentroidWS() - camera).length() > 65.f)
+				continue; // Cached render bounds avoid querying distant Jolt shapes.
+			const js::AABBox box = ob->physics_object->getAABBoxWS();
+			const Vec4f centre = (box.min_ + box.max_) * 0.5f;
+			const float distance = (centre - camera).length();
+			if(distance < 60.f && box.min_[2] < water_z + 1.5f && box.max_[2] > water_z - 0.5f)
+				candidates.push_back({ob->uid, ob->physics_object, distance});
+		}
+	}
+	std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.distance < b.distance; });
+	const size_t candidate_count = std::min(candidates.size(), size_t(24));
+	for(size_t i = 0; i < candidate_count && particle_budget > 0; ++i)
+	{
+		const Candidate& c = candidates[i];
+		const auto previous = surf_impact_times.find(c.uid);
+		if(previous != surf_impact_times.end() && now - previous->second < 0.7)
+			continue;
+		const js::AABBox box = c.body->getAABBoxWS();
+		Vec4f target = (box.min_ + box.max_) * 0.5f;
+		target[3] = 1.f;
+		const auto wave = waveAt(target);
+		if(wave.height < 0.f || wave.vertical_speed < 0.12f)
+			continue;
+		target[2] = water_z + wave.height;
+		const float radius = (box.axisLength(0) + box.axisLength(1)) * 0.5f + 1.f;
+		if(radius > 30.f) continue; // Large terrain/building meshes are handled by local probes below.
+		const Vec4f origin = target - dir * radius + tangent * ((rng.unitRandom() - 0.5f) * std::min(1.f, radius));
+		RayTraceResult floor_hit;
+		physics_world->traceRay(origin + Vec4f(0,0,2,0), Vec4f(0,0,-1,0), 12.f, c.body->jolt_body_id, floor_hit);
+		if(!floor_hit.hit_object || !floor_hit.hit_object->collidable || floor_hit.hit_object->is_sensor ||
+			origin[2] + 2.f - floor_hit.hit_t > water_z - 0.03f)
+			continue; // Do not emit from dry land or while collision meshes are still loading.
+		RayTraceResult hit;
+		physics_world->traceRay(origin, dir, radius * 2.f, JPH::BodyID(), hit);
+		if(hit.hit_object != c.body.ptr() || dot(hit.hit_normal_ws, dir) > -0.15f)
+			continue;
+		const Vec4f pos = origin + dir * hit.hit_t;
+		const float energy = std::min(2.5f, (0.5f + wave.vertical_speed) * s.surf_strength);
+		splash(pos, hit.hit_normal_ws, energy, 12);
+		surf_impact_times[c.uid] = now;
+		if(terrain_decal_manager)
+			terrain_decal_manager->addFoamDecal(Vec4f(pos[0], pos[1], water_z, 1), 1.2f, 0.6f, TerrainDecalManager::DecalType_ThickFoam);
+	}
+
+	// A fixed ray budget samples shallow breakers around the viewer. The same
+	// Jolt geometry detects beaches and object surfaces, not an AABB silhouette.
+	for(int i = 0; i < 12 && particle_budget > 0; ++i)
+	{
+		Vec4f p = camera + Vec4f((rng.unitRandom() - 0.5f) * 44.f, (rng.unitRandom() - 0.5f) * 44.f, 0, 0);
+		p[2] = water_z + 2.f;
+		RayTraceResult floor_hit;
+		physics_world->traceRay(p, Vec4f(0,0,-1,0), 5.f, JPH::BodyID(), floor_hit);
+		if(!floor_hit.hit_object || !floor_hit.hit_object->collidable || floor_hit.hit_object->is_sensor || floor_hit.hit_normal_ws[2] < 0.65f)
+			continue;
+		const float depth = floor_hit.hit_t - 2.f;
+		const auto wave = waveAt(p);
+		if(depth < 0.03f || depth > std::min(0.65f, s.wave_amplitude * 0.5f) || wave.height < depth * 0.6f || wave.vertical_speed < 0.12f)
+			continue;
+		p[2] = water_z + wave.height;
+		splash(p, dir, std::min(1.2f, wave.vertical_speed * s.surf_strength), 3);
+	}
 }
 
 
@@ -12117,6 +12396,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	if(particle_manager.nonNull())
 	{
 		updateParticleEmitters(dt);
+		updateShoreSurfEffects();
 		particle_manager->think((float)dt);
 	}
 
@@ -14022,21 +14302,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				}
 			}
 				
-			// Send CreateAvatar packet for this client's avatar
-			{
-				MessageUtils::initPacket(scratch_packet, Protocol::CreateAvatar);
-
-				Vec3d avatar_pos;
-				Vec3d cam_angles;
-				getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
-				Avatar avatar;
-				avatar.uid = this->client_avatar_uid;
-				avatar.pos = avatar_pos;
-				avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
-				writeAvatarToNetworkStream(avatar, scratch_packet);
-
-				enqueueMessageToSend(*this->client_thread, scratch_packet);
-			}
+			// Wait for the in-client guest avatar picker before creating an anonymous avatar.
+			if(!guest_avatar_selection_pending || guest_avatar_selection_ready)
+				sendInitialAvatarCreateMessage();
 
 			audio_engine.playOneShotSound(resources_dir_path + "/sounds/462089__newagesoup__ethereal-woosh_normalised_mono.mp3", 
 				(this->cam_controller.getFirstPersonPosition() + Vec3d(0, 0, -1)).toVec4fPoint());
@@ -15183,7 +15451,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						const int lod = av->getLODLevel(cam_controller.getPosition());
 						startLoadingTexturesForAvatar(*av, lod, av->getMaxDistForLODLevel(lod), av->isOurAvatar());
 						glare::ArenaFrame frame(arena_allocator);
-						assignLoadedOpenGLTexturesToAvatarMats(av, server_has_basis_textures, *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
+						assignLoadedOpenGLTexturesToAvatarMats(av, shouldUseBasisTexturesForAvatar(av->avatar_settings.model_url, server_has_basis_textures), *opengl_engine, *resource_manager, *animated_texture_manager, &arena_allocator);
 					}
 				}
 			}
@@ -20515,7 +20783,10 @@ void GUIClient::changeToDifferentWorld(const URLParseResults& parse_res)
 		avatar.uid = this->client_avatar_uid;
 		avatar.pos = avatar_pos;
 		avatar.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
-		avatar.avatar_settings = this->logged_in_avatar_settings;
+		if(this->logged_in_user_id.valid())
+			avatar.avatar_settings = this->logged_in_avatar_settings;
+		else if(this->guest_avatar_model_url != DEFAULT_AVATAR_MODEL_URL)
+			avatar.avatar_settings.model_url = this->guest_avatar_model_url;
 		avatar.name = this->logged_in_user_name;
 		avatar.equipped_gear = this->logged_in_equipped_gear;
 
@@ -26553,19 +26824,21 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 		scene->water_reflection_settings.cloud_reflection_strength = myClamp(sanitiseFinite(water_reflection.cloud_reflection_strength, 0.65f), 0.f, 1.f);
 		scene->water_reflection_settings.cloud_reflection_samples = myClamp(sanitiseFinite(water_reflection.cloud_reflection_samples, 24.f), 8.f, 48.f);
 		scene->water_reflection_settings.cloud_reflection_fade = myClamp(sanitiseFinite(water_reflection.cloud_reflection_fade, 0.75f), 0.f, 1.f);
-		scene->water_surface_settings.wave_amplitude = myClamp(sanitiseFinite(water_surface.wave_amplitude, 0.45f), 0.f, 10.f);
-		scene->water_surface_settings.wave_length = myClamp(sanitiseFinite(water_surface.wave_length, 28.f), 0.5f, 500.f);
-		scene->water_surface_settings.wave_steepness = myClamp(sanitiseFinite(water_surface.wave_steepness, 0.18f), 0.f, 1.f);
-		scene->water_surface_settings.wave_speed = myClamp(sanitiseFinite(water_surface.wave_speed, 1.0f), 0.f, 8.f);
+		const WaterSurfaceWorldSettings water_defaults;
+		scene->water_surface_settings.wave_amplitude = myClamp(sanitiseFinite(water_surface.wave_amplitude, water_defaults.wave_amplitude), 0.f, 10.f);
+		scene->water_surface_settings.wave_length = myClamp(sanitiseFinite(water_surface.wave_length, water_defaults.wave_length), 0.5f, 500.f);
+		scene->water_surface_settings.wave_steepness = myClamp(sanitiseFinite(water_surface.wave_steepness, water_defaults.wave_steepness), 0.f, 1.f);
+		scene->water_surface_settings.wave_speed = myClamp(sanitiseFinite(water_surface.wave_speed, water_defaults.wave_speed), 0.f, 8.f);
 		scene->water_surface_settings.wave_direction_deg = myClamp(sanitiseFinite(water_surface.wave_direction_deg, 68.4f), 0.f, 360.f);
-		scene->water_surface_settings.wave_direction_spread_deg = myClamp(sanitiseFinite(water_surface.wave_direction_spread_deg, 25.f), 0.f, 180.f);
+		scene->water_surface_settings.wave_direction_spread_deg = myClamp(sanitiseFinite(water_surface.wave_direction_spread_deg, water_defaults.wave_direction_spread_deg), 0.f, 180.f);
 		scene->water_surface_settings.secondary_wave_scale = myClamp(sanitiseFinite(water_surface.secondary_wave_scale, 0.18f), 0.f, 1.f);
-		scene->water_surface_settings.surf_enabled = water_surface.surf_enabled;
-		scene->water_surface_settings.surf_strength = myClamp(sanitiseFinite(water_surface.surf_strength, 0.28f), 0.f, 2.f);
-		scene->water_surface_settings.shoreline_width = myClamp(sanitiseFinite(water_surface.shoreline_width, 0.45f), 0.1f, 100.f);
+		scene->water_surface_settings.surf_enabled = water_surface.surf_enabled &&
+			BitUtils::isBitSet(connected_world_settings.terrain_spec.flags, TerrainSpec::WATER_ENABLED_FLAG);
+		scene->water_surface_settings.surf_strength = myClamp(sanitiseFinite(water_surface.surf_strength, water_defaults.surf_strength), 0.f, 2.f);
+		scene->water_surface_settings.shoreline_width = myClamp(sanitiseFinite(water_surface.shoreline_width, water_defaults.shoreline_width), 0.1f, 100.f);
 		scene->water_surface_settings.foam_scale = myClamp(sanitiseFinite(water_surface.foam_scale, 1.6f), 0.05f, 10.f);
-		scene->water_surface_settings.foam_speed = myClamp(sanitiseFinite(water_surface.foam_speed, 0.15f), 0.f, 5.f);
-		scene->water_surface_settings.foam_fade = myClamp(sanitiseFinite(water_surface.foam_fade, 0.75f), 0.f, 1.f);
+		scene->water_surface_settings.foam_speed = myClamp(sanitiseFinite(water_surface.foam_speed, water_defaults.foam_speed), 0.f, 5.f);
+		scene->water_surface_settings.foam_fade = myClamp(sanitiseFinite(water_surface.foam_fade, water_defaults.foam_fade), 0.f, 1.f);
 	}
 }
 

@@ -276,6 +276,95 @@ static bool lookupMetasiberiaMapPlaceName(const std::string& query, double& lat_
 
 namespace
 {
+class GuestAvatarSelectionDialog final : public QDialog
+{
+public:
+	GuestAvatarSelectionDialog(const QString& resources_dir, QWidget* parent)
+	:	QDialog(parent),
+		selected_model_url()
+	{
+		setWindowTitle(QString::fromUtf8("Выбор аватара"));
+		setWindowModality(Qt::WindowModal);
+		setFixedSize(560, 340);
+
+		QVBoxLayout* main_layout = new QVBoxLayout(this);
+		QLabel* title = new QLabel(QString::fromUtf8("Выбор аватара"), this);
+		title->setAlignment(Qt::AlignCenter);
+		title->setStyleSheet("font-size: 16px; font-weight: 600; padding: 6px;");
+		main_layout->addWidget(title);
+
+		QHBoxLayout* choices_layout = new QHBoxLayout();
+		choices_layout->setSpacing(14);
+		addChoice(choices_layout, resources_dir, QString::fromUtf8("Xbot"), "xbot.bmesh", "xbot");
+		addChoice(choices_layout, resources_dir, QString::fromUtf8("Ybot"), "ybot.bmesh", "ybot");
+		main_layout->addLayout(choices_layout, 1);
+
+		QLabel* hint = new QLabel(QString::fromUtf8("Выбор применяется сразу при входе в мир."), this);
+		hint->setAlignment(Qt::AlignCenter);
+		hint->setStyleSheet("color: #a0a0a0; padding: 4px;");
+		main_layout->addWidget(hint);
+	}
+
+	const QString& selectedModelURL() const { return selected_model_url; }
+
+private:
+	void addChoice(QHBoxLayout* choices_layout, const QString& resources_dir, const QString& name,
+		const QString& model_url, const QString& preview_name)
+	{
+		QFrame* card = new QFrame(this);
+		card->setFrameShape(QFrame::StyledPanel);
+		card->setStyleSheet("QFrame { background: #34343a; border: 1px solid #55555c; border-radius: 6px; } QLabel { border: none; }");
+
+		QVBoxLayout* card_layout = new QVBoxLayout(card);
+		card_layout->setContentsMargins(10, 10, 10, 10);
+
+		QLabel* preview = new QLabel(card);
+		preview->setAlignment(Qt::AlignCenter);
+		preview->setMinimumSize(220, 190);
+		preview->setStyleSheet("background: #25252a; color: #a0a0a0; border-radius: 4px;");
+
+		QPixmap preview_pixmap;
+		const QStringList preview_paths = {
+			resources_dir + "/" + preview_name + ".png",
+			resources_dir + "/" + preview_name + ".jpg",
+			resources_dir + "/" + preview_name + ".jpeg"
+		};
+		for(const QString& preview_path : preview_paths)
+		{
+			if(preview_pixmap.load(preview_path))
+			{
+				preview->setPixmap(preview_pixmap.scaled(preview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+				break;
+			}
+		}
+		if(preview_pixmap.isNull())
+			preview->setText(QString::fromUtf8("Превью будет добавлено\n") + preview_name + ".png");
+		card_layout->addWidget(preview);
+
+		QLabel* name_label = new QLabel(name, card);
+		name_label->setAlignment(Qt::AlignCenter);
+		name_label->setStyleSheet("font-size: 14px; font-weight: 600; padding: 3px;");
+		card_layout->addWidget(name_label);
+
+		QPushButton* select_button = new QPushButton(QString::fromUtf8("Выбрать"), card);
+		const bool model_available = QFileInfo::exists(resources_dir + "/" + model_url);
+		select_button->setEnabled(model_available);
+		if(!model_available)
+			select_button->setToolTip(QString::fromUtf8("Файл модели пока не найден: ") + model_url);
+		connect(select_button, &QPushButton::clicked, this, [this, model_url]()
+		{
+			selected_model_url = model_url;
+			accept();
+		});
+		card_layout->addWidget(select_button);
+
+		choices_layout->addWidget(card);
+	}
+
+	QString selected_model_url;
+};
+
+
 struct QtThemeColors
 {
 	QColor primary;
@@ -1557,13 +1646,16 @@ static void applyEditorDockTitleBarTheme(QDockWidget* dock_widget, const QPalett
 	if(!title_bar || title_bar->objectName() != QStringLiteral("editorDockTitleBar"))
 		return;
 
-	const QColor background = palette.color(QPalette::Window);
-	const QColor foreground = palette.color(QPalette::WindowText);
+	// This panel is always dark, including when constructed before the saved
+	// application theme is applied (the initial Windows palette can be white).
+	const bool avatar_panel = dock_widget->objectName() == QStringLiteral("avatarDockWidget");
+	const QColor background = avatar_panel ? QColor("#34343a") : palette.color(QPalette::Window);
+	const QColor foreground = avatar_panel ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
 	const QColor hover = foreground.lightness() > background.lightness() ? background.lighter(132) : background.darker(104);
 	// Own the custom title's colours locally, including when the dock floats.
 	// Do not depend on reapplying the main-window stylesheet to refresh it.
 	const QString title_style = QString(
-		"QWidget#editorDockTitleBar { background: %1; color: %2; border: none; }"
+		"QWidget#editorDockTitleBar { background: %1; color: %2; border-top: 1px solid #34343a; border-bottom: none; }"
 		"QLabel#editorDockTitleLabel { background: transparent; color: %2; border: none; }"
 		"QWidget#editorDockTitleBar QToolButton { background: transparent; color: %2; border: none; border-radius: 3px; padding: 1px; }"
 		"QWidget#editorDockTitleBar QToolButton:hover { background: %3; }")
@@ -2111,6 +2203,36 @@ void MainWindow::startMainTimer()
 }
 
 
+bool MainWindow::prepareGuestAvatarSelectionIfNeeded(const std::string& server_hostname)
+{
+	// A saved username means the client will try automatic login after connecting.
+	// The guest selector is only shown when this launch will actually be anonymous.
+	const bool guest_mode = !settings->value("LoginDialog/auto_login", true).toBool() || getUsernameForDomain(server_hostname).empty();
+	gui_client.setGuestAvatarSelectionPending(guest_mode);
+	return guest_mode;
+}
+
+
+void MainWindow::showGuestAvatarSelection()
+{
+	// Expected distribution layout for the two guest avatars:
+	//   data/resources/xbot.bmesh and xbot.png
+	//   data/resources/ybot.bmesh and ybot.png
+	// The preview files are optional while the new avatars are being prepared.
+	GuestAvatarSelectionDialog dialog(QtUtils::toQString(base_dir_path + "/data/resources"), this);
+	const QRect screen_rect = screen() ? screen()->availableGeometry() : QGuiApplication::primaryScreen()->availableGeometry();
+	dialog.move(
+		screen_rect.left() + (screen_rect.width() - dialog.width()) / 2,
+		screen_rect.top() + (screen_rect.height() - dialog.height()) / 2);
+
+	if(dialog.exec() == QDialog::Accepted && !dialog.selectedModelURL().isEmpty())
+		gui_client.setGuestAvatarModelURL(URLString(QtUtils::toStdString(dialog.selectedModelURL())));
+
+	// Closing the window keeps the safe default Xbot and still releases the pending avatar creation.
+	gui_client.setGuestAvatarSelectionReady();
+}
+
+
 void MainWindow::initialiseUI()
 {
 	ZoneScoped; // Tracy profiler
@@ -2198,6 +2320,12 @@ void MainWindow::initialiseUI()
 	avatar_dock_widget = new QDockWidget(tr("Avatar Settings"), this);
 	avatar_dock_widget->setObjectName("avatarDockWidget");
 	avatar_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+	avatar_dock_widget->setContentsMargins(0, 0, 0, 0);
+	avatar_dock_widget->setStyleSheet(
+		"QDockWidget#avatarDockWidget { background: #34343a; color: #e4e4e7; border: 0px; padding: 0px; margin: 0px; }"
+		"QDockWidget#avatarDockWidget::title { border: 0px; padding: 0px; margin: 0px; }"
+	);
+	installEditorDockTitleBar(avatar_dock_widget);
 
 	avatar_settings_widget = new AvatarSettingsWidget(
 		avatar_dock_widget,
@@ -3491,8 +3619,11 @@ void MainWindow::applyMainChromeThemeStylesheet()
 
 	const QString main_style = QString(
 		"QMainWindow#MainWindow { background: %1; color: %2; }"
-		"QDockWidget { background: %1; color: %2; }"
+		"QMainWindow::separator { background: #34343a; border: none; }"
+		"QDockWidget { background: %1; color: %2; border: none; }"
 		"QDockWidget::title { background: %1; color: %2; border-bottom: 1px solid %3; padding: 3px 6px; text-align: left; }"
+		"QDockWidget#avatarDockWidget { border: none; }"
+		"QDockWidget#avatarDockWidget::title { background: %1; border-top: none; border-bottom: 1px solid #34343a; }"
 		"QWidget#editorDockTitleBar { background: %1; border: none; }"
 		"QLabel#editorDockTitleLabel { background: transparent; color: %2; border: none; }"
 		"QWidget#editorDockTitleBar QToolButton { background: transparent; color: %2; border: none; border-radius: 3px; padding: 1px; }"
@@ -3513,6 +3644,7 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	applyEditorDockTitleBarTheme(ui->editorDockWidget, palette);
 	applyEditorDockTitleBarTheme(ui->environmentDockWidget, palette);
 	applyEditorDockTitleBarTheme(ui->worldSettingsDockWidget, palette);
+	applyEditorDockTitleBarTheme(avatar_dock_widget, palette);
 
 	if(ui->menubar)
 	{
@@ -3663,11 +3795,10 @@ void MainWindow::afterGLInitInitialise()
 	} done_current{ ui->glWidget };
 
 
-	if(settings->value("mainwindow/flyMode", QVariant(false)).toBool())
-	{
-		ui->actionFly_Mode->setChecked(true);
-		gui_client.player_physics.setFlyModeEnabled(true);
-	}
+	// Enter the world standing, even if the previous session ended in flight.
+	// Flight remains an explicit F/menu action for the current session.
+	ui->actionFly_Mode->setChecked(false);
+	gui_client.player_physics.setFlyModeEnabled(false);
 
 	gui_client.cam_controller.setThirdPersonEnabled(settings->value("mainwindow/thirdPersonCamera", /*default val=*/false).toBool());
 	ui->actionThird_Person_Camera->setChecked(settings->value("mainwindow/thirdPersonCamera", /*default val=*/false).toBool());
@@ -12687,6 +12818,7 @@ int main(int argc, char *argv[])
 			MainWindow mw(cyberspace_base_dir_path, appdata_path, parsed_args);
 			logLifecycleTiming("window construction", startup_stage_timer);
 			mw.minidump_sender = minidump_sender;
+			bool guest_avatar_selection_needed = false;
 
 			// If the user didn't explicitly specify a URL (e.g. on the command line), and there is a valid start location URL setting, use it.
 			if(!server_URL_explicitly_specified)
@@ -12708,6 +12840,7 @@ int main(int argc, char *argv[])
 			{
 				URLParseResults parse_results = URLParser::parseURL(server_URL);
 
+				guest_avatar_selection_needed = mw.prepareGuestAvatarSelectionIfNeeded(parse_results.hostname);
 				mw.gui_client.connectToServer(parse_results);
 			}
 			catch(glare::Exception& e)
@@ -12779,6 +12912,9 @@ int main(int argc, char *argv[])
 
 			mw.afterGLInitInitialise();
 			logLifecycleTiming("scene initialisation", startup_stage_timer);
+
+			if(guest_avatar_selection_needed)
+				mw.showGuestAvatarSelection();
 
 
 			app_exec_res = app.exec();

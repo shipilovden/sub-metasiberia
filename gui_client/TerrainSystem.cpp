@@ -401,43 +401,24 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 #if 1
 	if(BitUtils::isBitSet(spec.flags, TerrainSpec::WATER_ENABLED_FLAG))
 	{
-		const float large_water_quad_w = 20000;
-		Reference<OpenGLMeshRenderData> quad_meshdata = MeshPrimitiveBuilding::makeQuadMesh(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,1,0,0), /*res=*/2);
-		for(int y=0; y<16; ++y)
-		for(int x=0; x<16; ++x)
+		// One-metre near-field cells resolve the wave geometry. Four flat outer
+		// strips share its boundary with no overlapping water/depth surfaces.
+		// The vertex shader fades displacement to zero before the near-field edge.
+		Reference<OpenGLMeshRenderData> far_mesh = MeshPrimitiveBuilding::makeQuadMesh(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,1,0,0), 32);
+		for(int i=0; i<5; ++i)
 		{
-			const int offset_x = x - 8;
-			const int offset_y = y - 8;
-			if(!(offset_x == 0 && offset_y == 0))
-			{
-				// Tessellate ground mesh, to avoid texture shimmer due to large quads.
-				GLObjectRef gl_ob = opengl_engine->allocateObject();
-				gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, spec.water_z) * Matrix4f::uniformScaleMatrix(large_water_quad_w) * Matrix4f::translationMatrix(-0.5f + offset_x, -0.5f + offset_y, 0);
-				gl_ob->mesh_data = quad_meshdata;
-
-				gl_ob->materials.resize(1);
-				gl_ob->materials[0].albedo_linear_rgb = Colour3f(1,0,0);
-				gl_ob->materials[0] = water_mat;
-				opengl_engine->addObject(gl_ob);
-				water_gl_obs.push_back(gl_ob);
-			}
+			GLObjectRef ob = opengl_engine->allocateObject();
+			ob->mesh_data = i == 0 ? MeshPrimitiveBuilding::makeQuadMesh(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,1,0,0), 256) : far_mesh;
+			// Shader displacement is not represented in the flat mesh's bounds.
+			if(i == 0) { ob->mesh_data->aabb_os.min_[2] = -3.f; ob->mesh_data->aabb_os.max_[2] = 3.f; }
+			ob->materials.resize(1);
+			ob->materials[0] = water_mat;
+			ob->ob_to_world_matrix = Matrix4f::identity();
+			opengl_engine->addObject(ob);
+			water_gl_obs.push_back(ob);
 		}
-
-		{
-			// Tessellate ground mesh, to avoid texture shimmer due to large quads.
-			GLObjectRef gl_ob = opengl_engine->allocateObject();
-			gl_ob->ob_to_world_matrix = Matrix4f::translationMatrix(0, 0, spec.water_z) * Matrix4f::uniformScaleMatrix(large_water_quad_w) * Matrix4f::translationMatrix(-0.5f, -0.5f, 0);
-			// The central tile is the one normally seen around the player.  It needs
-			// enough vertices for the animated water displacement to move the
-			// shoreline instead of producing one rigid, flat plane.
-			gl_ob->mesh_data = MeshPrimitiveBuilding::makeQuadMesh(*opengl_engine->vert_buf_allocator, Vec4f(1,0,0,0), Vec4f(0,1,0,0), /*res=*/256);
-
-			gl_ob->materials.resize(1);
-			//gl_ob->materials[0].albedo_linear_rgb = Colour3f(0,0,1);
-			gl_ob->materials[0] = water_mat;
-			opengl_engine->addObject(gl_ob);
-			water_gl_obs.push_back(gl_ob);
-		}
+		water_mesh_centre = Vec3d(1.e30);
+		updateWaterMeshCentre(campos);
 
 
 
@@ -1097,6 +1078,8 @@ void TerrainSystem::shutdown()
 	for(size_t i=0; i<water_gl_obs.size(); ++i)
 		opengl_engine->removeObject(water_gl_obs[i]);
 	water_gl_obs.clear();
+	opengl_engine->getCurrentScene()->water_coast_texture = nullptr;
+	water_bathymetry_update_time = -1.0;
 
 	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
 	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
@@ -1114,7 +1097,9 @@ void TerrainSystem::shutdown()
 }
 void TerrainSystem::updateCampos(const Vec3d& campos, glare::StackAllocator& bump_allocator)
 {
+	updateWaterMeshCentre(campos);
 	rebuildAfterSculptIfNeeded();
+	updateWaterBathymetry(campos);
 	updateReferenceMaskDecalTransforms((float)campos.z);
 	updateSubtree(root_node.ptr(), campos);
 
@@ -1329,6 +1314,71 @@ float TerrainSystem::evalTreeMask(float p_x, float p_y) const
 	const float section_nx = nx - Maths::floorToInt(nx);
 	const float section_ny = ny - Maths::floorToInt(ny);
 	return section.treemaskmap->sampleSingleChannelTiled(section_nx, 1.f - section_ny, /*channel=*/0);
+}
+
+
+void TerrainSystem::updateWaterBathymetry(const Vec3d& campos)
+{
+	if(water_gl_obs.empty()) return;
+	const double now = opengl_engine->getCurrentTime();
+	const Vec3d centre(std::floor(campos.x / 8.0) * 8.0, std::floor(campos.y / 8.0) * 8.0, spec.water_z);
+	if(water_bathymetry_update_time >= 0 && now - water_bathymetry_update_time < 0.25) return;
+	if(centre == water_bathymetry_centre && now - water_bathymetry_update_time < 1.0) return;
+	water_bathymetry_centre = centre;
+	water_bathymetry_update_time = now;
+	// Two-metre terrain samples. The first row contains mapping metadata, not
+	// geometry. Sampling is independent of avatars/boats and of the camera view.
+	const int res = 129;
+	const float span = 256.f, step = span / (res - 1);
+	const float ox = (float)centre.x - span * 0.5f, oy = (float)centre.y - span * 0.5f;
+	std::vector<float> heights(res * res);
+	for(int y=0; y<res; ++y) for(int x=0; x<res; ++x)
+		heights[y*res+x] = evalTerrainHeight(ox+x*step, oy+y*step, step);
+	std::vector<float> data(res * (res+1) * 4, 0.f);
+	data[0]=ox; data[1]=oy; data[2]=1.f/span; data[3]=spec.water_z;
+	for(int y=0; y<res; ++y) for(int x=0; x<res; ++x)
+	{
+		const int xl=std::max(0,x-1), xr=std::min(res-1,x+1), yb=std::max(0,y-1), yt=std::min(res-1,y+1);
+		const int offset=((y+1)*res+x)*4;
+		data[offset]=heights[y*res+x];
+		data[offset+1]=(heights[y*res+xr]-heights[y*res+xl])/((xr-xl)*step);
+		data[offset+2]=(heights[yt*res+x]-heights[yb*res+x])/((yt-yb)*step);
+		data[offset+3]=1.f;
+	}
+	auto& texture = opengl_engine->getCurrentScene()->water_coast_texture;
+	const ArrayRef<uint8> bytes((const uint8*)data.data(), data.size()*sizeof(float));
+	if(!texture)
+		texture = new OpenGLTexture(res, res+1, opengl_engine, bytes, OpenGLTextureFormat::Format_RGBA_Linear_Float,
+			OpenGLTexture::Filtering_Nearest, OpenGLTexture::Wrapping_Clamp, false);
+	else
+		texture->loadIntoExistingTexture(0, res, res+1, res*4*sizeof(float), bytes, true);
+}
+
+
+void TerrainSystem::updateWaterMeshCentre(const Vec3d& campos)
+{
+	if(water_gl_obs.size() < 5)
+		return;
+	const Vec3d centre(std::floor(campos.x / 2.0) * 2.0, std::floor(campos.y / 2.0) * 2.0, spec.water_z);
+	if(centre == water_mesh_centre)
+		return;
+	water_mesh_centre = centre;
+	const float near_half = 128.f;
+	const float far_half = 160000.f;
+	// (min x, min y, width, height), a complete, non-overlapping plane.
+	const float rects[5][4] = {
+		{-near_half, -near_half, 2*near_half, 2*near_half},
+		{-far_half, -far_half, 2*far_half, far_half-near_half},
+		{-far_half, near_half, 2*far_half, far_half-near_half},
+		{-far_half, -near_half, far_half-near_half, 2*near_half},
+		{near_half, -near_half, far_half-near_half, 2*near_half}
+	};
+	for(int i=0; i<5; ++i)
+	{
+		water_gl_obs[i]->ob_to_world_matrix = Matrix4f::translationMatrix((float)centre.x + rects[i][0], (float)centre.y + rects[i][1], spec.water_z) *
+			Matrix4f::scaleMatrix(rects[i][2], rects[i][3], 1.f);
+		opengl_engine->updateObjectTransformData(*water_gl_obs[i]);
+	}
 }
 
 
