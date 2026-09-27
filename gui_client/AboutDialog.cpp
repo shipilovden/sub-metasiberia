@@ -82,6 +82,7 @@ AboutDialog::AboutDialog(QWidget* parent, const std::string& appdata_path)
 	const QColor link_colour = LucideIconUtils::themeAwareColour(
 		text_palette.color(QPalette::Link), text_palette, QPalette::WindowText, QPalette::Window);
 	const QString glare_link = externalLink(QStringLiteral("https://www.glaretechnologies.com/"), QStringLiteral("Glare-core"), link_colour);
+	const QString mixamo_link = externalLink(QStringLiteral("https://www.mixamo.com/"), QStringLiteral("https://www.mixamo.com/"), link_colour);
 	const QString ez_tree_link = externalLink(QStringLiteral("https://github.com/dgreenheck/ez-tree"), QStringLiteral("dgreenheck/ez-tree"), link_colour);
 	const QString dan_link = externalLink(QStringLiteral("https://x.com/dangreenheck"), QStringLiteral("https://x.com/dangreenheck"), link_colour);
 	const QString goxel_link = externalLink(QStringLiteral("https://github.com/guillaumechereau/goxel"), QStringLiteral("guillaumechereau/goxel"), link_colour);
@@ -133,6 +134,7 @@ AboutDialog::AboutDialog(QWidget* parent, const std::string& appdata_path)
 
 	QString foundations;
 	foundations += tr("Metasiberia is inspired by and based on %1.").arg(glare_link) + QStringLiteral("<br/><br/>");
+	foundations += tr("The X Bot and Y Bot avatars were taken from %1.").arg(mixamo_link) + QStringLiteral("<br/><br/>");
 	foundations += tr("The Tree Editor is based on the %1 project.").arg(ez_tree_link) + QStringLiteral("<br/>");
 	foundations += tr("Author: <b>%1</b> — %2").arg(QStringLiteral("Dan Greenheck"), dan_link) + QStringLiteral("<br/><br/>");
 	foundations += tr("The Voxel Editor is based on the %1 project.").arg(goxel_link) + QStringLiteral("<br/>");
