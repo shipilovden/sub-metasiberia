@@ -54,6 +54,7 @@ class WebcamWindow;
 class AvatarSettingsWidget;
 class ScientificObjectEditor;
 class CulturalObjectEditor;
+class SpotlightEditor;
 class AnimationEditorPanel;
 class PhotoVideoSettingsPanel;
 class DocumentEditorPanel;
@@ -650,6 +651,7 @@ public:
 	DocumentEditorPanel* document_editor_panel;
 	ScientificObjectEditor* scientific_object_editor;
 	CulturalObjectEditor* cultural_object_editor;
+	SpotlightEditor* spotlight_editor;
 	TreeEditorPanel* tree_editor_panel;
 	VoxelEditorPanel* voxel_editor_panel;
 	GearInventoryPanel* gear_inventory_panel;
@@ -663,6 +665,7 @@ public:
 		ActiveEditor_Object,
 		ActiveEditor_Scientific,
 		ActiveEditor_Cultural,
+		ActiveEditor_Spotlight,
 		ActiveEditor_Tree,
 		ActiveEditor_Voxel,
 		ActiveEditor_GearInventory

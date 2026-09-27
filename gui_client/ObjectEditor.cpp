@@ -843,6 +843,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	particleCollideSurfacesCheckBox(NULL),
 	particleDieOnSurfaceCheckBox(NULL),
 	spotlight_col(0.85f),
+	spotlight_housing_col(0.85f),
 	particle_col(0.82f),
 	particle_end_col(0.42f)
 {
@@ -2884,11 +2885,16 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 		SignalBlocker::setValue(this->luminousFluxDoubleSpinBox, selected_mat->emission_lum_flux_or_lum);
 
 		this->spotlight_col = selected_mat->colour_rgb; // Spotlight light colour is in colour_rgb instead of emission_rgb for historical reasons.
+		if(ob.materials.size() >= 2 && ob.materials[1].nonNull())
+			this->spotlight_housing_col = ob.materials[1]->colour_rgb;
+		else
+			this->spotlight_housing_col = Colour3f(0.85f);
 
 		SignalBlocker::setValue(this->spotlightStartAngleSpinBox, ::radToDegree(ob.type_data.spotlight_data.cone_start_angle));
 		SignalBlocker::setValue(this->spotlightEndAngleSpinBox,   ::radToDegree(ob.type_data.spotlight_data.cone_end_angle));
 
 		updateSpotlightColourButton();
+		updateSpotlightHousingColourButton();
 	}
 
 	// For seat:
@@ -3192,6 +3198,12 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 
 	if(ob_out.object_type == WorldObject::ObjectType_Spotlight) // NOTE: is ob_out.object_type set?
 	{
+		if(ob_out.materials.size() < 2)
+			ob_out.materials.resize(2);
+		if(ob_out.materials[1].isNull())
+			ob_out.materials[1] = new WorldMaterial();
+		ob_out.materials[1]->colour_rgb = this->spotlight_housing_col;
+
 		if(ob_out.materials.size() >= 1)
 		{
 			ob_out.materials[0]->emission_lum_flux_or_lum = (float)this->luminousFluxDoubleSpinBox->value();
@@ -3201,6 +3213,7 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 		}
 
 		updateSpotlightColourButton();
+		updateSpotlightHousingColourButton();
 
 		ob_out.type_data.spotlight_data.cone_start_angle = ::degreeToRad(this->spotlightStartAngleSpinBox->value());
 		ob_out.type_data.spotlight_data.cone_end_angle   = ::degreeToRad(this->spotlightEndAngleSpinBox->value());
@@ -4108,6 +4121,24 @@ void ObjectEditor::updateSpotlightColourButton()
 }
 
 
+void ObjectEditor::updateSpotlightHousingColourButton()
+{
+	const int COLOUR_BUTTON_W = 30;
+	QImage image(COLOUR_BUTTON_W, COLOUR_BUTTON_W, QImage::Format_RGB32);
+	image.fill(QColor(qRgba(
+		(int)(this->spotlight_housing_col.r * 255),
+		(int)(this->spotlight_housing_col.g * 255),
+		(int)(this->spotlight_housing_col.b * 255),
+		255
+	)));
+	QIcon icon;
+	QPixmap pixmap = QPixmap::fromImage(image);
+	icon.addPixmap(pixmap);
+	this->spotlightHousingColourPushButton->setIcon(icon);
+	this->spotlightHousingColourPushButton->setIconSize(QSize(COLOUR_BUTTON_W, COLOUR_BUTTON_W));
+}
+
+
 void ObjectEditor::updateParticleColourButton()
 {
 	const int COLOUR_BUTTON_W = 30;
@@ -4153,6 +4184,32 @@ void ObjectEditor::on_spotlightColourPushButton_clicked(bool checked)
 		this->spotlight_col.b = new_col.blue()  / 255.f;
 
 		updateSpotlightColourButton();
+
+		emit objectChanged();
+	}
+}
+
+
+void ObjectEditor::on_spotlightHousingColourPushButton_clicked(bool checked)
+{
+	const QColor initial_col(qRgba(
+		(int)(spotlight_housing_col.r * 255),
+		(int)(spotlight_housing_col.g * 255),
+		(int)(spotlight_housing_col.b * 255),
+		255
+	));
+
+	QColorDialog d(initial_col, this);
+	const int res = d.exec();
+	if(res == QDialog::Accepted)
+	{
+		const QColor new_col = d.currentColor();
+
+		this->spotlight_housing_col.r = new_col.red()   / 255.f;
+		this->spotlight_housing_col.g = new_col.green() / 255.f;
+		this->spotlight_housing_col.b = new_col.blue()  / 255.f;
+
+		updateSpotlightHousingColourButton();
 
 		emit objectChanged();
 	}
