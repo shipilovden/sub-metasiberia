@@ -855,22 +855,21 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 			// Adjust position of avatar upwards if needed, so that the feet and hips are above 'ground' level.  ('Ground' level is 1.67 m below the camera position)
 			// Fixes issues like meebits being partially below ground in some poses.
 			float lowest_bone_z_os = 0;
-			if(hips_node_i >= 0 && hips_node_i < (int)skinned_gl_ob->anim_node_data.size())
-			{
-				const Vec4f hips_pos_os = (Matrix4f::rotationAroundZAxis(Maths::pi<float>()) * pre_ob_to_world_matrix * skinned_gl_ob->anim_node_data[hips_node_i].last_pre_proc_to_object) * Vec4f(0,0,0,1);
-				lowest_bone_z_os = myMin(lowest_bone_z_os, hips_pos_os[2]);
-			}
-			if(left_foot_node_i >= 0 && left_foot_node_i < (int)skinned_gl_ob->anim_node_data.size())
-			{
-				const Vec4f left_foot_pos_os = (Matrix4f::rotationAroundZAxis(Maths::pi<float>()) * pre_ob_to_world_matrix * skinned_gl_ob->anim_node_data[left_foot_node_i].last_pre_proc_to_object) * Vec4f(0,0,0,1);
-				lowest_bone_z_os = myMin(lowest_bone_z_os, left_foot_pos_os[2]);
-			}
+		if(hips_node_i >= 0 && hips_node_i < (int)skinned_gl_ob->anim_node_data.size())
+		{
+			const Vec4f hips_pos_os = (Matrix4f::rotationAroundZAxis(Maths::pi<float>()) * pre_ob_to_world_matrix * skinned_gl_ob->anim_node_data[hips_node_i].last_pre_proc_to_object) * Vec4f(0,0,0,1);
+			lowest_bone_z_os = myMin(lowest_bone_z_os, hips_pos_os[2]);
+		}
+		if(left_foot_node_i >= 0 && left_foot_node_i < (int)skinned_gl_ob->anim_node_data.size())
+		{
+			const Vec4f left_foot_pos_os = (Matrix4f::rotationAroundZAxis(Maths::pi<float>()) * pre_ob_to_world_matrix * skinned_gl_ob->anim_node_data[left_foot_node_i].last_pre_proc_to_object) * Vec4f(0,0,0,1);
+			lowest_bone_z_os = myMin(lowest_bone_z_os, left_foot_pos_os[2]);
+		}
 
 			const float lowest_node_height_above_ground = lowest_bone_z_os + avatar_eye_height_above_ground - 0.03f;
-
-			float vertical_adjustment = 0;
+		float vertical_adjustment = 0;
 			if(lowest_node_height_above_ground < 0)
-				vertical_adjustment = -lowest_node_height_above_ground;
+			vertical_adjustment = -lowest_node_height_above_ground;
 
 			assert(isFinite(vertical_adjustment));
 			assert(isFinite(avatar_rotation.x));

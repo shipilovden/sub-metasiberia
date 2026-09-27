@@ -794,20 +794,20 @@ void WorldSettingsWidget::waterSurfEnabledToggledSlot(bool enabled)
 
 void WorldSettingsWidget::applyRecommendedWaterSurfSettings()
 {
-	// A calm-water preset: the foam follows the same slow wave motion and stays
-	// narrow enough that enabling the checkbox gives a believable shoreline
-	// without requiring a second round of manual tuning.
-	SignalBlocker::setValue(waterWaveAmplitudeWorldRealControl, 0.45);
-	SignalBlocker::setValue(waterWaveLengthWorldRealControl, 28.0);
-	SignalBlocker::setValue(waterWaveSteepnessWorldRealControl, 0.18);
-	SignalBlocker::setValue(waterWaveSpeedWorldRealControl, 1.0);
-	SignalBlocker::setValue(waterWaveSpreadWorldRealControl, 25.0);
-	SignalBlocker::setValue(waterSecondaryWaveScaleWorldRealControl, 0.18);
-	SignalBlocker::setValue(waterSurfStrengthWorldRealControl, 0.28);
-	SignalBlocker::setValue(waterShorelineWidthWorldRealControl, 0.45);
-	SignalBlocker::setValue(waterFoamScaleWorldRealControl, 1.6);
-	SignalBlocker::setValue(waterFoamSpeedWorldRealControl, 0.15);
-	SignalBlocker::setValue(waterFoamFadeWorldRealControl, 0.75);
+	// One coordinated default for new worlds and explicit surf enable. Loading
+	// a saved world never resets the owner's tuning or chosen wave direction.
+	const WaterSurfaceWorldSettings preset;
+	SignalBlocker::setValue(waterWaveAmplitudeWorldRealControl, preset.wave_amplitude);
+	SignalBlocker::setValue(waterWaveLengthWorldRealControl, preset.wave_length);
+	SignalBlocker::setValue(waterWaveSteepnessWorldRealControl, preset.wave_steepness);
+	SignalBlocker::setValue(waterWaveSpeedWorldRealControl, preset.wave_speed);
+	SignalBlocker::setValue(waterWaveSpreadWorldRealControl, preset.wave_direction_spread_deg);
+	SignalBlocker::setValue(waterSecondaryWaveScaleWorldRealControl, preset.secondary_wave_scale);
+	SignalBlocker::setValue(waterSurfStrengthWorldRealControl, preset.surf_strength);
+	SignalBlocker::setValue(waterShorelineWidthWorldRealControl, preset.shoreline_width);
+	SignalBlocker::setValue(waterFoamScaleWorldRealControl, preset.foam_scale);
+	SignalBlocker::setValue(waterFoamSpeedWorldRealControl, preset.foam_speed);
+	SignalBlocker::setValue(waterFoamFadeWorldRealControl, preset.foam_fade);
 }
 
 

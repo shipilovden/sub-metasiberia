@@ -312,6 +312,11 @@ private:
 	float terrain_scale_factor;
 
 	std::vector<GLObjectRef> water_gl_obs;
+	Vec3d water_mesh_centre;
+	void updateWaterMeshCentre(const Vec3d& campos);
+	void updateWaterBathymetry(const Vec3d& campos);
+	Vec3d water_bathymetry_centre = Vec3d(1.e30);
+	double water_bathymetry_update_time = -1.0;
 	float reference_mask_camera_z;
 
 	glare::AtomicInt num_uncompleted_tasks;

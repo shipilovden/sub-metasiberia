@@ -201,6 +201,9 @@ public:
 
 	Reference<SettingsStore> getSettingsStore() { return settings; }
 	bool isLoggedIn() const { return logged_in_user_id.valid(); }
+	void setGuestAvatarModelURL(const URLString& model_url);
+	void setGuestAvatarSelectionPending(bool pending);
+	void setGuestAvatarSelectionReady();
 	const std::vector<std::string>& getRecentEmojiHistory() const { return recent_emoji_history; }
 
 	void setGLWidgetContextAsCurrent();
@@ -439,6 +442,7 @@ public:
 	void assignLODChunkSubMeshPlaceholderToOb(const LODChunk* chunk, WorldObject* const ob);
 	void updateLODChunkGraphics();
 	void updateAvatarGraphics(double cur_time, double dt, const Vec3d& cam_angles, bool our_move_impulse_zero);
+	void sendInitialAvatarCreateMessage();
 	void setThirdPersonCameraPosition(double dt);
 	void handleMessages(double global_time, double cur_time);
 	bool haveParcelObjectCreatePermissions(const Vec3d& new_ob_pos, bool& in_parcel_out);
@@ -628,6 +632,9 @@ public:
 	void tryResolvePendingCameraPairCreateForObject(WorldObject* created_ob, WorldStateLock& world_state_lock);
 	void tryAutoLinkUnboundCameraScreen(WorldObject* maybe_screen_ob, WorldStateLock& world_state_lock);
 	void updateParticleEmitters(double dt);
+	void updateShoreSurfEffects();
+	double last_surf_effect_time = -1.0;
+	std::map<UID, double> surf_impact_times;
 	void updateSelectedParticleEmitterGizmo();
 	void clearSelectedParticleEmitterGizmo();
 	void triggerSelectedParticleEmitterBurst();
@@ -1161,6 +1168,9 @@ public:
 	std::string logged_in_user_name;
 	uint32 logged_in_user_flags;
 	AvatarSettings logged_in_avatar_settings; // Last avatar settings received from server in a LoggedInMessage.
+	URLString guest_avatar_model_url; // Model selected before connecting in guest mode.
+	bool guest_avatar_selection_pending;
+	bool guest_avatar_selection_ready;
 	struct BotClientInfo
 	{
 		uint64 bot_id = 0;

@@ -70,6 +70,15 @@ AvatarSettingsWidget::AvatarSettingsWidget(
 	pre_ob_to_world_matrix(Matrix4f::identity())
 {
 	setupUi(this);
+	setStyleSheet(
+		"QWidget#AvatarSettingsWidget, QWidget#avatarTab, QWidget#topWidget { background: #34343a; color: #e4e4e7; }"
+		"QTabWidget#tabWidget { background: #34343a; color: #e4e4e7; }"
+		"QTabWidget#tabWidget::pane { background: #34343a; border: 1px solid #34343a; }"
+		"QTabBar { background: #34343a; }"
+		"QTabBar::tab { background: #34343a; color: #e4e4e7; border: 1px solid #34343a; padding: 5px 10px; }"
+		"QTabBar::tab:selected { background: #34343a; color: #ffffff; border-bottom-color: #34343a; }"
+		"QLabel { background: transparent; color: #e4e4e7; }"
+	);
 
 	texture_server = new TextureServer(/*use_canonical_path_keys=*/false);
 	retranslateDynamicUi();
