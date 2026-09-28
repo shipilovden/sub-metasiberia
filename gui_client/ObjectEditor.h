@@ -112,7 +112,9 @@ private slots:
 	void zScaleChanged(double val);
 	void linkScaleCheckBoxToggled(bool val);
 	void on_spotlightColourPushButton_clicked(bool checked);
-	void on_spotlightHousingColourPushButton_clicked(bool checked);
+	void spotlightLuminousFluxChanged(double val);
+	void spotlightMaterialLuminanceChanged(double val);
+	void spotlightMaterialEditorChanged();
 	void onFontChanged(int index);
 	void audioPlaylistItemChanged(QListWidgetItem* item);
 	void audioPlaylistSelectionChanged();
@@ -384,7 +386,6 @@ private:
 	QCheckBox* particleDieOnSurfaceCheckBox;
 
 	Colour3f spotlight_col;
-	Colour3f spotlight_housing_col;
 	Colour3f particle_col;
 	Colour3f particle_end_col;
 };
