@@ -55,6 +55,7 @@
 | [cad-промышленные-объекты-план.md](cad-промышленные-объекты-план.md) | План CAD, инженерных чертежей и промышленных объектов | research specification |
 | [voxel-editor.md](voxel-editor.md) | Как устроены native voxel tools/layers/clipboard/generators и какие shared-format границы остаются? | основной WIP |
 | [inventory-system.md](inventory-system.md) | Как устроены native Gear Inventory, avatar attachment/preview и client/server contract? | active working tree; production не развёрнут |
+| [spotlight-materials.md](spotlight-materials.md) | Как связаны материалы света и корпуса прожектора и как загружаются его текстуры? | актуальный code-grounded |
 | [current-state.md](current-state.md) | Что baseline, partial, WIP, plan или unknown? | основной |
 | [decisions.md](decisions.md) | Почему приняты устойчивые architecture/policy decisions? | основной ADR |
 | [engineering-debt.md](engineering-debt.md) | Какие известные проблемы требуют отдельной задачи? | основной debt register |

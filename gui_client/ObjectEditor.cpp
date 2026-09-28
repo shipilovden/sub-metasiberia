@@ -843,7 +843,6 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	particleCollideSurfacesCheckBox(NULL),
 	particleDieOnSurfaceCheckBox(NULL),
 	spotlight_col(0.85f),
-	spotlight_housing_col(0.85f),
 	particle_col(0.82f),
 	particle_end_col(0.42f)
 {
@@ -898,7 +897,10 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	connect(this->COMOffsetZDoubleSpinBox,	SIGNAL(valueChanged(double)),		this, SIGNAL(objectChanged()));
 
 
+	connect(this->luminousFluxDoubleSpinBox,SIGNAL(valueChanged(double)),		this, SLOT(spotlightLuminousFluxChanged(double)));
 	connect(this->luminousFluxDoubleSpinBox,SIGNAL(valueChanged(double)),		this, SIGNAL(objectChanged()));
+	connect(this->matEditor->luminanceDoubleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(spotlightMaterialLuminanceChanged(double)));
+	connect(this->matEditor, SIGNAL(materialChanged()), this, SLOT(spotlightMaterialEditorChanged()));
 
 	connect(this->show3DControlsCheckBox,	SIGNAL(toggled(bool)),				this, SIGNAL(posAndRot3DControlsToggled()));
 
@@ -2588,9 +2590,10 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 
 	this->selected_mat_index = selected_mat_index_;
 
-	// The spotlight model has multiple materials, we want to edit material 0 though.
+	// The spotlight model stores the light emitter in material 0 and the visible
+	// housing in material 1. The common material editor should edit the housing.
 	if(ob.object_type == WorldObject::ObjectType_Spotlight)
-		this->selected_mat_index = 0;
+		this->selected_mat_index = (ob.materials.size() > 1) ? 1 : 0;
 
 	if(this->editing_audio_player_webview)
 		this->selected_mat_index = remapAudioPlayerMaterialIndexForEditor(this->selected_mat_index, ob.materials.size());
@@ -2733,7 +2736,9 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	}
 	else if(ob.object_type == WorldObject::ObjectType_Spotlight)
 	{
-		this->materialsGroupBox->hide();
+		// A spotlight still uses the common material editor for its light-emitting
+		// material. Keep the dedicated spotlight controls below it as well.
+		this->materialsGroupBox->show();
 		this->lightmapGroupBox->hide();
 		this->modelLabel->hide();
 		this->modelFileSelectWidget->hide();
@@ -2871,6 +2876,10 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 				this->materialComboBox->addItem(translateObjectEditorRuntimeText(ui_language, "Material 3 (Portal Effect)"), (int)i);
 			else if(ob.isPortal() && i == WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX)
 				this->materialComboBox->addItem(translateObjectEditorRuntimeText(ui_language, "Material 4 (Threshold)"), (int)i);
+			else if(ob.object_type == WorldObject::ObjectType_Spotlight && i == 0)
+				this->materialComboBox->addItem(QCoreApplication::translate("ObjectEditor", "Material 0 (Light)"), (int)i);
+			else if(ob.object_type == WorldObject::ObjectType_Spotlight && i == 1)
+				this->materialComboBox->addItem(QCoreApplication::translate("ObjectEditor", "Material 1 (Housing)"), (int)i);
 			else
 				this->materialComboBox->addItem(QtUtils::toQString("Material " + toString(i)), (int)i);
 		}
@@ -2882,19 +2891,20 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	// For spotlight:
 	if(ob.object_type == WorldObject::ObjectType_Spotlight)
 	{
-		SignalBlocker::setValue(this->luminousFluxDoubleSpinBox, selected_mat->emission_lum_flux_or_lum);
-
-		this->spotlight_col = selected_mat->colour_rgb; // Spotlight light colour is in colour_rgb instead of emission_rgb for historical reasons.
-		if(ob.materials.size() >= 2 && ob.materials[1].nonNull())
-			this->spotlight_housing_col = ob.materials[1]->colour_rgb;
+		if(ob.materials.size() >= 1 && ob.materials[0].nonNull())
+		{
+			SignalBlocker::setValue(this->luminousFluxDoubleSpinBox, ob.materials[0]->emission_lum_flux_or_lum);
+			this->spotlight_col = ob.materials[0]->colour_rgb;
+		}
 		else
-			this->spotlight_housing_col = Colour3f(0.85f);
+		{
+			SignalBlocker::setValue(this->luminousFluxDoubleSpinBox, 0.0);
+			this->spotlight_col = Colour3f(0.85f);
+		}
 
 		SignalBlocker::setValue(this->spotlightStartAngleSpinBox, ::radToDegree(ob.type_data.spotlight_data.cone_start_angle));
 		SignalBlocker::setValue(this->spotlightEndAngleSpinBox,   ::radToDegree(ob.type_data.spotlight_data.cone_end_angle));
-
 		updateSpotlightColourButton();
-		updateSpotlightHousingColourButton();
 	}
 
 	// For seat:
@@ -3202,18 +3212,21 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 			ob_out.materials.resize(2);
 		if(ob_out.materials[1].isNull())
 			ob_out.materials[1] = new WorldMaterial();
-		ob_out.materials[1]->colour_rgb = this->spotlight_housing_col;
 
+		if(ob_out.materials[0].isNull())
+			ob_out.materials[0] = new WorldMaterial();
+
+		// Material 0 is the light emitter. Its colour and luminous flux are
+		// controlled by the dedicated spotlight controls; material 1 is edited
+		// by the common MaterialEditor above.
 		if(ob_out.materials.size() >= 1)
 		{
-			ob_out.materials[0]->emission_lum_flux_or_lum = (float)this->luminousFluxDoubleSpinBox->value();
-
 			ob_out.materials[0]->colour_rgb = this->spotlight_col;
 			ob_out.materials[0]->emission_rgb = this->spotlight_col;
+			ob_out.materials[0]->emission_lum_flux_or_lum = (float)this->luminousFluxDoubleSpinBox->value();
 		}
 
 		updateSpotlightColourButton();
-		updateSpotlightHousingColourButton();
 
 		ob_out.type_data.spotlight_data.cone_start_angle = ::degreeToRad(this->spotlightStartAngleSpinBox->value());
 		ob_out.type_data.spotlight_data.cone_end_angle   = ::degreeToRad(this->spotlightEndAngleSpinBox->value());
@@ -4103,42 +4116,6 @@ void ObjectEditor::onFontChanged(int index)
 }
 
 
-void ObjectEditor::updateSpotlightColourButton()
-{
-	const int COLOUR_BUTTON_W = 30;
-	QImage image(COLOUR_BUTTON_W, COLOUR_BUTTON_W, QImage::Format_RGB32);
-	image.fill(QColor(qRgba(
-		(int)(this->spotlight_col.r * 255),
-		(int)(this->spotlight_col.g * 255),
-		(int)(this->spotlight_col.b * 255),
-		255
-	)));
-	QIcon icon;
-	QPixmap pixmap = QPixmap::fromImage(image);
-	icon.addPixmap(pixmap);
-	this->spotlightColourPushButton->setIcon(icon);
-	this->spotlightColourPushButton->setIconSize(QSize(COLOUR_BUTTON_W, COLOUR_BUTTON_W));
-}
-
-
-void ObjectEditor::updateSpotlightHousingColourButton()
-{
-	const int COLOUR_BUTTON_W = 30;
-	QImage image(COLOUR_BUTTON_W, COLOUR_BUTTON_W, QImage::Format_RGB32);
-	image.fill(QColor(qRgba(
-		(int)(this->spotlight_housing_col.r * 255),
-		(int)(this->spotlight_housing_col.g * 255),
-		(int)(this->spotlight_housing_col.b * 255),
-		255
-	)));
-	QIcon icon;
-	QPixmap pixmap = QPixmap::fromImage(image);
-	icon.addPixmap(pixmap);
-	this->spotlightHousingColourPushButton->setIcon(icon);
-	this->spotlightHousingColourPushButton->setIconSize(QSize(COLOUR_BUTTON_W, COLOUR_BUTTON_W));
-}
-
-
 void ObjectEditor::updateParticleColourButton()
 {
 	const int COLOUR_BUTTON_W = 30;
@@ -4161,6 +4138,24 @@ void ObjectEditor::updateParticleColourButton()
 	};
 	set_button_icon(this->particleColourPushButton, this->particle_col);
 	set_button_icon(this->particleEndColourPushButton, this->particle_end_col);
+}
+
+
+void ObjectEditor::updateSpotlightColourButton()
+{
+	const int COLOUR_BUTTON_W = 30;
+	QImage image(COLOUR_BUTTON_W, COLOUR_BUTTON_W, QImage::Format_RGB32);
+	image.fill(QColor(qRgba(
+		(int)(this->spotlight_col.r * 255),
+		(int)(this->spotlight_col.g * 255),
+		(int)(this->spotlight_col.b * 255),
+		255
+	)));
+	QIcon icon;
+	QPixmap pixmap = QPixmap::fromImage(image);
+	icon.addPixmap(pixmap);
+	this->spotlightColourPushButton->setIcon(icon);
+	this->spotlightColourPushButton->setIconSize(QSize(COLOUR_BUTTON_W, COLOUR_BUTTON_W));
 }
 
 
@@ -4190,28 +4185,34 @@ void ObjectEditor::on_spotlightColourPushButton_clicked(bool checked)
 }
 
 
-void ObjectEditor::on_spotlightHousingColourPushButton_clicked(bool checked)
+void ObjectEditor::spotlightLuminousFluxChanged(double val)
 {
-	const QColor initial_col(qRgba(
-		(int)(spotlight_housing_col.r * 255),
-		(int)(spotlight_housing_col.g * 255),
-		(int)(spotlight_housing_col.b * 255),
-		255
-	));
-
-	QColorDialog d(initial_col, this);
-	const int res = d.exec();
-	if(res == QDialog::Accepted)
+	if(this->editing_object_type == WorldObject::ObjectType_Spotlight && this->selected_mat_index == 0)
 	{
-		const QColor new_col = d.currentColor();
+		QSignalBlocker blocker(this->matEditor->luminanceDoubleSpinBox);
+		this->matEditor->luminanceDoubleSpinBox->setValue(val);
+	}
+}
 
-		this->spotlight_housing_col.r = new_col.red()   / 255.f;
-		this->spotlight_housing_col.g = new_col.green() / 255.f;
-		this->spotlight_housing_col.b = new_col.blue()  / 255.f;
 
-		updateSpotlightHousingColourButton();
+void ObjectEditor::spotlightMaterialLuminanceChanged(double val)
+{
+	if(this->editing_object_type == WorldObject::ObjectType_Spotlight && this->selected_mat_index == 0)
+	{
+		QSignalBlocker blocker(this->luminousFluxDoubleSpinBox);
+		this->luminousFluxDoubleSpinBox->setValue(val);
+	}
+}
 
-		emit objectChanged();
+
+void ObjectEditor::spotlightMaterialEditorChanged()
+{
+	if(this->editing_object_type == WorldObject::ObjectType_Spotlight && this->selected_mat_index == 0)
+	{
+		WorldMaterial material;
+		this->matEditor->toMaterial(material);
+		this->spotlight_col = material.colour_rgb;
+		updateSpotlightColourButton();
 	}
 }
 

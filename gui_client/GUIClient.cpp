@@ -3969,7 +3969,11 @@ static void doAssignLoadedOpenGLTexturesToMats(WorldObject* ob, bool use_basis, 
 	for(size_t z=0; z<ob->opengl_engine_ob->materials.size(); ++z)
 	{
 		OpenGLMaterial& opengl_mat = ob->opengl_engine_ob->materials[z];
-		const WorldMaterial* world_mat = (z < ob->materials.size()) ? ob->materials[z].ptr() : NULL;
+		// Spotlight meshes use the opposite material order: the visible housing
+		// is OpenGL material 0 but WorldObject material 1, while the emitter is
+		// OpenGL material 1 but WorldObject material 0.
+		const size_t world_material_index = ob->object_type == WorldObject::ObjectType_Spotlight ? (z == 0 ? 1 : 0) : z;
+		const WorldMaterial* world_mat = (world_material_index < ob->materials.size()) ? ob->materials[world_material_index].ptr() : NULL;
 
 		bool mat_changed = false;
 
@@ -11981,7 +11985,10 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 								opengl_engine->objectMaterialsUpdated(*opengl_ob);
 
 								if(ob->object_type == WorldObject::ObjectType_Spotlight)
+								{
 									updateSpotlightGraphicsEngineData(opengl_ob->ob_to_world_matrix, ob);
+									assignLoadedOpenGLTexturesToMats(ob);
+								}
 
 								//updateInstancedCopiesOfObject(ob);
 							}
@@ -19718,6 +19725,7 @@ void GUIClient::objectEdited()
 					else if(this->selected_ob->object_type == WorldObject::ObjectType_Spotlight)
 					{
 						updateSpotlightGraphicsEngineData(new_ob_to_world_matrix, this->selected_ob.ptr());
+						assignLoadedOpenGLTexturesToMats(this->selected_ob.ptr());
 					}
 
 					// Update transform of OpenGL object

@@ -4,6 +4,13 @@
 
 Формат записи: дата/фаза -> path/группа -> тип -> изменение -> evidence/причина.
 
+## 2026-09-28 — Spotlight material mapping
+
+- Добавлен [spotlight-materials.md](spotlight-materials.md) как canonical code-grounded описание двух материалов прожектора, обратного `WorldObject -> OpenGL` mapping и texture-update pipeline.
+- Зафиксировано правило UI: `materials[1]` редактируется стандартным `MaterialEditor` как корпус, а `materials[0]` хранит цвет света и luminous flux в группе прожектора.
+- Документ добавлен в [documentation-index.md](documentation-index.md), чтобы будущие изменения material/texture pipeline не повторяли ошибку с текстурой корпуса.
+- Evidence: source review `ObjectEditor.cpp`, `GUIClient.cpp`, `ObjectEditor.ui`; Qt `RelWithDebInfo` build успешен. SDL/Emscripten build не подтверждён из-за локального отсутствующего compiler/cache toolchain.
+
 ## 2026-08-09 — Codex orchestration and instruction scope
 
 - Верхний `C:\programming\AGENTS.md` сокращён до универсальных правил workspace; Metasiberia-specific архитектура, production и build details больше не распространяются на остальные проекты.
