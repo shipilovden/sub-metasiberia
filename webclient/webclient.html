@@ -17,6 +17,13 @@
 			top: 0;
 			left: 0;
 		}
+		#webclient-startup-cover {
+			position: fixed;
+			inset: 0;
+			z-index: 9000;
+			background: rgb(5, 24, 45);
+			pointer-events: none;
+		}
 		body {
 			margin: 0;
 			padding: 0;
@@ -115,6 +122,97 @@
 			display: flex;
 		}
 
+		#guest-avatar-selection {
+			display: none;
+			position: fixed;
+			inset: 0;
+			z-index: 10000;
+			align-items: center;
+			justify-content: center;
+			padding: 20px;
+			box-sizing: border-box;
+			background: rgba(0, 0, 0, 0.42);
+			font-family: Arial, sans-serif;
+		}
+
+		#guest-avatar-selection-panel {
+			width: min(560px, calc(100vw - 32px));
+			box-sizing: border-box;
+			padding: 18px 22px 16px;
+			border: 1px solid #615c67;
+			border-radius: 7px;
+			background: #2d2a30;
+			box-shadow: 0 12px 35px rgba(0, 0, 0, 0.45);
+			color: #f2f0f4;
+			text-align: center;
+		}
+
+		#guest-avatar-selection-title {
+			margin: 0 0 16px;
+			font-size: 20px;
+			font-weight: 700;
+		}
+
+		.guest-avatar-selection-cards {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 14px;
+		}
+
+		.guest-avatar-selection-card {
+			min-width: 0;
+			padding: 10px;
+			border: 1px solid #514d56;
+			border-radius: 6px;
+			background: #252328;
+		}
+
+		.guest-avatar-selection-card img {
+			display: block;
+			width: 100%;
+			height: 182px;
+			object-fit: contain;
+			background: #a7a7a7;
+			border-radius: 3px;
+		}
+
+		.guest-avatar-selection-card h3 {
+			margin: 8px 0 8px;
+			font-size: 16px;
+		}
+
+		.guest-avatar-selection-card button {
+			width: 100%;
+			min-height: 30px;
+			border: 1px solid #736f79;
+			border-radius: 4px;
+			background: #3b373f;
+			color: #f7f5f8;
+			cursor: pointer;
+		}
+
+		.guest-avatar-selection-card button:hover,
+		.guest-avatar-selection-card button:focus {
+			border-color: #d7b85f;
+			background: #514b44;
+			outline: none;
+		}
+
+		#guest-avatar-selection-note {
+			margin: 14px 0 0;
+			color: #b9b4bd;
+			font-size: 12px;
+		}
+
+		@media (max-width: 520px) {
+			.guest-avatar-selection-cards {
+				grid-template-columns: 1fr;
+			}
+			.guest-avatar-selection-card img {
+				height: 150px;
+			}
+		}
+
 		</style>
 	</head>
 	<body>
@@ -126,6 +224,7 @@
 		</div>
 
 		<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+		<div id="webclient-startup-cover" aria-hidden="true"></div>
 
 		<div class="avatar-settings" id="avatar-settings">
 			<div id="avatar-settings-close-button">&times;</div>
@@ -138,6 +237,25 @@
 				<button type="submit">Submit</button>
 			</form>
 
+		</div>
+
+		<div id="guest-avatar-selection" role="dialog" aria-modal="true" aria-labelledby="guest-avatar-selection-title">
+			<div id="guest-avatar-selection-panel">
+				<h2 id="guest-avatar-selection-title">Выбор аватара</h2>
+				<div class="guest-avatar-selection-cards">
+					<div class="guest-avatar-selection-card">
+						<img src="/webclient/data/resources/xbot.png" alt="Xbot">
+						<h3>Xbot</h3>
+						<button type="button" data-guest-avatar-choice="xbot">Выбрать</button>
+					</div>
+					<div class="guest-avatar-selection-card">
+						<img src="/webclient/data/resources/ybot.png" alt="Ybot">
+						<h3>Ybot</h3>
+						<button type="button" data-guest-avatar-choice="ybot">Выбрать</button>
+					</div>
+				</div>
+				<p id="guest-avatar-selection-note">Выбор применяется сразу при входе в мир.</p>
+			</div>
 		</div>
 
 	<script type='text/javascript'>
@@ -512,6 +630,37 @@
 			avatar_settings_div.style.visibility = "hidden";
 			avatar_settings_div.style.zIndex = -2; 
 		}
+
+		function showGuestAvatarSelectionWidget() {
+			const selection = document.getElementById('guest-avatar-selection');
+			if (selection)
+				selection.style.display = 'flex';
+		}
+
+		function hideGuestAvatarSelectionWidget() {
+			const selection = document.getElementById('guest-avatar-selection');
+			if (selection)
+				selection.style.display = 'none';
+		}
+
+		function removeMetasiberiaStartupCover() {
+			const cover = document.getElementById('webclient-startup-cover');
+			if (cover)
+				cover.remove();
+		}
+
+		// Failsafe: a permanently covered client is worse than showing the
+		// normal scene if the native frame callback is delayed.
+		window.setTimeout(removeMetasiberiaStartupCover, 5000);
+
+		document.querySelectorAll('[data-guest-avatar-choice]').forEach(function(button) {
+			button.addEventListener('click', function() {
+				const choice = button.getAttribute('data-guest-avatar-choice');
+				if (typeof Module !== 'undefined' && Module.ccall)
+					Module.ccall('metasiberiaGuestAvatarSelected', null, ['string'], [choice]);
+				hideGuestAvatarSelectionWidget();
+			});
+		});
 
 		const avatar_settings_form = document.getElementById('avatar-settings-form');
 

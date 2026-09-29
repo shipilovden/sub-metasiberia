@@ -297,6 +297,24 @@ void renderSignUpPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 		page_out += "<input id=\"new-password\"	autocomplete=\"new-password\"	required=\"required\"	type=\"password\"	name=\"password\">"; // See https://web.dev/sign-in-form-best-practices/#new-password
 		page_out += "</div>";
 
+		page_out += "<div class=\"msb-signup-avatars\" role=\"group\" aria-labelledby=\"msb-signup-avatar-heading\">";
+		page_out += "<div id=\"msb-signup-avatar-heading\" class=\"msb-signup-avatar-heading\" data-msb-en=\"Choose your avatar\" data-msb-ru=\"Выберите аватар\" data-no-translate=\"1\">Choose your avatar</div>";
+		page_out += "<div class=\"msb-signup-avatar-card\">";
+		page_out += "<img class=\"msb-signup-avatar-image\" src=\"/files/xbot.png\" alt=\"Xbot avatar\">";
+		page_out += "<label class=\"msb-signup-avatar-label\" for=\"msb-signup-avatar-xbot\">";
+		page_out += "<input type=\"checkbox\" id=\"msb-signup-avatar-xbot\" class=\"msb-signup-avatar-checkbox\" name=\"avatar_xbot\" value=\"1\">";
+		page_out += "<span data-msb-en=\"Xbot\" data-msb-ru=\"Xbot\" data-no-translate=\"1\">Xbot</span>";
+		page_out += "</label>";
+		page_out += "</div>";
+		page_out += "<div class=\"msb-signup-avatar-card\">";
+		page_out += "<img class=\"msb-signup-avatar-image\" src=\"/files/ybot.png\" alt=\"Ybot avatar\">";
+		page_out += "<label class=\"msb-signup-avatar-label\" for=\"msb-signup-avatar-ybot\">";
+		page_out += "<input type=\"checkbox\" id=\"msb-signup-avatar-ybot\" class=\"msb-signup-avatar-checkbox\" name=\"avatar_ybot\" value=\"1\">";
+		page_out += "<span data-msb-en=\"Ybot\" data-msb-ru=\"Ybot\" data-no-translate=\"1\">Ybot</span>";
+		page_out += "</label>";
+		page_out += "</div>";
+		page_out += "</div>";
+
 		page_out += "<div class=\"msb-signup-consents\" role=\"group\">";
 		page_out += "<div class=\"msb-signup-consent-row\">";
 		page_out += "<input type=\"checkbox\" id=\"msb-signup-terms-accepted\" class=\"msb-signup-consent-checkbox\" name=\"terms_accepted\" value=\"1\" required=\"required\">";
@@ -314,7 +332,7 @@ void renderSignUpPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 		page_out += "</div>";
 		page_out += "</div>";
 
-		page_out += "<input type=\"submit\" value=\"Sign Up\">";
+		page_out += "<input type=\"submit\" class=\"msb-disabled-submit\" value=\"Sign Up\" disabled=\"disabled\">";
 		page_out += "</form>";
 	}
 
@@ -352,6 +370,8 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 		const web::UnsafeString username		= request_info.getPostField("username");
 		const web::UnsafeString email			= request_info.getPostField("email");
 		const web::UnsafeString password		= request_info.getPostField("password");
+		const web::UnsafeString avatar_xbot	= request_info.getPostField("avatar_xbot");
+		const web::UnsafeString avatar_ybot	= request_info.getPostField("avatar_ybot");
 		const web::UnsafeString terms_accepted	= request_info.getPostField("terms_accepted");
 		const web::UnsafeString privacy_accepted	= request_info.getPostField("privacy_accepted");
 		const web::UnsafeString raw_return_URL	= request_info.getPostField("return");
@@ -365,10 +385,19 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 			throw InvalidCredentialsExcep("Username is too short, must have at least 3 characters");
 		if(password.str().size() < 6)
 			throw InvalidCredentialsExcep("Password is too short, must have at least 6 characters");
+		const bool xbot_selected = termsAccepted(avatar_xbot);
+		const bool ybot_selected = termsAccepted(avatar_ybot);
+		if(xbot_selected == ybot_selected)
+			throw InvalidCredentialsExcep("Please choose exactly one avatar.");
 		if(!termsAccepted(terms_accepted))
 			throw InvalidCredentialsExcep("You must confirm that you have read and accepted the Terms of Use.");
 		if(!termsAccepted(privacy_accepted))
 			throw InvalidCredentialsExcep("You must consent to the processing of your personal data in accordance with the Privacy Policy.");
+
+		const std::string avatar_choice = xbot_selected ? SignupAvatarChoice::XBOT : SignupAvatarChoice::YBOT;
+		URLString avatar_model_url;
+		if(!SignupAvatarChoice::modelURLForChoice(avatar_choice, avatar_model_url))
+			throw InvalidCredentialsExcep("Invalid avatar selection.");
 
 		std::string return_URL = raw_return_URL.str();
 		if(return_URL.empty())
@@ -396,6 +425,7 @@ void handleSignUpPost(ServerAllWorldsState& world_state, const web::RequestInfo&
 			new_user->created_time = TimeStamp::currentTime();
 			new_user->name = username.str();
 			new_user->email_address = email.str();
+			new_user->avatar_settings.model_url = avatar_model_url;
 
 			// We need a random salt for the user.
 			uint8 random_bytes[32];

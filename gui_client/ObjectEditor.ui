@@ -1101,6 +1101,16 @@
         </property>
        </widget>
       </item>
+       <item row="4" column="1">
+        <widget class="QCheckBox" name="spotlightLightEnabledCheckBox">
+         <property name="text">
+          <string>Light enabled</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
      </layout>
     </widget>
    </item>

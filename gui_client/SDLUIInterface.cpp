@@ -39,6 +39,24 @@ Copyright Glare Technologies Limited 2022 -
 
 #if EMSCRIPTEN
 
+static SDLUIInterface* active_sdl_ui_interface = nullptr;
+
+extern "C" EMSCRIPTEN_KEEPALIVE void metasiberiaGuestAvatarSelected(const char* avatar_choice)
+{
+	if(active_sdl_ui_interface && avatar_choice)
+		active_sdl_ui_interface->guestAvatarSelected(avatar_choice);
+}
+
+EM_JS(void, showGuestAvatarSelectionOverlay, (), {
+	if (typeof window.showGuestAvatarSelectionWidget === "function")
+		window.showGuestAvatarSelectionWidget();
+});
+
+EM_JS(void, hideGuestAvatarSelectionOverlay, (), {
+	if (typeof window.hideGuestAvatarSelectionWidget === "function")
+		window.hideGuestAvatarSelectionWidget();
+});
+
 // Define openURLInNewBrowserTab(const char* URL) function
 EM_JS(void, openURLInNewBrowserTab, (const char* URL), {
 	window.open(UTF8ToString(URL), "mozillaTab"); // See https://developer.mozilla.org/en-US/docs/Web/API/Window/open
@@ -174,6 +192,9 @@ void SDLUIInterface::setTextAsNotLoggedIn()
 void SDLUIInterface::setTextAsLoggedIn(const std::string& username)
 {
 	logged_in_username = username;
+#if EMSCRIPTEN
+	hideGuestAvatarSelection();
+#endif
 }
 
 void SDLUIInterface::loginButtonClicked()
@@ -469,6 +490,31 @@ void SDLUIInterface::showAvatarSettings() // Show avatar settings dialog.
 	avatar_settings_dialog_visible = true;
 #endif
 }
+
+#if EMSCRIPTEN
+void SDLUIInterface::showGuestAvatarSelection()
+{
+	active_sdl_ui_interface = this;
+	showGuestAvatarSelectionOverlay();
+}
+
+
+void SDLUIInterface::hideGuestAvatarSelection()
+{
+	hideGuestAvatarSelectionOverlay();
+}
+
+
+void SDLUIInterface::guestAvatarSelected(const std::string& avatar_choice)
+{
+	if(avatar_choice == "ybot")
+		gui_client->setGuestAvatarModelURL(URLString("ybot.bmesh"));
+	else if(avatar_choice != "xbot")
+		return;
+
+	gui_client->setGuestAvatarSelectionReady();
+}
+#endif
 
 void SDLUIInterface::hideAvatarSettings()
 {

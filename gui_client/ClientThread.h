@@ -207,6 +207,13 @@ public:
 };
 
 
+class GuestModeMessage : public ThreadMessage
+{
+public:
+	GuestModeMessage() : ThreadMessage(Msg_GuestModeMessage) {}
+};
+
+
 class UserGearListMessage : public ThreadMessage
 {
 public:

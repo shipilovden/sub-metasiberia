@@ -52,6 +52,32 @@ struct AvatarSettings
 };
 
 
+// The signup avatar choices are deliberately kept separate from arbitrary
+// avatar model URLs.  Both the web form and the native client use these
+// values, while the server maps them to the built-in model URLs below.
+namespace SignupAvatarChoice
+{
+	static const char* const XBOT = "xbot";
+	static const char* const YBOT = "ybot";
+
+	inline bool modelURLForChoice(const std::string& choice, URLString& model_url_out)
+	{
+		if(choice == XBOT)
+		{
+			// Empty is the established wire representation of the built-in Xbot.
+			model_url_out.clear();
+			return true;
+		}
+		if(choice == YBOT)
+		{
+			model_url_out = "ybot.bmesh";
+			return true;
+		}
+		return false;
+	}
+}
+
+
 /*=====================================================================
 Avatar
 -------------------

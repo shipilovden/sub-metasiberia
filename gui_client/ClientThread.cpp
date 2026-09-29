@@ -1678,6 +1678,11 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			out_msg_queue->enqueue(new LoggedOutMessage());
 			break;
 		}
+	case Protocol::GuestModeMessageID:
+		{
+			out_msg_queue->enqueue(new GuestModeMessage());
+			break;
+		}
 	case Protocol::UserGearList:
 		{
 			Reference<UserGearListMessage> msg = new UserGearListMessage();

@@ -43,6 +43,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../opengl/PBOAsyncTextureUploader.h"
 #include "../opengl/AsyncGeometryUploader.h"
 #include <opengl/TransformGizmo.h>
+#include <opengl/ui/GLUIImage.h>
 #include "../shared/WorldObject.h"
 #include "../shared/GearItem.h"
 #include "../shared/GaussianSplatData.h"
@@ -308,6 +309,11 @@ public:
 	void updateGroundPlane();
 	void sendLightmapNeededFlagsSlot();
 	void useActionTriggered(bool use_mouse_cursor); // if use_mouse_cursor is false, use crosshair as cursor instead.
+	bool isImageObjectForFullscreen(const WorldObject& ob) const;
+	bool tryOpenImageViewerAtMouseCursor();
+	void openImageViewer(WorldObject& ob);
+	void closeImageViewer();
+	void updateImageViewerLayout();
 	void loginButtonClicked();
 	void signupButtonClicked();
 	void loggedInButtonClicked();
@@ -1032,6 +1038,10 @@ public:
 	std::vector<std::string> recent_emoji_history;
 
 	GLUIRef gl_ui;
+	GLUIImageRef image_viewer_background;
+	GLUIImageRef image_viewer_image;
+	UID image_viewer_object_uid;
+	float image_viewer_aspect;
 	GestureUI gesture_ui; // Draws gesture buttons, also selfie and enable mic button
 	ObInfoUI ob_info_ui; // For object info and hyperlinks etc.
 	MiscInfoUI misc_info_ui; // For showing messages from the server, vehicle speed etc.

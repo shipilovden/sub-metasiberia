@@ -211,6 +211,11 @@ EM_JS(char*, getUserAgentString, (), {
 	return stringToNewUTF8(window.navigator.userAgent);
 });
 
+EM_JS(void, requestMetasiberiaStartupCoverRemoval, (), {
+	if(typeof window.removeMetasiberiaStartupCover === "function")
+		window.removeMetasiberiaStartupCover();
+});
+
 // High-DPI desktop browsers commonly report devicePixelRatio > 1 (for example,
 // Windows display scaling and Retina displays).  That must not select the
 // mobile low-memory renderer: it skips the final imaging pass, so linear
@@ -574,11 +579,21 @@ int main(int argc, char** argv)
 		int primary_H = 1100;
 
 #if EMSCRIPTEN
-		// This seems to return the canvas width and height before it is properly sized to the full window width (e.g. is 300x150px), so don't bother calling it.
-		// emscripten_get_canvas_element_size("#canvas", &primary_W, &primary_H);
-		
-		primary_W = 256; // Use small resolution in case these values are used, in which case we don't want to allocate a massive buffer that then gets thrown away.
-		primary_H = 256;
+		double canvas_css_W = 0.0;
+		double canvas_css_H = 0.0;
+		if(emscripten_get_element_css_size("canvas", &canvas_css_W, &canvas_css_H) == EMSCRIPTEN_RESULT_SUCCESS && canvas_css_W > 0.0 && canvas_css_H > 0.0)
+		{
+			// The HTML canvas is already stretched to the browser viewport.  Use
+			// that size before creating SDL/WebGL so the default framebuffer and
+			// the engine's first offscreen buffers start at the same resolution.
+			primary_W = myMax(1, (int)(canvas_css_W + 0.5));
+			primary_H = myMax(1, (int)(canvas_css_H + 0.5));
+		}
+		else
+		{
+			primary_W = 256;
+			primary_H = 256;
+		}
 #endif
 
 #if EMSCRIPTEN
@@ -856,6 +871,13 @@ int main(int argc, char** argv)
 		}
 
 #endif
+#if EMSCRIPTEN
+		// The server determines whether this WebSocket is authenticated from its
+		// session cookie. Keep anonymous avatar creation blocked until the server
+		// explicitly reports guest mode.
+		gui_client->setGuestAvatarSelectionPending(true);
+#endif
+
 		gui_client->connectToServer(url_parse_results);
 
 		gui_client->postConnectInitialise();
@@ -905,10 +927,6 @@ int main(int argc, char** argv)
 		// A high device_pixel_ratio indicates the UI is going to be very small unless it is scaled up a bit.
 		if(device_pixel_ratio > 2.f)
 			gui_client->gl_ui->setUIScale((float)device_pixel_ratio / 2.f);
-
-
-
-
 
 #if EMSCRIPTEN
 		// Stop SDL from accepting Ctrl+V events, so that paste events will be properly triggered.
@@ -1124,6 +1142,10 @@ static bool doing_cam_rotate_mouse_drag = false; // Is the mouse pointer hidden,
 static bool have_received_input = false;
 static bool tried_initialise_audio_engine = false;
 
+#if EMSCRIPTEN
+static int startup_frames_drawn = 0;
+#endif
+
 
 static void doOneMainLoopIter()
 {
@@ -1144,7 +1166,6 @@ static void doOneMainLoopIter()
 
 	if(SDL_GL_MakeCurrent(win, gl_context) != 0)
 		conPrint("SDL_GL_MakeCurrent failed.");
-
 
 #if 0 // EMSCRIPTEN // Print when memory size increases
 	const size_t total_memory = (size_t)EM_ASM_PTR(return HEAP8.length);
@@ -1572,6 +1593,19 @@ static void doOneMainLoopIter()
 	
 	// Display
 	SDL_GL_SwapWindow(win);
+
+#if EMSCRIPTEN
+	// Keep the browser from displaying transient WebGL contents while the
+	// canvas, SDL drawable and offscreen render targets settle on their final
+	// size.  The cover is removed only after several complete swapped frames.
+	if(startup_frames_drawn < 10)
+	{
+		startup_frames_drawn++;
+		if(startup_frames_drawn == 10)
+			requestMetasiberiaStartupCoverRemoval();
+	}
+#endif
+
 	FrameMark; // Tracy profiler
 
 	last_updateGL_time = drawing_timer.elapsed();

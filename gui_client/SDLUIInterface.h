@@ -86,6 +86,11 @@ public:
 	virtual void startLightmapFlagTimer() override;
 
 	virtual void showAvatarSettings() override; // Show avatar settings dialog.
+#if defined(EMSCRIPTEN)
+	void showGuestAvatarSelection() override;
+	void hideGuestAvatarSelection() override;
+	void guestAvatarSelected(const std::string& avatar_choice);
+#endif
 	virtual bool isAvatarSettingsDialogVisible() const override { return avatar_settings_dialog_visible; }
 	void hideAvatarSettings();
 	bool handleAvatarSettingsDialogMousePress(const MouseEvent& e); // Check if click is outside dialog

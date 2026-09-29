@@ -58,7 +58,7 @@ namespace Protocol
 
 const uint32 CyberspaceHello = 1357924680;
 
-const uint32 CyberspaceProtocolVersion = 62;
+const uint32 CyberspaceProtocolVersion = 63;
 
 const uint32 ClientProtocolOK		= 10000;
 const uint32 ClientProtocolTooOld	= 10001;
@@ -206,10 +206,13 @@ const uint32 ServerAdminMessageID	= 7010; // Allows server to send a message lik
 
 const uint32 LogInMessage			= 8000;
 const uint32 LogOutMessage			= 8001;
+// SignUpMessage payload: username, email, password, avatar choice string,
+// terms-accepted uint32, privacy-accepted uint32.
 const uint32 SignUpMessage			= 8002;
 const uint32 LoggedInMessageID		= 8003;
 const uint32 LoggedOutMessageID		= 8004;
 const uint32 SignedUpMessageID		= 8005;
+const uint32 GuestModeMessageID		= 8006;
 
 const uint32 RequestPasswordReset	= 8010; // Client wants to reset the password for a given email address.  Obsolete, does nothing.  Use website instead.
 const uint32 ChangePasswordWithResetToken = 8011; // Client is sending the password reset token, email address, and the new password.  Obsolete, does nothing.  Use website instead.
