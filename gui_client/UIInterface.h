@@ -51,6 +51,8 @@ public:
 	// UserDetailsWidget:
 	virtual void setTextAsNotLoggedIn() = 0;
 	virtual void setTextAsLoggedIn(const std::string& username) = 0;
+	virtual void showGuestAvatarSelection() {}
+	virtual void hideGuestAvatarSelection() {}
 
 	// Login/signup buttons
 	virtual void loginButtonClicked() = 0;

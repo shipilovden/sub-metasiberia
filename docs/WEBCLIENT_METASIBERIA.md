@@ -19,7 +19,19 @@
   - `/data/resources/buttons/...`
 - Это гарантирует, что webclient использует те же HUD-иконки, что и desktop fullscreen-клиент.
 
-## 3. Build-пайплайн для webclient
+## 3. Выбор аватара для анонимного гостя
+
+- При анонимном входе WebClient показывает поверх загружающегося мира обязательное
+  окно выбора Xbot/Ybot по центру экрана.
+- Выбранный вариант передаётся в общий `GUIClient`; создание гостевого аватара
+  откладывается до выбора и затем использует соответствующую модель.
+- Изображения выбора берутся из `resources/xbot.png` и `resources/ybot.png`.
+  После запуска `scripts/make_emscripten_preload_data.rb` они должны присутствовать
+  в bundle по пути `data/resources/`.
+- Изменение требует пересборки Emscripten `gui_client` и обновления WebClient
+  artifacts; одного изменения HTML недостаточно.
+
+## 4. Build-пайплайн для webclient
 
 1. Сгенерировать preload-данные:
    - `ruby scripts/make_emscripten_preload_data.rb C:\programming\substrata`
@@ -32,7 +44,7 @@
   - `$CYBERSPACE_OUTPUT/data/resources/buttons`
   - `$CYBERSPACE_OUTPUT/test_builds/data/resources/buttons`
 
-## 4. Исторический деплой на Metasiberia v2
+## 5. Исторический деплой на Metasiberia v2
 
 Ниже сохранён старый workflow для аудита истории. Он не является инструкцией для нового основного сервера.
 
@@ -51,7 +63,7 @@
 - `-SkipWebClientHtml`
 - `-SkipWebClientButtons`
 
-## 5. Android из webclient: что реально
+## 6. Android из webclient: что реально
 
 Да, Android-приложение можно делать из webclient, есть 2 рабочих пути:
 
@@ -65,7 +77,7 @@
 - Плюсы: меньше native-кода
 - Минусы: требуется корректная PWA-конфигурация и Digital Asset Links
 
-## 6. Минимальный чеклист readiness для Android
+## 7. Минимальный чеклист readiness для Android
 
 - Стабильный URL webclient: `https://vr.metasiberia.com/webclient`
 - Корректные touch-контролы и mobile layout
@@ -73,12 +85,12 @@
 - Политика разрешений (микрофон/камера) для мобильного браузера/WebView
 - Иконки и branding синхронизированы с desktop HUD
 
-## 7. Что важно помнить в проде Linux
+## 8. Что важно помнить в проде Linux
 
 - На Linux inotify watcher не всегда ловит изменения в глубине поддиректорий.
 - После деплоя webclient-поддиректорий нужно сделать "ping" в корне webclient dir (скрипт деплоя это делает), чтобы сервер перезагрузил web-данные.
 
-## 8. 2026-02-20 Emergency Fix (Gesture Manager and Webcam Icon)
+## 9. 2026-02-20 Emergency Fix (Gesture Manager and Webcam Icon)
 
 Problem seen in production:
 - Webclient loaded, but no `+` button, no gesture manager panel, and no webcam button.
@@ -121,12 +133,12 @@ Browser-side note:
 - After deploy, use `Ctrl+F5`.
 - If still stale, clear site data for `vr.metasiberia.com` and reload.
 
-## 9. 2026-02-20 Gesture Manager Icon
+## 10. 2026-02-20 Gesture Manager Icon
 
 - `Manage gestures` button icon in webclient is set to `plus.png` (same visual icon as add gesture action).
 - Source: `gui_client/GestureUI.cpp` (`edit_gestures_button`).
 
-## 10. 2026-03-17 Floating Chat Rollout
+## 11. 2026-03-17 Floating Chat Rollout
 
 - Webclient uses the same shared `GUIClient` path as the desktop client, so floating emoji and floating text previews above avatars ship to web through the normal Emscripten `gui_client` rebuild.
 - During the rebuild, two web-only blockers were fixed:

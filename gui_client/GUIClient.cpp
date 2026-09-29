@@ -175,6 +175,10 @@ static uint64 voxelEditorRevisionForObject(const WorldObject& object)
 	}
 	return revision;
 }
+
+
+static bool useRussianClientUI(GUIClient* gui_client);
+static std::string imageViewerPrompt(GUIClient* gui_client, const std::string& use_action_button);
 #include "superluminal/PerformanceAPI.h"
 #if BUGSPLAT_SUPPORT
 #include <BugSplat.h>
@@ -2410,6 +2414,7 @@ void GUIClient::shutdown()
 		return;
 	shutdown_started = true;
 	Timer shutdown_timer;
+	closeImageViewer();
 	// Destroy/close all OpenGL stuff, because once glWidget is destroyed, the OpenGL context is destroyed, so we can't free stuff properly.
 	hideTerrainSculptBrushOverlay();
 	terrain_sculpt_brush_gl_ob = NULL;
@@ -3364,6 +3369,9 @@ static void removeAnimatedTextureUse(GLObject& ob, AnimatedTextureManager& anima
 
 void GUIClient::removeAndDeleteGLObjectsForOb(WorldObject& ob)
 {
+	if(image_viewer_object_uid == ob.uid)
+		closeImageViewer();
+
 	gaussian_splat_render_objects.erase(ob.uid);
 
 	auto label_it = scientific_molecule_label_gl_obs.find(ob.uid);
@@ -4708,9 +4716,17 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				light->gpu_data.cone_min_cos_angle = std::cos(use_cone_end_angle);
 				light->gpu_data.cone_max_cos_angle = std::cos(use_cone_start_angle); 
 				assert(light->gpu_data.cone_min_cos_angle < light->gpu_data.cone_max_cos_angle);
-				float scale;
-				light->gpu_data.col = computeSpotlightColour(*ob, use_cone_start_angle, use_cone_end_angle, scale);
-				light->max_light_dist = myMin(15.f, 4.f * myMax(light->gpu_data.col[0], light->gpu_data.col[1], light->gpu_data.col[2]));
+				float scale = 0.f;
+				if(!BitUtils::isBitSet(ob->flags, WorldObject::SPOTLIGHT_DISABLED_FLAG))
+				{
+					light->gpu_data.col = computeSpotlightColour(*ob, use_cone_start_angle, use_cone_end_angle, scale);
+					light->max_light_dist = myMin(15.f, 4.f * myMax(light->gpu_data.col[0], light->gpu_data.col[1], light->gpu_data.col[2]));
+				}
+				else
+				{
+					light->gpu_data.col = Colour4f(0.f);
+					light->max_light_dist = 0.f;
+				}
 				
 				// Apply a light emitting material to the light surface material in the spotlight model.
 				if(ob->materials.size() >= 1)
@@ -14716,6 +14732,10 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		{
 			const LoggedInMessage* m = checkedDowncastPtr<const LoggedInMessage>(msg);
 
+			// A WebClient connection may be authenticated by the server-side
+			// session cookie, so do not treat it as a guest while the login reply
+			// is arriving asynchronously.
+			setGuestAvatarSelectionPending(false);
 			ui_interface->setTextAsLoggedIn(m->username);
 			this->logged_in_user_id = m->user_id;
 			this->logged_in_user_name = m->username;
@@ -14780,6 +14800,12 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			// Request user's chatbot list so bot editor works for existing bots
 			if(server_protocol_version >= 53)
 				queryUserBots();
+		}
+		break;
+		case Msg_GuestModeMessage:
+		{
+			if(!isLoggedIn() && guest_avatar_selection_pending && !guest_avatar_selection_ready)
+				ui_interface->showGuestAvatarSelection();
 		}
 		break;
 		case Msg_LoggedOutMessage:
@@ -19875,8 +19901,12 @@ void GUIClient::updateSpotlightGraphicsEngineData(const Matrix4f& ob_to_world_ma
 		light->gpu_data.cone_max_cos_angle = std::cos(use_cone_start_angle); 
 		assert(light->gpu_data.cone_min_cos_angle < light->gpu_data.cone_max_cos_angle);
 
-		float scale;
-		light->gpu_data.col = computeSpotlightColour(*ob, use_cone_start_angle, use_cone_end_angle, scale);
+		float scale = 0.f;
+		if(!BitUtils::isBitSet(ob->flags, WorldObject::SPOTLIGHT_DISABLED_FLAG))
+			light->gpu_data.col = computeSpotlightColour(*ob, use_cone_start_angle, use_cone_end_angle, scale);
+		else
+			light->gpu_data.col = Colour4f(0.f);
+		light->max_light_dist = myMin(15.f, 4.f * myMax(light->gpu_data.col[0], light->gpu_data.col[1], light->gpu_data.col[2]));
 
 		opengl_engine->setLightPos(light, ob->pos.toVec4fPoint());
 
@@ -21291,6 +21321,13 @@ bool GUIClient::mouseOverParticleEmitterRadiusHandle(const Vec2f& pixel_coords, 
 void GUIClient::mousePressed(MouseEvent& e)
 {
 	// conPrint("GUIClient::mousePressed");
+	if(image_viewer_image.nonNull())
+	{
+		e.accepted = true;
+		ui_interface->setCamRotationOnMouseDragEnabled(false);
+		ui_interface->setCamRotationOnRightMouseDragEnabled(false);
+		return;
+	}
 
 	if(gl_ui.nonNull())
 	{
@@ -21716,6 +21753,12 @@ void GUIClient::mousePressed(MouseEvent& e)
 
 void GUIClient::mouseReleased(MouseEvent& e)
 {
+	if(image_viewer_image.nonNull())
+	{
+		e.accepted = true;
+		return;
+	}
+
 	if(gl_ui.nonNull())
 	{
 		gl_ui->handleMouseRelease(e);
@@ -21842,6 +21885,12 @@ void GUIClient::mouseReleased(MouseEvent& e)
 
 void GUIClient::mouseDoubleClicked(MouseEvent& mouse_event)
 {
+	if(image_viewer_image.nonNull())
+	{
+		mouse_event.accepted = true;
+		return;
+	}
+
 	if(gl_ui.nonNull())
 	{
 		gl_ui->handleMouseDoubleClick(mouse_event);
@@ -22644,6 +22693,13 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 				}
 				else 
 				{
+					const bool is_fullscreen_image = isImageObjectForFullscreen(*ob);
+					if(is_fullscreen_image)
+					{
+						ob_info_ui.showMessage(imageViewerPrompt(this, "[F]"), cursor_gl_coords);
+						show_mouseover_info_ui = true;
+					}
+
 					if(!ob->target_url.empty() && (ob->web_view_data.isNull() && ob->browser_vid_player.isNull())) // If the object has a target URL (and is not a web-view and not a video object):
 					{
 						// If the mouse-overed ob is currently selected, and is editable, don't show the hyperlink, because 'E' is the key to pick up the object.
@@ -22658,6 +22714,13 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 
 							if(ob->isPortal())
 								ob_info_ui.showMessage("Walk through to visit " + trimmed_URL, cursor_gl_coords);
+							else if(is_fullscreen_image)
+							{
+								const std::string open_url_prompt = useRussianClientUI(this) ?
+									("Нажмите " + std::string(use_action_button) + " для открытия " + trimmed_URL) :
+									("Press " + std::string(use_action_button) + " to open " + trimmed_URL);
+								ob_info_ui.showMessage(imageViewerPrompt(this, "[F]") + "\n" + open_url_prompt, cursor_gl_coords);
+							}
 							else
 								ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to open " + trimmed_URL, cursor_gl_coords);
 
@@ -22749,6 +22812,12 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 
 void GUIClient::mouseMoved(MouseEvent& mouse_event)
 {
+	if(image_viewer_image.nonNull())
+	{
+		mouse_event.accepted = true;
+		return;
+	}
+
 	if(!isXRActive())
 	{
 		last_cursor_movement_was_from_mouse = true;
@@ -23276,6 +23345,15 @@ void GUIClient::deleteSelectedObject()
 		{
 			undo_buffer.startWorldObjectEdit(*selected_ob);
 			undo_buffer.finishWorldObjectEdit(*selected_ob);
+
+			// Remove the local light immediately instead of waiting for the
+			// server's DestroyObject update.  OpenGLEngine::removeLight()
+			// refreshes the affected objects' light indices.
+			if(selected_ob->opengl_light.nonNull())
+			{
+				opengl_engine->removeLight(selected_ob->opengl_light);
+				selected_ob->opengl_light = NULL;
+			}
 
 			// Send DestroyObject packet
 			MessageUtils::initPacket(scratch_packet, Protocol::DestroyObject);
@@ -24216,6 +24294,7 @@ void GUIClient::viewportResized(int w, int h)
 		gear_inventory_ui->viewportResized(w, h);
 	if(minimap)
 		minimap->viewportResized(w, h);
+	updateImageViewerLayout();
 }
 
 
@@ -25000,6 +25079,138 @@ static bool keyIsDeleteKey(int keycode)
 #else
 	return keycode == Key::Key_Delete;
 #endif
+}
+
+
+static bool useRussianClientUI(GUIClient* gui_client)
+{
+	if(!gui_client)
+		return false;
+
+	const Reference<SettingsStore> settings = gui_client->getSettingsStore();
+	if(settings.isNull())
+		return false;
+
+	std::string lang = settings->getStringValue("setting/ui_language", settings->getStringValue("ui/language", "en"));
+	std::transform(lang.begin(), lang.end(), lang.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	return (lang.rfind("ru", 0) == 0) || (lang == "russian");
+}
+
+
+static std::string imageViewerPrompt(GUIClient* gui_client, const std::string& use_action_button)
+{
+	if(useRussianClientUI(gui_client))
+		return "Нажмите " + use_action_button + " для просмотра изображения на весь экран";
+	return "Press " + use_action_button + " to view image full screen";
+}
+
+
+bool GUIClient::isImageObjectForFullscreen(const WorldObject& ob) const
+{
+	// Images created by the client are generic objects using the shared image
+	// cube mesh. Keep web views and videos out of this interaction: they have
+	// their own mouse and keyboard handling.
+	return
+		ob.object_type == WorldObject::ObjectType_Generic &&
+		hasPrefix(ob.model_url, "image_cube_");
+}
+
+
+bool GUIClient::tryOpenImageViewerAtMouseCursor()
+{
+	if(world_state.isNull() || physics_world.isNull() || ui_interface == nullptr)
+		return false;
+
+	WorldStateLock lock(world_state->mutex);
+
+	const Vec2i widget_pos = ui_interface->getMouseCursorWidgetPos();
+	const Vec4f origin = cam_controller.getPosition().toVec4fPoint();
+	const Vec4f dir = getDirForPixelTrace(widget_pos.x, widget_pos.y);
+
+	RayTraceResult results;
+	physics_world->traceRay(origin, dir, /*max_t=*/1.0e5f, /*ignore body id=*/JPH::BodyID(), results);
+
+	if(results.hit_object && results.hit_object->userdata && results.hit_object->userdata_type == 0)
+	{
+		WorldObject* ob = static_cast<WorldObject*>(results.hit_object->userdata);
+		if(isImageObjectForFullscreen(*ob))
+		{
+			openImageViewer(*ob);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+void GUIClient::updateImageViewerLayout()
+{
+	if(image_viewer_image.isNull() || opengl_engine.isNull())
+		return;
+
+	const float viewport_aspect = myMax(0.001f, opengl_engine->getViewPortAspectRatio());
+	const float image_aspect = myMax(0.001f, image_viewer_aspect);
+
+	// GLUIImage converts UI y-coordinates to OpenGL internally.  Keep the
+	// rectangle in UI coordinates here; applying the viewport aspect a second
+	// time stretches every image horizontally.
+	float image_width = 2.f;
+	float image_height = 2.f / viewport_aspect;
+	if(image_aspect >= viewport_aspect)
+		image_height = image_width / image_aspect;
+	else
+		image_width = image_height * image_aspect;
+
+	if(image_viewer_background.nonNull())
+		image_viewer_background->setPosAndDims(Vec2f(-1.f, -1.f), Vec2f(2.f, 2.f));
+	image_viewer_image->setPosAndDims(
+		Vec2f(-image_width * 0.5f, -image_height * 0.5f),
+		Vec2f(image_width, image_height));
+}
+
+
+void GUIClient::openImageViewer(WorldObject& ob)
+{
+	if(gl_ui.isNull() || opengl_engine.isNull() || !isImageObjectForFullscreen(ob) || ob.opengl_engine_ob.isNull() || ob.opengl_engine_ob->materials.empty())
+		return;
+
+	OpenGLTextureRef texture = ob.opengl_engine_ob->materials[0].albedo_texture;
+	if(texture.isNull())
+		texture = ob.opengl_engine_ob->materials[0].emission_texture;
+	if(texture.isNull())
+	{
+		showInfoNotification("Image is still loading.");
+		return;
+	}
+
+	closeImageViewer();
+
+	image_viewer_image = new GLUIImage(*gl_ui, opengl_engine, "", "", -0.99f);
+	image_viewer_image->overlay_ob->material.albedo_texture = texture;
+	image_viewer_image->overlay_ob->material.albedo_linear_rgb = Colour3f(1.f);
+	image_viewer_image->overlay_ob->material.alpha = 1.f;
+	image_viewer_object_uid = ob.uid;
+
+	// The loaded image texture retains the image pixel dimensions, including for
+	// generated LODs, so it is the authoritative source aspect ratio.
+	image_viewer_aspect = 0.f;
+	if(texture->xRes() > 0 && texture->yRes() > 0)
+		image_viewer_aspect = (float)texture->xRes() / (float)texture->yRes();
+	if(image_viewer_aspect <= 0.f)
+		image_viewer_aspect = (std::fabs(ob.scale.z) > 0.001f) ? std::fabs(ob.scale.x / ob.scale.z) : 1.f;
+
+	ob_info_ui.hideMessage();
+	updateImageViewerLayout();
+}
+
+
+void GUIClient::closeImageViewer()
+{
+	image_viewer_image = nullptr;
+	image_viewer_background = nullptr;
+	image_viewer_object_uid = UID();
+	image_viewer_aspect = 1.f;
 }
 
 
@@ -26911,6 +27122,14 @@ public:
 
 void GUIClient::keyPressed(KeyEvent& e)
 {
+	if(image_viewer_image.nonNull())
+	{
+		if(e.key == Key::Key_Escape || e.key == Key::Key_F)
+			closeImageViewer();
+		e.accepted = true;
+		return;
+	}
+
 	if(gl_ui)
 		gl_ui->handleKeyPressedEvent(e);
 	if(e.accepted)
@@ -27107,7 +27326,10 @@ void GUIClient::keyPressed(KeyEvent& e)
 	}
 	else if(e.key == Key::Key_F)
 	{
-		ui_interface->toggleFlyMode();
+		// F is fullscreen while pointing at an image; retain the existing fly
+		// shortcut everywhere else.
+		if(!tryOpenImageViewerAtMouseCursor())
+			ui_interface->toggleFlyMode();
 	}
 	else if(e.key == Key::Key_V)
 	{

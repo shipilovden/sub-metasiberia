@@ -372,6 +372,7 @@ public:
 	static const uint32 AUDIO_AUTOPLAY                          = 1024; // For objects that play audio, should the audio auto-play?
 	static const uint32 AUDIO_LOOP                              = 2048; // For objects that play audio, should the audio loop?
 	static const uint32 AUDIO_SHUFFLE                           = 4096; // For audio players, should playlist playback start in shuffle mode?
+	static const uint32 SPOTLIGHT_DISABLED_FLAG                 = 8192; // For spotlights, should the local light be disabled?
 	uint32 flags;
 
 	TimeStamp created_time;

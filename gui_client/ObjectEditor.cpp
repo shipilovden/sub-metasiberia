@@ -918,6 +918,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 
 	connect(this->spotlightStartAngleSpinBox,	SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
 	connect(this->spotlightEndAngleSpinBox,		SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
+	connect(this->spotlightLightEnabledCheckBox, SIGNAL(toggled(bool)),		this, SIGNAL(objectChanged()));
 
 	connect(this->cameraEnabledCheckBox,			SIGNAL(toggled(bool)),			this, SIGNAL(objectChanged()));
 	connect(this->cameraFOVYDoubleSpinBox,			SIGNAL(valueChanged(double)),	this, SIGNAL(objectChanged()));
@@ -2904,6 +2905,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 
 		SignalBlocker::setValue(this->spotlightStartAngleSpinBox, ::radToDegree(ob.type_data.spotlight_data.cone_start_angle));
 		SignalBlocker::setValue(this->spotlightEndAngleSpinBox,   ::radToDegree(ob.type_data.spotlight_data.cone_end_angle));
+		SignalBlocker::setChecked(this->spotlightLightEnabledCheckBox, !BitUtils::isBitSet(ob.flags, WorldObject::SPOTLIGHT_DISABLED_FLAG));
 		updateSpotlightColourButton();
 	}
 
@@ -3230,6 +3232,7 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 
 		ob_out.type_data.spotlight_data.cone_start_angle = ::degreeToRad(this->spotlightStartAngleSpinBox->value());
 		ob_out.type_data.spotlight_data.cone_end_angle   = ::degreeToRad(this->spotlightEndAngleSpinBox->value());
+		BitUtils::setOrZeroBit(ob_out.flags, WorldObject::SPOTLIGHT_DISABLED_FLAG, !this->spotlightLightEnabledCheckBox->isChecked());
 	}
 
 	// For seat:

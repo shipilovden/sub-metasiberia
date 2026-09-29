@@ -8282,6 +8282,7 @@ void MainWindow::on_actionAdd_Spotlight_triggered()
 
 	new_world_object->type_data.spotlight_data.cone_start_angle = 0.317560429291521f; // = std::acos(0.95f); (old fixed value)
 	new_world_object->type_data.spotlight_data.cone_end_angle   = 0.451026811796262f; // = std::acos(0.9f);  (old fixed value)
+	BitUtils::zeroBit(new_world_object->flags, WorldObject::SPOTLIGHT_DISABLED_FLAG);
 
 	// Emitting material
 	new_world_object->materials.push_back(new WorldMaterial());
@@ -9875,6 +9876,7 @@ void MainWindow::on_actionCloneObject_triggered()
 		new_world_object->angle = source_ob->angle;
 		new_world_object->scale = source_ob->scale;
 		new_world_object->flags = source_ob->flags;// | WorldObject::LIGHTMAP_NEEDS_COMPUTING_FLAG; // Lightmaps need to be built for it.
+		new_world_object->type_data = source_ob->type_data;
 		new_world_object->getDecompressedVoxels() = source_ob->getDecompressedVoxels();
 		new_world_object->getCompressedVoxels() = source_ob->getCompressedVoxels();
 		new_world_object->audio_source_url = source_ob->audio_source_url;
@@ -10026,6 +10028,7 @@ void MainWindow::on_actionSignUp_triggered()
 		const std::string username = QtUtils::toStdString(dialog.usernameLineEdit->text());
 		const std::string email    = QtUtils::toStdString(dialog.emailLineEdit->text());
 		const std::string password = QtUtils::toStdString(dialog.passwordLineEdit->text());
+		const std::string avatar_choice = QtUtils::toStdString(dialog.selectedAvatarChoice());
 
 		conPrint("username: " + username);
 		conPrint("email:    " + email);
@@ -10037,6 +10040,9 @@ void MainWindow::on_actionSignUp_triggered()
 		scratch_packet.writeStringLengthFirst(username);
 		scratch_packet.writeStringLengthFirst(email);
 		scratch_packet.writeStringLengthFirst(password);
+		scratch_packet.writeStringLengthFirst(avatar_choice);
+		scratch_packet.writeUInt32(dialog.termsAccepted() ? 1 : 0);
+		scratch_packet.writeUInt32(dialog.privacyAccepted() ? 1 : 0);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
 	}

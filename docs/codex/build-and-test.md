@@ -431,6 +431,19 @@ cmake --build . --target gui_client
 ruby C:\programming\substrata\scripts\update_webclient_cache_busting_hashes.rb C:\programming\substrata
 ```
 
+На Windows Emscripten launcher иногда не может запустить `python.exe` для
+длинной команды компиляции и выдаёт `WinError 5`/`Access is denied`, хотя сам
+`clang++` исправен. Перед сборкой в таком окружении задать путь к рабочему
+Python в текущем PowerShell-сеансе:
+
+```powershell
+$env:EMSDK_PYTHON = 'C:\Users\densh\AppData\Local\Programs\Python\Python313\python.exe'
+cmake --build . --target gui_client
+```
+
+Это только обход launcher-проблемы; при любом ненулевом коде сборки preload,
+cache-busting и deploy выполнять нельзя.
+
 Текущий канонический pipeline этого workspace:
 
 - source: `C:\programming\substrata`;

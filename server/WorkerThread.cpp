@@ -1817,6 +1817,16 @@ void WorkerThread::doRun()
 
 				request_missing_owned_resources();
 			}
+			else if(client_protocol_version >= 63)
+			{
+				// Tell current clients that the WebSocket session is anonymous.
+				// This is sent only after cookie authentication has been checked,
+				// so authenticated WebClients never open the guest avatar picker.
+				MessageUtils::initPacket(scratch_packet, Protocol::GuestModeMessageID);
+				MessageUtils::updatePacketLengthField(scratch_packet);
+				socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+				socket->flush();
+			}
 
 			// Send TimeSyncMessage packet to client
 			{
@@ -3931,6 +3941,22 @@ void WorkerThread::doRun()
 							const std::string username = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 							const std::string email    = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 							const std::string password = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+							std::string avatar_choice;
+							uint32 terms_accepted = 0;
+							uint32 privacy_accepted = 0;
+							URLString new_user_avatar_model_url;
+							bool signup_payload_valid = true;
+							try
+							{
+								avatar_choice = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+								terms_accepted = msg_buffer.readUInt32();
+								privacy_accepted = msg_buffer.readUInt32();
+							}
+							catch(glare::Exception&)
+							{
+								// Older clients do not send the mandatory avatar and consent fields.
+								signup_payload_valid = false;
+							}
 
 							try
 							{
@@ -3939,7 +3965,19 @@ void WorkerThread::doRun()
 								bool signed_up = false;
 
 								std::string msg_to_client;
-								if(world_state->isInReadOnlyMode())
+								if(!signup_payload_valid)
+								{
+									msg_to_client = "Please update the client before creating an account.";
+								}
+								else if(terms_accepted != 1 || privacy_accepted != 1)
+								{
+									msg_to_client = "You must accept the Terms of Use and Privacy Policy before creating an account.";
+								}
+								else if(!SignupAvatarChoice::modelURLForChoice(avatar_choice, new_user_avatar_model_url))
+								{
+									msg_to_client = "Please choose exactly one supported avatar.";
+								}
+								else if(world_state->isInReadOnlyMode())
 								{
 									msg_to_client = "Server is in read-only mode, you can't sign up right now.";
 								}
@@ -3966,6 +4004,7 @@ void WorkerThread::doRun()
 												new_user->created_time = TimeStamp::currentTime();
 												new_user->name = username;
 												new_user->email_address = email;
+														new_user->avatar_settings.model_url = new_user_avatar_model_url;
 
 												new_user->setNewPasswordAndSalt(password);
 

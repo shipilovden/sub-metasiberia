@@ -1169,20 +1169,33 @@
 
     var termsCheckbox = document.getElementById("msb-signup-terms-accepted");
     var privacyCheckbox = document.getElementById("msb-signup-privacy-accepted");
-    if (!termsCheckbox || !privacyCheckbox) return;
+    var xbotCheckbox = document.getElementById("msb-signup-avatar-xbot");
+    var ybotCheckbox = document.getElementById("msb-signup-avatar-ybot");
+    if (!termsCheckbox || !privacyCheckbox || !xbotCheckbox || !ybotCheckbox) return;
     form.dataset.msbSignupGateInit = "1";
 
+    var syncAvatarCheckboxes = function (changedCheckbox) {
+      if (changedCheckbox === xbotCheckbox && xbotCheckbox.checked) ybotCheckbox.checked = false;
+      if (changedCheckbox === ybotCheckbox && ybotCheckbox.checked) xbotCheckbox.checked = false;
+    };
+
     var toggleSubmit = function () {
-      var allowed = !!termsCheckbox.checked && !!privacyCheckbox.checked;
+      var avatarSelected = !!xbotCheckbox.checked !== !!ybotCheckbox.checked;
+      var allowed = avatarSelected && !!termsCheckbox.checked && !!privacyCheckbox.checked;
       submit.disabled = !allowed;
       if (allowed) submit.classList.remove("msb-disabled-submit");
       else submit.classList.add("msb-disabled-submit");
     };
 
+    xbotCheckbox.addEventListener("change", function () { syncAvatarCheckboxes(xbotCheckbox); toggleSubmit(); });
+    ybotCheckbox.addEventListener("change", function () { syncAvatarCheckboxes(ybotCheckbox); toggleSubmit(); });
     termsCheckbox.addEventListener("change", toggleSubmit);
     privacyCheckbox.addEventListener("change", toggleSubmit);
     form.addEventListener("submit", function (e) {
-      if (!termsCheckbox.checked) {
+      if (!!xbotCheckbox.checked === !!ybotCheckbox.checked) {
+        e.preventDefault();
+        window.alert("Please choose exactly one avatar.");
+      } else if (!termsCheckbox.checked) {
         e.preventDefault();
         window.alert("You must confirm that you have read and accepted the Terms of Use.");
       } else if (!privacyCheckbox.checked) {

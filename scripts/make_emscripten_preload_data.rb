@@ -32,6 +32,10 @@ FileUtils.rm_r("data", :verbose=>true) if File.exist?("data")
 FileUtils.mkdir_p("data", :verbose => true)
 
 FileUtils.cp_r(substrata_dir + "/resources", "data", :verbose=>true)
+# Avatar source files are used by the native avatar picker, not by the WebGL
+# client.  The web build receives the small Xbot/Ybot preview images below;
+# keeping the VRM source files here needlessly increases the initial download.
+FileUtils.rm_r("data/resources/selectable avatars", :verbose=>true) if File.exist?("data/resources/selectable avatars")
 FileUtils.rm_r("data/resources/materials", :verbose=>true) # We don't need most of the materials
 
 FileUtils.mkdir_p("data/resources/materials/white marble", :verbose => true)
@@ -97,6 +101,13 @@ FileUtils.mkdir_p(cyb_output_resources_dir + "/buttons", :verbose => true)
 FileUtils.mkdir_p(cyb_output_test_builds_resources_dir + "/buttons", :verbose => true)
 FileUtils.cp_r(substrata_dir + "/resources/buttons/.",                 cyb_output_resources_dir             + "/buttons",                   :verbose=>true)
 FileUtils.cp_r(substrata_dir + "/resources/buttons/.",                 cyb_output_test_builds_resources_dir + "/buttons",                   :verbose=>true)
+# Guest avatar picker images are loaded by the HTML overlay over HTTP, so keep
+# physical copies alongside the other WebClient resources as well as in the
+# Emscripten preload archive.
+FileUtils.cp(substrata_dir + "/resources/xbot.png", cyb_output_resources_dir + "/xbot.png", :verbose=>true)
+FileUtils.cp(substrata_dir + "/resources/ybot.png", cyb_output_resources_dir + "/ybot.png", :verbose=>true)
+FileUtils.cp(substrata_dir + "/resources/xbot.png", cyb_output_test_builds_resources_dir + "/xbot.png", :verbose=>true)
+FileUtils.cp(substrata_dir + "/resources/ybot.png", cyb_output_test_builds_resources_dir + "/ybot.png", :verbose=>true)
 FileUtils.cp_r(substrata_dir + "/resources/foam_windowed.basis",       cyb_output_resources_dir             + "/foam_windowed.basis",       :verbose=>true)
 FileUtils.cp_r(substrata_dir + "/resources/foam_windowed.basis",       cyb_output_test_builds_resources_dir + "/foam_windowed.basis",       :verbose=>true)
 

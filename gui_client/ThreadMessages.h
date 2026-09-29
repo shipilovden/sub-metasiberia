@@ -36,6 +36,7 @@ enum GuiClientThreadMessages
 	Msg_LogMessage,
 	Msg_LoggedInMessage,
 	Msg_LoggedOutMessage,
+	Msg_GuestModeMessage,
 	Msg_SignedUpMessage,
 	Msg_ServerAdminMessage,
 	Msg_WorldSettingsReceivedMessage,
