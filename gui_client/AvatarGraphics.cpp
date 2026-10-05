@@ -867,9 +867,14 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 		}
 
 			const float lowest_node_height_above_ground = lowest_bone_z_os + avatar_eye_height_above_ground - 0.03f;
-		float vertical_adjustment = 0;
-			if(lowest_node_height_above_ground < 0)
-			vertical_adjustment = -lowest_node_height_above_ground;
+			float vertical_adjustment = 0;
+			// A mesh anchored at or below the player's ground level must not be
+			// lifted again based on its bone-derived eye height.
+			const Vec4f mesh_bottom_os(0, skinned_gl_ob->mesh_data->aabb_os.min_[1], 0, 1);
+			const float mesh_bottom_height = (pre_ob_to_world_matrix * mesh_bottom_os)[2];
+			const bool ground_anchored_mesh = mesh_bottom_height <= -AvatarGrounding::kDefaultAvatarEyeHeightM + 0.005f;
+			if(!ground_anchored_mesh && lowest_node_height_above_ground < 0)
+				vertical_adjustment = -lowest_node_height_above_ground;
 
 			assert(isFinite(vertical_adjustment));
 			assert(isFinite(avatar_rotation.x));

@@ -10,6 +10,11 @@ Copyright Glare Technologies Limited 2022 -
 #include <opengl/OpenGLMeshRenderData.h>
 #include <utils/PlatformUtils.h>
 
+MeshData::MeshData(const URLString& model_URL_, Reference<OpenGLMeshRenderData> gl_meshdata_, MeshManager* mesh_manager_)
+:	source_is_vrm(gl_meshdata_->animation_data.vrm_data.nonNull()), model_url(model_URL_), gl_meshdata(gl_meshdata_),
+	voxel_subsample_factor(1), refcount(0), mesh_manager(mesh_manager_)
+{}
+
 
 void MeshData::meshDataBecameUsed() const
 {

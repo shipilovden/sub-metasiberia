@@ -10,18 +10,24 @@ Copyright Glare Technologies Limited 2024 -
 #include "GUIClient.h"
 #include "CredentialManager.h"
 #include "RuntimeTranslation.h"
+#include "PhotoCameraPath.h"
 #include <utils/ArgumentParser.h>
 #include <utils/Timer.h>
 #include <utils/ComObHandle.h>
 #include <utils/SocketBufferOutStream.h>
 #include <QtCore/QPoint>
+#include <QtCore/QPointer>
 #include <QtCore/QDateTime>
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QJsonArray>
 #include <QtCore/QMap>
+#include <QtCore/QVariantMap>
 #include <QtCore/QStringList>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QDockWidget>
 #include <string>
+#include <memory>
+class PhotoVideoRecorder;
 namespace Ui { class MainWindow; }
 namespace glare { class TaskManager; }
 class QSettings;
@@ -56,6 +62,7 @@ class ScientificObjectEditor;
 class CulturalObjectEditor;
 class SpotlightEditor;
 class AnimationEditorPanel;
+class AnimationEditorController;
 class PhotoVideoSettingsPanel;
 class DocumentEditorPanel;
 class TreeEditorPanel;
@@ -301,6 +308,7 @@ private:
 	void applyChatMessageDisplaySettings();
 	void applyChatThemeStylesheet();
 	void updateChatMessageVisibility();
+	void updateChatMessageSearch(int direction = 0);
 	void updateChatTabText();
 	void updatePrivateChatTabText();
 	void setChatSettingsVisible(bool visible);
@@ -456,6 +464,15 @@ public:
 	virtual bool inScreenshotTakingMode() override;
 	virtual void takeScreenshot() override;
 	virtual void showScreenshots() override;
+	virtual bool setNativePhotoModeEnabled(bool enabled) override;
+	virtual bool showNativeAnimationEditor() override;
+	void applyPhotoModeSettings(const QVariantMap& values);
+	void capturePhoto(const QVariantMap& values);
+	QImage capturePhotoFrame(const QVariantMap& values, const QSize& requested_size = QSize());
+	void setPhotoRecording(bool recording, const QVariantMap& values);
+	void photoRecordingTick();
+	void photoTrajectoryAction(const QString& action);
+	void photoTrajectoryTick();
 
 	virtual void setGLWidgetContextAsCurrent() override;
 
@@ -559,6 +576,11 @@ public:
 	QTabBar* chat_tabs_bar;
 	QVBoxLayout* chat_users_list_layout;
 	QLineEdit* chat_player_search_edit;
+	QLineEdit* chat_message_search_edit = nullptr;
+	QLabel* chat_search_count = nullptr;
+	QToolButton* chat_search_previous = nullptr;
+	QToolButton* chat_search_next = nullptr;
+	QPointer<QFrame> chat_search_current;
 	QLabel* chat_online_count_label;
 	QScrollArea* chat_messages_scroll_area;
 	QVBoxLayout* chat_messages_list_layout;
@@ -644,9 +666,22 @@ public:
 	QWidget* map_dock_map_widget;
 	QDockWidget* animation_editor_dock_widget;
 	AnimationEditorPanel* animation_editor_panel;
+	AnimationEditorController* animation_editor_controller = nullptr;
 	QDockWidget* photo_video_dock_widget;
 	PhotoVideoSettingsPanel* photo_video_settings_panel;
 	bool native_photo_video_gl_ready;
+	bool photo_focus_pick = false;
+	bool photo_focus_release = false;
+	std::vector<PhotoCameraPath::Keyframe> photo_path;
+	QTimer* photo_path_timer = nullptr;
+	QElapsedTimer photo_path_elapsed;
+	float photo_saved_bloom = 0;
+	std::unique_ptr<PhotoVideoRecorder> photo_video_recorder;
+	QTimer* photo_video_timer = nullptr;
+	QVariantMap photo_recording_settings;
+	QString photo_recording_path;
+	QSize photo_recording_size;
+	QElapsedTimer photo_recording_elapsed;
 	QDockWidget* document_editor_dock_widget;
 	DocumentEditorPanel* document_editor_panel;
 	ScientificObjectEditor* scientific_object_editor;

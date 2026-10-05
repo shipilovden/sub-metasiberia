@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+project(render_player_icons LANGUAGES CXX)
+find_package(Qt5 REQUIRED COMPONENTS Core Gui Svg)
+add_executable(render_player_icons main.cpp)
+target_link_libraries(render_player_icons PRIVATE Qt5::Core Qt5::Gui Qt5::Svg)

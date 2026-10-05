@@ -1669,16 +1669,19 @@ bool Server::enqueuePrivateChatPacketForWorld(const SocketBufferOutStream& recip
 
 		const UID avatar_uid = worker_thread->getRoutingAvatarUID();
 		bool is_recipient = recipient_avatar_uid.valid() && (avatar_uid == recipient_avatar_uid);
+		// A supplied UID is authoritative. Never broaden a private recipient to
+		// other users with matching display names, even if that UID is offline.
+		const bool allow_name_lookup = !recipient_avatar_uid.valid();
 
-		if(!is_recipient)
+		if(allow_name_lookup && !is_recipient)
 			is_recipient = StringUtils::equalCaseInsensitive(worker_thread->getRoutingUserName(), recipient_name);
 
 		auto avatar_name_res = avatar_names.find(avatar_uid);
-		if(!is_recipient && avatar_name_res != avatar_names.end())
+		if(allow_name_lookup && !is_recipient && avatar_name_res != avatar_names.end())
 			is_recipient = StringUtils::equalCaseInsensitive(avatar_name_res->second, recipient_name);
 
 		auto avatar_use_name_res = avatar_use_names.find(avatar_uid);
-		if(!is_recipient && avatar_use_name_res != avatar_use_names.end())
+		if(allow_name_lookup && !is_recipient && avatar_use_name_res != avatar_use_names.end())
 			is_recipient = StringUtils::equalCaseInsensitive(avatar_use_name_res->second, recipient_name);
 
 		if(is_recipient)

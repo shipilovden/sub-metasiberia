@@ -39,11 +39,23 @@ inline GroundingInfo computeGroundingInfo(const AnimationData& animation_data, b
 {
 	GroundingInfo info = {};
 
-	float toe_height = toe_bottom_offset_m;
-	if(tryGetNodeHeight(animation_data, "LeftToe_End", use_retarget_adjustment, toe_height))
-		info.foot_bottom_height = toe_height - toe_bottom_offset_m;
-	else
-		info.foot_bottom_height = 0.0f;
+	// Some VRM models have no *_Toe_End nodes. Using a zero fallback for those
+	// models makes the avatar float when the model origin is above the soles.
+	// Prefer toe tips, then fall back to both ankle/foot joints and use the
+	// lowest valid side so asymmetrical rigs are grounded consistently.
+	float lowest_foot_height = 0.0f;
+	bool have_foot_height = false;
+	for(const char* node_name : {"LeftToe_End", "RightToe_End", "LeftFoot", "RightFoot"})
+	{
+		float foot_height = 0.0f;
+		if(tryGetNodeHeight(animation_data, node_name, use_retarget_adjustment, foot_height))
+		{
+			if(!have_foot_height || foot_height < lowest_foot_height)
+				lowest_foot_height = foot_height;
+			have_foot_height = true;
+		}
+	}
+	info.foot_bottom_height = have_foot_height ? (lowest_foot_height - toe_bottom_offset_m) : 0.0f;
 
 	float left_eye_height = 0.0f;
 	float right_eye_height = 0.0f;

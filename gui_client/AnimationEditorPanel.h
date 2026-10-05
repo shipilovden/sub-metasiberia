@@ -1,134 +1,86 @@
-/*=====================================================================
-AnimationEditorPanel.h
-----------------------
-Native Qt animation-profile editor panel for Metasiberia.
-=====================================================================*/
 #pragma once
 
-
-#include <QtCore/QString>
-#include <QtCore/QVariantMap>
-#include <QtCore/QVector>
 #include <QtWidgets/QWidget>
+#include <QtCore/QVector>
 
-
-class QCheckBox;
-class QComboBox;
-class QDoubleSpinBox;
+class QSettings;
 class QLabel;
 class QLineEdit;
-class QListWidget;
-class QPushButton;
-class QSettings;
-class QSlider;
 class QTableWidget;
-class QTabWidget;
-class QToolButton;
-
+class QCheckBox;
+class QDoubleSpinBox;
+class QSlider;
+class QPushButton;
+class QVBoxLayout;
 
 struct AnimationEditorItem
 {
-	QString id;
+	QString id; // Resource URL, not the display name.
 	QString name;
-	QString category;
-	QString source;
-	double duration_seconds = 0.0;
-	bool favourite = false;
+	double duration_seconds = 0;
+	bool loop = false;
+	bool animate_head = false;
 };
 
-
+// Presentation only. The Qt adapter connects this panel to the existing gesture pipeline.
 class AnimationEditorPanel final : public QWidget
 {
 	Q_OBJECT
-
 public:
 	explicit AnimationEditorPanel(QSettings* settings, QWidget* parent = nullptr);
-
 	void setIconDirectory(const QString& directory);
-	void setAnimations(const QVector<AnimationEditorItem>& animations);
-	void setPreviewDuration(double duration_seconds);
+	void setAnimations(const QVector<AnimationEditorItem>& items, const QString& select_id = QString());
+	void setPreviewWidget(QWidget* widget);
+	void setPreviewDuration(double seconds);
 	void setPreviewPosition(double normalised_position);
+	void setPreviewPlaying(bool playing);
 	void setPreviewStatus(const QString& status);
-	QVariantMap currentProfileState() const;
-	QString currentProfileName() const;
+	void setEditingEnabled(bool enabled);
+	QString selectedAnimationId() const;
+	void setBusy(bool busy);
 
 signals:
-	void animationSelected(const QString& animation_id);
+	void animationSelected(const QString& id);
 	void previewPlaybackChanged(bool playing);
-	void previewSeekRequested(double normalised_position);
+	void previewSeekRequested(double position);
 	void previewStepRequested(int direction);
-	void previewResetRequested();
-	void profileChanged(const QString& profile_name, const QVariantMap& state);
-	void profileSaved(const QString& profile_name, const QVariantMap& state);
-	void applyProfileRequested(const QString& profile_name, const QVariantMap& state);
-	void animationImportRequested(const QString& filename, const QString& format);
-	void addAnimationRequested();
-	void settingsChanged(const QVariantMap& state);
+	void previewSpeedChanged(double speed);
+	void previewLoopChanged(bool loop);
+	void importRequested();
+	void saveCopyRequested(const QString& id, const QString& name, double speed);
+	void flagsEdited(const QString& id, bool loop, bool animate_head);
+	void removeRequested(const QString& id);
+	void performRequested(const QString& id);
+	void stopRequested();
+	void exportRequested(const QString& id);
 
 private:
-	QWidget* makeLibraryTab();
-	QWidget* makeSettingsTab();
-	QWidget* makeAssignmentTab();
-	QWidget* makeTransitionsTab();
-	QWidget* makeEventsTab();
-	QWidget* makeSkeletonTab();
-	QWidget* makeImportTab();
-	void refreshAnimationTable();
-	void refreshAnimationCombos();
-	void refreshProfiles();
-	void loadProfile(const QString& profile_name);
-	void saveCurrentProfile(bool emit_signal);
-	void controlsChanged();
-	void pushUndoSnapshot();
-	void undo();
-	void redo();
-	void restoreState(const QVariantMap& state);
-	QVariantMap captureState() const;
-	QString selectedAnimationId() const;
-	void updateUndoButtons();
-	void updateTransportText();
-	void applyIcons();
-
-	QSettings* settings;
-	QString icon_directory;
+	void selectionChanged();
+	void updateTime();
+	void updateActions();
 	QVector<AnimationEditorItem> animations;
-	QVariantMap deferred_profile_state;
-	QVector<QVariantMap> undo_stack;
-	QVector<QVariantMap> redo_stack;
-	bool restoring_state;
-	double preview_duration_seconds;
-
-	QComboBox* profile_combo;
-	QToolButton* save_profile_button;
-	QToolButton* undo_button;
-	QToolButton* redo_button;
-	QLabel* preview_label;
-	QLabel* preview_time_label;
-	QToolButton* previous_button;
-	QToolButton* play_button;
-	QToolButton* next_button;
-	QToolButton* reset_preview_button;
-	QSlider* timeline_slider;
-	QTabWidget* tabs;
-	QLineEdit* search_edit;
-	QComboBox* category_combo;
-	QListWidget* category_list;
-	QTableWidget* animation_table;
-	QCheckBox* loop_check;
-	QCheckBox* root_motion_check;
-	QCheckBox* mirror_check;
-	QCheckBox* interruptible_check;
-	QDoubleSpinBox* speed_spin;
-	QDoubleSpinBox* blend_in_spin;
-	QDoubleSpinBox* blend_out_spin;
-	QDoubleSpinBox* transition_duration_spin;
-	QTableWidget* assignment_table;
-	QTableWidget* events_table;
-	QTableWidget* skeleton_table;
-	QLineEdit* import_filename_edit;
-	QComboBox* import_format_combo;
+	QString icon_directory;
+	QVBoxLayout* preview_layout;
+	QLabel* status_label;
+	QLabel* time_label;
+	QLineEdit* search;
+	QLineEdit* copy_name;
+	QTableWidget* table;
+	QSlider* timeline;
+	QCheckBox* loop;
+	QCheckBox* animate_head;
+	QDoubleSpinBox* speed;
+	QPushButton* play;
+	QPushButton* previous;
+	QPushButton* next;
+	QPushButton* rewind;
 	QPushButton* import_button;
-	QPushButton* add_button;
-	QPushButton* apply_button;
-	QPushButton* save_set_button;
+	QPushButton* save_copy;
+	QPushButton* remove_button;
+	QPushButton* perform_button;
+	QPushButton* stop_button;
+	QPushButton* export_button;
+	double duration = 0;
+	bool can_edit = false;
+	bool busy = false;
 };

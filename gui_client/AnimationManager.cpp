@@ -4,6 +4,7 @@ AnimationManager.cpp
 Copyright Glare Technologies Limited 2026 -
 =====================================================================*/
 #include "AnimationManager.h"
+#include "GestureAnimationRetarget.h"
 
 
 #include "../graphics/AnimationData.h"
@@ -78,6 +79,14 @@ Reference<AnimationData> AnimationManager::getAnimationIfPresent(const URLString
 			if(anim->animations.size() != 1)
 				throw glare::Exception(".subanim file must have exactly one animation in it.");
 
+			// World avatars are already retargeted to Idle. Imported rigs can have
+			// different local axes/root wrappers; mapping channel names alone tilts them.
+			if(anim_url != URLString("Idle.subanim"))
+			{
+				const auto driver = getAnimation("Idle.subanim", resource_manager);
+				const auto compatible = normaliseGestureAnimation(*anim, *driver);
+				if(compatible.nonNull()) anim = compatible;
+			}
 			anim->prepareForMultipleUse(); // Copy keyframe_times and output_data from the AnimationData object to the AnimationDatum object, so it can be used by multiple different avatars
 
 			// Insert into map

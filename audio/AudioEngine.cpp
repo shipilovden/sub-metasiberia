@@ -186,6 +186,15 @@ AudioEngine::~AudioEngine()
 }
 
 
+#if defined(_WIN32) && !defined(USE_SDL) && !EMSCRIPTEN
+void AudioEngine::setRecordingCallback(std::function<void(const float*, size_t, unsigned int)> callback)
+{
+	Lock lock(callback_data.buffer_mutex);
+	callback_data.recording_callback.swap(callback);
+}
+#endif
+
+
 #if USE_MINIAUDIO
 
 // This function will be called when miniaudio needs more data.
@@ -223,6 +232,14 @@ static void miniAudioCallBack(ma_device* device, void* output_buffer, const void
 		// Pad with zeroes if there wasn't enough data in the queue
 		for(size_t i=num_samples_to_dequeue; i<num_samples_needed; ++i)
 			output_buffer_f[i] = 0.f;
+
+#if defined(_WIN32) && !defined(USE_SDL) && !EMSCRIPTEN
+		if(data->recording_callback)
+		{
+			try { data->recording_callback(output_buffer_f, frame_count, device->sampleRate); }
+			catch(...) {} // Never propagate recorder failures into the audio device thread.
+		}
+#endif
 	}
 }
 
@@ -321,6 +338,14 @@ static int rtAudioCallback(void* output_buffer, void* input_buffer, unsigned int
 			for(unsigned int i=0; i<n_buffer_frames*2; ++i)
 				output_buffer_f[i] = 0.f;
 		}
+
+#if defined(_WIN32) && !defined(USE_SDL) && !EMSCRIPTEN
+		if(data->recording_callback)
+		{
+			try { data->recording_callback(output_buffer_f, n_buffer_frames, data->engine->getSampleRate()); }
+			catch(...) {} // Never propagate recorder failures into the audio device thread.
+		}
+#endif
 	}
 #endif
 

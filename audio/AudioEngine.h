@@ -21,6 +21,9 @@ Copyright Glare Technologies Limited 2021 -
 #include <vector>
 #include <set>
 #include <map>
+#if defined(_WIN32) && !defined(USE_SDL) && !EMSCRIPTEN
+#include <functional>
+#endif
 
 
 class RtAudio;
@@ -170,6 +173,9 @@ struct AudioCallbackData
 {
 	Mutex buffer_mutex; // protects buffer
 	CircularBuffer<float> buffer			GUARDED_BY(buffer_mutex);
+#if defined(_WIN32) && !defined(USE_SDL) && !EMSCRIPTEN
+	std::function<void(const float*, size_t, unsigned int)> recording_callback GUARDED_BY(buffer_mutex);
+#endif
 
 	//ThreadSafeQueue<Reference<AudioBuffer>> audio_buffer_queue;
 	vraudio::ResonanceAudioApi* resonance;
@@ -234,6 +240,17 @@ public:
 	void setCurentRoomDimensions(const js::AABBox& room_aabb);
 
 	uint32 getSampleRate() const { return sample_rate; }
+
+#if defined(_WIN32) && !defined(USE_SDL) && !EMSCRIPTEN
+	// Taps the final clamped, silence-padded stereo output on the audio device thread.
+	// The samples are valid only during the call: do only a bounded, nonblocking copy,
+	// with no file/network I/O or calls back into AudioEngine (in particular, no
+	// reentrant setRecordingCallback). Callback exceptions are swallowed.
+	// Pass an empty callback to detach. Registration and invocation share buffer_mutex,
+	// so clearing returns only after any in-flight call finishes. Clear before destroying
+	// a recorder captured by raw pointer. The default callback is empty.
+	void setRecordingCallback(std::function<void(const float* interleaved_stereo, size_t frames, unsigned int sample_rate)> callback);
+#endif
 
 	void seekToStartAndUnpauseAudio(AudioSource& source);
 	

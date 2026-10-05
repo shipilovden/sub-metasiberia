@@ -104,7 +104,7 @@ AGENTS содержат только routing и обязательные local r
 | Public Websites | [METASIBERIA_WEBSITES.md](../METASIBERIA_WEBSITES.md) | canonical boundary between `metasiberia.com` static site and `vr.metasiberia.com` server site; REG.RU workflow |
 | Release | [RELEASE_PIPELINE.md](../RELEASE_PIPELINE.md) | canonical manual release policy |
 | Security reporting | [SECURITY.md](../SECURITY.md) | vulnerability reporting, не full security design |
-| Chat | [CHAT_REDESIGN_PLAN_2026-06-30.md](../CHAT_REDESIGN_PLAN_2026-06-30.md) | canonical requirements + partial implementation plan |
+| Chat | [chat-ui.md](../chat-ui.md), [CHAT_REDESIGN_PLAN_2026-06-30.md](../CHAT_REDESIGN_PLAN_2026-06-30.md) | current implementation/audit (partial/WIP) + requirements plan |
 | Figma/site | [FIGMA_SITE_SYNC.md](../FIGMA_SITE_SYNC.md) | Server Website/Figma workflow |
 | Web Client | [WEBCLIENT_METASIBERIA.md](../WEBCLIENT_METASIBERIA.md) | implementation notes + historical rollout |
 | XR | [VR_QT_INTEGRATION_PLAN_2026-03-20.md](../VR_QT_INTEGRATION_PLAN_2026-03-20.md) | mixed plan/implementation status |

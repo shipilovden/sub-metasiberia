@@ -101,7 +101,7 @@ static std::string trPhoto(const Reference<SettingsStore>& settings, const std::
 }
 
 PhotoModeUI::PhotoModeUI()
-:	gui_client(NULL)
+:	gui_client(NULL), photo_mode_enabled(false)
 {}
 
 
@@ -377,6 +377,7 @@ static void checkRemove(GLUIRef gl_ui, PhotoModeSlider& slider)
 
 void PhotoModeUI::destroy()
 {
+	photo_mode_enabled = false;
 	// grid_container will remove this widgets form gl_ui.
 	standard_cam_button = nullptr;
 	selfie_cam_button = nullptr;
@@ -439,6 +440,7 @@ bool PhotoModeUI::isVisible() const
 
 void PhotoModeUI::enablePhotoModeUI()
 {
+	photo_mode_enabled = true;
 	setVisible(true);
 
 	updateWidgetPositions();
@@ -449,6 +451,7 @@ void PhotoModeUI::enablePhotoModeUI()
 
 void PhotoModeUI::disablePhotoModeUI()
 {
+	photo_mode_enabled = false;
 	// Restore camera settings to the defaults
 	resetControlsToNonPhotoModeDefaults();
 
@@ -459,7 +462,7 @@ void PhotoModeUI::disablePhotoModeUI()
 
 bool PhotoModeUI::isPhotoModeEnabled()
 {
-	return standard_cam_button && standard_cam_button->isVisible();
+	return photo_mode_enabled;
 }
 
 
@@ -665,14 +668,7 @@ void PhotoModeUI::eventOccurred(GLUICallbackEvent& event)
 		}
 		else if(event.widget == upload_photo_button.ptr())
 		{
-			if(!gui_client->logged_in_user_id.valid())
-			{
-				gui_client->showErrorNotification(trPhoto(settings, "You must be logged in to upload a photo."));
-			}
-			else
-			{
-				showUploadPhotoWidget();
-			}
+			requestPhotoUpload();
 
 			event.accepted = true;
 		}
@@ -819,6 +815,15 @@ void PhotoModeUI::resetControlsToNonPhotoModeDefaults()
 	roll_slider.setValue(0.0, gl_ui);
 
 	opengl_engine->getCurrentScene()->dof_blur_strength = 0.0f; // Should already be set to zero but make sure.
+}
+
+
+void PhotoModeUI::requestPhotoUpload()
+{
+	if(!gui_client->logged_in_user_id.valid())
+		gui_client->showErrorNotification(trPhoto(settings, "You must be logged in to upload a photo."));
+	else
+		showUploadPhotoWidget();
 }
 
 

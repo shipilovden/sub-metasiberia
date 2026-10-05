@@ -160,6 +160,7 @@ void AvatarPreviewWidget::initializeGL()
 	if(!opengl_engine->initSucceeded())
 	{
 		conPrint("AvatarPreviewWidget opengl_engine init failed: " + opengl_engine->getInitialisationErrorMsg());
+		return; // Do not allocate scene resources on an uninitialised engine.
 	}
 
 	if(opengl_engine->initSucceeded())
@@ -201,7 +202,6 @@ void AvatarPreviewWidget::initializeGL()
 		}
 		catch(glare::Exception& e)
 		{
-			assert(0);
 			conPrint("ERROR: " + e.what());
 		}
 		ob->materials[0].roughness = 0.8f;
@@ -232,7 +232,7 @@ void AvatarPreviewWidget::paintGL()
 	opengl_engine->setViewportDims(viewport_w, viewport_h);
 	opengl_engine->setMaxDrawDistance(100.f);
 	opengl_engine->setPerspectiveCameraTransform(world_to_camera_space_matrix, sensor_width, lens_sensor_dist, render_aspect_ratio, /*lens shift up=*/0.f, /*lens shift right=*/0.f);
-	opengl_engine->setCurrentTime((float)timer.elapsed());
+	opengl_engine->setCurrentTime((float)(preview_time_override >= 0.0 ? preview_time_override : timer.elapsed()));
 	opengl_engine->draw();
 }
 
