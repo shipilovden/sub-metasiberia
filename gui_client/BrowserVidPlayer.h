@@ -42,6 +42,13 @@ public:
 	void keyPressed(KeyEvent* e);
 	void keyReleased(KeyEvent* e);
 
+	bool hasDirectVideoControls() const;
+	void playVideo();
+	void pauseVideo();
+	void seekVideo(float fraction);
+	void setVideoVolume(float volume);
+	void setVideoMuted(bool muted);
+
 private:
 	void createNewBrowserPlayer(GUIClient* gui_client, OpenGLEngine* opengl_engine, WorldObject* ob);
 

@@ -40,6 +40,8 @@ public:
 
 	void init(const std::string& base_dir_path_, QSettings* settings_, Reference<TextureServer> texture_server);
 	void shutdown();
+	// Opt-in deterministic preview clock. Negative values restore the normal wall clock.
+	void setPreviewTimeOverride(double seconds) { preview_time_override = seconds; }
 	
 protected:
 	virtual void initializeGL() override;
@@ -65,6 +67,7 @@ signals:;
 	void widgetShowSignal();
 
 private:
+	double preview_time_override = -1.0;
 	std::string base_dir_path;
 	QPoint mouse_prev_pos;
 	QPoint mouse_move_origin;

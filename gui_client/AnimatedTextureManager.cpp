@@ -45,6 +45,95 @@ AnimatedTexData::~AnimatedTexData()
 {}
 
 
+void AnimatedTexData::setPaused(bool paused_)
+{
+	if(paused == paused_)
+		return;
+#if WMF_MP4_PLAYBACK_SUPPORT
+	// Pausing discards queued audio. Refill both decoders from the same clock
+	// position on resume so the soundtrack cannot jump ahead of the picture.
+	if(video_reader && paused && !paused_ && playback_duration_seconds > 0)
+	{
+		const double position = video_reader->timer.elapsed();
+		seekFraction(position >= playback_duration_seconds ? 0.f : (float)(position / playback_duration_seconds));
+	}
+#endif
+	paused = paused_;
+
+#if WMF_MP4_PLAYBACK_SUPPORT
+	if(video_reader)
+	{
+		if(paused)
+			video_reader->timer.pause();
+		else
+			video_reader->timer.unpause();
+	}
+#endif
+
+	if(browser.nonNull())
+		browser->executeJavaScript(std::string("(function(){var v=document.getElementById('thevid'); if(v) v.") + (paused ? "pause" : "play") + "();})();");
+}
+
+
+void AnimatedTexData::seekFraction(float fraction)
+{
+	const float clamped_fraction = myClamp(fraction, 0.f, 1.f);
+
+#if WMF_MP4_PLAYBACK_SUPPORT
+	if(video_reader)
+	{
+		if(playback_duration_seconds > 0.0)
+		{
+			const double seek_time = myMin(playback_duration_seconds * clamped_fraction, myMax(0.0, playback_duration_seconds - 0.1));
+			video_reader->seek(seek_time);
+			video_reader->timer.reset();
+			video_reader->timer.setSecondsElapsed(seek_time);
+			seek_target_time_seconds = seek_time;
+			seek_frame_pending = true;
+		}
+	}
+#endif
+
+	if(browser.nonNull())
+		browser->executeJavaScript("(function(){var v=document.getElementById('thevid'); if(v && isFinite(v.duration) && v.duration > 0) v.currentTime=v.duration*" + toString(clamped_fraction) + ";})();");
+}
+
+
+bool AnimatedTexData::getPlaybackFraction(double& fraction_out) const
+{
+#if WMF_MP4_PLAYBACK_SUPPORT
+	if(video_reader && playback_duration_seconds > 0.0)
+	{
+		fraction_out = myClamp(video_reader->timer.elapsed() / playback_duration_seconds, 0.0, 1.0);
+		return true;
+	}
+#endif
+	return false;
+}
+
+
+void AnimatedTexData::setMuted(WorldObject& ob, bool muted_)
+{
+	muted = muted_;
+	if(ob.audio_source)
+		ob.audio_source->volume = muted ? 0.f : myClamp(ob.audio_volume * volume, 0.f, 10.f);
+
+	if(browser.nonNull())
+		browser->executeJavaScript(std::string("(function(){var v=document.getElementById('thevid'); if(v) v.muted=") + (muted ? "true" : "false") + ";})();");
+}
+
+
+void AnimatedTexData::setVolume(WorldObject& ob, float volume_)
+{
+	volume = myClamp(volume_, 0.f, 1.f);
+	muted = volume <= 0.f;
+	if(ob.audio_source)
+		ob.audio_source->volume = muted ? 0.f : myClamp(ob.audio_volume * volume, 0.f, 10.f);
+	if(browser.nonNull())
+		browser->executeJavaScript("(function(){var v=document.getElementById('thevid'); if(v){v.volume=" + toString(volume) + ";v.muted=" + (muted ? "true" : "false") + ";}})();");
+}
+
+
 [[maybe_unused]] static std::string makeDataURL(const std::string& html)
 {
 	std::string html_base64;
@@ -123,7 +212,10 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 							error_occurred = true;
 						}
 						else if(create_vid_reader_task->video_reader_result)
+						{
 							video_reader = create_vid_reader_task->video_reader_result;
+							playback_duration_seconds = video_reader->getSourceDuration();
+						}
 					}
 
 					if(error_occurred || video_reader) // If the create_vid_reader_task was finished:
@@ -134,6 +226,16 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 
 		if(video_reader)
 		{
+			if(paused)
+				video_reader->timer.pause();
+			else
+				video_reader->timer.unpause();
+			if(paused && ob->audio_source)
+			{
+				gui_client->audio_engine.removeSource(ob->audio_source);
+				ob->audio_source = NULL;
+			}
+
 			// Process any decoded frames: either add to audio_frame_queue or video_frame_queue.
 			{
 				Lock lock(video_reader->frame_queue.getMutex());
@@ -151,6 +253,8 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 			while(video_reader->audio_frame_queue.nonEmpty())
 			{
 				Reference<SampleInfo> front_frame = video_reader->audio_frame_queue.popAndReturnFront();
+				if(paused || (seek_frame_pending && front_frame->frame_time + front_frame->frame_duration < seek_target_time_seconds))
+					continue;
 
 				assert(front_frame->is_audio);
 				WMFSampleInfo* wmf_frame = front_frame.downcastToPtr<WMFSampleInfo>();
@@ -160,7 +264,7 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 				runtimeCheck((bytes_per_sample > 0) && (front_frame->num_channels > 0)); // Avoid divide by zero
 				const uint64 num_samples = front_frame->buffer_len_B / bytes_per_sample / front_frame->num_channels;
 
-				if(!ob->audio_source && !BitUtils::isBitSet(ob->flags, WorldObject::VIDEO_MUTED))
+				if(!ob->audio_source && !muted)
 				{
 					// Create audio source
 					ob->audio_source = new glare::AudioSource();
@@ -170,7 +274,7 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 					ob->audio_source->pos = ob->getCentroidWS();
 					ob->audio_source->debugname = "animated tex: " + tex_path;
 					ob->audio_source->sampling_rate = front_frame->sample_rate_hz;// gui_client->audio_engine.getSampleRate();
-					ob->audio_source->volume = myClamp(ob->audio_volume, 0.f, 10.f);
+					ob->audio_source->volume = myClamp(ob->audio_volume * volume, 0.f, 10.f);
 
 					{
 						Lock lock(gui_client->world_state->mutex);
@@ -231,12 +335,14 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 			{
 				Reference<SampleInfo> front_frame = video_reader->video_frame_queue.front(); // Look at front video frame, but don't remove from queue yet.
 				assert(!front_frame->is_audio);
-				if(!front_frame->is_EOS_marker)
+				if(seek_frame_pending && !front_frame->is_EOS_marker && front_frame->frame_time + front_frame->frame_duration < seek_target_time_seconds)
+					video_reader->video_frame_queue.pop_front(); // Skip keyframe preroll before the requested position.
+				else if(!front_frame->is_EOS_marker)
 				{
 					WMFSampleInfo* wmf_frame = front_frame.downcastToPtr<WMFSampleInfo>();
 
 					// conPrint("frame_time: " + toString(front_frame->frame_time) + ", video_reader->timer: " + toString(video_reader->timer.elapsed()));
-					if(front_frame->frame_time <= video_reader->timer.elapsed()) // If the play time has reached the frame presentation time, then present the frame:
+					if(front_frame->frame_time <= video_reader->timer.elapsed() || (paused && (video_display_opengl_tex.isNull() || seek_frame_pending))) // Present a frame at the new position even while paused.
 					{
 						video_reader->video_frame_queue.pop_front(); // Remove from queue
 
@@ -283,6 +389,7 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 								ob->opengl_engine_ob->materials[mat_index].allow_alpha_test = false;
 								opengl_engine->materialTextureChanged(*ob->opengl_engine_ob, ob->opengl_engine_ob->materials[mat_index]);
 							}
+							seek_frame_pending = false;
 						}
 					}
 				}
@@ -297,13 +404,21 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 						// conPrint("Received EOS, seeking to beginning...");
 						video_reader->seekToStart(); // Resets timer as well
 					}
+					else
+					{
+						paused = true;
+						video_reader->timer.pause();
+						video_reader->timer.setSecondsElapsed(playback_duration_seconds);
+					}
 				}
 			} // End if(front_frame)
 
 			// Start doing some new sample reads if needed.
 			assert(video_reader->audio_frame_queue.empty()); // We should have processed all audio samples.
 			const int TARGET_NUM_FRAMES_DECODED_OR_DECODING = 6;
-			const int num_additional_samples_needed = myMax(0, TARGET_NUM_FRAMES_DECODED_OR_DECODING - (int)video_reader->video_frame_queue.size() - (int)video_reader->num_pending_reads);
+			const bool need_frame_while_paused = video_display_opengl_tex.isNull() || seek_frame_pending;
+			const int num_additional_samples_needed = (paused && !need_frame_while_paused) ? 0 :
+				myMax(0, TARGET_NUM_FRAMES_DECODED_OR_DECODING - (int)video_reader->video_frame_queue.size() - (int)video_reader->num_pending_reads);
 			for(int i=0; i<num_additional_samples_needed; ++i)
 				video_reader->startReadingNextSample();
 		}
@@ -344,13 +459,14 @@ void AnimatedTexData::processMP4AnimatedTex(GUIClient* gui_client, OpenGLEngine*
 				}
 			}
 
-			// NOTE: We will use a custom HTML page with the loop attribute set to true.  Can also add 'controls' attribute to debug stuff.
+			const bool loop = ob->object_type != WorldObject::ObjectType_Video || BitUtils::isBitSet(ob->flags, WorldObject::VIDEO_LOOP);
+			const std::string attributes = std::string(paused ? "" : "autoplay ") + (loop ? "loop " : "") + (muted ? "muted " : "");
 			const std::string html =
 				"<html>"
 				"<head>"
 				"</head>"
 				"<body style=\"margin:0\">"
-				"<video autoplay loop name=\"media\" id=\"thevid\" width=\"" + toString(width) + "px\" height=\"" + toString(height) + "px\">"
+				"<video " + attributes + "name=\"media\" id=\"thevid\" width=\"" + toString(width) + "px\" height=\"" + toString(height) + "px\">"
 				"<source src=\"" + web::Escaping::HTMLEscape(use_URL) + "\" type=\"video/mp4\" />"
 				"</video>"
 				"</body>"
@@ -382,6 +498,9 @@ void AnimatedTexData::checkCloseMP4Playback(GUIClient* gui_client, OpenGLEngine*
 
 		gui_client->sendVideoReaderToGarbageDeleterThread(video_reader);
 		video_reader = NULL;
+		playback_duration_seconds = 0.0;
+		seek_frame_pending = false;
+		seek_target_time_seconds = 0.0;
 		texture_copy = NULL;
 		shared_handle = NULL;
 		
@@ -425,6 +544,74 @@ void AnimatedTexData::checkCloseMP4Playback(GUIClient* gui_client, OpenGLEngine*
 		}
 	}
 #endif // CEF_SUPPORT
+}
+
+
+const AnimatedTexData* AnimatedTexObData::getVideoPlaybackData() const
+{
+	for(const auto& material : mat_animtexdata)
+		if(material.emission_col_animated_tex_data)
+			return material.emission_col_animated_tex_data.ptr();
+	return NULL;
+}
+
+
+void AnimatedTexObData::setPaused(bool paused_)
+{
+	for(auto& material_data : mat_animtexdata)
+	{
+		if(material_data.emission_col_animated_tex_data.nonNull())
+		{
+			material_data.emission_col_animated_tex_data->setPaused(paused_);
+			return;
+		}
+	}
+}
+
+
+void AnimatedTexObData::seekFraction(float fraction)
+{
+	for(auto& material_data : mat_animtexdata)
+	{
+		if(material_data.emission_col_animated_tex_data.nonNull())
+		{
+			material_data.emission_col_animated_tex_data->seekFraction(fraction);
+			return;
+		}
+	}
+}
+
+
+bool AnimatedTexObData::getPlaybackFraction(double& fraction_out) const
+{
+	for(const auto& material_data : mat_animtexdata)
+		if(material_data.emission_col_animated_tex_data.nonNull())
+			return material_data.emission_col_animated_tex_data->getPlaybackFraction(fraction_out);
+	return false;
+}
+
+
+void AnimatedTexObData::setMuted(WorldObject& ob, bool muted_)
+{
+	for(auto& material_data : mat_animtexdata)
+	{
+		if(material_data.emission_col_animated_tex_data.nonNull())
+		{
+			material_data.emission_col_animated_tex_data->setMuted(ob, muted_);
+			return;
+		}
+	}
+}
+
+
+void AnimatedTexObData::setVolume(WorldObject& ob, float volume_)
+{
+	for(size_t m=0; m<mat_animtexdata.size(); ++m)
+	{
+		MaterialAnimatedTexData& material_data = mat_animtexdata[m];
+		if(material_data.emission_col_animated_tex_data.nonNull())
+			material_data.emission_col_animated_tex_data->setVolume(ob, volume_);
+	}
 }
 
 
@@ -522,7 +709,15 @@ void AnimatedTexObData::rescanObjectForAnimatedTextures(OpenGLEngine* opengl_eng
 		if(hasExtension(mat.emission_tex_path, "mp4"))
 		{
 			if(animation_data.mat_animtexdata[m].emission_col_animated_tex_data.isNull())
+			{
 				animation_data.mat_animtexdata[m].emission_col_animated_tex_data = new AnimatedTexData(/*mat index=*/m, /*is refl tex=*/false, animated_tex_manager.use_WMF_for_vid_playback);
+				if(ob->object_type == WorldObject::ObjectType_Video)
+				{
+					AnimatedTexData& data = *animation_data.mat_animtexdata[m].emission_col_animated_tex_data;
+					data.paused = !BitUtils::isBitSet(ob->flags, WorldObject::VIDEO_AUTOPLAY);
+					data.muted = BitUtils::isBitSet(ob->flags, WorldObject::VIDEO_MUTED);
+				}
+			}
 		}
 	}
 }

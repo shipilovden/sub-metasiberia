@@ -33,6 +33,8 @@ public:
 
 	// Used by webclient file-picker callback path.
 	void addGestureFromSelectedPath(const std::string& selected_path);
+	// Keep the open manager in sync with changes made by the Qt animation editor.
+	void setCurrentGestureSettings(const GestureSettings& settings);
 	static GestureManagerUI* getActiveInstance();
 
 	void think();

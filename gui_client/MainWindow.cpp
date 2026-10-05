@@ -68,7 +68,11 @@ Copyright Glare Technologies Limited 2024 -
 #include "CulturalObjectSettings.h"
 #include "SpotlightEditor.h"
 #include "AnimationEditorPanel.h"
+#include "AnimationEditorController.h"
 #include "PhotoVideoSettingsPanel.h"
+#include "PhotoModeEffects.h"
+#include "PhotoPostProcess.h"
+#include "PhotoVideoRecorder.h"
 #include "DocumentEditorPanel.h"
 #include "../qt/FlowLayout.h"
 #include "../qt/SignalBlocker.h"
@@ -109,6 +113,8 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtGui/QCursor>
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
+#include <QtGui/QImageWriter>
+#include <QtCore/QSaveFile>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPen>
@@ -179,6 +185,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/FileOutStream.h"
 #include "../utils/BufferOutStream.h"
 #include <algorithm>
+#include <stdexcept>
 #include <cstdlib>
 #include <functional>
 #include "../utils/IndigoXMLDoc.h"
@@ -1647,11 +1654,16 @@ static void applyEditorDockTitleBarTheme(QDockWidget* dock_widget, const QPalett
 	if(!title_bar || title_bar->objectName() != QStringLiteral("editorDockTitleBar"))
 		return;
 
-	// This panel is always dark, including when constructed before the saved
+	// These panels are always dark, including when constructed before the saved
 	// application theme is applied (the initial Windows palette can be white).
 	const bool avatar_panel = dock_widget->objectName() == QStringLiteral("avatarDockWidget");
-	const QColor background = avatar_panel ? QColor("#34343a") : palette.color(QPalette::Window);
-	const QColor foreground = avatar_panel ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
+	const bool photo_panel = dock_widget->objectName() == QStringLiteral("photoVideoSettingsDockWidget");
+	const bool animation_panel = dock_widget->objectName() == QStringLiteral("animationEditorDockWidget");
+	const bool chat_panel = dock_widget->objectName() == QStringLiteral("chatDockWidget");
+	// These editors deliberately keep a dark title strip in every theme and
+	// activation state, including when floating. Only the title is overridden.
+	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
+	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
 	const QColor hover = foreground.lightness() > background.lightness() ? background.lighter(132) : background.darker(104);
 	// Own the custom title's colours locally, including when the dock floats.
 	// Do not depend on reapplying the main-window stylesheet to refresh it.
@@ -1703,6 +1715,18 @@ static void installEditorDockTitleBar(QDockWidget* dock_widget)
 	close_button->setIcon(dock_widget->style()->standardIcon(QStyle::SP_TitleBarCloseButton));
 	close_button->setToolTip(QCoreApplication::translate("MainWindow", "Close"));
 	layout->addWidget(close_button);
+
+	if(dock_widget->objectName() == QStringLiteral("chatDockWidget"))
+	{
+		// Text glyphs inherit the explicit light title colour, unlike native icons
+		// captured from the initial (potentially light) Windows palette.
+		float_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+		float_button->setText(QString::fromUtf8("↗"));
+		float_button->setToolTip(QCoreApplication::translate("MainWindow", "Закрепить или открепить панель чата"));
+		close_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+		close_button->setText(QString::fromUtf8("×"));
+		close_button->setToolTip(QCoreApplication::translate("MainWindow", "Закрыть панель чата"));
+	}
 
 	QObject::connect(dock_widget, &QDockWidget::windowTitleChanged, title_label, &QLabel::setText);
 	QObject::connect(float_button, &QToolButton::clicked, dock_widget, [dock_widget]() {
@@ -2360,6 +2384,7 @@ void MainWindow::initialiseUI()
 	animation_editor_dock_widget->setObjectName(QStringLiteral("animationEditorDockWidget"));
 	animation_editor_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 	animation_editor_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	installEditorDockTitleBar(animation_editor_dock_widget);
 	animation_editor_panel = new AnimationEditorPanel(settings, animation_editor_dock_widget);
 	animation_editor_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
 	animation_editor_dock_widget->setWidget(animation_editor_panel);
@@ -2367,82 +2392,62 @@ void MainWindow::initialiseUI()
 	addDockWidget(Qt::RightDockWidgetArea, animation_editor_dock_widget);
 	animation_editor_dock_widget->hide();
 
-	QVector<AnimationEditorItem> initial_animations;
-	initial_animations << AnimationEditorItem{QStringLiteral("idle_default"), tr("Idle Default"), tr("System"), tr("Built-in"), 0.0, true}
-		<< AnimationEditorItem{QStringLiteral("walk_default"), tr("Walk Default"), tr("Movement"), tr("Built-in"), 0.0, true}
-		<< AnimationEditorItem{QStringLiteral("run_default"), tr("Run Default"), tr("Movement"), tr("Built-in"), 0.0, false}
-		<< AnimationEditorItem{QStringLiteral("jump_start"), tr("Jump Start"), tr("Movement"), tr("Built-in"), 0.0, false}
-		<< AnimationEditorItem{QStringLiteral("falling"), tr("Falling"), tr("Movement"), tr("Built-in"), 0.0, false}
-		<< AnimationEditorItem{QStringLiteral("landing"), tr("Landing"), tr("Movement"), tr("Built-in"), 0.0, false};
-	animation_editor_panel->setAnimations(initial_animations);
-	connect(animation_editor_panel, &AnimationEditorPanel::applyProfileRequested, this,
-		[this](const QString& profile_name, const QVariantMap&) {
-			showInfoNotification("Animation profile saved: " + QtUtils::toStdString(profile_name));
-		});
-
-	photo_video_dock_widget = new QDockWidget(tr("Photo and Video Settings"), this);
+	photo_video_dock_widget = new QDockWidget(tr("Фоторежим"), this);
 	photo_video_dock_widget->setObjectName(QStringLiteral("photoVideoSettingsDockWidget"));
 	photo_video_dock_widget->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 	photo_video_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	installEditorDockTitleBar(photo_video_dock_widget);
 	photo_video_settings_panel = new PhotoVideoSettingsPanel(settings, photo_video_dock_widget);
 	photo_video_settings_panel->setIconDirectory(LucideIconUtils::directoryForBasePath(base_dir_path));
 	photo_video_dock_widget->setWidget(photo_video_settings_panel);
 	photo_video_dock_widget->setMinimumWidth(400);
 	addDockWidget(Qt::RightDockWidgetArea, photo_video_dock_widget);
 	photo_video_dock_widget->hide();
+	connect(ui->glWidget, &GlWidget::photoRenderError, this, [this](const QString& error) {
+		showErrorNotification(QtUtils::toStdString(error));
+	});
+	connect(ui->glWidget, &GlWidget::photoHistogramReady, photo_video_settings_panel, &PhotoVideoSettingsPanel::setHistogram);
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::focusPickRequested, this, [this]() {
+		photoTrajectoryAction(QStringLiteral("stop"));
+		photo_focus_pick = true;
+		ui->glWidget->setCursor(Qt::CrossCursor);
+		showInfoNotification("Click a surface to focus. Right-click to cancel.");
+	});
+	photo_path_timer = new QTimer(this);
+	photo_path_timer->setTimerType(Qt::PreciseTimer);
+	photo_path_timer->setInterval(16);
+	connect(photo_path_timer, &QTimer::timeout, this, &MainWindow::photoTrajectoryTick);
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::trajectoryActionRequested, this, &MainWindow::photoTrajectoryAction);
+	QTimer* photo_focus_timer = new QTimer(photo_video_settings_panel);
+	photo_focus_timer->setInterval(250);
+	connect(photo_focus_timer, &QTimer::timeout, this, [this]() {
+		if(native_photo_video_gl_ready && gui_client.photo_mode_ui.isPhotoModeEnabled())
+			photo_video_settings_panel->updateAutofocusDistance(opengl_engine->getCurrentScene()->dof_blur_focus_distance);
+	});
+	photo_focus_timer->start();
 
-	const auto apply_photo_video_camera_mode = [this](const QString& mode) {
-		if(mode == QStringLiteral("selfie")) gui_client.cam_controller.selfieCameraModeSelected();
-		else if(mode == QStringLiteral("fixed_angle")) gui_client.cam_controller.fixedAngleCameraModeSelected();
-		else if(mode == QStringLiteral("free")) gui_client.cam_controller.freeCameraModeSelected();
-		else if(mode == QStringLiteral("tracking")) gui_client.cam_controller.trackingCameraModeSelected();
-		else gui_client.cam_controller.standardCameraModeSelected();
-	};
-	const auto apply_photo_video_autofocus_mode = [this](const QString& mode) {
-		gui_client.cam_controller.setAutofocusMode(mode == QStringLiteral("eye") ? CameraController::AutofocusMode_Eye : CameraController::AutofocusMode_Off);
-	};
-	const auto apply_photo_video_settings = [this](const QVariantMap& values) {
-		if(ui->glWidget->opengl_engine.nonNull() && ui->glWidget->opengl_engine->getCurrentScene())
-		{
-			auto* scene = ui->glWidget->opengl_engine->getCurrentScene();
-			scene->dof_blur_strength = (float)values.value(QStringLiteral("dof_blur"), 0.0).toDouble();
-			scene->dof_blur_focus_distance = (float)values.value(QStringLiteral("focus_distance"), 3.0).toDouble();
-			scene->exposure_factor = (float)std::exp2(values.value(QStringLiteral("ev"), 0.0).toDouble());
-			scene->saturation_multiplier = (float)values.value(QStringLiteral("saturation"), 1.0).toDouble();
-		}
-		gui_client.cam_controller.lens_sensor_dist = (float)(values.value(QStringLiteral("focal_length_mm"), 25.0).toDouble() * 0.001);
-		Vec3d angles = gui_client.cam_controller.getAngles();
-		angles.z = ::degreeToRad(values.value(QStringLiteral("roll_degrees"), 0.0).toDouble());
-		gui_client.cam_controller.setAngles(angles);
-	};
 	connect(photo_video_dock_widget, &QDockWidget::visibilityChanged, this,
-		[this, apply_photo_video_camera_mode, apply_photo_video_autofocus_mode, apply_photo_video_settings](const bool visible) {
-			if(!native_photo_video_gl_ready)
+		[this](bool) {
+			if(!native_photo_video_gl_ready || closing)
 				return;
-			gui_client.setPhotoModeEnabled(visible);
-			if(visible)
-			{
-				gui_client.photo_mode_ui.setVisible(false); // Native Qt dock replaces the legacy GL overlay.
-				const QVariantMap restored_state = photo_video_settings_panel->currentSettings();
-				apply_photo_video_camera_mode(restored_state.value(QStringLiteral("camera_mode"), QStringLiteral("standard")).toString());
-				apply_photo_video_autofocus_mode(restored_state.value(QStringLiteral("autofocus_mode"), QStringLiteral("off")).toString());
-				apply_photo_video_settings(restored_state);
-			}
+			// A tabified dock becoming obscured is not a request to leave photo mode.
+			gui_client.setPhotoModeEnabled(!photo_video_dock_widget->isHidden());
 		});
-	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::cameraModeChanged, this, apply_photo_video_camera_mode);
-	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::autofocusModeChanged, this, apply_photo_video_autofocus_mode);
-	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::settingsChanged, this, apply_photo_video_settings);
-	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::capturePhotoRequested, this,
-		[this](const QVariantMap&) { takeScreenshot(); });
-	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::browseGalleryRequested, this, [this]() { showScreenshots(); });
-	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::recordingChanged, this,
-		[this](const bool recording, const QVariantMap&) {
-			if(recording)
-			{
-				showErrorNotification("Video recording backend is not available in this build yet; the recording profile was saved.");
-				photo_video_settings_panel->setRecording(false);
-			}
-		});
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::settingsChanged, this, &MainWindow::applyPhotoModeSettings);
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::capturePhotoRequested, this, &MainWindow::capturePhoto);
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::browseGalleryRequested, this, [this]() {
+		QString directory = photo_video_settings_panel->currentSettings().value(QStringLiteral("output_directory")).toString().trimmed();
+		if(directory.isEmpty()) directory = QtUtils::toQString(appdata_path + "/screenshots");
+		if(!QDir().mkpath(directory) || !QDesktopServices::openUrl(QUrl::fromLocalFile(directory)))
+			showErrorNotification("Could not open the photo folder.");
+	});
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::uploadPhotoRequested, this, [this]() {
+		if(native_photo_video_gl_ready) gui_client.photo_mode_ui.requestPhotoUpload();
+	});
+	photo_video_timer = new QTimer(this);
+	photo_video_timer->setTimerType(Qt::PreciseTimer);
+	connect(photo_video_timer, &QTimer::timeout, this, &MainWindow::photoRecordingTick);
+	connect(photo_video_settings_panel, &PhotoVideoSettingsPanel::recordingChanged, this, &MainWindow::setPhotoRecording);
 
 	document_editor_dock_widget = new QDockWidget(tr("Documents"), this);
 	document_editor_dock_widget->setObjectName(QStringLiteral("documentEditorDockWidget"));
@@ -2506,6 +2511,7 @@ void MainWindow::initialiseUI()
 	installEditorDockTitleBar(ui->editorDockWidget);
 	installEditorDockTitleBar(ui->environmentDockWidget);
 	installEditorDockTitleBar(ui->worldSettingsDockWidget);
+	installEditorDockTitleBar(ui->chatDockWidget);
 	ui->editorDockWidget->setMinimumWidth(360);
 	ui->scrollArea->setWidgetResizable(true);
 	ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -2869,7 +2875,7 @@ void MainWindow::initialiseUI()
 	if(animation_editor_dock_widget)
 		animation_editor_dock_widget->setWindowTitle(tr("Animation Editor"));
 	if(photo_video_dock_widget)
-		photo_video_dock_widget->setWindowTitle(tr("Photo and Video Settings"));
+		photo_video_dock_widget->setWindowTitle(tr("Фоторежим"));
 	if(document_editor_dock_widget)
 		document_editor_dock_widget->setWindowTitle(tr("Documents"));
 	updateMapDockState();
@@ -3210,7 +3216,7 @@ void MainWindow::refreshTranslatedUiText()
 	if(animation_editor_dock_widget)
 		animation_editor_dock_widget->setWindowTitle(tr("Animation Editor"));
 	if(photo_video_dock_widget)
-		photo_video_dock_widget->setWindowTitle(tr("Photo and Video Settings"));
+		photo_video_dock_widget->setWindowTitle(tr("Фоторежим"));
 	if(document_editor_dock_widget)
 		document_editor_dock_widget->setWindowTitle(tr("Documents"));
 
@@ -3663,6 +3669,9 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	applyEditorDockTitleBarTheme(ui->environmentDockWidget, palette);
 	applyEditorDockTitleBarTheme(ui->worldSettingsDockWidget, palette);
 	applyEditorDockTitleBarTheme(avatar_dock_widget, palette);
+	applyEditorDockTitleBarTheme(photo_video_dock_widget, palette);
+	applyEditorDockTitleBarTheme(animation_editor_dock_widget, palette);
+	applyEditorDockTitleBarTheme(ui->chatDockWidget, palette);
 
 	if(ui->menubar)
 	{
@@ -3845,11 +3854,14 @@ void MainWindow::afterGLInitInitialise()
 	const auto device_pixel_ratio = ui->glWidget->devicePixelRatio(); // For retina screens this is 2, meaning the gl viewport width is in physical pixels, which have twice the density of qt pixel coordinates.
 
 	gui_client.afterGLInitInitialise((double)device_pixel_ratio, ui->glWidget->opengl_engine, fonts, emoji_fonts);
+	animation_editor_controller = new AnimationEditorController(animation_editor_panel, gui_client.base_dir_path,
+		settings, &gui_client, [main_gl_widget = QPointer<GlWidget>(ui->glWidget)]() {
+			if(main_gl_widget) main_gl_widget->makeCurrent();
+		});
 	native_photo_video_gl_ready = true;
 	if(photo_video_dock_widget && photo_video_dock_widget->isVisible())
 	{
 		gui_client.setPhotoModeEnabled(true);
-		gui_client.photo_mode_ui.setVisible(false);
 	}
 
 
@@ -3906,6 +3918,13 @@ void MainWindow::afterGLInitInitialise()
 MainWindow::~MainWindow()
 {
 	running_destructor = true; // Set this to not append log messages during destruction, causes assert failure in Qt.
+	if(animation_editor_controller) animation_editor_controller->shutdown();
+	if(photo_path_timer) photo_path_timer->stop();
+	if(photo_video_timer) photo_video_timer->stop();
+#if defined(_WIN32)
+	gui_client.audio_engine.setRecordingCallback({});
+#endif
+	photo_video_recorder.reset();
 	native_photo_video_gl_ready = false;
 	if(photo_video_dock_widget)
 		photo_video_dock_widget->blockSignals(true);
@@ -3962,6 +3981,14 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	}
 
 	closing = true;
+	photo_path_timer->stop();
+	photo_video_timer->stop();
+#if defined(_WIN32)
+	gui_client.audio_engine.setRecordingCallback({});
+#endif
+	photo_video_recorder.reset(); // Finish the MP4 before tearing down the scene.
+	if(photo_video_settings_panel) photo_video_settings_panel->cancelCapture();
+	native_photo_video_gl_ready = false;
 	Timer shutdown_stage_timer;
 
 	// If we are in fullscreen mode, exit it before we save the window state.  This is because we want to start next time not in fullscreen mode.
@@ -3980,10 +4007,12 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	ui->glWidget->makeCurrent();
 	if(avatar_settings_widget)
 		avatar_settings_widget->shutdownGL();
+	if(animation_editor_controller) animation_editor_controller->shutdown();
 	if(gear_inventory_panel)
 		gear_inventory_panel->shutdownPreview();
 	ui->glWidget->makeCurrent();
 
+	ui->glWidget->setPhotoSettings(QVariantMap(), false);
 	gui_client.shutdown();
 	logLifecycleTiming("client shutdown", shutdown_stage_timer);
 
@@ -5210,6 +5239,51 @@ void MainWindow::setupChatPlayerControls()
 	QVBoxLayout* messages_page_layout = new QVBoxLayout(chat_messages_page);
 	messages_page_layout->setContentsMargins(8, 8, 8, 8);
 	messages_page_layout->setSpacing(8);
+	auto* message_search_layout = new QHBoxLayout();
+	message_search_layout->setSpacing(4);
+	chat_message_search_edit = new QLineEdit(chat_messages_page);
+	chat_message_search_edit->setObjectName(QStringLiteral("chatMessageSearch"));
+	chat_message_search_edit->setMinimumWidth(0);
+	chat_message_search_edit->setPlaceholderText(tr("Текст или автор…"));
+	chat_message_search_edit->setToolTip(tr("Поиск без учёта регистра в загруженных сообщениях текущего чата. Enter — далее, Shift+Enter — назад, Esc — отменить."));
+	chat_search_count = new QLabel(chat_messages_page);
+	chat_search_count->setToolTip(tr("Текущее совпадение / число найденных сообщений."));
+	chat_search_previous = makeChatToolButton(chat_messages_page, QString::fromUtf8("↑"), tr("Предыдущее сообщение (Shift+Enter)"), "icon");
+	chat_search_next = makeChatToolButton(chat_messages_page, QString::fromUtf8("↓"), tr("Следующее сообщение (Enter)"), "icon");
+	auto* cancel_search = makeChatToolButton(chat_messages_page, QString::fromUtf8("×"), tr("Очистить поиск и вернуться к черновику (Esc)"), "icon");
+	QWidget* search_controls[] = {chat_message_search_edit, chat_search_previous, chat_search_next, cancel_search};
+	for(QWidget* control : search_controls)
+	{
+		control->setProperty("chatSearchControl", true);
+		control->installEventFilter(this);
+	}
+	chat_search_previous->setEnabled(false);
+	chat_search_next->setEnabled(false);
+	message_search_layout->addWidget(chat_message_search_edit, 1);
+	message_search_layout->addWidget(chat_search_count);
+	message_search_layout->addWidget(chat_search_previous);
+	message_search_layout->addWidget(chat_search_next);
+	message_search_layout->addWidget(cancel_search);
+	messages_page_layout->addLayout(message_search_layout);
+	connect(chat_message_search_edit, &QLineEdit::textChanged, this, [this]() {
+		chat_search_current.clear();
+		updateChatMessageVisibility();
+	});
+	connect(chat_search_previous, &QToolButton::clicked, this, [this]() { updateChatMessageSearch(-1); });
+	connect(chat_search_next, &QToolButton::clicked, this, [this]() { updateChatMessageSearch(1); });
+	connect(cancel_search, &QToolButton::clicked, this, [this]() {
+		chat_message_search_edit->clear();
+		ui->chatMessageLineEdit->setFocus();
+	});
+	auto* find_message = new QAction(tr("Поиск в сообщениях"), ui->chatDockWidget);
+	find_message->setShortcut(QKeySequence::Find);
+	find_message->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+	ui->chatDockWidget->addAction(find_message);
+	connect(find_message, &QAction::triggered, this, [this]() {
+		if(!chat_showing_private_messages) chat_tabs_bar->setCurrentIndex(1);
+		chat_message_search_edit->setFocus();
+		chat_message_search_edit->selectAll();
+	});
 	chat_messages_scroll_area = new QScrollArea(chat_messages_page);
 	chat_messages_scroll_area->setWidgetResizable(true);
 	chat_messages_scroll_area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -6032,6 +6106,11 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 	if(plain_text.isEmpty() && attachments.isEmpty())
 		return;
 
+	QScrollBar* scroll_bar = chat_messages_scroll_area ? chat_messages_scroll_area->verticalScrollBar() : nullptr;
+	const int scroll_position = scroll_bar ? scroll_bar->value() : 0;
+	const bool follow_latest = scroll_bar && scroll_bar->maximum() - scroll_position <= 2 &&
+		(!chat_message_search_edit || chat_message_search_edit->text().trimmed().isEmpty());
+
 	QFrame* message_row = new QFrame(ui->chatWidget);
 	message_row->setObjectName("chatMessageRow");
 	message_row->setProperty("chatMessageRow", true);
@@ -6207,8 +6286,10 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 	text_layout->addWidget(reaction_label);
 	row_layout->addLayout(text_layout, 1);
 
-	QToolButton* reply_button = makeChatToolButton(message_row, QString::fromUtf8("↩"), tr("Ответить"), "icon");
+	QToolButton* reply_button = makeChatToolButton(message_row, QString::fromUtf8("↩"), tr("Цитировать в черновике (текстовая цитата)"), "icon");
 	QToolButton* like_button = makeChatToolButton(message_row, QString::fromUtf8("♡"), tr("Реакция"), "icon");
+	like_button->setEnabled(false);
+	like_button->setToolTip(tr("Реакции недоступны: синхронизация с сервером не поддерживается."));
 	QToolButton* message_more_button = makeChatToolButton(message_row, QString::fromUtf8("⋮"), tr("Действия с сообщением"), "icon");
 	row_layout->addWidget(reply_button);
 	row_layout->addWidget(like_button);
@@ -6217,13 +6298,14 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 	connect(reply_button, &QToolButton::clicked, this, [this, plain_text]() {
 		if(!ui || !ui->chatMessageLineEdit)
 			return;
-		const QString reply_prefix = tr("Ответ: ") + plain_text.left(90) + " ";
-		ui->chatMessageLineEdit->setText(reply_prefix);
-			ui->chatMessageLineEdit->setFocus();
-	});
-	connect(like_button, &QToolButton::clicked, this, [this, message_row, like_button]() {
-		addReactionToChatMessage(message_row, QString::fromUtf8("♥"));
-		like_button->setText(QString::fromUtf8("♥ 1"));
+		const QString quoted_draft = tr("Цитата: ") + plain_text.left(90) + "\n" + ui->chatMessageLineEdit->text();
+		if(quoted_draft.size() > ui->chatMessageLineEdit->maxLength())
+		{
+			showErrorNotification("Цитата не добавлена: черновик достиг максимальной длины.");
+			return;
+		}
+		ui->chatMessageLineEdit->setText(quoted_draft);
+		ui->chatMessageLineEdit->setFocus();
 	});
 	connect(message_more_button, &QToolButton::clicked, this, [this, message_row, plain_text, message_more_button]() {
 		showChatMessageContextMenu(message_row, plain_text, message_more_button);
@@ -6242,27 +6324,21 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 	applyChatMessageDisplaySettings();
 	updateChatMessageVisibility();
 
-	if(chat_messages_scroll_area)
-		QTimer::singleShot(0, this, [this]() {
-			if(chat_messages_scroll_area && chat_messages_scroll_area->verticalScrollBar())
+	// Follow arrivals only if the reader was already at the bottom, and has not
+	// scrolled away while the layout update was pending.
+	if(follow_latest)
+		QTimer::singleShot(0, this, [this, scroll_position]() {
+			if(!closing && chat_messages_scroll_area && chat_messages_scroll_area->verticalScrollBar() &&
+				chat_messages_scroll_area->verticalScrollBar()->value() == scroll_position &&
+				(!chat_message_search_edit || chat_message_search_edit->text().trimmed().isEmpty()))
 				chat_messages_scroll_area->verticalScrollBar()->setValue(chat_messages_scroll_area->verticalScrollBar()->maximum());
 	});
 }
 
 
-void MainWindow::addReactionToChatMessage(QFrame* message_row, const QString& reaction)
+void MainWindow::addReactionToChatMessage(QFrame*, const QString&)
 {
-	if(!message_row || reaction.isEmpty())
-		return;
-
-	QLabel* reaction_label = message_row->findChild<QLabel*>("chatReactionLabel");
-	if(!reaction_label)
-		return;
-
-	message_row->setProperty("chatReaction", reaction);
-	reaction_label->setText(QString::fromUtf8("%1 1").arg(reaction));
-	reaction_label->setVisible(true);
-	showInfoNotification(QtUtils::toStdString(tr("Реакция добавлена: %1").arg(reaction)));
+	showInfoNotification("Реакции недоступны: синхронизация с сервером не поддерживается.");
 }
 
 
@@ -6272,15 +6348,27 @@ void MainWindow::showChatMessageContextMenu(QFrame* message_row, const QString& 
 		return;
 
 	QMenu menu(this);
-	QAction* reply_action = menu.addAction(tr("Ответить"));
+	menu.setToolTipsVisible(true);
+	QAction* reply_action = menu.addAction(tr("Цитировать в черновике"));
+	reply_action->setToolTip(tr("Добавить текстовую цитату перед черновиком. Связь с исходным сообщением не создаётся."));
 	QMenu* reactions_menu = menu.addMenu(tr("Реакция"));
 	QAction* thumbs_up_action = reactions_menu->addAction(QString::fromUtf8("👍"));
 	QAction* heart_action = reactions_menu->addAction(QString::fromUtf8("❤️"));
 	QAction* laugh_action = reactions_menu->addAction(QString::fromUtf8("😂"));
 	QAction* wow_action = reactions_menu->addAction(QString::fromUtf8("😮"));
 	QAction* thumbs_down_action = reactions_menu->addAction(QString::fromUtf8("👎"));
+	const QString reactions_unavailable = tr("Реакции недоступны: синхронизация с сервером не поддерживается.");
+	reactions_menu->menuAction()->setEnabled(false);
+	reactions_menu->menuAction()->setToolTip(reactions_unavailable);
+	for(QAction* action : {thumbs_up_action, heart_action, laugh_action, wow_action, thumbs_down_action})
+	{
+		action->setEnabled(false);
+		action->setToolTip(reactions_unavailable);
+	}
 	QAction* copy_action = menu.addAction(tr("Копировать текст"));
 	QAction* report_action = menu.addAction(tr("Пожаловаться"));
+	report_action->setEnabled(false);
+	report_action->setToolTip(tr("Отправка жалоб на сервер не поддерживается."));
 	menu.addSeparator();
 	QAction* delete_action = menu.addAction(tr("Удалить"));
 
@@ -6293,49 +6381,46 @@ void MainWindow::showChatMessageContextMenu(QFrame* message_row, const QString& 
 
 	if(selected == reply_action && ui && ui->chatMessageLineEdit)
 	{
-		ui->chatMessageLineEdit->setText(tr("Ответ: ") + plain_text.left(90) + " ");
+		const QString quoted_draft = tr("Цитата: ") + plain_text.left(90) + "\n" + ui->chatMessageLineEdit->text();
+		if(quoted_draft.size() > ui->chatMessageLineEdit->maxLength())
+		{
+			showErrorNotification("Цитата не добавлена: черновик достиг максимальной длины.");
+			return;
+		}
+		ui->chatMessageLineEdit->setText(quoted_draft);
 		ui->chatMessageLineEdit->setFocus();
 	}
-	else if(selected == thumbs_up_action)
-		addReactionToChatMessage(message_row, QString::fromUtf8("👍"));
-	else if(selected == heart_action)
-		addReactionToChatMessage(message_row, QString::fromUtf8("❤️"));
-	else if(selected == laugh_action)
-		addReactionToChatMessage(message_row, QString::fromUtf8("😂"));
-	else if(selected == wow_action)
-		addReactionToChatMessage(message_row, QString::fromUtf8("😮"));
-	else if(selected == thumbs_down_action)
-		addReactionToChatMessage(message_row, QString::fromUtf8("👎"));
 	else if(selected == copy_action && QGuiApplication::clipboard())
 	{
 		QGuiApplication::clipboard()->setText(plain_text);
 		showInfoNotification("Текст сообщения скопирован.");
-	}
-	else if(selected == report_action)
-	{
-		showInfoNotification("Жалоба на сообщение отправлена в локальную очередь модерации.");
 	}
 	else if(selected == delete_action)
 	{
 		QMessageBox msg_box(this);
 		msg_box.setWindowTitle(tr("Удалить сообщение"));
 		msg_box.setText(tr("Удалить сообщение?"));
-		msg_box.setInformativeText(tr("Можно удалить сообщение только у себя или у всех участников чата."));
+		msg_box.setInformativeText(tr("Можно удалить сообщение только у себя. Удаление у всех не поддерживается сервером."));
 		QAbstractButton* delete_for_me_button = msg_box.addButton(tr("У себя"), QMessageBox::AcceptRole);
 		QAbstractButton* delete_for_everyone_button = msg_box.addButton(tr("У всех"), QMessageBox::DestructiveRole);
+		delete_for_everyone_button->setEnabled(false);
+		delete_for_everyone_button->setToolTip(tr("Удаление у всех недоступно: синхронизация с сервером не поддерживается."));
 		msg_box.addButton(QMessageBox::Cancel);
 		msg_box.exec();
 
 		if(msg_box.clickedButton() == delete_for_me_button)
 			deleteChatMessageRow(message_row, /*delete_for_everyone=*/false);
-		else if(msg_box.clickedButton() == delete_for_everyone_button)
-			deleteChatMessageRow(message_row, /*delete_for_everyone=*/true);
 	}
 }
 
 
 void MainWindow::deleteChatMessageRow(QFrame* message_row, bool delete_for_everyone)
 {
+	if(delete_for_everyone)
+	{
+		showInfoNotification("Удаление у всех недоступно: синхронизация с сервером не поддерживается.");
+		return;
+	}
 	if(!message_row)
 		return;
 
@@ -6356,12 +6441,11 @@ void MainWindow::deleteChatMessageRow(QFrame* message_row, bool delete_for_every
 		}
 	}
 
+	message_row->setProperty("chatDeleted", true);
 	message_row->hide();
 	message_row->deleteLater();
-	if(delete_for_everyone)
-		showInfoNotification("Сообщение скрыто локально. Сетевое удаление у всех будет включено после добавления серверного ID сообщений.");
-	else
-		showInfoNotification("Сообщение удалено у вас.");
+	updateChatMessageVisibility();
+	showInfoNotification("Сообщение удалено у вас.");
 }
 
 
@@ -6377,12 +6461,15 @@ void MainWindow::applyChatMessageDisplaySettings()
 	const QList<QFrame*> rows = chat_messages_scroll_area->findChildren<QFrame*>("chatMessageRow");
 	for(QFrame* row : rows)
 	{
-		const QString row_style = chatMessageRowStyle(
+		QString row_style = chatMessageRowStyle(
 			row->property("chatPrivateMessage").toBool(),
 			row->property("chatAttachmentMessage").toBool(),
 			row->property("chatSystemMessage").toBool(),
 			row->property("chatReplyMessage").toBool()
 		);
+		if(row->property("chatSearchCurrent").toBool())
+			row_style += QString("QFrame#chatMessageRow, QFrame#chatMessageRow:hover { border: 2px solid %1; }")
+				.arg(chat_messages_scroll_area->palette().color(QPalette::Highlight).name());
 		if(row->styleSheet() != row_style)
 			row->setStyleSheet(row_style);
 		if(QLayout* layout = row->layout())
@@ -6396,19 +6483,64 @@ void MainWindow::updateChatMessageVisibility()
 	if(!chat_messages_scroll_area)
 		return;
 
+	const QString query = chat_message_search_edit ? chat_message_search_edit->text().trimmed() : QString();
 	const QList<QFrame*> rows = chat_messages_scroll_area->findChildren<QFrame*>("chatMessageRow");
 	for(QFrame* row : rows)
 	{
 		const bool private_row = row->property("chatPrivateMessage").toBool();
+		bool in_conversation = !private_row;
 		if(chat_showing_private_messages)
 		{
 			const QString row_peer = row->property("chatPrivatePeer").toString();
 			const QString selected_peer = QtUtils::toQString(selectedChatRecipientName());
-			row->setVisible(private_row && chat_private_conversation_open && chatPeerMatches(row_peer, selected_peer));
+			in_conversation = private_row && chat_private_conversation_open && chatPeerMatches(row_peer, selected_peer);
 		}
-		else
-			row->setVisible(!private_row);
+		in_conversation = in_conversation && !row->property("chatDeleted").toBool();
+		row->setVisible(in_conversation);
+		row->setProperty("chatSearchMatch", in_conversation && !query.isEmpty() &&
+			row->property("chatMessagePlainText").toString().contains(query, Qt::CaseInsensitive));
 	}
+	updateChatMessageSearch();
+}
+
+
+void MainWindow::updateChatMessageSearch(int direction)
+{
+	if(!chat_messages_scroll_area || !chat_message_search_edit || !chat_search_count)
+		return;
+	const bool has_query = !chat_message_search_edit->text().trimmed().isEmpty();
+	const QList<QFrame*> rows = chat_messages_scroll_area->findChildren<QFrame*>("chatMessageRow");
+	QList<QFrame*> matches;
+	for(QFrame* row : rows)
+	{
+		if(!has_query) row->setProperty("chatSearchMatch", false);
+		else if(row->property("chatSearchMatch").toBool()) matches.push_back(row);
+	}
+	const QPointer<QFrame> previous = chat_search_current;
+	int index = matches.indexOf(chat_search_current.data());
+	if(matches.isEmpty()) chat_search_current.clear();
+	else
+	{
+		index = index < 0 ? (direction < 0 ? matches.size() - 1 : 0) : (index + direction + matches.size()) % matches.size();
+		chat_search_current = matches[index];
+	}
+	chat_search_count->setText(!has_query ? QString() :
+		tr("%1 / %2").arg(matches.isEmpty() ? 0 : index + 1).arg(matches.size()));
+	chat_search_previous->setEnabled(!matches.isEmpty());
+	chat_search_next->setEnabled(!matches.isEmpty());
+	bool highlight_changed = false;
+	for(QFrame* row : rows)
+		if(row->property("chatSearchCurrent").toBool() != (row == chat_search_current.data()))
+		{
+			row->setProperty("chatSearchCurrent", row == chat_search_current.data());
+			highlight_changed = true;
+		}
+	if(highlight_changed) applyChatMessageDisplaySettings();
+	if(chat_search_current && (direction != 0 || previous != chat_search_current))
+		QTimer::singleShot(0, this, [this]() {
+			if(!closing && chat_messages_scroll_area && chat_search_current && !chat_search_current->isHidden())
+				chat_messages_scroll_area->ensureWidgetVisible(chat_search_current.data(), 0, 12);
+		});
 }
 
 
@@ -6769,9 +6901,35 @@ void MainWindow::showChatUserContextMenu(UID avatar_uid, const QPoint& global_po
 
 void MainWindow::showChatAttachmentMenu()
 {
+	if(!gui_client.logged_in_user_id.valid())
+	{
+		showErrorNotification("Войдите в аккаунт, чтобы отправить вложение.");
+		return;
+	}
+	if(gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
+	{
+		showErrorNotification("Нет соединения. Вложение не загружено и не отправлено.");
+		return;
+	}
 	const QStringList selected_filenames = QFileDialog::getOpenFileNames(this, tr("Прикрепить файлы"), QString(), tr("Все файлы (*.*)"));
 	if(selected_filenames.isEmpty())
 		return;
+
+	if(!ui || !ui->chatMessageLineEdit)
+		return;
+	const bool private_send = chat_showing_private_messages;
+	const std::string recipient_name = selectedChatRecipientName();
+	const UID recipient_avatar_uid = selectedChatRecipientUID();
+	if(private_send && recipient_name.empty())
+	{
+		showErrorNotification("Выберите личный диалог для отправки вложения.");
+		return;
+	}
+	if(private_send && !chat_network_private_messages_enabled)
+	{
+		showErrorNotification("Сетевые личные сообщения выключены, вложение не отправлено.");
+		return;
+	}
 
 	QStringList uploaded_filenames;
 	QStringList attachment_markers;
@@ -6798,20 +6956,6 @@ void MainWindow::showChatAttachmentMenu()
 
 	if(ui && ui->chatMessageLineEdit)
 	{
-		const bool private_send = chat_showing_private_messages;
-		const std::string recipient_name = selectedChatRecipientName();
-		const UID recipient_avatar_uid = selectedChatRecipientUID();
-		if(private_send && recipient_name.empty())
-		{
-			showErrorNotification("Выберите личный диалог для отправки вложения.");
-			return;
-		}
-		if(private_send && !chat_network_private_messages_enabled)
-		{
-			showErrorNotification("Сетевые личные сообщения выключены, вложение не отправлено.");
-			return;
-		}
-
 		appendLocalChatAttachmentMessage(uploaded_filenames);
 
 		const QString typed_text = ui->chatMessageLineEdit->text().trimmed();
@@ -6898,6 +7042,12 @@ void MainWindow::sendPrivateChatMessageToSelectedUser()
 {
 	if(!ui)
 		return;
+
+	if(!chat_network_private_messages_enabled)
+	{
+		showErrorNotification("Сетевые личные сообщения выключены. Сообщение не отправлено; черновик сохранён.");
+		return;
+	}
 
 	const std::string recipient_name = selectedChatRecipientName();
 	if(recipient_name.empty())
@@ -7111,7 +7261,8 @@ void MainWindow::loadChatHistoryFromDisk()
 		rebuildChatUserRows();
 	if(chat_messages_scroll_area)
 		QTimer::singleShot(0, this, [this]() {
-			if(!closing && chat_messages_scroll_area && chat_messages_scroll_area->verticalScrollBar())
+			if(!closing && chat_messages_scroll_area && chat_messages_scroll_area->verticalScrollBar() &&
+				(!chat_message_search_edit || chat_message_search_edit->text().trimmed().isEmpty()))
 				chat_messages_scroll_area->verticalScrollBar()->setValue(chat_messages_scroll_area->verticalScrollBar()->maximum());
 		});
 	logLifecycleTiming("chat history presentation", history_timer);
@@ -8656,6 +8807,22 @@ void MainWindow::updateFavoritesMenu()
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
+	if(obj && obj->property("chatSearchControl").toBool() && event->type() == QEvent::KeyPress)
+	{
+		const auto* key = static_cast<QKeyEvent*>(event);
+		if(key->key() == Qt::Key_Escape)
+		{
+			chat_message_search_edit->clear();
+			if(ui && ui->chatMessageLineEdit) ui->chatMessageLineEdit->setFocus();
+			return true;
+		}
+		if(obj == chat_message_search_edit && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter))
+		{
+			updateChatMessageSearch(key->modifiers().testFlag(Qt::ShiftModifier) ? -1 : 1);
+			return true;
+		}
+	}
+
 	if(ui && (obj == ui->menubar) && (event->type() == QEvent::ToolTip))
 	{
 		QHelpEvent* help_event = static_cast<QHelpEvent*>(event);
@@ -9234,7 +9401,8 @@ void MainWindow::on_actionAddTree_triggered()
 	new_world_object->pos = ob_pos;
 	new_world_object->axis = Vec3f(0, 0, 1);
 	new_world_object->angle = 0.0f;
-	new_world_object->scale = Vec3f(1.0f);
+	// Only newly placed trees start at half size; keep saved trees and presets unchanged.
+	new_world_object->scale = Vec3f(0.5f);
 	new_world_object->max_model_lod_level = params.lodEnabled ? 2 : 0;
 	new_world_object->model_url = mesh_URL;
 	TreeObject::applyToWorldObject(*new_world_object, params, /*rebuild_mesh=*/false, TreeObject::findBundledAssetRoot(base_dir_path));
@@ -10302,8 +10470,362 @@ void MainWindow::on_actionExport_view_to_Indigo_triggered()
 }
 
 
+bool MainWindow::showNativeAnimationEditor()
+{
+	// Do not create/repaint a second GL context inside a GLUI mouse callback.
+	QTimer::singleShot(0, this, [this]() {
+		if(closing || !animation_editor_dock_widget) return;
+		animation_editor_dock_widget->show();
+		animation_editor_dock_widget->raise();
+	});
+	return true;
+}
+
+bool MainWindow::setNativePhotoModeEnabled(bool enabled)
+{
+	if(!photo_video_dock_widget) return false;
+	const QSignalBlocker blocker(photo_video_dock_widget); // Visibility callback must not re-enter GUIClient.
+	const bool changed = native_photo_video_gl_ready && gui_client.photo_mode_ui.isPhotoModeEnabled() != enabled;
+	if(enabled)
+	{
+		if(changed || photo_video_dock_widget->isHidden())
+		{
+			photo_video_dock_widget->setFloating(false);
+			if(dockWidgetArea(photo_video_dock_widget) != Qt::RightDockWidgetArea)
+				addDockWidget(Qt::RightDockWidgetArea, photo_video_dock_widget);
+			if(map_dock_widget && map_dock_widget->isVisible() && !map_dock_widget->isFloating())
+				tabifyDockWidget(map_dock_widget, photo_video_dock_widget);
+			photo_video_dock_widget->show();
+			photo_video_dock_widget->raise();
+			resizeDocks({photo_video_dock_widget}, {420}, Qt::Horizontal);
+		}
+		if(changed)
+		{
+			ui->glWidget->makeCurrent();
+			photo_saved_bloom = opengl_engine->getCurrentScene()->bloom_strength;
+			gui_client.photo_mode_ui.enablePhotoModeUI();
+			gui_client.photo_mode_ui.setVisible(false);
+			applyPhotoModeSettings(photo_video_settings_panel->currentSettings());
+		}
+	}
+	else
+	{
+		photo_video_settings_panel->cancelCapture();
+		setPhotoRecording(false, QVariantMap());
+		photoTrajectoryAction(QStringLiteral("stop"));
+		photo_focus_pick = false;
+		ui->glWidget->unsetCursor();
+		ui->glWidget->setPhotoSettings(QVariantMap(), false);
+		photo_video_dock_widget->hide();
+		if(changed)
+		{
+			ui->glWidget->makeCurrent();
+			gui_client.photo_mode_ui.disablePhotoModeUI();
+			opengl_engine->getCurrentScene()->bloom_strength = photo_saved_bloom;
+			ui->glWidget->photo_shift_x = ui->glWidget->photo_shift_y = 0;
+		}
+	}
+	return true;
+}
+
+
+void MainWindow::applyPhotoModeSettings(const QVariantMap& values)
+{
+	if(!native_photo_video_gl_ready || !gui_client.photo_mode_ui.isPhotoModeEnabled()) return;
+	auto& camera = gui_client.cam_controller;
+	const QString mode = values.value(QStringLiteral("camera_mode")).toString();
+	if(photo_path_timer && photo_path_timer->isActive() && mode != QStringLiteral("free")) {
+		photoTrajectoryAction(QStringLiteral("stop"));
+		return; // setPathOptics emitted fresh settings synchronously; do not reapply this stale map.
+	}
+	const auto desired_mode = mode == QStringLiteral("selfie") ? CameraController::CameraMode_Selfie :
+		mode == QStringLiteral("fixed_angle") ? CameraController::CameraMode_FixedAngle :
+		mode == QStringLiteral("free") ? CameraController::CameraMode_FreeCamera :
+		mode == QStringLiteral("tracking") ? CameraController::CameraMode_TrackingCamera : CameraController::CameraMode_Standard;
+	// Re-selecting free/tracking modes on every slider move resets camera state.
+	const bool path_playing = photo_path_timer && photo_path_timer->isActive();
+	if(!path_playing && camera.current_cam_mode != desired_mode)
+	{
+		switch(desired_mode)
+		{
+		case CameraController::CameraMode_Selfie: camera.selfieCameraModeSelected(); break;
+		case CameraController::CameraMode_FixedAngle: camera.fixedAngleCameraModeSelected(); break;
+		case CameraController::CameraMode_FreeCamera: camera.freeCameraModeSelected(); break;
+		case CameraController::CameraMode_TrackingCamera: camera.trackingCameraModeSelected(); break;
+		default: camera.standardCameraModeSelected(); break;
+		}
+	}
+	if(!path_playing) camera.setAutofocusMode(values.value(QStringLiteral("autofocus_mode")).toString() == QStringLiteral("eye") ?
+		CameraController::AutofocusMode_Eye : CameraController::AutofocusMode_Off);
+	auto* scene = opengl_engine->getCurrentScene();
+	scene->dof_blur_strength = (float)values.value(QStringLiteral("dof_blur"), 0.0).toDouble();
+	if(!path_playing && camera.autofocus_mode == CameraController::AutofocusMode_Off)
+		scene->dof_blur_focus_distance = (float)values.value(QStringLiteral("focus_distance"), 3.0).toDouble();
+	const double strength = values.value("compare_original").toBool() ? 0.0 : values.value("filter_strength", 1.0).toDouble();
+	scene->exposure_factor = (float)std::exp2(values.value(QStringLiteral("ev"), 0.0).toDouble() * strength);
+	scene->saturation_multiplier = (float)(1 + (values.value(QStringLiteral("saturation"), 1.0).toDouble()-1)*strength);
+	scene->bloom_strength = values.value("bloom", photo_saved_bloom).toFloat() * strength;
+	ui->glWidget->photo_shift_x = values.value("shift_x").toFloat();
+	ui->glWidget->photo_shift_y = values.value("shift_y").toFloat();
+	if(!path_playing) {
+		camera.lens_sensor_dist = values.value(QStringLiteral("focal_length_mm"), 25.0).toDouble() * 0.001;
+		Vec3d angles = camera.getAngles();
+		angles.z = ::degreeToRad(values.value(QStringLiteral("roll_degrees"), 0.0).toDouble());
+		camera.setAngles(angles);
+	}
+	ui->glWidget->setPhotoSettings(values, true);
+}
+
+
+void MainWindow::photoTrajectoryAction(const QString& action)
+{
+	if(!photo_path_timer) return;
+	if(action == "stop") {
+		const bool was_playing = photo_path_timer->isActive();
+		photo_path_timer->stop();
+		if(was_playing && native_photo_video_gl_ready) {
+			const auto& camera = gui_client.cam_controller;
+			photo_video_settings_panel->setPathOptics(opengl_engine->getCurrentScene()->dof_blur_focus_distance,
+				camera.lens_sensor_dist * 1000, std::remainder(camera.getAngles().z * 180 / Maths::pi<double>(), 360.0));
+		}
+	} else {
+		if(!native_photo_video_gl_ready || !gui_client.photo_mode_ui.isPhotoModeEnabled()) return;
+		if(action == "play") {
+			if(photo_path.size() < 2) { showInfoNotification("Add at least two camera keyframes."); return; }
+			photo_focus_pick = false;
+			ui->glWidget->unsetCursor();
+			photo_video_settings_panel->setCameraMode(QStringLiteral("free"));
+			photo_path_elapsed.start();
+			photo_path_timer->start();
+			photoTrajectoryTick();
+		} else {
+			photoTrajectoryAction(QStringLiteral("stop"));
+			if(action == "clear") photo_path.clear();
+			else if(action == "remove" && !photo_path.empty()) photo_path.pop_back();
+			else if(action == "add") {
+				if(photo_path.size() >= 64) { showInfoNotification("Camera path is limited to 64 keyframes."); return; }
+				// Free mode preserves the current view and supplies consistent Euler angles.
+				photo_video_settings_panel->setCameraMode(QStringLiteral("free"));
+				const auto& camera = gui_client.cam_controller;
+				const Vec3d p = camera.getPosition(), a = camera.getAngles();
+				PhotoCameraPath::Keyframe key;
+				key.position = {p.x,p.y,p.z}; key.angles = {a.x,a.y,a.z};
+				key.focus = opengl_engine->getCurrentScene()->dof_blur_focus_distance;
+				key.lens_mm = camera.lens_sensor_dist * 1000;
+				photo_path.push_back(key);
+			}
+		}
+	}
+	photo_video_settings_panel->setTrajectoryStatus(tr("Ключевых кадров: %1%2").arg(photo_path.size()).arg(
+		photo_path_timer->isActive() ? tr(" · Воспроизведение") : tr(" · Остановлено")));
+}
+
+
+void MainWindow::photoTrajectoryTick()
+{
+	if(!native_photo_video_gl_ready || gui_client.world_state.isNull() || photo_path.size() < 2) { photoTrajectoryAction("stop"); return; }
+	const QVariantMap values = photo_video_settings_panel->currentSettings();
+	const double duration = qBound(1.0, values.value("trajectory_duration", 8).toDouble(), 120.0);
+	double fraction = photo_path_elapsed.elapsed() / (duration*1000);
+	const bool loop = values.value("trajectory_loop").toBool();
+	if(loop) { fraction = std::fmod(fraction, 2.0); if(fraction > 1) fraction = 2-fraction; }
+	const auto key = PhotoCameraPath::sample(photo_path, fraction);
+	auto& camera = gui_client.cam_controller;
+	camera.setAutofocusMode(CameraController::AutofocusMode_Off);
+	camera.setThirdPersonCamPosition(Vec3d(key.position[0],key.position[1],key.position[2]));
+	camera.setAngles(Vec3d(key.angles[0],key.angles[1],key.angles[2]));
+	camera.lens_sensor_dist = key.lens_mm * 0.001;
+	opengl_engine->getCurrentScene()->dof_blur_focus_distance = (float)key.focus;
+	if(!loop && fraction >= 1) photoTrajectoryAction("stop");
+}
+
+
+static QImage videoSizedFrame(const QImage& source, const QSize& size)
+{
+	QImage result(size, QImage::Format_RGB888);
+	result.fill(Qt::black);
+	const QImage scaled = source.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+	QPainter painter(&result);
+	painter.drawImage((size.width()-scaled.width())/2, (size.height()-scaled.height())/2, scaled);
+	return result;
+}
+
+
+void MainWindow::setPhotoRecording(bool recording, const QVariantMap& values)
+{
+	if(!recording) {
+		if(photo_video_recorder) {
+#if defined(_WIN32)
+			gui_client.audio_engine.setRecordingCallback({});
+#endif
+			photo_video_recorder->stop();
+			photo_video_settings_panel->setRecordingFinalising();
+		}
+		return;
+	}
+	if(photo_video_recorder || !native_photo_video_gl_ready || !gui_client.photo_mode_ui.isPhotoModeEnabled()) {
+		photo_video_settings_panel->setRecording(photo_video_recorder != nullptr);
+		return;
+	}
+	try {
+		const bool world_audio = values.value("world_audio").toBool();
+#if defined(_WIN32)
+		if(world_audio && (!gui_client.audio_engine.isInitialised() || gui_client.audio_engine.getSampleRate() != 48000))
+			throw glare::Exception("World audio recording requires the initialised 48 kHz audio engine");
+#endif
+		QString directory = values.value("output_directory").toString().trimmed();
+		if(directory.isEmpty()) directory=QtUtils::toQString(appdata_path+"/screenshots");
+		if(!QDir().mkpath(directory)) throw glare::Exception("Cannot create recording directory");
+		photo_recording_path = QDir(directory).filePath(QStringLiteral("video_")+QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss_")+QUuid::createUuid().toString(QUuid::WithoutBraces)+".mp4");
+		const QStringList dimensions=values.value("resolution", "1920x1080").toString().split('x');
+		if(dimensions.size()!=2) throw glare::Exception("Invalid recording resolution");
+		photo_recording_size=QSize(qBound(128,dimensions[0].toInt(),3840)/2*2,qBound(128,dimensions[1].toInt(),2160)/2*2);
+		const int fps=qBound(15,values.value("frame_rate",30).toInt(),60);
+		const int bitrate=qBound(1,values.value("bitrate_mbps",20).toInt(),200)*1000000;
+		photo_recording_settings=values;
+		QImage first=videoSizedFrame(capturePhotoFrame(values,photo_recording_size),photo_recording_size);
+		photo_video_recorder.reset(new PhotoVideoRecorder(photo_recording_path,fps,bitrate,first,
+			values.value("microphone").toBool(), world_audio, true));
+#if defined(_WIN32)
+		if(world_audio) {
+			PhotoVideoRecorder* recorder = photo_video_recorder.get();
+			gui_client.audio_engine.setRecordingCallback([recorder](const float* samples, size_t frames, unsigned rate) {
+				recorder->submitWorldAudio(samples, frames, rate);
+			});
+		}
+#endif
+		photo_recording_elapsed.start();
+		photo_video_timer->start(qMax(1,1000/fps));
+		photo_video_settings_panel->setRecording(true);
+	} catch(const glare::Exception& e) {
+#if defined(_WIN32)
+		gui_client.audio_engine.setRecordingCallback({});
+#endif
+		photo_video_recorder.reset();
+		photo_video_settings_panel->setRecording(false);
+		showErrorNotification("Could not start recording: "+e.what());
+	} catch(const std::exception& e) {
+#if defined(_WIN32)
+		gui_client.audio_engine.setRecordingCallback({});
+#endif
+		photo_video_recorder.reset();
+		photo_video_settings_panel->setRecording(false);
+		showErrorNotification(std::string("Could not start recording: ")+e.what());
+	}
+}
+
+
+void MainWindow::photoRecordingTick()
+{
+	if(!photo_video_recorder) { photo_video_timer->stop(); return; }
+	if(photo_video_recorder->finished()) {
+		const QString error=photo_video_recorder->error();
+		photo_video_timer->stop();
+#if defined(_WIN32)
+		gui_client.audio_engine.setRecordingCallback({});
+#endif
+		photo_video_recorder.reset();
+		photo_video_settings_panel->setRecording(false);
+		if(error.isEmpty()) showInfoNotification(QtUtils::toStdString(tr("Видео сохранено: %1").arg(photo_recording_path)));
+		else showErrorNotification(QtUtils::toStdString(tr("Ошибка записи: %1. Файл может быть неполным: %2").arg(error,photo_recording_path)));
+		return;
+	}
+	const int max_minutes=photo_recording_settings.value("maximum_duration_minutes").toInt();
+	if(!native_photo_video_gl_ready || (max_minutes>0 && photo_recording_elapsed.elapsed()>=max_minutes*60000LL))
+		setPhotoRecording(false,QVariantMap());
+	if(photo_video_recorder->stopping()) return;
+	try {
+		// Optics and filters stay live. File dimensions and frame rate remain fixed for the clip.
+		photo_video_recorder->submit(videoSizedFrame(capturePhotoFrame(photo_video_settings_panel->currentSettings(),photo_recording_size),photo_recording_size));
+	} catch(const glare::Exception& e) {
+		setPhotoRecording(false,QVariantMap());
+		showErrorNotification("Recording capture failed: "+e.what());
+	} catch(const std::exception& e) {
+		setPhotoRecording(false,QVariantMap());
+		showErrorNotification(std::string("Recording capture failed: ")+e.what());
+	}
+}
+
+
+QImage MainWindow::capturePhotoFrame(const QVariantMap& values, const QSize& requested_size)
+{
+	QSize size = requested_size;
+	if(size.isEmpty()) {
+		const QString resolution = values.value("photo_resolution", "viewport").toString();
+		if(resolution != "viewport") {
+			const auto dimensions = resolution.split('x');
+			if(dimensions.size() != 2) throw glare::Exception("Invalid photo resolution");
+			size = QSize(dimensions[0].toInt(), dimensions[1].toInt());
+			if(size.isEmpty()) throw glare::Exception("Invalid photo resolution");
+		}
+	}
+	QVariantMap snapshot = values;
+	snapshot.insert("focus_distance", opengl_engine->getCurrentScene()->dof_blur_focus_distance);
+	snapshot.insert("focal_length_mm", gui_client.cam_controller.lens_sensor_dist*1000);
+	snapshot.insert("roll_degrees", gui_client.cam_controller.getAngles().z*180/Maths::pi<double>());
+	if(photo_path_timer && photo_path_timer->isActive()) snapshot.insert("autofocus_mode", "off");
+	return ui->glWidget->capturePhotoFrame(snapshot,size);
+}
+
+
+void MainWindow::capturePhoto(const QVariantMap& values)
+{
+	if(!native_photo_video_gl_ready || !gui_client.photo_mode_ui.isPhotoModeEnabled()) return;
+	try
+	{
+		QImage image = capturePhotoFrame(values);
+		auto* scene = opengl_engine->getCurrentScene();
+		QString directory = values.value(QStringLiteral("output_directory")).toString().trimmed();
+		if(directory.isEmpty()) directory = QtUtils::toQString(appdata_path + "/screenshots");
+		if(!QDir().mkpath(directory)) throw glare::Exception("Cannot create photo directory.");
+		const QString format = values.value(QStringLiteral("image_format"), QStringLiteral("png")).toString();
+		if(!QImageWriter::supportedImageFormats().contains(format.toLatin1())) throw glare::Exception("Selected image format is not supported.");
+		QString name = QStringLiteral("photo_");
+		if(values.value(QStringLiteral("timestamp_filename"), true).toBool()) name += QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss_zzz_"));
+		name += QUuid::createUuid().toString(QUuid::WithoutBraces); // Never overwrite a previous shot.
+		const QString path = QDir(directory).filePath(name + QStringLiteral(".") + format);
+		QSaveFile file(path);
+		if(!file.open(QIODevice::WriteOnly)) throw glare::Exception(QtUtils::toStdString(file.errorString()));
+		QImageWriter writer(&file, format.toLatin1());
+		if(format != QStringLiteral("png")) writer.setQuality(qBound(1, values.value(QStringLiteral("image_quality"), 95).toInt(), 100));
+		if(!writer.write(image)) throw glare::Exception(QtUtils::toStdString(writer.errorString()));
+		if(!file.commit()) throw glare::Exception(QtUtils::toStdString(file.errorString()));
+		settings_store->setStringValue("photo/last_saved_photo_path", QtUtils::toStdString(path));
+		showInfoNotification(QtUtils::toStdString(tr("Фото сохранено: %1").arg(path)));
+		if(values.value(QStringLiteral("camera_metadata"), true).toBool())
+		{
+			QVariantMap metadata = values;
+			metadata.remove(QStringLiteral("output_directory"));
+			metadata.insert(QStringLiteral("width"), image.width());
+			metadata.insert(QStringLiteral("height"), image.height());
+			metadata.insert(QStringLiteral("focus_distance"), scene->dof_blur_focus_distance);
+			metadata.insert(QStringLiteral("focal_length_mm"), gui_client.cam_controller.lens_sensor_dist*1000);
+			metadata.insert(QStringLiteral("roll_degrees"), gui_client.cam_controller.getAngles().z*180/Maths::pi<double>());
+			metadata.remove(QStringLiteral("compare_original"));
+			const QByteArray json = QJsonDocument(QJsonObject::fromVariantMap(metadata)).toJson();
+			QSaveFile metadata_file(QDir(directory).filePath(name + QStringLiteral(".json")));
+			if(!metadata_file.open(QIODevice::WriteOnly) || metadata_file.write(json) != json.size() || !metadata_file.commit())
+				showErrorNotification("Photo saved, but camera settings could not be saved.");
+		}
+	}
+	catch(const glare::Exception& e)
+	{
+		showErrorNotification("Could not save photo: " + e.what());
+	}
+	catch(const std::exception& e)
+	{
+		showErrorNotification(std::string("Could not save photo: ") + e.what());
+	}
+}
+
+
 void MainWindow::on_actionTake_Screenshot_triggered()
 {
+	if(gui_client.photo_mode_ui.isPhotoModeEnabled())
+	{
+		capturePhoto(photo_video_settings_panel->currentSettings());
+		return;
+	}
 	opengl_engine->getCurrentScene()->draw_overlay_objects = false; // Hide UI
 
 	ui->glWidget->makeCurrent();
@@ -11311,17 +11833,12 @@ void MainWindow::sendChatOrEmojiMessage(const std::string& message)
 			return;
 		}
 
-		if(chat_network_private_messages_enabled)
-			gui_client.sendPrivateChatMessage(recipient_name, recipient_avatar_uid, safe_message);
-		else
+		if(!chat_network_private_messages_enabled)
 		{
-			const QString recipient = QtUtils::toQString(chat_private_recipient_name.empty() ? recipient_name : chat_private_recipient_name);
-			const QString html =
-				"<p><span style=\"color:#7c3aed; font-weight:600;\">" +
-				tr("Лично для %1").arg(recipient).toHtmlEscaped() +
-				"</span>: " + safe_message_q.toHtmlEscaped() + "</p>";
-			appendLocalChatMessage(html, true);
+			showErrorNotification("Сетевые личные сообщения выключены. Сообщение не отправлено; черновик сохранён.");
+			return;
 		}
+		gui_client.sendPrivateChatMessage(recipient_name, recipient_avatar_uid, safe_message);
 		return;
 	}
 
@@ -11382,6 +11899,23 @@ void MainWindow::sendChatMessageSlot()
 	const std::string message = stripHeadAndTailWhitespace(QtUtils::toIndString(ui->chatMessageLineEdit->text()));
 	if(message.empty())
 		return;
+	if(!gui_client.logged_in_user_id.valid())
+	{
+		showErrorNotification("Войдите в аккаунт, чтобы отправить сообщение. Черновик сохранён.");
+		return;
+	}
+	if(gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
+	{
+		showErrorNotification("Нет соединения. Сообщение не отправлено; черновик сохранён.");
+		return;
+	}
+
+	if(chat_showing_private_messages && !chat_network_private_messages_enabled)
+	{
+		showErrorNotification("Сетевые личные сообщения выключены. Сообщение не отправлено; черновик сохранён.");
+		ui->chatMessageLineEdit->setFocus();
+		return;
+	}
 
 	if(chat_showing_private_messages && selectedChatRecipientName().empty())
 	{
@@ -11694,6 +12228,39 @@ void MainWindow::glWidgetMousePressed(QMouseEvent* e)
 {
 	if(!opengl_engine)
 		return;
+	if(photo_focus_pick && gui_client.photo_mode_ui.isPhotoModeEnabled()) {
+		if(e->button() != Qt::LeftButton && e->button() != Qt::RightButton) return;
+		photo_focus_pick = false; photo_focus_release = true;
+		ui->glWidget->unsetCursor();
+		e->accept();
+		if(e->button() == Qt::RightButton || gui_client.physics_world.isNull() || gui_client.world_state.isNull()) return;
+		try {
+		const double ratio = ui->glWidget->devicePixelRatio();
+		const QSize size(qRound(ui->glWidget->width()*ratio),qRound(ui->glWidget->height()*ratio));
+		const QPointF mapped = PhotoPostProcess::sourceUV(QPointF(double(e->pos().x())/ui->glWidget->width(),
+			double(e->pos().y())/ui->glWidget->height()),size,photo_video_settings_panel->currentSettings());
+		const auto* scene = opengl_engine->getCurrentScene();
+		if(scene->lens_sensor_dist <= 0) throw std::runtime_error("Invalid focus camera lens");
+		const float x = float((mapped.x()-0.5)*scene->use_sensor_width + scene->lens_shift_right_distance) / scene->lens_sensor_dist;
+		const float y = float((0.5-mapped.y())*scene->use_sensor_height + scene->lens_shift_up_distance) / scene->lens_sensor_dist;
+		const Matrix4f& camera_to_world = scene->getCamToWorld();
+		const Vec4f origin = camera_to_world * Vec4f(0,0,0,1);
+		const Vec4f ray = normalise(camera_to_world * (scene->use_z_up ? Vec4f(x,1,y,0) : Vec4f(x,y,-1,0)));
+		RayTraceResult hit;
+		{
+			WorldStateLock lock(gui_client.world_state->mutex);
+			gui_client.physics_world->traceRay(origin,ray,10000.f,JPH::BodyID(),hit);
+		}
+		if(hit.hit_object) {
+			const Vec4f forward = normalise(camera_to_world * (scene->use_z_up ? Vec4f(0,1,0,0) : Vec4f(0,0,-1,0)));
+			const double axial_distance = hit.hit_t * dot(ray,forward);
+			photo_video_settings_panel->setManualFocusDistance(qBound(0.1,axial_distance,100.0));
+		} else showInfoNotification("No surface at this point. Focus was not changed.");
+		} catch(const std::exception& error) {
+			showErrorNotification(std::string("Focus pick failed: ")+error.what());
+		}
+		return;
+	}
 
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor && gui_client.selected_ob.nonNull() && gui_client.selected_ob->physics_object.nonNull() &&
 		(e->button() == Qt::LeftButton || e->button() == Qt::RightButton))
@@ -11729,6 +12296,7 @@ void MainWindow::glWidgetMouseReleased(QMouseEvent* e)
 {
 	if(!opengl_engine)
 		return;
+	if(photo_focus_release) { photo_focus_release=false; e->accept(); return; }
 
 	const Vec2f widget_pos((float)e->pos().x(), (float)e->pos().y());
 	const Vec2f gl_coords = GLCoordsForGLWidgetPos(this, widget_pos);
@@ -12167,6 +12735,17 @@ void MainWindow::exitFromFullScreenMode()
 
 void MainWindow::glWidgetKeyPressed(QKeyEvent* e)
 {
+	if(e->key() == Qt::Key_Escape && photo_focus_pick) {
+		photo_focus_pick = false;
+		ui->glWidget->unsetCursor();
+		e->accept();
+		return;
+	}
+	if(photo_path_timer && photo_path_timer->isActive() && e->key() == Qt::Key_Escape) {
+		photoTrajectoryAction("stop");
+		e->accept();
+		return;
+	}
 	// If ALT+ENTER is pressed, enter or exit fullscreen mode.
 	if((e->key() == Qt::Key_Return) && ((e->modifiers() & Qt::AltModifier) != 0))
 	{

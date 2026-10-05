@@ -18,6 +18,9 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtOpenGL/QGLWidget>
 #endif
 #include <QtCore/QTimer>
+#include <QtCore/QVariantMap>
+#include <QtGui/QImage>
+#include <memory>
 
 
 namespace Indigo { class Mesh; }
@@ -28,6 +31,7 @@ class TextureServer;
 class EnvEmitter;
 class QSettings;
 class QGamepad;
+class GlWidgetPhotoResources;
 
 
 class GlWidget : public
@@ -44,6 +48,8 @@ public:
 	~GlWidget();
 
 	void shutdown();
+	void setPhotoSettings(const QVariantMap& values, bool enabled);
+	QImage capturePhotoFrame(const QVariantMap& values, const QSize& requested_size = QSize());
 
 	// Non-empty if error occurred.
 	std::string getInitialisationErrorMsg() const { return initialisation_error_msg; }
@@ -102,6 +108,8 @@ signals:;
 	void focusOutSignal();
 	void gamepadButtonXChangedSignal(bool pressed);
 	void gamepadButtonAChangedSignal(bool pressed);
+	void photoRenderError(QString message);
+	void photoHistogramReady(QImage histogram);
 
 private slots:
 	void gamepadInputSlot();
@@ -109,7 +117,16 @@ private slots:
 	void buttonXChangedSlot(bool pressed);
 
 private:
-	
+	bool renderPhotoPreview();
+	void releasePhotoResources();
+	bool photo_enabled = false;
+	bool photo_frame_in_progress = false;
+	QVariantMap photo_settings;
+	QString last_photo_error;
+	Timer photo_frame_timer;
+	double last_photo_histogram_time = -1.0;
+	std::unique_ptr<GlWidgetPhotoResources> photo_resources;
+
 	QPoint mouse_move_origin;
 	QPoint last_mouse_press_pos;
 	CameraController* cam_controller;
@@ -128,6 +145,7 @@ public:
 	QGamepad* gamepad;
 	Reference<OpenGLEngine> opengl_engine;
 	float near_draw_dist;
+	float photo_shift_x = 0, photo_shift_y = 0;
 	float max_draw_dist;
 
 	QTimer* gamepad_init_timer;

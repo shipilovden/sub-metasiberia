@@ -23,6 +23,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "ObjectPathController.h"
 #include "AvatarGraphics.h"
 #include "AvatarGroundingUtils.h"
+#include "VRMObjectAnimation.h"
 #include "WinterShaderEvaluator.h"
 #include "ClientUDPHandlerThread.h"
 #include "URLWhitelist.h"
@@ -178,7 +179,7 @@ static uint64 voxelEditorRevisionForObject(const WorldObject& object)
 
 
 static bool useRussianClientUI(GUIClient* gui_client);
-static std::string imageViewerPrompt(GUIClient* gui_client, const std::string& use_action_button);
+static std::string fullscreenViewerPrompt(GUIClient* gui_client, bool is_video, bool is_web_view, const std::string& use_action_button);
 #include "superluminal/PerformanceAPI.h"
 #if BUGSPLAT_SUPPORT
 #include <BugSplat.h>
@@ -2414,7 +2415,7 @@ void GUIClient::shutdown()
 		return;
 	shutdown_started = true;
 	Timer shutdown_timer;
-	closeImageViewer();
+	closeFullscreenViewer();
 	// Destroy/close all OpenGL stuff, because once glWidget is destroyed, the OpenGL context is destroyed, so we can't free stuff properly.
 	hideTerrainSculptBrushOverlay();
 	terrain_sculpt_brush_gl_ob = NULL;
@@ -3370,7 +3371,7 @@ static void removeAnimatedTextureUse(GLObject& ob, AnimatedTextureManager& anima
 void GUIClient::removeAndDeleteGLObjectsForOb(WorldObject& ob)
 {
 	if(image_viewer_object_uid == ob.uid)
-		closeImageViewer();
+		closeFullscreenViewer();
 
 	gaussian_splat_render_objects.erase(ob.uid);
 
@@ -4532,6 +4533,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 		//ob->/*loaded_lod_level*/loading_lod_level = ob_lod_level;
 
 		// Add any objects with gif or mp4 textures to the set of animated objects. (if not already)
+		if(ob->object_type != WorldObject::ObjectType_Video)
 		for(size_t i=0; i<ob->materials.size(); ++i)
 		{
 			if(	::hasExtension(ob->materials[i]->colour_texture_url,   "mp4") ||
@@ -5452,6 +5454,22 @@ void GUIClient::updateGaussianSplatDepthSorting()
 void GUIClient::loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const Reference<MeshData>& mesh_data, const Reference<PhysicsShapeData>& physics_shape_data, int ob_lod_level, int ob_model_lod_level, 
 	int voxel_subsample_factor, WorldStateLock& world_state_lock)
 {
+	// Do this before addObject(), which allocates animation buffers and registers the object.
+	AnimationData& anim = mesh_data->gl_meshdata->animation_data;
+	if(ob->object_type == WorldObject::ObjectType_Generic && mesh_data->source_is_vrm && anim.animations.empty())
+	{
+		const GLMemUsage old_usage = mesh_data->gl_meshdata->getTotalMemUsage();
+		try
+		{
+			VRMObjectAnimation::addIdleIfMissing(anim, *animation_manager.getAnimation("Idle.subanim", *resource_manager));
+		}
+		catch(const glare::Exception& e)
+		{
+			conPrint("VRM object Idle: " + std::string(e.what()));
+		}
+		mesh_manager.meshMemoryAllocatedChanged(old_usage, mesh_data->gl_meshdata->getTotalMemUsage());
+	}
+
 	removeAndDeleteGLObjectsForOb(*ob); // Remove any existing OpenGL model
 
 	// Remove previous physics object. If this is a dynamic or kinematic object, don't delete old object though, unless it's a placeholder.
@@ -5550,6 +5568,7 @@ void GUIClient::loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const
 
 
 	// Add any objects with mp4 textures to the set of animated objects. (if not already)
+	if(ob->object_type != WorldObject::ObjectType_Video)
 	for(size_t i=0; i<ob->materials.size(); ++i)
 	{
 		if(	::hasExtension(ob->materials[i]->colour_texture_url,   "mp4") ||
@@ -5579,41 +5598,88 @@ void GUIClient::loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const
 }
 
 
-void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const Reference<MeshData>& mesh_data)
+// Share GPU allocations, not the mutable skeleton. Construct fresh reference
+// counters: a default copy of OpenGLMeshRenderData also copies embedded counters.
+static Reference<OpenGLMeshRenderData> copyMeshForAvatar(const OpenGLMeshRenderData& source)
+{
+	Reference<OpenGLMeshRenderData> copy = new OpenGLMeshRenderData();
+	copy->aabb_os = source.aabb_os;
+	copy->vert_data = source.vert_data;
+	copy->vbo_handle = source.vbo_handle;
+	copy->vert_index_buffer = source.vert_index_buffer;
+	copy->vert_index_buffer_uint16 = source.vert_index_buffer_uint16;
+	copy->vert_index_buffer_uint8 = source.vert_index_buffer_uint8;
+	copy->indices_vbo_handle = source.indices_vbo_handle;
+#if DO_INDIVIDUAL_VAO_ALLOC
+	copy->individual_vao = source.individual_vao;
+#else
+	copy->vao_data_index = source.vao_data_index;
+#endif
+	copy->batches = source.batches;
+	copy->has_uvs = source.has_uvs;
+	copy->has_shading_normals = source.has_shading_normals;
+	copy->has_vert_colours = source.has_vert_colours;
+	copy->has_vert_tangents = source.has_vert_tangents;
+	copy->pos_coords_quantised = source.pos_coords_quantised;
+	copy->position_w_is_oct16_normal = source.position_w_is_oct16_normal;
+	copy->uv0_scale = source.uv0_scale;
+	copy->uv1_scale = source.uv1_scale;
+	copy->setIndexType(source.getIndexType());
+	copy->vertex_spec = source.vertex_spec;
+	copy->batched_mesh = source.batched_mesh;
+	copy->animation_data = source.animation_data;
+	copy->animation_data.retarget_adjustments_set = source.animation_data.retarget_adjustments_set;
+	copy->num_materials_referenced = source.num_materials_referenced;
+	copy->processed_in_mem_count = false;
+	return copy;
+}
+
+
+void GUIClient::loadPresentAvatarModel(Avatar* avatar, int av_lod_level, const Reference<MeshData>& source_mesh_data)
 {
 	// conPrint("GUIClient::loadPresentAvatarModel");
-
-	removeAndDeleteGLObjectForAvatar(*avatar);
-
-	const Matrix4f ob_to_world_matrix = obToWorldMatrix(*avatar);
-	const bool use_basis_for_avatar_materials = shouldUseBasisTexturesForAvatar(avatar->avatar_settings.model_url, this->server_has_basis_textures);
-
-	// Create gl and physics object now
-	glare::ArenaFrame frame(arena_allocator);
-	avatar->graphics.skinned_gl_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data->gl_meshdata, av_lod_level, avatar->avatar_settings.materials, /*lightmap_url=*/URLString(),
-		/*use_basis=*/use_basis_for_avatar_materials, *resource_manager, &arena_allocator, ob_to_world_matrix);
-
-	mesh_data->meshDataBecameUsed();
-	avatar->mesh_data = mesh_data; // Hang on to a reference to the mesh data, so when object-uses of it are removed, it can be removed from the MeshManager with meshDataBecameUnused().
-
-	// Load animation data for ready-player-me type avatars
-	if(!avatar->graphics.skinned_gl_ob->mesh_data->animation_data.retarget_adjustments_set)
+	Reference<MeshData> mesh_data = source_mesh_data;
+	if(source_mesh_data->source_is_vrm)
 	{
-		const GLMemUsage old_mem_usage = avatar->graphics.skinned_gl_ob->mesh_data->getTotalMemUsage();
+		// A wearable avatar needs locomotion/gestures, while its display object may
+		// have authored clips. Keep animation state separate; GPU buffers stay shared.
+		const URLString avatar_cache_key = URLString("__avatar_runtime__/") + source_mesh_data->model_url;
+		mesh_data = mesh_manager.getMeshData(avatar_cache_key);
+		if(mesh_data.isNull())
+			mesh_data = mesh_manager.insertMesh(avatar_cache_key, copyMeshForAvatar(*source_mesh_data->gl_meshdata));
+	}
 
-		// Append the first animation (Idle) and build the retargetting data.
-		avatar->graphics.skinned_gl_ob->mesh_data->animation_data.loadAndRetargetAnim(*animation_manager.getAnimation("Idle.subanim", *resource_manager));
-
-		// Append all the other animations
-		for(size_t i=0; i<staticArrayNumElems(movement_anim_names); ++i)
-			if(!stringEqual(movement_anim_names[i], "Idle"))
-				avatar->graphics.skinned_gl_ob->mesh_data->animation_data.appendAnimationData(*animation_manager.getAnimation(URLString(movement_anim_names[i]) + ".subanim", *resource_manager));
-
-		const GLMemUsage new_mem_usage = avatar->graphics.skinned_gl_ob->mesh_data->getTotalMemUsage();
+	// Prepare animations before replacing the visible avatar. A failed load keeps
+	// both the previous avatar and the cached animation container intact.
+	{
+		const GLMemUsage old_mem_usage = mesh_data->gl_meshdata->getTotalMemUsage();
+		{
+			AnimationData& destination = mesh_data->gl_meshdata->animation_data;
+			AnimationData staged;
+			staged = destination;
+			staged.retarget_adjustments_set = destination.retarget_adjustments_set;
+			if(!staged.retarget_adjustments_set)
+				staged.loadAndRetargetAnim(*animation_manager.getAnimation("Idle.subanim", *resource_manager));
+			// The display object may already have installed Idle; still add locomotion.
+			for(size_t i=0; i<staticArrayNumElems(movement_anim_names); ++i)
+				if(staged.getAnimationIndex(movement_anim_names[i]) < 0)
+					staged.appendAnimationData(*animation_manager.getAnimation(URLString(movement_anim_names[i]) + ".subanim", *resource_manager));
+			VRMObjectAnimation::commitPrepared(destination, staged);
+		}
+		const GLMemUsage new_mem_usage = mesh_data->gl_meshdata->getTotalMemUsage();
 
 		// The mesh manager keeps a running total of the amount of memory used by inserted meshes.  Therefore it needs to be informed if the size of one of them changes.
 		mesh_manager.meshMemoryAllocatedChanged(old_mem_usage, new_mem_usage);
 	}
+
+	removeAndDeleteGLObjectForAvatar(*avatar);
+	const Matrix4f ob_to_world_matrix = obToWorldMatrix(*avatar);
+	const bool use_basis_for_avatar_materials = shouldUseBasisTexturesForAvatar(avatar->avatar_settings.model_url, this->server_has_basis_textures);
+	glare::ArenaFrame frame(arena_allocator);
+	avatar->graphics.skinned_gl_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data->gl_meshdata, av_lod_level, avatar->avatar_settings.materials, /*lightmap_url=*/URLString(),
+		/*use_basis=*/use_basis_for_avatar_materials, *resource_manager, &arena_allocator, ob_to_world_matrix);
+	mesh_data->meshDataBecameUsed();
+	avatar->mesh_data = mesh_data;
 
 	// AvatarSettingsWidget uses the retargeted animation data when it computes
 	// the eye anchor.  Do the same for the built-in guest models, then refresh
@@ -8156,8 +8222,17 @@ void GUIClient::updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::stri
 		resource_manager->copyLocalFileToResourceDir(bmesh_disk_path, mesh_URL);
 	}
 
-	Vec3d avatar_pos;
-	Vec3d cam_angles;
+	applyOurAvatarResource(mesh_URL, pre_ob_to_world_matrix, materials);
+}
+
+
+void GUIClient::applyOurAvatarResource(const URLString& mesh_URL, const Matrix4f& pre_ob_to_world_matrix, const std::vector<WorldMaterialRef>& materials)
+{
+	if(connection_state != ServerConnectionState_Connected || client_thread.isNull())
+		throw glare::Exception("Not connected to server.");
+	if(!logged_in_user_id.valid())
+		throw glare::Exception("You must be logged in to set your avatar model");
+	Vec3d avatar_pos, cam_angles;
 	getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
 	Avatar avatar;
 	avatar.uid = client_avatar_uid;
@@ -8212,6 +8287,76 @@ void GUIClient::updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::stri
 	showInfoNotification("Updated avatar.");
 
 	conPrint("GUIClient::updateOurAvatarModel() done.");
+}
+
+
+static bool isAvatarDisplayObject(const WorldObject& ob)
+{
+	return ob.object_type == WorldObject::ObjectType_Generic && ob.mesh_manager_data.nonNull() &&
+		ob.mesh_manager_data->gl_meshdata.nonNull() &&
+		(ob.mesh_manager_data->source_is_vrm || !ob.mesh_manager_data->gl_meshdata->animation_data.joint_nodes.empty());
+}
+
+
+static bool isWearableVRMObject(const WorldObject& ob)
+{
+	return isAvatarDisplayObject(ob) && !ob.isGearItem() && ob.vehicle_script.isNull() && ob.target_url.empty() && ob.script.empty() &&
+		!(ob.event_handlers && ob.event_handlers->onUserUsedObject_handlers.nonEmpty());
+}
+
+
+bool GUIClient::tryWearVRMObjectAtCursor(bool use_mouse_cursor)
+{
+	if(world_state.isNull() || physics_world.isNull()) return false;
+	WorldObjectRef display;
+	{
+		WorldStateLock lock(world_state->mutex);
+		const Vec2i pixel = use_mouse_cursor ? ui_interface->getMouseCursorWidgetPos() :
+			Vec2i(opengl_engine->getMainViewPortWidth() / 2, opengl_engine->getMainViewPortHeight() / 2);
+		RayTraceResult hit;
+		physics_world->traceRay(cam_controller.getPosition().toVec4fPoint(), getDirForPixelTrace(pixel.x, pixel.y),
+			1.0e5f, JPH::BodyID(), hit);
+		if(hit.hit_object && hit.hit_object->userdata && hit.hit_object->userdata_type == 0)
+		{
+			WorldObject* ob = static_cast<WorldObject*>(hit.hit_object->userdata);
+			if(isWearableVRMObject(*ob)) display = ob;
+		}
+	}
+	if(display.isNull()) return false;
+	try
+	{
+		if(!logged_in_user_id.valid())
+			throw glare::Exception(useRussianClientUI(this) ? "Войдите в аккаунт, чтобы надеть аватар." : "Log in to wear an avatar.");
+		URLString model_url;
+		Vec3f model_scale;
+		js::AABBox model_aabb;
+		std::vector<WorldMaterialRef> materials;
+		{
+			WorldStateLock lock(world_state->mutex);
+			if(!isWearableVRMObject(*display)) return true;
+			model_url = display->model_url;
+			model_scale = display->scale;
+			model_aabb = display->mesh_manager_data->gl_meshdata->aabb_os;
+			for(const auto& material : display->materials) materials.push_back(material->clone());
+		}
+		// Match the built-in avatar placement: avatar.pos is the eye point, and
+		// the source model's lower AABB edge is placed at ground level.
+		const float model_floor_height = model_aabb.min_[1] * model_scale.y;
+		// The VRM Idle pose leaves the visible soles above the unanimated mesh
+		// bounds. Keep the small sole correction proportional to the model scale.
+		const float idle_sole_correction = 0.16f * model_scale.y;
+		const Matrix4f transform = Matrix4f::translationMatrix(0, 0,
+			-AvatarGrounding::kDefaultAvatarEyeHeightM - model_floor_height - idle_sole_correction) *
+			Matrix4f::rotationAroundXAxis(Maths::pi<float>() * 0.5f) *
+			Matrix4f::scaleMatrix(model_scale.x, model_scale.y, model_scale.z);
+		// Outside the world lock: the existing apply path updates previews and sends AvatarFullUpdate.
+		applyOurAvatarResource(model_url, transform, materials);
+	}
+	catch(const glare::Exception& e)
+	{
+		showErrorNotification(e.what());
+	}
+	return true;
 }
 
 
@@ -10709,6 +10854,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	}
 
 
+	chat_ui.think();
 	if(gl_ui.nonNull())
 		gl_ui->think();
 
@@ -10909,8 +11055,23 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 	// Update info UI with stuff like drawing the URL for objects with target URLs, and showing the 'press [E] to enter vehicle' message.
 	// Don't do this if the mouse cursor is hidden, because that implies we are click-dragging to change the camera orientation, and we don't want to show mouse over messages while doing that.
-	if(!ui_interface->isCursorHidden())
+	if(!ui_interface->isCursorHidden() && image_viewer_image.isNull())
 	{
+		const int viewport_w = opengl_engine->getMainViewPortWidth();
+		const int viewport_h = opengl_engine->getMainViewPortHeight();
+		const bool cursor_inside_viewport = viewport_w > 0 && viewport_h > 0 &&
+			mouse_cursor_state.cursor_pos.x >= 0 && mouse_cursor_state.cursor_pos.y >= 0 &&
+			mouse_cursor_state.cursor_pos.x < viewport_w && mouse_cursor_state.cursor_pos.y < viewport_h;
+		if(cursor_inside_viewport != fullscreen_prompt_cursor_inside_viewport)
+		{
+			fullscreen_prompt_cursor_inside_viewport = cursor_inside_viewport;
+			fullscreen_prompt_object_uid = UID();
+			fullscreen_prompt_shown_at = -1.0;
+			fullscreen_prompt_visible = false;
+			if(!cursor_inside_viewport)
+				ob_info_ui.hideMessage();
+		}
+
 		//const QPoint widget_pos = ui->glWidget->mapFromGlobal(QCursor::pos());
 		const bool use_mouse_cursor_as_cursor = !isXRActive() && last_cursor_movement_was_from_mouse;
 		Vec2i cursor_pos;
@@ -10987,6 +11148,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 
 		animated_texture_manager->think(this, opengl_engine.ptr(), anim_time, dt);
+		updateFullscreenVideoState();
 
 
 		const bool screenshot_slave_mode = parsed_args.isArgPresent("--screenshotslave");
@@ -14678,7 +14840,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 						"<p><span style=\"color:rgb(" + toString(col.r * 255) + ", " + toString(col.g * 255) + ", " + toString(col.b * 255) + ")\">" + web::Escaping::HTMLEscape(use_avatar_name) + "</span>: " +
 						web::Escaping::HTMLEscape(m->msg) + "</p>");
 
-					chat_ui.appendMessage(use_avatar_name, col, ": " + overlay_message);
+					chat_ui.appendMessage(use_avatar_name, col, overlay_message, true);
 
 					spawnFloatingChatMessageForAvatar(m->sender_avatar_uid, overlay_message, cur_time);
 					if(m->sender_avatar_uid != client_avatar_uid && audio_engine.isInitialised() && (settings.isNull() || settings->getBoolValue("chat/sound_enabled", true)))
@@ -21323,17 +21485,30 @@ void GUIClient::mousePressed(MouseEvent& e)
 	// conPrint("GUIClient::mousePressed");
 	if(image_viewer_image.nonNull())
 	{
-		e.accepted = true;
 		ui_interface->setCamRotationOnMouseDragEnabled(false);
 		ui_interface->setCamRotationOnRightMouseDragEnabled(false);
+		if(fullscreen_video_controls)
+		{
+			handleFullscreenVideoAction(fullscreen_video_controls->mousePressed(e));
+		}
+		else
+		{
+			const WorldObjectRef ob = fullscreenViewerObject();
+			Vec2f uv;
+			if(ob && fullscreenViewerUVForPixel(e.cursor_pos, uv))
+			{
+				if(ob->web_view_data) ob->web_view_data->mousePressed(&e, uv);
+				else if(ob->browser_vid_player) ob->browser_vid_player->mousePressed(&e, uv);
+			}
+		}
+		e.accepted = true;
 		return;
 	}
 
 	if(gl_ui.nonNull())
 	{
+		chat_ui.handleMousePress(e);
 		gl_ui->handleMousePress(e);
-		if(!e.accepted)
-			chat_ui.handleMousePress(e);
 		if(!e.accepted && minimap)
 			minimap->handleMousePress(e);
 		if(e.accepted)
@@ -21755,6 +21930,21 @@ void GUIClient::mouseReleased(MouseEvent& e)
 {
 	if(image_viewer_image.nonNull())
 	{
+
+		if(fullscreen_video_controls)
+		{
+			handleFullscreenVideoAction(fullscreen_video_controls->mouseReleased(e));
+		}
+		else
+		{
+			const WorldObjectRef ob = fullscreenViewerObject();
+			Vec2f uv;
+			if(ob && fullscreenViewerUVForPixel(e.cursor_pos, uv))
+			{
+				if(ob->web_view_data) ob->web_view_data->mouseReleased(&e, uv);
+				else if(ob->browser_vid_player) ob->browser_vid_player->mouseReleased(&e, uv);
+			}
+		}
 		e.accepted = true;
 		return;
 	}
@@ -21887,6 +22077,21 @@ void GUIClient::mouseDoubleClicked(MouseEvent& mouse_event)
 {
 	if(image_viewer_image.nonNull())
 	{
+
+		if(fullscreen_video_controls)
+		{
+			if(!fullscreen_video_controls->contains(mouse_event.gl_coords)) closeFullscreenViewer();
+		}
+		else
+		{
+			const WorldObjectRef ob = fullscreenViewerObject();
+			Vec2f uv;
+			if(ob && fullscreenViewerUVForPixel(mouse_event.cursor_pos, uv))
+			{
+				if(ob->web_view_data) ob->web_view_data->mouseDoubleClicked(&mouse_event, uv);
+				else if(ob->browser_vid_player) ob->browser_vid_player->mouseDoubleClicked(&mouse_event, uv);
+			}
+		}
 		mouse_event.accepted = true;
 		return;
 	}
@@ -22683,23 +22888,32 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 					Vec2f(hitpos_os[0],     hitpos_os[2]) : // y=0 face:
 					Vec2f(1 - hitpos_os[0], hitpos_os[2]); // y=1 face:
 
+				const bool is_fullscreen_media = isFullscreenMediaObject(*ob);
+				const bool show_fullscreen_prompt = is_fullscreen_media && fullscreenPromptShouldShow(ob->uid);
+				bool fullscreen_prompt_message_shown = false;
+				if(is_fullscreen_media)
+					show_mouseover_info_ui = true;
+
 				if(ob->web_view_data.nonNull() && mouse_event) // If this is a web-view object:
 				{
 					ob->web_view_data->mouseMoved(mouse_event, uvs);
+					if(show_fullscreen_prompt)
+					{
+						ob_info_ui.showMessage(fullscreenViewerPrompt(this, isVideoObjectForFullscreen(*ob), isWebViewObjectForFullscreen(*ob), "[F]"), cursor_gl_coords);
+						fullscreen_prompt_message_shown = true;
+					}
 				}
 				else if(ob->browser_vid_player.nonNull() && mouse_event) // If this is a video object:
 				{
 					ob->browser_vid_player->mouseMoved(mouse_event, uvs);
+					if(show_fullscreen_prompt)
+					{
+						ob_info_ui.showMessage(fullscreenViewerPrompt(this, isVideoObjectForFullscreen(*ob), isWebViewObjectForFullscreen(*ob), "[F]"), cursor_gl_coords);
+						fullscreen_prompt_message_shown = true;
+					}
 				}
 				else 
 				{
-					const bool is_fullscreen_image = isImageObjectForFullscreen(*ob);
-					if(is_fullscreen_image)
-					{
-						ob_info_ui.showMessage(imageViewerPrompt(this, "[F]"), cursor_gl_coords);
-						show_mouseover_info_ui = true;
-					}
-
 					if(!ob->target_url.empty() && (ob->web_view_data.isNull() && ob->browser_vid_player.isNull())) // If the object has a target URL (and is not a web-view and not a video object):
 					{
 						// If the mouse-overed ob is currently selected, and is editable, don't show the hyperlink, because 'E' is the key to pick up the object.
@@ -22714,18 +22928,28 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 
 							if(ob->isPortal())
 								ob_info_ui.showMessage("Walk through to visit " + trimmed_URL, cursor_gl_coords);
-							else if(is_fullscreen_image)
+							else if(is_fullscreen_media)
 							{
-								const std::string open_url_prompt = useRussianClientUI(this) ?
-									("Нажмите " + std::string(use_action_button) + " для открытия " + trimmed_URL) :
-									("Press " + std::string(use_action_button) + " to open " + trimmed_URL);
-								ob_info_ui.showMessage(imageViewerPrompt(this, "[F]") + "\n" + open_url_prompt, cursor_gl_coords);
+								if(show_fullscreen_prompt)
+								{
+									const std::string open_url_prompt = useRussianClientUI(this) ?
+										("Нажмите " + std::string(use_action_button) + " для открытия " + trimmed_URL) :
+										("Press " + std::string(use_action_button) + " to open " + trimmed_URL);
+									ob_info_ui.showMessage(fullscreenViewerPrompt(this, isVideoObjectForFullscreen(*ob), isWebViewObjectForFullscreen(*ob), "[F]") + "\n" + open_url_prompt, cursor_gl_coords);
+									fullscreen_prompt_message_shown = true;
+								}
 							}
 							else
 								ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to open " + trimmed_URL, cursor_gl_coords);
 
 							show_mouseover_info_ui = true;
 						}
+					}
+
+					if(is_fullscreen_media && show_fullscreen_prompt && !fullscreen_prompt_message_shown)
+					{
+						ob_info_ui.showMessage(fullscreenViewerPrompt(this, isVideoObjectForFullscreen(*ob), isWebViewObjectForFullscreen(*ob), "[F]"), cursor_gl_coords);
+						fullscreen_prompt_message_shown = true;
 					}
 
 					if((ob->object_type == WorldObject::ObjectType_Seat) && seat_sitting_on.isNull() && vehicle_controller_inside.isNull() &&
@@ -22757,6 +22981,15 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 					{
 						ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to use", cursor_gl_coords);
 						show_mouseover_info_ui = true;
+					}
+
+					if(isAvatarDisplayObject(*ob))
+					{
+						show_mouseover_info_ui = true;
+						if(isWearableVRMObject(*ob) && seat_sitting_on.isNull() && vehicle_controller_inside.isNull())
+							ob_info_ui.showMessage(useRussianClientUI(this) ?
+								("Нажмите " + std::string(use_action_button) + ", чтобы надеть аватар") :
+								("Press " + std::string(use_action_button) + " to wear avatar"), cursor_gl_coords);
 					}
 
 					if(show_mouseover_info_ui)
@@ -22814,6 +23047,21 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 {
 	if(image_viewer_image.nonNull())
 	{
+
+		if(fullscreen_video_controls)
+		{
+			handleFullscreenVideoAction(fullscreen_video_controls->mouseMoved(mouse_event));
+		}
+		else
+		{
+			const WorldObjectRef ob = fullscreenViewerObject();
+			Vec2f uv;
+			if(ob && fullscreenViewerUVForPixel(mouse_event.cursor_pos, uv))
+			{
+				if(ob->web_view_data) ob->web_view_data->mouseMoved(&mouse_event, uv);
+				else if(ob->browser_vid_player) ob->browser_vid_player->mouseMoved(&mouse_event, uv);
+			}
+		}
 		mouse_event.accepted = true;
 		return;
 	}
@@ -24189,6 +24437,27 @@ void GUIClient::deselectParcel()
 
 void GUIClient::onMouseWheelEvent(MouseWheelEvent& e)
 {
+	if(image_viewer_image.nonNull())
+	{
+
+		if(fullscreen_video_controls)
+		{
+			handleFullscreenVideoAction(fullscreen_video_controls->wheel(e));
+		}
+		else
+		{
+			const WorldObjectRef ob = fullscreenViewerObject();
+			Vec2f uv;
+			if(ob && fullscreenViewerUVForPixel(e.cursor_pos, uv))
+			{
+				if(ob->web_view_data) ob->web_view_data->wheelEvent(&e, uv);
+				else if(ob->browser_vid_player) ob->browser_vid_player->wheelEvent(&e, uv);
+			}
+		}
+		e.accepted = true;
+		return;
+	}
+
 	chat_ui.handleMouseWheelEvent(e);
 	if(e.accepted)
 		return;
@@ -24294,7 +24563,8 @@ void GUIClient::viewportResized(int w, int h)
 		gear_inventory_ui->viewportResized(w, h);
 	if(minimap)
 		minimap->viewportResized(w, h);
-	updateImageViewerLayout();
+	updateFullscreenViewerLayout();
+	updateFullscreenVideoControlsLayout();
 }
 
 
@@ -24887,10 +25157,13 @@ void GUIClient::setSelfieModeEnabled(bool enabled)
 
 void GUIClient::setPhotoModeEnabled(bool enabled)
 {
-	if(enabled)
-		this->photo_mode_ui.enablePhotoModeUI();
-	else
-		this->photo_mode_ui.disablePhotoModeUI();
+	if(!ui_interface->setNativePhotoModeEnabled(enabled))
+	{
+		if(enabled)
+			this->photo_mode_ui.enablePhotoModeUI();
+		else
+			this->photo_mode_ui.disablePhotoModeUI();
+	}
 
 	this->gesture_ui.setPhotoModeEnabledUIState(enabled);
 }
@@ -25097,11 +25370,11 @@ static bool useRussianClientUI(GUIClient* gui_client)
 }
 
 
-static std::string imageViewerPrompt(GUIClient* gui_client, const std::string& use_action_button)
+static std::string fullscreenViewerPrompt(GUIClient* gui_client, bool is_video, bool is_web_view, const std::string& use_action_button)
 {
 	if(useRussianClientUI(gui_client))
-		return "Нажмите " + use_action_button + " для просмотра изображения на весь экран";
-	return "Press " + use_action_button + " to view image full screen";
+		return "Нажмите " + use_action_button + (is_web_view ? " для просмотра веб-страницы на весь экран" : (is_video ? " для просмотра видео на весь экран" : " для просмотра изображения на весь экран"));
+	return "Press " + use_action_button + (is_web_view ? " to view web page full screen" : (is_video ? " to view video full screen" : " to view image full screen"));
 }
 
 
@@ -25116,7 +25389,28 @@ bool GUIClient::isImageObjectForFullscreen(const WorldObject& ob) const
 }
 
 
-bool GUIClient::tryOpenImageViewerAtMouseCursor()
+bool GUIClient::isVideoObjectForFullscreen(const WorldObject& ob) const
+{
+	// Animated textures are not necessarily videos (for example, animated
+	// vehicle/material textures), so only explicit video objects and browser
+	// video players should open the video fullscreen controls.
+	return ob.object_type == WorldObject::ObjectType_Video || ob.browser_vid_player.nonNull();
+}
+
+
+bool GUIClient::isWebViewObjectForFullscreen(const WorldObject& ob) const
+{
+	return ob.web_view_data.nonNull();
+}
+
+
+bool GUIClient::isFullscreenMediaObject(const WorldObject& ob) const
+{
+	return isImageObjectForFullscreen(ob) || isVideoObjectForFullscreen(ob) || isWebViewObjectForFullscreen(ob);
+}
+
+
+bool GUIClient::tryOpenFullscreenViewerAtMouseCursor()
 {
 	if(world_state.isNull() || physics_world.isNull() || ui_interface == nullptr)
 		return false;
@@ -25133,9 +25427,9 @@ bool GUIClient::tryOpenImageViewerAtMouseCursor()
 	if(results.hit_object && results.hit_object->userdata && results.hit_object->userdata_type == 0)
 	{
 		WorldObject* ob = static_cast<WorldObject*>(results.hit_object->userdata);
-		if(isImageObjectForFullscreen(*ob))
+		if(isFullscreenMediaObject(*ob))
 		{
-			openImageViewer(*ob);
+			openFullscreenViewer(*ob);
 			return true;
 		}
 	}
@@ -25144,7 +25438,7 @@ bool GUIClient::tryOpenImageViewerAtMouseCursor()
 }
 
 
-void GUIClient::updateImageViewerLayout()
+void GUIClient::updateFullscreenViewerLayout()
 {
 	if(image_viewer_image.isNull() || opengl_engine.isNull())
 		return;
@@ -25163,33 +25457,213 @@ void GUIClient::updateImageViewerLayout()
 		image_width = image_height * image_aspect;
 
 	if(image_viewer_background.nonNull())
-		image_viewer_background->setPosAndDims(Vec2f(-1.f, -1.f), Vec2f(2.f, 2.f));
+		image_viewer_background->setPosAndDims(Vec2f(-1.f, -1.f / viewport_aspect), Vec2f(2.f, 2.f / viewport_aspect));
 	image_viewer_image->setPosAndDims(
 		Vec2f(-image_width * 0.5f, -image_height * 0.5f),
 		Vec2f(image_width, image_height));
+	updateFullscreenVideoControlsLayout();
 }
 
 
-void GUIClient::openImageViewer(WorldObject& ob)
+void GUIClient::handleFullscreenVideoAction(const VideoPlayerUI::Action& action)
 {
-	if(gl_ui.isNull() || opengl_engine.isNull() || !isImageObjectForFullscreen(ob) || ob.opengl_engine_ob.isNull() || ob.opengl_engine_ob->materials.empty())
+	if(action.command == VideoPlayerUI::None) return;
+	if(action.command == VideoPlayerUI::Close)
+	{
+		closeFullscreenViewer();
+		return;
+	}
+	const WorldObjectRef ob = fullscreenViewerObject();
+	if(!ob || !ob->animated_tex_data) return;
+	try
+	{
+		switch(action.command)
+		{
+		case VideoPlayerUI::TogglePlay:
+			fullscreen_video_paused = !fullscreen_video_paused;
+			ob->animated_tex_data->setPaused(fullscreen_video_paused);
+			if(ob->audio_source)
+			{
+				audio_engine.removeSource(ob->audio_source);
+				ob->audio_source = NULL;
+			}
+			break;
+		case VideoPlayerUI::ToggleMute:
+			fullscreen_video_muted = !fullscreen_video_muted;
+			if(!fullscreen_video_muted && fullscreen_video_volume <= 0)
+			{
+				fullscreen_video_volume = 1.f;
+				ob->animated_tex_data->setVolume(*ob, fullscreen_video_volume);
+			}
+			ob->animated_tex_data->setMuted(*ob, fullscreen_video_muted);
+			break;
+		case VideoPlayerUI::Seek:
+			seekFullscreenVideo((float)action.value);
+			break;
+		case VideoPlayerUI::Volume:
+			fullscreen_video_volume = (float)myClamp(action.value, 0.0, 1.0);
+			fullscreen_video_muted = fullscreen_video_volume <= 0;
+			ob->animated_tex_data->setVolume(*ob, fullscreen_video_volume);
+			break;
+		default: break;
+		}
+		updateFullscreenVideoState();
+	}
+	catch(glare::Exception& error)
+	{
+		showErrorNotification("Video player: " + error.what());
+		updateFullscreenVideoState();
+	}
+}
+
+
+void GUIClient::seekFullscreenVideo(float fraction)
+{
+	const WorldObjectRef ob = fullscreenViewerObject();
+	if(ob && ob->animated_tex_data)
+	{
+		ob->animated_tex_data->seekFraction(myClamp(fraction, 0.f, 1.f));
+		if(ob->audio_source)
+		{
+			audio_engine.removeSource(ob->audio_source);
+			ob->audio_source = NULL;
+		}
+	}
+}
+
+
+void GUIClient::updateFullscreenVideoState()
+{
+	if(!fullscreen_video_controls) return;
+	const WorldObjectRef ob = fullscreenViewerObject();
+	if(!ob || !ob->animated_tex_data) return;
+	const AnimatedTexData* data = ob->animated_tex_data->getVideoPlaybackData();
+	if(!data) return;
+	fullscreen_video_paused = data->paused;
+	fullscreen_video_muted = data->muted;
+	fullscreen_video_volume = data->volume;
+	double fraction = 0;
+	data->getPlaybackFraction(fraction);
+	fullscreen_video_controls->setState(data->paused, data->muted, data->volume,
+		fraction * data->playback_duration_seconds, data->playback_duration_seconds);
+}
+
+
+void GUIClient::updateFullscreenVideoControlsLayout()
+{
+	if(fullscreen_video_controls && image_viewer_image)
+		fullscreen_video_controls->layout(image_viewer_image->getRect());
+}
+
+
+WorldObjectRef GUIClient::fullscreenViewerObject() const
+{
+	if(world_state.isNull() || !image_viewer_object_uid.valid())
+		return NULL;
+
+	WorldStateLock lock(world_state->mutex);
+	auto it = world_state->objects.find(image_viewer_object_uid);
+	if(it == world_state->objects.end())
+		return NULL;
+	return it.getValue();
+}
+
+
+bool GUIClient::fullscreenPromptShouldShow(const UID& object_uid)
+{
+	if(!fullscreen_prompt_cursor_inside_viewport || image_viewer_image.nonNull())
+		return false;
+
+	const double now = total_timer.elapsed();
+	if(fullscreen_prompt_object_uid != object_uid)
+	{
+		fullscreen_prompt_object_uid = object_uid;
+		fullscreen_prompt_shown_at = now;
+		fullscreen_prompt_visible = true;
+	}
+	else if(fullscreen_prompt_visible && now - fullscreen_prompt_shown_at >= 3.0)
+	{
+		fullscreen_prompt_visible = false;
+		ob_info_ui.hideMessage();
+	}
+
+	return fullscreen_prompt_visible;
+}
+
+
+bool GUIClient::fullscreenViewerUVForPixel(const Vec2i& pixel, Vec2f& uv_out) const
+{
+	if(opengl_engine.isNull())
+		return false;
+
+	const float viewport_w = (float)opengl_engine->getViewPortWidth();
+	const float viewport_h = (float)opengl_engine->getViewPortHeight();
+	if(viewport_w <= 0.f || viewport_h <= 0.f)
+		return false;
+
+	const float viewport_aspect = viewport_w / viewport_h;
+	const float content_aspect = myMax(0.001f, image_viewer_aspect);
+	float content_w = viewport_w;
+	float content_h = content_w / content_aspect;
+	if(content_aspect < viewport_aspect)
+	{
+		content_h = viewport_h;
+		content_w = content_h * content_aspect;
+	}
+
+	const float left = (viewport_w - content_w) * 0.5f;
+	const float top = (viewport_h - content_h) * 0.5f;
+	const float x = ((float)pixel.x - left) / content_w;
+	const float y = ((float)pixel.y - top) / content_h;
+	if(x < 0.f || x > 1.f || y < 0.f || y > 1.f)
+		return false;
+
+	// Browser input uses a bottom-left UV origin and converts it to CEF's
+	// top-left pixel origin internally.
+	uv_out = Vec2f(x, 1.f - y);
+	return true;
+}
+
+
+void GUIClient::openFullscreenViewer(WorldObject& ob)
+{
+	if(gl_ui.isNull() || opengl_engine.isNull() || !isFullscreenMediaObject(ob) || ob.opengl_engine_ob.isNull() || ob.opengl_engine_ob->materials.empty())
 		return;
 
-	OpenGLTextureRef texture = ob.opengl_engine_ob->materials[0].albedo_texture;
+	const bool is_video = isVideoObjectForFullscreen(ob);
+	const bool is_web_view = isWebViewObjectForFullscreen(ob);
+	const OpenGLMaterial& source_material = ob.opengl_engine_ob->materials[0];
+	OpenGLTextureRef texture = (is_video || is_web_view) ? source_material.emission_texture : source_material.albedo_texture;
 	if(texture.isNull())
-		texture = ob.opengl_engine_ob->materials[0].emission_texture;
+		texture = (is_video || is_web_view) ? source_material.albedo_texture : source_material.emission_texture;
 	if(texture.isNull())
 	{
-		showInfoNotification("Image is still loading.");
+		showInfoNotification(is_web_view ? "Web page is still loading." : (is_video ? "Video is still loading." : "Image is still loading."));
 		return;
 	}
 
-	closeImageViewer();
+	closeFullscreenViewer();
 
-	image_viewer_image = new GLUIImage(*gl_ui, opengl_engine, "", "", -0.99f);
+	fullscreen_saved_keyboard_move_enabled = ui_interface->isKeyboardCameraMoveEnabled();
+	ui_interface->setKeyboardCameraMoveEnabled(false);
+	W_down = A_down = S_down = D_down = space_down = false;
+	SHIFT_down = CTRL_down = false;
+	gl_ui->setKeyboardFocusWidget(NULL);
+	gl_ui->hideTooltip();
+	image_viewer_background = new GLUIImage(*gl_ui, opengl_engine, "", "", -0.9998f);
+	image_viewer_background->setColour(Colour3f(0.f));
+	image_viewer_image = new GLUIImage(*gl_ui, opengl_engine, "", "", -0.9999f);
 	image_viewer_image->overlay_ob->material.albedo_texture = texture;
 	image_viewer_image->overlay_ob->material.albedo_linear_rgb = Colour3f(1.f);
 	image_viewer_image->overlay_ob->material.alpha = 1.f;
+	if(is_video || is_web_view)
+	{
+		// Video and web-view frames use the source material's Y-flip and (0, 1)
+		// translation.  GLUIImage has a different default transform, which
+		// samples the shared video texture outside its valid coordinates.
+		image_viewer_image->overlay_ob->material.tex_matrix = source_material.tex_matrix;
+		image_viewer_image->overlay_ob->material.tex_translation = source_material.tex_translation;
+	}
 	image_viewer_object_uid = ob.uid;
 
 	// The loaded image texture retains the image pixel dimensions, including for
@@ -25201,12 +25675,33 @@ void GUIClient::openImageViewer(WorldObject& ob)
 		image_viewer_aspect = (std::fabs(ob.scale.z) > 0.001f) ? std::fabs(ob.scale.x / ob.scale.z) : 1.f;
 
 	ob_info_ui.hideMessage();
-	updateImageViewerLayout();
+	fullscreen_prompt_visible = false;
+	if(is_video && ob.browser_vid_player.isNull())
+	{
+		try
+		{
+			fullscreen_video_controls = new VideoPlayerUI(*gl_ui, opengl_engine, resources_dir_path);
+		}
+		catch(glare::Exception& error)
+		{
+			closeFullscreenViewer();
+			showErrorNotification("Video player: " + error.what());
+			return;
+		}
+	}
+	updateFullscreenViewerLayout();
+	updateFullscreenVideoState();
 }
 
 
-void GUIClient::closeImageViewer()
+void GUIClient::closeFullscreenViewer()
 {
+	if(image_viewer_image.nonNull())
+	{
+		ui_interface->setKeyboardCameraMoveEnabled(fullscreen_saved_keyboard_move_enabled);
+		gl_ui->unhideTooltip();
+	}
+	fullscreen_video_controls = nullptr;
 	image_viewer_image = nullptr;
 	image_viewer_background = nullptr;
 	image_viewer_object_uid = UID();
@@ -25288,6 +25783,7 @@ void GUIClient::useActionTriggered(bool use_mouse_cursor)
 	}
 	else
 	{
+		if(tryWearVRMObjectAtCursor(use_mouse_cursor)) return;
 		WorldStateLock lock(world_state->mutex);
 
 		const Vec2i widget_pos = use_mouse_cursor ? ui_interface->getMouseCursorWidgetPos() : Vec2i(opengl_engine->getMainViewPortWidth() / 2, opengl_engine->getMainViewPortHeight() / 2);
@@ -27125,11 +27621,43 @@ void GUIClient::keyPressed(KeyEvent& e)
 	if(image_viewer_image.nonNull())
 	{
 		if(e.key == Key::Key_Escape || e.key == Key::Key_F)
-			closeImageViewer();
+		{
+			closeFullscreenViewer();
+		}
+		else if(fullscreen_video_controls)
+		{
+			if(e.key == Key::Key_Space)
+				handleFullscreenVideoAction(VideoPlayerUI::Action(VideoPlayerUI::TogglePlay));
+			else if(e.key == Key::Key_M)
+				handleFullscreenVideoAction(VideoPlayerUI::Action(VideoPlayerUI::ToggleMute));
+			else if(e.key == Key::Key_Left || e.key == Key::Key_Right)
+			{
+				const double duration = fullscreen_video_controls->getDuration();
+				if(duration > 0)
+					handleFullscreenVideoAction(VideoPlayerUI::Action(VideoPlayerUI::Seek,
+						(fullscreen_video_controls->getPosition() + (e.key == Key::Key_Left ? -5.0 : 5.0)) / duration));
+			}
+			else if(e.key == Key::Key_Up || e.key == Key::Key_Down)
+				handleFullscreenVideoAction(VideoPlayerUI::Action(VideoPlayerUI::Volume,
+					fullscreen_video_volume + (e.key == Key::Key_Up ? 0.05 : -0.05)));
+		}
+		else
+		{
+			const WorldObjectRef viewer_ob = fullscreenViewerObject();
+			if(viewer_ob.nonNull())
+			{
+				ui_interface->setKeyboardCameraMoveEnabled(false);
+				if(viewer_ob->web_view_data.nonNull())
+					viewer_ob->web_view_data->keyPressed(&e);
+				else if(viewer_ob->browser_vid_player.nonNull())
+					viewer_ob->browser_vid_player->keyPressed(&e);
+			}
+		}
 		e.accepted = true;
 		return;
 	}
 
+	if(e.key == Key::Key_Escape && chat_ui.dismissPopup()) { e.accepted=true; return; }
 	if(gl_ui)
 		gl_ui->handleKeyPressedEvent(e);
 	if(e.accepted)
@@ -27326,9 +27854,9 @@ void GUIClient::keyPressed(KeyEvent& e)
 	}
 	else if(e.key == Key::Key_F)
 	{
-		// F is fullscreen while pointing at an image; retain the existing fly
+		// F is fullscreen while pointing at an image or video; retain the existing fly
 		// shortcut everywhere else.
-		if(!tryOpenImageViewerAtMouseCursor())
+		if(!tryOpenFullscreenViewerAtMouseCursor())
 			ui_interface->toggleFlyMode();
 	}
 	else if(e.key == Key::Key_V)
@@ -27457,6 +27985,20 @@ void GUIClient::keyPressed(KeyEvent& e)
 
 void GUIClient::keyReleased(KeyEvent& e)
 {
+	if(image_viewer_image.nonNull())
+	{
+		const WorldObjectRef viewer_ob = fullscreenViewerObject();
+		if(viewer_ob.nonNull())
+		{
+			if(viewer_ob->web_view_data.nonNull())
+				viewer_ob->web_view_data->keyReleased(&e);
+			else if(viewer_ob->browser_vid_player.nonNull())
+				viewer_ob->browser_vid_player->keyReleased(&e);
+		}
+		e.accepted = true;
+		return;
+	}
+
 	SHIFT_down = BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Shift);// (e->modifiers() & ShiftModifier);
 	CTRL_down  = BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Ctrl);// (e->modifiers() & ControlModifier);
 
@@ -27509,6 +28051,18 @@ void GUIClient::keyReleased(KeyEvent& e)
 
 void GUIClient::handleTextInputEvent(TextInputEvent& text_input_event)
 {
+	if(image_viewer_image.nonNull())
+	{
+		const WorldObjectRef viewer_ob = fullscreenViewerObject();
+		if(viewer_ob.nonNull() && viewer_ob->web_view_data.nonNull())
+		{
+			ui_interface->setKeyboardCameraMoveEnabled(false);
+			viewer_ob->web_view_data->handleTextInputEvent(text_input_event);
+		}
+		text_input_event.accepted = true;
+		return;
+	}
+
 	if(gl_ui.nonNull())
 	{
 		gl_ui->handleTextInputEvent(text_input_event);
@@ -27648,7 +28202,8 @@ void GUIClient::unhideUIIfHidden()
 		gesture_ui.setVisible(true);
 		misc_info_ui.setVisible(true);
 		chat_ui.setVisible(true);
-		photo_mode_ui.setVisible(true);
+		if(photo_mode_ui.isPhotoModeEnabled() && !ui_interface->setNativePhotoModeEnabled(true))
+			photo_mode_ui.setVisible(true);
 		if(minimap)
 			minimap->setVisible(true);
 

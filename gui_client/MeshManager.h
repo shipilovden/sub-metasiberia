@@ -18,7 +18,8 @@ class MeshManager;
 
 struct MeshData
 {
-	MeshData(const URLString& model_URL_, Reference<OpenGLMeshRenderData> gl_meshdata_, MeshManager* mesh_manager_) : model_url(model_URL_), gl_meshdata(gl_meshdata_), voxel_subsample_factor(1), refcount(0), mesh_manager(mesh_manager_) {}
+	MeshData(const URLString& model_URL_, Reference<OpenGLMeshRenderData> gl_meshdata_, MeshManager* mesh_manager_);
+	const bool source_is_vrm; // Retargeting replaces the VRM node map; retain the source identity.
 
 	//------------------- Custom ReferenceCounted stuff, so we can call meshDataBecameUnused() ---------------------
 	/// Increment reference count

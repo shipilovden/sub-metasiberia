@@ -36,6 +36,8 @@ public:
 	void think();
 
 	void setCurrentGestureSettings(const GestureSettings& gesture_settings);
+	const GestureSettings& getCurrentGestureSettings() const { return gesture_settings; }
+	uint64 getSettingsRevision() const { return settings_revision; }
 
 	//bool handleMouseClick(const Vec2f& gl_coords);
 	//bool handleMouseMoved(const Vec2f& gl_coords);
@@ -73,6 +75,7 @@ private:
 	Reference<GestureManagerUI> gesture_manager;
 
 	GestureSettings gesture_settings;
+	uint64 settings_revision = 0;
 
 	GLUIButtonRef expand_button;
 	GLUIButtonRef collapse_button;

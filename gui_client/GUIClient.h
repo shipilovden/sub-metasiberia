@@ -44,6 +44,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../opengl/AsyncGeometryUploader.h"
 #include <opengl/TransformGizmo.h>
 #include <opengl/ui/GLUIImage.h>
+#include "VideoPlayerUI.h"
 #include "../shared/WorldObject.h"
 #include "../shared/GearItem.h"
 #include "../shared/GaussianSplatData.h"
@@ -310,10 +311,20 @@ public:
 	void sendLightmapNeededFlagsSlot();
 	void useActionTriggered(bool use_mouse_cursor); // if use_mouse_cursor is false, use crosshair as cursor instead.
 	bool isImageObjectForFullscreen(const WorldObject& ob) const;
-	bool tryOpenImageViewerAtMouseCursor();
-	void openImageViewer(WorldObject& ob);
-	void closeImageViewer();
-	void updateImageViewerLayout();
+	bool isVideoObjectForFullscreen(const WorldObject& ob) const;
+	bool isWebViewObjectForFullscreen(const WorldObject& ob) const;
+	bool isFullscreenMediaObject(const WorldObject& ob) const;
+	bool tryOpenFullscreenViewerAtMouseCursor();
+	void openFullscreenViewer(WorldObject& ob);
+	void closeFullscreenViewer();
+	void updateFullscreenViewerLayout();
+	void updateFullscreenVideoControlsLayout();
+	void handleFullscreenVideoAction(const VideoPlayerUI::Action& action);
+	void updateFullscreenVideoState();
+	void seekFullscreenVideo(float fraction);
+	WorldObjectRef fullscreenViewerObject() const;
+	bool fullscreenViewerUVForPixel(const Vec2i& pixel, Vec2f& uv_out) const;
+	bool fullscreenPromptShouldShow(const UID& object_uid);
 	void loginButtonClicked();
 	void signupButtonClicked();
 	void loggedInButtonClicked();
@@ -627,6 +638,8 @@ public:
 	void handleUploadedTexture(const OpenGLTextureKey& path, const URLString& URL, const OpenGLTextureRef& opengl_tex, const TextureDataRef& tex_data, const Map2DRef& terrain_map);
 
 	void updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::string& local_model_path, const Matrix4f& pre_ob_to_world_matrix, const std::vector<WorldMaterialRef>& materials);
+	void applyOurAvatarResource(const URLString& mesh_URL, const Matrix4f& pre_ob_to_world_matrix, const std::vector<WorldMaterialRef>& materials);
+	bool tryWearVRMObjectAtCursor(bool use_mouse_cursor);
 
 	void setObjectLoadDistance(float new_dist);
 
@@ -1042,6 +1055,15 @@ public:
 	GLUIImageRef image_viewer_image;
 	UID image_viewer_object_uid;
 	float image_viewer_aspect;
+	UID fullscreen_prompt_object_uid;
+	double fullscreen_prompt_shown_at = -1.0;
+	bool fullscreen_prompt_visible = false;
+	bool fullscreen_prompt_cursor_inside_viewport = true;
+	Reference<VideoPlayerUI> fullscreen_video_controls;
+	bool fullscreen_video_paused = false;
+	bool fullscreen_video_muted = false;
+	float fullscreen_video_volume = 1.f;
+	bool fullscreen_saved_keyboard_move_enabled = true;
 	GestureUI gesture_ui; // Draws gesture buttons, also selfie and enable mic button
 	ObInfoUI ob_info_ui; // For object info and hyperlinks etc.
 	MiscInfoUI misc_info_ui; // For showing messages from the server, vehicle speed etc.

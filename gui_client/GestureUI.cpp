@@ -318,8 +318,11 @@ void GestureUI::think()
 void GestureUI::setCurrentGestureSettings(const GestureSettings& gesture_settings_)
 {
 	gesture_settings = gesture_settings_;
+	++settings_revision;
 
 	rebuildGestureWidgets();
+	if(gesture_manager)
+		gesture_manager->setCurrentGestureSettings(gesture_settings);
 
 	updateWidgetPositions();
 }
@@ -601,6 +604,9 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 			gestures_visible = false;
 			updateWidgetPositions();
 			gui_client->getSettingsStore()->setBoolValue("GestureUI/gestures_visible", gestures_visible);
+
+			if(gui_client->ui_interface->showNativeAnimationEditor())
+				return;
 
 			if(!gesture_manager)
 			{

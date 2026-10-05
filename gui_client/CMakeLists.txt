@@ -104,6 +104,7 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client ScientificObjectEditor)
 	addMocFileRule(gui_client CulturalObjectEditor)
 	addMocFileRule(gui_client AnimationEditorPanel)
+	addMocFileRule(gui_client AnimationPreviewWidget)
 	addMocFileRule(gui_client PhotoVideoSettingsPanel)
 	addMocFileRule(gui_client DocumentEditorPanel)
 	addMocFileRule(gui_client TreeEditorPanel)
@@ -217,6 +218,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatRenderer.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GaussianSplatRenderer.h
 ${CMAKE_SOURCE_DIR}/gui_client/GUIClient.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GUIClient.h
+${CMAKE_SOURCE_DIR}/gui_client/VideoPlayerUI.cpp
+${CMAKE_SOURCE_DIR}/gui_client/VideoPlayerUI.h
 ${CMAKE_SOURCE_DIR}/gui_client/HashedObGrid.h
 ${CMAKE_SOURCE_DIR}/gui_client/HeadUpDisplayUI.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/HeadUpDisplayUI.h
@@ -325,6 +328,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/EmscriptenResourceDownloader.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/EmscriptenResourceDownloader.h
 ${CMAKE_SOURCE_DIR}/gui_client/ChatUI.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/ChatUI.h
+${CMAKE_SOURCE_DIR}/gui_client/ChatOverlayButton.h
+${CMAKE_SOURCE_DIR}/gui_client/ChatOverlayLayout.h
 ${CMAKE_SOURCE_DIR}/gui_client/ScriptedObjectProximityChecker.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/ScriptedObjectProximityChecker.h
 ${CMAKE_SOURCE_DIR}/gui_client/PhotoModeUI.cpp
@@ -333,6 +338,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/GarbageDeleterThread.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GarbageDeleterThread.h
 ${CMAKE_SOURCE_DIR}/gui_client/AnimationManager.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/AnimationManager.h
+${CMAKE_SOURCE_DIR}/gui_client/GestureAnimationRetarget.cpp
+${CMAKE_SOURCE_DIR}/gui_client/GestureAnimationRetarget.h
 ${CMAKE_SOURCE_DIR}/gui_client/GestureManagerUI.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/GestureManagerUI.h
 ${CMAKE_SOURCE_DIR}/gui_client/GearInventoryUI.cpp
@@ -389,8 +396,36 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/CulturalObjectSettings.h
 		${CMAKE_SOURCE_DIR}/gui_client/AnimationEditorPanel.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AnimationEditorPanel.h
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationEditorController.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationEditorController.h
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationPreviewWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationPreviewWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationImport.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationImport.h
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationFBXImport.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationFBXImport.h
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationGLBTracks.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AnimationGLBTracks.h
+		${CMAKE_SOURCE_DIR}/third_party/ufbx/ufbx.c
 		${CMAKE_SOURCE_DIR}/gui_client/PhotoVideoSettingsPanel.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/PhotoVideoSettingsPanel.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoModeOverlay.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoModeOverlay.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoModeEffects.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoCameraPath.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoPostProcess.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoPostProcess.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoFrameRenderer.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoVideoRecorder.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoVideoRecorder.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoAudioCapture.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoAudioCapture.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoAudioMuxer.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoAudioMuxer.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoAudioTimeline.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoAudioTimeline.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoAudioVideoTimeline.h
+		${CMAKE_SOURCE_DIR}/gui_client/PhotoAudioWindows.h
 		${CMAKE_SOURCE_DIR}/gui_client/DocumentEditorPanel.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/DocumentEditorPanel.h
 		${CMAKE_SOURCE_DIR}/gui_client/DocumentObjectSettings.cpp
@@ -551,6 +586,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_ScientificObjectEditor.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_CulturalObjectEditor.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_AnimationEditorPanel.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_AnimationPreviewWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_PhotoVideoSettingsPanel.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_DocumentEditorPanel.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_TreeEditorPanel.cpp
@@ -1298,6 +1334,20 @@ ${basisu_transcoder_files}
 ${settings}
 )
 
+if(NOT USE_SDL)
+	# Animation-only FBX reader: no tessellation, OBJ, caches, or filesystem IO.
+	set_source_files_properties(${CMAKE_SOURCE_DIR}/third_party/ufbx/ufbx.c
+		PROPERTIES COMPILE_DEFINITIONS "UFBX_MINIMAL;UFBX_NO_STDIO")
+	if(MSVC)
+		set_source_files_properties(
+			${CMAKE_SOURCE_DIR}/third_party/ufbx/ufbx.c
+			${CMAKE_SOURCE_DIR}/gui_client/AnimationImport.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/AnimationFBXImport.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/AnimationGLBTracks.cpp
+			PROPERTIES COMPILE_OPTIONS "/fp:precise;/utf-8")
+	endif()
+endif()
+
 if(MSVC)
 	# These translation/UI files contain Russian literals. Force UTF-8 source + execution
 	# charset to avoid CP1251->UTF8 mojibake.
@@ -1416,9 +1466,10 @@ elseif(WIN32)
 	target_link_libraries(${CURRENT_TARGET}
 		OpenGL32
 
-		# Media foundation video reading:
+		# Media foundation video reading and writing:
 		mfplat.lib 
 		mfreadwrite.lib 
+		mmdevapi.lib
 		mfuuid.lib
 		Mf.lib
 		d3d11.lib
@@ -1434,6 +1485,11 @@ elseif(WIN32)
 		
 		Opus
 	)
+	if(NOT USE_SDL)
+		target_sources(${CURRENT_TARGET} PRIVATE
+			${GLARE_CORE_TRUNK_DIR_ENV}/video/VideoWriter.cpp
+			${GLARE_CORE_TRUNK_DIR_ENV}/video/WMFVideoWriter.cpp)
+	endif()
 	
 	if(INDIGO_SUPPORT)
 		target_link_libraries(${CURRENT_TARGET}

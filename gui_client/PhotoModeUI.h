@@ -56,6 +56,7 @@ public:
 	void enablePhotoModeUI();
 	void disablePhotoModeUI();
 	bool isPhotoModeEnabled();
+	void requestPhotoUpload();
 
 	void autofocusDistSet(double dist);
 
@@ -82,6 +83,7 @@ private:
 	void uploadPhoto();
 
 	GUIClient* gui_client;
+	bool photo_mode_enabled;
 
 	GLUIWindowRef window;
 

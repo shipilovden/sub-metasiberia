@@ -479,6 +479,12 @@ EM_JS(int, makeHTMLVideoElement, (const char* http_URL, int autoplay, int loop, 
 
 	let video_elem = document.createElement('video');
 	video_elem.src = UTF8ToString(http_URL);
+	video_elem.controls = true;
+	video_elem.playsInline = true;
+	video_elem.className = 'transformable-html-view';
+	video_elem.style.display = 'block';
+	video_elem.style.objectFit = 'contain';
+	video_elem.style.backgroundColor = 'black';
 	if(autoplay)
 		video_elem.setAttribute('autoplay', ""); 
 	if(loop)
@@ -516,6 +522,38 @@ EM_JS(int, getVideoHeight, (int handle), {
 
 	console.assert(html_view_elem_handle_to_div_map[handle]);
 	return html_view_elem_handle_to_div_map[handle].videoHeight;
+});
+
+
+EM_JS(void, setVideoPlayState, (int handle, int should_play), {
+	let video_elem = html_view_elem_handle_to_div_map[handle];
+	if(!video_elem)
+		return;
+	if(should_play)
+		video_elem.play();
+	else
+		video_elem.pause();
+});
+
+
+EM_JS(void, seekVideoElement, (int handle, float fraction), {
+	let video_elem = html_view_elem_handle_to_div_map[handle];
+	if(video_elem && isFinite(video_elem.duration) && video_elem.duration > 0)
+		video_elem.currentTime = Math.max(0, Math.min(1, fraction)) * video_elem.duration;
+});
+
+
+EM_JS(void, setVideoElementVolume, (int handle, float volume), {
+	let video_elem = html_view_elem_handle_to_div_map[handle];
+	if(video_elem)
+		video_elem.volume = Math.max(0, Math.min(1, volume));
+});
+
+
+EM_JS(void, setVideoElementMuted, (int handle, int muted), {
+	let video_elem = html_view_elem_handle_to_div_map[handle];
+	if(video_elem)
+		video_elem.muted = muted != 0;
 });
 
 
@@ -760,6 +798,9 @@ void BrowserVidPlayer::process(GUIClient* gui_client, OpenGLEngine* opengl_engin
 		{
 			try
 			{
+				if(ob->materials.empty())
+					throw glare::Exception("materials were empty");
+
 				createNewBrowserPlayer(gui_client, opengl_engine, ob);
 				this->state = State_BrowserCreated;
 			}
@@ -886,7 +927,7 @@ void BrowserVidPlayer::mousePressed(MouseEvent* e, const Vec2f& uv_coords)
 		browser->mousePressed(e, uv_coords);
 
 #if EMSCRIPTEN
-	if(using_iframe)
+	if(using_iframe || html_view_handle >= 0)
 	{
 		if(m_gui_client)
 			m_gui_client->showInfoNotification("Interacting with video player");
@@ -942,4 +983,86 @@ void BrowserVidPlayer::keyReleased(KeyEvent* e)
 {
 	if(browser.nonNull())
 		browser->keyReleased(e);
+}
+
+
+bool BrowserVidPlayer::hasDirectVideoControls() const
+{
+#if EMSCRIPTEN
+	return !using_iframe && html_view_handle >= 0;
+#else
+	if(browser.isNull() || loaded_video_url.empty())
+		return false;
+
+	if(hasPrefix(loaded_video_url, "http://") || hasPrefix(loaded_video_url, "https://"))
+	{
+		const URL parsed_URL = URL::parseURL(loaded_video_url);
+		const std::string path = toLowerCase(parsed_URL.path);
+		return hasSuffix(path, ".mp4") || hasSuffix(path, ".webm") || hasSuffix(path, ".ogg");
+	}
+
+	return true;
+#endif
+}
+
+
+void BrowserVidPlayer::playVideo()
+{
+#if EMSCRIPTEN
+	if(hasDirectVideoControls())
+		setVideoPlayState(html_view_handle, 1);
+#else
+	if(hasDirectVideoControls())
+		browser->executeJavaScript("(function(){var v=document.getElementById('thevid'); if(v) v.play();})();");
+#endif
+}
+
+
+void BrowserVidPlayer::pauseVideo()
+{
+#if EMSCRIPTEN
+	if(hasDirectVideoControls())
+		setVideoPlayState(html_view_handle, 0);
+#else
+	if(hasDirectVideoControls())
+		browser->executeJavaScript("(function(){var v=document.getElementById('thevid'); if(v) v.pause();})();");
+#endif
+}
+
+
+void BrowserVidPlayer::seekVideo(float fraction)
+{
+	const float clamped_fraction = myClamp(fraction, 0.f, 1.f);
+#if EMSCRIPTEN
+	if(hasDirectVideoControls())
+		seekVideoElement(html_view_handle, clamped_fraction);
+#else
+	if(hasDirectVideoControls())
+		browser->executeJavaScript("(function(){var v=document.getElementById('thevid'); if(v && isFinite(v.duration) && v.duration > 0) v.currentTime=v.duration*" + toString(clamped_fraction) + ";})();");
+#endif
+}
+
+
+void BrowserVidPlayer::setVideoVolume(float volume)
+{
+	const float clamped_volume = myClamp(volume, 0.f, 1.f);
+#if EMSCRIPTEN
+	if(hasDirectVideoControls())
+		setVideoElementVolume(html_view_handle, clamped_volume);
+#else
+	if(hasDirectVideoControls())
+		browser->executeJavaScript("(function(){var v=document.getElementById('thevid'); if(v) v.volume=" + toString(clamped_volume) + ";})();");
+#endif
+}
+
+
+void BrowserVidPlayer::setVideoMuted(bool muted)
+{
+#if EMSCRIPTEN
+	if(hasDirectVideoControls())
+		setVideoElementMuted(html_view_handle, muted ? 1 : 0);
+#else
+	if(hasDirectVideoControls())
+		browser->executeJavaScript("(function(){var v=document.getElementById('thevid'); if(v) v.muted=" + std::string(muted ? "true" : "false") + ";})();");
+#endif
 }

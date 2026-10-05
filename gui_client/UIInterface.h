@@ -153,6 +153,10 @@ public:
 	virtual bool inScreenshotTakingMode() = 0;
 	virtual void takeScreenshot() = 0;
 	virtual void showScreenshots() = 0;
+	// Return true when the host provides its own photo-mode panel (Qt dock).
+	virtual bool setNativePhotoModeEnabled(bool enabled) { (void)enabled; return false; }
+	// Desktop Qt owns a combined animation editor/gesture manager. SDL keeps GLUI.
+	virtual bool showNativeAnimationEditor() { return false; }
 
 	virtual void setGLWidgetContextAsCurrent() = 0;
 

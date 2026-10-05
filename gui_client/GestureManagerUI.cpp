@@ -81,6 +81,16 @@ GestureManagerUI* GestureManagerUI::getActiveInstance()
 }
 
 
+void GestureManagerUI::setCurrentGestureSettings(const GestureSettings& settings)
+{
+	gesture_settings = settings;
+	// Rebuild on the next GLUI think tick. This method can be called while a
+	// checkbox/button event is being dispatched, when deleting widgets inline
+	// would invalidate the active callback.
+	need_rebuild_grid = true;
+}
+
+
 void GestureManagerUI::addGestureFromSelectedPath(const std::string& selected_path)
 {
 	if(selected_path.empty())

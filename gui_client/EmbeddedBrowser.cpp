@@ -1497,6 +1497,17 @@ void EmbeddedBrowser::navigate(const std::string& new_URL)
 }
 
 
+void EmbeddedBrowser::executeJavaScript(const std::string& code)
+{
+#if CEF_SUPPORT
+	if(embedded_cef_browser && embedded_cef_browser->cef_browser && embedded_cef_browser->cef_browser->GetMainFrame())
+		embedded_cef_browser->cef_browser->GetMainFrame()->ExecuteJavaScript(code, "https://localdomain/", 0);
+#else
+	(void)code;
+#endif
+}
+
+
 void EmbeddedBrowser::browserBecameVisible()
 {
 #if CEF_SUPPORT
@@ -1541,12 +1552,12 @@ static uint32 convertToCEFModifiers(uint32 modifiers)
 }
 
 
-static uint32 convertToCEFModifiers(uint32 modifiers, MouseButton mouse_button)
+static uint32 convertToCEFModifiers(uint32 modifiers, uint32 mouse_buttons)
 {
 	uint32 m = convertToCEFModifiers(modifiers);
 
-	if(BitUtils::isBitSet(mouse_button, MouseButton::Left))  m |= EVENTFLAG_LEFT_MOUSE_BUTTON;
-	if(BitUtils::isBitSet(mouse_button, MouseButton::Right)) m |= EVENTFLAG_RIGHT_MOUSE_BUTTON;
+	if(BitUtils::isBitSet(mouse_buttons, (uint32)MouseButton::Left))  m |= EVENTFLAG_LEFT_MOUSE_BUTTON;
+	if(BitUtils::isBitSet(mouse_buttons, (uint32)MouseButton::Right)) m |= EVENTFLAG_RIGHT_MOUSE_BUTTON;
 	return m;
 }
 
@@ -1607,7 +1618,7 @@ void EmbeddedBrowser::mouseMoved(MouseEvent* e, const Vec2f& uv_coords)
 	//conPrint("mouseMoved(), uv_coords: " + uv_coords.toString());
 #if CEF_SUPPORT
 	if(embedded_cef_browser)
-		embedded_cef_browser->sendMouseMoveEvent(uv_coords.x, uv_coords.y, convertToCEFModifiers(e->modifiers, e->button)); // TEMP REFACTOR using button not buttons
+		embedded_cef_browser->sendMouseMoveEvent(uv_coords.x, uv_coords.y, convertToCEFModifiers(e->modifiers, e->button_state));
 #endif
 }
 
