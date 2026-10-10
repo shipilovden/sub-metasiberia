@@ -159,6 +159,7 @@ struct WaterSurfaceWorldSettings
 	float foam_scale;
 	float foam_speed;
 	float foam_fade;
+	bool underwater_caustics_enabled;
 };
 
 

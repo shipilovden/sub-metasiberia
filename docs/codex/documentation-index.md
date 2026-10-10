@@ -40,6 +40,7 @@
 
 | Документ | Главный вопрос | Статус |
 | --- | --- | --- |
+| [Codex / MCP modeling](../MCP_CODEX_INTEGRATION.md) | Референсы, модели, меши/воксели, Poly Haven, PBR-текстуры, изображения и границы редакторов | partial/WIP; source coverage |
 | [system-overview.md](system-overview.md) | Что такое Metasiberia и какие surfaces существуют? | основной |
 | [project-index.md](project-index.md) | С какого документа/owner начать задачу? | основной |
 | [project-map.md](project-map.md) | Где находятся подсистемы и physical owners? | основной |

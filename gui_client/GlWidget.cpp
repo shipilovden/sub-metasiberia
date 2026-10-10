@@ -659,7 +659,7 @@ bool GlWidget::renderPhotoPreview()
 }
 
 
-QImage GlWidget::capturePhotoFrame(const QVariantMap& values, const QSize& requested_size)
+QImage GlWidget::capturePhotoFrame(const QVariantMap& values, const QSize& requested_size, const Matrix4f* inspection_camera)
 {
 	if(QThread::currentThread() != thread()) throw std::runtime_error("Photo capture must run on the widget thread");
 	if(photo_frame_in_progress) throw std::runtime_error("Photo capture is already in progress");
@@ -667,7 +667,9 @@ QImage GlWidget::capturePhotoFrame(const QVariantMap& values, const QSize& reque
 		throw std::runtime_error("The scene is not ready for photo capture");
 	if(take_map_screenshot || external_perspective_camera_transform_enabled)
 		throw std::runtime_error("Photo capture is unavailable during map or XR rendering");
-	const PhotoFrameRenderer::Layout layout = PhotoFrameRenderer::layout(QSize(viewport_w, viewport_h), values, requested_size);
+	const PhotoFrameRenderer::Layout layout = inspection_camera ?
+		PhotoFrameRenderer::Layout{requested_size, QRect(QPoint(0,0), requested_size), requested_size} :
+		PhotoFrameRenderer::layout(QSize(viewport_w, viewport_h), values, requested_size);
 	QScopedValueRollback<bool> rendering(photo_frame_in_progress, true);
 	PhotoCurrentContext current(*this);
 	PhotoGLState gl_state;
@@ -694,6 +696,9 @@ QImage GlWidget::capturePhotoFrame(const QVariantMap& values, const QSize& reque
 		float(viewport_w) / viewport_h, photo_shift_y, photo_shift_x);
 	opengl_engine->setViewportDims(layout.scene_size.width(), layout.scene_size.height());
 	opengl_engine->setMainViewportDims(layout.scene_size.width(), layout.scene_size.height());
+	if(inspection_camera)
+		opengl_engine->setPerspectiveCameraTransform(*inspection_camera, defaultSensorWidth(), defaultSensorWidth(),
+			float(layout.scene_size.width()) / layout.scene_size.height(), 0, 0);
 	OpenGLScene* scene = opengl_engine->getCurrentScene();
 	scene->render_to_main_render_framebuffer = true;
 	scene->draw_overlay_objects = !values.value(QStringLiteral("hide_world_ui"), true).toBool() && scene->draw_overlay_objects;

@@ -13,6 +13,12 @@ Copyright Glare Technologies Limited 2024 -
 #include "AboutDialog.h"
 #include "UpdateDialog.h"
 #include "UpdateManager.h"
+#include "AIConnectionDialog.h"
+#include "AIDockWidget.h"
+#include "MCPClientHandler.h"
+#include <QtCore/QSemaphore>
+#include <QtCore/QBuffer>
+#include <atomic>
 #include "CreateObjectsDialog.h"
 #include "webcam/WebcamWindow.h"
 #include "ClientThread.h"
@@ -178,6 +184,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/ConPrint.h"
 #include "../utils/Exception.h"
 #include "../utils/TaskManager.h"
+#include <webserver/WebListenerThread.h>
+#include <networking/IPAddress.h>
 #include "../utils/SocketBufferOutStream.h"
 #include "../utils/StringUtils.h"
 #include "../utils/FileUtils.h"
@@ -185,6 +193,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "../utils/FileOutStream.h"
 #include "../utils/BufferOutStream.h"
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <cstdlib>
 #include <functional>
@@ -1660,10 +1670,11 @@ static void applyEditorDockTitleBarTheme(QDockWidget* dock_widget, const QPalett
 	const bool photo_panel = dock_widget->objectName() == QStringLiteral("photoVideoSettingsDockWidget");
 	const bool animation_panel = dock_widget->objectName() == QStringLiteral("animationEditorDockWidget");
 	const bool chat_panel = dock_widget->objectName() == QStringLiteral("chatDockWidget");
+	const bool ai_panel = dock_widget->objectName() == QStringLiteral("aiDockWidget");
 	// These editors deliberately keep a dark title strip in every theme and
 	// activation state, including when floating. Only the title is overridden.
-	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
-	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
+	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
+	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
 	const QColor hover = foreground.lightness() > background.lightness() ? background.lighter(132) : background.darker(104);
 	// Own the custom title's colours locally, including when the dock floats.
 	// Do not depend on reapplying the main-window stylesheet to refresh it.
@@ -1779,6 +1790,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	closing(false),
 	main_timer_id(0),
 	gui_client(base_dir_path_, appdata_path_, args),
+	mcp_client_server_running(false),
+	mcp_connection_error_reported(false),
 	run_as_screenshot_slave(false),
 	taking_map_screenshot(false),
 	taking_gear_screenshot(false),
@@ -1836,6 +1849,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	,native_photo_video_gl_ready(false)
 	,document_editor_dock_widget(NULL)
 	,document_editor_panel(NULL)
+	,ai_dock_widget(NULL)
 	,scientific_object_editor(NULL)
 	,cultural_object_editor(NULL)
 	,spotlight_editor(NULL)
@@ -1854,6 +1868,14 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 	settings = new QSettings("Glare Technologies", "Metasiberia");
 	migrateLegacyQtSettings(*settings);
+	// MCP is opt-in.  Clear any development-era enabled default once before
+	// startup checks the setting, including installations that already passed
+	// the older migrations.
+	if(!settings->value(MainOptionsDialog::MCPDefaultsMigratedV4Key(), false).toBool())
+	{
+		settings->setValue(MainOptionsDialog::MCPEnabledKey(), false);
+		settings->setValue(MainOptionsDialog::MCPDefaultsMigratedV4Key(), true);
+	}
 
 	credential_manager.loadFromSettings(*settings);
 
@@ -2466,6 +2488,36 @@ void MainWindow::initialiseUI()
 	connect(document_editor_panel, &DocumentEditorPanel::pdfPageTextureRequested, this,
 		[this](const QString&, int) { showErrorNotification("PDF page-to-texture export requires the Qt PDF module in this build."); });
 
+	// Codex AI chat dock.  The dock is intentionally created with the other
+	// editor panels so it behaves like a normal right-side Qt editor and can be
+	// restored through the Window menu.
+	ai_dock_widget = new AIDockWidget(this);
+	mcp_poly_haven_enabled.store(settings->value("AI/PolyHavenEnabled",false).toBool());
+	ai_dock_widget->setPolyHavenEnabled(mcp_poly_haven_enabled.load());
+	connect(ai_dock_widget,&AIDockWidget::polyHavenChanged,this,[this](bool enabled) {
+		settings->setValue("AI/PolyHavenEnabled",enabled);
+		mcp_poly_haven_enabled.store(enabled);
+	});
+	ai_dock_widget->configureMCPSettings(settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool(),
+		settings->value(MainOptionsDialog::MCPPortKey(), MainOptionsDialog::defaultMCPPort()).toInt(),
+		LucideIconUtils::directoryForBasePath(base_dir_path));
+	connect(ai_dock_widget, &AIDockWidget::mcpSettingsChanged, this, [this](bool enabled, int port) {
+		if(settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool() == enabled &&
+			settings->value(MainOptionsDialog::MCPPortKey(), MainOptionsDialog::defaultMCPPort()).toInt() == port) return;
+		settings->setValue(MainOptionsDialog::MCPEnabledKey(), enabled);
+		settings->setValue(MainOptionsDialog::MCPPortKey(), port);
+		ai_dock_widget->stopCodex();
+		stopMCPClientServer();
+		on_actionAI_triggered();
+	});
+	ai_dock_widget->setObjectName(QStringLiteral("aiDockWidget"));
+	ai_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	ai_dock_widget->setMinimumWidth(320);
+	installEditorDockTitleBar(ai_dock_widget);
+	addDockWidget(Qt::RightDockWidgetArea, ai_dock_widget);
+	resizeDocks(QList<QDockWidget*>() << ai_dock_widget, QList<int>() << 440, Qt::Horizontal);
+	ai_dock_widget->hide();
+
 	// Add dock widgets to Window menu
 	ui->menuWindow->addSeparator();
 	ui->menuWindow->addAction(ui->editorDockWidget->toggleViewAction());
@@ -2477,6 +2529,7 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(animation_editor_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(photo_video_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(document_editor_dock_widget->toggleViewAction());
+	ui->menuWindow->addAction(ai_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(ui->chatDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->helpInfoDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->webcamDockWidget->toggleViewAction());
@@ -2828,9 +2881,25 @@ void MainWindow::initialiseUI()
 	{
 		gui_client.setTerrainSculptTool(tool);
 	});
-	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingBrushSettingsChangedSignal, this, [this](float radius_m, float strength_m)
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingMapPaintTargetChangedSignal, this, [this](int target)
 	{
-		gui_client.setTerrainSculptBrushSettings(radius_m, strength_m);
+		gui_client.setTerrainSculptMapPaintTarget(target);
+	});
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingBrushSettingsChangedSignal, this, [this](float radius_m, float strength_m, float target_height_m)
+	{
+		gui_client.setTerrainSculptBrushSettings(radius_m, strength_m, target_height_m);
+	});
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingIslandSettingsChangedSignal, this, [this](float sea_floor_m, float land_base_m, float peak_m, int seed)
+	{
+		gui_client.setTerrainSculptIslandSettings(sea_floor_m, land_base_m, peak_m, seed);
+	});
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingIslandRegenerateRequestedSignal, this, [this]()
+	{
+		gui_client.regenerateTerrainIsland();
+	});
+	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingIslandPlacementRequestedSignal, this, [this]()
+	{
+		gui_client.armTerrainIslandPlacement();
 	});
 	connect(ui->worldSettingsWidget, &WorldSettingsWidget::sculptingUndoSignal, this, [this]()
 	{
@@ -2878,6 +2947,8 @@ void MainWindow::initialiseUI()
 		photo_video_dock_widget->setWindowTitle(tr("Фоторежим"));
 	if(document_editor_dock_widget)
 		document_editor_dock_widget->setWindowTitle(tr("Documents"));
+	if(ai_dock_widget)
+		ai_dock_widget->retranslateUi();
 	updateMapDockState();
 
 	startMainTimer();
@@ -3383,6 +3454,7 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_top_plain(ui->actionShow_Parcels, "land-plot", QString::fromUtf8("▱"));
 	set_top_plain(ui->actionAbout_Substrata, "info", QStringLiteral("i"));
 	set_top_accent(ui->actionUpdate, "circle-arrow-up", "#22C55E", QString::fromUtf8("↑"));
+	set_top_accent(ui->actionAI, "bot", "#A78BFA", QStringLiteral("AI"));
 	if(animation_editor_dock_widget)
 		set_plain(animation_editor_dock_widget->toggleViewAction(), "activity", QString::fromUtf8("A"));
 	if(photo_video_dock_widget)
@@ -3436,6 +3508,7 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_plain(ui->actionSummon_Hovercar, "rocket", QString::fromUtf8("▲"));
 	set_plain(ui->actionSummon_Boat, "ship", QString::fromUtf8("▱"));
 	set_plain(ui->actionSummon_Jet_Ski, "waves-horizontal", QString::fromUtf8("≈"));
+	set_accent(ui->actionSummon_Snowboard, "snowflake", "#38BDF8", QString::fromUtf8("❄"));
 	set_plain(ui->actionSummon_Car, "car-front", QString::fromUtf8("▰"));
 	set_plain(ui->actionOpen_Gear_Inventory, "backpack", QString::fromUtf8("▣"));
 	set_plain(ui->actionConvert_Selected_Object_To_Gear_Item, "package-plus", QString::fromUtf8("+"));
@@ -3672,6 +3745,7 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	applyEditorDockTitleBarTheme(photo_video_dock_widget, palette);
 	applyEditorDockTitleBarTheme(animation_editor_dock_widget, palette);
 	applyEditorDockTitleBarTheme(ui->chatDockWidget, palette);
+	applyEditorDockTitleBarTheme(ai_dock_widget, palette);
 
 	if(ui->menubar)
 	{
@@ -3918,6 +3992,7 @@ void MainWindow::afterGLInitInitialise()
 MainWindow::~MainWindow()
 {
 	running_destructor = true; // Set this to not append log messages during destruction, causes assert failure in Qt.
+	stopMCPClientServer();
 	if(animation_editor_controller) animation_editor_controller->shutdown();
 	if(photo_path_timer) photo_path_timer->stop();
 	if(photo_video_timer) photo_video_timer->stop();
@@ -7427,6 +7502,11 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 	if(closing || in_CEF_message_loop)
 		return;
+	if(mcp_client_server_running && (gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
+		mcp_server_hostname != gui_client.server_hostname || mcp_worldname != gui_client.server_worldname))
+		stopMCPClientServer();
+	else if(!mcp_client_server_running && gui_client.connection_state == GUIClient::ServerConnectionState_Connected)
+		startMCPClientServerIfEnabled();
 
 	// We don't want to do the closeEvent stuff in the CEF message loop.  
 	// If we got a close event in there, handle it now when we're in the main message loop, and not the CEF message loop.
@@ -10151,6 +10231,7 @@ void MainWindow::on_actionLogIn_triggered()
 	const int res = dialog.exec();
 	if(res == QDialog::Accepted)
 	{
+		credential_manager.loadFromSettings(*settings);
 		const std::string username = QtUtils::toStdString(dialog.usernameLineEdit->text());
 		const std::string password = QtUtils::toStdString(dialog.passwordLineEdit->text());
 
@@ -10164,6 +10245,11 @@ void MainWindow::on_actionLogIn_triggered()
 		scratch_packet.writeStringLengthFirst(password);
 
 		enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
+		if(mcp_client_server_running)
+		{
+			stopMCPClientServer();
+			startMCPClientServerIfEnabled();
+		}
 	}
 }
 
@@ -10881,6 +10967,200 @@ void MainWindow::on_actionAbout_Substrata_triggered()
 }
 
 
+void MainWindow::on_actionAI_triggered()
+{
+	if(settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool() && !mcp_client_server_running)
+		startMCPClientServerIfEnabled();
+
+	const int port = settings->value(MainOptionsDialog::MCPPortKey(), MainOptionsDialog::defaultMCPPort()).toInt();
+	const QString endpoint = QStringLiteral("http://127.0.0.1:%1/mcp").arg(port);
+	const bool enabled = settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool();
+	const bool connected = gui_client.connection_state == GUIClient::ServerConnectionState_Connected;
+	if(!ai_dock_widget)
+		return;
+
+	ai_dock_widget->openForEndpoint(
+		endpoint,
+		enabled,
+		mcp_client_server_running,
+		connected,
+		QDir::currentPath());
+}
+
+
+void MainWindow::startMCPClientServerIfEnabled()
+{
+	if(mcp_client_server_running || !settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool())
+		return;
+	if(gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
+		return;
+	// LoginDialog writes credentials through a temporary manager. Reload the
+	// member before taking the MCP forwarding snapshot so a newly entered
+	// password is used immediately, without requiring a client restart.
+	credential_manager.loadFromSettings(*settings);
+
+	const int port = myClamp(settings->value(MainOptionsDialog::MCPPortKey(), MainOptionsDialog::defaultMCPPort()).toInt(),
+		MainOptionsDialog::minMCPPort(), MainOptionsDialog::maxMCPPort());
+	Reference<MCPClientSharedRequestHandler> shared_handler = new MCPClientSharedRequestHandler();
+	shared_handler->setPolyHavenEnabledCallback([this]() { return mcp_poly_haven_enabled.load(); });
+	const std::string render_server = gui_client.server_hostname, render_world = gui_client.server_worldname;
+	shared_handler->setRenderCallback([this, render_server, render_world](const MCPClientRenderRequest& request, MCPClientRenderResult& result) {
+		struct PendingRender {
+			QSemaphore done;
+			std::atomic<bool> cancelled{false};
+			MCPClientRenderResult image;
+			std::string error;
+		};
+		const auto pending = std::make_shared<PendingRender>();
+		QMetaObject::invokeMethod(this, [this, pending, request, render_server, render_world]() {
+			if(pending->cancelled.load()) return;
+			try
+			{
+				if(!mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
+					gui_client.server_hostname != render_server || gui_client.server_worldname != render_world)
+					throw std::runtime_error("The active world changed. Reconnect MCP before rendering.");
+				if(gui_client.num_non_net_resources_downloading || gui_client.download_queue.size() || gui_client.load_item_queue.size() ||
+					gui_client.model_and_texture_loader_task_manager.getNumUnfinishedTasks() || !gui_client.model_loaded_messages_to_process.empty())
+					throw std::runtime_error("Scene assets are still loading. Retry render_view after loading completes.");
+				Vec3d right, up, forward;
+				CameraController::getBasisForAngles(request.cam_angles, Vec3d(0,0,1), right, up, forward);
+				Matrix4f camera;
+				Matrix4f::fromRows(right.toVec4fVector(), forward.toVec4fVector(), up.toVec4fVector(), Vec4f(0,0,0,1))
+					.rightMultiplyWithTranslationMatrix(-request.cam_pos.toVec4fVector(), camera);
+				QVariantMap values;
+				values.insert("hide_world_ui", true);
+				values.insert("dof_blur", 0.0);
+				const QImage image = ui->glWidget->capturePhotoFrame(values, QSize(request.width, request.height), &camera);
+				QByteArray bytes;
+				QBuffer buffer(&bytes);
+				buffer.open(QIODevice::WriteOnly);
+				if(image.isNull() || !image.save(&buffer, "PNG")) throw std::runtime_error("Could not encode the scene image.");
+				pending->image.encoded_image.assign(bytes.constData(), bytes.constData()+bytes.size());
+				pending->image.mime_type = "image/png";
+			}
+			catch(const std::exception& e) { pending->error = e.what(); }
+			catch(...) { pending->error = "Scene rendering failed."; }
+			pending->done.release();
+		}, Qt::QueuedConnection);
+		// Never use BlockingQueuedConnection: endpoint shutdown joins workers on the GUI thread.
+		if(!pending->done.tryAcquire(1, 10000)) { pending->cancelled.store(true); throw glare::Exception("Scene render timed out. Retry when the client is responsive."); }
+		if(!pending->error.empty()) throw glare::Exception(pending->error);
+		result = std::move(pending->image);
+	});
+	shared_handler->setTerrainCallback([this, render_server, render_world](const QString& tool, const QJsonObject& args) -> QJsonObject {
+		struct PendingTerrain {
+			QSemaphore done;
+			std::atomic<bool> cancelled{false};
+			QJsonObject result;
+			std::string error;
+		};
+		const auto pending=std::make_shared<PendingTerrain>();
+		QMetaObject::invokeMethod(this, [this, pending, tool, args, render_server, render_world]() {
+			if(pending->cancelled.load()) return;
+			try
+			{
+				if(!mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
+					gui_client.server_hostname != render_server || gui_client.server_worldname != render_world)
+					throw std::runtime_error("Active world changed. Reconnect MCP before editing terrain.");
+				const TerrainSpec& terrain=gui_client.connected_world_settings.terrain_spec;
+				if(tool == "inspect_terrain")
+				{
+					QJsonArray sections;
+					for(const TerrainSpecSection& section : terrain.section_specs)
+					{
+						const double x0=(section.x-0.5)*terrain.terrain_section_width_m, y0=(section.y-0.5)*terrain.terrain_section_width_m;
+						sections.append(QJsonObject{{"section_x",section.x},{"section_y",section.y},
+							{"bounds_xy_m",QJsonArray{x0,y0,x0+terrain.terrain_section_width_m,y0+terrain.terrain_section_width_m}},
+							{"heightmap_loaded",gui_client.terrain_system.nonNull() && gui_client.terrain_system->isHeightmapSectionLoaded(section.x,section.y)},
+							{"heightmap_exr_present",!section.heightmap_URL.empty()}, {"tree_mask_present",!section.tree_mask_map_URL.empty()},
+							{"road_mask_present",!section.road_mask_map_URL.empty()}, {"building_mask_present",!section.building_mask_map_URL.empty()},
+							{"terrain_mask_present",!section.mask_map_URL.empty()}, {"disabled_map_flags",(int)section.disabled_map_flags}});
+					}
+					pending->result=QJsonObject{{"terrain_enabled",!terrain.section_specs.empty()}, {"section_width_m",terrain.terrain_section_width_m},
+						{"height_scale",terrain.terrain_height_scale}, {"base_height_m",terrain.default_terrain_z}, {"water_z_m",terrain.water_z},
+						{"heightmap_layer","EXR heightmap only; raw height values are multiplied by height_scale and offset by base_height_m"},
+						{"other_layers_preserved",true}, {"sections",sections}};
+				}
+				else if(tool == "smooth_terrain")
+				{
+					if(!args.value("center").isObject()) throw std::runtime_error("center {x,y} is required in world metres.");
+					const QJsonObject c=args.value("center").toObject();
+					const double x=c.value("x").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double y=c.value("y").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double radius=args.value("radius_m").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double strength=args.value("strength").toDouble(0.5);
+					const int passes=args.value("passes").toInt(3);
+					if(!std::isfinite(x)||!std::isfinite(y)||!std::isfinite(radius)||radius<1||radius>terrain.terrain_section_width_m*0.5||
+						!std::isfinite(strength)||strength<=0||strength>1||passes<1||passes>8)
+						throw std::runtime_error("Invalid terrain edit bounds. Radius must be 1 m..half a section; strength 0..1; passes 1..8.");
+					if(!gui_client.connectedToUsersWorldOrGodUser()) throw std::runtime_error("Terrain editing requires world owner or god permissions.");
+					if(gui_client.terrain_system.isNull()) throw std::runtime_error("Terrain sections are not loaded in the client. Move near the target area and retry.");
+					int loaded_sections=0, skipped_sections=0;
+					const bool changed=gui_client.terrain_system->smoothAtWorld(Vec3d(x,y,0), (float)radius, (float)strength, passes,
+						&loaded_sections, &skipped_sections);
+					if(!changed)
+					{
+						if(loaded_sections == 0)
+							throw std::runtime_error("No loaded heightmap sections intersect the requested brush. Run inspect_terrain and choose coordinates inside a section with heightmap_loaded=true, or move the client camera near the target to load it.");
+						throw std::runtime_error("The loaded heightmap samples in this brush did not change. The area may already be flat or the smoothing strength may be too low; inspect terrain bounds and try a larger radius or strength.");
+					}
+					if(!gui_client.saveTerrainSculptingChanges())
+						throw std::runtime_error("Terrain changed locally, but the EXR resource could not be fully saved. Inspect client log before retrying.");
+					pending->result=QJsonObject{{"changed",true},{"center",QJsonObject{{"x",x},{"y",y}}}, {"radius_m",radius},
+						{"strength",strength},{"passes",passes},{"saved","New EXR heightmap resource uploaded and world settings update queued."},
+						{"loaded_sections_edited",loaded_sections},{"unloaded_or_missing_sections_skipped",skipped_sections},
+						{"preserved_layers",QJsonArray{"terrain mask","tree mask","road mask","building mask","detail textures"}}};
+				}
+				else
+					throw std::runtime_error("Unknown terrain tool.");
+			}
+			catch(const std::exception& e) { pending->error=e.what(); }
+			catch(...) { pending->error="Terrain operation failed."; }
+			pending->done.release();
+		}, Qt::QueuedConnection);
+		if(!pending->done.tryAcquire(1,15000)) { pending->cancelled.store(true); throw glare::Exception("Terrain operation timed out while the client was busy."); }
+		if(!pending->error.empty()) throw glare::Exception(pending->error);
+		return pending->result;
+	});
+	if(!shared_handler->configureForwardingTargetFromCredentialManager(gui_client.server_hostname, gui_client.server_worldname, credential_manager))
+	{
+		if(!mcp_connection_error_reported)
+		{
+			showErrorNotification("MCP is enabled, but no saved login is available for the connected server. Enable 'remember me' when logging in.");
+			mcp_connection_error_reported = true;
+		}
+		return;
+	}
+
+	try
+	{
+		mcp_web_thread_manager.addThread(new web::WebListenerThread(port, IPAddress("127.0.0.1"), shared_handler.getPointer(), NULL));
+		mcp_client_server_running = true;
+		mcp_server_hostname = gui_client.server_hostname;
+		mcp_worldname = gui_client.server_worldname;
+		mcp_connection_error_reported = false;
+		conPrint("Started localhost MCP endpoint on port " + toString(port) + ".");
+		if(ai_dock_widget && ai_dock_widget->isVisible())
+			ai_dock_widget->openForEndpoint(QStringLiteral("http://127.0.0.1:%1/mcp").arg(port), true, true, true, QDir::currentPath());
+	}
+	catch(glare::Exception& e)
+	{
+		showErrorNotification("Failed to start local MCP endpoint: " + std::string(e.what()));
+	}
+}
+
+
+void MainWindow::stopMCPClientServer()
+{
+	if(ai_dock_widget) ai_dock_widget->stopCodex();
+	if(!mcp_client_server_running)
+		return;
+	mcp_web_thread_manager.killThreadsBlocking();
+	mcp_client_server_running = false;
+	mcp_connection_error_reported = false;
+}
+
+
 void MainWindow::on_webcamEnableCheckBox_toggled(bool checked)
 {
 	// If the full WebcamWindow is active, it owns capture and UI.
@@ -11203,6 +11483,8 @@ void MainWindow::on_actionOptions_triggered()
 		gui_client.opengl_engine->setSSAOEnabled(settings->value(MainOptionsDialog::SSAOKey(), /*default val=*/false).toBool());
 
 		startMainTimer(); // Restart main timer, as the timer interval depends on max FPS, whiich may have changed.
+
+
 	}
 
 	gui_client.mic_read_thread_manager.enqueueMessage(new InputVolumeScaleChangedMessage(
@@ -11405,6 +11687,22 @@ void MainWindow::on_actionSummon_Jet_Ski_triggered()
 	{
 		showErrorNotification(e.what());
 
+		QMessageBox msgBox;
+		msgBox.setText(QtUtils::toQString(e.what()));
+		msgBox.exec();
+	}
+}
+
+
+void MainWindow::on_actionSummon_Snowboard_triggered()
+{
+	try
+	{
+		gui_client.summonSnowboard();
+	}
+	catch(glare::Exception& e)
+	{
+		showErrorNotification(e.what());
 		QMessageBox msgBox;
 		msgBox.setText(QtUtils::toQString(e.what()));
 		msgBox.exec();
@@ -12128,6 +12426,8 @@ void MainWindow::posAndRot3DControlsToggledSlot()
 
 void MainWindow::materialSelectedInBrowser(const std::string& path)
 {
+	if(ui->worldSettingsWidget->setTerrainMaterialFromBrowser(path))
+		return;
 	if(gui_client.selected_ob.nonNull())
 	{
 		const bool have_edit_permissions = gui_client.objectModificationAllowedWithMsg(*gui_client.selected_ob, "edit");

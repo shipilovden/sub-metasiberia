@@ -49,7 +49,7 @@ public:
 
 	void shutdown();
 	void setPhotoSettings(const QVariantMap& values, bool enabled);
-	QImage capturePhotoFrame(const QVariantMap& values, const QSize& requested_size = QSize());
+	QImage capturePhotoFrame(const QVariantMap& values, const QSize& requested_size = QSize(), const Matrix4f* inspection_camera = nullptr);
 
 	// Non-empty if error occurred.
 	std::string getInitialisationErrorMsg() const { return initialisation_error_msg; }

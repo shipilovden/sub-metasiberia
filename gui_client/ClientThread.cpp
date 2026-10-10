@@ -1253,10 +1253,16 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 				{
 					WorldObject* ob = res.getValue().ptr();
 #if GUI_CLIENT
-					if(!ob->is_selected) // Don't update the selected object - we will consider the local client control authoritative while the object is selected.
+					if(!ob->is_selected || (!ob->from_local_other_dirty && !ob->from_local_transform_dirty)) // Selection alone must not discard MCP edits; preserve unsent local edits.
 #endif
 					{
+						const URLString previous_model_url = ob->model_url;
 						readWorldObjectFromNetworkStreamGivenUID(msg_buffer, *ob);
+#if GUI_CLIENT
+						ob->loading_or_loaded_lod_level = -10; // Reconsider changed material resources even at the same camera LOD.
+						if(ob->model_url != previous_model_url)
+							ob->loading_or_loaded_model_lod_level = -10;
+#endif
 						read = true;
 						ob->from_remote_other_dirty = true;
 						world_state->dirty_from_remote_objects.insert(ob);

@@ -123,6 +123,9 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client WorldSettingsWidget)
 	addMocFileRule(gui_client CreateObjectsDialog)
 	addMocFileRule(gui_client VRoidAuthFlow)
+	addMocFileRule(gui_client AIConnectionDialog)
+	addMocFileRule(gui_client CodexAppServerClient)
+	addMocFileRule(gui_client AIDockWidget)
 
 	# Webcam Qt UI (Qt Multimedia).  Not built for SDL configurations.
 	addMocFileRule(gui_client/webcam WebcamWindow)
@@ -164,6 +167,7 @@ if(NOT USE_SDL)
 	addUIFileRule(gui_client TerrainSpecSectionWidget)
 	addUIFileRule(gui_client WorldSettingsWidget)
 	addUIFileRule(gui_client CreateObjectsDialog)
+	addUIFileRule(gui_client AIConnectionDialog)
 
 	addUIFileRule(qt FileSelectWidget)
 	addUIFileRule(qt RealControl)
@@ -179,6 +183,8 @@ ${CMAKE_SOURCE_DIR}/gui_client/AvatarGraphics.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/AvatarGraphics.h
 ${CMAKE_SOURCE_DIR}/gui_client/BikePhysics.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/BikePhysics.h
+${CMAKE_SOURCE_DIR}/gui_client/SnowboardPhysics.cpp
+${CMAKE_SOURCE_DIR}/gui_client/SnowboardPhysics.h
 ${CMAKE_SOURCE_DIR}/gui_client/BiomeManager.cpp
 ${CMAKE_SOURCE_DIR}/gui_client/BiomeManager.h
 ${CMAKE_SOURCE_DIR}/gui_client/BoatPhysics.cpp
@@ -431,6 +437,13 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/DocumentObjectSettings.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/DocumentObjectSettings.h
 		${CMAKE_SOURCE_DIR}/gui_client/MCPClientHandler.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AIConnectionDialog.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AIConnectionDialog.h
+		${CMAKE_SOURCE_DIR}/gui_client/AIConnectionDialog.ui
+		${CMAKE_SOURCE_DIR}/gui_client/CodexAppServerClient.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/CodexAppServerClient.h
+		${CMAKE_SOURCE_DIR}/gui_client/AIDockWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AIDockWidget.h
 		${GLARE_CORE_TRUNK_DIR_ENV}/webserver/RequestHandler.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MCPClientHandler.h
 		${CMAKE_SOURCE_DIR}/gui_client/TreeEditorPanel.cpp
@@ -604,6 +617,9 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/moc_WorldSettingsWidget.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_CreateObjectsDialog.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/moc_VRoidAuthFlow.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_AIConnectionDialog.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_CodexAppServerClient.cpp
+	${CMAKE_SOURCE_DIR}/gui_client/moc_AIDockWidget.cpp
 
 	# Webcam Qt UI (Qt Multimedia)
 	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
@@ -639,6 +655,7 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/ui_TerrainSpecSectionWidget.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_WorldSettingsWidget.h
 	${CMAKE_SOURCE_DIR}/gui_client/ui_CreateObjectsDialog.h
+	${CMAKE_SOURCE_DIR}/gui_client/ui_AIConnectionDialog.h
 	)
 
 
@@ -738,7 +755,23 @@ ${GLARE_CORE_TRUNK_DIR_ENV}/webserver/Escaping.cpp
 ${GLARE_CORE_TRUNK_DIR_ENV}/webserver/Escaping.h
 ${GLARE_CORE_TRUNK_DIR_ENV}/webserver/ResponseUtils.cpp
 ${GLARE_CORE_TRUNK_DIR_ENV}/webserver/ResponseUtils.h
+${GLARE_CORE_TRUNK_DIR_ENV}/webserver/RequestInfo.cpp
+${GLARE_CORE_TRUNK_DIR_ENV}/webserver/RequestInfo.h
+${GLARE_CORE_TRUNK_DIR_ENV}/webserver/UnsafeString.cpp
+${GLARE_CORE_TRUNK_DIR_ENV}/webserver/UnsafeString.h
+${GLARE_CORE_TRUNK_DIR_ENV}/webserver/WebsiteExcep.h
 )
+
+# The local MCP listener is used by the Qt client.  The browser client does
+# not host an HTTP server and has no LibreSSL headers or server socket support.
+if(NOT USE_SDL)
+	list(APPEND webserver_files
+		${GLARE_CORE_TRUNK_DIR_ENV}/webserver/WebListenerThread.cpp
+		${GLARE_CORE_TRUNK_DIR_ENV}/webserver/WebListenerThread.h
+		${GLARE_CORE_TRUNK_DIR_ENV}/webserver/WebWorkerThread.cpp
+		${GLARE_CORE_TRUNK_DIR_ENV}/webserver/WebWorkerThread.h
+	)
+endif()
 
 SET(direct3d
 ${GLARE_CORE_TRUNK_DIR_ENV}/direct3d/Direct3DUtils.cpp

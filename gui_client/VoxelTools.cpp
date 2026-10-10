@@ -586,9 +586,9 @@ VoxelToolResult buildCommand(const VoxelToolType tool, const VoxelToolInput& inp
 	}
 
 	const size_t max_points = resolvedMaxVoxels(settings);
-	MaterialMap materials = makeMaterialMap(voxels);
 	if(tool == VoxelToolType::Fill)
 	{
+		MaterialMap materials = makeMaterialMap(voxels);
 		buildConnectedFill(input, settings, state, layer_index, materials, result);
 		return result;
 	}
@@ -608,6 +608,24 @@ VoxelToolResult buildCommand(const VoxelToolType tool, const VoxelToolInput& inp
 		buildLinePoints(input, settings, max_points, points, result.truncated);
 	else
 		buildStampPoints(input, settings, max_points, points, result.truncated);
+
+	// A normal brush click touches only a handful of coordinates. Building a
+	// hash table for every voxel in a large object just to look up those points
+	// creates substantial allocation and hashing work on the UI thread. Build a
+	// small targeted map for sparse edits; retain the full map for large shapes.
+	MaterialMap materials;
+	if(points.size() <= 128)
+	{
+		materials.reserve(points.size());
+		for(size_t i=0; i<voxels.size(); ++i)
+		{
+			const Coord coord(voxels[i].pos);
+			if(points.find(coord) != points.end() && validMaterial(voxels[i].mat_index))
+				materials[coord] = voxels[i].mat_index; // Last duplicate matches current mesher behaviour.
+		}
+	}
+	else
+		materials = makeMaterialMap(voxels);
 
 	for(const Coord& point : points)
 	{

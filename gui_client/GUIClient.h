@@ -263,6 +263,7 @@ public:
 	void summonHovercar();
 	void summonBoat();
 	void summonJetSki();
+	void summonSnowboard();
 	void summonCar();
 	void objectTransformEdited();
 	void objectEdited();
@@ -302,7 +303,7 @@ public:
 	void updateTerrainSculptBrushOverlayAtHit(const Vec3d& hit_pos);
 	void ensureTerrainSculptBrushOverlay();
 	void hideTerrainSculptBrushOverlay();
-	void saveTerrainSculptingChanges();
+	bool saveTerrainSculptingChanges(const WorldSettings* base_world_settings = NULL, bool apply_saved_settings = true);
 	void onMouseWheelEvent(MouseWheelEvent& e);
 	void gamepadButtonXChanged(bool pressed);
 	void gamepadButtonAChanged(bool pressed);
@@ -407,7 +408,7 @@ public:
 	void gearItemClicked(const GearItemRef& item);
 	void equippedGearItemClicked(const GearItemRef& item);
 	void deleteGearItem(const GearItemRef& item);
-	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings);
+	void worldSettingsChangedFromUI(const WorldSettings& new_world_settings, bool reload_terrain = true);
 	void applyWorldSettingsToOpenGLEngine();
 	void spawnFloatingChatMessageForAvatar(const UID& avatar_uid, const std::string& message, double cur_time);
 	void removeFloatingChatMessageForAvatar(const UID& avatar_uid);
@@ -570,6 +571,8 @@ public:
 	bool findSurfaceEyePosition(const Vec3d& candidate_pos, JPH::BodyID ignore_body_id, Vec3d& eye_pos_out) const;
 
 	void connectToServer(const URLParseResults& url_results);
+	std::string getAutoLoginUsername(const std::string& hostname);
+	void createOurAvatarLocally(const Avatar& avatar_state, WorldStateLock& lock) REQUIRES(world_state->mutex);
 	void changeToDifferentWorld(const URLParseResults& url_results);
 
 	void checkCreateResourceDownloadThreads(); // Create DownloadResourcesThread etc. if not created already and resource_manager is non-null.
@@ -618,7 +621,11 @@ public:
 	void setFlyModeEnabled(bool enabled);
 	void setTerrainSculptModeEnabled(bool enabled);
 	void setTerrainSculptTool(int tool);
-	void setTerrainSculptBrushSettings(float radius_m, float strength_m);
+	void setTerrainSculptMapPaintTarget(int target);
+	void setTerrainSculptBrushSettings(float radius_m, float strength_m, float target_height_m);
+	void setTerrainSculptIslandSettings(float sea_floor_m, float land_base_m, float peak_m, int seed);
+	void armTerrainIslandPlacement();
+	void regenerateTerrainIsland();
 	void undoTerrainSculpt();
 	void redoTerrainSculpt();
 
@@ -872,6 +879,9 @@ public:
 	//glare::TaskManager* task_manager; // General purpose task manager, for quick/blocking multithreaded builds of stuff. Currently just used for LODGeneration::generateLODTexturesForMaterialsIfNotPresent(). Lazily created.
 	
 	glare::TaskManager model_and_texture_loader_task_manager;
+	// Mesh rebuilds for the voxel object currently being edited should not wait
+	// behind distant background model and texture loads.
+	glare::TaskManager voxel_editor_mesh_task_manager;
 
 	// For short, processor-intensive tasks that the main thread depends on, such as computing animation data for the current frame, or executing Jolt physics tasks.
 	glare::TaskManager* high_priority_task_manager;
@@ -1152,8 +1162,17 @@ public:
 	Reference<TerrainDecalManager> terrain_decal_manager;
 	bool terrain_sculpt_mode_enabled;
 	int terrain_sculpt_tool;
+	int terrain_sculpt_map_paint_target;
 	float terrain_sculpt_brush_radius_m;
 	float terrain_sculpt_strength_m;
+	float terrain_sculpt_target_height_m;
+	float terrain_sculpt_island_sea_floor_m;
+	float terrain_sculpt_island_land_base_m;
+	float terrain_sculpt_island_peak_m;
+	int terrain_sculpt_island_seed;
+	bool terrain_sculpt_last_island_valid;
+	bool terrain_sculpt_island_placement_armed;
+	Vec3d terrain_sculpt_last_island_pos;
 	bool terrain_sculpt_stroke_active;
 	bool terrain_sculpt_have_last_hit;
 	Vec3d terrain_sculpt_last_hit;

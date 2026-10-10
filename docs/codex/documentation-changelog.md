@@ -4,6 +4,33 @@
 
 Формат записи: дата/фаза -> path/группа -> тип -> изменение -> evidence/причина.
 
+## 2026-10-07 — Референсы в чате и библиотечные примитивы
+
+- [MCP_CODEX_INTEGRATION.md](../MCP_CODEX_INTEGRATION.md): миниатюры и fullscreen просмотр вложений, индикатор turn/item активности и RU/EN; дополнен список ограничений моделирования.
+- Девять форм MCP используют геометрию существующей библиотеки OBJ через воспроизводимый generated header. Авторизация, MCP opt-in и серверные права сохранены.
+
+## 2026-10-07 — MCP текстуры и обновления вокселей
+
+- [MCP_CODEX_INTEGRATION.md](../MCP_CODEX_INTEGRATION.md): Poly Haven opt-in, процедурные PBR-карты, импорт/рисование изображений и плоскости в мире; границы UV и нейросетевой генерации.
+- Зафиксированы исправления пропуска обновлений выделенных объектов и фонового voxel meshing; Qt/Linux compilation отделена от ещё не проведённой runtime-проверки. Web build заблокирован compiler launcher.
+
+## 2026-10-07 — Настройки ИИ и строительство из куба
+
+- Продолжение: шестерёнка вкладки настроек, исправление discovery `render_view` при pretty-printed JSON и проверки cache key готовой воксельной геометрии. Qt собран; полная Web-сборка заблокирована падением Emscripten compiler launcher, runtime видимость ещё не подтверждена. Подробности в canonical MCP документе.
+
+- [MCP_CODEX_INTEGRATION.md](../MCP_CODEX_INTEGRATION.md): вкладки Chat/Settings, MCP opt-in в панели ИИ, Lucide icons, permission preflight, per-face cube materials и deformed_box.
+- Разделены реальные серверные права, инструкции модели и пределы знания о проекте/создателе.
+
+## 2026-10-07 — Референсы и визуальное моделирование MCP
+
+- [MCP_CODEX_INTEGRATION.md](../MCP_CODEX_INTEGRATION.md): вложения localImage, динамический model/list, Qt render_view, lathe/extrude/rounded_box/repeat, новые voxel volumes и shell.
+- Отдельно описаны границы visual feedback (только загруженная сцена), runtime acceptance и стадия активации релиза.
+
+## 2026-10-07 — MCP modeling
+
+- Обновлён [MCP_CODEX_INTEGRATION.md](../MCP_CODEX_INTEGRATION.md): native mesh assembly, indexed triangles, voxel constructive operations, readback, материалы, permissions и ограничения редакторов.
+- Добавлены machine-readable capabilities и примеры построения. Source/build отделены от runtime/production подтверждения.
+
 ## 2026-10-04 — GLUI чат и окно эмодзи
 
 - Добавлен [chat-ui.md](../chat-ui.md): текущий GLUI picker/левый чат, узкие Qt-исправления, отделение текстовых цитат от серверных ответов и реальные ограничения реакций/групп/custom emoji.

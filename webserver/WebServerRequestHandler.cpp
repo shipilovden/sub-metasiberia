@@ -20,6 +20,7 @@ Copyright Glare Technologies Limited 2021 -
 #include "ResourceHandlers.h"
 #include "PhotoHandlers.h"
 #include "ChatBotHandlers.h"
+#include "MCPHandlers.h"
 #include "SubEventHandlers.h"
 #include <networking/HTTPClient.h>
 #if USE_GLARE_PARCEL_AUCTION_CODE
@@ -320,7 +321,11 @@ void WebServerRequestHandler::handleRequest(const web::RequestInfo& request, web
 	if(request.verb == "POST")
 	{
 		// Route PUT request
-		if(request.path == "/login_post")
+		if(request.path == "/mcp")
+		{
+			MCPHandlers::handleMCPRequest(*this->server, *this->world_state, request, reply_info);
+		}
+		else if(request.path == "/login_post")
 		{
 			LoginHandlers::handleLoginPost(*this->world_state, request, reply_info);
 		}

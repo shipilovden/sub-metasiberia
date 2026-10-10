@@ -4,6 +4,7 @@ WorkerThread.cpp
 Copyright Glare Technologies Limited 2018 -
 =====================================================================*/
 #include "WorkerThread.h"
+#include "../shared/VehiclesShared.h"
 
 
 #include "ServerWorldState.h"
@@ -1091,7 +1092,8 @@ static bool isSummonedVehicleObject(const WorldObject& ob)
 			ob.model_url == "optimized_dressed_fix7_offset4_glb_4474648345850208925.bmesh" || // bike
 			ob.model_url == "peugot_closed_glb_2887717763908023194.bmesh" || // hovercar
 			ob.model_url == "poweryacht3_2_glb_17116251394697619807.bmesh" || // boat
-			ob.model_url == "Jet_Ski_obj_3200017390617214853.bmesh") // jetski
+			ob.model_url == "Jet_Ski_obj_3200017390617214853.bmesh" || // jetski
+			ob.model_url == VehiclesShared::snowboardModelURL()) // snowboard
 			return true;
 		else
 			return false;

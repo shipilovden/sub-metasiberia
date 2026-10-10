@@ -47,6 +47,7 @@ static std::string trGesture(GUIClient* gui_client, const std::string& src)
 	if(src == "Summon car") return "Вызвать машину";
 	if(src == "Summon boat") return "Вызвать лодку";
 	if(src == "Summon jet ski") return "Вызвать гидроцикл";
+	if(src == "Summon snowboard") return "Вызвать сноуборд";
 	if(src == "Summon hovercar") return "Вызвать ховеркар";
 	if(src == "Hide vehicles") return "Скрыть транспорт";
 	if(src == "Photo mode") return "Фоторежим";
@@ -166,6 +167,14 @@ void GestureUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_c
 		}
 		{
 			GLUITextButton::CreateArgs args;
+			args.tooltip = trGesture(gui_client, "Summon snowboard");
+			summon_snowboard_button = new GLUITextButton(*gl_ui, opengl_engine_, trGesture(gui_client, "Summon snowboard"), Vec2f(0), args);
+			summon_snowboard_button->setVisible(vehicle_buttons_visible);
+			summon_snowboard_button->handler = this;
+			gl_ui->addWidget(summon_snowboard_button);
+		}
+		{
+			GLUITextButton::CreateArgs args;
 			args.tooltip = trGesture(gui_client, "Summon hovercar");
 			summon_hovercar_button = new GLUITextButton(*gl_ui, opengl_engine_, trGesture(gui_client, "Summon hovercar"), Vec2f(0), args);
 			summon_hovercar_button->setVisible(vehicle_buttons_visible);
@@ -248,6 +257,7 @@ void GestureUI::destroy()
 	checkRemoveAndDeleteWidget(gl_ui, summon_car_button);
 	checkRemoveAndDeleteWidget(gl_ui, summon_boat_button);
 	checkRemoveAndDeleteWidget(gl_ui, summon_jetski_button);
+	checkRemoveAndDeleteWidget(gl_ui, summon_snowboard_button);
 	checkRemoveAndDeleteWidget(gl_ui, summon_hovercar_button);
 	checkRemoveAndDeleteWidget(gl_ui, collapse_vehicle_button);
 
@@ -418,7 +428,8 @@ void GestureUI::updateWidgetPositions()
 			if(vehicle_buttons_visible)
 			{
 				summon_jetski_button  ->setPos(Vec2f(vehicle_button_x, -min_max_y + BUTTON_W + 2*SPACING));
-				summon_boat_button    ->setPos(Vec2f(vehicle_button_x, summon_jetski_button->rect.getMax().y + SPACING));
+				summon_snowboard_button->setPos(Vec2f(vehicle_button_x, summon_jetski_button->rect.getMax().y + SPACING));
+				summon_boat_button    ->setPos(Vec2f(vehicle_button_x, summon_snowboard_button->rect.getMax().y + SPACING));
 				summon_hovercar_button->setPos(Vec2f(vehicle_button_x, summon_boat_button->rect.getMax().y + SPACING));
 				summon_car_button     ->setPos(Vec2f(vehicle_button_x, summon_hovercar_button->rect.getMax().y + SPACING));
 				summon_bike_button    ->setPos(Vec2f(vehicle_button_x, summon_car_button->rect.getMax().y + SPACING));
@@ -534,6 +545,7 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				summon_car_button->setVisible(vehicle_buttons_visible);
 				summon_boat_button->setVisible(vehicle_buttons_visible);
 				summon_jetski_button->setVisible(vehicle_buttons_visible);
+				summon_snowboard_button->setVisible(vehicle_buttons_visible);
 				summon_hovercar_button->setVisible(vehicle_buttons_visible);
 				collapse_vehicle_button->setVisible(vehicle_buttons_visible);
 
@@ -547,6 +559,7 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 				summon_car_button->setVisible(vehicle_buttons_visible);
 				summon_boat_button->setVisible(vehicle_buttons_visible);
 				summon_jetski_button->setVisible(vehicle_buttons_visible);
+				summon_snowboard_button->setVisible(vehicle_buttons_visible);
 				summon_hovercar_button->setVisible(vehicle_buttons_visible);
 				collapse_vehicle_button->setVisible(vehicle_buttons_visible);
 
@@ -669,6 +682,13 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 			}
 			hide_vehicle_buttons = true;
 		}
+		else if(event.widget == summon_snowboard_button.ptr())
+		{
+			event.accepted = true;
+			try { gui_client->summonSnowboard(); }
+			catch(glare::Exception& e) { gui_client->showErrorNotification(e.what()); }
+			hide_vehicle_buttons = true;
+		}
 		else if(event.widget == summon_hovercar_button.ptr())
 		{
 			event.accepted = true;
@@ -690,6 +710,7 @@ void GestureUI::eventOccurred(GLUICallbackEvent& event)
 			summon_car_button->setVisible(vehicle_buttons_visible);
 			summon_boat_button->setVisible(vehicle_buttons_visible);
 			summon_jetski_button->setVisible(vehicle_buttons_visible);
+			summon_snowboard_button->setVisible(vehicle_buttons_visible);
 			summon_hovercar_button->setVisible(vehicle_buttons_visible);
 			collapse_vehicle_button->setVisible(vehicle_buttons_visible);
 			updateWidgetPositions();
