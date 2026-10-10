@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2021 -
 #include "PCG32.h"
 #include "Matrix4f.h"
 #include "Quat.h"
+#include <limits>
 #include <string>
 #include <vector>
 struct GLObject;
@@ -70,7 +71,7 @@ struct PoseConstraint
 {
 	GLARE_ALIGNED_16_NEW_DELETE
 
-	PoseConstraint() : sitting(false), upper_leg_rot_around_thigh_bone_angle(0) {}
+	PoseConstraint() : sitting(false), upper_leg_rot_around_thigh_bone_angle(0), snowboarding(false), snowboard_crouch(0), snowboard_steer(0), snowboard_lean(0), snowboard_pelvis_delta_ss(Matrix4f::identity()), snowboard_chest_rot_ss(Quatf::identity()) { left_foot_point_ws = right_foot_point_ws = Vec4f(std::numeric_limits<float>::quiet_NaN()); snowboard_upper_arm_rot_ss[0] = snowboard_upper_arm_rot_ss[1] = Quatf::identity(); snowboard_forearm_rot_ss[0] = snowboard_forearm_rot_ss[1] = Quatf::identity(); }
 
 	// For sitting:
 	Matrix4f seat_to_world; // Sitting position is (0,0,0) in seat space, forwards is (0,1,0), right is (1,0,0).  Should just have rotation and translation, no scaling.
@@ -89,8 +90,18 @@ struct PoseConstraint
 	float lower_arm_up_angle; // radians.  From straight out from upper arm.  Positive number means bend lower arm forwards at elbow.
 	Vec4f left_hand_hold_point_ws;
 	Vec4f right_hand_hold_point_ws;
+	Vec4f left_foot_point_ws;
+	Vec4f right_foot_point_ws;
 
 	bool sitting;
+	bool snowboarding;
+	float snowboard_crouch;
+	float snowboard_steer;
+	float snowboard_lean;
+	Matrix4f snowboard_pelvis_delta_ss;
+	Quatf snowboard_chest_rot_ss;
+	Quatf snowboard_upper_arm_rot_ss[2];
+	Quatf snowboard_forearm_rot_ss[2];
 };
 
 #ifdef _WIN32

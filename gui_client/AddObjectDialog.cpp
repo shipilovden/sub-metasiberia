@@ -11,6 +11,7 @@ Copyright Glare Technologies Limited 2022 -
 #include "GaussianSplatRenderer.h"
 #include "MeshBuilding.h"
 #include "NetDownloadResourcesThread.h"
+#include "MCPTextureTools.h"
 #include "../shared/LODGeneration.h"
 #include "../shared/ImageDecoding.h"
 #include "../shared/GaussianSplatAsset.h"
@@ -34,6 +35,118 @@ Copyright Glare Technologies Limited 2022 -
 #include <QtWidgets/QPushButton>
 #include <QtCore/QSettings>
 #include <QtCore/QTimer>
+#include <QtCore/QEvent>
+#include <QtCore/QDir>
+#include <QtCore/QFile>
+#include <QtCore/QFileInfo>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
+#include <QtCore/QJsonArray>
+#include <QtCore/QMetaObject>
+#include <QtCore/QPointer>
+#include <QtCore/QRunnable>
+#include <QtCore/QThreadPool>
+#include <QtCore/QTemporaryDir>
+#include <QtCore/QUrl>
+#include <QtCore/QRegularExpression>
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QListWidgetItem>
+#include <QtWidgets/QAbstractItemView>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QDialogButtonBox>
+#include <functional>
+
+
+struct StandardPrimitiveEntry
+{
+	const char* asset;
+	const char* label;
+};
+
+static const StandardPrimitiveEntry standard_primitives[] = {
+	{"Quad", QT_TRANSLATE_NOOP("AddObjectDialog", "Quad")},
+	{"Cube", QT_TRANSLATE_NOOP("AddObjectDialog", "Cube")},
+	{"Capsule", QT_TRANSLATE_NOOP("AddObjectDialog", "Capsule")},
+	{"Cylinder", QT_TRANSLATE_NOOP("AddObjectDialog", "Cylinder")},
+	{"Icosahedron", QT_TRANSLATE_NOOP("AddObjectDialog", "Icosahedron")},
+	{"Platonic_Solid", QT_TRANSLATE_NOOP("AddObjectDialog", "Dodecahedron")},
+	{"Torus", QT_TRANSLATE_NOOP("AddObjectDialog", "Torus")},
+	{"Cone", QT_TRANSLATE_NOOP("AddObjectDialog", "Cone")},
+	{"Pyramid", QT_TRANSLATE_NOOP("AddObjectDialog", "Pyramid")},
+	{"Octahedron", QT_TRANSLATE_NOOP("AddObjectDialog", "Octahedron")},
+	{"Wedge", QT_TRANSLATE_NOOP("AddObjectDialog", "Wedge")},
+	{"Triangular_Prism", QT_TRANSLATE_NOOP("AddObjectDialog", "Triangular prism")},
+	{"Hexagonal_Prism", QT_TRANSLATE_NOOP("AddObjectDialog", "Hexagonal prism")},
+	{"Icosphere", QT_TRANSLATE_NOOP("AddObjectDialog", "Icosphere")}
+};
+
+
+class AddObjectRunnable : public QRunnable
+{
+public:
+	explicit AddObjectRunnable(const std::function<void()>& fn_) : fn(fn_) { setAutoDelete(true); }
+	void run() override { fn(); }
+private:
+	std::function<void()> fn;
+};
+
+
+static QString safePolyHavenRelativePath(QString path)
+{
+	path.replace('\\', '/');
+	const QString cleaned=QDir::cleanPath(path);
+	if(path.startsWith('/') || cleaned=="." || cleaned==".." || cleaned.startsWith("../") || QFileInfo(cleaned).isAbsolute())
+		throw glare::Exception("Poly Haven model contains an unsafe file path.");
+	return cleaned;
+}
+
+
+static QString downloadPolyHavenModel(const QString& asset_id, const QString& destination_root)
+{
+	if(!QRegularExpression("^[A-Za-z0-9_]{1,100}$").match(asset_id).hasMatch())
+		throw glare::Exception("Invalid Poly Haven model id.");
+	const QJsonObject files=QJsonDocument::fromJson(MCPTextures::fetch(QUrl("https://api.polyhaven.com/files/"+asset_id))).object();
+	QJsonObject asset=files.value("gltf").toObject().value("1k").toObject().value("gltf").toObject();
+	if(asset.isEmpty())
+		asset=files.value("obj").toObject().value("1k").toObject().value("obj").toObject();
+	if(asset.isEmpty() || !asset.value("url").isString())
+		throw glare::Exception("This Poly Haven model does not provide a glTF or OBJ download.");
+	const QString folder=QDir(destination_root).filePath(asset_id);
+	if(!QDir().mkpath(folder)) throw glare::Exception("Could not create the Poly Haven download folder.");
+	quint64 downloaded=0;
+	auto saveFile=[&](const QString& relative_path,const QJsonObject& entry) {
+		const QString safe_path=safePolyHavenRelativePath(relative_path);
+		const QUrl url(entry.value("url").toString());
+		if(url.host().toLower()!="dl.polyhaven.org" || !entry.value("size").isDouble())
+			throw glare::Exception("Poly Haven returned an unsupported model file URL.");
+		const qint64 declared_size=(qint64)entry.value("size").toDouble();
+		if(declared_size<0 || declared_size>128LL*1024*1024 || downloaded+(quint64)declared_size>256ULL*1024*1024)
+			throw glare::Exception("The Poly Haven model exceeds the 256 MiB download limit.");
+		const QByteArray data=MCPTextures::fetch(url,128*1024*1024);
+		if(declared_size>0 && data.size()!=declared_size)
+			throw glare::Exception("A Poly Haven model file had an unexpected size.");
+		const QString target=QDir(folder).filePath(safe_path);
+		if(!QDir().mkpath(QFileInfo(target).absolutePath())) throw glare::Exception("Could not create a model dependency folder.");
+		QFile output(target);
+		if(!output.open(QIODevice::WriteOnly) || output.write(data)!=data.size())
+			throw glare::Exception("Could not save a downloaded Poly Haven model file.");
+		downloaded+=(quint64)data.size();
+	};
+
+	const QUrl model_url(asset.value("url").toString());
+	const QString model_name=QFileInfo(model_url.path()).fileName();
+	if(model_name.isEmpty() || (!model_name.endsWith(".gltf",Qt::CaseInsensitive) && !model_name.endsWith(".obj",Qt::CaseInsensitive)))
+		throw glare::Exception("Poly Haven returned an invalid model filename.");
+	saveFile(model_name,asset);
+	const QJsonObject includes=asset.value("include").toObject();
+	for(auto it=includes.begin();it!=includes.end();++it)
+		saveFile(it.key(),it.value().toObject());
+	return QDir(folder).filePath(model_name);
+}
 
 
 static void deleteAddObjectGaussianTemporaryFile(const std::string& path)
@@ -58,12 +171,65 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	gaussian_splat_progress_dialog(NULL),
 	resource_manager(resource_manager_),
 	base_dir_path(base_dir_path_),
+	polyHavenModelList(NULL),
+	polyHavenSearchEdit(NULL),
+	polyHavenStatusLabel(NULL),
+	polyHavenWebTabs(NULL),
+	polyHavenSearchButton(NULL),
+	polyHavenTempDir(),
+	polyHavenRequestGeneration(0),
 	dev_manager(dev_manager_),
 	loaded_mesh_is_image_cube(false),
 	main_task_manager(main_task_manager_),
 	high_priority_task_manager(high_priority_task_manager_)
 {
 	setupUi(this);
+
+	// Keep the original URL workflow and add Poly Haven as a second source inside "From Web".
+	QTabWidget* webSources=new QTabWidget(tab_3);
+	polyHavenWebTabs=webSources;
+	QWidget* urlPage=new QWidget(webSources);
+	QVBoxLayout* urlLayout=new QVBoxLayout(urlPage);
+	urlLayout->setContentsMargins(0,0,0,0);
+	verticalLayout_5->removeWidget(widget);
+	widget->setParent(urlPage);
+	urlLayout->addWidget(widget);
+	urlLayout->addStretch(1);
+	webSources->addTab(urlPage,tr("URL"));
+	QWidget* polyHavenPage=new QWidget(webSources);
+	QVBoxLayout* polyLayout=new QVBoxLayout(polyHavenPage);
+	QHBoxLayout* searchLayout=new QHBoxLayout();
+	polyHavenSearchEdit=new QLineEdit(polyHavenPage);
+	polyHavenSearchEdit->setObjectName("polyHavenSearchEdit");
+	polyHavenSearchEdit->setPlaceholderText(tr("Search models: chair, tree, rock…"));
+	polyHavenSearchButton=new QPushButton(tr("Search"),polyHavenPage);
+	polyHavenSearchButton->setObjectName("polyHavenSearchButton");
+	searchLayout->addWidget(polyHavenSearchEdit,1);
+	searchLayout->addWidget(polyHavenSearchButton);
+	polyLayout->addLayout(searchLayout);
+	polyHavenModelList=new QListWidget(polyHavenPage);
+	polyHavenModelList->setObjectName("polyHavenModelList");
+	polyHavenModelList->setViewMode(QListWidget::IconMode);
+	polyHavenModelList->setIconSize(QSize(144,144));
+	polyHavenModelList->setGridSize(QSize(170,190));
+	polyHavenModelList->setResizeMode(QListWidget::Adjust);
+	polyHavenModelList->setMovement(QListWidget::Static);
+	polyHavenModelList->setSelectionMode(QAbstractItemView::SingleSelection);
+	polyLayout->addWidget(polyHavenModelList,1);
+	polyHavenStatusLabel=new QLabel(polyHavenPage);
+	polyHavenStatusLabel->setObjectName("polyHavenStatusLabel");
+	polyHavenStatusLabel->setOpenExternalLinks(true);
+	polyHavenStatusLabel->setTextFormat(Qt::RichText);
+	polyHavenStatusLabel->setText(tr("Choose a model to download and preview. <a href=\"https://polyhaven.com\">Powered by Poly Haven</a> · CC0"));
+	polyLayout->addWidget(polyHavenStatusLabel);
+	webSources->addTab(polyHavenPage,tr("Poly Haven"));
+	verticalLayout_5->addWidget(webSources);
+	connect(polyHavenSearchButton,SIGNAL(clicked()),this,SLOT(searchPolyHavenModels()));
+	connect(polyHavenSearchEdit,SIGNAL(returnPressed()),this,SLOT(searchPolyHavenModels()));
+	connect(polyHavenModelList,SIGNAL(itemClicked(QListWidgetItem*)),this,SLOT(polyHavenModelSelected(QListWidgetItem*)));
+	connect(webSources,SIGNAL(currentChanged(int)),this,SLOT(searchPolyHavenModels()));
+	polyHavenTempDir.reset(new QTemporaryDir());
+	polyHavenTempDir->setAutoRemove(true);
 
 	texture_server = new TextureServer(/*use_canonical_path_keys=*/false); // To cache textures for textureHasAlphaChannel
 
@@ -102,29 +268,17 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	listWidget->setResizeMode(QListWidget::Adjust);
 	listWidget->setSelectionMode(QAbstractItemView::NoSelection);
 	 
-	models.push_back("Quad");
-	models.push_back("Cube");
-	models.push_back("Capsule");
-	models.push_back("Cylinder");
-	models.push_back("Icosahedron");
-	models.push_back("Platonic_Solid");
-	models.push_back("Torus");
-	models.push_back("Cone");
-	models.push_back("Pyramid");
-	models.push_back("Octahedron");
-	models.push_back("Wedge");
-	models.push_back("Triangular_Prism");
-	models.push_back("Hexagonal_Prism");
-
-	for(size_t i=0; i<models.size(); ++i)
+	for(const StandardPrimitiveEntry& primitive : standard_primitives)
 	{
-		std::string preview_model = models[i];
+		std::string preview_model = primitive.asset;
 		if(preview_model == "Quad") preview_model = "quad";
-		else if(preview_model == "Cone" || preview_model == "Hexagonal_Prism") preview_model = "Cylinder";
-		else if(preview_model == "Pyramid" || preview_model == "Octahedron" || preview_model == "Wedge" || preview_model == "Triangular_Prism") preview_model = "Platonic_Solid";
 		const std::string image_path = base_dir_path + "/data/resources/models/" + preview_model + ".PNG";
 
-		listWidget->addItem(new QListWidgetItem(QIcon(QtUtils::toQString(image_path)), QtUtils::toQString(models[i])));
+		QListWidgetItem* item = new QListWidgetItem(QIcon(QtUtils::toQString(image_path)), tr(primitive.label));
+		// Asset paths must never depend on the current display language.
+		item->setData(Qt::UserRole, QString::fromLatin1(primitive.asset));
+		item->setData(Qt::UserRole + 1, QString::fromLatin1(primitive.label));
+		listWidget->addItem(item);
 	}
 }
 
@@ -158,6 +312,7 @@ void AddObjectDialog::shutdownGL()
 // Called when user presses ESC key, or clicks OK or cancel button.
 void AddObjectDialog::dialogFinished()
 {
+	++polyHavenRequestGeneration; // Ignore any queued Poly Haven result after the GL preview is shut down.
 	shutdownGL();
 }
 
@@ -174,7 +329,7 @@ void AddObjectDialog::modelSelected(QListWidgetItem* selected_item)
 	{
 		cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
 
-		const std::string model = QtUtils::toStdString(this->listWidget->currentItem()->text());
+		const std::string model = QtUtils::toStdString(this->listWidget->currentItem()->data(Qt::UserRole).toString());
 
 		this->listWidget->setCurrentItem(NULL);
 
@@ -191,7 +346,7 @@ void AddObjectDialog::modelDoubleClicked(QListWidgetItem* selected_item)
 {
 	cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
 
-	const std::string model = QtUtils::toStdString(selected_item->text());
+	const std::string model = QtUtils::toStdString(selected_item->data(Qt::UserRole).toString());
 	const std::string model_path = base_dir_path + "/data/resources/models/" + model + ".obj";
 	this->result_path = model_path;
 	accept();
@@ -609,6 +764,93 @@ void AddObjectDialog::tryLoadTexturesForPreviewOb(Reference<GLObject> preview_gl
 }
 
 
+void AddObjectDialog::searchPolyHavenModels()
+{
+	if(!polyHavenModelList || !polyHavenStatusLabel) return;
+	if(QPushButton* ok_button=buttonBox->button(QDialogButtonBox::Ok)) ok_button->setEnabled(true);
+	const int generation=++polyHavenRequestGeneration;
+	const QString query=polyHavenSearchEdit ? polyHavenSearchEdit->text() : QString();
+	polyHavenStatusLabel->setText(tr("Searching Poly Haven…"));
+	polyHavenModelList->clear();
+	QPointer<AddObjectDialog> dialog(this);
+	QThreadPool::globalInstance()->start(new AddObjectRunnable([dialog,generation,query]() {
+		QJsonArray results;
+		QString error;
+		try
+		{
+			results=MCPTextures::searchModels(query,24);
+			for(int i=0;i<results.size();++i)
+			{
+				QJsonObject item=results[i].toObject();
+				const QUrl thumbnail_url(item.value("thumbnail_url").toString());
+				if(!thumbnail_url.isEmpty())
+				{
+					try { item.insert("thumbnail_data",QString::fromLatin1(MCPTextures::fetch(thumbnail_url,4*1024*1024).toBase64())); }
+					catch(const glare::Exception&) {} // A missing thumbnail should not hide an otherwise usable model.
+				}
+				results[i]=item;
+			}
+		}
+		catch(const glare::Exception& e) { error=QString::fromStdString(e.what()); }
+		if(dialog)
+			QMetaObject::invokeMethod(dialog.data(),[dialog,generation,results,error]() {
+				if(!dialog || dialog->polyHavenRequestGeneration!=generation) return;
+				if(!error.isEmpty()) { dialog->polyHavenStatusLabel->setText(dialog->tr("Poly Haven search failed: %1").arg(error.toHtmlEscaped())); return; }
+				for(const QJsonValue& value : results)
+				{
+					const QJsonObject asset=value.toObject();
+					QListWidgetItem* item=new QListWidgetItem(asset.value("name").toString());
+					item->setData(Qt::UserRole,asset.value("id").toString());
+					item->setToolTip(asset.value("description").toString()+"\n\nPoly Haven · CC0");
+					const QByteArray image_bytes=QByteArray::fromBase64(asset.value("thumbnail_data").toString().toLatin1());
+					if(!image_bytes.isEmpty())
+					{
+						QPixmap pixmap; if(pixmap.loadFromData(image_bytes)) item->setIcon(QIcon(pixmap));
+					}
+					dialog->polyHavenModelList->addItem(item);
+				}
+				dialog->polyHavenStatusLabel->setText(dialog->tr("%1 models · choose one to download and preview. <a href=\"https://polyhaven.com\">Powered by Poly Haven</a> · CC0").arg(results.size()));
+			},Qt::QueuedConnection);
+	}));
+}
+
+
+void AddObjectDialog::polyHavenModelSelected(QListWidgetItem* item)
+{
+	if(!item || polyHavenTempDir.isNull() || !polyHavenTempDir->isValid()) return;
+	last_url=URLString(); // Any in-flight download from the URL page is now stale.
+	const QString id=item->data(Qt::UserRole).toString();
+	const int generation=++polyHavenRequestGeneration;
+	polyHavenStatusLabel->setText(tr("Downloading model and textures…"));
+	if(QPushButton* ok_button=buttonBox->button(QDialogButtonBox::Ok)) ok_button->setEnabled(false);
+	QPointer<AddObjectDialog> dialog(this);
+	const QSharedPointer<QTemporaryDir> temp_dir=polyHavenTempDir;
+	const QString destination=temp_dir->path();
+	QThreadPool::globalInstance()->start(new AddObjectRunnable([dialog,generation,id,destination,temp_dir]() {
+		QString model_path,error;
+		try { model_path=downloadPolyHavenModel(id,destination); }
+		catch(const glare::Exception& e) { error=QString::fromStdString(e.what()); }
+		if(dialog)
+			QMetaObject::invokeMethod(dialog.data(),[dialog,generation,model_path,error]() {
+				if(!dialog || dialog->polyHavenRequestGeneration!=generation) return;
+				if(QPushButton* ok_button=dialog->buttonBox->button(QDialogButtonBox::Ok)) ok_button->setEnabled(true);
+				if(!error.isEmpty()) { dialog->polyHavenStatusLabel->setText(dialog->tr("Could not download model: %1").arg(error.toHtmlEscaped())); return; }
+				dialog->cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
+				dialog->result_path=QtUtils::toStdString(model_path);
+				try
+				{
+					dialog->loadModelIntoPreview(dialog->result_path);
+					if(dialog->loaded_materials.empty())
+						dialog->polyHavenStatusLabel->setText(dialog->tr("Could not preview model: %1").arg(dialog->tr("The model could not be loaded.")));
+					else
+						dialog->polyHavenStatusLabel->setText(dialog->tr("Preview ready · <a href=\"https://polyhaven.com\">Poly Haven</a> · CC0"));
+				}
+				catch(const glare::Exception& e) { dialog->polyHavenStatusLabel->setText(dialog->tr("Could not preview model: %1").arg(QString::fromStdString(e.what()).toHtmlEscaped())); }
+			},Qt::QueuedConnection);
+	}));
+}
+
+
 void AddObjectDialog::urlChanged(const QString& filename)
 {
 	const URLString url = toURLString(QtUtils::toStdString(urlLineEdit->text()));
@@ -647,7 +889,32 @@ void AddObjectDialog::urlEditingFinished()
 // Will be called when the user clicks the 'X' button.
 void AddObjectDialog::closeEvent(QCloseEvent* event)
 {
+	++polyHavenRequestGeneration;
 	shutdownGL();
+}
+
+
+void AddObjectDialog::changeEvent(QEvent* event)
+{
+	QDialog::changeEvent(event);
+	if(event->type() == QEvent::LanguageChange)
+	{
+		Ui_AddObjectDialog::retranslateUi(this);
+		for(int i=0; i<listWidget->count(); ++i)
+		{
+			QListWidgetItem* item = listWidget->item(i);
+			item->setText(tr(item->data(Qt::UserRole + 1).toString().toLatin1().constData()));
+		}
+		if(polyHavenWebTabs)
+		{
+			polyHavenWebTabs->setTabText(0,tr("URL"));
+			polyHavenWebTabs->setTabText(1,tr("Poly Haven"));
+		}
+		if(polyHavenSearchEdit) polyHavenSearchEdit->setPlaceholderText(tr("Search models: chair, tree, rock…"));
+		if(polyHavenSearchButton) polyHavenSearchButton->setText(tr("Search"));
+		if(polyHavenModelList && polyHavenModelList->count()==0 && polyHavenStatusLabel)
+			polyHavenStatusLabel->setText(tr("Choose a model to download and preview. <a href=\"https://polyhaven.com\">Powered by Poly Haven</a> · CC0"));
+	}
 }
 
 
@@ -685,6 +952,8 @@ void AddObjectDialog::timerEvent(QTimerEvent* event)
 		if(dynamic_cast<const ResourceDownloadedMessage*>(msg.getPointer()))
 		{
 			const ResourceDownloadedMessage* m = static_cast<const ResourceDownloadedMessage*>(msg.getPointer());
+			if(m->URL != last_url)
+				continue; // Ignore a stale URL download if the user switched to another web model.
 
 			//conPrint("ResourceDownloadedMessage, URL: " + m->URL);
 			try

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AIConnectionDialog</class>
+ <widget class="QDialog" name="AIConnectionDialog">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>470</width><height>300</height></rect>
+  </property>
+  <property name="windowTitle"><string>AI / MCP</string></property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="titleLabel">
+     <property name="text"><string>Connect Codex to Metasiberia</string></property>
+     <property name="font"><font><pointsize>13</pointsize><bold>true</bold></font></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="descriptionLabel">
+     <property name="text"><string>Codex remains the chat and AI client. Metasiberia exposes MCP tools for the connected world; no OpenAI API key is stored in the game client.</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="connectionGroupBox">
+     <property name="title"><string>Local MCP endpoint</string></property>
+     <layout class="QFormLayout" name="formLayout">
+      <item row="0" column="0"><widget class="QLabel" name="endpointTextLabel"><property name="text"><string>Endpoint</string></property></widget></item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="endpointLayout">
+        <item><widget class="QLineEdit" name="endpointLineEdit"><property name="readOnly"><bool>true</bool></property></widget></item>
+        <item><widget class="QPushButton" name="copyEndpointPushButton"><property name="text"><string>Copy</string></property></widget></item>
+       </layout>
+      </item>
+      <item row="1" column="0"><widget class="QLabel" name="statusTextLabel"><property name="text"><string>Status</string></property></widget></item>
+      <item row="1" column="1"><widget class="QLabel" name="statusLabel"><property name="text"><string>Not connected</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="instructionsLabel">
+     <property name="text"><string>In Codex or VS Code, add this endpoint as an MCP server. Use the same account that is currently logged in here.</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
+    </widget>
+   </item>
+   <item><widget class="QLabel" name="copyStatusLabel"><property name="text"><string/></property></widget></item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="standardButtons"><set>QDialogButtonBox::Close</set></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <connections>
+  <connection><sender>buttonBox</sender><signal>rejected()</signal><receiver>AIConnectionDialog</receiver><slot>reject()</slot></connection>
+  <connection><sender>buttonBox</sender><signal>accepted()</signal><receiver>AIConnectionDialog</receiver><slot>accept()</slot></connection>
+ </connections>
+</ui>

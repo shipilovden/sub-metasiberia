@@ -59,10 +59,12 @@ Copyright Glare Technologies Limited 2024 -
 #include "Scripting.h"
 #include "HoverCarPhysics.h"
 #include "BikePhysics.h"
+#include "SnowboardPhysics.h"
 #include "CarPhysics.h"
 #include "BoatPhysics.h"
 #include "GearInventoryUI.h"
 #include "JoltUtils.h"
+#include "../shared/VehiclesShared.h"
 #include "MiniMap.h"
 #include "CEF.h"
 #if !defined(EMSCRIPTEN)
@@ -1062,6 +1064,7 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 #else
 	model_and_texture_loader_task_manager("model and texture loader task manager", /*num threads=*/myMax<size_t>(PlatformUtils::getNumLogicalProcessors() / 2, 1)),
 #endif
+	voxel_editor_mesh_task_manager("voxel editor mesh task manager", /*num threads=*/1),
 	//task_manager(NULL), // Currently just used for LODGeneration::generateLODTexturesForMaterialsIfNotPresent().
 	url_parcel_uid(-1),
 	running_destructor(false),
@@ -1114,7 +1117,15 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	ZoneScoped; // Tracy profiler
 	terrain_sculpt_mode_enabled = false;
 	terrain_sculpt_tool = TerrainSculptTool_Ridge;
+	terrain_sculpt_map_paint_target = 0;
 	terrain_sculpt_brush_radius_m = 32.f;
+	terrain_sculpt_target_height_m = 0.f;
+	terrain_sculpt_island_sea_floor_m = -85.f;
+	terrain_sculpt_island_land_base_m = 8.f;
+	terrain_sculpt_island_peak_m = 282.f;
+	terrain_sculpt_island_seed = 42;
+	terrain_sculpt_last_island_valid = false;
+	terrain_sculpt_island_placement_armed = false;
 	terrain_sculpt_strength_m = 1.f;
 	terrain_sculpt_stroke_active = false;
 	terrain_sculpt_have_last_hit = false;
@@ -1147,6 +1158,7 @@ GUIClient::GUIClient(const std::string& base_dir_path_, const std::string& appda
 	texture_server = new TextureServer(/*use_canonical_path_keys=*/false); // Just used for caching textures for GUIClient::setMaterialFlagsForObject()
 
 	model_and_texture_loader_task_manager.setThreadPriorities(MyThread::Priority_Lowest);
+	voxel_editor_mesh_task_manager.setThreadPriorities(MyThread::Priority_BelowNormal);
 	
 	this->world_ob_pool_allocator = new glare::FastPoolAllocator(/*ob alloc size=*/sizeof(WorldObject), /*alignment=*/64, /*block capacity=*/1024);
 	this->world_ob_pool_allocator->name = "world_ob_pool_allocator";
@@ -2178,6 +2190,18 @@ void GUIClient::sendInitialAvatarCreateMessage()
 	writeAvatarToNetworkStream(avatar, scratch_packet);
 
 	enqueueMessageToSend(*this->client_thread, scratch_packet);
+
+	// Guests do not receive their AvatarCreated reply until after the initial
+	// object query. Create the local avatar now so model loading starts early.
+	if(!logged_in_user_id.valid() && world_state.nonNull() && client_avatar_uid.valid())
+	{
+		WorldStateLock lock(world_state->mutex);
+		if(world_state->avatars.find(client_avatar_uid) == world_state->avatars.end())
+		{
+			avatar.name = "Anonymous";
+			createOurAvatarLocally(avatar, lock);
+		}
+	}
 }
 
 
@@ -2416,6 +2440,30 @@ void GUIClient::shutdown()
 	shutdown_started = true;
 	Timer shutdown_timer;
 	closeFullscreenViewer();
+	if(terrain_sculpt_stroke_active && terrain_system.nonNull())
+	{
+		terrain_system->endSculptStroke();
+		terrain_sculpt_stroke_active = false;
+		saveTerrainSculptingChanges();
+	}
+	if(world_settings_locally_dirty && client_thread.nonNull())
+	{
+		// Sculpted maps are uploaded asynchronously. Do not tear down the upload
+		// workers or disconnect before their URLs can be committed to the world.
+		Timer upload_wait_timer;
+		while(num_resources_uploading > 0 && upload_wait_timer.elapsed() < 15.0)
+			PlatformUtils::Sleep(10);
+		if(num_resources_uploading == 0)
+		{
+			MessageUtils::initPacket(scratch_packet, Protocol::WorldSettingsUpdate);
+			connected_world_settings.writeToStream(scratch_packet);
+			enqueueMessageToSend(*client_thread, scratch_packet);
+			world_settings_locally_dirty = false;
+			PlatformUtils::Sleep(100); // Give ClientThread time to write the final packet before disconnect.
+		}
+		else
+			conPrint("Could not finish uploading terrain maps before shutdown; world settings were not sent.");
+	}
 	// Destroy/close all OpenGL stuff, because once glWidget is destroyed, the OpenGL context is destroyed, so we can't free stuff properly.
 	hideTerrainSculptBrushOverlay();
 	terrain_sculpt_brush_gl_ob = NULL;
@@ -2431,6 +2479,8 @@ void GUIClient::shutdown()
 
 	model_and_texture_loader_task_manager.removeQueuedTasks();
 	model_and_texture_loader_task_manager.waitForTasksToComplete();
+	voxel_editor_mesh_task_manager.removeQueuedTasks();
+	voxel_editor_mesh_task_manager.waitForTasksToComplete();
 
 	opengl_worker_thread_manager.killThreadsBlocking();
 	conPrint("Lifecycle: loader shutdown took " + shutdown_timer.elapsedStringMSWIthNSigFigs());
@@ -2626,6 +2676,7 @@ void GUIClient::shutdown()
 	
 
 	model_and_texture_loader_task_manager.cancelAndWaitForTasksToComplete();
+	voxel_editor_mesh_task_manager.cancelAndWaitForTasksToComplete();
 
 	this->msg_queue.clear();
 
@@ -3117,9 +3168,31 @@ static bool shouldUseOptimisedMeshesForWorldObject(const WorldObject& ob, bool s
 	// leaves the otherwise valid source Quad in the placeholder state forever.
 	// Keep the exception scoped to CulturalObject; regular models continue to
 	// use the server optimisation pipeline.
+	// MCP-generated models are uploaded as their source .bmesh only.  Their
+	// _optN variants do not exist on the server, so WebClient must request the
+	// source mesh directly rather than waiting on an unavailable derivative.
+	if(hasPrefix(ob.model_url, "mcp_model_"))
+		return false;
+
 	return server_has_optimised_meshes &&
 		!GaussianSplatAsset::hasSupportedExtension(ob.model_url) &&
 		!isCulturalObjectContent(ob.content);
+}
+
+
+static void ensureSourceOnlyModelForWorldObject(WorldObject* ob)
+{
+	// MCP-generated meshes are stored as one source .bmesh.  They have neither
+	// _lodN nor _optN derivatives, so advertise only LOD 0 to the existing
+	// dependency and model-loading code.
+	if(ob && hasPrefix(ob->model_url, "mcp_model_"))
+		ob->max_model_lod_level = 0;
+}
+
+
+static int getWorldObjectModelLODLevel(const WorldObject& ob, int ob_lod_level)
+{
+	return hasPrefix(ob.model_url, "mcp_model_") ? 0 : myClamp(ob_lod_level, 0, ob.max_model_lod_level);
 }
 
 
@@ -3616,7 +3689,7 @@ bool GUIClient::isResourceCurrentlyNeededForObject(const URLString& url, const W
 	// The base model is also a valid dependency while the server-side optimised model is
 	// unavailable. This is the fallback requested by loadModelForObject(), so do not discard
 	// its download-completion message as an unrelated resource.
-	const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
+	const int ob_model_lod_level = getWorldObjectModelLODLevel(*ob, ob_lod_level);
 	WorldObject::GetLODModelURLOptions model_url_options(options.get_optimised_mesh, options.opt_mesh_version);
 	model_url_options.allocator = options.allocator;
 	const URLString desired_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, model_url_options);
@@ -3719,6 +3792,7 @@ void GUIClient::startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_l
 	ZoneText(ob->uid.toString().c_str(), ob->uid.toString().size());
 
 	// conPrint("startDownloadingResourcesForObject: ob_lod_level: " + toString(ob_lod_level));
+	ensureSourceOnlyModelForWorldObject(ob);
 
 	glare::ArenaFrame frame(arena_allocator);
 	glare::STLArenaAllocator<DependencyURL> stl_arena_allocator(&arena_allocator);
@@ -3738,7 +3812,7 @@ void GUIClient::startDownloadingResourcesForObject(WorldObject* ob, int ob_lod_l
 	// model as well, so the object can be displayed immediately and upgraded later.
 	if(options.get_optimised_mesh && !ob->model_url.empty() && !FileUtils::fileExists(ob->model_url))
 	{
-		const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
+		const int ob_model_lod_level = getWorldObjectModelLODLevel(*ob, ob_lod_level);
 		WorldObject::GetLODModelURLOptions model_url_options(options.get_optimised_mesh, options.opt_mesh_version);
 		model_url_options.allocator = options.allocator;
 		const URLString desired_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, model_url_options);
@@ -4441,6 +4515,7 @@ void GUIClient::errorOccurredFromLuaScript(LuaScript* script, const std::string&
 void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_lock)
 {
 	// conPrint("loadModelForObject(): UID: " + ob->uid.toString());
+	ensureSourceOnlyModelForWorldObject(ob);
 	const Vec4f campos = cam_controller.getPosition().toVec4fPoint();
 
 	// Check object is in proximity.  Otherwise we might load objects outside of proximity, for example large objects transitioning from LOD level 1 to LOD level 2 or vice-versa.
@@ -4457,7 +4532,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 		// LOD markers so this object is not retried every frame.
 		removeAndDeleteGLAndPhysicsObjectsForOb(*ob);
 		ob->loading_or_loaded_lod_level = ob_lod_level;
-		ob->loading_or_loaded_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
+		ob->loading_or_loaded_model_lod_level = getWorldObjectModelLODLevel(*ob, ob_lod_level);
 		return;
 	}
 	const bool use_basis_textures_for_ob = shouldUseBasisTexturesForWorldObject(*ob, this->server_has_basis_textures);
@@ -4481,7 +4556,7 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 	// Object LOD level is in [-1, 2].
 	// model LOD level is in [0, ob->max_model_lod_level], which is {0} or [0, 2].
 
-	const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
+	const int ob_model_lod_level = getWorldObjectModelLODLevel(*ob, ob_lod_level);
 
 	// Compute the maximum distance from the camera at which the object LOD level will remain what it currently is.
 	const float max_dist_for_ob_lod_level = ob->getMaxDistForLODLevel(ob_lod_level);
@@ -5098,7 +5173,10 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 							load_model_task->worker_allocator = worker_allocator;
 							load_model_task->upload_thread = opengl_upload_thread;
 
-							load_item_queue.enqueueItem(/*key=*/pseudo_lod_model_url, *ob, load_model_task, max_dist_for_ob_model_lod_level);
+							if(ob == selected_ob.ptr() && ob->object_type == WorldObject::ObjectType_VoxelGroup)
+								voxel_editor_mesh_task_manager.addTask(load_model_task);
+							else
+								load_item_queue.enqueueItem(/*key=*/pseudo_lod_model_url, *ob, load_model_task, max_dist_for_ob_model_lod_level);
 						}
 
 						load_placeholder = !added_opengl_ob;
@@ -5494,7 +5572,12 @@ void GUIClient::loadPresentObjectGraphicsAndPhysicsModels(WorldObject* ob, const
 
 	if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
 		for(size_t z=0; z<ob->opengl_engine_ob->materials.size(); ++z)
+		{
 			ob->opengl_engine_ob->materials[z].gen_planar_uvs = true;
+			// A rebuilt voxel mesh replaces the GL object while the logical world
+			// object remains selected. Carry the editor grid state across that swap.
+			ob->opengl_engine_ob->materials[z].draw_planar_uv_grid = ob->is_selected;
+		}
 						
 	mesh_data->meshDataBecameUsed();
 	ob->mesh_manager_data = mesh_data;// Hang on to a reference to the mesh data, so when object-uses of it are removed, it can be removed from the MeshManager with meshDataBecameUnused().
@@ -7883,13 +7966,26 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 				if(ob->in_proximity && voxel_data_matches)
 				{
 					const int ob_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
-					const int ob_model_lod_level = myClamp(ob_lod_level, 0, ob->max_model_lod_level);
+					const int ob_model_lod_level = getWorldObjectModelLODLevel(*ob, ob_lod_level);
 
 					WorldObject::GetLODModelURLOptions options(
 						/*get_optimised_mesh=*/shouldUseOptimisedMeshesForWorldObject(*ob, this->server_has_optimised_meshes),
 						this->server_opt_mesh_version);
 					const URLString current_desired_model_url = WorldObject::getLODModelURLForLevel(ob->model_url, ob_model_lod_level, options);
-					const bool is_current_desired_model = current_desired_model_url == lod_model_url;
+					// Voxel meshes have a generated cache key, not a model resource URL.
+					// Match the current topology as well as the voxel hash so an older
+					// asynchronous result cannot replace a changed mesh mode/material boundary.
+					URLString desired_voxel_url;
+					if(is_voxel_mesh)
+					{
+						std::string transparency_bytes(ob->materials.size(), '\0');
+						for(size_t i=0; i<ob->materials.size(); ++i)
+							transparency_bytes[i] = ob->materials[i]->opacity.val < 1.f ? '\1' : '\0';
+						desired_voxel_url = toURLString("__voxel__" + toString(ob->compressed_voxels_hash) + "_" + toString(ob_model_lod_level) +
+							(voxelMeshModeForObject(*ob) == VoxelMeshMode::Cubes ? "_cubes" : "_greedy") + "_t" +
+							toString(XXH64(transparency_bytes.data(), transparency_bytes.size(), 0)));
+					}
+					const bool is_current_desired_model = is_voxel_mesh ? desired_voxel_url == lod_model_url : current_desired_model_url == lod_model_url;
 					const bool is_available_base_fallback = lod_model_url == ob->model_url &&
 						current_desired_model_url != lod_model_url &&
 						!resource_manager->isFileForURLPresent(current_desired_model_url);
@@ -9975,6 +10071,7 @@ void GUIClient::setTerrainSculptModeEnabled(bool enabled)
 		terrain_sculpt_have_last_hit = false;
 		terrain_sculpt_brush_hit_valid = false;
 		terrain_sculpt_stroke_active = false;
+		terrain_sculpt_island_placement_armed = false;
 		cam_controller.freeCameraModeSelected();
 		ui_interface->setCamRotationOnRightMouseDragEnabled(true);
 	}
@@ -9983,9 +10080,14 @@ void GUIClient::setTerrainSculptModeEnabled(bool enabled)
 		if(terrain_sculpt_stroke_active && terrain_system.nonNull())
 			terrain_system->endSculptStroke();
 		terrain_sculpt_stroke_active = false;
+		terrain_sculpt_island_placement_armed = false;
 		terrain_sculpt_have_last_hit = false;
 		terrain_sculpt_brush_hit_valid = false;
-		saveTerrainSculptingChanges();
+		const bool has_edits = terrain_system.nonNull() &&
+			(terrain_system->hasSculptedHeightmaps() || terrain_system->hasSculptedMaskMaps());
+		const bool saved = saveTerrainSculptingChanges();
+		if(has_edits && !saved && ui_interface)
+			ui_interface->showHTMLMessageBox("Скульптинг", "Не удалось сохранить карты террейна. Проверьте подключение к серверу и права на изменение мира.");
 		terrain_sculpt_mode_enabled = false;
 		hideTerrainSculptBrushOverlay();
 		ui_interface->setCamRotationOnRightMouseDragEnabled(false);
@@ -9996,35 +10098,105 @@ void GUIClient::setTerrainSculptModeEnabled(bool enabled)
 
 void GUIClient::setTerrainSculptTool(int tool)
 {
-	terrain_sculpt_tool = (TerrainSculptTool)myClamp(tool, (int)TerrainSculptTool_Ridge, (int)TerrainSculptTool_SoftRaise);
+	terrain_sculpt_tool = (TerrainSculptTool)myClamp(tool, (int)TerrainSculptTool_Ridge, (int)TerrainSculptTool_StampRamp);
 }
 
 
-void GUIClient::setTerrainSculptBrushSettings(float radius_m, float strength_m)
+void GUIClient::setTerrainSculptMapPaintTarget(int target)
+{
+	terrain_sculpt_map_paint_target = myClamp(target, 0, 33);
+	terrain_sculpt_island_placement_armed = false;
+	terrain_sculpt_stroke_active = false;
+	terrain_sculpt_have_last_hit = false;
+}
+
+
+void GUIClient::setTerrainSculptBrushSettings(float radius_m, float strength_m, float target_height_m)
 {
 	terrain_sculpt_brush_radius_m = myClamp(radius_m, 0.25f, 4096.f);
 	terrain_sculpt_strength_m = myClamp(strength_m, 0.01f, 100.f);
+	terrain_sculpt_target_height_m = myClamp(target_height_m, -100000.f, 100000.f);
+}
+
+
+void GUIClient::setTerrainSculptIslandSettings(float sea_floor_m, float land_base_m, float peak_m, int seed)
+{
+	terrain_sculpt_island_sea_floor_m = myClamp(sea_floor_m, -160.f, -10.f);
+	terrain_sculpt_island_land_base_m = myClamp(land_base_m, 0.f, 50.f);
+	terrain_sculpt_island_peak_m = myClamp(peak_m, 60.f, 1200.f);
+	terrain_sculpt_island_seed = myClamp(seed, 1, 9999);
+}
+
+
+void GUIClient::armTerrainIslandPlacement()
+{
+	terrain_sculpt_island_placement_armed = terrain_sculpt_mode_enabled && terrain_sculpt_map_paint_target >= 8 && terrain_sculpt_map_paint_target <= 31;
+	terrain_sculpt_stroke_active = false;
+	terrain_sculpt_have_last_hit = false;
+}
+
+
+void GUIClient::regenerateTerrainIsland()
+{
+	if(!terrain_sculpt_mode_enabled || terrain_system.isNull() || !terrain_sculpt_last_island_valid || terrain_sculpt_map_paint_target < 8 || terrain_sculpt_map_paint_target > 31)
+		return;
+	if(terrain_sculpt_stroke_active)
+		terrain_system->endSculptStroke();
+	terrain_sculpt_stroke_active = false;
+	terrain_sculpt_have_last_hit = false;
+	if(!terrain_system->undoSculpt())
+	{
+		terrain_sculpt_last_island_valid = false;
+		return;
+	}
+	terrain_sculpt_last_island_valid = false;
+	const int island_index = terrain_sculpt_map_paint_target - 8;
+	const TerrainSculptTool island_tool = (TerrainSculptTool)((int)TerrainSculptTool_IslandClassic + island_index);
+	terrain_system->beginSculptStroke();
+	const bool applied = terrain_system->sculptAtWorld(terrain_sculpt_last_island_pos, NULL, island_tool,
+		terrain_sculpt_brush_radius_m, terrain_sculpt_strength_m, terrain_sculpt_target_height_m,
+		terrain_sculpt_island_sea_floor_m, terrain_sculpt_island_land_base_m, terrain_sculpt_island_peak_m, terrain_sculpt_island_seed);
+	terrain_system->endSculptStroke();
+	if(applied)
+	{
+		saveTerrainSculptingChanges();
+		terrain_sculpt_last_hit = terrain_sculpt_last_island_pos;
+		terrain_sculpt_have_last_hit = true;
+		terrain_sculpt_last_island_valid = true;
+	}
+	else
+	{
+		terrain_system->redoSculpt(); // Keep the existing island if the replacement could not be applied.
+		saveTerrainSculptingChanges();
+		terrain_sculpt_last_island_valid = true;
+	}
 }
 
 
 void GUIClient::undoTerrainSculpt()
 {
-	if(terrain_system.nonNull() && terrain_sculpt_mode_enabled)
+	if(terrain_system.nonNull() && terrain_sculpt_mode_enabled &&
+		(terrain_sculpt_map_paint_target >= 0 && terrain_sculpt_map_paint_target <= 33))
 	{
 		terrain_sculpt_stroke_active = false;
 		terrain_sculpt_have_last_hit = false;
+		terrain_sculpt_last_island_valid = false;
 		terrain_system->undoSculpt();
+		saveTerrainSculptingChanges();
 	}
 }
 
 
 void GUIClient::redoTerrainSculpt()
 {
-	if(terrain_system.nonNull() && terrain_sculpt_mode_enabled)
+	if(terrain_system.nonNull() && terrain_sculpt_mode_enabled &&
+		(terrain_sculpt_map_paint_target >= 0 && terrain_sculpt_map_paint_target <= 33))
 	{
 		terrain_sculpt_stroke_active = false;
 		terrain_sculpt_have_last_hit = false;
+		terrain_sculpt_last_island_valid = false;
 		terrain_system->redoSculpt();
+		saveTerrainSculptingChanges();
 	}
 }
 
@@ -10032,6 +10204,8 @@ void GUIClient::redoTerrainSculpt()
 bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_stroke)
 {
 	if(!terrain_sculpt_mode_enabled || terrain_system.isNull())
+		return false;
+	if(start_stroke && terrain_sculpt_map_paint_target >= 8 && terrain_sculpt_map_paint_target <= 31 && !terrain_sculpt_island_placement_armed)
 		return false;
 
 	const int cursor_dx = cursor_pos.x - terrain_sculpt_brush_cursor_pos.x;
@@ -10068,25 +10242,107 @@ bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_s
 			return true;
 	}
 
-	if(!terrain_system->sculptAtWorld(hit_pos, (TerrainSculptTool)terrain_sculpt_tool, terrain_sculpt_brush_radius_m, terrain_sculpt_strength_m))
+	const Vec3d* previous_hit_pos = terrain_sculpt_have_last_hit ? &terrain_sculpt_last_hit : NULL;
+	bool applied = false;
+	if(terrain_sculpt_map_paint_target == 0)
+		applied = terrain_system->sculptAtWorld(hit_pos, previous_hit_pos, (TerrainSculptTool)terrain_sculpt_tool,
+			terrain_sculpt_brush_radius_m, terrain_sculpt_strength_m, terrain_sculpt_target_height_m,
+			terrain_sculpt_island_sea_floor_m, terrain_sculpt_island_land_base_m, terrain_sculpt_island_peak_m, terrain_sculpt_island_seed);
+	else if(terrain_sculpt_map_paint_target >= 8 && terrain_sculpt_map_paint_target <= 31)
+	{
+		if(!start_stroke)
+			return false;
+		const int island_index = terrain_sculpt_map_paint_target - 8;
+		const TerrainSculptTool island_tool = (TerrainSculptTool)((int)TerrainSculptTool_IslandClassic + island_index);
+		applied = terrain_system->sculptAtWorld(hit_pos, NULL, island_tool,
+			terrain_sculpt_brush_radius_m, terrain_sculpt_strength_m, terrain_sculpt_target_height_m,
+			terrain_sculpt_island_sea_floor_m, terrain_sculpt_island_land_base_m, terrain_sculpt_island_peak_m, terrain_sculpt_island_seed);
+	}
+	else
+	{
+		const bool tree_mask = terrain_sculpt_map_paint_target == 4 || terrain_sculpt_map_paint_target == 5 || terrain_sculpt_map_paint_target == 33;
+		const bool erase = terrain_sculpt_map_paint_target == 6;
+		const int channel = terrain_sculpt_map_paint_target == 1 ? 0 :
+			terrain_sculpt_map_paint_target == 2 ? 1 :
+			terrain_sculpt_map_paint_target == 3 ? 2 :
+			terrain_sculpt_map_paint_target == 7 ? 3 :
+			terrain_sculpt_map_paint_target == 4 ? 0 : 1;
+		// The shared strength control is measured in metres for height sculpting.
+		// For mask painting, use a more visible opacity curve: 1 unit is 10%,
+		// so a single pass is perceptible while repeated strokes still accumulate.
+		const float opacity = myClamp(terrain_sculpt_strength_m * 0.1f, 0.01f, 1.f);
+		if(erase)
+			applied = terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, 0, false, true) |
+				terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, 0, true, true);
+		else if(terrain_sculpt_map_paint_target == 32 || terrain_sculpt_map_paint_target == 33)
+		{
+			// Grass uses the vegetation material channel; trees use the separate placement mask.
+			// This lets the user paint procedural grass without scattering trees.
+			applied = terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, 2, false, false) |
+				terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, terrain_sculpt_map_paint_target == 32 ? 1 : 0, true, false);
+		}
+		else
+			applied = terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, channel, tree_mask, false);
+	}
+	if(!applied)
 		return false;
 
 	terrain_sculpt_last_hit = hit_pos;
 	terrain_sculpt_have_last_hit = true;
+	if(terrain_sculpt_map_paint_target >= 8 && terrain_sculpt_map_paint_target <= 31)
+	{
+		terrain_sculpt_last_island_pos = hit_pos;
+		terrain_sculpt_last_island_valid = true;
+		terrain_sculpt_island_placement_armed = false;
+	}
+	else if(terrain_sculpt_map_paint_target == 0)
+		terrain_sculpt_last_island_valid = false;
 	return true;
 }
 
 
-void GUIClient::saveTerrainSculptingChanges()
+bool GUIClient::saveTerrainSculptingChanges(const WorldSettings* base_world_settings, bool apply_saved_settings)
 {
-	if(terrain_system.isNull() || !terrain_system->hasSculptedHeightmaps() || !resource_manager)
-		return;
+	if(terrain_system.isNull() ||
+		(!terrain_system->hasSculptedHeightmaps() && !terrain_system->hasSculptedMaskMaps()) || !resource_manager)
+		return false;
 
 	std::vector<TerrainSculptedHeightmap> maps;
 	terrain_system->getSculptedHeightmaps(maps);
+	std::vector<TerrainSculptedMaskMap> mask_maps;
+	terrain_system->getSculptedMaskMaps(mask_maps);
 	WorldSettings new_world_settings;
-	new_world_settings.copyNetworkStateFrom(connected_world_settings);
+	new_world_settings.copyNetworkStateFrom(base_world_settings ? *base_world_settings : connected_world_settings);
 	bool changed = false;
+	bool all_saved = true;
+	auto setTerrainSectionMap = [&new_world_settings](int x, int y, URLString TerrainSpecSection::* map_url,
+		uint32 disabled_flag, const URLString& new_url)
+	{
+		bool found = false;
+		for(size_t i=0; i<new_world_settings.terrain_spec.section_specs.size(); ++i)
+		{
+			TerrainSpecSection& section = new_world_settings.terrain_spec.section_specs[i];
+			if(section.x == x && section.y == y)
+			{
+				section.*map_url = new_url;
+				section.disabled_map_flags &= ~disabled_flag;
+				found = true;
+			}
+		}
+		if(found)
+			return;
+		TerrainSpecSection section;
+		section.x = x;
+		section.y = y;
+		section.heightmap_URL = URLString();
+		section.mask_map_URL = URLString();
+		section.tree_mask_map_URL = URLString();
+		section.road_mask_map_URL = URLString();
+		section.building_mask_map_URL = URLString();
+		section.disabled_map_flags = 0;
+		section.*map_url = new_url;
+		new_world_settings.terrain_spec.section_specs.push_back(section);
+	};
 	EXRDecoder::SaveOptions save_options;
 	save_options.compression_method = EXRDecoder::CompressionMethod_PIZ;
 	save_options.bit_depth = EXRDecoder::BitDepth_32;
@@ -10098,33 +10354,81 @@ void GUIClient::saveTerrainSculptingChanges()
 		{
 			EXRDecoder::saveImageToEXR(*maps[i].map, temp_path, "", save_options);
 			const URLString new_url = resource_manager->copyLocalFileToResourceDirAndReturnURL(temp_path);
-			for(size_t section_i=0; section_i<new_world_settings.terrain_spec.section_specs.size(); ++section_i)
-			{
-				TerrainSpecSection& section = new_world_settings.terrain_spec.section_specs[section_i];
-				if(section.x == maps[i].x && section.y == maps[i].y)
-				{
-					section.heightmap_URL = new_url;
-					changed = true;
-					break;
-				}
-			}
+			enqueueResourceUpload(new_url);
+			setTerrainSectionMap(maps[i].x, maps[i].y, &TerrainSpecSection::heightmap_URL,
+				TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG, new_url);
+			changed = true;
 			if(FileUtils::fileExists(temp_path))
 				FileUtils::deleteFile(temp_path);
 		}
 		catch(const glare::Exception& e)
 		{
 			conPrint(std::string("Could not save sculpted terrain: ") + e.what());
+			all_saved = false;
+			if(FileUtils::fileExists(temp_path))
+				FileUtils::deleteFile(temp_path);
+		}
+	}
+	for(size_t i=0; i<mask_maps.size(); ++i)
+	{
+		const std::string temp_path = PlatformUtils::getTempDirPath() + "/metasiberia_terrain_mask_" + toString(frame_num) + "_" + toString(i) + ".png";
+		try
+		{
+			PNGDecoder::write(*mask_maps[i].map, temp_path);
+			const URLString new_url = resource_manager->copyLocalFileToResourceDirAndReturnURL(temp_path);
+			enqueueResourceUpload(new_url);
+			if(mask_maps[i].tree_mask)
+			{
+				setTerrainSectionMap(mask_maps[i].x, mask_maps[i].y, &TerrainSpecSection::tree_mask_map_URL,
+					TerrainSpecSection::TREE_MASK_MAP_DISABLED_FLAG, new_url);
+			}
+			else
+			{
+				setTerrainSectionMap(mask_maps[i].x, mask_maps[i].y, &TerrainSpecSection::mask_map_URL,
+					TerrainSpecSection::MASK_MAP_DISABLED_FLAG, new_url);
+			}
+			changed = true;
+			if(FileUtils::fileExists(temp_path))
+				FileUtils::deleteFile(temp_path);
+		}
+		catch(const glare::Exception& e)
+		{
+			conPrint(std::string("Could not save sculpted terrain mask: ") + e.what());
+			all_saved = false;
 			if(FileUtils::fileExists(temp_path))
 				FileUtils::deleteFile(temp_path);
 		}
 	}
 
-	if(changed)
+	// Duplicate section coordinates load in array order, so the final record wins.
+	// Keep that effective record while removing duplicates from the world settings.
+	std::vector<TerrainSpecSection> unique_sections;
+	unique_sections.reserve(new_world_settings.terrain_spec.section_specs.size());
+	for(size_t i=0; i<new_world_settings.terrain_spec.section_specs.size(); ++i)
 	{
-		worldSettingsChangedFromUI(new_world_settings);
+		const TerrainSpecSection& section = new_world_settings.terrain_spec.section_specs[i];
+		bool has_later_duplicate = false;
+		for(size_t j=i+1; j<new_world_settings.terrain_spec.section_specs.size(); ++j)
+			if(new_world_settings.terrain_spec.section_specs[j].x == section.x &&
+				new_world_settings.terrain_spec.section_specs[j].y == section.y)
+			{
+				has_later_duplicate = true;
+				break;
+			}
+		if(!has_later_duplicate)
+			unique_sections.push_back(section);
+	}
+	new_world_settings.terrain_spec.section_specs.swap(unique_sections);
+
+	if(changed && apply_saved_settings)
+	{
+		// Keep the live sculpted maps attached to this TerrainSystem. Rebuilding
+		// here discards the in-memory edit before its resource URLs finish syncing.
+		worldSettingsChangedFromUI(new_world_settings, /*reload_terrain=*/false);
 		if(ui_interface)
 			ui_interface->updateWorldSettingsUIFromWorldSettings();
 	}
+	return changed && all_saved;
 }
 
 
@@ -12138,13 +12442,19 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 							}
 
 							// Update transform for object and object materials in OpenGL engine
-							if(ob->opengl_engine_ob.nonNull() && (ob != selected_ob.getPointer())) // Don't update the selected object based on network messages, we will consider the local transform for it authoritative.
+							if(ob->opengl_engine_ob.nonNull() &&
+								(ob != selected_ob.getPointer() || (!selected_ob_picked_up && grabbed_axis == -1))) // Accept MCP edits unless a local drag is in progress.
 							{
 								GLObjectRef opengl_ob = ob->opengl_engine_ob;
 
 								// Update transform
 								opengl_ob->ob_to_world_matrix = ob->obToWorldMatrix();
+								if(ob->object_type == WorldObject::ObjectType_VoxelGroup && ob->mesh_manager_data.nonNull())
+									opengl_ob->ob_to_world_matrix = opengl_ob->ob_to_world_matrix * Matrix4f::uniformScaleMatrix((float)ob->mesh_manager_data->voxel_subsample_factor);
 								opengl_engine->updateObjectTransformData(*opengl_ob);
+								if(ob->physics_object.nonNull() && !ob->isDynamic())
+									physics_world->setNewObToWorldTransform(*ob->physics_object, ob->pos.toVec4fPoint(),
+										Quatf::fromAxisAndAngle(normalise(ob->axis.toVec4fVector()), ob->angle), useScaleForWorldOb(ob->scale).toVec4fVector());
 
 								// Update materials in opengl engine.
 								glare::ArenaFrame frame(arena_allocator);
@@ -12161,6 +12471,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 								}
 
 								opengl_engine->objectMaterialsUpdated(*opengl_ob);
+								assignLoadedOpenGLTexturesToMats(ob);
 
 								if(ob->object_type == WorldObject::ObjectType_Spotlight)
 								{
@@ -12171,7 +12482,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 								//updateInstancedCopiesOfObject(ob);
 							}
 
-							if(ob == selected_ob.ptr())
+							if(ob == selected_ob.ptr() && !selected_ob_picked_up && grabbed_axis == -1)
 							{
 								if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
 								{
@@ -12179,7 +12490,9 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 									ui_interface->setObjectEditorFromOb(*ob, ui_interface->getSelectedMatIndex(), /*ob in editing user's world=*/connectedToUsersWorldOrGodUser());
 								}
 								else
-									ui_interface->objectModelURLUpdated(*ob); // Update model URL in UI if we have selected the object.
+									// Remote edits can change materials as well as the model URL. Refresh the full
+									// editor so texture URLs and material controls reflect the selected object.
+									ui_interface->setObjectEditorFromOb(*ob, ui_interface->getSelectedMatIndex(), /*ob in editing user's world=*/connectedToUsersWorldOrGodUser());
 							}
 
 
@@ -12550,7 +12863,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	}
 
 	// Send WorldSettingsUpdate message to server if we made a local change to the world settings in the UI.
-	if(world_settings_locally_dirty && (world_settings_local_change_timer.elapsed() >= 1.0) && client_thread)
+	if(world_settings_locally_dirty && (world_settings_local_change_timer.elapsed() >= 1.0) && client_thread && num_resources_uploading == 0)
 	{
 		MessageUtils::initPacket(scratch_packet, Protocol::WorldSettingsUpdate);
 		connected_world_settings.writeToStream(scratch_packet);
@@ -13297,6 +13610,7 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 									pose_constraint.lower_arm_up_angle						= vehicle_controller_inside->getSettings().seat_settings[cur_seat_index].lower_arm_up_angle;
 									pose_constraint.left_hand_hold_point_ws					= ob_to_world * vehicle_controller_inside->getSettings().seat_settings[cur_seat_index].left_hand_hold_point_os;
 									pose_constraint.right_hand_hold_point_ws				= ob_to_world * vehicle_controller_inside->getSettings().seat_settings[cur_seat_index].right_hand_hold_point_os;
+									vehicle_controller_inside->updateRiderPose(pose_constraint);
 								}
 								else
 								{
@@ -13420,6 +13734,7 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 										pose_constraint.lower_arm_up_angle						= controller->getSettings().seat_settings[avatar->vehicle_seat_index].lower_arm_up_angle;
 										pose_constraint.left_hand_hold_point_ws					= ob_to_world * controller->getSettings().seat_settings[avatar->vehicle_seat_index].left_hand_hold_point_os;
 										pose_constraint.right_hand_hold_point_ws				= ob_to_world * controller->getSettings().seat_settings[avatar->vehicle_seat_index].right_hand_hold_point_os;
+										controller->updateRiderPose(pose_constraint);
 									}
 									else
 									{
@@ -14470,23 +14785,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 				this->server_has_basisu_terrain_detail_maps = false;
 			}
 
-			// Try and log in automatically if we have saved credentials for this domain, and auto_login is true.
-			if(settings->getBoolValue("LoginDialog/auto_login", /*default=*/true))
-			{
-				const std::string username = ui_interface->getUsernameForDomain(server_hostname);
-				if(!username.empty())
-				{
-					const std::string password = ui_interface->getDecryptedPasswordForDomain(server_hostname); // manager.getDecryptedPasswordForDomain(server_hostname);
+			// Automatic login is queued in connectToServer(), before the initial
+			// object query, so LoggedInMessage is not delayed behind world objects.
 
-					// Make LogInMessage packet and enqueue to send
-					MessageUtils::initPacket(scratch_packet, Protocol::LogInMessage);
-					scratch_packet.writeStringLengthFirst(username);
-					scratch_packet.writeStringLengthFirst(password);
-
-					enqueueMessageToSend(*this->client_thread, scratch_packet);
-				}
-			}
-				
 			// Wait for the in-client guest avatar picker before creating an anonymous avatar.
 			if(!guest_avatar_selection_pending || guest_avatar_selection_ready)
 				sendInitialAvatarCreateMessage();
@@ -14916,6 +15217,35 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			ui_interface->gearInventoryUpdated();
 
 			logMessage("Logged in as '" + m->username + "', id " + toString(this->logged_in_user_id.value()));
+
+			// Create or update our avatar immediately. The server's AvatarCreated
+			// reply arrives only after the initial object stream.
+			if(world_state.nonNull() && client_avatar_uid.valid())
+			{
+				WorldStateLock lock(world_state->mutex);
+				Vec3d avatar_pos;
+				Vec3d cam_angles;
+				getCurrentAvatarPoseForNetworking(avatar_pos, cam_angles);
+				Avatar new_state;
+				new_state.name = m->username;
+				new_state.pos = avatar_pos;
+				new_state.rotation = Vec3f(0, (float)cam_angles.y, (float)cam_angles.x);
+				new_state.avatar_settings = m->avatar_settings;
+				new_state.equipped_gear = m->equipped_gear;
+				auto res = world_state->avatars.find(client_avatar_uid);
+				if(res == world_state->avatars.end())
+					createOurAvatarLocally(new_state, lock);
+				else
+				{
+					Avatar* avatar = res->second.ptr();
+					new_state.flags = avatar->flags;
+					new_state.pos = avatar->pos;
+					new_state.rotation = avatar->rotation;
+					avatar->copyNetworkStateFrom(new_state);
+					avatar->generatePseudoRandomNameColour();
+					avatar->other_dirty = true;
+				}
+			}
 
 			recolourParcelsForLoggedInState();
 			ui_interface->updateWorldSettingsControlsEditable();
@@ -18521,7 +18851,8 @@ void GUIClient::summonBike()
 			WorldObject* ob = it.getValue().ptr();
 			if(ob->creator_id == logged_in_user_id && // If we created this object
 				//BitUtils::isBitSet(ob->flags, WorldObject::SUMMONED_FLAG) && // And this object was summoned
-				ob->vehicle_script.nonNull() && ob->vehicle_script.isType<Scripting::BikeScript>()) // And it has a bike script
+				ob->vehicle_script.nonNull() && ob->vehicle_script.isType<Scripting::BikeScript>() &&
+				!isObjectVehicleBeingDrivenByOther(*ob)) // And another user is not riding it
 			{
 				if((existing_ob_to_summon == NULL) || (ob->uid.value() > existing_ob_to_summon->uid.value())) // Summon object with greatest UID
 					existing_ob_to_summon = ob;
@@ -18650,7 +18981,8 @@ void GUIClient::summonHovercar()
 			WorldObject* ob = it.getValue().ptr();
 			if(ob->creator_id == logged_in_user_id && // If we created this object
 				//BitUtils::isBitSet(ob->flags, WorldObject::SUMMONED_FLAG) && // And this object was summoned
-				ob->vehicle_script.nonNull() && ob->vehicle_script.isType<Scripting::HoverCarScript>()) // And it has a hovercar script
+				ob->vehicle_script.nonNull() && ob->vehicle_script.isType<Scripting::HoverCarScript>() &&
+				!isObjectVehicleBeingDrivenByOther(*ob)) // And another user is not driving it
 			{
 				if((existing_ob_to_summon == NULL) || (ob->uid.value() > existing_ob_to_summon->uid.value())) // Summon object with greatest UID
 					existing_ob_to_summon = ob;
@@ -18754,7 +19086,8 @@ void GUIClient::summonBoat()
 			if(ob->creator_id == logged_in_user_id && // If we created this object
 				//BitUtils::isBitSet(ob->flags, WorldObject::SUMMONED_FLAG) && // And this object was summoned
 				ob->vehicle_script && ob->vehicle_script.isType<Scripting::BoatScript>() && // And it has a boat script
-				(ob->model_url == boat_model_URL))
+				(ob->model_url == boat_model_URL) &&
+				!isObjectVehicleBeingDrivenByOther(*ob))
 			{
 				if((existing_ob_to_summon == NULL) || (ob->uid.value() > existing_ob_to_summon->uid.value())) // Summon object with greatest UID
 					existing_ob_to_summon = ob;
@@ -18858,7 +19191,8 @@ void GUIClient::summonJetSki()
 			WorldObject* ob = it.getValue().ptr();
 			if((ob->creator_id == logged_in_user_id) && // If we created this object
 				ob->vehicle_script && ob->vehicle_script.isType<Scripting::BoatScript>() && // And it has a boat script
-				(ob->model_url == jetski_model_URL)) // ANd it uses the Jet ski model
+				(ob->model_url == jetski_model_URL) &&
+				!isObjectVehicleBeingDrivenByOther(*ob)) // And another user is not riding it
 			{
 				if((existing_ob_to_summon == NULL) || (ob->uid.value() > existing_ob_to_summon->uid.value())) // Summon object with greatest UID
 					existing_ob_to_summon = ob;
@@ -18929,6 +19263,67 @@ void GUIClient::summonJetSki()
 }
 
 
+void GUIClient::summonSnowboard()
+{
+	if(!logged_in_user_id.valid())
+		throw glare::Exception("You must be logged in to summon a snowboard.");
+
+	const js::AABBox aabb_os(Vec4f(-0.95142f, -0.132507f, -0.188208f, 1), Vec4f(0.950202f, 0.131274f, 0.186821f, 1));
+	const Vec3d pos = cam_controller.getFirstPersonPosition() +
+		::removeComponentInDir(cam_controller.getForwardsVec(), Vec3d(0,0,1)) * 2.0 + Vec3d(0,0,-1.42);
+	const Quatf rot = Quatf::zAxisRot((float)cam_controller.getAvatarAngles().x) * Quatf::zAxisRot(-1.57f) * Quatf::xAxisRot(1.57f);
+	Vec4f axis;
+	float angle;
+	rot.toAxisAndAngle(axis, angle);
+	const URLString model_url(VehiclesShared::snowboardModelURL());
+
+	{
+		Lock lock(world_state->mutex);
+		WorldObject* existing = NULL;
+		for(auto it = world_state->objects.valuesBegin(); it != world_state->objects.valuesEnd(); ++it)
+		{
+			WorldObject* ob = it.getValue().ptr();
+			if(ob->creator_id == logged_in_user_id && ob->vehicle_script && ob->vehicle_script.isType<Scripting::SnowboardScript>() && ob->model_url == model_url &&
+				!isObjectVehicleBeingDrivenByOther(*ob) &&
+				(!existing || ob->uid.value() > existing->uid.value()))
+				existing = ob;
+		}
+		if(existing)
+		{
+			doMoveAndRotateObject(existing, pos, Vec3f(axis), angle, aabb_os, true);
+			enableMaterialisationEffectOnOb(*existing);
+			return;
+		}
+	}
+
+	IndigoXMLDoc doc(resources_dir_path + "/snowboard_mats.xml");
+	std::vector<WorldMaterialRef> materials;
+	for(pugi::xml_node n = doc.getRootElement().child("material"); n; n = n.next_sibling("material"))
+		materials.push_back(WorldMaterial::loadFromXMLElem("snowboard_mats.xml", false, n));
+
+	WorldObjectRef ob = new WorldObject();
+	ob->model_url = model_url;
+	ob->max_model_lod_level = 2;
+	ob->flags = WorldObject::COLLIDABLE_FLAG | WorldObject::DYNAMIC_FLAG | WorldObject::SUMMONED_FLAG | WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH;
+	ob->uid = UID(0);
+	ob->materials = materials;
+	ob->pos = pos;
+	ob->axis = Vec3f(axis);
+	ob->angle = angle;
+	ob->scale = Vec3f(1.f);
+	ob->setAABBOS(aabb_os);
+	ob->centre_of_mass_offset_os = Vec3f(0.f);
+	ob->script = FileUtils::readEntireFileTextMode(resources_dir_path + "/summoned_snowboard_script.xml");
+	ob->mass = 50.f;
+	ob->friction = 0.5f;
+	ob->restitution = 0.2f;
+	setMaterialFlagsForObject(ob.ptr());
+	MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
+	ob->writeToNetworkStream(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
 void GUIClient::summonCar()
 {
 	if(!this->logged_in_user_id.valid())
@@ -18960,7 +19355,8 @@ void GUIClient::summonCar()
 			WorldObject* ob = it.getValue().ptr();
 			if(ob->creator_id == logged_in_user_id && // If we created this object
 				//BitUtils::isBitSet(ob->flags, WorldObject::SUMMONED_FLAG) && // And this object was summoned
-				ob->vehicle_script.nonNull() && ob->vehicle_script.isType<Scripting::CarScript>()) // And it has a boat script
+				ob->vehicle_script.nonNull() && ob->vehicle_script.isType<Scripting::CarScript>() &&
+				!isObjectVehicleBeingDrivenByOther(*ob)) // And another user is not driving it
 			{
 				if((existing_ob_to_summon == NULL) || (ob->uid.value() > existing_ob_to_summon->uid.value())) // Summon object with greatest UID
 					existing_ob_to_summon = ob;
@@ -20143,6 +20539,11 @@ Reference<VehiclePhysics> GUIClient::createVehicleControllerForScript(WorldObjec
 
 		controller = new BoatPhysics(ob, ob->physics_object->jolt_body_id, physics_settings, *physics_world, particle_manager.ptr(), terrain_decal_manager.ptr());
 	}
+	else if(ob->vehicle_script.isType<Scripting::SnowboardScript>())
+	{
+		physics_world->setObjectLayer(ob->physics_object, Layers::VEHICLES);
+		controller = new SnowboardPhysics(ob, ob->vehicle_script->settings.downcast<Scripting::SnowboardScriptSettings>(), *physics_world, particle_manager.ptr());
+	}
 	else if(ob->vehicle_script.isType<Scripting::BikeScript>())
 	{
 		const Scripting::BikeScript* bike_script = ob->vehicle_script.downcastToPtr<Scripting::BikeScript>();
@@ -20862,6 +21263,21 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 	minimap = nullptr;
 	checkCreateManagersAndMinimap();
 
+	// Queue automatic login before the initial object query. The server
+	// processes messages in order, so this lets LoggedInMessage arrive before
+	// the potentially large initial object stream.
+	{
+		const std::string username = getAutoLoginUsername(server_hostname);
+		if(!username.empty())
+		{
+			const std::string password = ui_interface->getDecryptedPasswordForDomain(server_hostname);
+			MessageUtils::initPacket(scratch_packet, Protocol::LogInMessage);
+			scratch_packet.writeStringLengthFirst(username);
+			scratch_packet.writeStringLengthFirst(password);
+			enqueueMessageToSend(*this->client_thread, scratch_packet);
+		}
+	}
+
 	// Note that getFirstPersonPosition() is used for consistency with proximity_loader.updateCamPos() calls, where getFirstPersonPosition() is used also.
 	const js::AABBox initial_aabb = proximity_loader.setCameraPosForNewConnection(this->cam_controller.getFirstPersonPosition().toVec4fPoint());
 
@@ -20884,6 +21300,32 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 	this->connection_state = ServerConnectionState_Connecting;
 	this->received_world_settings_since_connect_or_world_change = false;
 	this->world_settings_locally_dirty = false;
+}
+
+
+std::string GUIClient::getAutoLoginUsername(const std::string& hostname)
+{
+	if(settings->getBoolValue("LoginDialog/auto_login", /*default=*/true))
+		return ui_interface->getUsernameForDomain(hostname);
+	return std::string();
+}
+
+
+void GUIClient::createOurAvatarLocally(const Avatar& avatar_state, WorldStateLock& lock)
+{
+	assert(world_state->avatars.find(client_avatar_uid) == world_state->avatars.end());
+
+	AvatarRef avatar = new Avatar();
+	avatar->uid = client_avatar_uid;
+	avatar->our_avatar = true;
+	avatar->copyNetworkStateFrom(avatar_state);
+	avatar->state = Avatar::State_JustCreated;
+	avatar->other_dirty = true;
+	avatar->generatePseudoRandomNameColour();
+	avatar->setTransformAndHistory(avatar_state.pos, avatar_state.rotation);
+	world_state->avatars.insert(std::make_pair(avatar->uid, avatar));
+
+	msg_queue.enqueue(new AvatarCreatedMessage(avatar->uid));
 }
 
 
@@ -21972,7 +22414,10 @@ void GUIClient::mouseReleased(MouseEvent& e)
 	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Left)
 	{
 		if(terrain_sculpt_stroke_active && terrain_system.nonNull())
+		{
 			terrain_system->endSculptStroke();
+			saveTerrainSculptingChanges();
+		}
 		terrain_sculpt_stroke_active = false;
 		terrain_sculpt_have_last_hit = false;
 		e.accepted = true;
@@ -22524,7 +22969,7 @@ void GUIClient::rebuildSelectedVoxelObject()
 
 void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob)
 {
-	Lock lock(this->world_state->mutex);
+	WorldStateLock lock(this->world_state->mutex);
 
 	ob->compressVoxels();
 	const int ob_lod_level = getEffectiveLODLevel(ob.ptr(), cam_controller.getPosition());
@@ -22534,23 +22979,38 @@ void GUIClient::updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob
 	// Clear lightmap URL, since the lightmap will be invalid now the voxels (and hence the UV map) will have changed.
 	ob->lightmap_url = "";
 
-	// Remove any existing OpenGL and physics model
-	if(ob->opengl_engine_ob)
+	// Keep the previous model visible until the replacement mesh is ready.
+	if(ob->getDecompressedVoxels().size() <= 4096 && ob->opengl_engine_ob)
 	{
 		removeAnimatedTextureUse(*ob->opengl_engine_ob, *animated_texture_manager);
 		opengl_engine->removeObject(ob->opengl_engine_ob);
 		ob->opengl_engine_ob = nullptr;
 	}
 
-	if(ob->opengl_light.nonNull())
+	if(ob->getDecompressedVoxels().size() <= 4096 && ob->opengl_light.nonNull())
 		opengl_engine->removeLight(ob->opengl_light);
 
-	destroyVehiclePhysicsControllingObject(ob.ptr()); // Destroy any vehicle controller controlling this object, as vehicle controllers have pointers to physics bodies.
-
-	checkRemoveObAndSetRefToNull(physics_world, ob->physics_object);
+	if(ob->getDecompressedVoxels().size() <= 4096)
+	{
+		destroyVehiclePhysicsControllingObject(ob.ptr());
+		checkRemoveObAndSetRefToNull(physics_world, ob->physics_object);
+	}
 
 	// Update in Indigo view
 	//ui->indigoView->objectRemoved(*ob);
+
+	// Large editor changes must use the same background meshing/physics path as
+	// network-created voxels. Keep the previous render and collision shape while the replacement mesh is built, so large models stay visible during asynchronous rebuild.
+	if(ob->getDecompressedVoxels().size() > 4096)
+	{
+		ob->setAABBOS(ob->getDecompressedVoxelGroup().getAABB());
+		ob->loading_or_loaded_model_lod_level = -10;
+		ob->loading_or_loaded_lod_level = -10;
+		loadModelForObject(ob.ptr(), lock);
+		ob->from_local_other_dirty = true;
+		this->world_state->dirty_from_local_objects.insert(ob);
+		return;
+	}
 
 	if(!ob->getDecompressedVoxels().empty())
 	{
@@ -24836,9 +25296,9 @@ void GUIClient::updateGroundPlane()
 
 		for(int i=0; i<4; ++i)
 		{
-			// Detail colour 0 is still reserved by the current terrain shader, but
-			// detail height 0 is sampled by TerrainSystem on the CPU.
-			if(i != 0 && !use_detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i))
+			// Detail colour 0 supplies the rock surface; colour slot 3 remains
+			// reserved. Height map 0 is also sampled by TerrainSystem on the CPU.
+			if(!use_detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i))
 			{
 				DownloadingResourceInfo info;
 				info.texture_params = detail_colourmap_tex_params;
@@ -24901,7 +25361,7 @@ void GUIClient::updateGroundPlane()
 
 		for(int i=0; i<4; ++i)
 		{
-			if(i != 0 && !use_detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i) && this->resource_manager->isFileForURLPresent(use_detail_col_map_URLs[i]))
+			if(!use_detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i) && this->resource_manager->isFileForURLPresent(use_detail_col_map_URLs[i]))
 				load_item_queue.enqueueItem(use_detail_col_map_URLs[i], Vec4f(0,0,0,1), aabb_ws_longest_len, 
 					new LoadTextureTask(opengl_engine, resource_manager, &this->msg_queue, path_spec.detail_col_map_paths[i], this->resource_manager->getOrCreateResourceForURL(use_detail_col_map_URLs[i]), 
 						detail_colourmap_tex_params, /*is terrain map=*/true, worker_allocator, texture_loaded_msg_allocator, opengl_upload_thread), 
@@ -27437,18 +27897,31 @@ void GUIClient::deleteBot(uint64 bot_id)
 }
 
 
-void GUIClient::worldSettingsChangedFromUI(const WorldSettings& new_world_settings)
+void GUIClient::worldSettingsChangedFromUI(const WorldSettings& new_world_settings, bool reload_terrain)
 {
-	const bool terrain_changed = !(this->connected_world_settings.terrain_spec == new_world_settings.terrain_spec);
+	WorldSettings settings_with_saved_sculpt;
+	settings_with_saved_sculpt.copyNetworkStateFrom(new_world_settings);
+	const bool terrain_changed = !(this->connected_world_settings.terrain_spec == settings_with_saved_sculpt.terrain_spec);
+	const bool has_sculpted_maps = terrain_system.nonNull() &&
+		(terrain_system->hasSculptedHeightmaps() || terrain_system->hasSculptedMaskMaps());
+	if(terrain_changed && reload_terrain && has_sculpted_maps)
+	{
+		if(!saveTerrainSculptingChanges(&settings_with_saved_sculpt, /*apply_saved_settings=*/false))
+		{
+			if(ui_interface)
+				ui_interface->showHTMLMessageBox("Скульптинг", "Не удалось сохранить текущие карты террейна. Изменения настроек мира не применены, чтобы не потерять остров.");
+			return;
+		}
+	}
 
-	this->connected_world_settings.copyNetworkStateFrom(new_world_settings);
+	this->connected_world_settings.copyNetworkStateFrom(settings_with_saved_sculpt);
 
 	// Start a timer to send WorldSettingsUpdate message to server.
 	this->world_settings_locally_dirty = true;
 	this->world_settings_local_change_timer.reset();
 
 	// Reload terrain by shutting it down, will be recreated in GUIClient::updateGroundPlane().
-	if(terrain_changed)
+	if(terrain_changed && reload_terrain)
 	{
 		if(this->terrain_system.nonNull())
 		{
@@ -27554,6 +28027,7 @@ void GUIClient::applyWorldSettingsToOpenGLEngine()
 		scene->water_surface_settings.foam_scale = myClamp(sanitiseFinite(water_surface.foam_scale, 1.6f), 0.05f, 10.f);
 		scene->water_surface_settings.foam_speed = myClamp(sanitiseFinite(water_surface.foam_speed, water_defaults.foam_speed), 0.f, 5.f);
 		scene->water_surface_settings.foam_fade = myClamp(sanitiseFinite(water_surface.foam_fade, water_defaults.foam_fade), 0.f, 1.f);
+		scene->water_surface_settings.underwater_caustics_enabled = water_surface.underwater_caustics_enabled;
 	}
 }
 

@@ -12,6 +12,8 @@ Copyright Glare Technologies Limited 2026 -
 #include <functional>
 #include <string>
 #include <vector>
+#include <QtCore/QString>
+#include <QtCore/QJsonObject>
 class CredentialManager;
 class HTTPClient;
 class JSONParser;
@@ -36,11 +38,15 @@ struct MCPClientRenderResult
 
 typedef std::function<void (const MCPClientRenderRequest&, MCPClientRenderResult&)> MCPClientRenderCallback;
 typedef std::function<void (const std::string&)> MCPClientStatusCallback;
+typedef std::function<QJsonObject (const QString&, const QJsonObject&)> MCPClientTerrainCallback;
 
 
 struct MCPClientForwardingTarget
 {
 	std::string server_hostname;
+	// Empty means the main/root world.  The value is captured from the active
+	// GUI connection and forwarded to the server with every MCP request.
+	std::string world_name;
 	std::string username;
 	std::string password;
 };
@@ -61,7 +67,7 @@ web::WebListenerThread API.
 class MCPClientRequestHandler : public web::RequestHandler
 {
 public:
-	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback);
+	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback);
 
 	virtual void handleRequest(const web::RequestInfo& request_info, web::ReplyInfo& reply_info) override;
 
@@ -72,7 +78,9 @@ private:
 
 	std::string server_hostname;
 	MCPClientRenderCallback render_callback;
+	MCPClientTerrainCallback terrain_callback;
 	MCPClientStatusCallback status_callback;
+	std::function<bool()> poly_haven_enabled;
 
 	// A request handler is created per incoming connection and used serially by
 	// one worker thread, so HTTPClient needs no locking. Keep-alive lets
@@ -98,11 +106,13 @@ public:
 
 	// Takes a runtime snapshot of the saved login for server_hostname. Returns
 	// false when no complete saved login exists or the hostname is invalid.
-	bool configureForwardingTargetFromCredentialManager(const std::string& server_hostname, CredentialManager& credential_manager);
+	bool configureForwardingTargetFromCredentialManager(const std::string& server_hostname, const std::string& world_name, CredentialManager& credential_manager);
 	void clearForwardingTarget();
 
 	void setRenderCallback(const MCPClientRenderCallback& callback) { render_callback = callback; }
 	void setStatusCallback(const MCPClientStatusCallback& callback) { status_callback = callback; }
+	void setPolyHavenEnabledCallback(const std::function<bool()>& callback) { poly_haven_enabled = callback; }
+	void setTerrainCallback(const MCPClientTerrainCallback& callback) { terrain_callback = callback; }
 
 	bool isConfigured() const;
 
@@ -110,6 +120,8 @@ public:
 
 private:
 	MCPClientForwardingTarget forwarding_target;
+	std::function<bool()> poly_haven_enabled;
 	MCPClientRenderCallback render_callback;
+	MCPClientTerrainCallback terrain_callback;
 	MCPClientStatusCallback status_callback;
 };

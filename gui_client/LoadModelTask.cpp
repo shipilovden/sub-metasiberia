@@ -203,10 +203,6 @@ void LoadModelTask::run(size_t thread_index)
 			{
 				UploadGeometryMessage* upload_msg = new UploadGeometryMessage();
 				upload_msg->meshdata = gl_meshdata;
-				upload_msg->index_data_src_offset_B = index_data_src_offset_B;
-				upload_msg->total_geom_size_B = total_geom_size_B;
-				upload_msg->vert_data_size_B = vert_data.size();
-				upload_msg->index_data_size_B = index_data.size();
 
 				LoadModelTaskUploadingUserInfo* user_info = new LoadModelTaskUploadingUserInfo();
 				user_info->physics_shape = physics_shape;
@@ -224,7 +220,7 @@ void LoadModelTask::run(size_t thread_index)
 				gl_meshdata = NULL;
 				physics_shape.jolt_shape = NULL;
 
-				upload_thread->getMessageQueue().enqueue(upload_msg);
+				upload_thread->enqueueUpload(upload_msg);
 			}
 			else
 			{

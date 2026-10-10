@@ -461,6 +461,11 @@ URLString WorldObject::makeOptimisedMeshURL(const URLString& base_model_url, int
 
 URLString WorldObject::getLODModelURLForLevel(const URLString& base_model_url, int lod_level, const GetLODModelURLOptions& options)
 {
+	// MCP meshes are stored only as source .bmesh files. Never invent an
+	// _optN or _lodN URL for them, regardless of the caller's LOD options.
+	if(hasPrefix(base_model_url, "mcp_model_"))
+		return URLString(base_model_url, glare::STLArenaAllocator<char>(options.allocator));
+
 	if((lod_level == 0) && !options.get_optimised_mesh)
 		return URLString(base_model_url, glare::STLArenaAllocator<char>(options.allocator));
 
@@ -519,6 +524,8 @@ URLString WorldObject::getLODModelURL(const Vec3d& campos, const GetLODModelURLO
 	// Early-out for max_model_lod_level == 0: avoid computing LOD
 	if(this->max_model_lod_level == 0)
 	{
+		if(hasPrefix(this->model_url, "mcp_model_"))
+			return URLString(this->model_url, glare::STLArenaAllocator<char>(options.allocator));
 		if(options.get_optimised_mesh)
 			return makeOptimisedMeshURL(this->model_url, /*lod_level=*/0, /*get_optimised_mesh=*/true, options.opt_mesh_version);
 		else
@@ -2191,10 +2198,13 @@ Reference<glare::SharedImmutableArray<uint8> > WorldObject::compressVoxelGroup(c
 	if(group.voxels.size() > MAX_NUM_VOXELS)
 		throw glare::Exception("Too many voxels to compress: " + toString(group.voxels.size()));
 
+	size_t max_bucket = 0;
 	// The mesh paths store material indices in a uint8 (255 is reserved for
 	// empty), and the supported coordinate range guarantees that relative
 	// positions below cannot overflow an int.  Validate here because legacy
-	// v9-v11 disk/clipboard records contain raw, untrusted Voxel bytes.
+	// v9-v11 disk/clipboard records contain raw, untrusted Voxel bytes.  Gather
+	// the maximum material at the same time so compression does one fewer pass
+	// over large groups.
 	for(size_t i=0; i<group.voxels.size(); ++i)
 	{
 		const Voxel& voxel = group.voxels[i];
@@ -2203,11 +2213,8 @@ Reference<glare::SharedImmutableArray<uint8> > WorldObject::compressVoxelGroup(c
 		if(voxel.pos.x < -32768 || voxel.pos.y < -32768 || voxel.pos.z < -32768 ||
 			voxel.pos.x >  32766 || voxel.pos.y >  32766 || voxel.pos.z >  32766)
 			throw glare::Exception("Invalid voxel position: " + voxel.pos.toString());
+		max_bucket = myMax<size_t>(max_bucket, voxel.mat_index);
 	}
-
-	size_t max_bucket = 0;
-	for(size_t i=0; i<group.voxels.size(); ++i)
-		max_bucket = myMax<size_t>(max_bucket, group.voxels[i].mat_index);
 
 	const size_t num_buckets = max_bucket + 1;
 

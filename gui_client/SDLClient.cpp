@@ -736,6 +736,10 @@ int main(int argc, char** argv)
 		settings.shadow_mapping = true;
 		settings.depth_fog = true;
 		settings.render_water_caustics = !low_memory_mode;
+#if defined(EMSCRIPTEN)
+		// WebGL has a 16-sampler fragment limit, and the caustic frames are not in the web preload.
+		settings.render_water_caustics = false;
+#endif
 		settings.msaa_samples = use_MSAA ? 4 : 1;
 		settings.render_to_offscreen_renderbuffers = !low_memory_mode;
 		settings.ssao_support = false;

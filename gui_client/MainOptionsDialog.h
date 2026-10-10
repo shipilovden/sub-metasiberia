@@ -58,6 +58,13 @@ public:
 	// this dialog: the runtime integration must obtain them from CredentialManager.
 	static const QString MCPEnabledKey()	{ return "mcp_client/enabled"; }
 	static const QString MCPPortKey()		{ return "mcp_client/port"; }
+	static const QString MCPDefaultsMigratedKey() { return "mcp_client/defaults_migrated"; }
+	static const QString MCPDefaultsMigratedV2Key() { return "mcp_client/defaults_migrated_v2"; }
+	static const QString MCPDefaultsMigratedV3Key() { return "mcp_client/defaults_migrated_v3"; }
+	// V4 resets the development-era opt-in state once for clients that already
+	// persisted one of the earlier defaults.  MCP remains disabled until the
+	// user explicitly enables it in the AI Settings tab.
+	static const QString MCPDefaultsMigratedV4Key() { return "mcp_client/defaults_migrated_v4"; }
 
 	static int defaultMCPPort() { return 8095; }
 	static int minMCPPort() { return 1024; }
@@ -71,7 +78,6 @@ public:
 private slots:;
 	void accepted();
 	void customCacheDirCheckBoxChanged(bool checked);
-	void MCPCheckBoxChanged(bool checked);
 
 	void on_inputDeviceComboBox_currentIndexChanged(int index);
 	void on_inputVolumeScaleHorizontalSlider_valueChanged(int new_value);

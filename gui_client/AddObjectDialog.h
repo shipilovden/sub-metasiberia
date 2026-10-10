@@ -13,6 +13,7 @@ Copyright Glare Technologies Limited 2022 -
 #include <utils/ThreadManager.h>
 #include <graphics/BatchedMesh.h>
 #include <QtCore/QString>
+#include <QtCore/QSharedPointer>
 class QSettings;
 struct GLObject;
 struct IMFDXGIDeviceManager;
@@ -22,6 +23,12 @@ class GaussianSplatCEFConverter;
 class GaussianSplatData;
 class GaussianSplatRenderObject;
 class QProgressDialog;
+class QListWidget;
+class QLineEdit;
+class QLabel;
+class QTemporaryDir;
+class QTabWidget;
+class QPushButton;
 
 
 /*=====================================================================
@@ -51,9 +58,12 @@ private slots:;
 
 	void urlChanged(const QString& filename);
 	void urlEditingFinished();
+	void searchPolyHavenModels();
+	void polyHavenModelSelected(QListWidgetItem* item);
 	
 private:
 	virtual void closeEvent(QCloseEvent *event);
+	virtual void changeEvent(QEvent* event) override;
 	virtual void timerEvent(QTimerEvent* event);
 
 	void loadModelIntoPreview(const std::string& local_path);
@@ -95,7 +105,13 @@ private:
 	void makeMeshForWidthAndHeight(const std::string& local_path, int w, int h);
 
 	std::string base_dir_path;
-	std::vector<std::string> models;
+	QListWidget* polyHavenModelList;
+	QLineEdit* polyHavenSearchEdit;
+	QLabel* polyHavenStatusLabel;
+	QTabWidget* polyHavenWebTabs;
+	QPushButton* polyHavenSearchButton;
+	QSharedPointer<QTemporaryDir> polyHavenTempDir;
+	int polyHavenRequestGeneration;
 
 	URLString last_url;
 

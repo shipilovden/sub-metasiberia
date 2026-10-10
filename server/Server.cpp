@@ -493,6 +493,47 @@ int main(int argc, char *argv[])
 		else
 			server.world_state->createNewDatabase(server_state_path);
 
+		// Older MCP object creation could leave its source mesh on disk without a
+		// present resource record. Restore only meshes referenced by live objects;
+		// otherwise WebClient receives a 404 even though the .bmesh file exists.
+		{
+			WorldStateLock lock(server.world_state->mutex);
+			std::set<URLString> checked_model_urls;
+			size_t restored_model_resources = 0;
+			for(auto world_it = server.world_state->world_states.begin(); world_it != server.world_state->world_states.end(); ++world_it)
+			for(auto ob_it = world_it->second->getObjects(lock).begin(); ob_it != world_it->second->getObjects(lock).end(); ++ob_it)
+			{
+				const WorldObject& ob = *ob_it->second.ptr();
+				const URLString& URL = ob.model_url;
+				if(!hasPrefix(URL, "mcp_model_") || !hasExtension(URL, "bmesh") || !checked_model_urls.insert(URL).second)
+					continue;
+				const std::string raw_path = server.world_state->resource_manager->computeDefaultRawLocalPathForURL(URL);
+				const std::string expected_path = server_resource_dir + "/" + raw_path;
+				if(!FileUtils::fileExists(expected_path))
+					continue;
+				ResourceRef resource = server.world_state->resource_manager->getOrCreateResourceForURL(URL);
+				if(resource->getState() != Resource::State_Present || !FileUtils::fileExists(server.world_state->resource_manager->getLocalAbsPathForResource(*resource)))
+				{
+					resource->setRawLocalPath(raw_path);
+					resource->setState(Resource::State_Present);
+					server.world_state->addResourceAsDBDirty(resource);
+					restored_model_resources++;
+				}
+			}
+			if(restored_model_resources > 0)
+				conPrint("Restored " + toString(restored_model_resources) + " MCP model resource(s) from disk.");
+		}
+
+		// Saved missing-resource records can replace bundled resources registered before
+		// loading the database. Restore their distribution copies without changing owners
+		// or paths of resources that are already present.
+		for(const std::string& path : FileUtils::getFilesInDirFullPaths(server_state_dir + "/dist_resources/"))
+		{
+			const URLString URL(FileUtils::getFilename(path));
+			if(!server.world_state->resource_manager->isFileForURLPresent(URL))
+				server.world_state->resource_manager->addExternalResource(URL, path);
+		}
+
 		if(parsed_args.isArgPresent("--dump_objects_near"))
 		{
 			const double centre_x = stringToDouble(parsed_args.getArgStringValue("--dump_objects_near", 1));

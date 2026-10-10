@@ -13,6 +13,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "PhotoCameraPath.h"
 #include <utils/ArgumentParser.h>
 #include <utils/Timer.h>
+#include <utils/ThreadManager.h>
 #include <utils/ComObHandle.h>
 #include <utils/SocketBufferOutStream.h>
 #include <QtCore/QPoint>
@@ -27,6 +28,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QDockWidget>
 #include <string>
 #include <memory>
+#include <atomic>
 class PhotoVideoRecorder;
 namespace Ui { class MainWindow; }
 namespace glare { class TaskManager; }
@@ -56,6 +58,7 @@ struct _SDL_GameController;
 class RenderStatsWidget;
 class MiniDmpSender;
 class UpdateManager;
+class AIDockWidget;
 class WebcamWindow;
 class AvatarSettingsWidget;
 class ScientificObjectEditor;
@@ -141,6 +144,7 @@ private slots:;
 	void on_actionShow_Screenshot_Folder_triggered();
 	void on_actionAbout_Substrata_triggered();
 	void on_actionUpdate_triggered();
+	void on_actionAI_triggered();
 	void on_actionOptions_triggered();
 	void on_actionUndo_triggered();
 	void on_actionRedo_triggered();
@@ -151,6 +155,7 @@ private slots:;
 	void on_actionSummon_Hovercar_triggered();
 	void on_actionSummon_Boat_triggered();
 	void on_actionSummon_Jet_Ski_triggered();
+	void on_actionSummon_Snowboard_triggered();
 	void on_actionSummon_Car_triggered();
 	void on_actionOpen_Gear_Inventory_triggered();
 	void on_actionConvert_Selected_Object_To_Gear_Item_triggered();
@@ -351,6 +356,8 @@ private:
 	void updateStatusBar();
 	void updateDiagnostics();
 	void runScreenshotCode();
+	void startMCPClientServerIfEnabled();
+	void stopMCPClientServer();
 
 	virtual void dragEnterEvent(QDragEnterEvent* event) override;
 	virtual void dropEvent(QDropEvent* event) override;
@@ -645,6 +652,12 @@ public:
 	GUIClient gui_client;
 
 	CredentialManager credential_manager;
+	ThreadManager mcp_web_thread_manager;
+	bool mcp_client_server_running;
+	std::atomic<bool> mcp_poly_haven_enabled{false};
+	bool mcp_connection_error_reported;
+	std::string mcp_server_hostname;
+	std::string mcp_worldname;
 
 	glare::TaskManager* main_task_manager;
 	glare::TaskManager* high_priority_task_manager;
@@ -684,6 +697,7 @@ public:
 	QElapsedTimer photo_recording_elapsed;
 	QDockWidget* document_editor_dock_widget;
 	DocumentEditorPanel* document_editor_panel;
+	AIDockWidget* ai_dock_widget;
 	ScientificObjectEditor* scientific_object_editor;
 	CulturalObjectEditor* cultural_object_editor;
 	SpotlightEditor* spotlight_editor;

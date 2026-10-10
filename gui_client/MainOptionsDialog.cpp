@@ -140,7 +140,6 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 	connect(this->buttonBox, SIGNAL(accepted()), this, SLOT(accepted()));
 
 	connect(this->useCustomCacheDirCheckBox, SIGNAL(toggled(bool)), this, SLOT(customCacheDirCheckBoxChanged(bool)));
-	connect(this->enableMCPCheckBox, SIGNAL(toggled(bool)), this, SLOT(MCPCheckBoxChanged(bool)));
 
 	this->customCacheDirFileSelectWidget->setSettingsKey("options/lastCacheDirFileSelectDir");
 	this->customCacheDirFileSelectWidget->setType(FileSelectWidget::Type_Directory);
@@ -172,9 +171,9 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 	start_location_url.replace("sub://89.104.70.23", "sub://vr.metasiberia.com");
 	this->startLocationURLLineEdit->setText(start_location_url);
 
-	this->xrLaunchModeComboBox->addItem("Automatic: use VR when headset is ready", "auto");
-	this->xrLaunchModeComboBox->addItem("Desktop only", "desktop");
-	this->xrLaunchModeComboBox->addItem("VR first, then fall back to desktop", "vr");
+	this->xrLaunchModeComboBox->addItem(tr("Automatic: use VR when headset is ready"), "auto");
+	this->xrLaunchModeComboBox->addItem(tr("Desktop only"), "desktop");
+	this->xrLaunchModeComboBox->addItem(tr("VR first, then fall back to desktop"), "vr");
 
 	const QString xr_launch_mode = settings->value(xrLaunchModeKey(), "auto").toString();
 	const int xr_launch_mode_index = this->xrLaunchModeComboBox->findData(xr_launch_mode);
@@ -182,11 +181,11 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 
 	if(XR::isRuntimeCapableBuild())
 	{
-		this->xrLaunchModeComboBox->setToolTip("Automatic mode starts VR when the headset and OpenXR runtime are available, then falls back to desktop if startup fails.");
+		this->xrLaunchModeComboBox->setToolTip(tr("Automatic mode starts VR when the headset and OpenXR runtime are available, then falls back to desktop if startup fails."));
 	}
 	else
 	{
-		this->xrLaunchModeComboBox->setToolTip("This build was compiled without XR support. The launch mode will take effect after rebuilding with XR support enabled.");
+		this->xrLaunchModeComboBox->setToolTip(tr("This build was compiled without XR support. The launch mode will take effect after rebuilding with XR support enabled."));
 	}
 
 	const auto dev_names = getAudioInputDeviceNames();
@@ -197,11 +196,6 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 
 	inputVolumeScaleHorizontalSlider->setValue(						settings->value(inputScaleFactorNameKey(), 100).toInt());
 
-	const int MCP_port = myClamp(settings->value(MCPPortKey(), defaultMCPPort()).toInt(), minMCPPort(), maxMCPPort());
-	SignalBlocker::setChecked(this->enableMCPCheckBox, false);
-	this->enableMCPCheckBox->setEnabled(false);
-	SignalBlocker::setValue(this->MCPPortSpinBox, MCP_port);
-	this->MCPSettingsContainer->setEnabled(false);
 
 #ifdef OSX
 	// Force SSAO to false for now on Mac, as when it's enabled, the number of texture units exceeds the max (16) for the terrain shader.
@@ -238,20 +232,13 @@ void MainOptionsDialog::accepted()
 	settings->setValue(inputDeviceNameKey(),						this->inputDeviceComboBox->currentText());
 	settings->setValue(inputScaleFactorNameKey(),					this->inputVolumeScaleHorizontalSlider->value());
 
-	settings->setValue(MCPEnabledKey(),								false);
-	settings->setValue(MCPPortKey(),								this->MCPPortSpinBox->value());
+
 }
 
 
 void MainOptionsDialog::customCacheDirCheckBoxChanged(bool checked)
 {
 	this->customCacheDirFileSelectWidget->setEnabled(checked);
-}
-
-
-void MainOptionsDialog::MCPCheckBoxChanged(bool /*checked*/)
-{
-	this->MCPSettingsContainer->setEnabled(false);
 }
 
 

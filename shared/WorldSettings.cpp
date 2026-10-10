@@ -119,7 +119,8 @@ WaterSurfaceWorldSettings::WaterSurfaceWorldSettings()
 	shoreline_width(2.4f),
 	foam_scale(1.6f),
 	foam_speed(0.45f),
-	foam_fade(0.68f)
+	foam_fade(0.68f),
+	underwater_caustics_enabled(true)
 {}
 
 
@@ -186,7 +187,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 
 // v14 marks the new presentation defaults.  The payload is unchanged; the
 // version lets readers distinguish old v13 defaults from explicit settings.
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 14;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 15;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -299,6 +300,7 @@ void WorldSettings::writeToStream(OutStream& stream) const
 	buffer.writeFloat(water_surface_settings.foam_scale);
 	buffer.writeFloat(water_surface_settings.foam_speed);
 	buffer.writeFloat(water_surface_settings.foam_fade);
+	buffer.writeUInt32(water_surface_settings.underwater_caustics_enabled ? 1u : 0u); // New in v15.
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
@@ -491,6 +493,8 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 							settings.water_surface_settings.foam_scale = buffer_stream.readFloat();
 							settings.water_surface_settings.foam_speed = buffer_stream.readFloat();
 							settings.water_surface_settings.foam_fade = buffer_stream.readFloat();
+							if(version >= 15 && buffer_stream.buf.size() - buffer_stream.getReadIndex() >= sizeof(uint32))
+								settings.water_surface_settings.underwater_caustics_enabled = buffer_stream.readUInt32() != 0;
 						}
 					}
 				}

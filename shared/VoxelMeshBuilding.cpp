@@ -126,7 +126,7 @@ public:
 
 
 template <class VertPosKeyType, typename VertPosIntType, class VertPosKeyHashFunc>
-static void makeVoxelMeshForVertPosKeyType(const VoxelBounds& bounds_, const Vec3<int>& res_, const Array3D<VoxelMatIndexType>& voxel_array, size_t num_orig_voxels, const js::Vector<bool, 16>& mats_transparent_, Indigo::Mesh* mesh, glare::Allocator* mem_allocator)
+static void makeVoxelMeshForVertPosKeyType(const VoxelBounds& bounds_, const Vec3<int>& res_, const Array3D<VoxelMatIndexType>& voxel_array, size_t num_voxels, const std::vector<uint8> occupied_slices[3], const js::Vector<bool, 16>& mats_transparent_, Indigo::Mesh* mesh, glare::Allocator* mem_allocator)
 {
 	const VoxelBounds bounds = bounds_;
 	const Vec3<int> res = res_;
@@ -138,11 +138,16 @@ static void makeVoxelMeshForVertPosKeyType(const VoxelBounds& bounds_, const Vec
 		mat_transparent[i] = (i < mats_transparent_.size()) && mats_transparent_[i];
 
 	// Hash map from voxel coordinates to index of created vertex in mesh->vert_positions.
-	// Note that a lot of voxel models create not a lot of vertices.  So don't start the hashmap with too large a size, or it just wastes memory.
+	// Greedy meshes usually have far fewer vertices than voxels, but large and
+	// irregular voxel models can still create many vertices.  Reserving only
+	// 1% of the voxel count makes the hash table repeatedly grow while building
+	// those models.  Start with a bounded estimate to reduce rehashing without
+	// allocating a very large table for every model.
 	VertPosKeyType vertpos_empty_key;
 	vertpos_empty_key.v[0] = vertpos_empty_key.v[1] = vertpos_empty_key.v[2] = 0;
 	vertpos_empty_key.misc = 0;
-	HashMap<VertPosKeyType, int, VertPosKeyHashFunc> vertpos_hash(/*empty key=*/vertpos_empty_key, /*expected_num_items=*/num_orig_voxels / 100, mem_allocator);
+	const size_t expected_num_vertices = myMin<size_t>(myMax<size_t>(num_voxels / 2, 64), 262144);
+	HashMap<VertPosKeyType, int, VertPosKeyHashFunc> vertpos_hash(/*empty key=*/vertpos_empty_key, expected_num_vertices, mem_allocator);
 
 
 	const int dim_mask_val = (int)std::numeric_limits<VertPosIntType>::max();
@@ -193,6 +198,12 @@ static void makeVoxelMeshForVertPosKeyType(const VoxelBounds& bounds_, const Vec
 		for(int dim_coord = 0; dim_coord < dim_size; ++dim_coord)
 		{
 			Vec3<int> vox_indices, adjacent_vox_indices; // pos coords of current voxel, and adjacent voxel
+
+			// An empty slice cannot contribute faces in either direction.  Sparse
+			// voxel models often have long gaps inside their bounds, so skip them
+			// rather than scanning the complete 2D slice twice.
+			if(!occupied_slices[dim][dim_coord])
+				continue;
 
 			//================= Do lower faces along dim ==========================
 			// Build face_needed_mat data for this slice
@@ -686,6 +697,11 @@ static Reference<Indigo::Mesh> doMakeIndigoMeshForVoxelGroupWith3dArray(const gl
 
 		const VoxelMatIndexType no_voxel_mat = std::numeric_limits<VoxelMatIndexType>::max();
 		Array3D<VoxelMatIndexType> voxel_array(res.x, res.y, res.z, no_voxel_mat, mem_allocator);
+		std::vector<uint8> occupied_slices[3];
+		occupied_slices[0].resize((size_t)res.x, 0);
+		occupied_slices[1].resize((size_t)res.y, 0);
+		occupied_slices[2].resize((size_t)res.z, 0);
+		size_t num_occupied_voxels = 0;
 
 		for(size_t i=0; i<voxels_size; ++i)
 		{
@@ -693,7 +709,13 @@ static Reference<Indigo::Mesh> doMakeIndigoMeshForVoxelGroupWith3dArray(const gl
 			const Vec4i orig_vox_pos = Vec4i(voxels[i].pos.x, voxels[i].pos.y, voxels[i].pos.z, 0);
 			const Vec4i vox_pos = shiftRightWithSignExtension(orig_vox_pos, subsample_shift_amount_b); // Shifting right with sign extension effectively divides by 2^subsample_shift_amount_b, rounding down.
 			const Vec4i indices = vox_pos - bounds_min;
-			voxel_array.elem(indices[0], indices[1], indices[2]) = (VoxelMatIndexType)voxel.mat_index;
+			VoxelMatIndexType& cell = voxel_array.elem(indices[0], indices[1], indices[2]);
+			if(cell == no_voxel_mat)
+				num_occupied_voxels++;
+			cell = (VoxelMatIndexType)voxel.mat_index;
+			occupied_slices[0][(size_t)indices[0]] = 1;
+			occupied_slices[1][(size_t)indices[1]] = 1;
+			occupied_slices[2][(size_t)indices[2]] = 1;
 		}
 
 		//if(voxel_array.getData().size() > 100000)
@@ -701,11 +723,11 @@ static Reference<Indigo::Mesh> doMakeIndigoMeshForVoxelGroupWith3dArray(const gl
 
 		if(res[0] <= 256 && res[1] <= 256 && res[2] <= 256)
 		{
-			makeVoxelMeshForVertPosKeyType<VertPosKeyInt8, uint8, VertPosKeyInt8HashFunc>(bounds, res, voxel_array, voxels.size(), mats_transparent_, mesh.ptr(), mem_allocator);
+			makeVoxelMeshForVertPosKeyType<VertPosKeyInt8, uint8, VertPosKeyInt8HashFunc>(bounds, res, voxel_array, num_occupied_voxels, occupied_slices, mats_transparent_, mesh.ptr(), mem_allocator);
 		}
 		else
 		{
-			makeVoxelMeshForVertPosKeyType<VertPosKeyInt16, uint16, VertPosKeyInt16HashFunc>(bounds, res, voxel_array, voxels.size(), mats_transparent_, mesh.ptr(), mem_allocator);
+			makeVoxelMeshForVertPosKeyType<VertPosKeyInt16, uint16, VertPosKeyInt16HashFunc>(bounds, res, voxel_array, num_occupied_voxels, occupied_slices, mats_transparent_, mesh.ptr(), mem_allocator);
 		}
 
 		mesh->endOfModel();

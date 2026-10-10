@@ -70,7 +70,81 @@ enum TerrainSculptTool
 	TerrainSculptTool_Ridge = 0,
 	TerrainSculptTool_Raise,
 	TerrainSculptTool_Lower,
-	TerrainSculptTool_SoftRaise
+	TerrainSculptTool_SoftRaise,
+	TerrainSculptTool_HardRaise,
+	TerrainSculptTool_SoftLower,
+	TerrainSculptTool_HardLower,
+	TerrainSculptTool_Pinch,
+	TerrainSculptTool_Inflate,
+	TerrainSculptTool_Deflate,
+	TerrainSculptTool_Clay,
+	TerrainSculptTool_Blob,
+	TerrainSculptTool_Amplify,
+	TerrainSculptTool_Dampen,
+	TerrainSculptTool_Smooth,
+	TerrainSculptTool_Polish,
+	TerrainSculptTool_Sharpen,
+	TerrainSculptTool_Flatten,
+	TerrainSculptTool_Plateau,
+	TerrainSculptTool_Ramp,
+	TerrainSculptTool_Cliff,
+	TerrainSculptTool_Wall,
+	TerrainSculptTool_Basin,
+	TerrainSculptTool_Gorge,
+	TerrainSculptTool_Berm,
+	TerrainSculptTool_Saddle,
+	TerrainSculptTool_Notch,
+	TerrainSculptTool_Lake,
+	TerrainSculptTool_Fill,
+	TerrainSculptTool_Lowland,
+	TerrainSculptTool_Coast,
+	TerrainSculptTool_Shelf,
+	TerrainSculptTool_Cove,
+	TerrainSculptTool_Spit,
+	TerrainSculptTool_River,
+	TerrainSculptTool_Channel,
+	TerrainSculptTool_Delta,
+	TerrainSculptTool_Sea,
+	TerrainSculptTool_StampVolcano,
+	TerrainSculptTool_StampCrater,
+	TerrainSculptTool_StampHill,
+	TerrainSculptTool_StampCone,
+	TerrainSculptTool_StampMesa,
+	TerrainSculptTool_StampCaldera,
+	TerrainSculptTool_StampRidge,
+	TerrainSculptTool_StampSpire,
+	TerrainSculptTool_StampPyramid,
+	TerrainSculptTool_StampBowl,
+	TerrainSculptTool_StampArch,
+	TerrainSculptTool_StampAtoll,
+	TerrainSculptTool_StampTwin,
+	TerrainSculptTool_StampDunes,
+	TerrainSculptTool_StampTor,
+	TerrainSculptTool_StampRamp,
+	TerrainSculptTool_IslandClassic,
+	TerrainSculptTool_IslandHigh,
+	TerrainSculptTool_IslandLow,
+	TerrainSculptTool_IslandBarrier,
+	TerrainSculptTool_IslandTwin,
+	TerrainSculptTool_IslandCaldera,
+	TerrainSculptTool_IslandMesa,
+	TerrainSculptTool_IslandRias,
+	TerrainSculptTool_IslandSpit,
+	TerrainSculptTool_IslandArch,
+	TerrainSculptTool_IslandChain,
+	TerrainSculptTool_IslandReef,
+	TerrainSculptTool_IslandRing,
+	TerrainSculptTool_IslandCrescent,
+	TerrainSculptTool_IslandStar,
+	TerrainSculptTool_IslandSpiral,
+	TerrainSculptTool_IslandSerpent,
+	TerrainSculptTool_IslandShards,
+	TerrainSculptTool_IslandCrystal,
+	TerrainSculptTool_IslandPlateau,
+	TerrainSculptTool_IslandMushroom,
+	TerrainSculptTool_IslandHeart,
+	TerrainSculptTool_IslandNeedle,
+	TerrainSculptTool_IslandLagoonChain
 };
 
 
@@ -78,6 +152,13 @@ struct TerrainSculptedHeightmap
 {
 	int x, y;
 	ImageMapFloatRef map;
+};
+
+struct TerrainSculptedMaskMap
+{
+	int x, y;
+	bool tree_mask;
+	ImageMapUInt8Ref map;
 };
 
 
@@ -92,7 +173,12 @@ struct TerrainDataSection
 	Map2DRef heightmap;
 	ImageMapFloatRef sculpt_heightmap;
 	OpenGLTextureRef heightmap_gl_tex;
+	OpenGLTextureRef sculpt_heightmap_gl_tex;
+	bool sculpt_heightmap_texture_dirty;
 	Map2DRef maskmap;
+	ImageMapUInt8Ref sculpt_maskmap;
+	ImageMapUInt8Ref sculpt_treemaskmap;
+	bool sculpt_maskmap_texture_dirty;
 	OpenGLTextureRef mask_gl_tex;
 
 	Map2DRef treemaskmap;
@@ -213,13 +299,25 @@ public:
 	bool traceRay(const Vec3d& origin, const Vec3d& direction, Vec3d& hit_pos_out) const;
 	void beginSculptStroke();
 	void endSculptStroke();
-	bool sculptAtWorld(const Vec3d& hit_pos, TerrainSculptTool tool, float radius_m, float strength_m);
+	bool sculptAtWorld(const Vec3d& hit_pos, const Vec3d* previous_hit_pos, TerrainSculptTool tool,
+		float radius_m, float strength_m, float target_height_m,
+		float island_sea_floor_m = -85.f, float island_land_base_m = 8.f,
+		float island_peak_m = 282.f, int island_seed = 42);
+	static float getIslandPreviewHeight(int island_kind, float u, float v, int seed,
+		float sea_floor_m, float land_base_m, float peak_m);
+	bool paintTerrainMapAtWorld(const Vec3d& hit_pos, float radius_m, float strength,
+		int channel, bool tree_mask, bool erase);
+	bool smoothAtWorld(const Vec3d& centre, float radius_m, float strength, int passes,
+		int* loaded_sections_out = NULL, int* skipped_sections_out = NULL);
+	bool isHeightmapSectionLoaded(int section_x, int section_y) const;
 	bool canUndoSculpt() const;
 	bool canRedoSculpt() const;
 	bool undoSculpt();
 	bool redoSculpt();
 	bool hasSculptedHeightmaps() const;
 	void getSculptedHeightmaps(std::vector<TerrainSculptedHeightmap>& maps_out) const;
+	bool hasSculptedMaskMaps() const;
+	void getSculptedMaskMaps(std::vector<TerrainSculptedMaskMap>& maps_out) const;
 
 	bool isTerrainFullyBuilt();
 
@@ -243,12 +341,15 @@ private:
 	void updateReferenceMaskOverlay(int section_x, int section_y, TerrainDataSection& section);
 	void updateReferenceMaskDecalTransforms(float camera_z);
 	void rebuildAfterSculptIfNeeded();
+	void updateSculptedHeightmapTextures();
 	ImageMapFloatRef makeEditableHeightmap(TerrainDataSection& section);
 	TerrainDataSection* getSectionForSculptCoords(int section_x, int section_y);
 	const TerrainDataSection* getSectionForSculptCoords(int section_x, int section_y) const;
 	struct TerrainSculptPatch;
+	struct TerrainSculptMaskPatch;
 	struct TerrainSculptStroke;
 	void applySculptPatch(const TerrainSculptPatch& patch, bool use_after_values);
+	void applySculptMaskPatch(const TerrainSculptMaskPatch& patch, bool use_after_values);
 
 	GLARE_DISABLE_COPY(TerrainSystem);
 
@@ -290,9 +391,19 @@ private:
 		std::vector<float> after;
 	};
 
+	struct TerrainSculptMaskPatch
+	{
+		int section_x, section_y;
+		bool tree_mask;
+		int width, height, channels;
+		std::vector<uint8> before;
+		std::vector<uint8> after;
+	};
+
 	struct TerrainSculptStroke
 	{
 		std::vector<TerrainSculptPatch> patches;
+		std::vector<TerrainSculptMaskPatch> mask_patches;
 	};
 
 	std::vector<TerrainSculptStroke> sculpt_undo_stack;
@@ -300,6 +411,8 @@ private:
 	TerrainSculptStroke current_sculpt_stroke;
 	bool sculpt_stroke_active;
 	bool sculpt_geometry_rebuild_pending;
+	bool sculpt_material_mask_upload_pending;
+	bool sculpt_tree_scattering_rebuild_pending;
 
 	// Terrain chunks are generated on worker threads while sculpting changes an
 	// ImageMapFloat on the GUI thread.  A generated chunk must see one complete

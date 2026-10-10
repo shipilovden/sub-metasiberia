@@ -15,6 +15,7 @@ Copyright Glare Technologies Limited 2021 -
 #include "opengl/OpenGLMeshRenderData.h"
 #include "graphics/FormatDecoderGLTF.h"
 #include "../dll/include/IndigoMesh.h"
+#include <cmath>
 #include <utils/ConPrint.h>
 #include <utils/StringUtils.h>
 #include <utils/FileInStream.h>
@@ -121,6 +122,67 @@ inline static void clearProceduralRotation(js::Vector<GLObjectAnimNodeData, 16>&
 {
 	if(node_index >= 0 && node_index < (int)anim_node_data.size())
 		anim_node_data[node_index].procedural_rot_mask = 0;
+}
+
+static Matrix4f riderNodeTransform(const GLObject& ob, int node_i)
+{
+	const GLObjectAnimNodeData& node = ob.anim_node_data[node_i];
+	const int parent_i = ob.mesh_data->animation_data.nodes[node_i].parent_index;
+	if(parent_i < 0) return node.last_pre_proc_to_object * node.procedural_transform;
+	Matrix4f old_parent_inverse;
+	ob.anim_node_data[parent_i].node_hierarchical_to_object.getInverseForAffine3Matrix(old_parent_inverse);
+	return riderNodeTransform(ob, parent_i) * old_parent_inverse * node.last_pre_proc_to_object * node.procedural_transform;
+}
+
+// Apply a world-space rotation to a rider bone around its current pivot.
+static void rotateRiderBoneAroundPivot(GLObject& ob, int node_i, const Matrix4f& rotation_ws)
+{
+	const Matrix4f current = ob.ob_to_world_matrix * riderNodeTransform(ob, node_i);
+	Matrix4f current_inverse;
+	current.getInverseForAffine3Matrix(current_inverse);
+	const Vec4f pivot = current.getColumn(3);
+	ob.anim_node_data[node_i].procedural_transform = ob.anim_node_data[node_i].procedural_transform * current_inverse *
+		Matrix4f::translationMatrix(pivot) * rotation_ws * Matrix4f::translationMatrix(-pivot) * current;
+}
+
+static void rotateRiderBone(GLObject& ob, int node_i, const Vec4f& from_ws, const Vec4f& to_ws)
+{
+	if(from_ws.length() < 1.e-5f || to_ws.length() < 1.e-5f) return;
+	const Vec4f from = normalise(from_ws), to = normalise(to_ws);
+	Vec4f axis = crossProduct(from, to);
+	const float cosine = myClamp(dot(from, to), -1.0f, 1.0f);
+	if(axis.length() < 1.e-5f) { if(cosine > 0) return; axis = crossProduct(from, std::fabs(from[0]) < 0.9f ? Vec4f(1,0,0,0) : Vec4f(0,1,0,0)); }
+	rotateRiderBoneAroundPivot(ob, node_i, Quatf::fromAxisAndAngle(normalise(axis), std::acos(cosine)).toMatrix());
+}
+
+static void solveSnowboardLeg(GLObject& ob, int thigh_i, int knee_i, int foot_i, const Vec4f& target_ws,
+	const Matrix4f& seat_to_world, const Matrix4f& avatar_to_seat, float toe_angle)
+{
+	const Vec4f hip = (ob.ob_to_world_matrix * riderNodeTransform(ob, thigh_i)).getColumn(3);
+	Vec4f knee = (ob.ob_to_world_matrix * riderNodeTransform(ob, knee_i)).getColumn(3);
+	Vec4f foot = (ob.ob_to_world_matrix * riderNodeTransform(ob, foot_i)).getColumn(3);
+	const float a = hip.getDist(knee), b = knee.getDist(foot), distance = hip.getDist(target_ws);
+	if(a < 1.e-4f || b < 1.e-4f || distance < 1.e-4f) return;
+	const float c = myClamp(distance, std::fabs(a-b) + 1.e-4f, a+b - 1.e-4f);
+	const Vec4f down = normalise(target_ws - hip);
+	const Vec4f forward = seat_to_world * Vec4f(0,1,0,0);
+	const Vec4f pole = forward - down * dot(forward, down);
+	if(pole.length() < 1.e-4f) return;
+	const float along = (a*a + c*c - b*b) / (2*c);
+	const Vec4f knee_target = hip + down * along + normalise(pole) * std::sqrt(myMax(0.0f, a*a - along*along));
+	rotateRiderBone(ob, thigh_i, knee - hip, knee_target - hip);
+	knee = (ob.ob_to_world_matrix * riderNodeTransform(ob, knee_i)).getColumn(3);
+	foot = (ob.ob_to_world_matrix * riderNodeTransform(ob, foot_i)).getColumn(3);
+	rotateRiderBone(ob, knee_i, foot - knee, target_ws - knee);
+	Matrix4f bind_foot;
+	ob.mesh_data->animation_data.nodes[foot_i].inverse_bind_matrix.getInverseForAffine3Matrix(bind_foot);
+	const Matrix4f desired = seat_to_world * Matrix4f::rotationAroundZAxis(toe_angle) * avatar_to_seat * bind_foot;
+	const Matrix4f current_foot = ob.ob_to_world_matrix * riderNodeTransform(ob, foot_i);
+	Matrix4f flat = current_foot;
+	for(int axis=0; axis<3; ++axis) if(desired.getColumn(axis).length() > 1.e-5f) flat.setColumn(axis, normalise(desired.getColumn(axis)) * current_foot.getColumn(axis).length());
+	Matrix4f inverse;
+	current_foot.getInverseForAffine3Matrix(inverse);
+	ob.anim_node_data[foot_i].procedural_transform = ob.anim_node_data[foot_i].procedural_transform * inverse * flat;
 }
 
 
@@ -233,9 +295,21 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 		
 		const Vec4f up_os(0,1,0,0);
 
+		// These bones are procedurally constrained only while riding a snowboard.
+		// Clear the previous frame before applying the current rider pose.
+		const int foot_indices[2] = { left_foot_node_i, right_foot_node_i };
+		for(int i=0; i<2; ++i)
+			if(foot_indices[i] >= 0 && foot_indices[i] < (int)anim_node_data.size())
+				anim_node_data[foot_indices[i]].procedural_transform = Matrix4f::identity();
+		if(spine2_node_i >= 0 && spine2_node_i < (int)anim_node_data.size())
+			anim_node_data[spine2_node_i].procedural_transform = Matrix4f::identity();
 		if(pose_constraint.sitting)
 		{
 			new_anim_i = idle_anim_i;
+			if(left_foot_node_i >= 0 && left_foot_node_i < (int)skinned_gl_ob->anim_node_data.size())
+				skinned_gl_ob->anim_node_data[left_foot_node_i].procedural_transform = Matrix4f::identity();
+			if(right_foot_node_i >= 0 && right_foot_node_i < (int)skinned_gl_ob->anim_node_data.size())
+				skinned_gl_ob->anim_node_data[right_foot_node_i].procedural_transform = Matrix4f::identity();
 
 			const Vec4f seat_right_ws = pose_constraint.seat_to_world * Vec4f(1,0,0,0);
 			avatar_rotation.z = std::atan2(seat_right_ws[1], seat_right_ws[0]) + Maths::pi_2<float>();
@@ -248,7 +322,37 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 			}
 
 			// pre_ob_to_world_matrix will rotate avatars from y-up and z-forwards to z-up and -y forwards.  Rotate around z axis to change to +y-forwards
-			skinned_gl_ob->ob_to_world_matrix = pose_constraint.seat_to_world * /*move hips to seat position=*/Matrix4f::translationMatrix(-hips_pos_os) * Matrix4f::rotationAroundZAxis(Maths::pi<float>()) * pre_ob_to_world_matrix;
+			float snowboard_leg_length = 0.9f;
+			const bool snowboard_legs = pose_constraint.snowboarding &&
+				left_up_leg_node_i >= 0 && right_up_leg_node_i >= 0 && left_knee_node_i >= 0 && right_knee_node_i >= 0 && left_foot_node_i >= 0 && right_foot_node_i >= 0 &&
+				left_up_leg_node_i < (int)anim_node_data.size() && right_up_leg_node_i < (int)anim_node_data.size() &&
+				left_knee_node_i < (int)anim_node_data.size() && right_knee_node_i < (int)anim_node_data.size() &&
+				left_foot_node_i < (int)anim_node_data.size() && right_foot_node_i < (int)anim_node_data.size();
+			if(snowboard_legs)
+			{
+				const Vec4f hip = (skinned_gl_ob->ob_to_world_matrix * anim_node_data[left_up_leg_node_i].last_pre_proc_to_object).getColumn(3);
+				const Vec4f knee = (skinned_gl_ob->ob_to_world_matrix * anim_node_data[left_knee_node_i].last_pre_proc_to_object).getColumn(3);
+				const Vec4f foot = (skinned_gl_ob->ob_to_world_matrix * anim_node_data[left_foot_node_i].last_pre_proc_to_object).getColumn(3);
+				snowboard_leg_length = myClamp(hip.getDist(knee) + knee.getDist(foot), 0.1f, 4.0f);
+			}
+			if(pose_constraint.snowboarding)
+			{
+				clearProceduralRotation(anim_node_data, left_arm_node_i);
+				clearProceduralRotation(anim_node_data, right_arm_node_i);
+				clearProceduralRotation(anim_node_data, left_forearm_node_i);
+				clearProceduralRotation(anim_node_data, right_forearm_node_i);
+				clearProceduralRotation(anim_node_data, left_hand_node_i);
+				clearProceduralRotation(anim_node_data, right_hand_node_i);
+
+				const float crouch = myClamp(pose_constraint.snowboard_crouch, 0.f, 1.f);
+				// Keep the hips slightly lower than the standing bind pose so both
+				// boots stay seated in the bindings instead of floating above them.
+				const Vec4f hip_offset(0, -snowboard_leg_length * (0.08f + 0.16f*crouch), snowboard_leg_length * (0.90f - 0.27f*crouch), 0);
+				skinned_gl_ob->ob_to_world_matrix = pose_constraint.seat_to_world * pose_constraint.snowboard_pelvis_delta_ss * Matrix4f::rotationAroundXAxis(pose_constraint.snowboard_lean) *
+					Matrix4f::translationMatrix(hip_offset - hips_pos_os) * Matrix4f::rotationAroundZAxis(Maths::pi<float>()) * pre_ob_to_world_matrix;
+			}
+			else
+				skinned_gl_ob->ob_to_world_matrix = pose_constraint.seat_to_world * /*move hips to seat position=*/Matrix4f::translationMatrix(-hips_pos_os) * Matrix4f::rotationAroundZAxis(Maths::pi<float>()) * pre_ob_to_world_matrix;
 
 			Matrix4f world_to_ob_matrix;
 			skinned_gl_ob->ob_to_world_matrix.getInverseForAffine3Matrix(world_to_ob_matrix);
@@ -256,7 +360,7 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 
 			if(hips_node_i >= 0 && hips_node_i < (int)skinned_gl_ob->anim_node_data.size()) // Upper torso
 			{
-				skinned_gl_ob->anim_node_data[hips_node_i].procedural_transform = Matrix4f::rotationAroundXAxis(-pose_constraint.upper_body_rot_angle); // Apply recline rotation to upper body (lean back)
+				skinned_gl_ob->anim_node_data[hips_node_i].procedural_transform = Matrix4f::rotationAroundXAxis(-pose_constraint.upper_body_rot_angle); // Apply recline rotation to upper body.
 			}
 
 			if(	left_foot_node_i >= 0  && left_foot_node_i < (int)skinned_gl_ob->anim_node_data.size() && 
@@ -296,6 +400,17 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 				skinned_gl_ob->anim_node_data[right_knee_node_i].procedural_transform = Matrix4f::rotationAroundZAxis( pose_constraint.rotate_foot_out_angle) * /*move lower leg out=*/Matrix4f::rotationAroundYAxis(-pose_constraint.lower_leg_apart_angle) * Matrix4f::rotationAroundXAxis(pose_constraint.lower_leg_rot_angle);
 			}
 
+			if(snowboard_legs)
+			{
+				const Matrix4f avatar_to_seat = Matrix4f::rotationAroundZAxis(Maths::pi<float>()) * pre_ob_to_world_matrix;
+				const float half_stance = snowboard_leg_length * 0.30f;
+				const float ankle_height = snowboard_leg_length * 0.09f;
+				const float binding_offset_y = -0.12f;
+				const Vec4f left_target = isFinite(pose_constraint.left_foot_point_ws[0]) ? pose_constraint.left_foot_point_ws : pose_constraint.seat_to_world * Vec4f(-half_stance,binding_offset_y,ankle_height,1);
+				const Vec4f right_target = isFinite(pose_constraint.right_foot_point_ws[0]) ? pose_constraint.right_foot_point_ws : pose_constraint.seat_to_world * Vec4f(half_stance,binding_offset_y,ankle_height,1);
+				solveSnowboardLeg(*skinned_gl_ob, left_up_leg_node_i, left_knee_node_i, left_foot_node_i, left_target, pose_constraint.seat_to_world, avatar_to_seat, 0.25f);
+				solveSnowboardLeg(*skinned_gl_ob, right_up_leg_node_i, right_knee_node_i, right_foot_node_i, right_target, pose_constraint.seat_to_world, avatar_to_seat, -0.25f);
+			}
 
 			// Inverse kinematics for left arm grab
 			const bool do_left_arm_IK_grab = isFinite(pose_constraint.left_hand_hold_point_ws[0]);
@@ -493,6 +608,26 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 				{
 					anim_node_data[right_forearm_node_i].procedural_transform = Matrix4f::rotationAroundXAxis(-pose_constraint.lower_arm_up_angle);
 				}
+			}
+
+			// Apply the snowboard rider physics deviations after the regular seated
+			// pose has positioned the arms.  The rotations are expressed in seat
+			// space and applied around each bone's current pivot.
+			if(pose_constraint.snowboarding)
+			{
+				Matrix4f seat_rot = pose_constraint.seat_to_world;
+				seat_rot.setColumn(3, Vec4f(0,0,0,1));
+				Matrix4f seat_rot_inverse;
+				seat_rot.getInverseForAffine3Matrix(seat_rot_inverse);
+				const int node_indices[5] = { spine2_node_i, left_arm_node_i, right_arm_node_i, left_forearm_node_i, right_forearm_node_i };
+				const Quatf rots_ss[5] = {
+					pose_constraint.snowboard_chest_rot_ss,
+					pose_constraint.snowboard_upper_arm_rot_ss[0], pose_constraint.snowboard_upper_arm_rot_ss[1],
+					pose_constraint.snowboard_forearm_rot_ss[0], pose_constraint.snowboard_forearm_rot_ss[1]
+				};
+				for(int i=0; i<5; ++i)
+					if(node_indices[i] >= 0 && node_indices[i] < (int)anim_node_data.size())
+						rotateRiderBoneAroundPivot(*skinned_gl_ob, node_indices[i], seat_rot * rots_ss[i].toMatrix() * seat_rot_inverse);
 			}
 
 			//------------------- Set grabbing pose for hands and fingers if doing IK grabbing -----------------------

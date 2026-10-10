@@ -4,6 +4,7 @@ WorldMaintenance.cpp
 Copyright Glare Technologies Limited 2024 -
 =====================================================================*/
 #include "WorldMaintenance.h"
+#include "../shared/VehiclesShared.h"
 
 
 #include <graphics/Map2D.h>
@@ -181,6 +182,7 @@ void WorldMaintenance::removeOldVehicles(Reference<ServerAllWorldsState> all_wor
 	int num_boats_deleted = 0;
 	int num_cars_deleted = 0;
 	int num_jetskis_deleted = 0;
+	int num_snowboards_deleted = 0;
 
 	for(auto it = all_worlds_state->world_states.begin(); it != all_worlds_state->world_states.end(); ++it)
 	{
@@ -230,6 +232,13 @@ void WorldMaintenance::removeOldVehicles(Reference<ServerAllWorldsState> all_wor
 					delete_ob = true;
 				}
 
+				if(object->model_url == VehiclesShared::snowboardModelURL() && object->materials.size() == 1 &&
+					object->materials[0]->colour_rgb == Colour3f(0.99999994,0.99999994,0.99999994))
+				{
+					++num_snowboards_deleted;
+					delete_ob = true;
+				}
+
 				if(delete_ob)
 				{
 					// Mark object as dead
@@ -243,7 +252,7 @@ void WorldMaintenance::removeOldVehicles(Reference<ServerAllWorldsState> all_wor
 		}
 	}
 
-	if((num_bikes_deleted > 0) || (num_hovercars_deleted > 0) || (num_boats_deleted > 0) || (num_cars_deleted > 0) || (num_jetskis_deleted > 0))
+	if((num_bikes_deleted > 0) || (num_hovercars_deleted > 0) || (num_boats_deleted > 0) || (num_cars_deleted > 0) || (num_jetskis_deleted > 0) || (num_snowboards_deleted > 0))
 		conPrint("WorldMaintenance::removeOldVehicles(): removed " + toString(num_bikes_deleted) + " bike(s), " + toString(num_hovercars_deleted) + " hovercar(s), " + 
-			toString(num_cars_deleted) + " car(s), " + toString(num_boats_deleted) + " boat(s) and " + toString(num_jetskis_deleted) + " jetskis(s)");
+			toString(num_cars_deleted) + " car(s), " + toString(num_boats_deleted) + " boat(s), " + toString(num_jetskis_deleted) + " jetski(s) and " + toString(num_snowboards_deleted) + " snowboard(s)");
 }
