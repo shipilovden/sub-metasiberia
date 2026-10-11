@@ -10,6 +10,9 @@ Copyright Glare Technologies Limited 2023 -
 
 
 class QSettings;
+class QPushButton;
+class QLabel;
+class QDoubleSpinBox;
 
 
 class TerrainSpecSectionWidget : public QWidget, public Ui::TerrainSpecSectionWidget
@@ -21,6 +24,16 @@ public:
 	~TerrainSpecSectionWidget();
 
 	void updateControlsEditable(bool editable);
+	void retranslateMapClearButtons();
+	void clearHeightMap();
+	void setMapPreviewPath(int index, const QString& path);
+	QDoubleSpinBox* mapScaleSpinBox(int index) const;
 signals:
 	void removeButtonClickedSignal();
+	void mapClearedSignal();
+private:
+	QPushButton* map_clear_buttons[5];
+	QLabel* map_preview_labels[5];
+	QLabel* map_scale_labels[5];
+	QDoubleSpinBox* map_scale_spin_boxes[5];
 };

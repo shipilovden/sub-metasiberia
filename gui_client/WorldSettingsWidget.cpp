@@ -56,6 +56,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
+#include <QtWidgets/QListView>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSlider>
@@ -734,6 +735,10 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	terrain_section_resize_drag_start_global_y(0),
 	terrain_section_resize_drag_start_height(0),
 	terrain_material_browser_target(-1),
+	terrain_height_clear_button(NULL),
+	world_terrain_sections_button(NULL),
+	world_materials_button(NULL),
+	world_terrain_geometry_button(NULL),
 	settings_tabs(NULL),
 	sculpting_tab(NULL),
 	sculpting_basic_accordion_button(NULL),
@@ -748,6 +753,12 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	sculpting_layers_accordion_button(NULL),
 	sculpting_layers_group(NULL),
 	sculpting_layers_list(NULL),
+	sculpting_real_islands_button(NULL),
+	sculpting_fantasy_islands_button(NULL),
+	sculpting_vegetation_button(NULL),
+	sculpting_real_islands_panel(NULL),
+	sculpting_fantasy_islands_panel(NULL),
+	sculpting_vegetation_panel(NULL),
 	sculpting_radius_spin_box(NULL),
 	sculpting_strength_spin_box(NULL),
 	sculpting_target_height_spin_box(NULL),
@@ -795,25 +806,61 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	real_terrain_import_thread(NULL)
 {
 	setupUi(this);
+	for(int i=0; i<24; ++i) sculpting_island_buttons[i] = NULL;
+	for(int i=0; i<2; ++i) sculpting_vegetation_buttons[i] = NULL;
+	const QString terrain_layer_names[4] = { tr("Rock"), tr("Ground / sand"), tr("Vegetation"), tr("Overlay material") };
 	for(int i=0; i<4; ++i)
 	{
+		terrain_material_clear_buttons[i] = NULL;
+		terrain_material_scale_spin_boxes[i] = NULL;
+		terrain_material_scale_labels[i] = NULL;
 		terrain_material_preview_labels[i] = new QLabel(this);
 		terrain_material_preview_labels[i]->setFixedSize(56, 38);
 		terrain_material_preview_labels[i]->setAlignment(Qt::AlignCenter);
 		terrain_material_preview_labels[i]->setFrameShape(QFrame::StyledPanel);
-		terrain_material_preview_labels[i]->setToolTip(tr("Preview of the terrain material texture"));
+		terrain_material_preview_labels[i]->setToolTip(tr("Preview of the texture assigned to World > Surface material textures > colour slot %1 (%2).").arg(i).arg(terrain_layer_names[i]));
 		QHBoxLayout* row_layout = findChild<QHBoxLayout*>(QString("detailColMapURLs%1RowLayout").arg(i));
 		FileSelectWidget* file_widget = findChild<FileSelectWidget*>(QString("detailColMapURLs%1FileSelectWidget").arg(i));
 		if(row_layout && file_widget)
 		{
 			row_layout->insertWidget(1, terrain_material_preview_labels[i]);
+			QLabel* scale_label = new QLabel(tr("Scale"), this);
+			scale_label->setObjectName(QString("terrainMaterialScale%1Label").arg(i));
+			scale_label->setToolTip(tr("Controls tiling for World > Surface material textures > colour slot %1 (%2). Higher values repeat it more often; lower values make its pattern larger.").arg(i).arg(terrain_layer_names[i]));
+			terrain_material_scale_labels[i] = scale_label;
+			row_layout->insertWidget(2, scale_label);
+			terrain_material_scale_spin_boxes[i] = new QDoubleSpinBox(this);
+			terrain_material_scale_spin_boxes[i]->setObjectName(QString("terrainMaterialScale%1SpinBox").arg(i));
+			terrain_material_scale_spin_boxes[i]->setRange(0.01, 100.0);
+			terrain_material_scale_spin_boxes[i]->setValue(1.0);
+			terrain_material_scale_spin_boxes[i]->setDecimals(2);
+			terrain_material_scale_spin_boxes[i]->setSingleStep(0.1);
+			terrain_material_scale_spin_boxes[i]->setSuffix(QStringLiteral(" ×"));
+			terrain_material_scale_spin_boxes[i]->setToolTip(tr("Controls tiling for World > Surface material textures > colour slot %1 (%2). Higher values repeat it more often; lower values make its pattern larger.").arg(i).arg(terrain_layer_names[i]));
+			row_layout->insertWidget(3, terrain_material_scale_spin_boxes[i]);
+			connect(terrain_material_scale_spin_boxes[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, i](double value)
+			{
+				if(main_window && main_window->gui_client.opengl_engine)
+					main_window->gui_client.opengl_engine->setDetailTextureScale(i, (float)value);
+				settingsChangedSlot();
+			});
+			terrain_material_clear_buttons[i] = new QPushButton(tr("Clear"), this);
+			terrain_material_clear_buttons[i]->setObjectName(QString("terrainMaterialClearButton%1").arg(i));
+			terrain_material_clear_buttons[i]->setToolTip(tr("Clear colour slot %1 (%2). The source image file is not deleted.").arg(i).arg(terrain_layer_names[i]));
+			row_layout->addWidget(terrain_material_clear_buttons[i]);
+			connect(terrain_material_clear_buttons[i], &QPushButton::clicked, this, [this, file_widget, i]()
+			{
+				file_widget->setFilename(QString());
+				updateTerrainMaterialPreview(i);
+				settingsChangedSlot();
+			});
 			QPushButton* browser_button = new QPushButton(tr("Choose material"), this);
 			browser_button->setObjectName(QString("terrainMaterialBrowserButton%1").arg(i));
-			browser_button->setToolTip(tr("Open the material browser and assign its colour texture to this terrain layer."));
+			browser_button->setToolTip(tr("Choose a texture for colour slot %1 (%2). Assigning it here makes it available to the matching brush in Sculpting > Surface layers.").arg(i).arg(terrain_layer_names[i]));
 			row_layout->addWidget(browser_button);
 			QPushButton* poly_haven_button = new QPushButton(tr("Poly Haven"), this);
 			poly_haven_button->setObjectName(QString("terrainPolyHavenButton%1").arg(i));
-			poly_haven_button->setToolTip(tr("Search Poly Haven textures, preview the albedo, and assign it to this layer."));
+			poly_haven_button->setToolTip(tr("Search Poly Haven textures for colour slot %1 (%2), preview the albedo, then assign the result here.").arg(i).arg(terrain_layer_names[i]));
 			row_layout->addWidget(poly_haven_button);
 			connect(poly_haven_button, &QPushButton::clicked, this, [this, i]() { browsePolyHavenTerrainTexture(i); });
 			connect(browser_button, &QPushButton::clicked, this, [this, i]()
@@ -829,10 +876,45 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 		}
 		updateTerrainMaterialPreview(i);
 	}
-	detailColMapURLs0FileSelectWidget->setToolTip(tr("Base-colour texture for the rock material layer. Paint the red channel of the terrain material mask to apply it."));
-	detailColMapURLs1FileSelectWidget->setToolTip(tr("Base-colour texture for the ground / sand material layer. Paint the green channel of the terrain material mask to apply it."));
-	detailColMapURLs2FileSelectWidget->setToolTip(tr("Base-colour texture for the vegetation material layer. Paint the blue channel of the terrain material mask to apply it."));
-	detailColMapURLs3FileSelectWidget->setToolTip(tr("Base-colour texture for the independent overlay layer. Paint the Overlay material layer to apply it over rock, ground and vegetation."));
+	terrain_material_clear_all_button = new QPushButton(tr("Clear all material textures"), this);
+	terrain_material_clear_all_button->setObjectName("terrainMaterialClearAllButton");
+	terrain_material_clear_all_button->setToolTip(tr("Clear the four colour texture slots and the rock micro-height texture in World > Surface material textures. Source image files are not deleted."));
+	connect(terrain_material_clear_all_button, &QPushButton::clicked, this, [this]()
+	{
+		for(int i=0; i<4; ++i)
+		{
+			FileSelectWidget* file_widget = findChild<FileSelectWidget*>(QString("detailColMapURLs%1FileSelectWidget").arg(i));
+			if(file_widget) file_widget->setFilename(QString());
+		}
+		detailHeightMapURLs0FileSelectWidget->setFilename(QString());
+		for(int i=0; i<4; ++i) updateTerrainMaterialPreview(i);
+		settingsChangedSlot();
+	});
+	terrain_relief_clear_all_button = new QPushButton(tr("Clear all terrain height maps"), this);
+	terrain_relief_clear_all_button->setObjectName("terrainReliefClearAllButton");
+	terrain_relief_clear_all_button->setToolTip(tr("Remove the height map from every terrain section, leaving a flat surface at the configured base elevation. Material, vegetation, tree, road and building maps remain assigned."));
+	connect(terrain_relief_clear_all_button, &QPushButton::clicked, this, [this]()
+	{
+		QLayout* layout = terrainSectionScrollAreaWidgetContents->layout();
+		if(layout)
+			for(int i=0; i<layout->count(); ++i)
+				if(TerrainSpecSectionWidget* section = dynamic_cast<TerrainSpecSectionWidget*>(layout->itemAt(i)->widget()))
+					section->clearHeightMap();
+		settingsChangedSlot();
+	});
+	terrain_height_clear_button = new QPushButton(tr("Clear"), this);
+	terrain_height_clear_button->setObjectName("terrainHeightClearButton");
+	terrain_height_clear_button->setToolTip(tr("Remove the rock micro-height texture from this world. The file itself is not deleted."));
+	detailHeightMapURLs0RowLayout->addWidget(terrain_height_clear_button);
+	connect(terrain_height_clear_button, &QPushButton::clicked, this, [this]()
+	{
+		detailHeightMapURLs0FileSelectWidget->setFilename(QString());
+		settingsChangedSlot();
+	});
+	detailColMapURLs0FileSelectWidget->setToolTip(tr("Assign the Rock texture to World > Surface material textures > colour slot 0. Then select Sculpting > Surface layers > Rock and drag on the terrain."));
+	detailColMapURLs1FileSelectWidget->setToolTip(tr("Assign the Ground / sand texture to World > Surface material textures > colour slot 1. Then select Sculpting > Surface layers > Ground / sand and drag on the terrain."));
+	detailColMapURLs2FileSelectWidget->setToolTip(tr("Assign the Vegetation texture to World > Surface material textures > colour slot 2. Then select Sculpting > Surface layers > Vegetation and drag on the terrain. This also controls grass."));
+	detailColMapURLs3FileSelectWidget->setToolTip(tr("Assign the Overlay texture to World > Surface material textures > colour slot 3. Then select Sculpting > Surface layers > Overlay and drag on the terrain."));
 	for(int i=0; i<17; ++i)
 		sculpting_tool_buttons[i] = NULL;
 	for(int i=0; i<21; ++i)
@@ -978,7 +1060,7 @@ void WorldSettingsWidget::browsePolyHavenTerrainTexture(int index)
 	dialog.setWindowTitle(tr("Poly Haven terrain textures"));
 	dialog.resize(620, 480);
 	QVBoxLayout* layout = new QVBoxLayout(&dialog);
-	QLabel* help = new QLabel(tr("Search CC0 textures. Select a result to load its colour map preview, then assign it to this terrain layer."), &dialog);
+	QLabel* help = new QLabel(tr("Browse the full Poly Haven texture catalogue or search by English material name. Select a result to preview its colour map, then assign it to this world material slot."), &dialog);
 	help->setWordWrap(true);
 	layout->addWidget(help);
 	QHBoxLayout* search_layout = new QHBoxLayout();
@@ -1018,11 +1100,6 @@ void WorldSettingsWidget::browsePolyHavenTerrainTexture(int index)
 	connect(search_button, &QPushButton::clicked, &dialog, [&dialog, query_edit, results, status, search_button, &request_serial]()
 	{
 		const QString query = query_edit->text().trimmed();
-		if(query.isEmpty())
-		{
-			status->setText(WorldSettingsWidget::tr("Enter search terms first."));
-			return;
-		}
 		const int serial = ++request_serial;
 		results->clear();
 		status->setText(WorldSettingsWidget::tr("Searching Poly Haven…"));
@@ -1035,7 +1112,7 @@ void WorldSettingsWidget::browsePolyHavenTerrainTexture(int index)
 		{
 			QJsonArray assets;
 			QString error;
-			try { assets = MCPTextures::search(QJsonObject{{"query", query}, {"limit", 24}}).value("assets").toArray(); }
+			try { assets = MCPTextures::search(QJsonObject{{"query", query}, {"limit", 10000}}).value("assets").toArray(); }
 			catch(const std::exception& e) { error = QString::fromUtf8(e.what()); }
 			QMetaObject::invokeMethod(QCoreApplication::instance(), [serial, assets, error, dialog_guard, results_guard, status_guard, search_guard]()
 			{
@@ -1051,7 +1128,7 @@ void WorldSettingsWidget::browsePolyHavenTerrainTexture(int index)
 					QListWidgetItem* item = new QListWidgetItem(QString("%1  —  %2").arg(asset.value("name").toString(), asset.value("category").toString()), results_guard);
 					item->setData(Qt::UserRole, asset.value("id").toString());
 				}
-				status_guard->setText(assets.isEmpty() ? WorldSettingsWidget::tr("No matching textures found.") : WorldSettingsWidget::tr("Select a result to load its colour texture preview."));
+				status_guard->setText(assets.isEmpty() ? WorldSettingsWidget::tr("No matching textures found.") : WorldSettingsWidget::tr("%1 textures found. Select one to preview its colour map.").arg(assets.size()));
 			});
 		});
 		QObject::connect(worker, &QThread::finished, worker, &QObject::deleteLater);
@@ -1089,7 +1166,8 @@ void WorldSettingsWidget::browsePolyHavenTerrainTexture(int index)
 			try
 			{
 				const QJsonObject files = QJsonDocument::fromJson(MCPTextures::fetch(QUrl(QString("https://api.polyhaven.com/files/%1").arg(id)))).object();
-				image = MCPTextures::map(files, {"Diffuse", "diff", "diffuse", "Color"}, "1k", true);
+				image = MCPTextures::map(files, {"Diffuse", "diff", "diffuse", "Color"}, "1k", false);
+				if(image.isNull()) image = MCPTextures::map(files, {"Diffuse", "diff", "diffuse", "Color"}, "2k", true);
 				QDir().mkpath(QtUtils::toQString(cache_dir));
 				path = QtUtils::toQString(cache_dir + "/polyhaven_" + QtUtils::toStdString(id) + "_1k.png");
 				if(!image.save(path, "PNG")) throw glare::Exception("Could not save the Poly Haven preview image.");
@@ -1110,7 +1188,6 @@ void WorldSettingsWidget::browsePolyHavenTerrainTexture(int index)
 		worker->start();
 		dialog.setProperty("polyHavenSelectedId", id);
 	});
-	query_edit->setText("sand");
 	search_button->click();
 	if(dialog.exec() == QDialog::Accepted && downloaded_paths->contains(selected_id))
 	{
@@ -1193,6 +1270,62 @@ void WorldSettingsWidget::createSculptingTab()
 	terrainSectionScrollArea->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
 	terrainSectionScrollAreaWidgetContents->setMinimumWidth(0);
 
+	// Keep the imported section maps, paintable materials and terrain dimensions
+	// together while retaining their original controls and settings bindings.
+	QWidget* world_panels[3] = { new QWidget(world_tab), new QWidget(world_tab), new QWidget(world_tab) };
+	QFormLayout* panel_forms[3];
+	for(int i=0; i<3; ++i)
+	{
+		panel_forms[i] = new QFormLayout(world_panels[i]);
+		panel_forms[i]->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+		panel_forms[i]->setRowWrapPolicy(QFormLayout::WrapLongRows);
+		panel_forms[i]->setLabelAlignment(Qt::AlignLeft | Qt::AlignTop);
+		world_panels[i]->setMinimumWidth(0);
+	}
+	int panel_row[3] = { 0, 0, 0 };
+	for(int source_row=0; source_row<=16; ++source_row)
+	{
+		const QFormLayout::TakeRowResult row = world_form_layout->takeRow(0);
+		const int panel = source_row < 2 ? 0 : source_row < 8 ? 1 : 2;
+		if(!row.labelItem && !row.fieldItem) continue;
+		if(row.labelItem && row.labelItem->widget()) row.labelItem->widget()->setParent(world_panels[panel]);
+		if(row.fieldItem && row.fieldItem->widget()) row.fieldItem->widget()->setParent(world_panels[panel]);
+		if(row.labelItem) panel_forms[panel]->setItem(panel_row[panel], QFormLayout::LabelRole, row.labelItem);
+		if(row.fieldItem) panel_forms[panel]->setItem(panel_row[panel], row.labelItem ? QFormLayout::FieldRole : QFormLayout::SpanningRole, row.fieldItem);
+		++panel_row[panel];
+	}
+	QToolButton* world_buttons[3] = {
+		world_terrain_sections_button = new QToolButton(world_tab),
+		world_materials_button = new QToolButton(world_tab),
+		world_terrain_geometry_button = new QToolButton(world_tab)
+	};
+	panel_forms[0]->addRow(terrain_relief_clear_all_button);
+	panel_forms[1]->insertRow(0, terrain_material_clear_all_button);
+	for(int i=0; i<3; ++i)
+	{
+		QToolButton* button = world_buttons[i];
+		const bool expanded = i == 1;
+		button->setCheckable(true);
+		button->setChecked(expanded);
+		button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		button->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+		world_form_layout->insertRow(i * 2, button);
+		world_form_layout->insertRow(i * 2 + 1, world_panels[i]);
+		QWidget* panel = world_panels[i];
+		if(!expanded) panel->hide();
+		connect(button, &QToolButton::toggled, this, [button, panel](bool expanded)
+		{
+			panel->setVisible(expanded);
+			button->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+		});
+	}
+	world_terrain_sections_button->setText(tr("Terrain section maps"));
+	world_materials_button->setText(tr("Surface material textures"));
+	world_terrain_geometry_button->setText(tr("Terrain geometry and water"));
+	world_terrain_sections_button->setToolTip(tr("Expand or collapse height, material and object masks imported for each terrain section."));
+	world_materials_button->setToolTip(tr("Expand or collapse texture slots used by the paintable surface layers."));
+	world_terrain_geometry_button->setToolTip(tr("Expand or collapse terrain size, elevation and water level settings."));
+
 	settings_tabs = new QTabWidget(this);
 	settings_tabs->setMinimumWidth(0);
 	settings_tabs->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
@@ -1229,7 +1362,7 @@ void WorldSettingsWidget::createSculptingTab()
 	sculpting_strength_spin_box->setValue(1.0);
 	sculpting_strength_spin_box->setDecimals(2);
 	sculpting_strength_spin_box->setSuffix(tr(" m"));
-	sculpting_strength_spin_box->setToolTip(tr("Controls height change in metres. For surface and tree masks it also controls paint opacity: roughly 10% per strength unit."));
+	sculpting_strength_spin_box->setToolTip(tr("Controls height change in metres. For material and tree masks, strength sets paint opacity; Paint grass uses this value as its opacity, so the default 1.0 paints full grass weight at the brush centre."));
 	sculpting_strength_label = new QLabel(tr("Strength"), sculpting_tab);
 	brush_layout->addRow(sculpting_strength_label, sculpting_strength_spin_box);
 
@@ -1243,8 +1376,8 @@ void WorldSettingsWidget::createSculptingTab()
 	brush_layout->addRow(sculpting_target_height_label, sculpting_target_height_spin_box);
 	sculpting_layout->addLayout(brush_layout);
 
-	sculpting_map_target_label = new QLabel(tr("Edit / generate"), sculpting_tab);
-	sculpting_map_target_label->setToolTip(tr("Choose whether strokes sculpt height, paint a surface or vegetation mask, or place an island."));
+	sculpting_map_target_label = new QLabel(tr("Action"), sculpting_tab);
+	sculpting_map_target_label->setToolTip(tr("Choose the map changed by this mode: World > Terrain section maps > Height map, World > Terrain section maps > Tree mask, or World > Surface material textures > colour slot 0 (Rock), 1 (Ground / sand), 2 (Vegetation), or 3 (Overlay)."));
 	sculpting_map_target_combo = new QComboBox(sculpting_tab);
 	sculpting_map_target_combo->addItem(tr("Terrain height"), 0);
 	sculpting_map_target_combo->addItem(tr("Rock material"), 1);
@@ -1280,20 +1413,20 @@ void WorldSettingsWidget::createSculptingTab()
 	sculpting_map_target_combo->setItemIcon(sculpting_map_target_combo->findData(32), makeTerrainLayerPreviewIcon(QColor(72, 150, 58)));
 	sculpting_map_target_combo->setItemIcon(sculpting_map_target_combo->findData(33), makeTerrainLayerPreviewIcon(QColor(52, 118, 44)));
 	sculpting_map_target_combo->setItemData(sculpting_map_target_combo->findData(32),
-		tr("Paint procedural grass by adding vegetation. Trees are blocked in the painted area."), Qt::ToolTipRole);
+		tr("Paint World > Surface material textures > colour slot 2 (Vegetation) to grow procedural grass. Trees are blocked in the painted area."), Qt::ToolTipRole);
 	sculpting_map_target_combo->setItemData(sculpting_map_target_combo->findData(33),
-		tr("Paint procedural grass and allow trees in the painted area."), Qt::ToolTipRole);
+		tr("Paint World > Surface material textures > colour slot 2 (Vegetation) to grow procedural grass. World > Terrain section maps > Tree mask permits trees in the painted area."), Qt::ToolTipRole);
 	sculpting_map_target_combo->setIconSize(QSize(48, 30));
 	const int target_icons[8] = { -1, 0, 1, 2, -1, -1, -1, 3 };
 	const QString target_tooltips[8] = {
 		tr("Sculpt terrain height; click or drag across the terrain."),
-		tr("Paint the rock surface weight. Assign a rock texture in World settings to see the material."),
-		tr("Paint the ground and sand surface weight. Assign a texture in World settings to see the material."),
-		tr("Paint the vegetation surface weight. This mask also controls terrain vegetation scattering."),
-		tr("Paint the tree placement mask to allow trees in this area."),
-		tr("Paint the tree placement mask to block trees in this area."),
-		tr("Restore the imported surface and tree masks in the brushed area."),
-		tr("Paint the independent overlay texture, such as beach, snow, or rock." )
+		tr("To paint Rock, assign a texture in World > Surface material textures > colour slot 0 (Rock), then select Rock here and drag on the terrain. Without a texture, only the mask changes."),
+		tr("To paint Ground / sand, assign a texture in World > Surface material textures > colour slot 1 (Ground / sand), then select Ground / sand here and drag on the terrain. Without a texture, only the mask changes."),
+		tr("To paint Vegetation, assign a texture in World > Surface material textures > colour slot 2 (Vegetation), then select Vegetation here and drag on the terrain. This also controls procedural grass."),
+		tr("Paint World > Terrain section maps > Tree mask to allow trees in this area."),
+		tr("Paint World > Terrain section maps > Tree mask to block trees in this area."),
+		tr("Restore the imported surface and tree masks from World > Terrain section maps in the brushed area."),
+		tr("To paint Overlay, assign a texture in World > Surface material textures > colour slot 3 (Overlay), then select Overlay here and drag on the terrain. Use it for beach, snow or another surface.")
 	};
 	for(int i=0; i<8; ++i)
 	{
@@ -1328,9 +1461,31 @@ void WorldSettingsWidget::createSculptingTab()
 	const int fantasy_island_item = sculpting_map_target_combo->findData(20);
 	if(real_island_item > 0) sculpting_map_target_combo->setItemText(real_island_item - 1, tr("Real islands"));
 	if(fantasy_island_item > 0) sculpting_map_target_combo->setItemText(fantasy_island_item - 1, tr("Fantasy islands"));
-	QFormLayout* map_target_layout = new QFormLayout();
+	QListView* compact_target_view = new QListView(sculpting_map_target_combo);
+	sculpting_map_target_combo->setView(compact_target_view);
+	for(int i=0; i<sculpting_map_target_combo->count(); ++i)
+	{
+		const QVariant target = sculpting_map_target_combo->itemData(i);
+		if(!target.isValid() || target.toInt() >= 8)
+			compact_target_view->setRowHidden(i, true);
+	}
+	sculpting_map_target_accordion_button = new QToolButton(sculpting_tab);
+	sculpting_map_target_accordion_button->setText(tr("Edit and generate"));
+	sculpting_map_target_accordion_button->setCheckable(true);
+	sculpting_map_target_accordion_button->setChecked(true);
+	sculpting_map_target_accordion_button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	sculpting_map_target_accordion_button->setArrowType(Qt::DownArrow);
+	sculpting_map_target_accordion_button->setToolTip(tr("Expand or collapse the active terrain editing mode selector."));
+	sculpting_layout->addWidget(sculpting_map_target_accordion_button);
+	sculpting_map_target_panel = new QWidget(sculpting_tab);
+	QFormLayout* map_target_layout = new QFormLayout(sculpting_map_target_panel);
 	map_target_layout->addRow(sculpting_map_target_label, sculpting_map_target_combo);
-	sculpting_layout->addLayout(map_target_layout);
+	sculpting_layout->addWidget(sculpting_map_target_panel);
+	connect(sculpting_map_target_accordion_button, &QToolButton::toggled, this, [this](bool expanded)
+	{
+		sculpting_map_target_panel->setVisible(expanded);
+		sculpting_map_target_accordion_button->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+	});
 
 	sculpting_layers_accordion_button = new QToolButton(sculpting_tab);
 	sculpting_layers_accordion_button->setText(tr("Surface layers"));
@@ -1353,16 +1508,82 @@ void WorldSettingsWidget::createSculptingTab()
 	{
 		QListWidgetItem* item = new QListWidgetItem(makeTerrainLayerPreviewIcon(material_layer_colours[i]), material_layer_names[i]);
 		item->setData(Qt::UserRole, i == 3 ? 7 : i + 1);
-		item->setToolTip(i == 0 ? tr("Paint the rock weight map. The assigned rock texture appears where this layer has weight.") :
-			i == 1 ? tr("Paint the ground / sand weight map. The assigned ground texture appears where this layer has weight.") :
-			i == 2 ? tr("Paint the vegetation weight map. Tree placement also depends on the separate tree mask.") :
-			tr("Paint an independent overlay, such as beach or snow. This layer blends over the three base materials."));
+		item->setToolTip(target_tooltips[i == 3 ? 7 : i + 1]);
 		item->setSizeHint(QSize(0, 34));
-		item->setToolTip(item->toolTip() + tr(" Surface texture is assigned in the World tab. Select this row, then paint in the scene."));
 		sculpting_layers_list->addItem(item);
 	}
 	sculpting_layers_layout->addWidget(sculpting_layers_list);
 	sculpting_layout->addWidget(sculpting_layers_group);
+
+	QToolButton* island_headers[3] = {
+		sculpting_real_islands_button = new QToolButton(sculpting_tab),
+		sculpting_fantasy_islands_button = new QToolButton(sculpting_tab),
+		sculpting_vegetation_button = new QToolButton(sculpting_tab)
+	};
+	QWidget* island_panels[3] = {
+		sculpting_real_islands_panel = new QWidget(sculpting_tab),
+		sculpting_fantasy_islands_panel = new QWidget(sculpting_tab),
+		sculpting_vegetation_panel = new QWidget(sculpting_tab)
+	};
+	QGridLayout* island_grids[3];
+	for(int group=0; group<3; ++group)
+	{
+		QToolButton* header = island_headers[group];
+		QWidget* panel = island_panels[group];
+		header->setCheckable(true);
+		header->setChecked(false);
+		header->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		header->setArrowType(Qt::RightArrow);
+		sculpting_layout->addWidget(header);
+		island_grids[group] = new QGridLayout(panel);
+		island_grids[group]->setContentsMargins(8, 2, 8, 6);
+		sculpting_layout->addWidget(panel);
+		panel->hide();
+		connect(header, &QToolButton::toggled, this, [header, panel](bool expanded)
+		{
+			panel->setVisible(expanded);
+			header->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+		});
+	}
+	sculpting_real_islands_button->setText(tr("Real islands"));
+	sculpting_fantasy_islands_button->setText(tr("Fantasy islands"));
+	sculpting_vegetation_button->setText(tr("Grass and trees"));
+	sculpting_real_islands_button->setToolTip(tr("Open realistic island presets. Choose a shape, adjust its settings, then place it in the world."));
+	sculpting_fantasy_islands_button->setToolTip(tr("Open fantasy island presets. Choose a shape, adjust its settings, then place it in the world."));
+	sculpting_vegetation_button->setToolTip(tr("Open brushes for procedural grass and trees."));
+	for(int i=0; i<24; ++i)
+	{
+		const int group = i < 12 ? 0 : 1;
+		QPushButton* button = sculpting_island_buttons[i] = new QPushButton(island_names[i], island_panels[group]);
+		button->setIcon(makeSculptToolPreviewIcon(17 + i));
+		button->setIconSize(QSize(48, 30));
+		button->setStyleSheet("text-align: left; padding-left: 4px;");
+		button->setCheckable(true);
+		button->setToolTip(tr("Select this island, adjust its height and seed below, then click Add island to world and click the desired terrain location."));
+		island_grids[group]->addWidget(button, (i % 12) / 2, i % 2);
+		connect(button, &QPushButton::clicked, this, [this, i]()
+		{
+			for(int j=0; j<24; ++j) sculpting_island_buttons[j]->setChecked(j == i);
+			for(int j=0; j<2; ++j) sculpting_vegetation_buttons[j]->setChecked(false);
+			sculpting_map_target_combo->setCurrentIndex(sculpting_map_target_combo->findData(8 + i));
+		});
+	}
+	for(int i=0; i<2; ++i)
+	{
+		const int target = 32 + i;
+		QPushButton* button = sculpting_vegetation_buttons[i] = new QPushButton(i == 0 ? tr("Paint grass") : tr("Paint trees and grass"), island_panels[2]);
+		button->setIcon(makeTerrainLayerPreviewIcon(i == 0 ? QColor(72, 150, 58) : QColor(52, 118, 44)));
+		button->setIconSize(QSize(48, 30));
+		button->setStyleSheet("text-align: left; padding-left: 4px;");
+		button->setCheckable(true);
+		island_grids[2]->addWidget(button, i, 0, 1, 2);
+		connect(button, &QPushButton::clicked, this, [this, target]()
+		{
+			for(int j=0; j<24; ++j) sculpting_island_buttons[j]->setChecked(false);
+			for(int j=0; j<2; ++j) sculpting_vegetation_buttons[j]->setChecked(32 + j == target);
+			sculpting_map_target_combo->setCurrentIndex(sculpting_map_target_combo->findData(target));
+		});
+	}
 
 	sculpting_island_settings_group = new QGroupBox(tr("Island settings"), sculpting_tab);
 	QGridLayout* island_settings_layout = new QGridLayout(sculpting_island_settings_group);
@@ -1423,7 +1644,7 @@ void WorldSettingsWidget::createSculptingTab()
 		sculpting_tool_buttons[i]->setText(tool_names[i]);
 		sculpting_tool_buttons[i]->setIcon(makeSculptToolPreviewIcon(i));
 		sculpting_tool_buttons[i]->setIconSize(QSize(48, 30));
-		sculpting_tool_buttons[i]->setToolTip(tr("%1: select the brush, then left-drag on the terrain. The thumbnail shows the approximate height profile; radius and strength are set above.").arg(tool_names[i]));
+		sculpting_tool_buttons[i]->setToolTip(tr("%1: edits World > Terrain section maps > Height map. Select this brush and left-drag on the terrain. The thumbnail shows its profile; radius and strength are above.").arg(tool_names[i]));
 		sculpting_tool_buttons[i]->setStyleSheet(QStringLiteral("text-align: left; padding-left: 8px;"));
 		sculpting_tool_buttons[i]->setCheckable(true);
 		sculpting_tool_buttons[i]->setAutoExclusive(true);
@@ -1461,7 +1682,7 @@ void WorldSettingsWidget::createSculptingTab()
 		sculpting_shape_tool_buttons[i]->setText(shape_tool_names[i]);
 		sculpting_shape_tool_buttons[i]->setIcon(makeSculptToolPreviewIcon(17 + i));
 		sculpting_shape_tool_buttons[i]->setIconSize(QSize(48, 30));
-		sculpting_shape_tool_buttons[i]->setToolTip(tr("%1: select the shape, set the target height if needed, then left-drag on the terrain. The thumbnail shows its approximate profile.").arg(shape_tool_names[i]));
+		sculpting_shape_tool_buttons[i]->setToolTip(tr("%1: edits World > Terrain section maps > Height map. Set Target height if needed, then left-drag on the terrain. The thumbnail shows its profile.").arg(shape_tool_names[i]));
 		sculpting_shape_tool_buttons[i]->setStyleSheet(QStringLiteral("text-align: left; padding-left: 8px;"));
 		sculpting_shape_tool_buttons[i]->setCheckable(true);
 		sculpting_shape_tool_buttons[i]->setAutoExclusive(true);
@@ -1498,7 +1719,7 @@ void WorldSettingsWidget::createSculptingTab()
 		sculpting_stamp_tool_buttons[i]->setText(stamp_tool_names[i]);
 		sculpting_stamp_tool_buttons[i]->setIcon(makeSculptToolPreviewIcon(38 + i));
 		sculpting_stamp_tool_buttons[i]->setIconSize(QSize(48, 30));
-		sculpting_stamp_tool_buttons[i]->setToolTip(tr("%1: select the stamp, then click or drag to apply its height shape. Brush radius controls its size; the thumbnail is schematic.").arg(stamp_tool_names[i]));
+		sculpting_stamp_tool_buttons[i]->setToolTip(tr("%1: edits World > Terrain section maps > Height map. Select the stamp, then click or drag to apply its shape. Brush radius controls its size; the thumbnail is schematic.").arg(stamp_tool_names[i]));
 		sculpting_stamp_tool_buttons[i]->setStyleSheet(QStringLiteral("text-align: left; padding-left: 8px;"));
 		sculpting_stamp_tool_buttons[i]->setCheckable(true);
 		sculpting_stamp_tool_buttons[i]->setAutoExclusive(true);
@@ -1790,6 +2011,8 @@ void WorldSettingsWidget::createSculptingTab()
 	connect(sculpting_map_target_combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, updateIslandSettings](int index)
 	{
 		const int target = sculpting_map_target_combo->itemData(index).toInt();
+		for(int i=0; i<24; ++i) sculpting_island_buttons[i]->setChecked(target == 8 + i);
+		for(int i=0; i<2; ++i) sculpting_vegetation_buttons[i]->setChecked(target == 32 + i);
 		if(target >= 1 && target <= 3)
 			sculpting_layers_list->setCurrentRow(target - 1);
 		else if(target == 7)
@@ -1861,6 +2084,7 @@ void WorldSettingsWidget::createSculptingTab()
 	});
 
 	setSculptingControlsEnabled(false);
+	retranslateSculptingTab();
 }
 
 
@@ -1877,6 +2101,12 @@ void WorldSettingsWidget::setSculptingControlsEnabled(bool enabled)
 	sculpting_target_height_spin_box->setEnabled(enabled);
 	sculpting_map_target_combo->setEnabled(enabled);
 	sculpting_layers_group->setEnabled(enabled);
+	sculpting_real_islands_button->setEnabled(enabled);
+	sculpting_fantasy_islands_button->setEnabled(enabled);
+	sculpting_vegetation_button->setEnabled(enabled);
+	sculpting_real_islands_panel->setEnabled(enabled);
+	sculpting_fantasy_islands_panel->setEnabled(enabled);
+	sculpting_vegetation_panel->setEnabled(enabled);
 	real_terrain_group->setEnabled(enabled);
 	const int target = sculpting_map_target_combo->currentData().toInt();
 	const bool undoable = (target >= 0 && target <= 7) || (target >= 8 && target <= 33);
@@ -1892,7 +2122,37 @@ void WorldSettingsWidget::retranslateSculptingTab()
 		return;
 	settings_tabs->setTabText(0, tr("World"));
 	settings_tabs->setTabText(1, tr("Sculpting"));
+	QLabel* material_label_widgets[5] = { fghghdfgfg, label, label_2, label_3, label_4 };
+	const QString material_labels[5] = {
+		tr("Rock texture (slot 0)"), tr("Ground / sand texture (slot 1)"),
+		tr("Vegetation texture (slot 2)"), tr("Overlay texture (slot 3)"), tr("Rock micro-height map")
+	};
+	for(int i=0; i<5; ++i)
+		material_label_widgets[i]->setText(material_labels[i]);
+	terrainMaterialHelpLabel->setText(tr("Colour slot 0 = Rock, 1 = Ground / sand, 2 = Vegetation, 3 = Overlay (beach, snow or another surface). Assign each texture here, set its scale here, then open Sculpting > Surface layers, select the matching slot and drag on the terrain. Vegetation also controls grass; tree placement uses a separate mask."));
+	world_terrain_sections_button->setText(tr("Terrain section maps"));
+	world_materials_button->setText(tr("Surface material textures"));
+	world_terrain_geometry_button->setText(tr("Terrain geometry and water"));
+	world_terrain_sections_button->setToolTip(tr("Expand or collapse height, material and object masks imported for each terrain section."));
+	world_materials_button->setToolTip(tr("Expand or collapse texture slots used by the paintable surface layers."));
+	world_terrain_geometry_button->setToolTip(tr("Expand or collapse terrain size, elevation and water level settings."));
+	for(int i=0; i<4; ++i)
+	{
+		if(terrain_material_clear_buttons[i])
+		{
+			terrain_material_clear_buttons[i]->setText(tr("Clear"));
+			terrain_material_clear_buttons[i]->setToolTip(tr("Remove this texture from the world material slot. The file itself is not deleted."));
+		}
+	}
+	terrain_material_clear_all_button->setText(tr("Clear all material textures"));
+	terrain_material_clear_all_button->setToolTip(tr("Clear the four colour texture slots and the rock micro-height texture in World > Surface material textures. Source image files are not deleted."));
+	terrain_relief_clear_all_button->setText(tr("Clear all terrain height maps"));
+	terrain_relief_clear_all_button->setToolTip(tr("Remove the height map from every terrain section, leaving a flat surface at the configured base elevation. Material, vegetation, tree, road and building maps remain assigned."));
+	terrain_height_clear_button->setText(tr("Clear"));
+	terrain_height_clear_button->setToolTip(tr("Remove the rock micro-height texture from this world. The file itself is not deleted."));
 	sculpting_mode_check_box->setText(tr("Enable sculpting mode"));
+	sculpting_map_target_accordion_button->setText(tr("Edit and generate"));
+	sculpting_map_target_accordion_button->setToolTip(tr("Expand or collapse the active terrain editing mode selector."));
 	sculpting_undo_button->setText(tr("Undo"));
 	sculpting_redo_button->setText(tr("Redo"));
 	sculpting_radius_label->setText(tr("Brush radius"));
@@ -1900,6 +2160,13 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	sculpting_target_height_label->setText(tr("Target height"));
 	sculpting_layers_group->setTitle(tr("Surface layers"));
 	sculpting_layers_accordion_button->setText(tr("Surface layers"));
+	sculpting_layers_list->setToolTip(tr("Choose the material layer to paint on the terrain. The brush changes its weight map; it does not replace the terrain height map."));
+	sculpting_real_islands_button->setText(tr("Real islands"));
+	sculpting_fantasy_islands_button->setText(tr("Fantasy islands"));
+	sculpting_vegetation_button->setText(tr("Grass and trees"));
+	sculpting_real_islands_button->setToolTip(tr("Open realistic island presets. Choose a shape, adjust its settings, then place it in the world."));
+	sculpting_fantasy_islands_button->setToolTip(tr("Open fantasy island presets. Choose a shape, adjust its settings, then place it in the world."));
+	sculpting_vegetation_button->setToolTip(tr("Open brushes for procedural grass and trees."));
 	const QString material_layer_names[4] = { tr("Rock"), tr("Ground / sand"), tr("Vegetation"), tr("Overlay material") };
 	for(int i=0; i<4; ++i)
 	{
@@ -1907,7 +2174,6 @@ void WorldSettingsWidget::retranslateSculptingTab()
 		if(item) item->setText(material_layer_names[i]);
 	}
 	sculpting_island_settings_group->setTitle(tr("Island settings"));
-	sculpting_island_preview_label->setText(tr("Island preview: %1").arg(sculpting_map_target_combo->currentText()));
 	sculpting_island_sea_floor_label->setText(tr("Sea floor"));
 	sculpting_island_land_base_label->setText(tr("Land base"));
 	sculpting_island_peak_label->setText(tr("Maximum peak"));
@@ -1919,7 +2185,8 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	sculpting_island_land_base_value->setText(QString::number(sculpting_island_land_base_slider->value()) + tr(" m"));
 	sculpting_island_peak_value->setText(QString::number(sculpting_island_peak_slider->value()) + tr(" m"));
 	sculpting_island_seed_value->setText(QString::number(sculpting_island_seed_slider->value()));
-	sculpting_map_target_label->setText(tr("Edit / generate"));
+	sculpting_map_target_label->setText(tr("Action"));
+	sculpting_map_target_label->setToolTip(tr("Choose the map changed by this mode: World > Terrain section maps > Height map, World > Terrain section maps > Tree mask, or World > Surface material textures > colour slot 0 (Rock), 1 (Ground / sand), 2 (Vegetation), or 3 (Overlay)."));
 	real_terrain_group->setTitle(tr("Real-world terrain"));
 	real_terrain_map_label->setText(tr("Select an area on the map. Drag with the left mouse button; right-drag pans, wheel zooms."));
 	real_terrain_basemap_combo->setItemText(0, tr("Metasiberia Map"));
@@ -1964,6 +2231,14 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	{
 		const int item = sculpting_map_target_combo->findData(8 + i);
 		if(item >= 0) sculpting_map_target_combo->setItemText(item, island_names[i]);
+		sculpting_island_buttons[i]->setText(island_names[i]);
+		sculpting_island_buttons[i]->setToolTip(tr("Creates height data in World > Terrain section maps > Height map. Choose this island, set its sliders, click Add island to world, then click a location in the scene."));
+	}
+	sculpting_island_preview_label->setText(tr("Island preview: %1").arg(sculpting_map_target_combo->currentText()));
+	for(int i=0; i<2; ++i)
+	{
+		sculpting_vegetation_buttons[i]->setText(i == 0 ? tr("Paint grass") : tr("Paint trees and grass"));
+		sculpting_vegetation_buttons[i]->setToolTip(i == 0 ? tr("Paints procedural grass using World > Surface material textures > Vegetation, colour slot 2. Drag on the terrain; trees are blocked in the painted area.") : tr("Paints procedural grass using World > Surface material textures > Vegetation, colour slot 2, and permits trees using World > Terrain section maps > Tree mask."));
 	}
 	const int real_island_item = sculpting_map_target_combo->findData(8);
 	const int fantasy_island_item = sculpting_map_target_combo->findData(20);
@@ -1995,7 +2270,7 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	for(int i=0; i<17; ++i)
 	{
 		sculpting_tool_buttons[i]->setText(tool_names[i]);
-		sculpting_tool_buttons[i]->setToolTip(tr("%1: select the brush, then left-drag on the terrain. The thumbnail shows the approximate height profile; radius and strength are set above.").arg(tool_names[i]));
+		sculpting_tool_buttons[i]->setToolTip(tr("%1: edits World > Terrain section maps > Height map. Select this brush and left-drag on the terrain. The thumbnail shows its profile; radius and strength are above.").arg(tool_names[i]));
 	}
 	const QString shape_tool_names[21] = {
 		tr("Flatten"), tr("Plateau"), tr("Ramp"), tr("Cliff"), tr("Wall ridge"),
@@ -2006,7 +2281,7 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	for(int i=0; i<21; ++i)
 	{
 		sculpting_shape_tool_buttons[i]->setText(shape_tool_names[i]);
-		sculpting_shape_tool_buttons[i]->setToolTip(tr("%1: select the shape, set the target height if needed, then left-drag on the terrain. The thumbnail shows its approximate profile.").arg(shape_tool_names[i]));
+		sculpting_shape_tool_buttons[i]->setToolTip(tr("%1: edits World > Terrain section maps > Height map. Set Target height if needed, then left-drag on the terrain. The thumbnail shows its profile.").arg(shape_tool_names[i]));
 	}
 	const QString stamp_tool_names[16] = {
 		tr("Volcano"), tr("Crater"), tr("Hill"), tr("Cone"), tr("Mesa"), tr("Caldera"),
@@ -2016,22 +2291,23 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	for(int i=0; i<16; ++i)
 	{
 		sculpting_stamp_tool_buttons[i]->setText(stamp_tool_names[i]);
-		sculpting_stamp_tool_buttons[i]->setToolTip(tr("%1: select the stamp, then click or drag to apply its height shape. Brush radius controls its size; the thumbnail is schematic.").arg(stamp_tool_names[i]));
+		sculpting_stamp_tool_buttons[i]->setToolTip(tr("%1: edits World > Terrain section maps > Height map. Select the stamp, then click or drag to apply its shape. Brush radius controls its size; the thumbnail is schematic.").arg(stamp_tool_names[i]));
 	}
 	sculpting_radius_spin_box->setToolTip(tr("Sets the brush radius in metres. Use a smaller radius for detail and a larger radius for broad changes."));
-	sculpting_strength_spin_box->setToolTip(tr("Controls height change in metres. For surface and tree masks it also controls paint opacity: roughly 10% per strength unit."));
+	sculpting_strength_spin_box->setToolTip(tr("Controls height change in metres. For material and tree masks, strength sets paint opacity; Paint grass uses this value as its opacity, so the default 1.0 paints full grass weight at the brush centre."));
 	sculpting_target_height_spin_box->setToolTip(tr("Target elevation used by height tools such as Flatten and Fill to level."));
-	sculpting_map_target_label->setToolTip(tr("Choose whether strokes sculpt height, paint a surface or vegetation mask, or place an island."));
+	sculpting_map_target_label->setText(tr("Action"));
+	sculpting_map_target_label->setToolTip(tr("Choose the map changed by this mode: World > Terrain section maps > Height map, World > Terrain section maps > Tree mask, or World > Surface material textures > colour slot 0 (Rock), 1 (Ground / sand), 2 (Vegetation), or 3 (Overlay)."));
 	sculpting_layers_accordion_button->setToolTip(tr("Expand or collapse the paintable terrain material layers."));
 	const QString target_tooltips[8] = {
-		tr("Sculpt terrain height; click or drag across the terrain."),
-		tr("Paint the rock surface weight. Assign a rock texture in World settings to see the material."),
-		tr("Paint the ground and sand surface weight. Assign a texture in World settings to see the material."),
-		tr("Paint the vegetation surface weight. This mask also controls terrain vegetation scattering."),
-		tr("Paint the tree placement mask to allow trees in this area."),
-		tr("Paint the tree placement mask to block trees in this area."),
-		tr("Restore the imported surface and tree masks in the brushed area."),
-		tr("Paint the independent overlay texture, such as beach, snow, or rock.")
+		tr("Edits World > Terrain section maps > Height map. Select this mode and click or drag on the terrain."),
+		tr("To paint Rock, assign a texture in World > Surface material textures > colour slot 0 (Rock), then select Rock here and drag on the terrain. Without a texture, only the mask changes."),
+		tr("To paint Ground / sand, assign a texture in World > Surface material textures > colour slot 1 (Ground / sand), then select Ground / sand here and drag on the terrain. Without a texture, only the mask changes."),
+		tr("To paint Vegetation, assign a texture in World > Surface material textures > colour slot 2 (Vegetation), then select Vegetation here and drag on the terrain. This also controls procedural grass."),
+		tr("Paint World > Terrain section maps > Tree mask to allow trees in this area."),
+		tr("Paint World > Terrain section maps > Tree mask to block trees in this area."),
+		tr("Restore the imported surface and tree masks from World > Terrain section maps in the brushed area."),
+		tr("To paint Overlay, assign a texture in World > Surface material textures > colour slot 3 (Overlay), then select Overlay here and drag on the terrain. Use it for beach, snow or another surface.")
 	};
 	for(int i=0; i<8; ++i)
 	{
@@ -2040,23 +2316,19 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	}
 	const int grass_tooltip_item = sculpting_map_target_combo->findData(32);
 	const int trees_grass_tooltip_item = sculpting_map_target_combo->findData(33);
-	if(grass_tooltip_item >= 0) sculpting_map_target_combo->setItemData(grass_tooltip_item, tr("Paint procedural grass by adding vegetation. Trees are blocked in the painted area."), Qt::ToolTipRole);
-	if(trees_grass_tooltip_item >= 0) sculpting_map_target_combo->setItemData(trees_grass_tooltip_item, tr("Paint procedural grass and allow trees in the painted area."), Qt::ToolTipRole);
+	if(grass_tooltip_item >= 0) sculpting_map_target_combo->setItemData(grass_tooltip_item, tr("Paint World > Surface material textures > colour slot 2 (Vegetation) to grow procedural grass. Trees are blocked in the painted area."), Qt::ToolTipRole);
+	if(trees_grass_tooltip_item >= 0) sculpting_map_target_combo->setItemData(trees_grass_tooltip_item, tr("Paint World > Surface material textures > colour slot 2 (Vegetation) to grow procedural grass. World > Terrain section maps > Tree mask permits trees in the painted area."), Qt::ToolTipRole);
 	for(int i=0; i<24; ++i)
 	{
 		const int item = sculpting_map_target_combo->findData(8 + i);
-		if(item >= 0) sculpting_map_target_combo->setItemData(item, tr("Preview and place this island shape. Click Add island to world, then click the location in the scene."), Qt::ToolTipRole);
+		if(item >= 0) sculpting_map_target_combo->setItemData(item, tr("Creates height data in World > Terrain section maps > Height map. Choose the island, set its sliders, click Add island to world, then click a location in the scene."), Qt::ToolTipRole);
 	}
 	for(int i=0; i<4; ++i)
 	{
 		QListWidgetItem* item = sculpting_layers_list->item(i);
 		if(item)
 		{
-			const QString base = i == 0 ? tr("Paint the rock weight map. The assigned rock texture appears where this layer has weight.") :
-				i == 1 ? tr("Paint the ground / sand weight map. The assigned ground texture appears where this layer has weight.") :
-				i == 2 ? tr("Paint the vegetation weight map. Tree placement also depends on the separate tree mask.") :
-				tr("Paint an independent overlay, such as beach or snow. This layer blends over the three base materials.");
-			item->setToolTip(base + tr(" Surface texture is assigned in the World tab. Select this row, then paint in the scene."));
+			item->setToolTip(target_tooltips[i == 3 ? 7 : i + 1]);
 		}
 	}
 	waterCausticsEnabledCheckBox->setToolTip(tr("Show or hide projected underwater caustics on terrain below the water level. This does not turn the water itself off."));
@@ -2086,26 +2358,38 @@ void WorldSettingsWidget::init(MainWindow* main_window_)
 void WorldSettingsWidget::retranslateUiText()
 {
 	retranslateUi(this);
+	const QString terrain_layer_names[4] = { tr("Rock"), tr("Ground / sand"), tr("Vegetation"), tr("Overlay material") };
 	for(int i=0; i<4; ++i)
 	{
 		if(QPushButton* button = findChild<QPushButton*>(QString("terrainMaterialBrowserButton%1").arg(i)))
 		{
 			button->setText(tr("Choose material"));
-			button->setToolTip(tr("Open the material browser and assign its colour texture to this terrain layer."));
+			button->setToolTip(tr("Choose a texture for colour slot %1 (%2). Assigning it here makes it available to the matching brush in Sculpting > Surface layers.").arg(i).arg(terrain_layer_names[i]));
 		}
 		if(QPushButton* button = findChild<QPushButton*>(QString("terrainPolyHavenButton%1").arg(i)))
 		{
 			button->setText(tr("Poly Haven"));
-			button->setToolTip(tr("Search Poly Haven textures, preview the albedo, and assign it to this layer."));
+			button->setToolTip(tr("Search Poly Haven textures for colour slot %1 (%2), preview the albedo, then assign the result here.").arg(i).arg(terrain_layer_names[i]));
+		}
+		if(terrain_material_clear_buttons[i])
+		{
+			terrain_material_clear_buttons[i]->setText(tr("Clear"));
+			terrain_material_clear_buttons[i]->setToolTip(tr("Clear colour slot %1 (%2). The source image file is not deleted.").arg(i).arg(terrain_layer_names[i]));
+		}
+		if(terrain_material_scale_spin_boxes[i])
+		{
+			terrain_material_scale_spin_boxes[i]->setToolTip(tr("Controls tiling for World > Surface material textures > colour slot %1 (%2). Higher values repeat it more often; lower values make its pattern larger.").arg(i).arg(terrain_layer_names[i]));
+			terrain_material_scale_labels[i]->setText(tr("Scale"));
+			terrain_material_scale_labels[i]->setToolTip(tr("Controls tiling for World > Surface material textures > colour slot %1 (%2). Higher values repeat it more often; lower values make its pattern larger.").arg(i).arg(terrain_layer_names[i]));
 		}
 		if(terrain_material_preview_labels[i])
-			terrain_material_preview_labels[i]->setToolTip(tr("Preview of the terrain material texture"));
+			terrain_material_preview_labels[i]->setToolTip(tr("Preview of the texture assigned to World > Surface material textures > colour slot %1 (%2).").arg(i).arg(terrain_layer_names[i]));
 		updateTerrainMaterialPreview(i);
 	}
-	detailColMapURLs0FileSelectWidget->setToolTip(tr("Base-colour texture for the rock material layer. Paint the red channel of the terrain material mask to apply it."));
-	detailColMapURLs1FileSelectWidget->setToolTip(tr("Base-colour texture for the ground / sand material layer. Paint the green channel of the terrain material mask to apply it."));
-	detailColMapURLs2FileSelectWidget->setToolTip(tr("Base-colour texture for the vegetation material layer. Paint the blue channel of the terrain material mask to apply it."));
-	detailColMapURLs3FileSelectWidget->setToolTip(tr("Base-colour texture for the independent overlay layer. Paint the Overlay material layer to apply it over rock, ground and vegetation."));
+	detailColMapURLs0FileSelectWidget->setToolTip(tr("Assign the Rock texture to World > Surface material textures > colour slot 0. Then select Sculpting > Surface layers > Rock and drag on the terrain."));
+	detailColMapURLs1FileSelectWidget->setToolTip(tr("Assign the Ground / sand texture to World > Surface material textures > colour slot 1. Then select Sculpting > Surface layers > Ground / sand and drag on the terrain."));
+	detailColMapURLs2FileSelectWidget->setToolTip(tr("Assign the Vegetation texture to World > Surface material textures > colour slot 2. Then select Sculpting > Surface layers > Vegetation and drag on the terrain. This also controls grass."));
+	detailColMapURLs3FileSelectWidget->setToolTip(tr("Assign the Overlay texture to World > Surface material textures > colour slot 3. Then select Sculpting > Surface layers > Overlay and drag on the terrain."));
 	retranslateSculptingTab();
 
 	QLayout* sections_layout = terrainSectionScrollAreaWidgetContents->layout();
@@ -2118,7 +2402,10 @@ void WorldSettingsWidget::retranslateUiText()
 		{
 			TerrainSpecSectionWidget* section_widget = dynamic_cast<TerrainSpecSectionWidget*>(widget);
 			if(section_widget)
+			{
 				section_widget->retranslateUi(section_widget);
+				section_widget->retranslateMapClearButtons();
+			}
 		}
 	}
 }
@@ -2239,6 +2526,30 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 		new_section_widget->treeMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.tree_mask_map_URL));
 		new_section_widget->roadMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.road_mask_map_URL));
 		new_section_widget->buildingMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.building_mask_map_URL));
+		for(int map_i=0; map_i<5; ++map_i)
+			SignalBlocker::setValue(new_section_widget->mapScaleSpinBox(map_i), section_spec.map_scales[map_i]);
+		FileSelectWidget* section_map_fields[5] = {
+			new_section_widget->heightmapURLFileSelectWidget, new_section_widget->maskMapURLFileSelectWidget,
+			new_section_widget->treeMaskMapURLFileSelectWidget, new_section_widget->roadMaskMapURLFileSelectWidget,
+			new_section_widget->buildingMaskMapURLFileSelectWidget
+		};
+		for(int map_i=0; map_i<5; ++map_i)
+		{
+			FileSelectWidget* field = section_map_fields[map_i];
+			auto update_preview = [this, new_section_widget, field, map_i]()
+			{
+				QString image_path = field->filename();
+				if(!image_path.isEmpty() && !QFile::exists(image_path) && main_window)
+				{
+					const std::string resource_path = main_window->gui_client.resource_manager->pathForURL(toURLString(QtUtils::toStdString(image_path)));
+					image_path = QtUtils::toQString(resource_path);
+				}
+				new_section_widget->setMapPreviewPath(map_i, image_path);
+			};
+			update_preview();
+			connect(field, &FileSelectWidget::filenameChanged, this, [update_preview](QString&) { update_preview(); });
+			connect(new_section_widget->mapScaleSpinBox(map_i), QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &WorldSettingsWidget::settingsChangedSlot);
+		}
 		SignalBlocker::setChecked(new_section_widget->heightmapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG));
 		SignalBlocker::setChecked(new_section_widget->maskMapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::MASK_MAP_DISABLED_FLAG));
 		SignalBlocker::setChecked(new_section_widget->treeMaskMapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::TREE_MASK_MAP_DISABLED_FLAG));
@@ -2250,6 +2561,7 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 
 		terrainSectionScrollAreaWidgetContents->layout()->addWidget(new_section_widget);
 		connect(new_section_widget, SIGNAL(removeButtonClickedSignal()), this, SLOT(removeTerrainSectionButtonClickedSlot()));
+		connect(new_section_widget, &TerrainSpecSectionWidget::mapClearedSignal, this, &WorldSettingsWidget::settingsChangedSlot);
 		connect(new_section_widget->heightmapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 		connect(new_section_widget->maskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 		connect(new_section_widget->treeMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
@@ -2262,7 +2574,12 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 	detailColMapURLs2FileSelectWidget->setFilename(QtUtils::toQString(world_settings.terrain_spec.detail_col_map_URLs[2]));
 	detailColMapURLs3FileSelectWidget->setFilename(QtUtils::toQString(world_settings.terrain_spec.detail_col_map_URLs[3]));
 	for(int i=0; i<4; ++i)
+	{
+		SignalBlocker::setValue(terrain_material_scale_spin_boxes[i], world_settings.terrain_spec.detail_col_map_scales[i]);
+		if(main_window && main_window->gui_client.opengl_engine)
+			main_window->gui_client.opengl_engine->setDetailTextureScale(i, world_settings.terrain_spec.detail_col_map_scales[i]);
 		updateTerrainMaterialPreview(i);
+	}
 	SignalBlocker::setChecked(detailColMapURLs0EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_COL_MAP_0_DISABLED_FLAG));
 	SignalBlocker::setChecked(detailColMapURLs1EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_COL_MAP_1_DISABLED_FLAG));
 	SignalBlocker::setChecked(detailColMapURLs2EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_COL_MAP_2_DISABLED_FLAG));
@@ -2365,6 +2682,8 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 			section.tree_mask_map_URL = getURLForFileSelectWidget(section_widget->treeMaskMapURLFileSelectWidget);
 			section.road_mask_map_URL = getURLForFileSelectWidget(section_widget->roadMaskMapURLFileSelectWidget);
 			section.building_mask_map_URL = getURLForFileSelectWidget(section_widget->buildingMaskMapURLFileSelectWidget);
+			for(int map_i=0; map_i<5; ++map_i)
+				section.map_scales[map_i] = (float)section_widget->mapScaleSpinBox(map_i)->value();
 			section.disabled_map_flags =
 				(section_widget->heightmapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG) |
 				(section_widget->maskMapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::MASK_MAP_DISABLED_FLAG) |
@@ -2380,6 +2699,8 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.terrain_spec.detail_col_map_URLs[1] = getURLForFileSelectWidget(detailColMapURLs1FileSelectWidget);
 	world_settings_out.terrain_spec.detail_col_map_URLs[2] = getURLForFileSelectWidget(detailColMapURLs2FileSelectWidget);
 	world_settings_out.terrain_spec.detail_col_map_URLs[3] = getURLForFileSelectWidget(detailColMapURLs3FileSelectWidget);
+	for(int i=0; i<4; ++i)
+		world_settings_out.terrain_spec.detail_col_map_scales[i] = (float)terrain_material_scale_spin_boxes[i]->value();
 	world_settings_out.terrain_spec.disabled_detail_map_flags =
 		(detailColMapURLs0EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_COL_MAP_0_DISABLED_FLAG) |
 		(detailColMapURLs1EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_COL_MAP_1_DISABLED_FLAG) |
@@ -2464,7 +2785,12 @@ void WorldSettingsWidget::updateControlsEditable()
 			button->setEnabled(editable);
 		if(QPushButton* button = findChild<QPushButton*>(QString("terrainPolyHavenButton%1").arg(i)))
 			button->setEnabled(editable);
+		if(terrain_material_clear_buttons[i]) terrain_material_clear_buttons[i]->setEnabled(editable);
+		if(terrain_material_scale_spin_boxes[i]) terrain_material_scale_spin_boxes[i]->setEnabled(editable);
 	}
+	terrain_material_clear_all_button->setEnabled(editable);
+	terrain_relief_clear_all_button->setEnabled(editable);
+	terrain_height_clear_button->setEnabled(editable);
 
 	detailColMapURLs0FileSelectWidget->setReadOnly(!editable);
 	detailColMapURLs1FileSelectWidget->setReadOnly(!editable);
@@ -2547,6 +2873,7 @@ void WorldSettingsWidget::newTerrainSectionPushButtonClicked()
 	terrainSectionScrollAreaWidgetContents->layout()->addWidget(new_section_widget);
 
 	connect(new_section_widget, SIGNAL(removeButtonClickedSignal()), this, SLOT(removeTerrainSectionButtonClickedSlot()));
+	connect(new_section_widget, &TerrainSpecSectionWidget::mapClearedSignal, this, &WorldSettingsWidget::settingsChangedSlot);
 	connect(new_section_widget->heightmapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(new_section_widget->maskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(new_section_widget->treeMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));

@@ -6172,7 +6172,7 @@ void GUIClient::loadScriptForObject(WorldObject* ob, WorldStateLock& world_state
 		
 		removeObScriptingInfo(ob);
 
-		if(hasPrefix(ob->script, "<?xml"))
+		if(hasPrefix(ob->script, "<?xml") || hasPrefix(ob->script, "<script"))
 		{
 			const double global_time = this->world_state->getCurrentGlobalTime();
 
@@ -6203,7 +6203,8 @@ void GUIClient::loadScriptForObject(WorldObject* ob, WorldStateLock& world_state
 				createPathControlledPathVisObjects(*ob); // Create or update 3d path visualisation.
 		}
 
-		if(!ob->script.empty() && ob->script_evaluator.isNull())
+		if(!ob->script.empty() && ob->script_evaluator.isNull() &&
+			!hasPrefix(ob->script, "<?xml") && !hasPrefix(ob->script, "<script") && !hasPrefix(ob->script, "--lua"))
 		{
 			const bool just_inserted = checkAddScriptToProcessingSet(ob->script); // Mark script as being processed so another LoadScriptTask doesn't try and process it also.
 			if(just_inserted)
@@ -10278,8 +10279,13 @@ bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_s
 		{
 			// Grass uses the vegetation material channel; trees use the separate placement mask.
 			// This lets the user paint procedural grass without scattering trees.
-			applied = terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, 2, false, false) |
-				terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, terrain_sculpt_map_paint_target == 32 ? 1 : 0, true, false);
+			// Grass is a visible brush tool: at the default strength (1) its centre
+			// must cross the scattering threshold in one pass instead of requiring
+			// several perfectly overlapping strokes. The radial brush falloff still
+			// softens its edge in paintTerrainMapAtWorld().
+			const float grass_opacity = myClamp(terrain_sculpt_strength_m, 0.01f, 1.f);
+			applied = terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, grass_opacity, 2, false, false) |
+				terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, grass_opacity, terrain_sculpt_map_paint_target == 32 ? 1 : 0, true, false);
 		}
 		else
 			applied = terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, channel, tree_mask, false);
@@ -25186,6 +25192,8 @@ void GUIClient::updateGroundPlane()
 		{
 			path_spec.section_specs[i].x = spec.section_specs[i].x;
 			path_spec.section_specs[i].y = spec.section_specs[i].y;
+			for(int map_i=0; map_i<5; ++map_i)
+				path_spec.section_specs[i].map_scales[map_i] = spec.section_specs[i].map_scales[map_i];
 			if(!spec.section_specs[i].heightmap_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG))
 				path_spec.section_specs[i].heightmap_path = resource_manager->pathForURL(spec.section_specs[i].heightmap_URL);
 			if(!spec.section_specs[i].mask_map_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::MASK_MAP_DISABLED_FLAG))
@@ -25203,6 +25211,7 @@ void GUIClient::updateGroundPlane()
 		URLString use_detail_height_map_URLs[4];
 		for(int i=0; i<4; ++i)
 		{
+			opengl_engine->setDetailTextureScale(i, spec.detail_col_map_scales[i]);
 			if(!spec.detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i))
 				use_detail_col_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_col_map_URLs[i])) + "basis")) : spec.detail_col_map_URLs[i];
 			if(!spec.detail_height_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << (4 + i)))

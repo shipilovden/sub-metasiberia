@@ -278,7 +278,7 @@ void ShaderEditorDialog::buildCodeAndShowResults()
 	this->error_locations.clear();
 
 	const std::string shader = QtUtils::toIndString(shaderEdit->document()->toPlainText());
-	if(hasPrefix(shader, "<?xml"))
+	if(hasPrefix(shader, "<?xml") || hasPrefix(shader, "<script"))
 	{
 		buildResultsLabel->setText("Build Results (parsing as XML):");
 		// Try and parse script as XML

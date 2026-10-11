@@ -29,6 +29,8 @@ class QLabel;
 class QTemporaryDir;
 class QTabWidget;
 class QPushButton;
+class QComboBox;
+class QMouseEvent;
 
 
 /*=====================================================================
@@ -41,11 +43,16 @@ class AddObjectDialog : public QDialog, private Ui_AddObjectDialog
 	Q_OBJECT
 public:
 	AddObjectDialog(const std::string& base_dir_path_, QSettings* settings, 
-		Reference<ResourceManager> resource_manager, IMFDXGIDeviceManager* dev_manager, glare::TaskManager* main_task_manager, glare::TaskManager* high_priority_task_manager);
+		Reference<ResourceManager> resource_manager, IMFDXGIDeviceManager* dev_manager, glare::TaskManager* main_task_manager, glare::TaskManager* high_priority_task_manager,
+		QWidget* parent = nullptr, bool show_as_workspace_overlay = false);
 	~AddObjectDialog();
-
-	static void tryLoadTexturesForPreviewOb(Reference<GLObject> preview_gl_ob, std::vector<WorldMaterialRef>& world_materials, OpenGLEngine* opengl_engine, 
+	void setOverlayBounds(const QRect& bounds);
+	void setDockedMode();
+	static void tryLoadTexturesForPreviewOb(Reference<GLObject> preview_gl_ob, std::vector<WorldMaterialRef>& world_materials, OpenGLEngine* opengl_engine,
 		TextureServer& texture_server, QWidget* parent_widget);
+
+signals:
+	void dockRequested();
 
 private slots:;
 	void accepted();
@@ -65,6 +72,7 @@ private:
 	virtual void closeEvent(QCloseEvent *event);
 	virtual void changeEvent(QEvent* event) override;
 	virtual void timerEvent(QTimerEvent* event);
+	virtual bool eventFilter(QObject* watched, QEvent* event) override;
 
 	void loadModelIntoPreview(const std::string& local_path);
 	void setGaussianSplatPreviewObject(const Reference<GaussianSplatData>& splat_data);
@@ -110,8 +118,16 @@ private:
 	QLabel* polyHavenStatusLabel;
 	QTabWidget* polyHavenWebTabs;
 	QPushButton* polyHavenSearchButton;
+	QComboBox* polyHavenCategoryCombo;
 	QSharedPointer<QTemporaryDir> polyHavenTempDir;
 	int polyHavenRequestGeneration;
+	bool workspace_overlay;
+	bool docked_mode;
+	QWidget* overlay_title_bar;
+	Qt::Edges resize_edges;
+	QPoint resize_start_global_pos;
+	QRect resize_start_geometry;
+	QRect overlay_bounds;
 
 	URLString last_url;
 

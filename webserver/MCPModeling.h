@@ -961,11 +961,17 @@ static std::string editMeshTopology(ServerAllWorldsState& all,ServerWorldState& 
 	WorldObjectRef ob=meshSnapshot(all,w,p,n,user,"replace_uid");Reference<BatchedMesh> native=readNativeMesh(all,*ob);Reference<Indigo::Mesh> source=native->buildIndigoMesh();
 	const MCPMeshOps::Mesh input=operationsMesh(*source);const std::string mode=n.getChildStringValue(p,"mode");MCPMeshOps::Mesh edited;
 	try {
-		if(mode=="extrude_faces"||mode=="inset_faces"||mode=="set_face_material") {
-			const JSONNode& face_list=n.getChildArray(p,"faces");if(face_list.child_indices.empty()||face_list.child_indices.size()>4096) throw glare::Exception("Select 1..4096 triangle faces from get_geometry output.");
+		if(mode=="extrude_faces"||mode=="inset_faces"||mode=="set_face_material"||mode=="delete_faces") {
+			const JSONNode& face_list=n.getChildArray(p,"faces");if(face_list.child_indices.empty()||face_list.child_indices.size()>10000) throw glare::Exception("Select 1..10000 triangle faces from get_geometry output.");
 			std::vector<double> raw(face_list.child_indices.size());face_list.parseDoubleArrayValues(p,raw.size(),raw.data());std::vector<size_t> faces;faces.reserve(raw.size());
 			for(double f:raw) { if(!std::isfinite(f)||f<0||f>=input.size()||f!=std::floor(f)) throw glare::Exception("Face indices must be integer triangle indices from get_geometry.");faces.push_back((size_t)f); }
-			if(mode=="set_face_material") {
+			if(mode=="delete_faces") {
+				std::vector<bool> removed(input.size(),false);
+				for(size_t face:faces) removed[face]=true;
+				edited.reserve(input.size());
+				for(size_t face=0;face<input.size();++face) if(!removed[face]) edited.push_back(input[face]);
+				if(edited.empty()) throw glare::Exception("Deleting these faces would remove the entire mesh.");
+			} else if(mode=="set_face_material") {
 				const int material=integer(p,n,"material",0,0,(int)ob->materials.size()-1);edited=input;
 				for(size_t face:faces) edited[face].material=(unsigned int)material;
 			} else if(mode=="extrude_faces") edited=MCPMeshOps::extrudeFaceRegion(input,faces,number(p,n,"distance",.1,-1000,1000));
@@ -978,7 +984,7 @@ static std::string editMeshTopology(ServerAllWorldsState& all,ServerWorldState& 
 				edges.push_back(pair);
 			}
 			const int material=integer(p,n,"material",0,0,(int)ob->materials.size()-1);edited=MCPMeshOps::bevelEdges(input,edges,number(p,n,"width",.05,.0001,100),(unsigned int)material);
-		} else throw glare::Exception("Topology mode must be extrude_faces, inset_faces, set_face_material or bevel_edges.");
+		} else throw glare::Exception("Topology mode must be delete_faces, extrude_faces, inset_faces, set_face_material or bevel_edges.");
 	} catch(const glare::Exception&) { throw; }
 	catch(const std::exception& e) { throw glare::Exception(e.what()); }
 	MeshBuilder builder;builder.appendOperationsMesh(edited);builder.mesh.endOfModel();Reference<BatchedMesh> result=BatchedMesh::buildFromIndigoMesh(builder.mesh);result->checkValidAndSanitiseMesh();ob->setAABBOS(result->aabb_os);

@@ -23,6 +23,7 @@ class RandomAccessOutStream;
 
 struct TerrainSpecSection
 {
+	TerrainSpecSection();
 	bool operator == (const TerrainSpecSection& other) const;
 
 	int x, y; // section coordinates.  (0,0) is section centered on world origin.
@@ -32,6 +33,8 @@ struct TerrainSpecSection
 	URLString tree_mask_map_URL;
 	URLString road_mask_map_URL;
 	URLString building_mask_map_URL;
+	// UV frequency multipliers in height/material/tree/road/building order.
+	float map_scales[5];
 
 	// A set bit means that the corresponding map is not used for rendering.
 	// Zero keeps all maps enabled, including for worlds written by older clients.
@@ -45,12 +48,15 @@ struct TerrainSpecSection
 
 struct TerrainSpec
 {
+	TerrainSpec();
+
 	bool operator == (const TerrainSpec& other) const;
 
 	std::vector<TerrainSpecSection> section_specs;
 
 	URLString detail_col_map_URLs[4];
 	URLString detail_height_map_URLs[4];
+	float detail_col_map_scales[4]; // UV frequency multipliers for colour layers; 1 keeps legacy tiling.
 
 	float terrain_section_width_m;
 	float terrain_height_scale; // Multiplier applied to raw heightmap values. Default value is 1.

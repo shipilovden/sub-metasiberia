@@ -116,6 +116,8 @@ struct ShaderChunkInfo
 	float terrain_scale_factor;
 	float terrain_height_scale;
 	float water_level_z;
+	float heightmap_scale;
+	float maskmap_scale;
 	uint32 vert_data_offset_B;
 };
 
@@ -1730,15 +1732,17 @@ void TerrainScattering::updateGridScatterChunkWithComputeShader(int chunk_x_inde
 	if(section_x >= 0 && section_x < TerrainSystem::TERRAIN_DATA_SECTION_RES && section_y >= 0 && section_y < TerrainSystem::TERRAIN_DATA_SECTION_RES)
 	{
 		section = &terrain_system->terrain_data_sections[section_x + section_y*TerrainSystem::TERRAIN_DATA_SECTION_RES];
-		if(section->maskmap.nonNull())
+		const Map2D* surface_map = section->sculpt_maskmap.nonNull() ? static_cast<const Map2D*>(section->sculpt_maskmap.ptr()) : section->maskmap.ptr();
+		if(surface_map)
 		{
 			const float query_nw = grid_scatter.chunk_width / terrain_section_w; // query width in normalised section coordinates
-			const int query_w_px = myMax(1, (int)(section->maskmap->getMapWidth() * query_nw)); // in pixels
+			const int query_w_px = myMax(1, (int)(surface_map->getMapWidth() * query_nw)); // in pixels
 			const float corner_p_x = chunk_x_index * grid_scatter.chunk_width;
 			const float corner_p_y = chunk_y_index * grid_scatter.chunk_width;
 			const float corner_nx = Maths::fract(corner_p_x * terrain_scale_factor + 0.5f); // Normalised section coordinates.
 			const float corner_ny = Maths::fract(corner_p_y * terrain_scale_factor + 0.5f); // Normalised section coordinates.
 			const float step_n = query_nw / query_w_px;
+			const float map_scale = myClamp(section->maskmap_scale, 0.01f, 100.f);
 			for(int j=0; j<=query_w_px; ++j)
 			for(int i=0; i<=query_w_px; ++i)
 			{
@@ -1746,7 +1750,9 @@ void TerrainScattering::updateGridScatterChunkWithComputeShader(int chunk_x_inde
 				const float ny = corner_ny + (float)j * step_n;
 				assert(nx >= 0.f && nx <= 1.01f);
 				assert(ny >= 0.f && ny <= 1.01f);
-				const Colour4f mask_val = section->maskmap->vec3Sample(nx, 1.f - ny, /*wrap=*/false);
+				const float map_nx = myClamp((nx - 0.5f) * map_scale + 0.5f, 0.f, 1.f);
+				const float map_ny = myClamp((ny - 0.5f) * map_scale + 0.5f, 0.f, 1.f);
+				const Colour4f mask_val = surface_map->vec3Sample(map_nx, 1.f - map_ny, /*wrap=*/false);
 				max_vegetation_val = myMax(max_vegetation_val, mask_val[2]);
 			}
 		}
@@ -1820,6 +1826,8 @@ void TerrainScattering::updateGridScatterChunkWithComputeShader(int chunk_x_inde
 		chunk_info.terrain_scale_factor = terrain_scale_factor;
 		chunk_info.terrain_height_scale = terrain_system->spec.terrain_height_scale;
 		chunk_info.water_level_z = BitUtils::isBitSet(terrain_system->spec.flags, TerrainSpec::WATER_ENABLED_FLAG) ? terrain_system->spec.water_z : -100000.f;
+	chunk_info.heightmap_scale = section ? section->heightmap_scale : 1.f;
+	chunk_info.maskmap_scale = section ? section->maskmap_scale : 1.f;
 		chunk_info.vert_data_offset_B = (uint32)chunk.imposters_gl_ob->mesh_data->vbo_handle.offset;
 
 		chunk_info_ssbo->updateData(0, &chunk_info, sizeof(chunk_info));

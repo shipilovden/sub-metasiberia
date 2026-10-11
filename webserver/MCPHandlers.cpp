@@ -22,6 +22,7 @@ MCPHandlers.cpp
 #include <algorithm>
 #include <vector>
 #include <dll/include/IndigoException.h>
+#include <utils/IndigoXMLDoc.h>
 #include "MCPModeling.h"
 #include "../server/Server.h"
 #include "../shared/SubstrataLuaVM.h"
@@ -123,7 +124,7 @@ static std::string callTool(Server& server, ServerAllWorldsState& world_state, S
 	if(tool_name == "get_luau_reference")
 	{
 		const std::string topic = args.getChildStringValueWithDefaultVal(parser, "topic", "overview");
-		if(topic == "overview") return "{\"language\":\"Luau\",\"marker\":\"--lua\",\"execution\":\"Scripts run on both client and server; object side effects vary.\",\"uid\":\"Use this_object.uid for this object's UID and getObjectForUID(uid) to find another object.\",\"documentation\":\"Internal source: /about_luau_scripting and /example_luau_scripts\",\"topics\":[\"events\",\"objects\",\"materials\",\"avatars\",\"timers\",\"storage\",\"http\",\"examples\"]}";
+		if(topic == "overview") return "{\"languages\":{\"Luau\":\"Interactive object event scripts, source begins --lua\",\"XML\":\"Declarative object scripts such as follow_path and dynamic_texture_update; root is <script>\",\"Winter\":\"Deterministic object motion functions evalRotation and evalTranslation; no language marker\"},\"application\":\"Use update_object_script after editing; it applies the complete source to that object's UID and notifies clients to reload. Read the existing source first. In the native client, script changes are compiled when the object's script editor closes.\",\"documentation\":\"Luau: /about_luau_scripting and /example_luau_scripts; Winter: /about_scripting and resources/winter_stdlib.txt\",\"topics\":[\"events\",\"objects\",\"materials\",\"avatars\",\"timers\",\"storage\",\"http\",\"examples\",\"xml\",\"winter\"]}";
 		if(topic == "events") return "{\"functions\":[\"onUserTouchedObject(avatar, object)\",\"onUserUsedObject(avatar, object)\",\"onUserMovedNearToObject(avatar, object)\",\"onUserMovedAwayFromObject(avatar, object)\",\"onUserEnteredParcel(avatar, object, parcel)\",\"onUserExitedParcel(avatar, object, parcel)\",\"onUserEnteredVehicle(avatar, vehicle_ob)\",\"onUserExitedVehicle(avatar, vehicle_ob)\"],\"other_objects\":\"addEventListener(event_name, ob_uid, handler) listens on another object's UID; use an existing handler function.\",\"rules\":\"Start source with --lua. The E key triggers onUserUsedObject. Touch events may repeat about every 0.5 seconds while contact continues. Near/far events use about 20 metres.\"}";
 		if(topic == "objects") return "{\"globals\":[\"this_object:Object\",\"IS_CLIENT:boolean\",\"IS_SERVER:boolean\"],\"functions\":[\"getObjectForUID(uid):Object (throws if missing)\",\"showMessageToUser(msg, avatar)\"],\"object_attributes\":[\"uid\",\"model_url\",\"pos\",\"axis\",\"angle (radians)\",\"scale\",\"collidable\",\"dynamic\",\"sensor\",\"content\",\"video_autoplay\",\"video_loop\",\"video_muted\",\"mass\",\"friction\",\"restitution\",\"centre_of_mass_offset_os\",\"audio_source_url\",\"audio_volume\",\"getNumMaterials()\",\"getMaterial(index)\"],\"note\":\"Object attribute changes can have client-only or server-only immediate effects depending on the property. Use documented object properties; do not invent APIs.\"}";
 		if(topic == "materials") return "{\"access\":\"Object:getNumMaterials() and Object:getMaterial(index)\",\"material_properties\":[\"colour\",\"colour_texture_url\",\"emission_rgb\",\"emission_texture_url\",\"normal_map_url\",\"roughness_val\",\"roughness_texture_url\",\"metallic_fraction_val\",\"opacity_val\",\"tex_matrix\",\"emission_lum_flux_or_lum\",\"hologram\",\"double_sided\"],\"note\":\"Use only documented Material fields. Material edits may be client- or server-side according to runtime behavior.\"}";
@@ -132,8 +133,10 @@ static std::string callTool(Server& server, ServerAllWorldsState& world_state, S
 		if(topic == "storage") return "{\"functions\":[\"objectstorage.getItem(key)\",\"objectstorage.setItem(key, serialisable_value)\"],\"scope\":\"Storage is persistent across server restarts and script reloads; keys are scoped to the script object's UID.\"}";
 		if(topic == "http") return "{\"functions\":[\"doHTTPGetRequestAsync(url, headers, onDone, onError)\",\"doHTTPPostRequestAsync(url, body, content_type, headers, onDone, onError)\",\"parseJSON(json)\",\"getSecret(name)\"],\"limits\":\"HTTP requests are rate-limited to 5 per user per 300 seconds. Lua HTTP must be enabled by the server. getSecret reads account secrets; never hardcode API keys in object scripts.\",\"callbacks\":\"onDone receives response_code, response_message, mime_type, body_data; onError receives error_code and error_description.\"}";
 		if(topic == "examples") return "{\"source\":\"Internal examples: /example_luau_scripts. Patterns include touch/used-object interactions, jump pads, object-to-object UID references, timers and persistent visitor counters. Read the relevant example before generating a similar script.\",\"minimal_use_example\":\"--lua\\nfunction onUserUsedObject(avatar, object)\\n  showMessageToUser('Hello ' .. avatar.name, avatar)\\nend\"}";
-		if(topic == "all") return "{\"topics\":[\"overview\",\"events\",\"objects\",\"materials\",\"avatars\",\"timers\",\"storage\",\"http\",\"examples\"],\"instruction\":\"Call get_luau_reference again with each needed topic. Full internal reference: /about_luau_scripting; examples: /example_luau_scripts.\"}";
-		throw glare::Exception("Unknown Luau reference topic. Use overview, events, objects, materials, avatars, timers, storage, http, examples, or all.");
+		if(topic == "xml") return "{\"supported_forms\":[\"follow_path\",\"dynamic_texture_update\",\"vehicle configuration elements supported by the client parser\"],\"rules\":\"Keep the XML declaration optional, use one <script> root, and preserve all unrelated elements. For a route use <follow_path><speed>10</speed><time_offset>0</time_offset><waypoint><pos>x y z</pos><type>CurveIn|CurveOut|Stop</type><pause_time>10</pause_time></waypoint>...</follow_path>. Coordinates are world metres with Z up. Stop maps to a station; pause_time is seconds. CurveIn/CurveOut are trimmed before validation. XML is not Luau and must not be prefixed with --lua.\",\"validation\":\"update_object_script parses XML before saving; clients parse the supported route/vehicle data when notified.\"}";
+		if(topic == "winter") return "{\"purpose\":\"Winter provides deterministic, non-reactive object motion. Define either or both optional entry points; it is separate from XML follow_path and Luau event scripts.\",\"entry_points\":[\"def evalRotation(float time, WinterEnv env) vec3\",\"def evalTranslation(float time, WinterEnv env) vec3\"],\"rotation\":\"Return an axis-angle vector: its direction is the rotation axis and its length is the counter-clockwise angle in radians. Example: vec3(0, 0, 1) * time rotates around Z.\",\"translation\":\"Return an XYZ offset in metres from the object's authored position. Example: vec3(sin(time * 1.5) * 0.8, 0, 0). time is global world time.\",\"environment\":\"WinterEnv has integer instance_index and num_instances. The client currently evaluates ordinary objects with instance_index=0 and num_instances=1. The bundled resources/winter_stdlib.txt provides vec2/vec3/vec4 and matrix types, arithmetic helpers and standard math functions. composeRotations(vec3, vec3) is also available.\",\"editing\":\"Winter source is stored in the object's Script field without a --lua marker. Use update_object_script to apply the full Winter source; connected native desktop clients compile it as Winter. The MCP server does not compile Winter, and the web client does not support Winter evaluation. Internal reference: /about_scripting and the bundled Winter standard library.\"}";
+		if(topic == "all") return "{\"topics\":[\"overview\",\"events\",\"objects\",\"materials\",\"avatars\",\"timers\",\"storage\",\"http\",\"examples\",\"xml\",\"winter\"],\"instruction\":\"Read the topic matching the object's current script format. Full Luau reference: /about_luau_scripting; examples: /example_luau_scripts; Winter standard library: resources/winter_stdlib.txt.\"}";
+		throw glare::Exception("Unknown script reference topic. Use overview, events, objects, materials, avatars, timers, storage, http, examples, xml, winter, or all.");
 	}
 	if(tool_name == "get_object_script" || tool_name == "update_object_script")
 	{
@@ -147,11 +150,25 @@ static std::string callTool(Server& server, ServerAllWorldsState& world_state, S
 		const std::string script = args.getChildStringValue(parser, "script");
 		if(script.size() > WorldObject::MAX_SCRIPT_SIZE) throw glare::Exception("Script exceeds the 10000-byte object script limit.");
 		if(script.find('\0') != std::string::npos) throw glare::Exception("Script cannot contain a NUL byte.");
-		if(!script.empty() && !hasPrefix(script, "--lua")) throw glare::Exception("Luau object scripts must begin with --lua.");
+		const bool is_luau = hasPrefix(script, "--lua");
+		const bool is_xml = hasPrefix(script, "<?xml") || hasPrefix(script, "<script");
+		if(!script.empty() && is_xml)
+		{
+			try
+			{
+				IndigoXMLDoc doc(script.c_str(), script.size());
+				if(std::string(doc.getRootElement().name()) != "script")
+					throw glare::Exception("XML object scripts must have a <script> root element.");
+			}
+			catch(const glare::Exception& e)
+			{
+				throw glare::Exception(std::string("Invalid Metasiberia XML object script: ") + e.what());
+			}
+		}
 
 		Reference<LuaScriptEvaluator> new_evaluator;
 		bool server_execution_enabled = BitUtils::isBitSet(world_state.feature_flag_info.feature_flags, ServerAllWorldsState::SERVER_SCRIPT_EXEC_FEATURE_FLAG);
-		if(!script.empty() && server_execution_enabled)
+		if(!script.empty() && is_luau && server_execution_enabled)
 		{
 			if(!ob->creator_id.valid()) throw glare::Exception("Cannot start a server-side object script without a valid creator account.");
 			Reference<SubstrataLuaVM> lua_vm;
@@ -173,7 +190,8 @@ static std::string callTool(Server& server, ServerAllWorldsState& world_state, S
 		world.addWorldObjectAsDBDirty(ob, lock);
 		world.getDirtyFromRemoteObjects(lock).insert(ob);
 		world_state.markAsChanged();
-		return "{\"uid\":" + toString(ob->uid.value()) + ",\"saved\":true,\"bytes\":" + toString(script.size()) + ",\"server_execution_enabled\":" + std::string(server_execution_enabled ? "true" : "false") + ",\"server_evaluator_reloaded\":" + std::string(server_execution_enabled ? "true" : "false") + "}";
+		const char* const script_format = script.empty() ? "empty" : is_luau ? "luau" : is_xml ? "xml" : "winter";
+		return "{\"uid\":" + toString(ob->uid.value()) + ",\"saved\":true,\"bytes\":" + toString(script.size()) + ",\"format\":\"" + script_format + "\",\"server_execution_enabled\":" + std::string(server_execution_enabled ? "true" : "false") + ",\"server_evaluator_reloaded\":" + std::string(server_execution_enabled && is_luau ? "true" : "false") + "}";
 	}
 	if(tool_name == "import_texture") return Modeling::importTexture(world_state,parser,args);
 	if(tool_name == "create_image") return Modeling::imageObject(world_state,world,parser,args,user_id,username);
