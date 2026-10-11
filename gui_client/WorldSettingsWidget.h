@@ -83,6 +83,7 @@ public:
 	// Applies the albedo texture from a material selected in the material browser
 	// to the terrain layer whose "Choose material" button was used.
 	bool setTerrainMaterialFromBrowser(const std::string& material_path);
+	int terrainMaterialBrowserTarget() const { return terrain_material_browser_target; }
 
 	void updateControlsEditable();
 

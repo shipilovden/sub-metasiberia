@@ -18,6 +18,38 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 		ru_translations.insert(key(context, src), QString::fromUtf8(dst));
 	};
 
+	// Material browser / Poly Haven
+	add("MaterialBrowser", "Materials", "Материалы");
+	add("MaterialBrowser", "Search Poly Haven textures…", "Поиск текстур Poly Haven…");
+	add("MaterialBrowser", "Refresh", "Обновить");
+	add("MaterialBrowser", "Popular", "Популярные");
+	add("MaterialBrowser", "Newest", "Новые");
+	add("MaterialBrowser", "Name", "По названию");
+	add("MaterialBrowser", "All textures", "Все текстуры");
+	add("MaterialBrowser", "Asphalt & Bitumen", "Асфальт и битум");
+	add("MaterialBrowser", "Brick & Block", "Кирпичи и блоки");
+	add("MaterialBrowser", "Ceramic", "Керамика");
+	add("MaterialBrowser", "Concrete", "Бетон");
+	add("MaterialBrowser", "Ground & Terrain", "Земля и местность");
+	add("MaterialBrowser", "Metal", "Металл");
+	add("MaterialBrowser", "Organic", "Органика");
+	add("MaterialBrowser", "Paper & Cardboard", "Бумага и картон");
+	add("MaterialBrowser", "Paper & Card", "Бумага и картон");
+	add("MaterialBrowser", "Plastic & Rubber", "Пластик и резина");
+	add("MaterialBrowser", "Stone", "Камень");
+	add("MaterialBrowser", "Textiles & Leather", "Текстиль и кожа");
+	add("MaterialBrowser", "Wood", "Древесина");
+	add("MaterialBrowser", "Loading Poly Haven textures…", "Загрузка текстур Poly Haven…");
+	add("MaterialBrowser", "Could not load Poly Haven: %1", "Не удалось загрузить Poly Haven: %1");
+	add("MaterialBrowser", "Offline catalogue. Downloaded materials remain available.", "Каталог без подключения. Скачанные материалы доступны.");
+	add("MaterialBrowser", "No matching textures found.", "Подходящих текстур не найдено.");
+	add("MaterialBrowser", "%1 textures · Click a sphere to apply its 1K material.", "%1 текстур · Нажмите на сферу, чтобы применить материал 1K.");
+	add("MaterialBrowser", "Loading %1 · 1K…", "Загрузка %1 · 1K…");
+	add("MaterialBrowser", "Could not load the material: %1", "Не удалось загрузить материал: %1");
+	add("MaterialBrowser", "1K material ready. Click another sphere to change it.", "Материал 1K готов. Нажмите на другую сферу для замены.");
+	add("MainWindow", "Selection changed. Click the downloaded material again to apply it.", "Выделение изменилось. Нажмите на скачанный материал ещё раз, чтобы применить его.");
+	add("MainWindow", "Select an object, then click a material to apply it.", "Выделите объект и нажмите на материал, чтобы применить его.");
+
 	// Main menu
 	add("MainWindow", "Edit", "Правка");
 	add("MainWindow", "Movement", "Движение");
