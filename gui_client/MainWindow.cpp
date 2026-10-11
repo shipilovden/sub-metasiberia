@@ -1674,10 +1674,11 @@ static void applyEditorDockTitleBarTheme(QDockWidget* dock_widget, const QPalett
 	const bool chat_panel = dock_widget->objectName() == QStringLiteral("chatDockWidget");
 	const bool ai_panel = dock_widget->objectName() == QStringLiteral("aiDockWidget");
 	const bool add_object_panel = dock_widget->objectName() == QStringLiteral("addObjectDockWidget");
+	const bool material_panel = dock_widget->objectName() == QStringLiteral("materialBrowserDockWidget");
 	// These editors deliberately keep a dark title strip in every theme and
 	// activation state, including when floating. Only the title is overridden.
-	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || add_object_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
-	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || add_object_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
+	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || add_object_panel || material_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
+	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || add_object_panel || material_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
 	const QColor hover = foreground.lightness() > background.lightness() ? background.lighter(132) : background.darker(104);
 	// Own the custom title's colours locally, including when the dock floats.
 	// Do not depend on reapplying the main-window stylesheet to refresh it.
@@ -1743,6 +1744,13 @@ static void installEditorDockTitleBar(QDockWidget* dock_widget)
 	}
 	if(dock_widget->objectName() == QStringLiteral("addObjectDockWidget"))
 		float_button->hide(); // The model browser stays fixed while docked.
+	if(dock_widget->objectName() == QStringLiteral("materialBrowserDockWidget"))
+	{
+		float_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+		float_button->setText(QString::fromUtf8("↗"));
+		close_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+		close_button->setText(QString::fromUtf8("×"));
+	}
 
 	QObject::connect(dock_widget, &QDockWidget::windowTitleChanged, title_label, &QLabel::setText);
 	QObject::connect(float_button, &QToolButton::clicked, dock_widget, [dock_widget]() {
@@ -2570,6 +2578,7 @@ void MainWindow::initialiseUI()
 	installEditorDockTitleBar(ui->environmentDockWidget);
 	installEditorDockTitleBar(ui->worldSettingsDockWidget);
 	installEditorDockTitleBar(ui->chatDockWidget);
+	installEditorDockTitleBar(ui->materialBrowserDockWidget);
 	ui->editorDockWidget->setMinimumWidth(360);
 	ui->scrollArea->setWidgetResizable(true);
 	ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -2930,6 +2939,37 @@ void MainWindow::initialiseUI()
 
 	ui->materialBrowserDockWidgetContents->init(this, this->base_dir_path, this->appdata_path, /*print output=*/this);
 	connect(ui->materialBrowserDockWidgetContents, SIGNAL(materialSelected(const std::string&)), this, SLOT(materialSelectedInBrowser(const std::string&)));
+	// Online loading is deferred: only apply if the world, object and material slot
+	// still match the selection at click time. The browser discards superseded clicks.
+	const auto apply_polyhaven_material = std::make_shared<std::function<void(const std::string&)>>();
+	connect(ui->materialBrowserDockWidgetContents, &MaterialBrowser::polyHavenMaterialRequested, this, [this, apply_polyhaven_material]() {
+		const WorldObjectRef object = gui_client.selected_ob;
+		const auto world = gui_client.world_state;
+		const int material_index = ui->objectEditor->getSelectedMatIndex();
+		const int terrain_index = ui->worldSettingsWidget->terrainMaterialBrowserTarget();
+		*apply_polyhaven_material = [this, object, world, material_index, terrain_index](const std::string& path) {
+			if(gui_client.world_state != world || ui->worldSettingsWidget->terrainMaterialBrowserTarget() != terrain_index ||
+				(terrain_index < 0 && (gui_client.selected_ob != object || ui->objectEditor->getSelectedMatIndex() != material_index)))
+			{
+				showErrorNotification(QtUtils::toStdString(tr("Selection changed. Click the downloaded material again to apply it.")));
+				return;
+			}
+			if(terrain_index < 0 && object.isNull())
+			{
+				showErrorNotification(QtUtils::toStdString(tr("Select an object, then click a material to apply it.")));
+				return;
+			}
+			materialSelectedInBrowser(path);
+		};
+	});
+	connect(ui->materialBrowserDockWidgetContents, &MaterialBrowser::polyHavenMaterialReady, this, [apply_polyhaven_material](const std::string& path) {
+		if(*apply_polyhaven_material)
+		{
+			auto apply = std::move(*apply_polyhaven_material);
+			*apply_polyhaven_material = {};
+			apply(path);
+		}
+	});
 
 	ui->objectEditor->setControlsEnabled(false);
 	scientific_object_editor->setControlsEnabled(false);
@@ -3750,6 +3790,7 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	applyEditorDockTitleBarTheme(photo_video_dock_widget, palette);
 	applyEditorDockTitleBarTheme(animation_editor_dock_widget, palette);
 	applyEditorDockTitleBarTheme(ui->chatDockWidget, palette);
+	applyEditorDockTitleBarTheme(ui->materialBrowserDockWidget, palette);
 	applyEditorDockTitleBarTheme(ai_dock_widget, palette);
 
 	if(ui->menubar)

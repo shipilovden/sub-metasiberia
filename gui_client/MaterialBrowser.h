@@ -10,11 +10,24 @@ Copyright Glare Technologies Limited 2025 -
 #include <utils/Reference.h>
 #include <string>
 #include <vector>
+#include <QtCore/QHash>
+#include <QtCore/QJsonObject>
+#include <QtCore/QSet>
+#include <QtGui/QIcon>
+#include <atomic>
+#include <memory>
 
 class QPushButton;
 class FlowLayout;
 class OpenGLEngine;
 class PrintOutput;
+class QTabWidget;
+class QTreeWidget;
+class QListWidget;
+class QListWidgetItem;
+class QLineEdit;
+class QLabel;
+class QComboBox;
 
 
 /*=====================================================================
@@ -36,11 +49,40 @@ public:
 
 signals:;
 	void materialSelected(const std::string& path);
+	void polyHavenMaterialRequested();
+	void polyHavenMaterialReady(const std::string& path);
 
 private slots:;
 	void buttonClicked();
 
 private:
+	void loadPolyHavenCatalog();
+	void rebuildCategories();
+	void filterPolyHavenMaterials();
+	void loadVisibleThumbnails();
+	void selectPolyHavenMaterial(QListWidgetItem* item);
+	void startMaterialDownload();
+	void retranslateBrowser();
+	void changeEvent(QEvent* event) override;
+	bool eventFilter(QObject* watched, QEvent* event) override;
+
+	QTabWidget* source_tabs = nullptr;
+	QTreeWidget* categories = nullptr;
+	QListWidget* polyhaven_materials = nullptr;
+	QLineEdit* search = nullptr;
+	QComboBox* sort = nullptr;
+	QLabel* status = nullptr;
+	QLabel* attribution = nullptr;
+	QPushButton* refresh = nullptr;
+	QJsonObject catalog;
+	QHash<QString, QIcon> thumbnail_icons;
+	QSet<QString> pending_thumbnails, failed_thumbnails;
+	QString pending_material_id;
+	int selection_generation = 0;
+	bool catalog_loading = false;
+	bool material_loading = false;
+	std::shared_ptr<std::atomic<bool>> alive;
+
 	FlowLayout *				flow_layout;
 	std::vector<QPushButton *>	browser_buttons;
 	std::vector<std::string>	mat_paths;

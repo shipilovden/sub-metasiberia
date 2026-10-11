@@ -517,6 +517,7 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/UpdateManager.h
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.h
+		${CMAKE_SOURCE_DIR}/gui_client/PolyHavenMaterialCache.h
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialBrowser.ui
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialEditor.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MaterialEditor.h
