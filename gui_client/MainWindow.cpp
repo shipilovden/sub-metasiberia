@@ -18,6 +18,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "MCPClientHandler.h"
 #include <QtCore/QSemaphore>
 #include <QtCore/QBuffer>
+#include <QtCore/QEventLoop>
 #include <atomic>
 #include "CreateObjectsDialog.h"
 #include "webcam/WebcamWindow.h"
@@ -150,6 +151,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QDockWidget>
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
@@ -1671,10 +1673,11 @@ static void applyEditorDockTitleBarTheme(QDockWidget* dock_widget, const QPalett
 	const bool animation_panel = dock_widget->objectName() == QStringLiteral("animationEditorDockWidget");
 	const bool chat_panel = dock_widget->objectName() == QStringLiteral("chatDockWidget");
 	const bool ai_panel = dock_widget->objectName() == QStringLiteral("aiDockWidget");
+	const bool add_object_panel = dock_widget->objectName() == QStringLiteral("addObjectDockWidget");
 	// These editors deliberately keep a dark title strip in every theme and
 	// activation state, including when floating. Only the title is overridden.
-	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
-	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
+	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || add_object_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
+	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || add_object_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
 	const QColor hover = foreground.lightness() > background.lightness() ? background.lighter(132) : background.darker(104);
 	// Own the custom title's colours locally, including when the dock floats.
 	// Do not depend on reapplying the main-window stylesheet to refresh it.
@@ -1738,6 +1741,8 @@ static void installEditorDockTitleBar(QDockWidget* dock_widget)
 		close_button->setText(QString::fromUtf8("×"));
 		close_button->setToolTip(QCoreApplication::translate("MainWindow", "Закрыть панель чата"));
 	}
+	if(dock_widget->objectName() == QStringLiteral("addObjectDockWidget"))
+		float_button->hide(); // The model browser stays fixed while docked.
 
 	QObject::connect(dock_widget, &QDockWidget::windowTitleChanged, title_label, &QLabel::setText);
 	QObject::connect(float_button, &QToolButton::clicked, dock_widget, [dock_widget]() {
@@ -8334,47 +8339,107 @@ void MainWindow::on_actionAddObject_triggered()
 		return;
 	}
 
-	AddObjectDialog dialog(this->base_dir_path, this->settings, gui_client.resource_manager, 
+	// Overlay the model browser inside the current world viewport. The world
+	// stays at its existing layout size underneath the browser.
+	const QRect scene_bounds(ui->glWidget->mapTo(this, QPoint(0, 0)), ui->glWidget->size());
+	AddObjectDialog* dialog = new AddObjectDialog(this->base_dir_path, this->settings, gui_client.resource_manager,
 #ifdef _WIN32
 		this->device_manager.ptr,
 #else
 		NULL,
 #endif
-		main_task_manager, high_priority_task_manager
+		main_task_manager, high_priority_task_manager, this, true
 	);
-	const int res = dialog.exec();
+	QDockWidget* add_object_dock = NULL;
+	dialog->setOverlayBounds(scene_bounds);
+	connect(ui->glWidget, &GlWidget::viewportResizedSignal, dialog, [this, dialog, &add_object_dock](int, int)
+	{
+		if(add_object_dock)
+			return;
+		const QRect resized_scene_bounds(ui->glWidget->mapTo(this, QPoint(0, 0)), ui->glWidget->size());
+		dialog->setOverlayBounds(resized_scene_bounds);
+		dialog->raise();
+	});
+	const int initial_width = qBound(qMin(420, scene_bounds.width()),
+		qRound(scene_bounds.width() * 0.58), scene_bounds.width());
+	dialog->setGeometry(QRect(
+		QPoint(scene_bounds.right() - initial_width + 1, scene_bounds.top()),
+		QSize(initial_width, scene_bounds.height())));
+	connect(dialog, &AddObjectDialog::dockRequested, dialog, [this, dialog, &add_object_dock]()
+	{
+		// Reparent after the double-click event has finished dispatching.
+		QTimer::singleShot(0, dialog, [this, dialog, &add_object_dock]()
+		{
+			if(add_object_dock)
+				return;
+			const int preferred_width = qMin(dialog->width(), 560);
+			dialog->setDockedMode();
+			QDockWidget* dock = new QDockWidget(dialog->windowTitle(), this);
+			add_object_dock = dock;
+			dock->setObjectName(QStringLiteral("addObjectDockWidget"));
+			dock->setAllowedAreas(Qt::RightDockWidgetArea);
+			dock->setFeatures(QDockWidget::DockWidgetClosable);
+			installEditorDockTitleBar(dock);
+			dialog->setParent(dock, Qt::Widget);
+			dock->setWidget(dialog);
+			addDockWidget(Qt::RightDockWidgetArea, dock);
+			QDockWidget* const adjacent = (ai_dock_widget && ai_dock_widget->isVisible() && !ai_dock_widget->isFloating())
+				? static_cast<QDockWidget*>(ai_dock_widget)
+				: ((ui->chatDockWidget->isVisible() && !ui->chatDockWidget->isFloating()) ? ui->chatDockWidget : NULL);
+			if(adjacent)
+				splitDockWidget(dock, adjacent, Qt::Horizontal);
+			dock->show();
+			dialog->show();
+			resizeDocks(QList<QDockWidget*>() << dock, QList<int>() << preferred_width, Qt::Horizontal);
+			connect(dock, &QDockWidget::visibilityChanged, dialog, [dialog](bool visible)
+			{
+				if(!visible && !dialog->isHidden())
+					dialog->reject();
+			});
+		});
+	});
+	QEventLoop dialog_event_loop;
+	connect(dialog, &QDialog::finished, &dialog_event_loop, &QEventLoop::quit);
+	dialog->show();
+	dialog->raise();
+	dialog->activateWindow();
+	dialog_event_loop.exec();
+	const int res = dialog->result();
+	dialog->hide();
+	if(add_object_dock)
+		add_object_dock->hide();
 	ui->glWidget->makeCurrent(); // Change back from the dialog GL context to the mainwindow GL context.
 
-	if((res == QDialog::Accepted) && !dialog.loaded_materials.empty()) // If dialog was accepted, and we loaded an object successfully in it:
+	if((res == QDialog::Accepted) && !dialog->loaded_materials.empty()) // If dialog was accepted, and we loaded an object successfully in it:
 	{
 		try
 		{
-			const Vec3d adjusted_ob_pos = ob_pos + gui_client.cam_controller.getRightVec() * dialog.ob_cam_right_translation + gui_client.cam_controller.getUpVec() * dialog.ob_cam_up_translation; // Centre object in front of camera
+			const Vec3d adjusted_ob_pos = ob_pos + gui_client.cam_controller.getRightVec() * dialog->ob_cam_right_translation + gui_client.cam_controller.getUpVec() * dialog->ob_cam_up_translation; // Centre object in front of camera
 
 			// Some mesh types have a rotation to bring them to our z-up convention.  Don't change the rotation on those.
 			Vec3f axis(0, 0, 1);
 			float angle = 0;
-			if(dialog.axis == Vec3f(0, 0, 1))
+			if(dialog->axis == Vec3f(0, 0, 1))
 			{
 				// If we don't have a rotation to z-up, make object face camera.
 				angle = Maths::roundToMultipleFloating((float)gui_client.cam_controller.getAngles().x - Maths::pi_2<float>(), Maths::pi_4<float>()); // Round to nearest 45 degree angle, facing camera.
 			}
 			else
 			{
-				axis = dialog.axis;
-				angle = dialog.angle;
+				axis = dialog->axis;
+				angle = dialog->angle;
 			}
 
 			gui_client.createObject(
-				dialog.result_path,
-				dialog.loaded_mesh,
-				dialog.loaded_mesh_is_image_cube,
-				dialog.loaded_voxels,
+				dialog->result_path,
+				dialog->loaded_mesh,
+				dialog->loaded_mesh_is_image_cube,
+				dialog->loaded_voxels,
 				adjusted_ob_pos,
-				dialog.scale,
+				dialog->scale,
 				axis,
 				angle,
-				dialog.loaded_materials
+				dialog->loaded_materials
 			);
 		}
 		catch(glare::Exception& e)
@@ -8386,6 +8451,10 @@ void MainWindow::on_actionAddObject_triggered()
 			m.exec();
 		}
 	}
+	if(add_object_dock)
+		delete add_object_dock; // Owns the dialog after setWidget().
+	else
+		delete dialog;
 }
 
 

@@ -34,7 +34,6 @@ Copyright Glare Technologies Limited 2022 -
 #include <QtWidgets/QProgressDialog>
 #include <QtWidgets/QPushButton>
 #include <QtCore/QSettings>
-#include <QtCore/QTimer>
 #include <QtCore/QEvent>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
@@ -44,6 +43,7 @@ Copyright Glare Technologies Limited 2022 -
 #include <QtCore/QJsonArray>
 #include <QtCore/QMetaObject>
 #include <QtCore/QPointer>
+#include <QtCore/QSignalBlocker>
 #include <QtCore/QRunnable>
 #include <QtCore/QThreadPool>
 #include <QtCore/QTemporaryDir>
@@ -56,8 +56,12 @@ Copyright Glare Technologies Limited 2022 -
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QListWidgetItem>
 #include <QtWidgets/QAbstractItemView>
+#include <QtWidgets/QComboBox>
+#include <QtWidgets/QSplitter>
+#include <QtWidgets/QToolButton>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QDialogButtonBox>
+#include <QtGui/QMouseEvent>
 #include <functional>
 
 
@@ -166,8 +170,9 @@ static void deleteAddObjectGaussianTemporaryFile(const std::string& path)
 
 
 AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* settings_, Reference<ResourceManager> resource_manager_, IMFDXGIDeviceManager* dev_manager_,
-	glare::TaskManager* main_task_manager_, glare::TaskManager* high_priority_task_manager_)
-:	settings(settings_),
+	glare::TaskManager* main_task_manager_, glare::TaskManager* high_priority_task_manager_, QWidget* parent_, bool show_as_workspace_overlay)
+:	QDialog(parent_, show_as_workspace_overlay ? Qt::Widget : Qt::Dialog),
+	settings(settings_),
 	gaussian_splat_progress_dialog(NULL),
 	resource_manager(resource_manager_),
 	base_dir_path(base_dir_path_),
@@ -176,14 +181,90 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	polyHavenStatusLabel(NULL),
 	polyHavenWebTabs(NULL),
 	polyHavenSearchButton(NULL),
+	polyHavenCategoryCombo(NULL),
 	polyHavenTempDir(),
 	polyHavenRequestGeneration(0),
+	workspace_overlay(show_as_workspace_overlay),
+	docked_mode(false),
+	overlay_title_bar(NULL),
+	resize_edges(),
 	dev_manager(dev_manager_),
 	loaded_mesh_is_image_cube(false),
 	main_task_manager(main_task_manager_),
 	high_priority_task_manager(high_priority_task_manager_)
 {
+	if(workspace_overlay)
+		setParent(parent_, Qt::Widget); // QDialog's constructor otherwise keeps Qt::Dialog and a native title bar.
 	setupUi(this);
+	if(workspace_overlay)
+	{
+		// This is a child overlay over the GL viewport, not a separate desktop
+		// window. Keeping it in the widget tree avoids DWM transparency/flicker
+		// while the adjacent dock panels are resized.
+		setAttribute(Qt::WA_NativeWindow, true);
+		setWindowModality(Qt::NonModal);
+		setMouseTracking(true);
+		setMinimumSize(420, 360);
+		if(parent_)
+			setPalette(parent_->palette());
+		setAutoFillBackground(true);
+		verticalLayout->setContentsMargins(8, 8, 8, 8);
+		verticalLayout->setSpacing(4);
+
+		QWidget* title_bar = new QWidget(this);
+		overlay_title_bar = title_bar;
+		title_bar->setObjectName(QStringLiteral("addObjectOverlayTitleBar"));
+		title_bar->setAttribute(Qt::WA_StyledBackground, true);
+		title_bar->setStyleSheet(QStringLiteral("QWidget#addObjectOverlayTitleBar { background: #34343a; border-bottom: 1px solid #4b4950; }"));
+		QHBoxLayout* title_layout = new QHBoxLayout(title_bar);
+		title_layout->setContentsMargins(8, 2, 4, 2);
+		QLabel* title_label = new QLabel(tr("Add Model or Image"), title_bar);
+		title_label->setAttribute(Qt::WA_TransparentForMouseEvents);
+		title_label->setStyleSheet(QStringLiteral("color: #e4e4e7; background: transparent; border: none;"));
+		QToolButton* close_button = new QToolButton(title_bar);
+		close_button->setText(QString::fromUtf8("×"));
+		close_button->setToolTip(tr("Close"));
+		close_button->setFixedSize(26, 22);
+		close_button->setStyleSheet(QStringLiteral("QToolButton { color: #e4e4e7; background: transparent; border: none; font-size: 18px; } QToolButton:hover { background: #b33a3a; }"));
+		title_layout->addWidget(title_label, 1);
+		title_layout->addWidget(close_button);
+		verticalLayout->insertWidget(0, title_bar);
+		connect(close_button, &QToolButton::clicked, this, &QDialog::reject);
+	}
+	else
+		setWindowFlags(windowFlags() | Qt::WindowMaximizeButtonHint);
+
+	// Keep the browser and 3D preview independently resizable in the same dialog.
+	QWidget* browser_panel = new QWidget(this);
+	QVBoxLayout* browser_layout = new QVBoxLayout(browser_panel);
+	browser_layout->setContentsMargins(0, 0, 0, 0);
+	verticalLayout->removeWidget(tabWidget);
+	tabWidget->setParent(browser_panel);
+	browser_layout->addWidget(tabWidget);
+	QWidget* preview_panel = new QWidget(this);
+	QVBoxLayout* preview_layout = new QVBoxLayout(preview_panel);
+	preview_layout->setContentsMargins(0, 0, 0, 0);
+	verticalLayout->removeWidget(label);
+	verticalLayout->removeWidget(centralWidget);
+	label->setParent(preview_panel);
+	centralWidget->setParent(preview_panel);
+	preview_layout->addWidget(label);
+	preview_layout->addWidget(centralWidget, 1);
+	QSplitter* content_splitter = new QSplitter(Qt::Vertical, this);
+	content_splitter->setObjectName("addObjectContentSplitter");
+	// Let the splitter resize its panels below their contents' preferred heights.
+	browser_panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Ignored);
+	preview_panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Ignored);
+	browser_panel->setMinimumHeight(120);
+	preview_panel->setMinimumHeight(120);
+	content_splitter->setHandleWidth(10);
+	content_splitter->addWidget(browser_panel);
+	content_splitter->addWidget(preview_panel);
+	content_splitter->setStretchFactor(0, 1);
+	content_splitter->setStretchFactor(1, 1);
+	content_splitter->setSizes(QList<int>() << 120 << 120); // Start with equal browser and preview heights.
+	content_splitter->setChildrenCollapsible(false);
+	verticalLayout->insertWidget(workspace_overlay ? 1 : 0, content_splitter, 1);
 
 	// Keep the original URL workflow and add Poly Haven as a second source inside "From Web".
 	QTabWidget* webSources=new QTabWidget(tab_3);
@@ -204,6 +285,10 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	polyHavenSearchEdit->setPlaceholderText(tr("Search models: chair, tree, rock…"));
 	polyHavenSearchButton=new QPushButton(tr("Search"),polyHavenPage);
 	polyHavenSearchButton->setObjectName("polyHavenSearchButton");
+	polyHavenCategoryCombo=new QComboBox(polyHavenPage);
+	polyHavenCategoryCombo->setObjectName("polyHavenCategoryCombo");
+	polyHavenCategoryCombo->addItem(tr("All categories"), QString());
+	searchLayout->addWidget(polyHavenCategoryCombo);
 	searchLayout->addWidget(polyHavenSearchEdit,1);
 	searchLayout->addWidget(polyHavenSearchButton);
 	polyLayout->addLayout(searchLayout);
@@ -226,6 +311,7 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 	verticalLayout_5->addWidget(webSources);
 	connect(polyHavenSearchButton,SIGNAL(clicked()),this,SLOT(searchPolyHavenModels()));
 	connect(polyHavenSearchEdit,SIGNAL(returnPressed()),this,SLOT(searchPolyHavenModels()));
+	connect(polyHavenCategoryCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { searchPolyHavenModels(); });
 	connect(polyHavenModelList,SIGNAL(itemClicked(QListWidgetItem*)),this,SLOT(polyHavenModelSelected(QListWidgetItem*)));
 	connect(webSources,SIGNAL(currentChanged(int)),this,SLOT(searchPolyHavenModels()));
 	polyHavenTempDir.reset(new QTemporaryDir());
@@ -235,8 +321,10 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 
 	this->objectPreviewGLWidget->init(base_dir_path, settings_, texture_server, main_task_manager, high_priority_task_manager);
 
-	// Load main window geometry and state
-	this->restoreGeometry(settings->value("AddObjectDialog/geometry").toByteArray());
+	// Overlay geometry is constrained by the current scene viewport. Ignore old
+	// saved top-level dialog geometry so it cannot cover the whole application.
+	if(!workspace_overlay)
+		this->restoreGeometry(settings->value("AddObjectDialog/geometry").toByteArray());
 
 	this->tabWidget->setCurrentIndex(settings->value("AddObjectDialog/tabIndex").toInt());
 
@@ -280,6 +368,17 @@ AddObjectDialog::AddObjectDialog(const std::string& base_dir_path_, QSettings* s
 		item->setData(Qt::UserRole + 1, QString::fromLatin1(primitive.label));
 		listWidget->addItem(item);
 	}
+
+	if(workspace_overlay)
+	{
+		// Edge gestures must still work when the pointer is over a child control.
+		installEventFilter(this);
+		for(QWidget* child : findChildren<QWidget*>())
+		{
+			child->setMouseTracking(true);
+			child->installEventFilter(this);
+		}
+	}
 }
 
 
@@ -287,9 +386,157 @@ AddObjectDialog::~AddObjectDialog()
 {
 	cancelGaussianSplatConversion(/*delete_temporary_output=*/true);
 
-	settings->setValue("AddObjectDialog/geometry", saveGeometry());
+	if(isWindow() && !workspace_overlay)
+		settings->setValue("AddObjectDialog/geometry", saveGeometry());
 
 	settings->setValue("AddObjectDialog/tabIndex", this->tabWidget->currentIndex());
+}
+
+
+void AddObjectDialog::setOverlayBounds(const QRect& bounds)
+{
+	if(!workspace_overlay || docked_mode || bounds.isEmpty())
+		return;
+
+	const bool had_previous_bounds = !overlay_bounds.isEmpty();
+	const double width_fraction = had_previous_bounds ? (double)width() / overlay_bounds.width() : 0.58;
+	const double height_fraction = had_previous_bounds ? (double)height() / overlay_bounds.height() : 1.0;
+	overlay_bounds = bounds;
+	setMinimumSize(qMin(420, bounds.width()), qMin(360, bounds.height()));
+	setMaximumSize(bounds.size());
+
+	if(had_previous_bounds)
+	{
+		const int new_width = qBound(minimumWidth(), qRound(bounds.width() * width_fraction), bounds.width());
+		const int new_height = qBound(minimumHeight(), qRound(bounds.height() * height_fraction), bounds.height());
+		setGeometry(QRect(QPoint(bounds.right() - new_width + 1, bounds.top()), QSize(new_width, new_height)));
+	}
+}
+
+
+void AddObjectDialog::setDockedMode()
+{
+	if(!workspace_overlay || docked_mode)
+		return;
+
+	docked_mode = true;
+	resize_edges = Qt::Edges();
+	if(overlay_title_bar)
+		overlay_title_bar->hide();
+	setMinimumSize(420, 360);
+	setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+}
+
+
+bool AddObjectDialog::eventFilter(QObject* watched, QEvent* event)
+{
+	if(!workspace_overlay || docked_mode)
+		return QDialog::eventFilter(watched, event);
+
+	QWidget* const source = qobject_cast<QWidget*>(watched);
+	if(!source || (source != this && !isAncestorOf(source)))
+		return QDialog::eventFilter(watched, event);
+	// Keep the splitter's resize cursor and mouse gestures independent of overlay edge resizing.
+	if(resize_edges == Qt::Edges() && qobject_cast<QSplitterHandle*>(source))
+		return QDialog::eventFilter(watched, event);
+
+	if(event->type() == QEvent::MouseButtonDblClick && source == overlay_title_bar)
+	{
+		emit dockRequested();
+		event->accept();
+		return true;
+	}
+	if(event->type() == QEvent::Leave)
+	{
+		if(resize_edges == Qt::Edges())
+			source->unsetCursor();
+		return QDialog::eventFilter(watched, event);
+	}
+
+	const QEvent::Type type = event->type();
+	if(type == QEvent::MouseButtonPress || type == QEvent::MouseMove || type == QEvent::MouseButtonRelease)
+	{
+		QMouseEvent* const mouse_event = static_cast<QMouseEvent*>(event);
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+		const QPoint global_pos = mouse_event->globalPosition().toPoint();
+#else
+		const QPoint global_pos = mouse_event->globalPos();
+#endif
+		const QPoint local_pos = source->mapTo(this, mouse_event->pos());
+
+		if(type == QEvent::MouseButtonPress && mouse_event->button() == Qt::LeftButton)
+		{
+			const int edge_margin = 8;
+			resize_edges = Qt::Edges();
+			if(local_pos.x() <= edge_margin) resize_edges |= Qt::LeftEdge;
+			if(local_pos.x() >= width() - edge_margin) resize_edges |= Qt::RightEdge;
+			if(local_pos.y() <= edge_margin) resize_edges |= Qt::TopEdge;
+			if(local_pos.y() >= height() - edge_margin) resize_edges |= Qt::BottomEdge;
+			if(resize_edges != Qt::Edges())
+			{
+				resize_start_global_pos = global_pos;
+				resize_start_geometry = geometry();
+				grabMouse();
+				mouse_event->accept();
+				return true;
+			}
+		}
+		else if(type == QEvent::MouseMove)
+		{
+			if(resize_edges != Qt::Edges() && (mouse_event->buttons() & Qt::LeftButton))
+			{
+				const QPoint delta = global_pos - resize_start_global_pos;
+				int left = resize_start_geometry.left();
+				int right = resize_start_geometry.right();
+				int top = resize_start_geometry.top();
+				int bottom = resize_start_geometry.bottom();
+				const int min_width = minimumWidth();
+				const int min_height = minimumHeight();
+
+				if(resize_edges.testFlag(Qt::LeftEdge)) left += delta.x();
+				if(resize_edges.testFlag(Qt::RightEdge)) right += delta.x();
+				if(resize_edges.testFlag(Qt::TopEdge)) top += delta.y();
+				if(resize_edges.testFlag(Qt::BottomEdge)) bottom += delta.y();
+
+				if(resize_edges.testFlag(Qt::LeftEdge))
+					left = qBound(overlay_bounds.left(), left, right - min_width + 1);
+				if(resize_edges.testFlag(Qt::RightEdge))
+					right = qBound(left + min_width - 1, right, overlay_bounds.right());
+				if(resize_edges.testFlag(Qt::TopEdge))
+					top = qBound(overlay_bounds.top(), top, bottom - min_height + 1);
+				if(resize_edges.testFlag(Qt::BottomEdge))
+					bottom = qBound(top + min_height - 1, bottom, overlay_bounds.bottom());
+
+				setGeometry(QRect(QPoint(left, top), QPoint(right, bottom)));
+				mouse_event->accept();
+				return true;
+			}
+
+			const int edge_margin = 8;
+			const bool left = local_pos.x() <= edge_margin;
+			const bool right = local_pos.x() >= width() - edge_margin;
+			const bool top = local_pos.y() <= edge_margin;
+			const bool bottom = local_pos.y() >= height() - edge_margin;
+			if((left || right) && (top || bottom))
+				source->setCursor((left == top) ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
+			else if(left || right)
+				source->setCursor(Qt::SizeHorCursor);
+			else if(top || bottom)
+				source->setCursor(Qt::SizeVerCursor);
+			else
+				source->unsetCursor();
+		}
+		else if(type == QEvent::MouseButtonRelease && mouse_event->button() == Qt::LeftButton && resize_edges != Qt::Edges())
+		{
+			resize_edges = Qt::Edges();
+			releaseMouse();
+			unsetCursor();
+			mouse_event->accept();
+			return true;
+		}
+	}
+
+	return QDialog::eventFilter(watched, event);
 }
 
 
@@ -770,16 +1017,19 @@ void AddObjectDialog::searchPolyHavenModels()
 	if(QPushButton* ok_button=buttonBox->button(QDialogButtonBox::Ok)) ok_button->setEnabled(true);
 	const int generation=++polyHavenRequestGeneration;
 	const QString query=polyHavenSearchEdit ? polyHavenSearchEdit->text() : QString();
+	const QString category=polyHavenCategoryCombo ? polyHavenCategoryCombo->currentData().toString() : QString();
 	polyHavenStatusLabel->setText(tr("Searching Poly Haven…"));
 	polyHavenModelList->clear();
 	QPointer<AddObjectDialog> dialog(this);
-	QThreadPool::globalInstance()->start(new AddObjectRunnable([dialog,generation,query]() {
+	QThreadPool::globalInstance()->start(new AddObjectRunnable([dialog,generation,query,category]() {
 		QJsonArray results;
+		QStringList categories;
 		QString error;
 		try
 		{
-			results=MCPTextures::searchModels(query,24);
-			for(int i=0;i<results.size();++i)
+			categories=MCPTextures::modelCategories();
+			results=MCPTextures::searchModels(query,200,category);
+			for(int i=0;i<results.size() && i<48;++i)
 			{
 				QJsonObject item=results[i].toObject();
 				const QUrl thumbnail_url(item.value("thumbnail_url").toString());
@@ -793,15 +1043,27 @@ void AddObjectDialog::searchPolyHavenModels()
 		}
 		catch(const glare::Exception& e) { error=QString::fromStdString(e.what()); }
 		if(dialog)
-			QMetaObject::invokeMethod(dialog.data(),[dialog,generation,results,error]() {
+			QMetaObject::invokeMethod(dialog.data(),[dialog,generation,results,categories,error]() {
 				if(!dialog || dialog->polyHavenRequestGeneration!=generation) return;
 				if(!error.isEmpty()) { dialog->polyHavenStatusLabel->setText(dialog->tr("Poly Haven search failed: %1").arg(error.toHtmlEscaped())); return; }
+				if(dialog->polyHavenCategoryCombo)
+				{
+					const QString selected=dialog->polyHavenCategoryCombo->currentData().toString();
+					const QSignalBlocker blocker(dialog->polyHavenCategoryCombo);
+					dialog->polyHavenCategoryCombo->clear();
+					dialog->polyHavenCategoryCombo->addItem(dialog->tr("All categories"), QString());
+					for(const QString& category : categories) dialog->polyHavenCategoryCombo->addItem(category, category);
+					const int selected_index=dialog->polyHavenCategoryCombo->findData(selected);
+					if(selected_index>=0) dialog->polyHavenCategoryCombo->setCurrentIndex(selected_index);
+				}
 				for(const QJsonValue& value : results)
 				{
 					const QJsonObject asset=value.toObject();
-					QListWidgetItem* item=new QListWidgetItem(asset.value("name").toString());
+					const QString site_category=asset.value("category").toString();
+					const QString categories_text=site_category.isEmpty() ? QString() : QString(" — %1").arg(site_category);
+					QListWidgetItem* item=new QListWidgetItem(asset.value("name").toString()+categories_text);
 					item->setData(Qt::UserRole,asset.value("id").toString());
-					item->setToolTip(asset.value("description").toString()+"\n\nPoly Haven · CC0");
+					item->setToolTip(asset.value("description").toString()+"\n\n"+site_category+"\nPoly Haven · CC0");
 					const QByteArray image_bytes=QByteArray::fromBase64(asset.value("thumbnail_data").toString().toLatin1());
 					if(!image_bytes.isEmpty())
 					{
@@ -889,8 +1151,9 @@ void AddObjectDialog::urlEditingFinished()
 // Will be called when the user clicks the 'X' button.
 void AddObjectDialog::closeEvent(QCloseEvent* event)
 {
-	++polyHavenRequestGeneration;
-	shutdownGL();
+	// Let QDialog finish normally. dialogFinished() invalidates pending search
+	// results and releases the preview GL context exactly once.
+	QDialog::closeEvent(event);
 }
 
 
@@ -912,6 +1175,7 @@ void AddObjectDialog::changeEvent(QEvent* event)
 		}
 		if(polyHavenSearchEdit) polyHavenSearchEdit->setPlaceholderText(tr("Search models: chair, tree, rock…"));
 		if(polyHavenSearchButton) polyHavenSearchButton->setText(tr("Search"));
+		if(polyHavenCategoryCombo && polyHavenCategoryCombo->count()>0) polyHavenCategoryCombo->setItemText(0,tr("All categories"));
 		if(polyHavenModelList && polyHavenModelList->count()==0 && polyHavenStatusLabel)
 			polyHavenStatusLabel->setText(tr("Choose a model to download and preview. <a href=\"https://polyhaven.com\">Powered by Poly Haven</a> · CC0"));
 	}

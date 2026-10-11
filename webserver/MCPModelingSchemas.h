@@ -131,11 +131,11 @@ static std::string toolsListJSON()
     },
     {
       "name": "get_luau_reference",
-      "description": "Read the built-in Metasiberia Luau scripting reference before writing object scripts. Use a focused topic; generated scripts must use documented APIs and begin with --lua. Internal docs: /about_luau_scripting and /example_luau_scripts.",
+      "description": "Read the built-in Metasiberia script reference before writing or editing object code. Topics cover Luau, supported XML object scripts and the separate Winter motion language. Use the correct format for the object and preserve unrelated source.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "topic": {"type": "string", "enum": ["overview", "events", "objects", "materials", "avatars", "timers", "storage", "http", "examples", "all"]}
+          "topic": {"type": "string", "enum": ["overview", "events", "objects", "materials", "avatars", "timers", "storage", "http", "examples", "xml", "winter", "all"]}
         },
         "required": [],
         "additionalProperties": false
@@ -144,7 +144,7 @@ static std::string toolsListJSON()
     },
     {
       "name": "get_object_script",
-      "description": "Read a Lua/Luau script by exact object UID. Requires permission to edit the object. Use get_luau_reference first; never expose or copy a different object's script.",
+      "description": "Read code stored on one exact object UID, including Luau, XML or Winter. Requires permission to edit the object. Use get_luau_reference first; never expose or copy a different object's code.",
       "inputSchema": {
         "type": "object",
         "properties": {"uid": {"type": "integer", "minimum": 0}},
@@ -155,12 +155,12 @@ static std::string toolsListJSON()
     },
     {
       "name": "update_object_script",
-      "description": "Replace or clear the Luau script on one exact object UID. Requires permission to edit it. Read the current script first, preserve unrelated logic, use only documented APIs, begin non-empty source with --lua, and report the target UID. Replacing a script restarts server-side execution when enabled and marks clients to reload it.",
+      "description": "Write or clear the code stored on one exact object UID. This applies the edit to the object and tells connected clients to reload it. Read current code first and preserve unrelated source. Luau starts with --lua; supported XML scripts use a <script> root; other source is compiled as Winter by desktop clients. Requires edit permission.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "uid": {"type": "integer", "minimum": 0},
-          "script": {"type": "string", "maxLength": 10000, "description": "Full replacement Luau script, or an empty string to remove the script."}
+          "script": {"type": "string", "maxLength": 10000, "description": "Full replacement Luau, supported XML object script or Winter motion source, or an empty string to remove the script."}
         },
         "required": ["uid", "script"],
         "additionalProperties": false
@@ -1649,13 +1649,13 @@ static std::string toolsListJSON()
     },
     {
       "name": "edit_mesh_topology",
-      "description": "Extrude or inset one planar region, assign a material to selected triangles, or bevel explicitly selected edges on a convex closed native mesh. Replaces geometry on the same editable UID and retains materials. Face geometry operations require one connected, coplanar region with a simple boundary; edge bevel is limited to 4096 triangles.",
+      "description": "Delete selected triangles (also works on open/high-triangle meshes), extrude or inset one planar region, assign a material to selected triangles, or bevel explicitly selected edges on a convex closed native mesh. Use get_geometry triangle indices from the exact UID; deletion preserves all unselected faces, materials and the UID, and does not require a closed mesh. Other face geometry operations require one connected, coplanar region with a simple boundary; edge bevel is limited to 4096 triangles.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "replace_uid": {"type": "integer", "minimum": 0},
-          "mode": {"type": "string", "enum": ["extrude_faces", "inset_faces", "set_face_material", "bevel_edges"]},
-          "faces": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 1, "maxItems": 4096, "description": "Global triangle indices from get_geometry: page offset plus each row's zero-based position; required for face modes."},
+          "mode": {"type": "string", "enum": ["delete_faces", "extrude_faces", "inset_faces", "set_face_material", "bevel_edges"]},
+          "faces": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 1, "maxItems": 10000, "description": "Global triangle indices from get_geometry: page offset plus each row's zero-based position; required for face modes. delete_faces removes exactly these triangles without requiring closed/manifold topology."},
           "distance": {"type": "number", "minimum": -1000, "maximum": 1000, "description": "extrude_faces: nonzero distance along the region normal (negative moves inward). inset_faces: positive inset width."},
           "edges": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}}, "description": "Pairs of local-space endpoint coordinates matching edges returned by get_geometry; required for bevel_edges."},
           "width": {"type": "number", "minimum": 0.0001, "maximum": 100, "description": "Bevel width measured from the selected convex edge."},

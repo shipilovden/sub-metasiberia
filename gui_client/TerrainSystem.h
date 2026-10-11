@@ -40,6 +40,11 @@ TerrainSystem
 
 struct TerrainPathSpecSection
 {
+	TerrainPathSpecSection()
+	{
+		for(int i=0; i<5; ++i) map_scales[i] = 1.f;
+	}
+
 	int x, y; // section coordinates.  (0,0) is section centered on world origin.
 
 	OpenGLTextureKey heightmap_path;
@@ -47,6 +52,7 @@ struct TerrainPathSpecSection
 	OpenGLTextureKey tree_mask_map_path;
 	OpenGLTextureKey road_mask_map_path;
 	OpenGLTextureKey building_mask_map_path;
+	float map_scales[5];
 };
 
 struct TerrainPathSpec
@@ -169,6 +175,7 @@ struct TerrainDataSection
 	OpenGLTextureKey tree_mask_map_path;
 	OpenGLTextureKey road_mask_map_path;
 	OpenGLTextureKey building_mask_map_path;
+	float heightmap_scale, maskmap_scale, tree_maskmap_scale, road_maskmap_scale, building_maskmap_scale;
 
 	Map2DRef heightmap;
 	ImageMapFloatRef sculpt_heightmap;

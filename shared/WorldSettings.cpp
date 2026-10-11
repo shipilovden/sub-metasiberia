@@ -132,6 +132,8 @@ WorldSettings::WorldSettings()
 	terrain_spec.default_terrain_z = 0;
 	terrain_spec.disabled_detail_map_flags = 0;
 	terrain_spec.flags = 0;
+	for(int i=0; i<4; ++i)
+		terrain_spec.detail_col_map_scales[i] = 1.f;
 
 	sun_phi = 1.f;
 	sun_theta = Maths::pi<float>() / 4;
@@ -142,6 +144,22 @@ WorldSettings::WorldSettings()
 
 WorldSettings::~WorldSettings()
 {
+}
+
+
+TerrainSpecSection::TerrainSpecSection()
+:
+	x(0), y(0), disabled_map_flags(0)
+{
+	for(int i=0; i<5; ++i)
+		map_scales[i] = 1.f;
+}
+
+
+TerrainSpec::TerrainSpec()
+{
+	for(int i=0; i<4; ++i)
+		detail_col_map_scales[i] = 1.f;
 }
 
 
@@ -187,7 +205,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 
 // v14 marks the new presentation defaults.  The payload is unchanged; the
 // version lets readers distinguish old v13 defaults from explicit settings.
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 15;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 17;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -301,6 +319,15 @@ void WorldSettings::writeToStream(OutStream& stream) const
 	buffer.writeFloat(water_surface_settings.foam_speed);
 	buffer.writeFloat(water_surface_settings.foam_fade);
 	buffer.writeUInt32(water_surface_settings.underwater_caustics_enabled ? 1u : 0u); // New in v15.
+
+	// New in v16: independent UV frequency multipliers for the four terrain colour layers.
+	for(int i=0; i<4; ++i)
+		buffer.writeFloat(terrain_spec.detail_col_map_scales[i]);
+
+	// New in v17: per-section map UV frequency multipliers.
+	for(size_t i=0; i<terrain_spec.section_specs.size(); ++i)
+		for(int map_i=0; map_i<5; ++map_i)
+			buffer.writeFloat(terrain_spec.section_specs[i].map_scales[map_i]);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
@@ -505,7 +532,7 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 	// Migrate worlds written with the old v13 presentation defaults.  Only a
 	// complete match is migrated, so a world with an intentional custom value
 	// keeps that value.
-	if(version < WORLDSETTINGS_SERIALISATION_VERSION)
+	if(version < 15)
 	{
 		const VolumetricCloudWorldSettings& clouds = settings.volumetric_cloud_settings;
 		const bool legacy_cloud_defaults =
@@ -542,6 +569,24 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 			settings.water_surface_settings = WaterSurfaceWorldSettings();
 	}
 
+	// v16 appends independent terrain material tiling controls. Older payloads
+	// keep the legacy mapping (scale 1) and older readers skip these bytes.
+	for(int i=0; i<4; ++i)
+		settings.terrain_spec.detail_col_map_scales[i] = 1.f;
+	if(version >= 16 && buffer_stream.buf.size() - buffer_stream.getReadIndex() >= sizeof(float) * 4)
+		for(int i=0; i<4; ++i)
+			settings.terrain_spec.detail_col_map_scales[i] = myClamp(buffer_stream.readFloat(), 0.01f, 100.f);
+
+	// v17 appends five section map scales after the v16 material scales.
+	if(version >= 17)
+	{
+		const size_t section_scale_payload_size = (size_t)num_section_specs * sizeof(float) * 5;
+		if(buffer_stream.buf.size() - buffer_stream.getReadIndex() >= section_scale_payload_size)
+			for(uint32 section_i=0; section_i<num_section_specs; ++section_i)
+				for(int map_i=0; map_i<5; ++map_i)
+					settings.terrain_spec.section_specs[section_i].map_scales[map_i] = myClamp(buffer_stream.readFloat(), 0.01f, 100.f);
+	}
+
 	// We effectively skip any remaining data we have not processed by discarding buffer_stream.
 }
 
@@ -554,6 +599,10 @@ bool TerrainSpec::operator==(const TerrainSpec& other) const
 		detail_col_map_URLs[1] == other.detail_col_map_URLs[1] &&
 		detail_col_map_URLs[2] == other.detail_col_map_URLs[2] &&
 		detail_col_map_URLs[3] == other.detail_col_map_URLs[3] &&
+		detail_col_map_scales[0] == other.detail_col_map_scales[0] &&
+		detail_col_map_scales[1] == other.detail_col_map_scales[1] &&
+		detail_col_map_scales[2] == other.detail_col_map_scales[2] &&
+		detail_col_map_scales[3] == other.detail_col_map_scales[3] &&
 		detail_height_map_URLs[0] == other.detail_height_map_URLs[0] &&
 		detail_height_map_URLs[1] == other.detail_height_map_URLs[1] &&
 		detail_height_map_URLs[2] == other.detail_height_map_URLs[2] &&
@@ -572,6 +621,8 @@ bool TerrainSpecSection::operator==(const TerrainSpecSection& other) const
 	return
 		x == other.x &&
 		y == other.y &&
+		map_scales[0] == other.map_scales[0] && map_scales[1] == other.map_scales[1] &&
+		map_scales[2] == other.map_scales[2] && map_scales[3] == other.map_scales[3] && map_scales[4] == other.map_scales[4] &&
 		heightmap_URL == other.heightmap_URL &&
 		mask_map_URL == other.mask_map_URL &&
 		tree_mask_map_URL == other.tree_mask_map_URL &&

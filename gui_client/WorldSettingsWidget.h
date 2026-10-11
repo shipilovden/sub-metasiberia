@@ -130,6 +130,15 @@ private:
 	int terrain_section_resize_drag_start_height;
 	int terrain_material_browser_target;
 	QLabel* terrain_material_preview_labels[4];
+	QPushButton* terrain_material_clear_buttons[4];
+	QDoubleSpinBox* terrain_material_scale_spin_boxes[4];
+	QLabel* terrain_material_scale_labels[4];
+	QPushButton* terrain_material_clear_all_button;
+	QPushButton* terrain_relief_clear_all_button;
+	QPushButton* terrain_height_clear_button;
+	QToolButton* world_terrain_sections_button;
+	QToolButton* world_materials_button;
+	QToolButton* world_terrain_geometry_button;
 
 	QTabWidget* settings_tabs;
 	QWidget* sculpting_tab;
@@ -142,9 +151,19 @@ private:
 	QCheckBox* sculpting_mode_check_box;
 	QComboBox* sculpting_map_target_combo;
 	QLabel* sculpting_map_target_label;
+	QToolButton* sculpting_map_target_accordion_button;
+	QWidget* sculpting_map_target_panel;
 	QToolButton* sculpting_layers_accordion_button;
 	QGroupBox* sculpting_layers_group;
 	QListWidget* sculpting_layers_list;
+	QToolButton* sculpting_real_islands_button;
+	QToolButton* sculpting_fantasy_islands_button;
+	QToolButton* sculpting_vegetation_button;
+	QWidget* sculpting_real_islands_panel;
+	QWidget* sculpting_fantasy_islands_panel;
+	QWidget* sculpting_vegetation_panel;
+	QPushButton* sculpting_island_buttons[24];
+	QPushButton* sculpting_vegetation_buttons[2];
 	QDoubleSpinBox* sculpting_radius_spin_box;
 	QDoubleSpinBox* sculpting_strength_spin_box;
 	QDoubleSpinBox* sculpting_target_height_spin_box;

@@ -87,7 +87,40 @@ inline QJsonObject modelCatalog()
 	}
 	return catalog;
 }
-inline QJsonArray searchModels(const QString& query, int limit=48)
+inline QStringList categories(const QJsonObject& asset)
+{
+	QStringList result;
+	const QJsonArray values=asset.value("categories").toArray();
+	for(const QJsonValue& value : values)
+		if(value.isString() && !value.toString().trimmed().isEmpty()) result.append(value.toString().trimmed());
+	// Older cached catalogues and API responses used a singular category field.
+	if(result.isEmpty() && asset.value("category").isString()) result.append(asset.value("category").toString());
+	return result;
+}
+inline QString categoriesText(const QJsonObject& asset)
+{
+	QStringList values=categories(asset);
+	const QString category=asset.value("category").toString().trimmed();
+	if(!category.isEmpty() && !values.contains(category,Qt::CaseInsensitive)) values.append(category);
+	return values.join(" / ");
+}
+inline QStringList modelCategories()
+{
+	QStringList result;
+	const QJsonObject catalog=modelCatalog();
+	for(auto it=catalog.begin(); it!=catalog.end(); ++it)
+		if(it.value().toObject().value("type").toInt(-1)==2)
+		{
+			const QJsonObject asset=it.value().toObject();
+			const QString site_category=asset.value("category").toString().trimmed();
+			const QStringList values=site_category.isEmpty() ? categories(asset) : QStringList{site_category};
+			for(const QString& category : values)
+				if(!result.contains(category,Qt::CaseInsensitive)) result.append(category);
+		}
+	result.sort(Qt::CaseInsensitive);
+	return result;
+}
+inline QJsonArray searchModels(const QString& query, int limit=48, const QString& category_filter=QString())
 {
 	const QJsonObject catalog=modelCatalog();
 	const QStringList terms=query.trimmed().toLower().split(' ',Qt::SkipEmptyParts);
@@ -97,7 +130,8 @@ inline QJsonArray searchModels(const QString& query, int limit=48)
 		const QJsonObject asset=it.value().toObject();
 		if(asset.value("type").toInt(-1)!=2) continue;
 		const QString id=it.key().toLower(), name=asset.value("name").toString().toLower();
-		const QString category=asset.value("category").toString().toLower();
+		const QString category=categoriesText(asset).toLower();
+		if(!category_filter.isEmpty() && asset.value("category").toString()!=category_filter && !categories(asset).contains(category_filter,Qt::CaseInsensitive)) continue;
 		QStringList tags;
 		for(const QJsonValue& tag : asset.value("tags").toArray()) if(tag.isString()) tags.append(tag.toString().toLower());
 		const QString tag_text=tags.join(' '), description=asset.value("description").toString().toLower();
@@ -120,7 +154,7 @@ inline QJsonArray searchModels(const QString& query, int limit=48)
 	QJsonArray found;
 	for(size_t i=0;i<hits.size() && found.size()<limit;++i) {
 		const SearchHit& hit=hits[i];
-		found.append(QJsonObject{{"id",hit.id},{"name",hit.asset.value("name")},{"category",hit.asset.value("category")},
+		found.append(QJsonObject{{"id",hit.id},{"name",hit.asset.value("name")},{"category",hit.asset.value("category")},{"categories",QJsonArray::fromStringList(categories(hit.asset))},
 			{"thumbnail_url",hit.asset.value("thumbnail_url")},{"description",hit.asset.value("description")},
 			{"source","Poly Haven"},{"license","CC0"}});
 	}
@@ -144,13 +178,13 @@ inline QJsonObject search(const QJsonObject& args)
 {
 	const QJsonObject catalog=textureCatalog();
 	const QStringList terms=args.value("query").toString().toLower().split(' ',Qt::SkipEmptyParts);
-	const int limit=(int)number(args,"limit",12,1,30);
+	const int limit=(int)number(args,"limit",12,1,10000);
 	struct SearchHit { int score; QString id; QJsonObject asset; };
 	std::vector<SearchHit> hits;
 	for(auto it=catalog.begin(); it!=catalog.end(); ++it) {
 		const QJsonObject asset=it.value().toObject(); if(asset.value("type").toInt(-1)!=1) continue;
 		const QString id=it.key().toLower(), name=asset.value("name").toString().toLower();
-		const QString category=asset.value("category").toString().toLower();
+		const QString category=categoriesText(asset).toLower();
 		QStringList tags;
 		for(const QJsonValue& tag : asset.value("tags").toArray()) if(tag.isString()) tags.append(tag.toString().toLower());
 		const QString tag_text=tags.join(' '), description=asset.value("description").toString().toLower();
@@ -173,7 +207,7 @@ inline QJsonObject search(const QJsonObject& args)
 	QJsonArray found;
 	for(size_t i=0;i<hits.size() && found.size()<limit;++i) {
 		const SearchHit& hit=hits[i];
-		found.append(QJsonObject{{"id",hit.id},{"name",hit.asset.value("name")},{"category",hit.asset.value("category")},
+		found.append(QJsonObject{{"id",hit.id},{"name",hit.asset.value("name")},{"category",hit.asset.value("category")},{"categories",QJsonArray::fromStringList(categories(hit.asset))},
 			{"dimensions_mm",hit.asset.value("dimensions")},{"uv_scale",textureUVScale(hit.asset)},
 			{"source","Poly Haven"},{"license","CC0"}});
 	}
