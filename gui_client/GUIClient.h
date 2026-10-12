@@ -267,6 +267,7 @@ public:
 	void summonCar();
 	void objectTransformEdited();
 	void objectEdited();
+	std::string resolvedWorldTextFontPath(const WorldObject& ob); // Actual renderer font, including its default fallback.
 	// The Cultural Object editor is Qt-only.  Keep its image-cache bridge out
 	// of the common SDL/Emscripten client interface.
 #if !defined(USE_SDL)
@@ -762,6 +763,7 @@ public:
 	UID voxel_selection_object_uid = UID::invalidUID();
 	VoxelSelectionBounds voxel_selection_bounds;
 	VoxelClipboard voxel_clipboard;
+	UserID voxel_clipboard_user_id;
 	Vec3<int> voxel_clipboard_origin = Vec3<int>(0, 0, 0);
 
 	ParcelRef selected_parcel;

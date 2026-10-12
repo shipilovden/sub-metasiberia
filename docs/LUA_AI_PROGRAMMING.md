@@ -1,0 +1,113 @@
+# Luau для MCP Codex и объектов Metasiberia
+
+Это руководство описывает API, зарегистрированный в `shared/SubstrataLuaVM.cpp` и `shared/LuaScriptEvaluator.cpp`. Оно предназначено и для автора скрипта, и для MCP Codex. Luau здесь управляет поведением уже существующих объектов; API не создаёт произвольные mesh, риги или скелетные клипы.
+
+## Обязательный порядок работы ИИ
+
+Для запроса изменить поведение объекта Codex должен:
+
+1. Убедиться, что выбран правильный мир и точный UID объекта.
+2. Вызвать `get_luau_reference` с `overview`, затем прочитать нужные темы API.
+3. Вызвать `get_object_script` для UID и определить фактический формат текущего кода. Не перезаписывать XML или Winter скриптом Luau без явного запроса на смену формата.
+4. Сохранить полезные существующие обработчики, настройки и пользовательский код. Изменять только то, что требуется для запроса.
+5. Подготовить полный скрипт размером до 10 000 байт, начинающийся с `--lua`.
+6. Записать полный текст через `update_object_script` для того же UID. Это изменяет объект и запускает/перезапускает серверный evaluator, если серверное выполнение включено.
+7. Снова вызвать `get_object_script`, сверить UID и сохранённый текст. Различать «сохранено» и «проверено в клиенте»: клиентские визуальные действия нужно проверить в мире и в Script Editor.
+8. В ответе кратко перечислить изменённое поведение, сторону выполнения (сервер/клиент), ограничения и что фактически проверено. Не заявлять о сборке или успешном runtime, если они не выполнялись.
+
+Перед сохранением объяснить риск, если скрипт перемещает объект, меняет физику, отправляет HTTP-запросы или реагирует на чат. Если подходящего API нет, сказать об этом; не выдумывать binding.
+
+## Формат и модель выполнения
+
+Первая строка: `--lua`. Скрипт Luau отличается от декларативного XML и языка движения Winter. Верхний уровень выполняется при загрузке. События привязываются по функциям с зарезервированными именами; состояние `local` сохраняется между событиями жизни этого evaluator, но теряется при его пересоздании. Для периодической работы используй ограниченный `createTimer`, а не бесконечный цикл.
+
+`IS_SERVER` и `IS_CLIENT` показывают, где выполняется evaluator. Не делай один и тот же игровой эффект одновременно на сервере и каждом клиенте. Авторитетное изменение мира обычно должно выполняться сервером; звук, частицы и запуск анимации — клиентским кодом. Сохранение скрипта само по себе не доказывает, что клиентская функция отработала.
+
+В MCP доступны `get_object_script(uid)`, `update_object_script(uid, script)` и `get_luau_reference(topic)`. Сохранение скрипта требует права редактирования объекта; сервер должен быть не в read-only режиме. MCP tool обновляет поле Script точного объекта и уведомляет подключённые клиенты.
+
+## События
+
+Имена функций на `this_object` автоматически регистрируются для этого объекта:
+
+| Обработчик | Аргументы |
+| --- | --- |
+| `onUserUsedObject(avatar, object)` | Пользователь нажал E / использовал объект |
+| `onUserTouchedObject(avatar, object)` | Контакт с объектом; может повторяться примерно каждые 0,5 секунды |
+| `onUserMovedNearToObject(avatar, object)` | Пользователь вошёл в область близости (примерно 20 м) |
+| `onUserMovedAwayFromObject(avatar, object)` | Пользователь покинул область близости |
+| `onUserEnteredParcel(avatar, object, parcel)` | Вход пользователя на участок |
+| `onUserExitedParcel(avatar, object, parcel)` | Выход пользователя с участка |
+| `onUserEnteredVehicle(avatar, vehicle_object)` | Посадка в транспорт |
+| `onUserExitedVehicle(avatar, vehicle_object)` | Выход из транспорта |
+| `onChatMessage(avatar, message)` | Сообщение пользователя в чат |
+
+Слушатель события другого объекта: `addEventListener(event_name, object_uid, handler_function)`. Допустимы только перечисленные имена событий. Предел — 100 регистраций слушателя на скрипт. Перед установкой слушателя проверь UID и наличие объекта: `getObjectForUID(uid)` бросает ошибку, если объекта нет. Не добавляй новый обработчик повторно в каждом таймерном тике.
+
+```lua
+--lua
+function onUserUsedObject(avatar, object)
+    showMessageToUser("Объект активирован", avatar)
+end
+```
+
+## Объекты и материалы
+
+Глобальные значения и функции:
+
+| API | Назначение |
+| --- | --- |
+| `this_object` | Объект, на котором установлен скрипт |
+| `Vec3d(x, y, z)` | Создаёт позицию (таблица с x/y/z) |
+| `Vec3f(x, y, z)` | Создаёт Luau vector для axis/scale/цвета/скорости |
+| `getObjectForUID(uid)` | Получить другой объект; ошибка, если он недоступен |
+| `getCurrentTime()` | Текущее глобальное время мира |
+| `showMessageToUser(message, avatar)` | Показать сообщение локальному GUI-пользователю; server-side вызов интерфейс не отображает |
+| `IS_SERVER`, `IS_CLIENT` | Boolean-флаги текущей стороны выполнения |
+
+Читаемые поля WorldObject: `uid`, `model_url`, `pos`, `axis`, `angle` (радианы), `scale`, `collidable`, `dynamic`, `sensor`, `content`, `target_url`, `video_autoplay`, `video_loop`, `video_muted`, `mass`, `friction`, `restitution`, `centre_of_mass_offset_os`, `audio_source_url`, `audio_volume`, `audio_loop`.
+
+Поддерживаемые присваивания объекту включают трансформацию `pos`, `axis`, `angle`, `scale`; `model_url`, `content`, `target_url`; физические `collidable`, `dynamic`, `sensor`, `mass`, `friction`, `restitution`, `centre_of_mass_offset_os`; video-флаги и аудио-поля. `pos` ожидает `Vec3d(x, y, z)`; `axis`, `scale` и другие векторные поля ожидают `Vec3f(x, y, z)`. Setter помечает объект изменённым и сохраняет серверное состояние. Меняй только необходимые свойства и проверяй масштаб/координаты, чтобы не телепортировать объект случайно.
+
+Материалы получаются через `object:getNumMaterials()` и `object:getMaterial(index)`. Индекс нулевой: от `0` до `count - 1`. Поля материала: `colour`, `colour_texture_url`, `emission_rgb`, `emission_texture_url`, `normal_map_url`, `roughness_val`, `roughness_texture_url`, `metallic_fraction_val`, `opacity_val`, `tex_matrix`, `emission_lum_flux_or_lum`, `hologram`, `double_sided`. Изменение material field доступно через setter; при работе с текстурами используй URL ресурса, который клиент действительно может загрузить.
+
+```lua
+local count = this_object:getNumMaterials()
+if count > 0 then
+    local material = this_object:getMaterial(0)
+    material.colour = Vec3f(0.8, 0.2, 0.1)
+    material.roughness_val = 0.35
+end
+```
+
+## Аватары
+
+Читаемые поля: `pos`, `name`, `linear_velocity`, `vehicle_inside`. Имя read-only. Присваивание `avatar.pos` или `avatar.linear_velocity` действует только на локального аватара в GUI-client; на сервере эти операции не перемещают удалённого пользователя. `vehicle_inside` — nil либо WorldObject. Для простых сообщений используй `showMessageToUser(message, avatar)`.
+
+## Таймеры и постоянное состояние
+
+`createTimer(callback, interval_seconds, repeating)` возвращает handle. Callback получает `this_object`. `destroyTimer(handle)` останавливает таймер. Максимум — 4 активных таймера на evaluator. Создавай таймер один раз, используй разумный интервал, ограничивай число повторов и удаляй repeating timer, когда действие завершено.
+
+`objectstorage.getItem(key)` / `objectstorage.setItem(key, value)` — постоянное серверное хранилище ключей, изолированное по UID объекта. Данные переживают перезапуск сервера и изменение скрипта; локальные `local` переменные — нет. Ключ не длиннее 256 байт; значения должны сериализоваться, глубина таблиц до 16, размер до 64 KiB. Клиентское выполнение не читает и не записывает это хранилище. Для таблицы счётчиков безопасно загружай nil как пустое значение и сохраняй после каждого подтверждённого изменения.
+
+## HTTP и секреты
+
+Поддерживаются `doHTTPGetRequestAsync(url, headers, onDone, onError)` и `doHTTPPostRequestAsync(url, body, content_type, headers, onDone, onError)`. HTTP работает только на сервере и требует включённого feature flag; client-side вызов ничего не отправляет. `onDone(response)` получает одну таблицу с `response_code`, `response_message`, `mime_type`, `body_data` (buffer); `onError(error)` получает одну таблицу с `error_code`, `error_description`. `parseJSON(json)` превращает JSON в Lua tables; JSON null становится nil. `getSecret(name)` читает секрет из настроек учётной записи. Действуют ограничения частоты запросов. Никогда не встраивай ключи/пароли в объектный скрипт и не отправляй секреты обратно в чат/логи. Проверяй статус, формат и размер ответа.
+
+## Аудио, анимации и частицы
+
+- Аудио WorldObject: `audio_source_url`, `audio_volume`, `audio_loop`, методы `object:playAudio()` и `object:isPlayingAudio()`. Воспроизведение/проверка — клиентские функции; сервер может сохранить настройки источника, но не воспроизводит звук.
+- Анимации: `object:getAnimationIndex(name)` возвращает индекс либо `-1`; `object:startPlayingAnimation(index)` просит клиент проиграть клип модели. Работает только у загруженного animated mesh на GUI-клиенте. Это не создание скелета, skin weights, rig binding или сетевого animation clip.
+- Эмиттер частиц на `this_object`: `emitter.start()`, `emitter.stop()`, `emitter.burst(count)`, `emitter.clear()` / `emitter.clearParticles()`. Нужен существующий particle-emitter content на объекте; API клиентский, возвращает true/false; burst count ограничен 1..512. Это управление готовым эмиттером, не генератор произвольной геометрии.
+
+## Ресурсы и ограничения
+
+- Скрипт объекта — максимум 10 000 байт.
+- VM ограничивает память 16 MiB, а исполнение одного события — 10 000 VM interrupts.
+- Не использовать бесконечные циклы, рекурсию без предела, огромные таблицы или частые таймеры.
+- Не изменять один объект на каждом near/touch callback без cooldown: touch может часто повторяться.
+- Ошибка выполнения может отключить evaluator; читать первую runtime error в Script Editor/server script log и исправлять конкретную причину.
+- Полный project API: `/about_luau_scripting`; примеры: `/example_luau_scripts`. Эти страницы могут устареть — проверять binding по этому руководству/реализации.
+
+## Известная граница
+
+Luau даёт события, свойства объектов, некоторые свойства материалов, таймеры, storage и HTTP. Он не является общим доступом к C++, Blender или MCP. Для произвольной геометрии, фотограмметрии, редактирования mesh, риггинга и анимационного монтажа нужны соответствующие MCP-инструменты и форматы; не обещать это через Lua API.

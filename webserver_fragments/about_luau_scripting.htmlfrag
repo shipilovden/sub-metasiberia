@@ -37,6 +37,14 @@ To create a Luau script, you <b>must start your script</b> with
 <p>
 This tells Substrata to expect a Luau script, as opposed to a Winter or XML script.
 </p>
+<h2>Vector constructors</h2>
+<p>
+Use <code>Vec3d(x, y, z)</code> for an object's double-precision world position. Use <code>Vec3f(x, y, z)</code> for float-vector fields such as rotation axis, scale, material colour and avatar velocity. These are Substrata constructors available to scripts.
+</p>
+<pre class="code-block">
+this_object.pos = Vec3d(0, 0, 2)
+this_object.scale = Vec3f(1, 1, 1)
+</pre>
 <p>
 To apply changes in your script to the object, just close the script editor window.
 </p>

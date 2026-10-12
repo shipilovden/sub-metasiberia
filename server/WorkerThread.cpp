@@ -20,6 +20,7 @@ Copyright Glare Technologies Limited 2018 -
 #include "../shared/ProtocolStructs.h"
 #include "../shared/UID.h"
 #include "../shared/WorldObject.h"
+#include "../shared/ObjectCopyPermissions.h"
 #include "../shared/MessageUtils.h"
 #include "../shared/FileTypes.h"
 #include "../shared/LuaScriptEvaluator.h"
@@ -1717,11 +1718,17 @@ void WorkerThread::doRun()
 
 		if(client_protocol_version >= 41) // Sending server_capabilities was added in protocol version 41.
 		{
-			const uint32 server_capabilities =
+			uint32 server_capabilities =
 				Protocol::OBJECT_TEXTURE_BASISU_SUPPORT |
 				Protocol::TERRAIN_DETAIL_MAPS_BASISU_SUPPORT |
 				Protocol::OPTIMISED_MESH_SUPPORT |
-				Protocol::GEAR_INVENTORY_SUPPORT;
+				Protocol::GEAR_INVENTORY_SUPPORT |
+				Protocol::OBJECT_COPY_SUPPORT;
+			// Released 0.0.24 (protocol 62) never downloads the avatar source when
+			// an optimised derivative is absent. Keep real source URLs for these
+			// peers; new clients have a bounded original-model fallback.
+			if(client_protocol_version <= 62)
+				server_capabilities &= ~Protocol::OPTIMISED_MESH_SUPPORT;
 			socket->writeUInt32(server_capabilities);
 		}
 
@@ -2936,6 +2943,75 @@ void WorkerThread::doRun()
 
 							break;
 						}
+					case Protocol::CopyObject:
+						{
+							const uint32 request_id = msg_buffer.readUInt32();
+							const std::string source_world = msg_buffer.readStringLengthFirst(1000);
+							const UID source_uid = readUIDFromStream(msg_buffer);
+							const Vec3d destination = readVec3FromStream<double>(msg_buffer);
+							UID created_uid = UID::invalidUID();
+							std::string error;
+							{
+								WorldStateLock lock(world_state->mutex);
+								if(!client_user_id.valid()) error = "You must be logged in to copy an object.";
+								else if(world_state->isInReadOnlyMode()) error = "Server is in read-only mode.";
+								else if(!destination.isFinite() || std::abs(destination.x)>1.0e7 || std::abs(destination.y)>1.0e7 || std::abs(destination.z)>1.0e7)
+									error = "Invalid copy destination.";
+								else
+								{
+									const auto world_it = world_state->world_states.find(source_world);
+									if(world_it == world_state->world_states.end()) error = "The source world no longer exists.";
+									else
+									{
+										ServerWorldState& source_state = *world_it->second;
+										const auto source_it = source_state.getObjects(lock).find(source_uid);
+										if(source_it == source_state.getObjects(lock).end()) error = "The source object no longer exists.";
+										else if(!ObjectCopyPermissions::canCopyObject(*source_it->second, client_user_id, source_state.details.owner_id, source_state.getParcels(lock)))
+											error = "Only your own objects entirely inside your own parcel or personal world can be copied.";
+										else
+										{
+											// Derive all geometry, material and script data from the authoritative source.
+											WorldObjectRef new_ob = new WorldObject();
+											new_ob->copyNetworkStateFrom(*source_it->second);
+											new_ob->pos = destination;
+											new_ob->transformChanged();
+											if(!ObjectCopyPermissions::canPlaceCopy(*new_ob, client_user_id, cur_world_state->details.owner_id, cur_world_state->getParcels(lock)))
+												error = "The copy must fit entirely inside your own parcel or personal world.";
+											else
+											{
+												for(auto& material : new_ob->materials) material = material->clone();
+												new_ob->lightmap_url = URLString();
+												new_ob->chunk_batch0_start = new_ob->chunk_batch0_end = new_ob->chunk_batch1_start = new_ob->chunk_batch1_end = 0;
+												new_ob->physics_owner_id = std::numeric_limits<uint32>::max();
+												new_ob->last_physics_ownership_change_global_time = 0;
+												new_ob->creator_id = client_user_id;
+												new_ob->creator_name = client_user_name;
+												new_ob->created_time = new_ob->last_modified_time = TimeStamp::currentTime();
+												new_ob->uid = world_state->getNextObjectUID();
+												new_ob->state = WorldObject::State_JustCreated;
+												new_ob->from_remote_other_dirty = true;
+												cur_world_state->addWorldObjectAsDBDirty(new_ob, lock);
+												cur_world_state->getDirtyFromRemoteObjects(lock).insert(new_ob);
+												cur_world_state->getObjects(lock).insert(std::make_pair(new_ob->uid, new_ob));
+												markLODChunkAsNeedsRebuildForChangedObject(cur_world_state.ptr(), new_ob.ptr(), lock);
+												world_state->markAsChanged();
+												created_uid = new_ob->uid;
+											}
+										}
+									}
+								}
+							}
+							// Socket writes happen after releasing the shared world lock.
+							MessageUtils::initPacket(scratch_packet, Protocol::ObjectCopyResult);
+							scratch_packet.writeUInt32(request_id);
+							scratch_packet.writeUInt32(error.empty() ? 0 : 1);
+							writeToStream(created_uid, scratch_packet);
+							scratch_packet.writeStringLengthFirst(error.empty() ? "Object copied." : error);
+							MessageUtils::updatePacketLengthField(scratch_packet);
+							socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
+							socket->flush();
+							break;
+						}
 					case Protocol::CreateObject: // Client wants to create an object
 						{
 							conPrintIfNotFuzzing("CreateObject");
@@ -2959,6 +3035,14 @@ void WorkerThread::doRun()
 							else if(world_state->isInReadOnlyMode())
 							{
 								writeErrorMessageToClient(socket, "Server is in read-only mode, you can't create an object right now.");
+							}
+							else if(!isGodUser(client_user_id) && !BitUtils::isBitSet(client_capabilities, Protocol::AUTHORISED_OBJECT_COPY_SUPPORT))
+							{
+								writeErrorMessageToClient(socket, "Please update your client to create objects. This client does not support the required object copy permissions.");
+							}
+							else if(new_ob->uid.valid() && new_ob->uid.value() != 0 && !isGodUser(client_user_id))
+							{
+								writeErrorMessageToClient(socket, "Legacy object copy is disabled. Use the updated client's authenticated copy/paste action.");
 							}
 							else
 							{

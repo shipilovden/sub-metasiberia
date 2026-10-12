@@ -1674,7 +1674,7 @@ bool TerrainSystem::paintTerrainMapAtWorld(const Vec3d& hit_pos, float radius_m,
 
 		const int width = (int)editable->getWidth();
 		const int height = (int)editable->getHeight();
-		const float map_scale = tree_mask ? section->tree_maskmap_scale : section->maskmap_scale;
+		const float map_scale = myClamp(tree_mask ? section->tree_maskmap_scale : section->maskmap_scale, 0.01f, 100.f);
 		const float u = sectionMapCoord((float)(hit_pos.x / terrain_section_w + 0.5 - sx), map_scale);
 		const float v = sectionMapCoord((float)(hit_pos.y / terrain_section_w + 0.5 - sy), map_scale);
 		const float cx = u * (width - 1), cy = v * (height - 1);
@@ -1689,12 +1689,17 @@ bool TerrainSystem::paintTerrainMapAtWorld(const Vec3d& hit_pos, float radius_m,
 		for(int y=y0; y<=y1; ++y)
 		for(int x=x0; x<=x1; ++x)
 		{
-			const float wx = (sx + (float)x / (width - 1) - 0.5f) * terrain_section_w;
-			const float wy = (sy + (float)y / (height - 1) - 0.5f) * terrain_section_w;
+			// Convert image pixels back through the section's map scale before
+			// testing the world-space brush radius. Otherwise scaled masks paint
+			// away from the visible brush (or cover the wrong area).
+			const float wx = (sx + ((float)x / (width - 1) - 0.5f) / map_scale) * terrain_section_w;
+			const float wy = (sy + ((float)y / (height - 1) - 0.5f) / map_scale) * terrain_section_w;
 			const float dx = wx - (float)hit_pos.x, dy = wy - (float)hit_pos.y;
 			const float t = std::sqrt(dx*dx + dy*dy) / radius_m;
 			if(t >= 1.f) continue;
-			const float blend = strength * std::pow(1.f - t, 1.65f);
+			// Tree placement is binary. A full-strength tree brush must clear or
+			// allow the full radius, including trees near its edge.
+			const float blend = tree_mask && !erase && strength >= 1.f ? 1.f : strength * std::pow(1.f - t, 1.65f);
 			uint8* pixel = editable->getPixel((size_t)x, (size_t)y);
 			if(tree_mask)
 			{
@@ -1745,7 +1750,7 @@ bool TerrainSystem::paintTerrainMapAtWorld(const Vec3d& hit_pos, float radius_m,
 			sculpt_material_mask_upload_pending = true;
 		// TerrainScattering also reads the blue vegetation weight channel. Rebuild it
 		// after vegetation painting/restoring so ground cover follows the edited mask.
-		if(!tree_mask && (channel == 2 || erase))
+		if(!tree_mask && (channel == 2 || erase || channel == 1))
 			sculpt_tree_scattering_rebuild_pending = true;
 		for(int sy=min_sy; sy<=max_sy; ++sy)
 		for(int sx=min_sx; sx<=max_sx; ++sx)

@@ -18,7 +18,7 @@
 | `CYBERSPACE_OUTPUT` | runtime/build output root |
 | Qt | Windows 5.15.16; macOS/Linux 5.15.10 в `scripts/config-lib.rb` |
 | VS2022 x64 | canonical Windows generator/local wrapper |
-| SDL2 | alternative native и обязательный Emscripten path |
+| SDL2 | legacy dependency reference; do not build SDL targets |
 | LLVM 15, LibreSSL, libjpeg-turbo | root CMake dependencies |
 | Jolt 5.3.0, Luau 0.627 | fetched by `scripts/get_libs.rb` into external dependency root |
 | Optional CEF | compile-time browser/webview helper; canonical Windows Qt wrapper default ON |
@@ -193,15 +193,7 @@ CEF runtime evidence in both directories includes `browser_process.exe`, `libcef
 
 Для воспроизводимой сборки Metasiberia Beta v0.0.22 внешний `glare-core` должен быть на commit `8142cd63403532726c068d18551383c54b8d7f66`, а его tracked worktree — чистым. `glare-core` подключается через `GLARE_CORE_TRUNK_DIR` и не является submodule этого репозитория, поэтому SHA зависимости нужно проверять отдельно до configure/build.
 
-Изменения серверного кода не считаются проверенными без сборки сервера. После правок в `server/**`, общего протокола/сериализации или `shared/**`, который читается/пишется сервером, обязательно выполнить локальную сборку:
-
-```powershell
-cmake --build C:\\programming\\substrata_build_qt --config RelWithDebInfo --target server -j 8
-```
-
-Проверить код возврата и время/размер `C:\\programming\\substrata_output_qt\\vs2022\\cyberspace_x64\\RelWithDebInfo\\server.exe`. Эта проверка не запускает сервер; production Linux ELF-сборка, деплой и restart выполняются только после отдельного разрешения пользователя.
-
-Критическое различие: production работает на Ubuntu/Linux `metasiberia-server`. Windows `server.exe` не является production-артефактом. Для серверной правки после локальной проверки обязательно выполнить Linux workflow из `docs/SERVERS_AND_EXCHANGE.md`, собрать `server` в `/srv/metasiberia/build/master`, скопировать ELF в release, переключить `/srv/metasiberia/releases/current` и перезапустить `metasiberia-server.service` только при явном разрешении пользователя.
+Сервер Metasiberia работает на Linux. **Запрещено собирать Windows target `server`/`server.exe`**: он не является нужным или подтверждающим артефактом. Серверные правки проверять только в доступном Linux окружении/CI согласно `docs/SERVERS_AND_EXCHANGE.md`. Не собирать на production, не копировать ELF в release, не переключать symlink и не перезапускать службу без отдельного явного задания. Если Linux build environment недоступно, сделать доступные статические проверки и прямо указать, что compile/link не подтверждены.
 
 ### Native Voxel Editor smoke
 
@@ -223,7 +215,6 @@ C:\programming\substrata_output_qt\vs2022\cyberspace_x64\RelWithDebInfo\gui_clie
 
 ```powershell
 cmake --build C:\programming\substrata_build_qt --config RelWithDebInfo --target gui_client -j 8
-cmake --build C:\programming\substrata_build_qt --config RelWithDebInfo --target server -j 8
 ```
 
 Scope boundary: smoke не вызывает `VoxelUndoStack::undo/redo` и `Ctrl+Z`/`Ctrl+Y` через `MainWindow`, не открывает реальное menu/toolbar действие, не проходит `CreateObject`/server confirmation/auto-selection, не эмулирует live scene mouse input или selection overlay, не проверяет визуальный render/physics, reconnect, second client, network persistence или production. Он также не является SDL/Web build. Canonical wrapper завершился успешно, несмотря на известное предупреждение об отсутствующем optional `C:\programming\SDL\sdl_2.30.9_build\Release\SDL2.dll`; Qt artifacts/runtime copy созданы.
@@ -338,7 +329,6 @@ cmake -S C:\programming\substrata `
 
 ```powershell
 cmake --build C:\programming\substrata_build_qt --config RelWithDebInfo --target gui_client -j 8
-cmake --build C:\programming\substrata_build_qt --config RelWithDebInfo --target server -j 8
 cmake --build C:\programming\substrata_build_qt --config RelWithDebInfo --target screenshot_bot -j 8
 ```
 
@@ -360,28 +350,18 @@ CTest/add_test в repo нет. `BUILD_TESTS=1` автоматически зад
 
 ```powershell
 C:\programming\substrata_output_qt\vs2022\cyberspace_x64\RelWithDebInfo\gui_client.exe --test
-C:\programming\substrata_output_qt\vs2022\cyberspace_x64\RelWithDebInfo\server.exe --test
 ```
+
+`server.exe --test` запрещено: это Windows target Linux-сервера. Server tests запускаются только в Linux build environment по разрешённому workflow.
 
 - Release `--test` не поддерживает compiled test suite.
 - Suites не полностью hermetic: включают file/codec/model/database, TLS/HTTP/SMTP-related tests. Перед запуском оценить network/local-state side effects.
 - `WebServerRequestHandlerTests`, `WorkerThreadTests` и некоторые terrain tests существуют, но отдельный wired runner не подтверждён.
 - Debug полезен для leak detection, но дороже.
 
-## Linux configure/build
+## Linux server build
 
-CI подтверждает только configure shape:
-
-```bash
-cmake -S . -B build \
-  -DCEF_SUPPORT=OFF \
-  -DUSE_SDL=ON \
-  -DSDL_BUILD_DIR=/usr \
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build --target server -j 4
-```
-
-Требуются корректные external dependency trees/env. CI не выполняет вторую строку и не подтверждает link/runtime.
+Сервер Metasiberia работает на Linux. Не собирать Windows server и не собирать SDL/Emscripten client. Локального Linux build environment на этой рабочей станции нет; конкретный серверный workflow и ограничения запуска описаны в `docs/SERVERS_AND_EXCHANGE.md`. CI здесь выполняет только CMake configure, не compile/link/runtime.
 
 ## Компонентная матрица проверок
 
@@ -390,31 +370,31 @@ cmake --build build --target server -j 4
 | Qt client/UI/editor | affected symbol/CMake list | `gui_client` target + `--test` | manual UI flow; server при protocol | default client run пишет appdata/может подключаться к production |
 | Scientific Object Editor WIP | marker/schema/CMake/10 KB bound | тот же `gui_client` target после отдельного разрешения | create/edit/reconnect/resource/permission flow | current implementation Qt-based, untracked WIP; Web/SDL parity и adapters/AI execution не считать реализованными |
 | Procedural Tree Editor WIP | marker/params/preset/assets/CMake | `gui_client` target + `--tree_generator_smoke` + `--tree_editor_smoke` | Add Tree, realtime edit, server-confirm, reconnect, second client | Qt-only editor; smokes не проверяют final live-world render/permissions |
-| SDL client | compile guards/search | configure `USE_SDL=ON`, build `gui_client` | manual SDL flow | отдельный current wrapper отсутствует |
+| SDL client | не собирать | SDL/Emscripten targets запрещены для этого проекта | — | Qt `gui_client` — отдельный разрешённый Windows client build |
 | XR | CMake/guard + target | wrapper `-XR On/Off`, client test | `--desktop` и `--vr`, HMD/runtime | runtime/HMD external; не запускать как generic smoke |
-| Server | affected target | `server` + `--test` | local copy state + client; route smoke | обычный run меняет state/listens ports |
-| Embedded web/admin/API | route/handler/assets | build/test `server` | localhost HTTP/auth/permission flow | отдельного target/server нет |
-| Shared protocol/model | readers/writers matrix | client + server builds/tests | old fixture/cross-version peers | architecture-level risk |
+| Server | affected target | Linux server build/tests only | local copy state + client; route smoke | Windows `server.exe` запрещён; ordinary run changes state/listens ports |
+| Embedded web/admin/API | route/handler/assets | Linux server build/tests only | localhost HTTP/auth/permission flow | отдельного target/server нет |
+| Shared protocol/model | readers/writers matrix | Qt client + Linux server builds/tests | old fixture/cross-version peers | architecture-level risk |
 | Screenshot pipeline | target build | `screenshot_bot` build | isolated server + GUI slave | production/default run external и long-running |
 | Webclient | HTML/script read | Emscripten `gui_client` | local server `/webclient` + WSS | expensive toolchain; generated outputs |
 | Site CSS/JS/fragments | link/path/syntax read | server build only if C++ changed | local WebDataStore/site route | publish/deploy separate |
 | Node site capture | `package.json`/script | `npm ci`; explicit capture | local/non-sensitive URL | network/output; auth state sensitive |
 | Optional bots/installer | source/CMake audit | command не подтверждён | none | root-disabled/stale dependencies |
 
-## Emscripten/webclient
+## SDL/Emscripten/webclient (historical reference only; do not build)
 
-### Обязательный platform-boundary gate: Qt vs SDL/Emscripten
+### Platform boundary notes
 
-`gui_client` имеет два compile contracts: Qt desktop (`USE_SDL=OFF`) и SDL/Emscripten (`USE_SDL=ON`). Успешная Windows Qt-сборка не доказывает, что Web-client собирается или работает.
+В старых workflow описаны Qt desktop (`USE_SDL=OFF`) и SDL/Emscripten (`USE_SDL=ON`). Для текущей работы действует `AGENTS.md`: SDL/Emscripten configure/build и генерация Web bundle запрещены. Команды ниже сохранены как историческая справка и не являются инструкцией к запуску.
 
 Перед Web-затрагивающей правкой в `gui_client/**`, общем коде или public headers обязательно:
 
 1. Проверить, что в SDL/common path не попали Qt-only headers, типы или API (`QString`, Qt JSON/image classes, QWidget editor/adapter и т. п.).
 2. Если Qt-only поведение необходимо, вынести его на Qt boundary. Когда guard оправдан, `#if !defined(USE_SDL)` должен окружать include, declaration/signature, member/inline reference, definition и call site. Guard только вокруг тела функции недостаточен.
-3. Выполнить изолированную Emscripten-сборку `gui_client` до запуска preload/hash scripts.
+3. Не запускать Emscripten configure/build, preload/hash scripts или Web deploy.
 4. Если configure/build не успешен, остановиться: не использовать предыдущий JS/WASM/data bundle, не считать функцию Web-ready и не выполнять Web deploy.
 
-Это обязательный regression gate после инцидента с Qt-зависимостью в общем `GUIClient` path. Публиковать можно только артефакты, созданные успешной Emscripten-сборкой из текущего source tree; после cache-busting сверить hashes HTML, JS, WASM и data.
+Этот раздел сохранён для исторического контекста; он не отменяет запрет на сборку SDL/Emscripten.
 
 Source command shape из `docs/building.txt`:
 

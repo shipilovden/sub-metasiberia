@@ -41,6 +41,10 @@
 | Документ | Главный вопрос | Статус |
 | --- | --- | --- |
 | [Codex / MCP modeling](../MCP_CODEX_INTEGRATION.md) | Референсы, модели, меши/воксели, Poly Haven, PBR-текстуры, изображения и границы редакторов | partial/WIP; source coverage |
+| [Параметрическое строительство](../parametric-building.md) | Именованные части, реальные проёмы, сохранённые рецепты, размеры и привязка | implementation; runtime acceptance pending |
+| [Моделирование по референсам](../photo-modeling-and-text.md) | Калибровка чертежей, фото workflow, кривые/поверхности, именованные mesh-сборки и объёмный текст | implementation; runtime acceptance pending |
+| [Редактор текста и шрифты](../text-editor-fonts.md) | Курсор, покрытие символов, фильтр и явная замена шрифта | implementation; offline font checks |
+| [Luau для MCP Codex](../LUA_AI_PROGRAMMING.md) | Как ИИ безопасно читает, пишет, проверяет и использует поддерживаемые Lua bindings объектов? | code-grounded API reference |
 | [system-overview.md](system-overview.md) | Что такое Metasiberia и какие surfaces существуют? | основной |
 | [project-index.md](project-index.md) | С какого документа/owner начать задачу? | основной |
 | [project-map.md](project-map.md) | Где находятся подсистемы и physical owners? | основной |

@@ -11,6 +11,7 @@ MCPHandlers.cpp
 #include "../server/User.h"
 #include "../shared/WorldObject.h"
 #include "../shared/WorldMaterial.h"
+#include "../shared/Parcel.h"
 #include "../shared/Avatar.h"
 #include "../shared/ResourceManager.h"
 #include "../shared/WorldStateLock.h"
@@ -24,6 +25,7 @@ MCPHandlers.cpp
 #include <dll/include/IndigoException.h>
 #include <utils/IndigoXMLDoc.h>
 #include "MCPModeling.h"
+#include "MCPPrecision.h"
 #include "../server/Server.h"
 #include "../shared/SubstrataLuaVM.h"
 #include "../shared/LuaScriptEvaluator.h"
@@ -124,19 +126,24 @@ static std::string callTool(Server& server, ServerAllWorldsState& world_state, S
 	if(tool_name == "get_luau_reference")
 	{
 		const std::string topic = args.getChildStringValueWithDefaultVal(parser, "topic", "overview");
-		if(topic == "overview") return "{\"languages\":{\"Luau\":\"Interactive object event scripts, source begins --lua\",\"XML\":\"Declarative object scripts such as follow_path and dynamic_texture_update; root is <script>\",\"Winter\":\"Deterministic object motion functions evalRotation and evalTranslation; no language marker\"},\"application\":\"Use update_object_script after editing; it applies the complete source to that object's UID and notifies clients to reload. Read the existing source first. In the native client, script changes are compiled when the object's script editor closes.\",\"documentation\":\"Luau: /about_luau_scripting and /example_luau_scripts; Winter: /about_scripting and resources/winter_stdlib.txt\",\"topics\":[\"events\",\"objects\",\"materials\",\"avatars\",\"timers\",\"storage\",\"http\",\"examples\",\"xml\",\"winter\"]}";
-		if(topic == "events") return "{\"functions\":[\"onUserTouchedObject(avatar, object)\",\"onUserUsedObject(avatar, object)\",\"onUserMovedNearToObject(avatar, object)\",\"onUserMovedAwayFromObject(avatar, object)\",\"onUserEnteredParcel(avatar, object, parcel)\",\"onUserExitedParcel(avatar, object, parcel)\",\"onUserEnteredVehicle(avatar, vehicle_ob)\",\"onUserExitedVehicle(avatar, vehicle_ob)\"],\"other_objects\":\"addEventListener(event_name, ob_uid, handler) listens on another object's UID; use an existing handler function.\",\"rules\":\"Start source with --lua. The E key triggers onUserUsedObject. Touch events may repeat about every 0.5 seconds while contact continues. Near/far events use about 20 metres.\"}";
-		if(topic == "objects") return "{\"globals\":[\"this_object:Object\",\"IS_CLIENT:boolean\",\"IS_SERVER:boolean\"],\"functions\":[\"getObjectForUID(uid):Object (throws if missing)\",\"showMessageToUser(msg, avatar)\"],\"object_attributes\":[\"uid\",\"model_url\",\"pos\",\"axis\",\"angle (radians)\",\"scale\",\"collidable\",\"dynamic\",\"sensor\",\"content\",\"video_autoplay\",\"video_loop\",\"video_muted\",\"mass\",\"friction\",\"restitution\",\"centre_of_mass_offset_os\",\"audio_source_url\",\"audio_volume\",\"getNumMaterials()\",\"getMaterial(index)\"],\"note\":\"Object attribute changes can have client-only or server-only immediate effects depending on the property. Use documented object properties; do not invent APIs.\"}";
+		if(topic == "overview") return "{\"language\":\"Luau event scripts for world objects; source must start with --lua\",\"workflow\":[\"Read get_object_script for the exact UID and preserve useful existing logic.\",\"Read events and the API topics needed for the requested behaviour.\",\"Decide whether each effect belongs on server, client, or both; avoid duplicate execution.\",\"Write the complete script with update_object_script for that same UID.\",\"Read it back with get_object_script and report server_execution_enabled/server_evaluator_reloaded.\",\"For visual/client-only behavior, ask the user to test in the Qt client and inspect Script Editor build/runtime results.\"],\"scope\":\"MCP saves the object's script and notifies connected clients. Luau execution is controlled by the world's server-script feature flag. Saving is not proof that a client-only visual effect works.\",\"topics\":[\"coding\",\"events\",\"objects\",\"materials\",\"avatars\",\"timers\",\"storage\",\"http\",\"audio\",\"animation\",\"particles\",\"limits\",\"examples\",\"xml\",\"winter\"]}";
+		if(topic == "coding") return "{\"format\":\"First line: --lua. Vec3d(x,y,z) constructs a position table; Vec3f(x,y,z) constructs a Luau vector for axis/scale/material colour/velocity fields.\",\"execution\":\"The server/client reload executes the script body, so keep top-level code short and put repeated work in event callbacks/timers.\",\"edit_protocol\":\"Read the exact object's script first; preserve unrelated handlers/state; deliver a complete replacement; update that same UID; read it back. Do not claim compilation or runtime success from an MCP save response alone.\",\"diagnostics\":\"Script Editor reports parse/build output and runtime errors. A script runtime error disables that evaluator after the error; fix the first error and reload.\"}";
+		if(topic == "events") return "{\"self_handlers\":[\"onUserTouchedObject(avatar, object)\",\"onUserUsedObject(avatar, object)\",\"onUserMovedNearToObject(avatar, object)\",\"onUserMovedAwayFromObject(avatar, object)\",\"onUserEnteredParcel(avatar, object, parcel)\",\"onUserExitedParcel(avatar, object, parcel)\",\"onUserEnteredVehicle(avatar, vehicle_object)\",\"onUserExitedVehicle(avatar, vehicle_object)\",\"onChatMessage(avatar, message)\"],\"other_object\":\"addEventListener(event_name, object_uid, handler_function); event_name must be one of the listed handler names.\",\"behavior\":\"A function with a matching name automatically handles events for this script's object. E/use action triggers onUserUsedObject. Touch can repeat while contact continues; near/far use a spatial proximity check (~20 m). Parcel/vehicle events are discrete transitions.\",\"limits\":\"At most 100 other-object event registrations per script.\"}";
+		if(topic == "objects") return "{\"globals\":[\"this_object\",\"IS_CLIENT\",\"IS_SERVER\",\"Vec3d(x,y,z)\",\"Vec3f(x,y,z)\",\"getObjectForUID(uid)\",\"getCurrentTime()\",\"showMessageToUser(message, avatar)\"],\"readable_object_fields\":[\"uid\",\"model_url\",\"pos\",\"axis\",\"angle\",\"scale\",\"collidable\",\"dynamic\",\"sensor\",\"content\",\"target_url\",\"video_autoplay\",\"video_loop\",\"video_muted\",\"mass\",\"friction\",\"restitution\",\"centre_of_mass_offset_os\",\"audio_source_url\",\"audio_volume\",\"audio_loop\"],\"methods\":[\"getNumMaterials()\",\"getMaterial(index)\",\"playAudio()\",\"isPlayingAudio()\",\"getAnimationIndex(name)\",\"startPlayingAnimation(index)\"],\"write_example\":\"this_object.pos = Vec3d(0, 0, 2)\",\"notes\":\"pos is Vec3d; axis/scale and other vector fields are Luau vectors made with Vec3f. Object transforms/properties are server-backed and marked dirty by setters. getObjectForUID throws when the object is missing. showMessageToUser only displays in the local GUI client.\"}";
 		if(topic == "materials") return "{\"access\":\"Object:getNumMaterials() and Object:getMaterial(index)\",\"material_properties\":[\"colour\",\"colour_texture_url\",\"emission_rgb\",\"emission_texture_url\",\"normal_map_url\",\"roughness_val\",\"roughness_texture_url\",\"metallic_fraction_val\",\"opacity_val\",\"tex_matrix\",\"emission_lum_flux_or_lum\",\"hologram\",\"double_sided\"],\"note\":\"Use only documented Material fields. Material edits may be client- or server-side according to runtime behavior.\"}";
-		if(topic == "avatars") return "{\"avatar_properties\":[\"pos\",\"name\",\"linear_velocity\",\"vehicle_inside\"],\"common_use\":\"Event handlers receive the Avatar userdata; pass it to showMessageToUser(msg, avatar).\"}";
-		if(topic == "timers") return "{\"functions\":[\"createTimer(callback, interval_seconds, repeating):number\",\"destroyTimer(handle)\"],\"callback\":\"callback(object)\",\"limit\":\"At most 4 timers per script at a time. Destroy repeating timers when no longer needed.\"}";
-		if(topic == "storage") return "{\"functions\":[\"objectstorage.getItem(key)\",\"objectstorage.setItem(key, serialisable_value)\"],\"scope\":\"Storage is persistent across server restarts and script reloads; keys are scoped to the script object's UID.\"}";
-		if(topic == "http") return "{\"functions\":[\"doHTTPGetRequestAsync(url, headers, onDone, onError)\",\"doHTTPPostRequestAsync(url, body, content_type, headers, onDone, onError)\",\"parseJSON(json)\",\"getSecret(name)\"],\"limits\":\"HTTP requests are rate-limited to 5 per user per 300 seconds. Lua HTTP must be enabled by the server. getSecret reads account secrets; never hardcode API keys in object scripts.\",\"callbacks\":\"onDone receives response_code, response_message, mime_type, body_data; onError receives error_code and error_description.\"}";
-		if(topic == "examples") return "{\"source\":\"Internal examples: /example_luau_scripts. Patterns include touch/used-object interactions, jump pads, object-to-object UID references, timers and persistent visitor counters. Read the relevant example before generating a similar script.\",\"minimal_use_example\":\"--lua\\nfunction onUserUsedObject(avatar, object)\\n  showMessageToUser('Hello ' .. avatar.name, avatar)\\nend\"}";
+		if(topic == "avatars") return "{\"fields\":[\"pos\",\"name\",\"linear_velocity\",\"vehicle_inside\"],\"events\":\"Handlers receive an Avatar table. Pass it to showMessageToUser(message, avatar).\",\"write_limits\":\"Avatar name is read-only. Setting pos/linear_velocity only controls the local player's avatar in GUI client scripts; server-side assignment does not move a remote user. vehicle_inside is nil or a WorldObject.\"}";
+		if(topic == "timers") return "{\"functions\":[\"createTimer(callback, interval_seconds, repeating): handle\",\"destroyTimer(handle)\"],\"callback\":\"callback(this_object)\",\"limits\":\"Maximum 4 active timers per script. Use a positive interval; cancel repeating timers when no longer needed. Do not create a busy loop.\"}";
+		if(topic == "storage") return "{\"functions\":[\"objectstorage.getItem(key)\",\"objectstorage.setItem(key, value)\"],\"scope\":\"Persistent server storage scoped to the script object's UID; it survives server restart and script reload.\",\"constraints\":\"Key <= 256 bytes. Values must be serializable Lua data (tables/scalars), max nesting depth 16 and serialized size 64 KiB. Client-only storage reads nil and writes nothing.\"}";
+		if(topic == "http") return "{\"functions\":[\"doHTTPGetRequestAsync(url, headers, onDone, onError)\",\"doHTTPPostRequestAsync(url, body, content_type, headers, onDone, onError)\",\"parseJSON(json)\",\"getSecret(name)\"],\"scope\":\"HTTP requests are server-side only and require the server HTTP feature to be enabled. Client calls do nothing.\",\"limits\":\"Requests are rate-limited to 5 per user per 300 seconds. getSecret reads account secrets; never hardcode API keys in object scripts.\",\"callbacks\":\"onDone(response) receives one table with response_code, response_message, mime_type and body_data (buffer). onError(error) receives one table with error_code and error_description.\"}";
+		if(topic == "audio") return "{\"fields\":[\"audio_source_url\",\"audio_volume\",\"audio_loop\"],\"methods\":[\"object:playAudio()\",\"object:isPlayingAudio()\"],\"scope\":\"Playback methods are GUI-client features; changing source/volume/loop updates object properties. A server script can set properties but cannot itself render sound.\"}";
+		if(topic == "animation") return "{\"methods\":[\"object:getAnimationIndex(name): number\",\"object:startPlayingAnimation(index)\"],\"workflow\":\"Run on the client that renders the model. Look up by exact animation name; -1 means not found. If found, call startPlayingAnimation(index).\",\"limits\":\"Animation playback is client-side and only works for a loaded animated model; it is not a skeleton/rig authoring API and does not create networked animation clips.\"}";
+		if(topic == "particles") return "{\"global_table\":\"emitter\",\"methods\":[\"emitter.start()\",\"emitter.stop()\",\"emitter.burst(count)\",\"emitter.clear()\"],\"aliases\":[\"emitter.clearParticles()\"],\"scope\":\"These operate on this_object only when its content configures a particle emitter; they are GUI-client runtime controls and return true/false. burst count is clamped to 1..512.\"}";
+		if(topic == "limits") return "{\"script_source\":\"Maximum 10,000 bytes per object script.\",\"execution\":\"Luau VM has a 16 MiB memory limit and each script execution is interrupted after 10,000 VM interrupts.\",\"timers\":\"4 per script\",\"listeners\":\"100 other-object event registrations per script\",\"http\":\"Server feature flag required; rate limited\",\"safe_design\":\"Bound loops and data; do expensive setup once; throttle repeated touch/proximity work; avoid per-frame timers and recursive event cascades.\"}";
+		if(topic == "examples") return "{\"simple_interaction\":\"--lua\\nfunction onUserUsedObject(avatar, object)\\n  if IS_CLIENT then showMessageToUser('Hello ' .. avatar.name, avatar) end\\nend\",\"material_edit\":\"--lua\\nlocal count = this_object:getNumMaterials()\\nif count > 0 then\\n  local material = this_object:getMaterial(0)\\n  material.colour = Vec3f(0.8, 0.2, 0.1)\\nend\",\"cooldown_pattern\":\"--lua\\nlocal ready = true\\nfunction onUserTouchedObject(avatar, object)\\n  if not ready then return end\\n  ready = false\\n  if IS_CLIENT then showMessageToUser('Activated', avatar) end\\n  createTimer(function(ob) ready = true end, 2, false)\\nend\",\"cross_object\":\"local target = getObjectForUID(12345)\\naddEventListener('onUserUsedObject', target.uid, function(avatar, object)\\n  if IS_CLIENT then showMessageToUser('Target used', avatar) end\\nend)\",\"full_examples\":\"/example_luau_scripts contains project examples; verify their current APIs and fix any stale sample before reusing.\"}";
 		if(topic == "xml") return "{\"supported_forms\":[\"follow_path\",\"dynamic_texture_update\",\"vehicle configuration elements supported by the client parser\"],\"rules\":\"Keep the XML declaration optional, use one <script> root, and preserve all unrelated elements. For a route use <follow_path><speed>10</speed><time_offset>0</time_offset><waypoint><pos>x y z</pos><type>CurveIn|CurveOut|Stop</type><pause_time>10</pause_time></waypoint>...</follow_path>. Coordinates are world metres with Z up. Stop maps to a station; pause_time is seconds. CurveIn/CurveOut are trimmed before validation. XML is not Luau and must not be prefixed with --lua.\",\"validation\":\"update_object_script parses XML before saving; clients parse the supported route/vehicle data when notified.\"}";
 		if(topic == "winter") return "{\"purpose\":\"Winter provides deterministic, non-reactive object motion. Define either or both optional entry points; it is separate from XML follow_path and Luau event scripts.\",\"entry_points\":[\"def evalRotation(float time, WinterEnv env) vec3\",\"def evalTranslation(float time, WinterEnv env) vec3\"],\"rotation\":\"Return an axis-angle vector: its direction is the rotation axis and its length is the counter-clockwise angle in radians. Example: vec3(0, 0, 1) * time rotates around Z.\",\"translation\":\"Return an XYZ offset in metres from the object's authored position. Example: vec3(sin(time * 1.5) * 0.8, 0, 0). time is global world time.\",\"environment\":\"WinterEnv has integer instance_index and num_instances. The client currently evaluates ordinary objects with instance_index=0 and num_instances=1. The bundled resources/winter_stdlib.txt provides vec2/vec3/vec4 and matrix types, arithmetic helpers and standard math functions. composeRotations(vec3, vec3) is also available.\",\"editing\":\"Winter source is stored in the object's Script field without a --lua marker. Use update_object_script to apply the full Winter source; connected native desktop clients compile it as Winter. The MCP server does not compile Winter, and the web client does not support Winter evaluation. Internal reference: /about_scripting and the bundled Winter standard library.\"}";
-		if(topic == "all") return "{\"topics\":[\"overview\",\"events\",\"objects\",\"materials\",\"avatars\",\"timers\",\"storage\",\"http\",\"examples\",\"xml\",\"winter\"],\"instruction\":\"Read the topic matching the object's current script format. Full Luau reference: /about_luau_scripting; examples: /example_luau_scripts; Winter standard library: resources/winter_stdlib.txt.\"}";
-		throw glare::Exception("Unknown script reference topic. Use overview, events, objects, materials, avatars, timers, storage, http, examples, xml, winter, or all.");
+		if(topic == "all") return "{\"topics\":[\"overview\",\"coding\",\"events\",\"objects\",\"materials\",\"avatars\",\"timers\",\"storage\",\"http\",\"audio\",\"animation\",\"particles\",\"limits\",\"examples\",\"xml\",\"winter\"],\"instruction\":\"Read overview and the specific API topics before editing. Luau guide: /about_luau_scripting; examples: /example_luau_scripts. XML and Winter are distinct formats.\"}";
+		throw glare::Exception("Unknown script reference topic. Use overview, coding, events, objects, materials, avatars, timers, storage, http, audio, animation, particles, limits, examples, xml, winter, or all.");
 	}
 	if(tool_name == "get_object_script" || tool_name == "update_object_script")
 	{
@@ -195,11 +202,32 @@ static std::string callTool(Server& server, ServerAllWorldsState& world_state, S
 	}
 	if(tool_name == "import_texture") return Modeling::importTexture(world_state,parser,args);
 	if(tool_name == "create_image") return Modeling::imageObject(world_state,world,parser,args,user_id,username);
+	if(tool_name == "create_reference_plane") return Modeling::referencePlaneObject(world_state,world,parser,args,user_id,username);
 	if(tool_name == "apply_image_texture") return Modeling::applyImageTexture(world_state,world,parser,args,user_id,username);
 	if(tool_name == "get_modeling_example")
 		return Modeling::buildingExample(args.getChildStringValue(parser,"kind"));
+	if(tool_name == "measure_object") return Modeling::measureObject(world_state,world,parser,args);
+	if(tool_name == "resize_object") return Modeling::precisionTransform(world_state,world,parser,args,user_id,"resize");
+	if(tool_name == "align_object") return Modeling::precisionTransform(world_state,world,parser,args,user_id,"align");
+	if(tool_name == "snap_object_to_grid") return Modeling::precisionTransform(world_state,world,parser,args,user_id,"snap");
+	if(tool_name == "build_parametric") return Modeling::Building::create(world_state,world,parser,args,user_id,username);
+	if(tool_name == "preview_parametric") return Modeling::Building::preview(world_state,world,parser,args,user_id);
+	if(tool_name == "get_parametric") return Modeling::Building::get(world_state,world,parser,args,user_id);
+	if(tool_name == "update_parametric_component") return Modeling::Building::update(world_state,world,parser,args,user_id,username);
+	if(tool_name == "build_assembly") return Modeling::Assembly::create(world_state,world,parser,args,user_id,username);
+	if(tool_name == "preview_assembly") return Modeling::Assembly::preview(world_state,world,parser,args,user_id);
+	if(tool_name == "get_assembly") return Modeling::Assembly::get(world_state,world,parser,args,user_id);
+	if(tool_name == "update_assembly_component") return Modeling::Assembly::update(world_state,world,parser,args,user_id,username);
 	if(tool_name == "build_mesh")
 		return Modeling::meshObject(world_state, world, parser, args, user_id, username);
+	if(tool_name == "convert_mesh") return Modeling::convertMesh(world_state,world,parser,args,user_id,username);
+	if(tool_name == "simplify_mesh") return Modeling::simplifyMesh(world_state,world,parser,args,user_id,username);
+	if(tool_name == "subdivide_mesh" || tool_name == "remesh_mesh" || tool_name == "sculpt_mesh" || tool_name == "edit_mesh_uv")
+		return Modeling::advancedMeshEdit(world_state,world,parser,args,user_id,username,tool_name);
+	if(tool_name == "get_rig") return Modeling::getRig(world_state,world,parser,args,user_id);
+	if(tool_name == "create_skeleton") return Modeling::createSkeleton(world_state,world,parser,args,user_id,username);
+	if(tool_name == "set_skin_weights") return Modeling::setSkinWeights(world_state,world,parser,args,user_id,username);
+	if(tool_name == "set_animation_clip") return Modeling::setAnimationClip(world_state,world,parser,args,user_id,username);
 	if(tool_name == "deform_mesh")
 		return Modeling::deformMesh(world_state,world,parser,args,user_id,username);
 	if(tool_name == "edit_mesh_topology")
@@ -232,6 +260,47 @@ static std::string callTool(Server& server, ServerAllWorldsState& world_state, S
 		return Modeling::editObject(world_state, world, parser, args, user_id, username, true);
 
 	WorldStateLock all_lock(world_state.mutex);
+	if(tool_name == "list_parcels_in_bounds")
+	{
+		const Vec3d lo=Modeling::vector(parser,args,"bounds_min",Vec3d(0,0,0),-1e7,1e7);
+		const Vec3d hi=Modeling::vector(parser,args,"bounds_max",Vec3d(0,0,0),-1e7,1e7);
+		if(lo.x>=hi.x || lo.y>=hi.y || lo.z>=hi.z) throw glare::Exception("bounds_min must be below bounds_max on all three world axes.");
+		const size_t offset=(size_t)Modeling::integer(parser,args,"offset",0,0,1000000);
+		const size_t limit=(size_t)Modeling::integer(parser,args,"limit",100,1,500);
+		const Vec3d centre=(lo+hi)*0.5;
+		std::vector<std::pair<double,ParcelRef>> matches;
+		for(const auto& entry:world.getParcels(all_lock))
+		{
+			const ParcelRef& parcel=entry.second;
+			// Parcels loaded from persistent state are inserted into this authoritative map
+			// while retaining State_JustCreated; don't require State_Alive here.
+			if(parcel->state==Parcel::State_Dead) continue;
+			// Parcels define 2D land lots. Use the requested XY footprint for discovery,
+			// regardless of the caller's Z range, and return z_bounds as metadata.
+			if(parcel->aabb_max.x<lo.x || parcel->aabb_min.x>hi.x || parcel->aabb_max.y<lo.y || parcel->aabb_min.y>hi.y) continue;
+			const Vec3d d=(parcel->aabb_min+parcel->aabb_max)*0.5-centre;
+			matches.push_back(std::make_pair(d.x*d.x+d.y*d.y+d.z*d.z,parcel));
+		}
+		std::sort(matches.begin(),matches.end(),[](const std::pair<double,ParcelRef>& a,const std::pair<double,ParcelRef>& b){return a.first!=b.first?a.first<b.first:a.second->id.value()<b.second->id.value();});
+		const size_t end=std::min(matches.size(),offset+limit);
+		std::string out="{\"total\":"+toString(matches.size())+",\"offset\":"+toString(offset)+",\"limit\":"+toString(limit)+",\"bounds_min\":"+Modeling::vecJSON(lo)+",\"bounds_max\":"+Modeling::vecJSON(hi)+",\"parcels\":[";
+		for(size_t i=offset;i<end;++i)
+		{
+			if(i>offset) out+=",";
+			const Parcel& parcel=*matches[i].second;
+			out+="{\"id\":"+toString(parcel.id.value())+",\"title\":\""+web::Escaping::JSONEscape(parcel.getUseTitle())+"\",\"bounds_min\":"+Modeling::vecJSON(parcel.aabb_min)+",\"bounds_max\":"+Modeling::vecJSON(parcel.aabb_max)+",\"z_bounds\":["+doubleToString(parcel.zbounds.x)+","+doubleToString(parcel.zbounds.y)+"],\"vertices_xy\":[";
+			for(size_t v=0;v<4;++v)
+			{
+				if(v) out+=",";
+				out+="["+doubleToString(parcel.verts[v].x)+","+doubleToString(parcel.verts[v].y)+"]";
+			}
+			out+="]}";
+		}
+		out+="]";
+		if(end<matches.size()) out+=",\"next_offset\":"+toString(end);
+		else out+=",\"next_offset\":null";
+		return out+"}";
+	}
 
 	if(tool_name == "get_world_info")
 		return "{\"name\":\"" + web::Escaping::JSONEscape(world.details.name) + "\",\"description\":\"" + web::Escaping::JSONEscape(world.details.description) + "\"}";

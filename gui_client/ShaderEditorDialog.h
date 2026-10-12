@@ -28,6 +28,9 @@ public:
 
 	void initialise(const std::string& shader);
 	void update(const std::string& shader);
+	// Replace the editor contents with a script received from the object/world state.
+	// This is authoritative, so closing the window must not send the previous local text back.
+	void updateFromRemote(const std::string& shader);
 
 	QString getShaderText();
 

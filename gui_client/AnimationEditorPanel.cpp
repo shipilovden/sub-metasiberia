@@ -223,6 +223,40 @@ QString AnimationEditorPanel::selectedAnimationId() const
 	return item ? item->data(Qt::UserRole).toString() : QString();
 }
 
+bool AnimationEditorPanel::selectAnimation(const QString& id)
+{
+	for(int row = 0; row < table->rowCount(); ++row)
+		if(table->item(row, 0)->data(Qt::UserRole).toString() == id)
+		{
+			search->clear();
+			if(table->currentRow() != row) table->selectRow(row);
+			return true;
+		}
+	return false;
+}
+
+void AnimationEditorPanel::setPreviewSpeed(double value) { speed->setValue(value); }
+
+void AnimationEditorPanel::setAnimationFlags(bool repeat, bool head)
+{
+	{
+		const QSignalBlocker b1(loop), b2(animate_head);
+		loop->setChecked(repeat);
+		animate_head->setChecked(head);
+	}
+	for(auto& item : animations) if(item.id == selectedAnimationId()) { item.loop = repeat; item.animate_head = head; }
+	emit previewLoopChanged(repeat);
+	emit flagsEdited(selectedAnimationId(), repeat, head);
+}
+
+QJsonObject AnimationEditorPanel::previewState() const
+{
+	return QJsonObject{{"animation_url", selectedAnimationId()}, {"visible", isVisible()}, {"playing", play->isChecked()},
+		{"duration_seconds", duration}, {"position", timeline->value() / 10000.0}, {"speed", speed->value()},
+		{"loop", loop->isChecked()}, {"animate_head", animate_head->isChecked()}, {"busy", busy},
+		{"status", status_label->text()}};
+}
+
 void AnimationEditorPanel::selectionChanged()
 {
 	const QString id = selectedAnimationId();

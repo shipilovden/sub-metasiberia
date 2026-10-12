@@ -141,6 +141,10 @@ const uint32 SummonObject			= 3030;
 
 const uint32 CreateObject			= 3004; // Client wants to create an object.
 const uint32 DestroyObject			= 3005; // Client wants to destroy an object.
+// Available only when the server advertises OBJECT_COPY_SUPPORT. These are new
+// framed messages; existing CreateObject payload and protocol versions remain unchanged.
+const uint32 CopyObject                  = 3006; // uint32 request_id, string source_world (<=1000), UID source_uid, Vec3d destination_pos.
+const uint32 ObjectCopyResult            = 3007; // uint32 request_id, uint32 status (0=success), UID created_uid (invalid on error), string message.
 
 const uint32 QueryObjects			= 3020; // Client wants to query objects in certain grid cells
 const uint32 ObjectInitialSend		= 3021;
@@ -241,6 +245,8 @@ const uint32 PhotoUploadFailed		= 14001;
 const uint32 STREAMING_COMPRESSED_OBJECT_SUPPORT	= 0x1; // Can the client handle ObjectInitialSendCompressed messages?
 const uint32 SENDS_USER_MOVED_CHATBOT_MSGS			= 0x2;//  Does the client send UserMovedNearToAvatar and userMovedAwayFromBotAvatar msgs?
 
+const uint32 AUTHORISED_OBJECT_COPY_SUPPORT = 0x4; // Uses source-UID CopyObject for clone/paste.
+
 // Server capabilities
 const uint32 OBJECT_TEXTURE_BASISU_SUPPORT			= 0x1;
 const uint32 TERRAIN_DETAIL_MAPS_BASISU_SUPPORT		= 0x2;
@@ -249,6 +255,7 @@ const uint32 OPTIMISED_MESH_SUPPORT					= 0x4;
 // Do not infer this from the protocol version: some Metasiberia v52+ servers
 // advertised the message IDs but did not have the corresponding handlers.
 const uint32 GEAR_INVENTORY_SUPPORT					= 0x8;
+const uint32 OBJECT_COPY_SUPPORT                         = 0x10; // Authoritative source-UID based copy/paste with ObjectCopyResult.
 
 const int OPTIMISED_MESH_VERSION = 3;
 

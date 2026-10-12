@@ -10,7 +10,10 @@
 #include "../utils/Reference.h"
 #include "../utils/RefCounted.h"
 #include "ui_ObjectEditor.h"
+#include "FontCoverage.h"
 #include <QtCore/QEvent>
+#include <QtCore/QPair>
+#include <QtCore/QVector>
 #include <map>
 
 
@@ -145,6 +148,9 @@ private:
 	void updateSpotlightHousingColourButton();
 	void updateParticleColourButton();
 	void loadAvailableFonts(); // Lists names/paths only; popup paint lazily generates and caches previews.
+	void updateFontWarning();
+	void applyFontFilter();
+	void chooseCompatibleFont();
 	void syncAudioPlaylistWidgetFromContent(const std::string& content);
 	void syncContentFromAudioPlaylistWidget();
 	void addAudioPlaylistEntry(const QString& value, bool make_current);
@@ -182,6 +188,12 @@ private:
 	double last_x_scale_over_y_scale;
 	double last_y_scale_over_z_scale;
 	QString selected_font_name;
+	QLabel* font_warning_label;
+	QCheckBox* compatible_fonts_checkbox;
+	QPushButton* compatible_font_button;
+	QTimer* font_filter_timer;
+	QVector<QPair<QString, QString>> font_catalogue;
+	FontCoverage font_coverage;
 	bool controls_editable;
 	bool text_font_feature_supported;
 	bool syncing_audio_playlist_widget;

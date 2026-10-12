@@ -110,6 +110,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Add Bot", "Добавить бота");
 	add("MainWindow", "Add to Favorites", "Добавить в избранное");
 	add("MainWindow", "Save Object To Disk", "Сохранить объект на диск");
+	add("MainWindow", "Export Object to GLB", "Экспортировать объект в glb");
 	add("MainWindow", "Save Parcel Objects To Disk", "Сохранить объекты участка на диск");
 	add("MainWindow", "Load Object(s) From Disk", "Загрузить объект(ы) с диска");
 	add("MainWindow", "Summon Bike", "Вызвать байк");
@@ -1140,6 +1141,8 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("WorldSettingsWidget", "Vegetation material", "Растительный грунт");
 	add("WorldSettingsWidget", "Allow trees", "Разрешить деревья");
 	add("WorldSettingsWidget", "Block trees", "Запретить деревья");
+	add("WorldSettingsWidget", "Erase trees", "Ластик деревьев");
+	add("WorldSettingsWidget", "Erase grass", "Ластик травы");
 	add("WorldSettingsWidget", "Restore source map", "Восстановить исходные карты");
 	add("WorldSettingsWidget", "Overlay material (e.g. beach / snow)", "Слой-покрытие (например, пляж / снег)");
 	add("WorldSettingsWidget", "Overlay material", "Слой-покрытие");
@@ -1163,6 +1166,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("WorldSettingsWidget", "Expand or collapse the active terrain editing mode selector.", "Развернуть или свернуть выбор режима редактирования рельефа.");
 	add("WorldSettingsWidget", "Sets the brush radius in metres. Use a smaller radius for detail and a larger radius for broad changes.", "Задаёт радиус кисти в метрах. Для мелких деталей уменьшите радиус, для больших участков — увеличьте.");
 	add("WorldSettingsWidget", "Controls height change in metres. For material and tree masks, strength sets paint opacity; Paint grass uses this value as its opacity, so the default 1.0 paints full grass weight at the brush centre.", "Задаёт изменение высоты в метрах. Для материалов и масок деревьев сила определяет непрозрачность мазка. Кисть «Рисовать траву» использует это значение как непрозрачность: при значении 1,0 в центре кисти сразу наносится полный вес травы.");
+	add("WorldSettingsWidget", "For height tools, strength is in metres. For tree brushes, 1.0 paints the full mask at the brush centre; material brushes use 1.0 as 10% opacity.", "Для изменения высоты сила задаётся в метрах. Для кистей деревьев значение 1,0 полностью меняет маску в центре кисти; для кистей материалов это 10% непрозрачности.");
 	add("WorldSettingsWidget", "Target elevation used by height tools such as Flatten and Fill to level.", "Целевая высота для выравнивания такими инструментами, как «Плоскость» и «Заполнить».");
 	add("WorldSettingsWidget", "Sculpt terrain height; click or drag across the terrain.", "Изменяет высоту рельефа. Нажмите или проведите кистью по поверхности.");
 	add("WorldSettingsWidget", "Expand or collapse the paintable terrain material layers.", "Развернуть или свернуть слои материалов, по которым можно рисовать.");
@@ -1172,6 +1176,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("WorldSettingsWidget", "Paint World > Surface material textures > colour slot 2 (Vegetation) to grow procedural grass. World > Terrain section maps > Tree mask permits trees in the painted area.", "Рисуйте процедурную траву через Мир → Текстуры материалов поверхности → цветовой слот 2 (Растительность). Маска деревьев в Мир → Карты секций рельефа разрешает деревья в закрашенной области.");
 	add("WorldSettingsWidget", "Paint World > Terrain section maps > Tree mask to allow trees in this area.", "Рисуйте карту Мир → Карты секций рельефа → Маска деревьев, чтобы разрешить деревья в этой области.");
 	add("WorldSettingsWidget", "Paint World > Terrain section maps > Tree mask to block trees in this area.", "Рисуйте карту Мир → Карты секций рельефа → Маска деревьев, чтобы запретить деревья в этой области.");
+	add("WorldSettingsWidget", "Erase procedural trees only inside the brush. Grass, terrain, materials and placed tree objects are unchanged.", "Удаляет процедурные деревья только внутри кисти. Трава, рельеф, материалы и размещённые вручную деревья не изменяются.");
 	add("WorldSettingsWidget", "Restore the imported surface and tree masks from World > Terrain section maps in the brushed area.", "Восстанавливает импортированные маски поверхности и деревьев из Мир → Карты секций рельефа в области кисти.");
 	add("WorldSettingsWidget", "To paint Rock, assign a texture in World > Surface material textures > colour slot 0 (Rock), then select Rock here and drag on the terrain. Without a texture, only the mask changes.", "Чтобы рисовать скалами, назначьте текстуру в Мир → Текстуры материалов поверхности → цветовой слот 0 (Скалы), затем выберите здесь «Скалы» и проведите кистью по рельефу. Без текстуры меняется только маска.");
 	add("WorldSettingsWidget", "To paint Ground / sand, assign a texture in World > Surface material textures > colour slot 1 (Ground / sand), then select Ground / sand here and drag on the terrain. Without a texture, only the mask changes.", "Чтобы рисовать грунтом или песком, назначьте текстуру в Мир → Текстуры материалов поверхности → цветовой слот 1 (Грунт / песок), затем выберите этот слой и проведите кистью по рельефу. Без текстуры меняется только маска.");
@@ -1300,6 +1305,10 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("WorldSettingsWidget", "Base-colour texture for the independent overlay layer. Paint the Overlay material layer to apply it over rock, ground and vegetation.", "Текстура цвета отдельного слоя покрытия. Рисуйте по слою «Покрытие», чтобы нанести его поверх скал, грунта и растительности.");
 	add("WorldSettingsWidget", "Paint grass", "Рисовать траву");
 	add("WorldSettingsWidget", "Paint trees and grass", "Рисовать деревья и траву");
+	add("WorldSettingsWidget", "Erase grass", "Ластик травы");
+	add("WorldSettingsWidget", "Drag across the terrain to erase procedural trees inside the brush. Grass, terrain and placed objects stay unchanged.", "Проведите кистью по рельефу, чтобы убрать процедурные деревья в её пределах. Трава, рельеф и размещённые объекты не изменятся.");
+	add("WorldSettingsWidget", "Drag across the terrain to erase procedural grass inside the brush. The vegetation weight is transferred to ground; trees and height stay unchanged.", "Проведите кистью по рельефу, чтобы убрать процедурную траву в её пределах. Вес растительности перейдёт к грунту; деревья и высота рельефа не изменятся.");
+	add("WorldSettingsWidget", "Erase procedural grass inside the brush by transferring vegetation weight to ground. Tree masks and terrain height stay unchanged.", "Убирает процедурную траву в пределах кисти, передавая её вес грунту. Маска деревьев и высота рельефа не изменятся.");
 	add("WorldSettingsWidget", "Tree mask: allow", "Маска деревьев: разрешить");
 	add("WorldSettingsWidget", "Tree mask: block", "Маска деревьев: запретить");
 	add("WorldSettingsWidget", "Paint the rock weight map. The assigned rock texture appears where this layer has weight.", "Рисуйте маску скального слоя. Назначенная текстура скалы появится в областях с этим слоем.");

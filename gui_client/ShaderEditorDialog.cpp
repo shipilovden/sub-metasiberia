@@ -104,6 +104,13 @@ void ShaderEditorDialog::update(const std::string& shader)
 }
 
 
+void ShaderEditorDialog::updateFromRemote(const std::string& shader)
+{
+	update(shader);
+	text_has_changed = false;
+}
+
+
 QString ShaderEditorDialog::getShaderText()
 {
 	return shaderEdit->document()->toPlainText();

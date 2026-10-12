@@ -1,6 +1,7 @@
 // Qt-only local MCP asset adapter. All decoding, generation and network work
 // runs on the MCP worker; no GUI object or OpenGL context is accessed here.
 #pragma once
+#include "../shared/Version.h"
 #include <QtCore/QBuffer>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -39,7 +40,7 @@ inline QByteArray fetch(const QUrl& url, size_t max_bytes=24*1024*1024)
 		(host!="api.polyhaven.com" && host!="dl.polyhaven.org" && host!="cdn.polyhaven.com")) fail("Unsupported Poly Haven URL.");
 	HTTPClient client;
 	client.max_data_size=max_bytes;
-	client.additional_headers.push_back("User-Agent: Metasiberia/0.0.24 (AI material importer)");
+	client.additional_headers.push_back("User-Agent: Metasiberia/" + ::cyberspace_version + " (AI material importer)");
 	std::vector<uint8> data;
 	const HTTPClient::ResponseInfo response=client.downloadFile(url.toString(QUrl::FullyEncoded).toStdString(),data);
 	if(response.response_code!=200)
@@ -63,7 +64,9 @@ inline QJsonObject upload(const QImage& image,const ServerCall& call)
 	QByteArray bytes; QBuffer buffer(&bytes); buffer.open(QIODevice::WriteOnly);
 	if(!image.save(&buffer,"PNG")) fail("Could not encode texture.");
 	if(bytes.size()>4*1024*1024) fail("Texture exceeds the PNG upload budget.");
-	return call("import_texture",QJsonObject{{"png_base64",QString::fromLatin1(bytes.toBase64())}});
+	QJsonObject result=call("import_texture",QJsonObject{{"png_base64",QString::fromLatin1(bytes.toBase64())}});
+	result.insert("pixel_width",image.width());result.insert("pixel_height",image.height());
+	return result;
 }
 inline QJsonObject textureCatalog()
 {
