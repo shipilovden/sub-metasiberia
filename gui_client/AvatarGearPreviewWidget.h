@@ -80,12 +80,14 @@ public:
 
 	void setSelectedGear(const UID& gear_id);
 	void updateGearItemData(const GearItem& gear_item);
+	bool fitSelectedGearToBone(GearItem& gear_item) const;
 	void setInteractionMode(InteractionMode mode, TransformAxis axis);
 	void setGizmoVisible(bool visible);
 	void setTransformDragCallback(TransformDragCallback callback);
 	void setTransformHandleClickCallback(TransformHandleClickCallback callback);
 	void setGearSelectionCallback(GearSelectionCallback callback);
 	bool currentMoveDragDeltaBoneSpace(const QPoint& total_pixel_delta, Vec3f& delta_out) const;
+	bool currentAxisDragPixels(const QPoint& total_pixel_delta, float& delta_out) const;
 	bool currentWorldAxisBoneSpace(Vec3f& axis_out) const;
 
 	void shutdown();

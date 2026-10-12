@@ -413,6 +413,17 @@ static int luaGetWorldObjectForUID(lua_State* state)
 }
 
 
+static int luaVec3fConstructor(lua_State* state)
+{
+	checkNumArgs(state, /*num_args_required=*/3);
+	const float x = (float)LuaUtils::getDoubleArg(state, /*index=*/1);
+	const float y = (float)LuaUtils::getDoubleArg(state, /*index=*/2);
+	const float z = (float)LuaUtils::getDoubleArg(state, /*index=*/3);
+	lua_pushvector(state, x, y, z);
+	return 1;
+}
+
+
 static int getCurrentTime(lua_State* state)
 {
 	// Expected args:
@@ -1052,7 +1063,7 @@ static int getNumMaterials(lua_State* state)
 
 	// Get object UID
 	//const UID uid((uint64)LuaUtils::getTableLightUserDataField(state, /*table index=*/1, "uid"));
-	const UID ob_uid((uint64)LuaUtils::getTableNumberField(state, /*table index=*/2, "uid"));
+	const UID ob_uid((uint64)LuaUtils::getTableNumberField(state, /*table index=*/1, "uid"));
 	
 	LuaScript* script = (LuaScript*)lua_getthreaddata(state); // NOTE: this double pointer-chasing sucks
 	LuaScriptEvaluator* script_evaluator = (LuaScriptEvaluator*)script->userdata;
@@ -1083,7 +1094,7 @@ static int getMaterial(lua_State* state)
 
 	WorldObject* ob = getWorldObjectForUID(script_evaluator, ob_uid);
 
-	if(index > ob->materials.size())
+	if(index >= ob->materials.size())
 		throw glare::Exception("Invalid material index" + errorContextString(state));
 
 	// Make a material table with object UID and material index
@@ -2186,6 +2197,8 @@ SubstrataLuaVM::SubstrataLuaVM(const SubstrataLuaVMArgs& args)
 
 
 	// Set some global functions
+	lua_pushcfunction(lua_vm->state, luaVec3fConstructor, /*debugname=*/"Vec3f");
+	lua_setglobal(lua_vm->state, "Vec3f");
 //TEMP DISABLED	lua_pushcfunction(lua_vm->state, createObject, /*debugname=*/"createObject");
 //	lua_setglobal(lua_vm->state, "createObject"); // Pops a value from the stack and sets it as the new value of global name.
 	

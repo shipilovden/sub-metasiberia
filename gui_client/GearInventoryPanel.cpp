@@ -18,6 +18,7 @@ Copyright Metasiberia 2026
 #include "../utils/FileUtils.h"
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QSettings>
 #include <QtGui/QGradient>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
@@ -34,6 +35,8 @@ Copyright Metasiberia 2026
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QScrollArea>
+#include <QtWidgets/QSplitter>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
@@ -724,7 +727,8 @@ static QString conciseURL(const URLString& url)
 
 
 GearInventoryPanel::GearInventoryPanel(QWidget* parent)
-:	QWidget(parent), gui_client(nullptr), transform_mode(Mode_Orbit), transform_axis(Axis_All), drag_start_angle(0.f), updating_editor(false)
+:	QWidget(parent), gui_client(nullptr), transform_mode(Mode_Orbit), transform_axis(Axis_All), drag_start_angle(0.f), updating_editor(false),
+	preview_inventory_poll_attempts(0), settings(nullptr), workspace_splitter(nullptr)
 {
 	QVBoxLayout* root = new QVBoxLayout(this);
 	root->setContentsMargins(12, 12, 12, 12);
@@ -741,10 +745,16 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	heading->addWidget(refresh_button);
 	root->addLayout(heading);
 
-	QGroupBox* preview_group = new QGroupBox(tr("Превью аватара с экипировкой"), this);
+	workspace_splitter = new QSplitter(Qt::Vertical, this);
+	workspace_splitter->setObjectName(QStringLiteral("gearInventoryWorkspaceSplitter"));
+	workspace_splitter->setHandleWidth(10);
+	workspace_splitter->setChildrenCollapsible(false);
+	workspace_splitter->setStyleSheet(QStringLiteral("QSplitter::handle:vertical { background: palette(mid); margin: 2px 10px; } QSplitter::handle:vertical:hover { background: palette(highlight); }"));
+	QGroupBox* preview_group = new QGroupBox(tr("Превью аватара с экипировкой"), workspace_splitter);
+	preview_group->setMinimumHeight(220);
 	QVBoxLayout* preview_layout = new QVBoxLayout(preview_group);
 	preview = new AvatarGearPreviewWidget(this);
-	preview->setMinimumHeight(420);
+	preview->setMinimumHeight(140);
 	preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	preview_layout->addWidget(preview, 1);
 
@@ -754,9 +764,9 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	rotate_button = new QToolButton(this); rotate_button->setText(tr("Вращение")); rotate_button->setCheckable(true);
 	scale_button = new QToolButton(this); scale_button->setText(tr("Масштаб")); scale_button->setCheckable(true);
 	orbit_button->setToolTip(tr("Обзор аватара: ЛКМ вращает, колесо изменяет масштаб просмотра"));
-	move_button->setToolTip(tr("Перемещение предмета: перетаскивание мышью или gizmo"));
-	rotate_button->setToolTip(tr("Вращение предмета: перетаскивание мышью или gizmo"));
-	scale_button->setToolTip(tr("Масштаб предмета: перетаскивание мышью или gizmo"));
+	move_button->setToolTip(tr("Выберите инструмент, затем перетаскивайте стрелку gizmo. Пустое место вращает камеру."));
+	rotate_button->setToolTip(tr("Перетаскивайте цветное кольцо gizmo. Пустое место вращает камеру."));
+	scale_button->setToolTip(tr("Перетаскивайте стрелку нужной оси gizmo. Пустое место вращает камеру."));
 	tools->addWidget(orbit_button);
 	tools->addWidget(move_button);
 	tools->addWidget(rotate_button);
@@ -780,13 +790,16 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	axis_buttons[2]->setToolTip(tr("Ось Y"));
 	axis_buttons[3]->setToolTip(tr("Ось Z"));
 	preview_layout->addLayout(tools);
-	root->addWidget(preview_group);
+	workspace_splitter->addWidget(preview_group);
 
-	selection_label = new QLabel(tr("Выберите карточку предмета"), this);
+	QWidget* editor_content = new QWidget(workspace_splitter);
+	QVBoxLayout* editor_layout = new QVBoxLayout(editor_content);
+	editor_layout->setContentsMargins(0, 0, 0, 0);
+	selection_label = new QLabel(tr("Выберите карточку предмета"), editor_content);
 	selection_label->setWordWrap(true);
-	root->addWidget(selection_label);
+	editor_layout->addWidget(selection_label);
 
-	QGroupBox* attachment_group = new QGroupBox(tr("Закрепление и точная настройка"), this);
+	QGroupBox* attachment_group = new QGroupBox(tr("Закрепление и точная настройка"), editor_content);
 	QGridLayout* grid = new QGridLayout(attachment_group);
 	bone_combo = new QComboBox(this);
 	const std::pair<const char*, const char*> bones[] = {
@@ -801,6 +814,9 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	bone_combo->setToolTip(tr("Кость аватара, к которой прикреплён предмет"));
 	grid->addWidget(new QLabel(tr("Кость"), this), 0, 0);
 	grid->addWidget(bone_combo, 0, 1, 1, 3);
+	fit_bone_button = new QPushButton(tr("Подогнать"), attachment_group);
+	fit_bone_button->setToolTip(tr("Уместить предмет по размеру выбранной кости и поставить его в точку крепления. После этого положение можно точно изменить."));
+	grid->addWidget(fit_bone_button, 0, 4);
 	name_edit = new QLineEdit(this);
 	name_edit->setMaxLength((int)GearItem::MAX_NAME_SIZE - 1);
 	name_edit->setPlaceholderText(tr("Название предмета"));
@@ -842,9 +858,9 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	delete_button->setToolTip(tr("Удалить выбранный предмет из инвентаря"));
 	grid->addWidget(apply_button, 7, 0, 1, 2);
 	grid->addWidget(delete_button, 7, 2, 1, 2);
-	root->addWidget(attachment_group);
+	editor_layout->addWidget(attachment_group);
 
-	tabs = new QTabWidget(this);
+	tabs = new QTabWidget(editor_content);
 	QWidget* equipped_page = new QWidget(tabs);
 	equipped_cards_layout = new QVBoxLayout(equipped_page);
 	equipped_cards_layout->setContentsMargins(4, 8, 4, 8);
@@ -853,11 +869,22 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	all_cards_layout->setContentsMargins(4, 8, 4, 8);
 	tabs->addTab(equipped_page, tr("Экипировано"));
 	tabs->addTab(all_page, tr("Все предметы"));
-	root->addWidget(tabs);
-	root->addStretch(1);
+	editor_layout->addWidget(tabs, 1);
+	QScrollArea* editor_scroll = new QScrollArea(workspace_splitter);
+	editor_scroll->setObjectName(QStringLiteral("gearInventoryEditorScroll"));
+	editor_scroll->setWidgetResizable(true);
+	editor_scroll->setFrameShape(QFrame::NoFrame);
+	editor_scroll->setWidget(editor_content);
+	workspace_splitter->addWidget(editor_scroll);
+	workspace_splitter->setStretchFactor(0, 1);
+	workspace_splitter->setStretchFactor(1, 1);
+	workspace_splitter->setSizes(QList<int>() << 445 << 445);
+	root->addWidget(workspace_splitter, 1);
 	preview_resource_timer.setInterval(750);
+	preview_inventory_poll_timer.start();
 	connect(&preview_resource_timer, &QTimer::timeout, this, [this]() {
 		if(!isVisible() || !gui_client) return;
+		pollForGearPreviewImages();
 		const QString signature = previewResourceSignature();
 		if(signature != preview_signature)
 		{
@@ -867,7 +894,11 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	});
 	preview_resource_timer.start();
 
-	connect(refresh_button, &QToolButton::clicked, this, [this]() { if(gui_client) gui_client->requestGearInventory(); });
+	connect(refresh_button, &QToolButton::clicked, this, [this]() {
+		preview_inventory_poll_attempts = 0;
+		preview_inventory_poll_timer.restart();
+		if(gui_client) gui_client->requestGearInventory();
+	});
 	connect(orbit_button, &QToolButton::clicked, this, [this]() { setTransformMode(Mode_Orbit); });
 	connect(move_button, &QToolButton::clicked, this, [this]() { setTransformMode(Mode_Move); });
 	connect(rotate_button, &QToolButton::clicked, this, [this]() { setTransformMode(Mode_Rotate); });
@@ -875,10 +906,15 @@ GearInventoryPanel::GearInventoryPanel(QWidget* parent)
 	for(int i=0; i<4; ++i)
 		connect(axis_buttons[i], &QToolButton::clicked, this, [this, i]() { setTransformAxis((TransformAxis)i); });
 	connect(apply_button, &QPushButton::clicked, this, [this]() { updateSelectionFromEditor(true); });
+	connect(fit_bone_button, &QPushButton::clicked, this, [this]() { fitSelectedItemToBone(true); });
 	connect(gizmo_button, &QCheckBox::toggled, this, [this](bool on) { preview->setGizmoVisible(on); });
 	connect(link_scale_check, &QCheckBox::toggled, this, [this](bool) { updateEditorFromSelection(); });
 	connect(name_edit, &QLineEdit::editingFinished, this, [this]() { updateSelectionFromEditor(true); });
-	connect(bone_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { updateSelectionFromEditor(true); });
+	connect(bone_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+		if(updating_editor || !selected_item) return;
+		selected_item->bone_name = boneDataName().toStdString();
+		fitSelectedItemToBone(/*save_to_server=*/true);
+	});
 	connect(rotation_angle_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) { updateSelectionFromEditor(true); });
 	for(int i=0; i<3; ++i)
 	{
@@ -911,6 +947,17 @@ GearInventoryPanel::~GearInventoryPanel()
 void GearInventoryPanel::initPreview(const std::string& base_dir_path, QSettings* settings, Reference<ResourceManager> resource_manager,
 	AnimationManager* animation_manager, std::function<void()> restore_main_context)
 {
+	this->settings = settings;
+	if(settings)
+	{
+		const QByteArray saved_state = settings->value(QStringLiteral("gear_inventory/workspace_splitter_state")).toByteArray();
+		if(!saved_state.isEmpty())
+			workspace_splitter->restoreState(saved_state);
+		connect(workspace_splitter, &QSplitter::splitterMoved, this, [this](int, int) {
+			if(this->settings)
+				this->settings->setValue(QStringLiteral("gear_inventory/workspace_splitter_state"), workspace_splitter->saveState());
+		});
+	}
 	preview->init(base_dir_path, settings, resource_manager, animation_manager, std::move(restore_main_context));
 	preview->setTransformDragCallback([this](AvatarGearPreviewWidget::InteractionMode, AvatarGearPreviewWidget::TransformAxis, const QPoint& delta, bool finished) {
 		applyPreviewDrag(delta, finished);
@@ -1070,19 +1117,15 @@ QWidget* GearInventoryPanel::makeCard(const GearItemRef& item, bool equipped)
 		const QPixmap pix(preview_path);
 		if(!pix.isNull()) thumb->setPixmap(pix.scaled(68, 68, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 	}
-	// A freshly-created item may not have a server screenshot URL yet.  Use the
-	// already rendered equipment preview for the selected card instead of
-	// falling back to a generic package icon.  The server thumbnail remains the
-	// preferred source and replaces this fallback as soon as it arrives.
-	if((thumb->pixmap() == nullptr || thumb->pixmap()->isNull()) && selected_item && selected_item->id == item->id && preview->hasRenderableAvatar())
-	{
-		const QImage frame = preview->grabFrameBuffer();
-		if(!frame.isNull())
-			thumb->setPixmap(QPixmap::fromImage(frame).scaled(68, 68, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-	}
 	if(thumb->pixmap() == nullptr || thumb->pixmap()->isNull())
-		thumb->setPixmap(LucideIconUtils::tintedIcon(icon_directory, "package", palette().color(QPalette::Text), 42).pixmap(42, 42));
-	thumb->setToolTip(item->preview_image_URL.empty() ? tr("Изображение предмета из превью; серверная миниатюра будет загружена автоматически") : tr("Мини-превью предмета"));
+	{
+		const char* icon = item->preview_image_screenshot_id != 0 && item->preview_image_URL.empty() ? "image" : "package";
+		thumb->setPixmap(LucideIconUtils::tintedIcon(icon_directory, icon, palette().color(QPalette::Text), 42).pixmap(42, 42));
+		if(item->preview_image_screenshot_id != 0 && item->preview_image_URL.empty())
+			thumb->setToolTip(tr("Сервер создаёт отдельную фотографию этого предмета. Карточка обновится автоматически."));
+		else
+			thumb->setToolTip(item->preview_image_URL.empty() ? tr("Для этого предмета нет опубликованного снимка") : tr("Мини-превью предмета"));
+	}
 	row->addWidget(thumb);
 
 	QVBoxLayout* text = new QVBoxLayout();
@@ -1159,6 +1202,7 @@ void GearInventoryPanel::updateEditorFromSelection()
 		selection_label->setText(tr("Выберите карточку предмета"));
 	name_edit->setEnabled(have_item && canSynchroniseInventory());
 	bone_combo->setEnabled(editable);
+	fit_bone_button->setEnabled(editable);
 	for(int i=0; i<3; ++i) { translation_spins[i]->setEnabled(editable); rotation_axis_spins[i]->setEnabled(editable); scale_spins[i]->setEnabled(editable); }
 	link_scale_check->setEnabled(editable);
 	rotation_angle_spin->setEnabled(editable);
@@ -1235,16 +1279,38 @@ void GearInventoryPanel::applyPreviewDrag(const QPoint& total_delta, bool finish
 	else if(transform_mode == Mode_Scale)
 	{
 		selected_item->scale = drag_start_scale;
-		const float factor = std::exp((horizontal + vertical) * 0.004f);
-		if(transform_axis == Axis_X) selected_item->scale.x = myMax(0.001f, drag_start_scale.x * factor);
-		else if(transform_axis == Axis_Y) selected_item->scale.y = myMax(0.001f, drag_start_scale.y * factor);
-		else if(transform_axis == Axis_Z) selected_item->scale.z = myMax(0.001f, drag_start_scale.z * factor);
-		else selected_item->scale = drag_start_scale * factor;
+		float drag_pixels = horizontal + vertical;
+		if(transform_axis != Axis_All && !preview->currentAxisDragPixels(total_delta, drag_pixels))
+			drag_pixels = 0.f;
+		const float factor = std::exp(drag_pixels * 0.008f);
+		if(transform_axis == Axis_All || link_scale_check->isChecked())
+			selected_item->scale = drag_start_scale * myClamp(factor, 0.001f, 100.f);
+		else if(transform_axis == Axis_X) selected_item->scale.x = myClamp(drag_start_scale.x * factor, 0.001f, 100.f);
+		else if(transform_axis == Axis_Y) selected_item->scale.y = myClamp(drag_start_scale.y * factor, 0.001f, 100.f);
+		else if(transform_axis == Axis_Z) selected_item->scale.z = myClamp(drag_start_scale.z * factor, 0.001f, 100.f);
 	}
 	updateEditorFromSelection();
 	preview->updateGearItemData(*selected_item);
 	if((finished || !total_delta.isNull()) && canSynchroniseInventory())
 		gui_client->gearItemChangedOnOurAvatar(selected_item.ptr());
+}
+
+
+void GearInventoryPanel::fitSelectedItemToBone(bool save_to_server)
+{
+	if(!selected_item || !selectedItemIsEquipped() || !canSynchroniseInventory())
+		return;
+	const std::string previous_bone = selected_item->bone_name;
+	selected_item->bone_name = boneDataName().toStdString();
+	if(!preview->fitSelectedGearToBone(*selected_item))
+	{
+		selected_item->bone_name = previous_bone;
+		updateEditorFromSelection();
+		gui_client->showErrorNotification("Не удалось подогнать предмет: модель или выбранная кость ещё не загружены.");
+		return;
+	}
+	updateEditorFromSelection();
+	updateSelectionFromEditor(save_to_server);
 }
 
 
@@ -1337,6 +1403,35 @@ QString GearInventoryPanel::previewResourceSignature() const
 		signature += QString::number(item->id.value()) + (present ? QStringLiteral(":1;") : QStringLiteral(":0;"));
 	}
 	return signature;
+}
+
+
+void GearInventoryPanel::pollForGearPreviewImages()
+{
+	if(!canSynchroniseInventory())
+		return;
+
+	QString pending;
+	for(size_t i=0; i<gui_client->logged_in_all_gear.items.size(); ++i)
+	{
+		const GearItemRef& item = gui_client->logged_in_all_gear.items[i];
+		if(item.nonNull() && item->preview_image_screenshot_id != 0 && item->preview_image_URL.empty())
+			pending += QString::number(item->id.value()) + QLatin1Char(';');
+	}
+	if(pending != pending_preview_ids)
+	{
+		pending_preview_ids = pending;
+		preview_inventory_poll_attempts = 0;
+		preview_inventory_poll_timer.restart();
+	}
+	// The server renders an isolated item screenshot asynchronously. Refresh
+	// only while one is pending, with a bounded retry window.
+	if(!pending.isEmpty() && preview_inventory_poll_attempts < 24 && preview_inventory_poll_timer.elapsed() >= 2500)
+	{
+		gui_client->requestGearInventory();
+		++preview_inventory_poll_attempts;
+		preview_inventory_poll_timer.restart();
+	}
 }
 
 

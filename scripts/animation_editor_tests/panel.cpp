@@ -111,6 +111,22 @@ try
 	panel.setPreviewDuration(5);
 	panel.setBusy(true); require(!play->isEnabled() && !panel.findChild<QPushButton*>("animationImport")->isEnabled());
 	panel.setBusy(false); require(play->isEnabled());
+	// MCP selection and state must be the same state seen by the user, with no duplicate persistence signals.
+	search->setText("second");
+	const int selection_before = selection.count();
+	require(panel.selectAnimation("first.subanim") && search->text().isEmpty() && panel.selectedAnimationId() == "first.subanim", "MCP selection must reveal the selected row");
+	require(selection.count() == selection_before + 1, "MCP selection emits once");
+	require(panel.selectAnimation("first.subanim") && selection.count() == selection_before + 1, "same selection must not restart preview");
+	require(!panel.selectAnimation("missing.subanim") && panel.selectedAnimationId() == "first.subanim", "unknown selection must preserve editor state");
+	const int flags_before = flags.count();
+	panel.setAnimationFlags(true, true);
+	require(flags.count() == flags_before + 1 && flags.last()[0].toString() == "first.subanim" && flags.last()[1].toBool() && flags.last()[2].toBool(), "MCP flag update persists exactly once");
+	panel.setPreviewDuration(2);
+	panel.setPreviewPosition(.75);
+	panel.setPreviewSpeed(.5);
+	const QJsonObject state = panel.previewState();
+	require(state.value("animation_url").toString() == "first.subanim" && state.value("duration_seconds").toDouble() == 2 &&
+		state.value("position").toDouble() == .75 && state.value("speed").toDouble() == .5 && state.value("loop").toBool() && state.value("animate_head").toBool(), "MCP snapshot must match visible preview controls");
 	if(argc > 1)
 	{
 		panel.resize(480, 900);

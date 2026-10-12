@@ -447,6 +447,10 @@ else()
 		${GLARE_CORE_TRUNK_DIR_ENV}/webserver/RequestHandler.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MCPClientHandler.h
 		${CMAKE_SOURCE_DIR}/gui_client/TreeEditorPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/MCPTextMeshTools.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/MCPTextMeshTools.h
+		${CMAKE_SOURCE_DIR}/gui_client/ObjectGLBExport.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/ObjectGLBExport.h
 		${CMAKE_SOURCE_DIR}/gui_client/TreeEditorPanel.h
 		${CMAKE_SOURCE_DIR}/gui_client/TreeGenerator.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/TreeGenerator.h

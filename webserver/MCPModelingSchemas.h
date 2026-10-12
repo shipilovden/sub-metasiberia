@@ -1,5 +1,9 @@
 // Private tool discovery schemas; included by MCPModeling.h.
-static std::string toolsListJSON()
+#include "MCPAdvancedSchemas.h"
+#include "MCPPrecisionSchemas.h"
+#include "MCPBuildingSchemas.h"
+#include "MCPAssemblySchemas.h"
+static std::string baseToolsListJSON()
 {
 	return std::string(R"json({
   "tools": [
@@ -19,7 +23,7 @@ static std::string toolsListJSON()
     },
     {
       "name": "check_build_permissions",
-      "description": "Check permission for the entire planned world-space bounding box BEFORE building. Returns allowed/reason and up to 20 writable parcel bounds. Read-only snapshot; all write tools enforce permissions again. Never move a build to a suggested parcel without user agreement.",
+      "description": "Check permission for the entire planned world-space bounding box BEFORE building. Returns allowed/reason and up to 20 writable parcel suggestions only; use list_parcels_in_bounds for complete parcel geometry. Read-only snapshot; all write tools enforce permissions again. Never move a build to a suggested parcel without user agreement.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -53,7 +57,7 @@ static std::string toolsListJSON()
     },
     {
       "name": "get_modeling_example",
-      "description": "Get annotated construction recipes for mesh_bench, mesh_vase, mesh_arch, mesh_kiosk, mesh_robot, mesh_road, voxel_cottage or voxel_tower. Read-only: adapt structure, dimensions and materials to the requested design.",
+      "description": "Get annotated construction recipes, including parametric_building (persisted dimensioned architecture), photo_reference (model from attached photographs), mesh_loft (body from silhouette sections), mesh_bench, mesh_vase, mesh_arch, mesh_kiosk, mesh_robot, mesh_road, mesh_wall_opening, voxel_cottage, voxel_tower or timber_house (square timber/round logs). Read-only: adapt structure, dimensions and materials to the requested design.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -64,9 +68,17 @@ static std::string toolsListJSON()
               "mesh_vase",
               "mesh_arch",
               "mesh_road",
+              "mesh_wall_opening",
+            "mesh_sculpt",
+            "skeletal_rig",
               "voxel_tower",
               "mesh_kiosk",
-              "mesh_robot"
+              "mesh_robot",
+              "mesh_loft",
+              "photo_reference",
+              "mesh_curve_surface_assembly",
+              "parametric_building",
+              "timber_house"
             ]
           }
         },
@@ -131,11 +143,11 @@ static std::string toolsListJSON()
     },
     {
       "name": "get_luau_reference",
-      "description": "Read the built-in Metasiberia script reference before writing or editing object code. Topics cover Luau, supported XML object scripts and the separate Winter motion language. Use the correct format for the object and preserve unrelated source.",
+      "description": "Read the built-in Metasiberia Luau API/reference before writing object code. Covers events, registered Lua bindings, runtime side, limits, examples, supported XML and separate Winter motion language. Read overview and relevant topics; use exact supported APIs.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "topic": {"type": "string", "enum": ["overview", "events", "objects", "materials", "avatars", "timers", "storage", "http", "examples", "xml", "winter", "all"]}
+          "topic": {"type": "string", "enum": ["overview", "coding", "events", "objects", "materials", "avatars", "timers", "storage", "http", "audio", "animation", "particles", "limits", "examples", "xml", "winter", "all"]}
         },
         "required": [],
         "additionalProperties": false
@@ -155,7 +167,7 @@ static std::string toolsListJSON()
     },
     {
       "name": "update_object_script",
-      "description": "Write or clear the code stored on one exact object UID. This applies the edit to the object and tells connected clients to reload it. Read current code first and preserve unrelated source. Luau starts with --lua; supported XML scripts use a <script> root; other source is compiled as Winter by desktop clients. Requires edit permission.",
+      "description": "Write or clear the complete code stored on one exact object UID. Read current code first, preserve unrelated source, and read it back after saving. Luau starts with --lua; supported XML scripts use a <script> root; otherwise desktop clients interpret source as Winter. With server scripting enabled, a Luau update constructs and executes the new server evaluator before saving, so syntax/top-level execution errors can reject the update; with it disabled, MCP cannot claim server runtime validation. Successful save notifies clients to reload. Requires edit permission.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -206,7 +218,7 @@ static std::string toolsListJSON()
     },
     {
       "name": "validate_mesh",
-      "description": "Read-only structural diagnostics for a native mesh up to 250000 triangles: closed/manifold edges, winding consistency, signed volume, duplicate/degenerate faces, vertex normals, UV triangle area and connected components. Also checks whether the mesh passes the separately bounded Boolean preflight (4096 triangles per operand). Validation does not imply that a large mesh is suitable for Boolean operations.",
+      "description": "Read-only structural diagnostics for a native mesh up to 250000 triangles: closed/manifold edges, winding consistency, signed volume, duplicate/degenerate faces, vertex normals, UV triangle area and connected components. Also checks whether the mesh passes the separately bounded Boolean preflight (16384 triangles per operand). Validation does not imply that a large mesh is suitable for Boolean operations.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -264,6 +276,22 @@ static std::string toolsListJSON()
         "readOnlyHint": true,
         "destructiveHint": false
       }
+    },
+    {
+      "name": "list_parcels_in_bounds",
+        "description": "List every non-deleted land parcel intersecting the requested XY footprint. Parcel discovery uses XY only; the requested Z values do not filter parcels. Returns parcel ID, four XY boundary corners, height range and bounds. Results include conservative bounding-box matches for rotated parcels; keep them as obstacles unless the polygon proves clear. Results are paginated: continue with next_offset until null and verify collected count equals total.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+            "bounds_min": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3, "description": "World-space minimum [x,y,z] in metres. Parcel search uses x and y; z is required for API consistency and does not filter parcels."},
+            "bounds_max": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3, "description": "World-space maximum [x,y,z] in metres. Parcel search uses x and y; z is required for API consistency and does not filter parcels."},
+          "offset": {"type": "integer", "minimum": 0, "maximum": 1000000},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500}
+        },
+        "required": ["bounds_min", "bounds_max"],
+        "additionalProperties": false
+      },
+      "annotations": {"readOnlyHint": true, "destructiveHint": false}
     },
     {
       "name": "list_objects_in_bounds",
@@ -348,7 +376,7 @@ static std::string toolsListJSON()
           },
           "angle": {
             "type": "number",
-            "description": "Angle in radians; default rotation axis +Z."
+ )json") + R"json(            "description": "Angle in radians; default rotation axis +Z."
           },
           "materials": {
             "type": "array",
@@ -464,9 +492,10 @@ static std::string toolsListJSON()
         "destructiveHint": true
       }
     },
-    {
+	)json"
+		+ R"json(    {
       "name": "build_mesh",
-      "description": "Build one native mesh using primitives, rounded boxes, smooth path-swept roads and tubes, lathe radius/Z profiles, extrusion of simple concave XY contours, inline Boolean parts, repeated parts, or custom indexed triangles. A road smoothly curves through its local path anchors. A part operation of union/subtract/intersect operates on the accumulated closed mesh. Use validate_mesh and render_view, then refine with replace_uid.",
+      "description": "Build one native mesh using primitives, rounded boxes, smooth path-swept roads and tubes, lathe radius/Z profiles, lofted silhouette sections, extrusion of simple concave XY contours, inline Boolean parts, repeated parts, or custom indexed triangles. A loft joins matching XY contour vertices at increasing Z and closes both ends; useful for photographic silhouettes and irregular bodies. A road smoothly curves through its local path anchors. A part operation of union/subtract/intersect operates on the accumulated closed mesh. Use validate_mesh and render_view, then refine with replace_uid.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -484,7 +513,7 @@ static std::string toolsListJSON()
               }
             },
             "required": [
-)json")
+)json"
 		+ R"json(              "x",
               "y",
               "z"
@@ -602,6 +631,7 @@ static std::string toolsListJSON()
                     "torus",
                     "rounded_box",
                     "lathe",
+                    "loft",
                     "extrude",
                     "deformed_box",
                     "quad",
@@ -616,7 +646,8 @@ static std::string toolsListJSON()
                     "hexagonal_prism"
                     ,"beveled_box",
                     "tube",
-                    "road"
+                    "road",
+                    "bezier_patch"
                   ],
                   "description": "Native library primitives are supported alongside procedural primitives. cube uses box. platonic_solid is the library dodecahedron. Each part has an independent material slot."
                 },
@@ -679,6 +710,24 @@ static std::string toolsListJSON()
                   },
                   "description": "lathe: ordered [radius,z] in local metres, outside bottom-to-top; radius zero endpoints close caps; continue down inner wall for hollow vessels. extrude: simple XY contour, either winding, convex or concave, no holes or repeated/collinear vertices. size scales profile coordinates."
                 },
+                "sections": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 32,
+                  "description": "loft only: horizontal cross-sections in local metres, ordered by z with at least 0.001m spacing. Every simple XY profile must have the same 3..64 vertices, same winding and corresponding starting vertex. Concave contours allowed; no duplicate/collinear vertices, holes, collapsed tips or self intersections. Ends have flat caps; sides use smooth shading by default (smooth=false for facets). Add sections/contour vertices for finer silhouette. size/rotation/center apply afterwards. Up to 4092 triangles per loft; final closure and intersections are checked. Rotate the part to loft along another world axis.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "z": {"type": "number", "minimum": -1000, "maximum": 1000},
+                      "profile": {
+                        "type": "array", "minItems": 3, "maxItems": 64,
+                        "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": -1000, "maximum": 1000}}
+                      }
+                    },
+                    "required": ["z", "profile"],
+                    "additionalProperties": false
+                  }
+                },
                 "holes": {
                   "type": "array",
                   "minItems": 1,
@@ -721,7 +770,7 @@ static std::string toolsListJSON()
                 },
                 "operation": {
                   "enum": ["add", "union", "subtract", "intersect"],
-                  "description": "Optional ordered Boolean step. add appends this part as a separate shell. union/subtract/intersect applies this closed primitive to the accumulated closed mesh; put one base solid first. Boolean operands are limited to 4096 triangles each."
+                  "description": "Optional ordered Boolean step. add appends this part as a separate shell. union/subtract/intersect applies this closed primitive to the accumulated closed mesh; put one base solid first. Boolean operands are limited to 16384 triangles each."
                 },
                 "path": {
                   "type": "array",
@@ -733,7 +782,19 @@ static std::string toolsListJSON()
                     "maxItems": 3,
                     "items": { "type": "number" }
                   },
-                  "description": "tube or road: 2..128 local-space control points in metres. road passes through these anchors and smoothly interpolates between them; tube sweeps a circular section along the supplied points. Keep coordinates local to the object; world placement belongs in pos."
+                  "description": "tube or road: 2..128 local-space control points in metres. road passes through these anchors and smoothly interpolates between them; tube sweeps a circular section along the supplied points. For tube, smooth=true interpolates a Catmull-Rom curve through the anchors. Keep coordinates local to the object; world placement belongs in pos."
+                },
+                "control_points": {
+                  "type": "array", "minItems": 4, "maxItems": 4,
+                  "description": "bezier_patch only: exactly 4 rows x 4 XYZ points, in local metres. The cubic Bezier patch interpolates a sampled smooth surface through these handles; material should be double_sided for cloth viewed from both sides.",
+                  "items": {"type":"array","minItems":4,"maxItems":4,"items":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"number"}}}
+                },
+                "u_segments": {"type":"integer","minimum":2,"maximum":64,"description":"bezier_patch only: number of surface subdivisions along U."},
+                "v_segments": {"type":"integer","minimum":2,"maximum":64,"description":"bezier_patch only: number of surface subdivisions along V."},
+                "samples_per_span": {"type":"integer","minimum":2,"maximum":32,"description":"road: curve subdivisions per anchor pair. Smooth tube: Catmull-Rom samples per anchor pair."},
+                "smooth": {
+                  "type":"boolean",
+                  "description":"road defaults true: Catmull-Rom deck interpolation. tube defaults false for compatibility; true makes a smooth Catmull-Rom swept path. loft: smooth side shading only, not silhouette."
                 },
                 "width": {
                   "type": "number",
@@ -747,16 +808,6 @@ static std::string toolsListJSON()
                   "maximum": 50,
                   "description": "road only: solid deck thickness in metres. The top surface follows the path height."
                 },
-                "samples_per_span": {
-                  "type": "integer",
-                  "minimum": 2,
-                  "maximum": 32,
-                  "description": "road only: curve subdivisions between each pair of path anchors; 8..16 gives smooth visible bends."
-                },
-                "smooth": {
-                  "type": "boolean",
-                  "description": "road only: Catmull-Rom interpolation through path anchors. Defaults to true; set false for straight linear spans."
-                },
                 "tube_radius": {
                   "type": "number",
                   "minimum": 0.001,
@@ -764,7 +815,7 @@ static std::string toolsListJSON()
                   "description": "tube only: radius before part size/rotation/center transforms."
                 },
                 "closed": {
-                  "type": "boolean",
+)json" + R"json(                  "type": "boolean",
                   "description": "tube only: join the final path point back to the first and omit end caps."
                 },
                 "repeat": {
@@ -1612,7 +1663,7 @@ static std::string toolsListJSON()
     },
     {
       "name": "boolean_mesh",
-      "description": "Compute a bounded union, subtraction or intersection for any two editable closed native .bmesh objects, even when their world positions, rotations or scales differ; the server transforms the operand into the target's local space automatically. Use union to permanently join overlapping parts, subtraction for a hole/cutout, and intersection for their shared volume. Replaces replace_uid, retains its identity/materials and consumes operand_uid. Inputs are limited to 4096 triangles each; closed manifold solids with a small deliberate overlap work best for joins; open/nonmanifold meshes and other object types are rejected.",
+      "description": "Compute a bounded union, subtraction or intersection for any two editable closed native .bmesh objects, even when their world positions, rotations or scales differ; the server transforms the operand into the target's local space automatically. Use union to permanently join overlapping parts, subtraction for a hole/cutout, and intersection for their shared volume. Replaces replace_uid, retains its identity/materials and consumes operand_uid. Inputs are limited to 16384 triangles each; closed manifold solids with a small deliberate overlap work best for joins; open/nonmanifold meshes and other object types are rejected.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1655,7 +1706,7 @@ static std::string toolsListJSON()
         "properties": {
           "replace_uid": {"type": "integer", "minimum": 0},
           "mode": {"type": "string", "enum": ["delete_faces", "extrude_faces", "inset_faces", "set_face_material", "bevel_edges"]},
-          "faces": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 1, "maxItems": 10000, "description": "Global triangle indices from get_geometry: page offset plus each row's zero-based position; required for face modes. delete_faces removes exactly these triangles without requiring closed/manifold topology."},
+)json" + R"json(          "faces": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 1, "maxItems": 10000, "description": "Global triangle indices from get_geometry: page offset plus each row's zero-based position; required for face modes. delete_faces removes exactly these triangles without requiring closed/manifold topology."},
           "distance": {"type": "number", "minimum": -1000, "maximum": 1000, "description": "extrude_faces: nonzero distance along the region normal (negative moves inward). inset_faces: positive inset width."},
           "edges": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}}, "description": "Pairs of local-space endpoint coordinates matching edges returned by get_geometry; required for bevel_edges."},
           "width": {"type": "number", "minimum": 0.0001, "maximum": 100, "description": "Bevel width measured from the selected convex edge."},
@@ -1694,6 +1745,26 @@ static std::string toolsListJSON()
         "required": ["replace_uid", "texture_url", "face"],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "create_reference_plane",
+      "description": "Place a user-provided orthographic drawing/photo as a calibrated reference image plane. Import the image first; use pixel_width/pixel_height returned by import_image and one known measured length to preserve aspect ratio in metres. view selects front (XZ), side (YZ) or top (XY). This is a guide for native modeling, not geometry extraction. Placement permission is enforced.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "texture_url": {"type":"string"},
+          "pixel_width": {"type":"integer","minimum":1,"maximum":8192},
+          "pixel_height": {"type":"integer","minimum":1,"maximum":8192},
+          "known_dimension_m": {"type":"number","minimum":0.001,"maximum":100},
+          "known_dimension_axis": {"type":"string","enum":["width","height"],"default":"width"},
+          "view": {"type":"string","enum":["front","side","top"],"default":"front"},
+          "pos": {"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"}},"required":["x","y","z"],"additionalProperties":false},
+          "double_sided": {"type":"boolean","default":true}
+        },
+        "required":["texture_url","pixel_width","pixel_height","known_dimension_m"],
+        "additionalProperties":false
+      },
+      "annotations":{"readOnlyHint":false,"destructiveHint":false}
     },
     {
       "name": "create_image",
@@ -1757,4 +1828,13 @@ static std::string toolsListJSON()
     }
   ]
 })json";
+}
+
+static std::string toolsListJSON()
+{
+	std::string json=baseToolsListJSON();
+	const size_t end=json.rfind(']');
+	if(end==std::string::npos) throw glare::Exception("Malformed native tool registry.");
+	json.insert(end,","+advancedToolsJSON()+","+precisionToolsJSON()+","+buildingToolsJSON()+","+assemblyToolsJSON());
+	return json;
 }

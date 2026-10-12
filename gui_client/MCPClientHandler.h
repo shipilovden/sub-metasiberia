@@ -67,7 +67,7 @@ web::WebListenerThread API.
 class MCPClientRequestHandler : public web::RequestHandler
 {
 public:
-	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback);
+	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback, const MCPClientTerrainCallback& animation_callback, const MCPClientTerrainCallback& text_mesh_callback);
 
 	virtual void handleRequest(const web::RequestInfo& request_info, web::ReplyInfo& reply_info) override;
 
@@ -79,6 +79,8 @@ private:
 	std::string server_hostname;
 	MCPClientRenderCallback render_callback;
 	MCPClientTerrainCallback terrain_callback;
+	MCPClientTerrainCallback animation_callback;
+	MCPClientTerrainCallback text_mesh_callback;
 	MCPClientStatusCallback status_callback;
 	std::function<bool()> poly_haven_enabled;
 
@@ -113,6 +115,8 @@ public:
 	void setStatusCallback(const MCPClientStatusCallback& callback) { status_callback = callback; }
 	void setPolyHavenEnabledCallback(const std::function<bool()>& callback) { poly_haven_enabled = callback; }
 	void setTerrainCallback(const MCPClientTerrainCallback& callback) { terrain_callback = callback; }
+	void setTextMeshCallback(const MCPClientTerrainCallback& callback) { text_mesh_callback = callback; }
+	void setAnimationCallback(const MCPClientTerrainCallback& callback) { animation_callback = callback; }
 
 	bool isConfigured() const;
 
@@ -123,5 +127,7 @@ private:
 	std::function<bool()> poly_haven_enabled;
 	MCPClientRenderCallback render_callback;
 	MCPClientTerrainCallback terrain_callback;
+	MCPClientTerrainCallback animation_callback;
+	MCPClientTerrainCallback text_mesh_callback;
 	MCPClientStatusCallback status_callback;
 };

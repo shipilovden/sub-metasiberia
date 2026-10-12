@@ -2,6 +2,7 @@
 
 #include <QtWidgets/QWidget>
 #include <QtCore/QVector>
+#include <QtCore/QJsonObject>
 
 class QSettings;
 class QLabel;
@@ -38,6 +39,11 @@ public:
 	void setEditingEnabled(bool enabled);
 	QString selectedAnimationId() const;
 	void setBusy(bool busy);
+	// Controller/MCP use the same visible selection and controls as manual editing.
+	bool selectAnimation(const QString& id);
+	void setPreviewSpeed(double value);
+	void setAnimationFlags(bool repeat, bool head);
+	QJsonObject previewState() const;
 
 signals:
 	void animationSelected(const QString& id);

@@ -39,6 +39,10 @@ struct Vertex { Vec3 position,normal; double u=0,v=0; };
 struct Triangle { std::array<Vertex,3> vertices; unsigned int material=0; };
 using Mesh = std::vector<Triangle>;
 
+// Boolean-specific limits; other editing operations keep their smaller budgets.
+static constexpr size_t MAX_BOOLEAN_INPUT_TRIANGLES=16384;
+static constexpr size_t MAX_BOOLEAN_OUTPUT_TRIANGLES=100000;
+
 namespace Detail {
 // These limits bound both memory growth and adversarial BSP/edge-conformance work.
 static constexpr size_t MAX_INPUT_TRIANGLES=4096, MAX_OUTPUT_TRIANGLES=40000;
@@ -47,6 +51,41 @@ struct Budget {
 	size_t work=0,fragments=0;
 	void tick(size_t n=1) { if(n>30000000-work) throw std::runtime_error("Mesh operation work limit exceeded; simplify or split the operands."); work+=n; }
 	void fragment(size_t n=1) { if(n>200000-fragments) throw std::runtime_error("Mesh operation fragment limit exceeded."); fragments+=n; }
+};
+struct SpatialBounds { Vec3 lo,hi;size_t index=0; };
+// Balanced median AABB index. Conservative box queries replace axis-only sweeps and
+// all-vertex edge searches; exact geometric predicates still decide every candidate.
+// Query traversal and primitive visits consume the same operation-wide work budget.
+class BoundsIndex {
+	struct Branch { Vec3 lo,hi;size_t begin=0,end=0,left=0,right=0; };
+	std::vector<SpatialBounds> items;std::vector<Branch> branches;
+	size_t build(size_t begin,size_t end,Budget& budget) {
+		const size_t id=branches.size();branches.emplace_back();
+		Branch node;node.begin=begin;node.end=end;node.lo=items[begin].lo;node.hi=items[begin].hi;
+		Vec3 centroid_lo=(items[begin].lo+items[begin].hi)*.5,centroid_hi=centroid_lo;
+		for(size_t i=begin;i<end;++i) { budget.tick();for(int k=0;k<3;++k) { node.lo[k]=std::min(node.lo[k],items[i].lo[k]);node.hi[k]=std::max(node.hi[k],items[i].hi[k]);const double c=(items[i].lo[k]+items[i].hi[k])*.5;centroid_lo[k]=std::min(centroid_lo[k],c);centroid_hi[k]=std::max(centroid_hi[k],c); } }
+		if(end-begin>8) {
+			const Vec3 extent=centroid_hi-centroid_lo;int axis=0;if(extent.y>extent[axis]) axis=1;if(extent.z>extent[axis]) axis=2;
+			const size_t mid=begin+(end-begin)/2;
+			std::nth_element(items.begin()+begin,items.begin()+mid,items.begin()+end,[axis](const SpatialBounds& a,const SpatialBounds& b) { const double x=a.lo[axis]+a.hi[axis],y=b.lo[axis]+b.hi[axis];return x==y?a.index<b.index:x<y; });
+			node.left=build(begin,mid,budget);node.right=build(mid,end,budget);
+		}
+		branches[id]=node;return id;
+	}
+	static bool overlaps(const Vec3& lo,const Vec3& hi,const Vec3& other_lo,const Vec3& other_hi,double eps) {
+		for(int k=0;k<3;++k) if(lo[k]>other_hi[k]+eps||other_lo[k]>hi[k]+eps) return false;return true;
+	}
+public:
+	BoundsIndex(std::vector<SpatialBounds> input,Budget& budget):items(std::move(input)) { if(!items.empty()) { branches.reserve(items.size()/2+1);build(0,items.size(),budget); } }
+	std::vector<size_t> query(const Vec3& lo,const Vec3& hi,double eps,Budget& budget) const {
+		std::vector<size_t> out;if(branches.empty()) return out;std::vector<size_t> pending(1,0);
+		while(!pending.empty()) {
+			budget.tick();const Branch& node=branches[pending.back()];pending.pop_back();if(!overlaps(lo,hi,node.lo,node.hi,eps)) continue;
+			if(node.left) { pending.push_back(node.left);pending.push_back(node.right); }
+			else for(size_t i=node.begin;i<node.end;++i) { budget.tick();if(overlaps(lo,hi,items[i].lo,items[i].hi,eps)) out.push_back(items[i].index); }
+		}
+		return out;
+	}
 };
 struct Plane { Vec3 normal;double distance=0; };
 struct Polygon { std::vector<Vertex> vertices;Plane plane;unsigned int material=0; };
@@ -200,18 +239,16 @@ inline std::vector<Polygon> toPolygons(const Mesh& mesh,double eps) {
 	}return out;
 }
 inline void rejectSelfIntersections(const Mesh& mesh,double eps,Budget& budget) {
-	struct Bounds { Vec3 lo,hi;size_t index; };
-	std::vector<Bounds> bounds;
+	std::vector<SpatialBounds> bounds;
 	for(size_t i=0;i<mesh.size();++i) {
-		Bounds b;b.index=i;b.lo=b.hi=mesh[i].vertices[0].position;
+		SpatialBounds b;b.index=i;b.lo=b.hi=mesh[i].vertices[0].position;
 		for(const Vertex& v:mesh[i].vertices) for(int k=0;k<3;++k) { b.lo[k]=std::min(b.lo[k],v.position[k]);b.hi[k]=std::max(b.hi[k],v.position[k]); }bounds.push_back(b);
 	}
-	std::sort(bounds.begin(),bounds.end(),[](const Bounds& a,const Bounds& b){return a.lo.x<b.lo.x;});
+	BoundsIndex spatial(bounds,budget);
 	auto project=[](const Vec3& p,int axis) { return Vec3(p[(axis+1)%3],p[(axis+2)%3],0); };
 	auto cross2=[](const Vec3& a,const Vec3& b,const Vec3& c) { return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x); };
-	for(size_t i=0;i<bounds.size();++i) for(size_t j=i+1;j<bounds.size()&&bounds[j].lo.x<=bounds[i].hi.x+eps;++j) {
-		budget.tick();const Bounds& ba=bounds[i];const Bounds& bb=bounds[j];
-		if(ba.lo.y>bb.hi.y+eps||bb.lo.y>ba.hi.y+eps||ba.lo.z>bb.hi.z+eps||bb.lo.z>ba.hi.z+eps) continue;
+	for(size_t i=0;i<bounds.size();++i) for(size_t j:spatial.query(bounds[i].lo,bounds[i].hi,eps,budget)) if(j>i) {
+		budget.tick();const SpatialBounds& ba=bounds[i];const SpatialBounds& bb=bounds[j];
 		const Triangle& a=mesh[ba.index];const Triangle& b=mesh[bb.index];
 		const Vec3 na=unit(cross(a.vertices[1].position-a.vertices[0].position,a.vertices[2].position-a.vertices[0].position));
 		const Vec3 nb=unit(cross(b.vertices[1].position-b.vertices[0].position,b.vertices[2].position-b.vertices[0].position));
@@ -275,9 +312,12 @@ inline void validateShellOrientations(const Mesh& mesh,double eps,Budget& budget
 		if((volume>0)!=(nesting%2==0)) throw std::runtime_error("Boolean shell winding is invalid: exterior shells must point outward and cavity shells inward.");
 	}
 }
-inline Mesh triangulateConforming(const std::vector<Polygon>& polygons,double eps,Budget& budget) {
+inline Mesh triangulateConforming(const std::vector<Polygon>& polygons,double eps,Budget& budget,size_t max_triangles=MAX_OUTPUT_TRIANGLES) {
 	// Split all polygon edges at existing boundary vertices. BSP produces T junctions otherwise.
 	Welder weld(eps);for(const Polygon& p:polygons) for(const Vertex& v:p.vertices) weld.add(v.position);
+	std::vector<SpatialBounds> point_bounds;point_bounds.reserve(weld.points.size());
+	for(size_t i=0;i<weld.points.size();++i) point_bounds.push_back({weld.points[i],weld.points[i],i});
+	BoundsIndex spatial(std::move(point_bounds),budget);
 	Mesh out;
 	for(const Polygon& p:polygons) {
 		std::vector<Vertex> ring;
@@ -286,7 +326,9 @@ inline Mesh triangulateConforming(const std::vector<Polygon>& polygons,double ep
 			a.position=weld.points[weld.add(a.position)];b.position=weld.points[weld.add(b.position)];
 			const Vec3 d=b.position-a.position;const double d2=dot(d,d);if(d2<=eps*eps) continue;
 			std::vector<std::pair<double,Vec3>> splits;
-			for(const Vec3& v:weld.points) {
+			Vec3 lo,hi;for(int k=0;k<3;++k) { lo[k]=std::min(a.position[k],b.position[k]);hi[k]=std::max(a.position[k],b.position[k]); }
+			for(size_t index:spatial.query(lo,hi,eps,budget)) {
+				const Vec3& v=weld.points[index];
 				budget.tick();const double t=dot(v-a.position,d)/d2;
 				if(t>eps/std::sqrt(d2)&&t<1-eps/std::sqrt(d2)&&length(a.position+d*t-v)<=eps) splits.emplace_back(t,v);
 			}
@@ -301,7 +343,7 @@ inline Mesh triangulateConforming(const std::vector<Polygon>& polygons,double ep
 		for(size_t i=0;i<ring.size();++i) {
 			Triangle t;t.material=p.material;t.vertices={{center,ring[i],ring[(i+1)%ring.size()]}};
 			if(length(cross(t.vertices[1].position-center.position,t.vertices[2].position-center.position))<=eps*eps) continue;
-			if(out.size()>=MAX_OUTPUT_TRIANGLES) throw std::runtime_error("Boolean output triangle limit exceeded.");out.push_back(t);
+			if(out.size()>=max_triangles) throw std::runtime_error("Mesh output triangle limit exceeded.");out.push_back(t);
 		}
 	}return out;
 }
@@ -316,7 +358,7 @@ inline double signedVolume(const Mesh& mesh) {
 
 inline void validateClosed(const Mesh& mesh,double eps=0) {
 	if(mesh.empty()) throw std::runtime_error("Boolean operand is empty.");
-	if(mesh.size()>Detail::MAX_OUTPUT_TRIANGLES) throw std::runtime_error("Mesh triangle limit exceeded.");
+	if(mesh.size()>MAX_BOOLEAN_OUTPUT_TRIANGLES) throw std::runtime_error("Mesh triangle limit exceeded.");
 	if(eps==0) eps=Detail::tolerance(mesh);else Detail::tolerance(mesh);
 	Detail::Welder weld(eps);
 	struct Edge { unsigned count=0;int direction=0; };
@@ -415,7 +457,7 @@ inline ValidationReport validateMesh(const Mesh& mesh) {
 // exact-predicate CAD kernel. No world state changes occur before a complete result is returned.
 inline Mesh booleanMesh(const Mesh& a,const Mesh& b,const std::string& operation) {
 	if(operation!="union"&&operation!="subtract"&&operation!="intersect") throw std::runtime_error("Boolean operation must be union, subtract or intersect.");
-	if(a.size()>Detail::MAX_INPUT_TRIANGLES||b.size()>Detail::MAX_INPUT_TRIANGLES) throw std::runtime_error("Boolean operands are limited to 4096 triangles each.");
+	if(a.size()>MAX_BOOLEAN_INPUT_TRIANGLES||b.size()>MAX_BOOLEAN_INPUT_TRIANGLES) throw std::runtime_error("Boolean operands are limited to 16384 triangles each; simplify or split larger operands.");
 	const double eps=std::max(Detail::tolerance(a),Detail::tolerance(b));validateClosed(a,eps);validateClosed(b,eps);
 	Detail::Budget budget;Detail::rejectSelfIntersections(a,eps,budget);Detail::rejectSelfIntersections(b,eps,budget);
 	Detail::validateShellOrientations(a,eps,budget);Detail::validateShellOrientations(b,eps,budget);
@@ -423,7 +465,7 @@ inline Mesh booleanMesh(const Mesh& a,const Mesh& b,const std::string& operation
 	if(operation=="union") { x.clipTo(y);y.clipTo(x);y.invert();y.clipTo(x);y.invert();x.build(y.all()); }
 	else if(operation=="subtract") { x.invert();x.clipTo(y);y.clipTo(x);y.invert();y.clipTo(x);y.invert();x.build(y.all());x.invert(); }
 	else { x.invert();y.clipTo(x);y.invert();x.clipTo(y);y.clipTo(x);x.build(y.all());x.invert(); }
-	Mesh out=Detail::triangulateConforming(x.all(),eps,budget);
+	Mesh out=Detail::triangulateConforming(x.all(),eps,budget,MAX_BOOLEAN_OUTPUT_TRIANGLES);
 	// Empty is mathematically valid; the world-object adapter decides how to report it.
 	if(!out.empty()) validateClosed(out,eps);return out;
 }

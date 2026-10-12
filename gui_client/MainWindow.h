@@ -223,6 +223,7 @@ private slots:
 	void onBotEditorBotSelected(uint64 bot_id, const UID& avatar_uid);
 	void on_actionMute_Audio_toggled(bool checked);
 	void on_actionSave_Object_To_Disk_triggered();
+	void on_actionExport_Object_GLB_triggered();
 	void on_actionSave_Parcel_Objects_To_Disk_triggered();
 	void on_actionLoad_Objects_From_Disk_triggered();
 	void on_actionDelete_All_Parcel_Objects_triggered();

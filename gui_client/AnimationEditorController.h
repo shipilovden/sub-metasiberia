@@ -1,5 +1,6 @@
 #pragma once
 #include <QtCore/QObject>
+#include <QtCore/QJsonObject>
 #include <functional>
 #include <memory>
 #include <string>
@@ -16,6 +17,8 @@ public:
 		QSettings* settings, GUIClient* client, std::function<void()> restore_main_context);
 	~AnimationEditorController() override;
 	void shutdown();
+	// GUI thread only. Uses this editor's controller and normal resource/gesture pipeline.
+	QJsonObject handleMCPRequest(const QString& tool, const QJsonObject& arguments);
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
 private:

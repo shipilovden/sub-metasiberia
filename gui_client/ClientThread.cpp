@@ -1636,6 +1636,16 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			out_msg_queue->enqueue(new UserDeselectedObjectMessage(avatar_uid, object_uid));
 			break;
 		}
+	case Protocol::ObjectCopyResult:
+		{
+			(void)msg_buffer.readUInt32(); // Request ID.
+			const uint32 status = msg_buffer.readUInt32();
+			(void)readUIDFromStream(msg_buffer); // Created object arrives via ObjectCreated.
+			const std::string msg = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
+			if(status == 0) out_msg_queue->enqueue(new InfoMessage(msg));
+			else out_msg_queue->enqueue(new ErrorMessage(msg));
+			break;
+		}
 	case Protocol::InfoMessageID:
 		{
 			//conPrint("Received InfoMessage msg.");
@@ -2096,7 +2106,7 @@ void ClientThread::runConnection()
 		if(peer_protocol_version >= 42)
 		{
 			// Send client capabilities
-			const uint32 client_capabilities = Protocol::STREAMING_COMPRESSED_OBJECT_SUPPORT | Protocol::SENDS_USER_MOVED_CHATBOT_MSGS;
+			const uint32 client_capabilities = Protocol::STREAMING_COMPRESSED_OBJECT_SUPPORT | Protocol::SENDS_USER_MOVED_CHATBOT_MSGS | Protocol::AUTHORISED_OBJECT_COPY_SUPPORT;
 			socket->writeUInt32(client_capabilities);
 		}
 

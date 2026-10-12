@@ -26,9 +26,10 @@ Which has this result in-world when you walk into the red cube:
 <pre class="code-block">
 --lua
 function onUserTouchedObject(avatar : Avatar, ob : WorldObject)
-	local v = avatar.linear_velocity
-	local new_v = Vec3f(v.x, v.y, 10.0)
-	avatar.linear_velocity = new_v
+	if IS_CLIENT then
+		local v = avatar.linear_velocity
+		avatar.linear_velocity = Vec3f(v.x, v.y, 10.0)
+	end
 </pre>
 
 
@@ -209,7 +210,7 @@ function updateScoreboardText()
 	getObjectForUID(scoreboard_text_ob_uid).content = s
 end
 
-function checkAddTimeToBestTimes(av : Avater, time_s : number)
+function checkAddTimeToBestTimes(av : Avatar, time_s : number)
 	for i = 1 , #best_times do
 		if(time_s &lt; best_times[i].time) then -- If the new time was faster than time i:
 			
@@ -241,7 +242,7 @@ function checkAddTimeToBestTimes(av : Avater, time_s : number)
 	end
 end
 
-function onUserTouchedObject(av : Avater, ob : Object)
+function onUserTouchedObject(av : Avatar, ob : Object)
 	print("User touched object " .. tostring(ob.uid))
 
 	-- Get or create per-user race information (user_race_info)

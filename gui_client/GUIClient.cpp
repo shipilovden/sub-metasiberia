@@ -71,6 +71,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "../networking/TLSSocket.h"
 #endif
 #include "../shared/Protocol.h"
+#include "../shared/ObjectCopyPermissions.h"
 #include "../shared/Version.h"
 #include "../shared/LODGeneration.h"
 #include "../shared/ImageDecoding.h"
@@ -3875,6 +3876,17 @@ void GUIClient::startDownloadingResourcesForAvatar(Avatar* ob, int ob_lod_level,
 
 	ob->getDependencyURLSet(ob_lod_level, options, dependency_URLs);
 
+	// Optimised avatar resources can be missing while the uploaded source exists.
+	// Download the source as well: another user's client normally has no local
+	// source cache, unlike the client which originally uploaded this avatar.
+	if(!ob->avatar_settings.model_url.empty())
+	{
+		const Avatar::GetLODModelURLOptions model_options(options.get_optimised_mesh, options.opt_mesh_version);
+		const URLString desired_model_url = Avatar::getLODModelURLForLevel(ob->avatar_settings.model_url, ob_lod_level, model_options);
+		if(desired_model_url != ob->avatar_settings.model_url && !resource_manager->isFileForURLPresent(desired_model_url))
+			dependency_URLs.insert(DependencyURL(ob->avatar_settings.model_url));
+	}
+
 	for(auto it = dependency_URLs.begin(); it != dependency_URLs.end(); ++it)
 	{
 		const DependencyURL& url_info = *it;
@@ -4285,6 +4297,20 @@ static TextRendererFontFaceSizeSet* getFontSetForWorldTextObject(GUIClient& gui_
 }
 
 } // namespace
+
+
+std::string GUIClient::resolvedWorldTextFontPath(const WorldObject& ob)
+{
+	if(!ob.text_font.empty() && ob.text_font != "Default")
+	{
+		const std::string path = getResolvedWorldTextFontPath(*this, ob.text_font);
+		if(path.empty()) throw glare::Exception("The selected font is not installed in this client. Choose an available font before converting text.");
+		return path;
+	}
+	TextRendererFontFaceSizeSet* fonts = getFontSetForWorldTextObject(*this, ob);
+	if(!fonts) throw glare::Exception("Text renderer is not initialized.");
+	return fonts->font_file_path;
+}
 
 
 // Compute approximate spectral radiance of the emitter, from the given luminous flux, multiplied by 1.0e-9 (to avoid precision issues in shaders)
@@ -6103,6 +6129,11 @@ void GUIClient::loadModelForAvatar(Avatar* avatar)
 		if(!added_opengl_ob)
 		{
 			this->loading_model_URL_to_avatar_UID_map[lod_model_url].insert(avatar->uid);
+			// Subscribe before a cold-cache source download completes. Accepting a
+			// source only when it was already cached made remote avatars invisible.
+			if(!avatar_is_default_model && lod_model_url != avatar->avatar_settings.model_url &&
+				!resource_manager->isFileForURLPresent(lod_model_url))
+				this->loading_model_URL_to_avatar_UID_map[avatar->avatar_settings.model_url].insert(avatar->uid);
 		}
 
 		loadGearModelsForAvatar(avatar, ob_lod_level, ob_model_lod_level, max_dist_for_ob_model_lod_level, our_avatar);
@@ -8036,12 +8067,12 @@ void GUIClient::handleUploadedMeshData(const URLString& lod_model_url, int loade
 					const int av_lod_level = av->getLODLevel(cam_controller.getPosition());
 
 					// Check the avatar wants this particular LOD level model right now:
-					// If we are using the default avatar, make sure this check doesn't fail due to getLODModelURLForLevel() appending "_optX" suffix.
-					Avatar::GetLODModelURLOptions options(this->server_has_optimised_meshes, this->server_opt_mesh_version);
+					Avatar::GetLODModelURLOptions options(shouldUseOptimisedMeshesForAvatar(av->avatar_settings.model_url, this->server_has_optimised_meshes), this->server_opt_mesh_version);
 					const URLString current_desired_model_LOD_URL = av->getLODModelURLForLevel(av->avatar_settings.model_url, av_lod_level, options);
 					conPrint("  avatar uid=" + av->uid.toString() + " desired_url='" + toStdString(current_desired_model_LOD_URL) + "' our_avatar=" + toString(our_avatar) + " mats_empty=" + toString(av->avatar_settings.materials.empty()));
-					if((current_desired_model_LOD_URL == lod_model_url) || (av->avatar_settings.model_url == DEFAULT_AVATAR_MODEL_URL) ||
-					   (URLString(av->avatar_settings.model_url) == lod_model_url)) // fallback: loaded original .glb when optimised bmesh wasn't local
+					// Match exact URLs, including the original fallback. A switch to a
+					// built-in avatar must not accept a stale custom-model completion.
+					if((current_desired_model_LOD_URL == lod_model_url) || (av->avatar_settings.model_url == lod_model_url))
 					{
 						try
 						{
@@ -10105,7 +10136,7 @@ void GUIClient::setTerrainSculptTool(int tool)
 
 void GUIClient::setTerrainSculptMapPaintTarget(int target)
 {
-	terrain_sculpt_map_paint_target = myClamp(target, 0, 33);
+	terrain_sculpt_map_paint_target = myClamp(target, 0, 34);
 	terrain_sculpt_island_placement_armed = false;
 	terrain_sculpt_stroke_active = false;
 	terrain_sculpt_have_last_hit = false;
@@ -10177,7 +10208,7 @@ void GUIClient::regenerateTerrainIsland()
 void GUIClient::undoTerrainSculpt()
 {
 	if(terrain_system.nonNull() && terrain_sculpt_mode_enabled &&
-		(terrain_sculpt_map_paint_target >= 0 && terrain_sculpt_map_paint_target <= 33))
+		(terrain_sculpt_map_paint_target >= 0 && terrain_sculpt_map_paint_target <= 34))
 	{
 		terrain_sculpt_stroke_active = false;
 		terrain_sculpt_have_last_hit = false;
@@ -10191,7 +10222,7 @@ void GUIClient::undoTerrainSculpt()
 void GUIClient::redoTerrainSculpt()
 {
 	if(terrain_system.nonNull() && terrain_sculpt_mode_enabled &&
-		(terrain_sculpt_map_paint_target >= 0 && terrain_sculpt_map_paint_target <= 33))
+		(terrain_sculpt_map_paint_target >= 0 && terrain_sculpt_map_paint_target <= 34))
 	{
 		terrain_sculpt_stroke_active = false;
 		terrain_sculpt_have_last_hit = false;
@@ -10268,13 +10299,20 @@ bool GUIClient::applyTerrainSculptAtCursor(const Vec2i& cursor_pos, bool start_s
 			terrain_sculpt_map_paint_target == 3 ? 2 :
 			terrain_sculpt_map_paint_target == 7 ? 3 :
 			terrain_sculpt_map_paint_target == 4 ? 0 : 1;
-		// The shared strength control is measured in metres for height sculpting.
-		// For mask painting, use a more visible opacity curve: 1 unit is 10%,
-		// so a single pass is perceptible while repeated strokes still accumulate.
-		const float opacity = myClamp(terrain_sculpt_strength_m * 0.1f, 0.01f, 1.f);
+		// Tree placement is a binary mask. At the default strength, a tree brush
+		// must cross its threshold in one pass at the brush centre. Surface material
+		// painting retains the gentler 10% opacity curve.
+		const float opacity = (tree_mask || terrain_sculpt_map_paint_target == 34) ? myClamp(terrain_sculpt_strength_m, 0.01f, 1.f) :
+			myClamp(terrain_sculpt_strength_m * 0.1f, 0.01f, 1.f);
 		if(erase)
 			applied = terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, 0, false, true) |
 				terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, 0, true, true);
+		else if(terrain_sculpt_map_paint_target == 34)
+		{
+			// Transfer vegetation weight to ground, removing procedural grass while
+			// leaving the independent tree mask and terrain height unchanged.
+			applied = terrain_system->paintTerrainMapAtWorld(hit_pos, terrain_sculpt_brush_radius_m, opacity, 1, false, false);
+		}
 		else if(terrain_sculpt_map_paint_target == 32 || terrain_sculpt_map_paint_target == 33)
 		{
 			// Grass uses the vegetation material channel; trees use the separate placement mask.
@@ -18338,8 +18376,10 @@ void GUIClient::createObjectLoadedFromXML(WorldObjectRef new_world_object, Print
 		use_print_output.print("Sending Create Object message to server..");
 		SocketBufferOutStream temp_packet(SocketBufferOutStream::DontUseNetworkByteOrder);
 
+		// An imported file creates a new object; its archived UID is not a live copy request.
+		new_world_object->uid = UID(0);
 		MessageUtils::initPacket(temp_packet, Protocol::CreateObject);
-		new_world_object->writeToNetworkStream(temp_packet);
+		new_world_object->writeToNetworkStream(temp_packet, server_protocol_version);
 
 		enqueueMessageToSend(*this->client_thread, temp_packet);
 	}
@@ -18602,8 +18642,17 @@ void GUIClient::applyUndoOrRedoObject(const WorldObjectRef& restored_ob)
 				// Note that the recreated object will have a different ID.
 				// To apply more undo edits to the recreated object, use recreated_ob_uid to map from edit UID to recreated object UID.
 				{
+					WorldObject recreated;
+					recreated.copyNetworkStateFrom(*restored_ob);
+					recreated.uid = restored_ob->uid;
+					if(!ObjectCopyPermissions::canCopyObject(recreated, logged_in_user_id, connected_world_details.owner_id, world_state->parcels))
+					{
+						showErrorNotification("You may restore only your own objects in your own parcels or personal world.");
+						return;
+					}
+					recreated.uid = UID(0); // Fresh creation, not the legacy clipboard protocol.
 					MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-					restored_ob->writeToNetworkStream(scratch_packet);
+					recreated.writeToNetworkStream(scratch_packet, server_protocol_version);
 
 					this->last_restored_ob_uid_in_edit = restored_ob->uid; // Store edit UID, will be used when receiving new object to add entry to recreated_ob_uid map.
 
@@ -18682,6 +18731,8 @@ void GUIClient::bakeLightmapsForAllObjectsInParcel(uint32 lightmap_flag)
 
 std::string GUIClient::serialiseAllObjectsInParcelToXML(size_t& num_obs_serialised_out)
 {
+	if(world_state.isNull() || !logged_in_user_id.valid())
+		throw glare::Exception("Log in before exporting objects.");
 	std::string xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 	xml += "<objects>\n";
 	
@@ -18706,7 +18757,8 @@ std::string GUIClient::serialiseAllObjectsInParcelToXML(size_t& num_obs_serialis
 		for(auto it = world_state->objects.valuesBegin(); it != world_state->objects.valuesEnd(); ++it)
 		{
 			const WorldObject* ob = it.getValue().ptr();
-			if(cur_parcel->pointInParcel(ob->pos))
+			if(cur_parcel->pointInParcel(ob->pos) &&
+				ObjectCopyPermissions::canCopyObject(*ob, logged_in_user_id, connected_world_details.owner_id, world_state->parcels))
 			{
 				xml += ob->serialiseToXML(/*tab_depth=*/1);
 				xml += "\n";
@@ -22674,6 +22726,13 @@ bool GUIClient::applyVoxelProceduralGenerator(const VoxelProceduralType type, co
 
 bool GUIClient::copyVoxelSelection()
 {
+	if(world_state.isNull()) return false;
+	Lock copy_lock(world_state->mutex);
+	if(selected_ob.nonNull() && !ObjectCopyPermissions::canCopyObject(*selected_ob, logged_in_user_id, connected_world_details.owner_id, world_state->parcels))
+	{
+		showErrorNotification("You may copy or export only your own objects in your own parcels or personal world.");
+		return false;
+	}
 	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup ||
 		!voxel_selection_valid || voxel_selection_object_uid != selected_ob->uid)
 	{
@@ -22699,6 +22758,7 @@ bool GUIClient::copyVoxelSelection()
 		return false;
 	}
 	voxel_clipboard = std::move(result.clipboard);
+	voxel_clipboard_user_id = logged_in_user_id;
 	voxel_clipboard_origin = voxel_selection_bounds.min;
 	showInfoNotification("Copied " + toString(voxel_clipboard.voxelCount()) + " voxels.");
 	return true;
@@ -22707,7 +22767,14 @@ bool GUIClient::copyVoxelSelection()
 
 bool GUIClient::pasteVoxelSelection(const Vec3<int>& offset)
 {
-	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup || voxel_clipboard.empty())
+	if(world_state.isNull()) return false;
+	Lock copy_lock(world_state->mutex);
+	if(selected_ob.nonNull() && !ObjectCopyPermissions::canCopyObject(*selected_ob, logged_in_user_id, connected_world_details.owner_id, world_state->parcels))
+	{
+		showErrorNotification("You may paste objects only inside your own parcels or personal world.");
+		return false;
+	}
+	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup || voxel_clipboard.empty() || voxel_clipboard_user_id != logged_in_user_id)
 	{
 		showInfoNotification("Copy a voxel selection before pasting.");
 		return false;
@@ -22772,6 +22839,13 @@ bool GUIClient::deleteVoxelSelection()
 
 bool GUIClient::duplicateVoxelSelection(const Vec3<int>& offset)
 {
+	if(world_state.isNull()) return false;
+	Lock copy_lock(world_state->mutex);
+	if(selected_ob.nonNull() && !ObjectCopyPermissions::canCopyObject(*selected_ob, logged_in_user_id, connected_world_details.owner_id, world_state->parcels))
+	{
+		showErrorNotification("You may duplicate only your own objects in your own parcels or personal world.");
+		return false;
+	}
 	if(selected_ob.isNull() || selected_ob->object_type != WorldObject::ObjectType_VoxelGroup ||
 		!voxel_selection_valid || voxel_selection_object_uid != selected_ob->uid)
 	{
@@ -26704,8 +26778,8 @@ void GUIClient::convertSelectedObjectToGearItem()
 	item->materials = selected_ob->materials;
 	item->bone_name = "LeftHand";
 	item->translation = Vec3f(0.f);
-	item->axis = Vec3f(0, 0, 1);
-	item->angle = 0.f;
+	item->axis = selected_ob->axis;
+	item->angle = selected_ob->angle;
 	item->scale = selected_ob->scale;
 	item->name = "New gear item";
 
@@ -28461,7 +28535,24 @@ void GUIClient::keyPressed(KeyEvent& e)
 		url_parse_results.parsed_x = url_parse_results.parsed_y = url_parse_results.parsed_z = true;
 		url_parse_results.heading =  Maths::doubleMod(::radToDegree(this->cam_controller.getAngles().x), 360.0);
 
-		this->connectToServer(url_parse_results);
+		// Refreshing the current world does not require tearing down the client
+		// connection.  The reconnect path waits synchronously for network and
+		// resource threads to stop, which can make the window appear hung while
+		// a large scene is being cleared.  Reuse the normal world-change protocol
+		// instead; it clears the local world and requests the current world's data
+		// again while keeping those workers alive.
+		if((connection_state == ServerConnectionState_Connected) &&
+			(client_thread.nonNull()) &&
+			(server_protocol_version >= 44) &&
+			received_world_settings_since_connect_or_world_change)
+		{
+			changeToDifferentWorld(url_parse_results);
+		}
+		else if((connection_state == ServerConnectionState_NotConnected) ||
+			((connection_state == ServerConnectionState_Connected) && (server_protocol_version < 44)))
+		{
+			connectToServer(url_parse_results);
+		}
 	}
 }
 

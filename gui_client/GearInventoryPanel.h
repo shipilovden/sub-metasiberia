@@ -7,6 +7,7 @@ Native Qt gear inventory/editor dock for Metasiberia.
 
 
 #include "../shared/GearItem.h"
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QTimer>
 #include <QtCore/QString>
 #include <QtWidgets/QWidget>
@@ -24,6 +25,7 @@ class QCheckBox;
 class QLineEdit;
 class QPushButton;
 class QSettings;
+class QSplitter;
 class QTabWidget;
 class QToolButton;
 class QVBoxLayout;
@@ -59,6 +61,8 @@ private:
 	void setTransformMode(TransformMode mode);
 	void setTransformAxis(TransformAxis axis);
 	void updateToolButtonStates();
+	void fitSelectedItemToBone(bool save_to_server);
+	void pollForGearPreviewImages();
 	QString previewPathForItem(const GearItem& item) const;
 	QString previewResourceSignature() const;
 	QString boneDisplayName(const QString& bone_name) const;
@@ -90,7 +94,12 @@ private:
 	QDoubleSpinBox* scale_spins[3];
 	QCheckBox* link_scale_check;
 	QTimer preview_resource_timer;
+	QElapsedTimer preview_inventory_poll_timer;
+	QString pending_preview_ids;
+	int preview_inventory_poll_attempts;
 	QString preview_signature;
+	QSettings* settings;
+	QSplitter* workspace_splitter;
 	QToolButton* orbit_button;
 	QToolButton* refresh_button;
 	QToolButton* move_button;
@@ -99,5 +108,6 @@ private:
 	QToolButton* axis_buttons[4];
 	QPushButton* apply_button;
 	QPushButton* delete_button;
+	QPushButton* fit_bone_button;
 	QCheckBox* gizmo_button;
 };

@@ -12,3 +12,7 @@ emscripten_build2/
 
 # Local XR captures and test recordings
 vr_screenshots/
+
+# Generated Python bytecode
+__pycache__/
+*.pyc

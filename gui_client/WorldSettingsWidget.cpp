@@ -807,7 +807,7 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 {
 	setupUi(this);
 	for(int i=0; i<24; ++i) sculpting_island_buttons[i] = NULL;
-	for(int i=0; i<2; ++i) sculpting_vegetation_buttons[i] = NULL;
+	for(int i=0; i<4; ++i) sculpting_vegetation_buttons[i] = NULL;
 	const QString terrain_layer_names[4] = { tr("Rock"), tr("Ground / sand"), tr("Vegetation"), tr("Overlay material") };
 	for(int i=0; i<4; ++i)
 	{
@@ -1362,7 +1362,7 @@ void WorldSettingsWidget::createSculptingTab()
 	sculpting_strength_spin_box->setValue(1.0);
 	sculpting_strength_spin_box->setDecimals(2);
 	sculpting_strength_spin_box->setSuffix(tr(" m"));
-	sculpting_strength_spin_box->setToolTip(tr("Controls height change in metres. For material and tree masks, strength sets paint opacity; Paint grass uses this value as its opacity, so the default 1.0 paints full grass weight at the brush centre."));
+	sculpting_strength_spin_box->setToolTip(tr("For height tools, strength is in metres. For tree brushes, 1.0 paints the full mask at the brush centre; material brushes use 1.0 as 10% opacity."));
 	sculpting_strength_label = new QLabel(tr("Strength"), sculpting_tab);
 	brush_layout->addRow(sculpting_strength_label, sculpting_strength_spin_box);
 
@@ -1384,7 +1384,7 @@ void WorldSettingsWidget::createSculptingTab()
 	sculpting_map_target_combo->addItem(tr("Ground / sand material"), 2);
 	sculpting_map_target_combo->addItem(tr("Vegetation material"), 3);
 	sculpting_map_target_combo->addItem(tr("Allow trees"), 4);
-	sculpting_map_target_combo->addItem(tr("Block trees"), 5);
+	sculpting_map_target_combo->addItem(tr("Erase trees"), 5);
 	sculpting_map_target_combo->addItem(tr("Restore source map"), 6);
 	sculpting_map_target_combo->addItem(tr("Overlay material (e.g. beach / snow)"), 7);
 	sculpting_map_target_combo->insertSeparator(sculpting_map_target_combo->count());
@@ -1410,6 +1410,7 @@ void WorldSettingsWidget::createSculptingTab()
 	sculpting_map_target_combo->insertSeparator(sculpting_map_target_combo->count());
 	sculpting_map_target_combo->addItem(tr("Paint grass"), 32);
 	sculpting_map_target_combo->addItem(tr("Paint trees and grass"), 33);
+	sculpting_map_target_combo->addItem(tr("Erase grass"), 34);
 	sculpting_map_target_combo->setItemIcon(sculpting_map_target_combo->findData(32), makeTerrainLayerPreviewIcon(QColor(72, 150, 58)));
 	sculpting_map_target_combo->setItemIcon(sculpting_map_target_combo->findData(33), makeTerrainLayerPreviewIcon(QColor(52, 118, 44)));
 	sculpting_map_target_combo->setItemData(sculpting_map_target_combo->findData(32),
@@ -1424,7 +1425,7 @@ void WorldSettingsWidget::createSculptingTab()
 		tr("To paint Ground / sand, assign a texture in World > Surface material textures > colour slot 1 (Ground / sand), then select Ground / sand here and drag on the terrain. Without a texture, only the mask changes."),
 		tr("To paint Vegetation, assign a texture in World > Surface material textures > colour slot 2 (Vegetation), then select Vegetation here and drag on the terrain. This also controls procedural grass."),
 		tr("Paint World > Terrain section maps > Tree mask to allow trees in this area."),
-		tr("Paint World > Terrain section maps > Tree mask to block trees in this area."),
+		tr("Erase procedural trees only inside the brush. Grass, terrain, materials and placed tree objects are unchanged."),
 		tr("Restore the imported surface and tree masks from World > Terrain section maps in the brushed area."),
 		tr("To paint Overlay, assign a texture in World > Surface material textures > colour slot 3 (Overlay), then select Overlay here and drag on the terrain. Use it for beach, snow or another surface.")
 	};
@@ -1564,15 +1565,15 @@ void WorldSettingsWidget::createSculptingTab()
 		connect(button, &QPushButton::clicked, this, [this, i]()
 		{
 			for(int j=0; j<24; ++j) sculpting_island_buttons[j]->setChecked(j == i);
-			for(int j=0; j<2; ++j) sculpting_vegetation_buttons[j]->setChecked(false);
+			for(int j=0; j<4; ++j) sculpting_vegetation_buttons[j]->setChecked(false);
 			sculpting_map_target_combo->setCurrentIndex(sculpting_map_target_combo->findData(8 + i));
 		});
 	}
-	for(int i=0; i<2; ++i)
+	for(int i=0; i<4; ++i)
 	{
-		const int target = 32 + i;
-		QPushButton* button = sculpting_vegetation_buttons[i] = new QPushButton(i == 0 ? tr("Paint grass") : tr("Paint trees and grass"), island_panels[2]);
-		button->setIcon(makeTerrainLayerPreviewIcon(i == 0 ? QColor(72, 150, 58) : QColor(52, 118, 44)));
+		const int target = i == 2 ? 5 : i == 3 ? 34 : 32 + i;
+		QPushButton* button = sculpting_vegetation_buttons[i] = new QPushButton(i == 0 ? tr("Paint grass") : i == 1 ? tr("Paint trees and grass") : i == 2 ? tr("Erase trees") : tr("Erase grass"), island_panels[2]);
+		button->setIcon(makeTerrainLayerPreviewIcon(i == 0 ? QColor(72, 150, 58) : i == 1 ? QColor(52, 118, 44) : QColor(70, 72, 76)));
 		button->setIconSize(QSize(48, 30));
 		button->setStyleSheet("text-align: left; padding-left: 4px;");
 		button->setCheckable(true);
@@ -1580,7 +1581,7 @@ void WorldSettingsWidget::createSculptingTab()
 		connect(button, &QPushButton::clicked, this, [this, target]()
 		{
 			for(int j=0; j<24; ++j) sculpting_island_buttons[j]->setChecked(false);
-			for(int j=0; j<2; ++j) sculpting_vegetation_buttons[j]->setChecked(32 + j == target);
+			for(int j=0; j<4; ++j) sculpting_vegetation_buttons[j]->setChecked((j == 2 ? 5 : j == 3 ? 34 : 32 + j) == target);
 			sculpting_map_target_combo->setCurrentIndex(sculpting_map_target_combo->findData(target));
 		});
 	}
@@ -2012,7 +2013,7 @@ void WorldSettingsWidget::createSculptingTab()
 	{
 		const int target = sculpting_map_target_combo->itemData(index).toInt();
 		for(int i=0; i<24; ++i) sculpting_island_buttons[i]->setChecked(target == 8 + i);
-		for(int i=0; i<2; ++i) sculpting_vegetation_buttons[i]->setChecked(target == 32 + i);
+		for(int i=0; i<4; ++i) sculpting_vegetation_buttons[i]->setChecked(target == (i == 2 ? 5 : i == 3 ? 34 : 32 + i));
 		if(target >= 1 && target <= 3)
 			sculpting_layers_list->setCurrentRow(target - 1);
 		else if(target == 7)
@@ -2028,7 +2029,8 @@ void WorldSettingsWidget::createSculptingTab()
 		sculpting_target_height_label->setVisible(!island_mode);
 		sculpting_target_height_spin_box->setVisible(!island_mode);
 		const bool height_edit = target == 0;
-		const bool undoable = (target >= 0 && target <= 7) || (target >= 8 && target <= 33);
+		sculpting_strength_spin_box->setSuffix(height_edit ? tr(" m") : QString());
+		const bool undoable = (target >= 0 && target <= 7) || (target >= 8 && target <= 34);
 		const bool enabled = sculpting_mode_check_box->isChecked() && (!main_window || main_window->connectedToUsersWorldOrGodUser());
 		sculpting_undo_button->setEnabled(enabled && undoable);
 		sculpting_redo_button->setEnabled(enabled && undoable);
@@ -2048,7 +2050,11 @@ void WorldSettingsWidget::createSculptingTab()
 			sculpting_status_label->setText(tr("Paint procedural grass on the terrain. Trees are blocked in the painted area."));
 		else if(target == 33)
 			sculpting_status_label->setText(tr("Paint procedural grass and allow trees in the painted area."));
-		else if(target == 4 || target == 5)
+		else if(target == 34)
+			sculpting_status_label->setText(tr("Drag across the terrain to erase procedural grass inside the brush. The vegetation weight is transferred to ground; trees and height stay unchanged."));
+		else if(target == 5)
+			sculpting_status_label->setText(tr("Drag across the terrain to erase procedural trees inside the brush. Grass, terrain and placed objects stay unchanged."));
+		else if(target == 4)
 			sculpting_status_label->setText(tr("Left-drag to allow or block trees. Tree placement changes when the stroke is released."));
 		else
 			sculpting_status_label->setText(tr("Left-drag to restore the source surface and tree masks in this area."));
@@ -2109,7 +2115,7 @@ void WorldSettingsWidget::setSculptingControlsEnabled(bool enabled)
 	sculpting_vegetation_panel->setEnabled(enabled);
 	real_terrain_group->setEnabled(enabled);
 	const int target = sculpting_map_target_combo->currentData().toInt();
-	const bool undoable = (target >= 0 && target <= 7) || (target >= 8 && target <= 33);
+	const bool undoable = (target >= 0 && target <= 7) || (target >= 8 && target <= 34);
 	sculpting_undo_button->setEnabled(enabled && undoable);
 	sculpting_redo_button->setEnabled(enabled && undoable);
 	sculpting_status_label->setEnabled(enabled);
@@ -2207,7 +2213,7 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	real_terrain_source_label->setText(tr("Imports height, material, tree, road and building maps into the chosen terrain section. OSM road/building detail is available for areas up to about 25 km across."));
 	const QString map_target_names[8] = {
 		tr("Terrain height"), tr("Rock material"), tr("Ground / sand material"), tr("Vegetation material"),
-		tr("Allow trees"), tr("Block trees"), tr("Restore source map"), tr("Overlay material (e.g. beach / snow)")
+		tr("Allow trees"), tr("Erase trees"), tr("Restore source map"), tr("Overlay material (e.g. beach / snow)")
 	};
 	for(int i=0; i<8; ++i)
 		sculpting_map_target_combo->setItemText(i, map_target_names[i]);
@@ -2215,10 +2221,12 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	const int block_trees_item = sculpting_map_target_combo->findData(5);
 	const int grass_item = sculpting_map_target_combo->findData(32);
 	const int trees_grass_item = sculpting_map_target_combo->findData(33);
+	const int erase_grass_item = sculpting_map_target_combo->findData(34);
 	if(allow_trees_item >= 0) sculpting_map_target_combo->setItemText(allow_trees_item, tr("Tree mask: allow"));
-	if(block_trees_item >= 0) sculpting_map_target_combo->setItemText(block_trees_item, tr("Tree mask: block"));
+	if(block_trees_item >= 0) sculpting_map_target_combo->setItemText(block_trees_item, tr("Erase trees"));
 	if(grass_item >= 0) sculpting_map_target_combo->setItemText(grass_item, tr("Paint grass"));
 	if(trees_grass_item >= 0) sculpting_map_target_combo->setItemText(trees_grass_item, tr("Paint trees and grass"));
+	if(erase_grass_item >= 0) sculpting_map_target_combo->setItemText(erase_grass_item, tr("Erase grass"));
 	const QString island_names[24] = {
 		tr("Island: classic volcanic"), tr("Island: high mountainous"), tr("Island: low coral cay"), tr("Island: barrier / long"),
 		tr("Island: twin linked"), tr("Island: caldera"), tr("Island: table / mesa"), tr("Island: rias / drowned"),
@@ -2235,22 +2243,22 @@ void WorldSettingsWidget::retranslateSculptingTab()
 		sculpting_island_buttons[i]->setToolTip(tr("Creates height data in World > Terrain section maps > Height map. Choose this island, set its sliders, click Add island to world, then click a location in the scene."));
 	}
 	sculpting_island_preview_label->setText(tr("Island preview: %1").arg(sculpting_map_target_combo->currentText()));
-	for(int i=0; i<2; ++i)
+	for(int i=0; i<4; ++i)
 	{
-		sculpting_vegetation_buttons[i]->setText(i == 0 ? tr("Paint grass") : tr("Paint trees and grass"));
-		sculpting_vegetation_buttons[i]->setToolTip(i == 0 ? tr("Paints procedural grass using World > Surface material textures > Vegetation, colour slot 2. Drag on the terrain; trees are blocked in the painted area.") : tr("Paints procedural grass using World > Surface material textures > Vegetation, colour slot 2, and permits trees using World > Terrain section maps > Tree mask."));
+		sculpting_vegetation_buttons[i]->setText(i == 0 ? tr("Paint grass") : i == 1 ? tr("Paint trees and grass") : i == 2 ? tr("Erase trees") : tr("Erase grass"));
+		sculpting_vegetation_buttons[i]->setToolTip(i == 0 ? tr("Paints procedural grass using World > Surface material textures > Vegetation, colour slot 2. Drag on the terrain; trees are blocked in the painted area.") : i == 1 ? tr("Paints procedural grass using World > Surface material textures > Vegetation, colour slot 2, and permits trees using World > Terrain section maps > Tree mask.") : i == 2 ? tr("Erase procedural trees only inside the brush. Grass, terrain, materials and placed tree objects are unchanged.") : tr("Erase procedural grass inside the brush by transferring vegetation weight to ground. Tree masks and terrain height stay unchanged."));
 	}
 	const int real_island_item = sculpting_map_target_combo->findData(8);
 	const int fantasy_island_item = sculpting_map_target_combo->findData(20);
 	if(real_island_item > 0) sculpting_map_target_combo->setItemText(real_island_item - 1, tr("Real islands"));
 	if(fantasy_island_item > 0) sculpting_map_target_combo->setItemText(fantasy_island_item - 1, tr("Fantasy islands"));
 	sculpting_radius_spin_box->setSuffix(tr(" m"));
-	sculpting_strength_spin_box->setSuffix(tr(" m"));
 	sculpting_target_height_spin_box->setSuffix(tr(" m"));
 	sculpting_basic_accordion_button->setText(tr("Basic tools"));
 	sculpting_shape_accordion_button->setText(tr("Shape tools"));
 	sculpting_stamp_accordion_button->setText(tr("Stamps"));
 	const int map_target = sculpting_map_target_combo->currentData().toInt();
+	sculpting_strength_spin_box->setSuffix(map_target == 0 ? tr(" m") : QString());
 	if(map_target == 0)
 		sculpting_status_label->setText(tr("Free camera is enabled with this mode. Left-click the terrain to sculpt."));
 	else if(map_target >= 8 && map_target <= 31)
@@ -2259,6 +2267,10 @@ void WorldSettingsWidget::retranslateSculptingTab()
 		sculpting_status_label->setText(tr("Paint procedural grass on the terrain. Trees are blocked in the painted area."));
 	else if(map_target == 33)
 		sculpting_status_label->setText(tr("Paint procedural grass and allow trees in the painted area."));
+	else if(map_target == 34)
+		sculpting_status_label->setText(tr("Drag across the terrain to erase procedural grass inside the brush. The vegetation weight is transferred to ground; trees and height stay unchanged."));
+	else if(map_target == 5)
+		sculpting_status_label->setText(tr("Drag across the terrain to erase procedural trees inside the brush. Grass, terrain and placed objects stay unchanged."));
 	else
 		sculpting_status_label->setText(tr("Free camera is enabled with this mode. Left-click to paint the selected map; strength controls opacity."));
 	const QString tool_names[17] = {
@@ -2294,7 +2306,7 @@ void WorldSettingsWidget::retranslateSculptingTab()
 		sculpting_stamp_tool_buttons[i]->setToolTip(tr("%1: edits World > Terrain section maps > Height map. Select the stamp, then click or drag to apply its shape. Brush radius controls its size; the thumbnail is schematic.").arg(stamp_tool_names[i]));
 	}
 	sculpting_radius_spin_box->setToolTip(tr("Sets the brush radius in metres. Use a smaller radius for detail and a larger radius for broad changes."));
-	sculpting_strength_spin_box->setToolTip(tr("Controls height change in metres. For material and tree masks, strength sets paint opacity; Paint grass uses this value as its opacity, so the default 1.0 paints full grass weight at the brush centre."));
+	sculpting_strength_spin_box->setToolTip(tr("For height tools, strength is in metres. For tree brushes, 1.0 paints the full mask at the brush centre; material brushes use 1.0 as 10% opacity."));
 	sculpting_target_height_spin_box->setToolTip(tr("Target elevation used by height tools such as Flatten and Fill to level."));
 	sculpting_map_target_label->setText(tr("Action"));
 	sculpting_map_target_label->setToolTip(tr("Choose the map changed by this mode: World > Terrain section maps > Height map, World > Terrain section maps > Tree mask, or World > Surface material textures > colour slot 0 (Rock), 1 (Ground / sand), 2 (Vegetation), or 3 (Overlay)."));
@@ -2305,7 +2317,7 @@ void WorldSettingsWidget::retranslateSculptingTab()
 		tr("To paint Ground / sand, assign a texture in World > Surface material textures > colour slot 1 (Ground / sand), then select Ground / sand here and drag on the terrain. Without a texture, only the mask changes."),
 		tr("To paint Vegetation, assign a texture in World > Surface material textures > colour slot 2 (Vegetation), then select Vegetation here and drag on the terrain. This also controls procedural grass."),
 		tr("Paint World > Terrain section maps > Tree mask to allow trees in this area."),
-		tr("Paint World > Terrain section maps > Tree mask to block trees in this area."),
+		tr("Erase procedural trees only inside the brush. Grass, terrain, materials and placed tree objects are unchanged."),
 		tr("Restore the imported surface and tree masks from World > Terrain section maps in the brushed area."),
 		tr("To paint Overlay, assign a texture in World > Surface material textures > colour slot 3 (Overlay), then select Overlay here and drag on the terrain. Use it for beach, snow or another surface.")
 	};

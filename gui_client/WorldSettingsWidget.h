@@ -164,7 +164,7 @@ private:
 	QWidget* sculpting_fantasy_islands_panel;
 	QWidget* sculpting_vegetation_panel;
 	QPushButton* sculpting_island_buttons[24];
-	QPushButton* sculpting_vegetation_buttons[2];
+	QPushButton* sculpting_vegetation_buttons[4];
 	QDoubleSpinBox* sculpting_radius_spin_box;
 	QDoubleSpinBox* sculpting_strength_spin_box;
 	QDoubleSpinBox* sculpting_target_height_spin_box;

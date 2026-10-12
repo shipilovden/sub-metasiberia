@@ -1,4 +1,5 @@
 #include "ObjectEditor.h"
+#include "EditorTextSync.h"
 #include "ParticleEmitterSettings.h"
 #include "RuntimeTranslation.h"
 
@@ -17,6 +18,7 @@
 #include "../utils/Clock.h"
 #include "../utils/Timer.h"
 #include "../utils/Platform.h"
+#include "../utils/PlatformUtils.h"
 #include "../utils/FileUtils.h"
 #include "../utils/Reference.h"
 #include "../utils/StringUtils.h"
@@ -68,6 +70,8 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 
 // NOTE: these max volume levels should be the same as in maxAudioVolumeForObject() in WorkerThread.cpp (runs on server)
@@ -644,6 +648,10 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	shader_editor(NULL),
 	settings(NULL),
 	selected_font_name("Default"),
+	font_warning_label(NULL),
+	compatible_fonts_checkbox(NULL),
+	compatible_font_button(NULL),
+	font_filter_timer(new QTimer(this)),
 	controls_editable(true),
 	text_font_feature_supported(true),
 	syncing_audio_playlist_widget(false),
@@ -1095,6 +1103,26 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 
 	this->fontComboBox->setMinimumContentsLength(22);
 	this->fontComboBox->setIconSize(QSize(300, 32));
+	font_warning_label = new QLabel(this);
+	font_warning_label->setWordWrap(true);
+	font_warning_label->setTextFormat(Qt::PlainText);
+	font_warning_label->setStyleSheet("color: #d8ad65;");
+	font_warning_label->hide();
+	this->formLayout->insertRow(17, font_warning_label);
+	compatible_fonts_checkbox = new QCheckBox(this);
+	compatible_fonts_checkbox->setObjectName("compatibleFontsCheckBox");
+	compatible_fonts_checkbox->setChecked(true);
+	compatible_font_button = new QPushButton(this);
+	compatible_font_button->setObjectName("chooseCompatibleFontButton");
+	compatible_font_button->hide();
+	this->formLayout->insertRow(18, compatible_fonts_checkbox);
+	this->formLayout->insertRow(19, compatible_font_button);
+	font_filter_timer->setSingleShot(true);
+	font_filter_timer->setInterval(200);
+	connect(font_filter_timer, &QTimer::timeout, this, &ObjectEditor::applyFontFilter);
+	connect(compatible_fonts_checkbox, &QCheckBox::toggled, this, &ObjectEditor::applyFontFilter);
+	connect(compatible_font_button, &QPushButton::clicked, this, &ObjectEditor::chooseCompatibleFont);
+	connect(this->contentTextEdit, &QTextEdit::textChanged, this, &ObjectEditor::updateFontWarning);
 	if(this->fontComboBox->view())
 	{
 		this->fontComboBox->view()->setTextElideMode(Qt::ElideNone);
@@ -1140,6 +1168,7 @@ void ObjectEditor::changeEvent(QEvent* event)
 		retranslateDynamicPortalUI();
 		retranslateDynamicGaussianSplatUI();
 		retranslateDynamicParticleUI();
+		updateFontWarning();
 	}
 
 	QWidget::changeEvent(event);
@@ -2550,6 +2579,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 {
 	const QSignalBlocker signal_blocker(this);
 
+	const bool same_object = this->editing_ob_uid == ob.uid;
 	this->editing_ob_uid = ob.uid;
 	this->editing_object_type = ob.object_type;
 	this->editing_audio_player_webview = ob.isAudioPlayerWebView();
@@ -2600,14 +2630,12 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 		this->selected_mat_index = remapAudioPlayerMaterialIndexForEditor(this->selected_mat_index, ob.materials.size());
 
 	this->modelFileSelectWidget->setFilename(QtUtils::toQString(ob.model_url));
-	{
-		SignalBlocker b(this->scriptTextEdit);
-		this->scriptTextEdit->setPlainText(QtUtils::toQString(ob.script));
-	}
-	{
-		SignalBlocker b(this->contentTextEdit);
-		this->contentTextEdit->setPlainText(QtUtils::toQString(ob.content));
-	}
+	syncEditorPlainText(this->scriptTextEdit, QtUtils::toQString(ob.script), same_object);
+	// MCP object-script updates refresh the main editor above. Keep an already-open
+	// Script Editor in sync as well, so the code shown to the user is authoritative.
+	if(shader_editor)
+		shader_editor->updateFromRemote(QtUtils::toIndString(QtUtils::toQString(ob.script)));
+	syncEditorPlainText(this->contentTextEdit, QtUtils::toQString(ob.content), same_object);
 	syncAudioPlaylistWidgetFromContent(ob.content);
 	if(this->editing_particle_emitter)
 		setParticleControlsFromContent(ob.content);
@@ -2616,14 +2644,22 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	{
 		SignalBlocker b(this->fontComboBox);
 		// Set font combobox to the object's font
-		const int font_index = this->fontComboBox->findData(QtUtils::toQString(ob.text_font));
-		if(font_index >= 0)
-			this->fontComboBox->setCurrentIndex(font_index);
-		else
-			this->fontComboBox->setCurrentIndex(0); // Default to first font if not found
+		const QString font_name = ob.text_font.empty() ? QStringLiteral("Default") : QtUtils::toQString(ob.text_font);
+		int font_index = this->fontComboBox->findData(font_name);
+		if(font_index < 0)
+		{
+			// Keep the authoritative name even if this installation lacks its file.
+			// Editing content must not silently replace another user's font.
+			addFontComboItem(this->fontComboBox, font_name, QIcon());
+			font_index = this->fontComboBox->count() - 1;
+			for(const auto& entry : font_catalogue)
+				if(entry.first == font_name) { fontComboBox->setItemData(font_index, entry.second, fontPreviewPathRole); break; }
+		}
+		this->fontComboBox->setCurrentIndex(font_index);
 
 		this->selected_font_name = fontNameForComboIndex(this->fontComboBox, this->fontComboBox->currentIndex());
 	}
+	updateFontWarning();
 	{
 		SignalBlocker b(this->targetURLLineEdit);
 		this->targetURLLineEdit->setText(QtUtils::toQString(ob.target_url));
@@ -3047,8 +3083,7 @@ static void checkStringSize(StringType& s, size_t max_size)
 
 void ObjectEditor::setContentForSpecialisedEditor(const std::string& content)
 {
-	SignalBlocker blocker(this->contentTextEdit);
-	this->contentTextEdit->setPlainText(QtUtils::toQString(content));
+	syncEditorPlainText(this->contentTextEdit, QtUtils::toQString(content), /*same_object=*/true);
 }
 
 
@@ -3378,6 +3413,7 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->scriptTextEdit->setReadOnly(!editable);
 	this->contentTextEdit->setReadOnly(!editable);
 	this->fontComboBox->setEnabled(editable && text_font_feature_supported);
+	if(compatible_font_button) compatible_font_button->setEnabled(editable && text_font_feature_supported);
 	this->targetURLLineEdit->setReadOnly(!editable);
 
 	this->posXDoubleSpinBox->setReadOnly(!editable);
@@ -3532,6 +3568,7 @@ void ObjectEditor::setTextFontFeatureSupported(bool supported)
 {
 	this->text_font_feature_supported = supported;
 	this->fontComboBox->setEnabled(this->controls_editable && supported);
+	if(compatible_font_button) compatible_font_button->setEnabled(this->controls_editable && supported);
 
 	const QString tooltip = supported ?
 		QString() :
@@ -4113,6 +4150,7 @@ void ObjectEditor::onFontChanged(int index)
 		return;
 
 	this->selected_font_name = fontNameForComboIndex(this->fontComboBox, index);
+	updateFontWarning();
 
 	// Defer the object update until the ComboBox has fully committed the new current item.
 	QTimer::singleShot(0, this, SLOT(editTimerTimeout()));
@@ -4718,6 +4756,126 @@ void ObjectEditor::setParticleDiagnostics(size_t selected_emitter_particle_count
 }
 
 
+void ObjectEditor::updateFontWarning()
+{
+	if(!font_warning_label) return;
+	font_warning_label->hide();
+	compatible_font_button->hide();
+	compatible_fonts_checkbox->setVisible(editing_object_type == WorldObject::ObjectType_Text);
+	const bool russian = currentUILanguageForObjectEditor(settings) == RuntimeTranslation::UILanguage::Russian;
+	compatible_fonts_checkbox->setText(russian ? QString::fromUtf8("Поддерживает мой текст") : QStringLiteral("Supports my text"));
+	compatible_fonts_checkbox->setToolTip(russian ? QString::fromUtf8("Показывать шрифты со всеми символами текста. Текущий выбранный шрифт всегда остаётся в списке.") : QStringLiteral("Show fonts containing every character. The currently selected font always remains in the list."));
+	compatible_font_button->setText(russian ? QString::fromUtf8("Выбрать совместимый шрифт") : QStringLiteral("Choose a compatible font"));
+	compatible_font_button->setEnabled(controls_editable && text_font_feature_supported);
+	font_filter_timer->start(200);
+	if(editing_object_type != WorldObject::ObjectType_Text) return;
+	const QString path = fontComboBox->currentData(fontPreviewPathRole).toString();
+	QString warning;
+	if(path.isEmpty())
+		warning = russian ? QString::fromUtf8("Файл выбранного шрифта отсутствует в этом клиенте.") : QStringLiteral("The selected font file is missing from this client.");
+	else
+	{
+		const FontCoverage::Entry& coverage = font_coverage.get(QtUtils::toIndString(path));
+		QStringList missing;
+		const QVector<uint> codepoints = contentTextEdit->toPlainText().toUcs4();
+		for(uint codepoint : codepoints)
+		{
+			if(FontCoverage::layoutControl(codepoint)) continue;
+			if(coverage.characters.count(codepoint) == 0)
+			{
+				const QString value = QString::fromUcs4(&codepoint, 1);
+				if(!missing.contains(value)) missing.push_back(value);
+				if(missing.size() == 12) break;
+			}
+		}
+		if(!missing.empty())
+			warning = (russian ? QString::fromUtf8("В этом шрифте нет символов: ") : QStringLiteral("This font has no glyphs for: ")) + missing.join(" ");
+		if(!coverage.loaded)
+			warning = russian ? QString::fromUtf8("Не удалось загрузить выбранный шрифт.") : QStringLiteral("Could not load the selected font.");
+	}
+	font_warning_label->setText(warning);
+	font_warning_label->setVisible(!warning.isEmpty());
+	compatible_font_button->setVisible(!warning.isEmpty());
+}
+
+
+void ObjectEditor::applyFontFilter()
+{
+	if(!compatible_fonts_checkbox || font_catalogue.isEmpty()) return;
+	const QString selected = selected_font_name;
+	const QString selected_path = fontComboBox->currentData(fontPreviewPathRole).toString();
+	const QVector<uint> text = contentTextEdit->toPlainText().toUcs4();
+	const bool filter = compatible_fonts_checkbox->isChecked() && editing_object_type == WorldObject::ObjectType_Text;
+	if(filter)
+	{
+		// First-use discovery is chunked across event-loop turns. Later edits
+		// use cached character sets and never reopen the 326 font files.
+		Timer budget;
+		for(const auto& entry : font_catalogue)
+		{
+			const std::string path = QtUtils::toIndString(entry.second);
+			if(!font_coverage.cached(path))
+			{
+				font_coverage.get(path);
+				if(budget.elapsed() >= 0.008) { font_filter_timer->start(10); return; }
+			}
+		}
+	}
+	const QSignalBlocker blocker(fontComboBox);
+	fontComboBox->clear();
+	for(const auto& entry : font_catalogue)
+		if(!filter || entry.first == selected || font_coverage.supports(QtUtils::toIndString(entry.second), text))
+		{
+			addFontComboItem(fontComboBox, entry.first, QIcon());
+			fontComboBox->setItemData(fontComboBox->count()-1, entry.second, fontPreviewPathRole);
+			fontComboBox->setItemData(fontComboBox->count()-1, QSize(360, 36), Qt::SizeHintRole);
+		}
+	int index = fontComboBox->findData(selected);
+	if(index < 0)
+	{
+		// An unavailable font belonging to another client must survive a filter,
+		// content edit or remote echo without silently changing the object.
+		addFontComboItem(fontComboBox, selected, QIcon());
+		index = fontComboBox->count()-1;
+		fontComboBox->setItemData(index, selected_path, fontPreviewPathRole);
+	}
+	fontComboBox->setCurrentIndex(index);
+	if(filter && !font_coverage.supports(QtUtils::toIndString(fontComboBox->itemData(index, fontPreviewPathRole).toString()), text))
+	{
+		const bool russian = currentUILanguageForObjectEditor(settings) == RuntimeTranslation::UILanguage::Russian;
+		fontComboBox->setItemText(index, selected + (russian ? QString::fromUtf8(" (выбран; неполный)") : QStringLiteral(" (selected; incomplete)")));
+		fontComboBox->setItemData(index, russian ? QString::fromUtf8("Выбранный шрифт сохранён, хотя он не поддерживает весь текст. Используйте кнопку выбора совместимого шрифта.") : QStringLiteral("The selected font is preserved although it does not support every character. Use Choose a compatible font to repair."), Qt::ToolTipRole);
+	}
+}
+
+
+void ObjectEditor::chooseCompatibleFont()
+{
+	if(!controls_editable || !text_font_feature_supported || editing_object_type != WorldObject::ObjectType_Text) return;
+	const QVector<uint> text = contentTextEdit->toPlainText().toUcs4();
+	for(const auto& entry : font_catalogue)
+		if(font_coverage.supports(QtUtils::toIndString(entry.second), text))
+		{
+			// This explicit user action is the only point at which the repair
+			// changes the selected font. The normal editor signal handles undo
+			// and the authoritative object update, just like a manual selection.
+			int index = fontComboBox->findData(entry.first);
+			if(index < 0)
+			{
+				const QSignalBlocker blocker(fontComboBox);
+				addFontComboItem(fontComboBox, entry.first, QIcon());
+				index = fontComboBox->count()-1;
+				fontComboBox->setItemData(index, entry.second, fontPreviewPathRole);
+			}
+			fontComboBox->setCurrentIndex(index);
+			return;
+		}
+	const bool russian = currentUILanguageForObjectEditor(settings) == RuntimeTranslation::UILanguage::Russian;
+	font_warning_label->setText(russian ? QString::fromUtf8("Среди установленных шрифтов нет шрифта со всеми символами этого текста. Измените символы или установите подходящий шрифт.") : QStringLiteral("No installed font contains every character in this text. Change the characters or install a suitable font."));
+	font_warning_label->show();
+}
+
+
 void ObjectEditor::loadAvailableFonts()
 {
 	Timer timer;
@@ -4805,6 +4963,21 @@ void ObjectEditor::loadAvailableFonts()
 	}
 
 	const int previous_index = this->fontComboBox->findData(previous_font);
+	// The default is the actual world-rendering face, not an unchecked alias.
+	const QStringList default_paths = {
+#if defined(_WIN32)
+		QtUtils::toQString(PlatformUtils::getFontsDirPath() + "/Segoeui.ttf")
+#elif defined(__APPLE__)
+		QStringLiteral("/System/Library/Fonts/SFNS.ttf")
+#else
+		QtUtils::toQString(base_dir_path + "/data/resources/TruenoLight-E2pg.otf")
+#endif
+	};
+	for(const QString& path : default_paths)
+		if(QFileInfo::exists(path)) { fontComboBox->setItemData(0, QFileInfo(path).absoluteFilePath(), fontPreviewPathRole); break; }
+	font_catalogue.clear();
+	for(int i=0; i<fontComboBox->count(); ++i)
+		font_catalogue.push_back(qMakePair(fontNameForComboIndex(fontComboBox, i), fontComboBox->itemData(i, fontPreviewPathRole).toString()));
 	this->fontComboBox->setCurrentIndex(previous_index >= 0 ? previous_index : 0);
 	this->selected_font_name = fontNameForComboIndex(this->fontComboBox, this->fontComboBox->currentIndex());
 	qInfo("ObjectEditor::loadAvailableFonts: %d fonts listed, previews deferred, elapsed %.3f ms",

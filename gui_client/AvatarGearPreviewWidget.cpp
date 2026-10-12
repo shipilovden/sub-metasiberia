@@ -281,6 +281,62 @@ void AvatarGearPreviewWidget::updateGearItemData(const GearItem& gear_item)
 }
 
 
+bool AvatarGearPreviewWidget::fitSelectedGearToBone(GearItem& gear_item) const
+{
+	if(avatar_gl_ob.isNull() || avatar_gl_ob->mesh_data.isNull())
+		return false;
+
+	const PreviewGear* selected = nullptr;
+	for(size_t i=0; i<preview_gear.size(); ++i)
+		if(preview_gear[i].item.nonNull() && preview_gear[i].item->id == gear_item.id)
+		{
+			selected = &preview_gear[i];
+			break;
+		}
+	if(selected == nullptr || selected->gl_ob.isNull() || selected->gl_ob->mesh_data.isNull())
+		return false;
+
+	const AnimationData& animation_data = avatar_gl_ob->mesh_data->animation_data;
+	if(animation_data.getNodeIndex(gear_item.bone_name) < 0)
+		return false;
+
+	const Vec4f avatar_span = avatar_gl_ob->mesh_data->aabb_os.span();
+	const float avatar_height = myMax(avatar_span[0], myMax(avatar_span[1], avatar_span[2]));
+	const Vec4f item_span = selected->gl_ob->mesh_data->aabb_os.span();
+	const float item_max_dim = myMax(item_span[0], myMax(item_span[1], item_span[2]));
+	if(!std::isfinite(avatar_height) || !std::isfinite(item_max_dim) || avatar_height < 1.0e-4f || item_max_dim < 1.0e-6f)
+		return false;
+
+	// Fit proportions to the loaded avatar, not to a fixed metre size.  The
+	// uniform scale preserves the item's shape; users can refine it below.
+	float region_fraction = 0.14f;
+	Vec3f centre_offset(0.f);
+	const std::string& bone = gear_item.bone_name;
+	if(bone == "Head") { region_fraction = 0.16f; centre_offset.y = avatar_height * 0.035f; }
+	else if(bone == "Neck") region_fraction = 0.09f;
+	else if(bone == "Spine2") region_fraction = 0.30f;
+	else if(bone == "Hips") region_fraction = 0.23f;
+	else if(bone.find("Shoulder") != std::string::npos) region_fraction = 0.17f;
+	else if(bone.find("Arm") != std::string::npos || bone.find("ForeArm") != std::string::npos) region_fraction = 0.20f;
+	else if(bone.find("Hand") != std::string::npos || bone.find("Finger") != std::string::npos) region_fraction = 0.10f;
+	else if(bone.find("UpLeg") != std::string::npos) region_fraction = 0.26f;
+	else if(bone.find("Leg") != std::string::npos) region_fraction = 0.22f;
+	else if(bone.find("Foot") != std::string::npos || bone.find("Toe") != std::string::npos) region_fraction = 0.16f;
+
+	const float uniform_scale = myClamp(avatar_height * region_fraction / item_max_dim, 0.001f, 100.f);
+	gear_item.scale = Vec3f(uniform_scale);
+	Vec3f axis = gear_item.axis;
+	if(axis.length2() < 1.0e-8f)
+		axis = Vec3f(0, 0, 1);
+	const Matrix4f rotation = Matrix4f::rotationMatrix(normalise(axis.toVec4fVector()), gear_item.angle);
+	const Vec4f item_centre = selected->gl_ob->mesh_data->aabb_os.centroid();
+	const Vec4f scaled_centre(item_centre[0] * uniform_scale, item_centre[1] * uniform_scale, item_centre[2] * uniform_scale, 0.f);
+	const Vec4f rotated_centre = rotation * scaled_centre;
+	gear_item.translation = centre_offset - Vec3f(rotated_centre[0], rotated_centre[1], rotated_centre[2]);
+	return true;
+}
+
+
 void AvatarGearPreviewWidget::setInteractionMode(InteractionMode mode, TransformAxis axis)
 {
 	interaction_mode = mode;
@@ -329,6 +385,20 @@ bool AvatarGearPreviewWidget::currentMoveDragDeltaBoneSpace(const QPoint& total_
 
 	const float axis_fraction = dot(pixel_delta, transform_drag_axis_pixel_vector) / pixel_length2;
 	delta_out = transform_drag_axis_bone_vector * axis_fraction;
+	return true;
+}
+
+
+bool AvatarGearPreviewWidget::currentAxisDragPixels(const QPoint& total_pixel_delta, float& delta_out) const
+{
+	delta_out = 0.f;
+	if(!transform_drag_axis_mapping_valid)
+		return false;
+	const Vec2f pixel_delta((float)total_pixel_delta.x(), (float)total_pixel_delta.y());
+	const float pixel_length2 = dot(transform_drag_axis_pixel_vector, transform_drag_axis_pixel_vector);
+	if(pixel_length2 < 1.0e-6f)
+		return false;
+	delta_out = dot(pixel_delta, transform_drag_axis_pixel_vector) / std::sqrt(pixel_length2);
 	return true;
 }
 
@@ -451,7 +521,9 @@ void AvatarGearPreviewWidget::mousePressEvent(QMouseEvent* event)
 		if(handle >= 0)
 		{
 			grabbed_gizmo_handle = handle;
-			interaction_mode = handle < 3 ? Interaction_Move : Interaction_Rotate;
+			interaction_mode = handle < 3
+				? (interaction_mode == Interaction_Scale ? Interaction_Scale : Interaction_Move)
+				: Interaction_Rotate;
 			transform_axis = static_cast<TransformAxis>((handle % 3) + 1);
 			if(transform_handle_click_callback)
 				transform_handle_click_callback(interaction_mode, transform_axis);
@@ -464,24 +536,8 @@ void AvatarGearPreviewWidget::mousePressEvent(QMouseEvent* event)
 		}
 	}
 
-	if(interaction_mode == Interaction_Orbit)
-	{
-		AvatarPreviewWidget::mousePressEvent(event);
-		return;
-	}
-
-	if(event->button() == Qt::LeftButton && selected_gear_id.valid() && transform_drag_callback)
-	{
-		prepareTransformDragAxisMapping();
-		transform_dragging = true;
-		transform_drag_origin = event->pos();
-		// A zero-delta callback marks the beginning of a transform gesture, so
-		// the owning panel can snapshot the item's starting transform before any
-		// move events apply cumulative deltas.
-		transform_drag_callback(interaction_mode, transform_axis, QPoint(0, 0), /*finished=*/false);
-		event->accept();
-		return;
-	}
+	// Empty preview space always belongs to the camera. Object transforms start
+	// only when the user grabs a visible gizmo handle.
 
 	AvatarPreviewWidget::mousePressEvent(event);
 }

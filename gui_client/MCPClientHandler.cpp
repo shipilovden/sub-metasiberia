@@ -6,6 +6,8 @@ Copyright Glare Technologies Limited 2026 -
 #include "MCPClientHandler.h"
 #include "MCPTextureTools.h"
 #include "MCPImageGeneration.h"
+#include "MCPAnimationTools.h"
+#include "MCPTextMeshTools.h"
 
 
 #include "CredentialManager.h"
@@ -112,7 +114,7 @@ void writeJSONRPCError(web::ReplyInfo& reply_info, const std::string& id_json, i
 }
 
 
-std::string spliceRenderViewIntoToolsList(const std::string& response)
+std::string spliceRenderViewIntoToolsList(const std::string& response, bool animation_available, bool text_mesh_available)
 {
 	// This handler is part of the Qt local bridge. Parse the envelope rather than
 	// matching raw JSON text: the server may pretty-print its tool schema.
@@ -130,6 +132,8 @@ std::string spliceRenderViewIntoToolsList(const std::string& response)
 	tools.prepend(QJsonDocument::fromJson(QByteArray(SMOOTH_TERRAIN_TOOL_JSON)).object());
 	for(const QJsonValue& tool : MCPTextures::schemas()) tools.append(tool);
 	for(const QJsonValue& tool : MCPImages::schemas()) tools.append(tool);
+	if(animation_available) for(const QJsonValue& tool : MCPAnimationTools::schemas()) tools.append(tool);
+	if(text_mesh_available) for(const QJsonValue& tool : MCPTextMeshTools::schemas()) tools.append(tool);
 	result.insert("tools", tools);
 	root.insert("result", result);
 	document.setObject(root);
@@ -145,10 +149,12 @@ bool isFiniteVec(const Vec3d& v)
 } // anonymous namespace
 
 
-MCPClientRequestHandler::MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback_, const MCPClientStatusCallback& status_callback_, const std::function<bool()>& poly_haven_enabled_, const MCPClientTerrainCallback& terrain_callback_)
+MCPClientRequestHandler::MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback_, const MCPClientStatusCallback& status_callback_, const std::function<bool()>& poly_haven_enabled_, const MCPClientTerrainCallback& terrain_callback_, const MCPClientTerrainCallback& animation_callback_, const MCPClientTerrainCallback& text_mesh_callback_)
 :	server_hostname(forwarding_target.server_hostname),
 	render_callback(render_callback_),
 	terrain_callback(terrain_callback_),
+	animation_callback(animation_callback_),
+	text_mesh_callback(text_mesh_callback_),
 	status_callback(status_callback_),
 	poly_haven_enabled(poly_haven_enabled_),
 	keepalive_configured(false)
@@ -344,6 +350,23 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 		{
 			const JSONNode& params = root.getChildObject(parser, "params");
 			const QString name=QString::fromStdString(params.getChildStringValue(parser,"name"));
+			if(MCPAnimationTools::handles(name) || MCPTextMeshTools::handles(name))
+			{
+				try {
+					const auto& callback = MCPTextMeshTools::handles(name) ? text_mesh_callback : animation_callback;
+					if(!callback) throw glare::Exception("The requested native editor bridge is unavailable in this client.");
+					const QJsonValue arguments = QJsonDocument::fromJson(QByteArray::fromStdString(body)).object().value("params").toObject().value("arguments");
+					if(!arguments.isUndefined() && !arguments.isObject()) throw glare::Exception("Animation tool arguments must be an object.");
+					const QJsonObject result = callback(name, arguments.toObject());
+					const QJsonObject envelope{{"isError",false},{"structuredContent",result},{"content",QJsonArray{QJsonObject{{"type","text"},{"text",QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))}}}}};
+					writeJSONRPCResult(reply_info,id_json,QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
+				} catch(const glare::Exception& e) {
+					writeJSONRPCResult(reply_info,id_json,"{\"isError\":true,\"content\":[{\"type\":\"text\",\"text\":\""+web::Escaping::JSONEscape(e.what())+"\"}]}");
+				} catch(const std::exception& e) {
+					writeJSONRPCResult(reply_info,id_json,"{\"isError\":true,\"content\":[{\"type\":\"text\",\"text\":\""+web::Escaping::JSONEscape(e.what())+"\"}]}");
+				}
+				return;
+			}
 			if(MCPTextures::handles(name) || MCPImages::handles(name))
 			{
 				try {
@@ -399,8 +422,8 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 	{
 		reportStatus("Handling MCP '" + method + "' method.");
 		std::string response = forwardToServer(body);
-			if(method == "tools/list" && (render_callback || terrain_callback))
-				response = spliceRenderViewIntoToolsList(response);
+			if(method == "tools/list" && (render_callback || terrain_callback || animation_callback || text_mesh_callback))
+				response = spliceRenderViewIntoToolsList(response, (bool)animation_callback, (bool)text_mesh_callback);
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, response.data(), response.size(), /*content type=*/"application/json");
 	}
 	catch(glare::Exception& e)
@@ -456,5 +479,5 @@ bool MCPClientSharedRequestHandler::isConfigured() const
 
 Reference<web::RequestHandler> MCPClientSharedRequestHandler::getOrMakeRequestHandler()
 {
-	return new MCPClientRequestHandler(forwarding_target, render_callback, status_callback, poly_haven_enabled, terrain_callback);
+	return new MCPClientRequestHandler(forwarding_target, render_callback, status_callback, poly_haven_enabled, terrain_callback, animation_callback, text_mesh_callback);
 }

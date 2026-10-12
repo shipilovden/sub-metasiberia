@@ -16,6 +16,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "AIConnectionDialog.h"
 #include "AIDockWidget.h"
 #include "MCPClientHandler.h"
+#include "MCPTextMeshTools.h"
 #include <QtCore/QSemaphore>
 #include <QtCore/QBuffer>
 #include <QtCore/QEventLoop>
@@ -34,6 +35,8 @@ Copyright Glare Technologies Limited 2024 -
 #include "FindObjectDialog.h"
 #include "ListObjectsNearbyDialog.h"
 #include "ModelLoading.h"
+#include "ObjectGLBExport.h"
+#include "../shared/ObjectCopyPermissions.h"
 #include "EmojiUtils.h"
 #include "TestSuite.h"
 #include "TerrainSystem.h"
@@ -2315,6 +2318,7 @@ void MainWindow::initialiseUI()
 		ui->setupUi(this);
 	}
 	ui->menubar->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+	connect(ui->menuEdit, &QMenu::aboutToShow, this, &MainWindow::setUIForSelectedObject);
 	ui->menubar->setMouseTracking(true);
 	ui->menubar->installEventFilter(this);
 
@@ -3543,6 +3547,7 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_accent(ui->actionBake_Lightmaps_fast_for_all_objects_in_parcel, "gauge", "#FACC15", QString::fromUtf8("◌"));
 	set_accent(ui->actionBake_lightmaps_high_quality_for_all_objects_in_parcel, "sun-medium", "#FACC15", QString::fromUtf8("◎"));
 	set_plain(ui->actionSave_Object_To_Disk, "save", QString::fromUtf8("▣"));
+	set_plain(ui->actionExport_Object_GLB, "download", QString::fromUtf8("↓"));
 	set_plain(ui->actionSave_Parcel_Objects_To_Disk, "package", QString::fromUtf8("▤"));
 	set_plain(ui->actionLoad_Objects_From_Disk, "folder-open", QString::fromUtf8("⇪"));
 
@@ -8083,7 +8088,7 @@ void MainWindow::runScreenshotCode()
 				GLObjectRef gear_gl_ob = opengl_engine->allocateObject();
 				gear_gl_ob->mesh_data = screenshot_gear_world_ob->opengl_engine_ob->mesh_data;
 				gear_gl_ob->materials = screenshot_gear_world_ob->opengl_engine_ob->materials;
-				gear_gl_ob->ob_to_world_matrix = Matrix4f::scaleMatrix(screenshot_gear_item->scale.x, screenshot_gear_item->scale.y, screenshot_gear_item->scale.z);
+				gear_gl_ob->ob_to_world_matrix = screenshot_gear_item->gearObToBoneSpaceMatrix();
 				opengl_engine->addObject(gear_gl_ob);
 
 				const js::AABBox aabb_ws = gear_gl_ob->aabb_ws;
@@ -9871,10 +9876,49 @@ void MainWindow::on_actionAdd_Voxels_triggered()
 }
 
 
+static bool canCopyObjectInClient(GUIClient& client, const WorldObject& ob)
+{
+	if(client.world_state.isNull()) return false;
+	Lock lock(client.world_state->mutex);
+	auto found = client.world_state->objects.find(ob.uid);
+	if(found == client.world_state->objects.end() || found.getValue().ptr() != &ob) return false;
+	return ObjectCopyPermissions::canCopyObject(ob, client.logged_in_user_id, client.connected_world_details.owner_id, client.world_state->parcels);
+}
+
+
+static bool canPlaceObjectCopyInClient(GUIClient& client, const WorldObject& ob)
+{
+	if(client.world_state.isNull()) return false;
+	Lock lock(client.world_state->mutex);
+	return ObjectCopyPermissions::canPlaceCopy(ob, client.logged_in_user_id, client.connected_world_details.owner_id, client.world_state->parcels);
+}
+
+
+static void requestServerObjectCopy(GUIClient& client, const std::string& source_world, const UID source_uid, const Vec3d& position)
+{
+	if(client.client_thread.isNull() || !(client.server_capabilities & Protocol::OBJECT_COPY_SUPPORT))
+		throw glare::Exception("The server must be updated before objects can be copied or cloned.");
+	SocketBufferOutStream packet(SocketBufferOutStream::DontUseNetworkByteOrder);
+	MessageUtils::initPacket(packet, Protocol::CopyObject);
+	packet.writeUInt32(0); // No optimistic local object: the server reports the result.
+	packet.writeStringLengthFirst(source_world);
+	writeToStream(source_uid, packet);
+	writeToStream(position, packet);
+	enqueueMessageToSend(*client.client_thread, packet);
+}
+
+
 void MainWindow::on_actionCopy_Object_triggered()
 {
+	if(gui_client.world_state.isNull()) return;
 	if(gui_client.selected_ob.nonNull())
 	{
+		Lock copy_lock(gui_client.world_state->mutex);
+		if(!canCopyObjectInClient(gui_client, *gui_client.selected_ob))
+		{
+			showErrorNotification("You may copy or export only your own objects in your own parcels or personal world.");
+			return;
+		}
 		QClipboard* clipboard = QGuiApplication::clipboard();
 		QMimeData* mime_data = new QMimeData();
 
@@ -9882,6 +9926,11 @@ void MainWindow::on_actionCopy_Object_triggered()
 		gui_client.selected_ob->writeToStream(temp_buf);
 
 		mime_data->setData(/*mime-type:*/"x-substrata-object-binary", QByteArray((const char*)temp_buf.buf.data(), (int)temp_buf.buf.size()));
+		QJsonObject origin;
+		origin["host"] = QtUtils::toQString(gui_client.server_hostname);
+		origin["world"] = QtUtils::toQString(gui_client.server_worldname);
+		origin["uid"] = QtUtils::toQString(gui_client.selected_ob->uid.toString());
+		mime_data->setData("x-metasiberia-object-origin", QJsonDocument(origin).toJson(QJsonDocument::Compact));
 		clipboard->setMimeData(mime_data);
 	}
 	else if(gui_client.selected_parcel.nonNull())
@@ -9975,6 +10024,13 @@ void MainWindow::handlePasteOrDropMimeData(const QMimeData* mime_data)
 					// Deserialise object
 					WorldObjectRef pasted_ob = new WorldObject();
 					readWorldObjectFromStream(in_stream_buf, *pasted_ob);
+					const QJsonObject origin = QJsonDocument::fromJson(mime_data->data("x-metasiberia-object-origin")).object();
+					bool uid_ok = false;
+					const UID source_uid(origin.value("uid").toString().toULongLong(&uid_ok));
+					if(!uid_ok || !origin.value("world").isString() ||
+						origin.value("host").toString() != QtUtils::toQString(gui_client.server_hostname))
+						throw glare::Exception("Copy the object again in the updated client on the current server.");
+					const std::string source_world = QtUtils::toStdString(origin.value("world").toString());
 
 					// Choose a position for the pasted object.
 					Vec3d new_ob_pos;
@@ -10010,6 +10066,8 @@ void MainWindow::handlePasteOrDropMimeData(const QMimeData* mime_data)
 
 					pasted_ob->pos = new_ob_pos;
 					pasted_ob->transformChanged();
+					if(!canPlaceObjectCopyInClient(gui_client, *pasted_ob))
+						throw glare::Exception("You may paste objects only inside your own parcels or personal world.");
 
 					// Check permissions
 					bool ob_pos_in_parcel;
@@ -10023,20 +10081,14 @@ void MainWindow::handlePasteOrDropMimeData(const QMimeData* mime_data)
 						return;
 					}
 
-					// Create object, by sending CreateObject message to server
-					// Note that the recreated object will have a different ID than in the clipboard.
-					{
-						MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-						pasted_ob->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
-
-						enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
-
-						showInfoNotification("Object pasted.");
-					}
+					// The server rechecks the real source and destination and derives the copy
+					// from its own object, never from an editable clipboard snapshot.
+					requestServerObjectCopy(gui_client, source_world, source_uid, new_ob_pos);
 				}
 				catch(glare::Exception& e)
 				{
 					conPrint("Error while reading object from clipboard: " + e.what());
+					showErrorNotification(e.what());
 				}
 			}
 			else if(mime_data->hasFormat("x-substrata-parcel-binary")) // Binary encoded parcel, from a user copying a parcel.
@@ -10196,76 +10248,33 @@ void MainWindow::glWidgetPasteShortcutTriggered()
 
 void MainWindow::on_actionCloneObject_triggered()
 {
-	if(gui_client.selected_ob.nonNull())
+	try
 	{
-		WorldObjectRef source_ob = gui_client.selected_ob;
+		WorldObjectRef source = gui_client.selected_ob;
+		if(source.isNull()) throw glare::Exception("Please select an object before cloning.");
+		if(!canCopyObjectInClient(gui_client, *source))
+			throw glare::Exception("You may copy or export only your own objects in your own parcels or personal world.");
 
-		// Position cloned object besides the source object.
-		// Translate along an axis depending on the camera viewpoint.
-		Vec3d use_offset_vec;
+		Vec3d offset;
 		if(std::fabs(gui_client.cam_controller.getRightVec().x) > std::fabs(gui_client.cam_controller.getRightVec().y))
-			use_offset_vec = (gui_client.cam_controller.getRightVec().x > 0) ? Vec3d(1,0,0) : Vec3d(-1,0,0);
+			offset = gui_client.cam_controller.getRightVec().x > 0 ? Vec3d(1,0,0) : Vec3d(-1,0,0);
 		else
-			use_offset_vec = (gui_client.cam_controller.getRightVec().y > 0) ? Vec3d(0,1,0) : Vec3d(0,-1,0);
+			offset = gui_client.cam_controller.getRightVec().y > 0 ? Vec3d(0,1,0) : Vec3d(0,-1,0);
 
-		const Vec3d new_ob_pos = source_ob->pos + use_offset_vec;
-
-		bool ob_pos_in_parcel;
-		const bool have_creation_perms = gui_client.haveParcelObjectCreatePermissions(new_ob_pos, ob_pos_in_parcel);
-		if(!have_creation_perms)
+		WorldObject placement;
 		{
-			if(ob_pos_in_parcel)
-				showErrorNotification("You do not have write permissions, and are not an admin for this parcel.");
-			else
-				showErrorNotification("You can only create objects in a parcel that you have write permissions for.");
-			return;
+			Lock lock(gui_client.world_state->mutex);
+			placement.copyNetworkStateFrom(*source);
 		}
-
-		WorldObjectRef new_world_object = new WorldObject();
-		new_world_object->uid = UID(0); // Will be set by server
-		new_world_object->object_type = source_ob->object_type;
-		new_world_object->model_url = source_ob->model_url;
-		new_world_object->script = source_ob->script;
-		new_world_object->materials = source_ob->materials; // TODO: clone?
-		new_world_object->content = source_ob->content;
-		new_world_object->target_url = source_ob->target_url;
-		new_world_object->pos = new_ob_pos;
-		new_world_object->axis = source_ob->axis;
-		new_world_object->angle = source_ob->angle;
-		new_world_object->scale = source_ob->scale;
-		new_world_object->flags = source_ob->flags;// | WorldObject::LIGHTMAP_NEEDS_COMPUTING_FLAG; // Lightmaps need to be built for it.
-		new_world_object->type_data = source_ob->type_data;
-		new_world_object->getDecompressedVoxels() = source_ob->getDecompressedVoxels();
-		new_world_object->getCompressedVoxels() = source_ob->getCompressedVoxels();
-		new_world_object->audio_source_url = source_ob->audio_source_url;
-		new_world_object->audio_volume = source_ob->audio_volume;
-		new_world_object->audio_player_activation_distance = source_ob->audio_player_activation_distance;
-		new_world_object->setAABBOS(source_ob->getAABBOS());
-
-		new_world_object->max_model_lod_level = source_ob->max_model_lod_level;
-		new_world_object->mass = source_ob->mass;
-		new_world_object->friction = source_ob->friction;
-		new_world_object->restitution = source_ob->restitution;
-
-
-		// Send CreateObject message to server
-		{
-			MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
-			new_world_object->writeToNetworkStream(scratch_packet, gui_client.server_protocol_version);
-
-			enqueueMessageToSend(*gui_client.client_thread, scratch_packet);
-		}
-
-		// Deselect any currently selected object
-		gui_client.deselectObject();
-
-		showInfoNotification("Object cloned.");
+		placement.pos += offset;
+		placement.transformChanged();
+		if(!canPlaceObjectCopyInClient(gui_client, placement))
+			throw glare::Exception("You may paste objects only inside your own parcels or personal world.");
+		requestServerObjectCopy(gui_client, gui_client.server_worldname, source->uid, placement.pos);
 	}
-	else
+	catch(glare::Exception& e)
 	{
-		QMessageBox msgBox;
-		msgBox.setText("Please select an object before cloning.");
-		msgBox.exec();
+		showErrorNotification(e.what());
 	}
 }
 
@@ -11114,6 +11123,70 @@ void MainWindow::startMCPClientServerIfEnabled()
 	Reference<MCPClientSharedRequestHandler> shared_handler = new MCPClientSharedRequestHandler();
 	shared_handler->setPolyHavenEnabledCallback([this]() { return mcp_poly_haven_enabled.load(); });
 	const std::string render_server = gui_client.server_hostname, render_world = gui_client.server_worldname;
+	const UserID animation_user = gui_client.logged_in_user_id;
+	shared_handler->setAnimationCallback([this, render_server, render_world, animation_user](const QString& tool, const QJsonObject& args) -> QJsonObject {
+		struct PendingAnimation {
+			QSemaphore done;
+			std::atomic<bool> cancelled{false};
+			QJsonObject result;
+			std::string error;
+		};
+		const auto pending = std::make_shared<PendingAnimation>();
+		QMetaObject::invokeMethod(this, [this, pending, tool, args, render_server, render_world, animation_user]() {
+			if(pending->cancelled.load()) return;
+			try {
+				if(closing || !mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
+					gui_client.server_hostname != render_server || gui_client.server_worldname != render_world || gui_client.logged_in_user_id != animation_user)
+					throw std::runtime_error("Active account or world changed. Reconnect MCP before editing animations.");
+				if(!animation_editor_controller) throw std::runtime_error("Animation Editor is not initialized yet.");
+				const QString action = args.value("action").toString();
+				if(tool == "animation_editor_control" && (action == "select" || action == "play" || action == "seek"))
+				{
+					animation_editor_dock_widget->show();
+					animation_editor_dock_widget->raise();
+				}
+				pending->result = animation_editor_controller->handleMCPRequest(tool, args);
+			} catch(const glare::Exception& e) { pending->error = e.what(); }
+			catch(const std::exception& e) { pending->error = e.what(); }
+			catch(...) { pending->error = "Animation editor operation failed."; }
+			pending->done.release();
+		}, Qt::QueuedConnection);
+		// Endpoint shutdown joins workers on the GUI thread: never use BlockingQueuedConnection.
+		if(!pending->done.tryAcquire(1, 10000)) {
+			pending->cancelled.store(true);
+			throw glare::Exception("Animation editor request timed out. Inspect animation_editor_list before retrying a mutation.");
+		}
+		if(!pending->error.empty()) throw glare::Exception(pending->error);
+		return pending->result;
+	});
+	shared_handler->setTextMeshCallback([this, render_server, render_world, animation_user](const QString& tool, const QJsonObject& args) -> QJsonObject {
+		struct PendingTextMesh {
+			QSemaphore done;
+			std::atomic<bool> cancelled{false};
+			QJsonObject result;
+			std::string error;
+		};
+		const auto pending = std::make_shared<PendingTextMesh>();
+		QMetaObject::invokeMethod(this, [this, pending, tool, args, render_server, render_world, animation_user]() {
+			if(pending->cancelled.load()) return;
+			try {
+				if(closing || !mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
+					gui_client.server_hostname != render_server || gui_client.server_worldname != render_world || gui_client.logged_in_user_id != animation_user)
+					throw std::runtime_error("Active account or world changed. Reconnect MCP before editing text.");
+				if(tool == "convert_text_to_mesh") ui->glWidget->makeCurrent();
+				pending->result = MCPTextMeshTools::handle(gui_client, tool, args);
+			} catch(const glare::Exception& e) { pending->error = e.what(); }
+			catch(const std::exception& e) { pending->error = e.what(); }
+			catch(...) { pending->error = "Text conversion failed."; }
+			pending->done.release();
+		}, Qt::QueuedConnection);
+		if(!pending->done.tryAcquire(1, 15000)) {
+			pending->cancelled.store(true);
+			throw glare::Exception("Text conversion timed out. Inspect the object before retrying to avoid a duplicate edit.");
+		}
+		if(!pending->error.empty()) throw glare::Exception(pending->error);
+		return pending->result;
+	});
 	shared_handler->setRenderCallback([this, render_server, render_world](const MCPClientRenderRequest& request, MCPClientRenderResult& result) {
 		struct PendingRender {
 			QSemaphore done;
@@ -11854,6 +11927,13 @@ void MainWindow::on_actionSave_Object_To_Disk_triggered()
 {
 	if(gui_client.selected_ob)
 	{
+		const WorldObjectRef export_ob = gui_client.selected_ob;
+		const std::string export_host = gui_client.server_hostname, export_world = gui_client.server_worldname;
+		if(!canCopyObjectInClient(gui_client, *export_ob))
+		{
+			showErrorNotification("You may copy or export only your own objects in your own parcels or personal world.");
+			return;
+		}
 		QString last_save_object_dir = settings->value("mainwindow/lastSaveObjectDir").toString();
 
 		QFileDialog::Options options;
@@ -11872,7 +11952,13 @@ void MainWindow::on_actionSave_Object_To_Disk_triggered()
 
 			try
 			{
-				const std::string xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + gui_client.selected_ob->serialiseToXML(/*tab depth=*/0);
+				if(gui_client.server_hostname != export_host || gui_client.server_worldname != export_world || !canCopyObjectInClient(gui_client, *export_ob))
+					throw glare::Exception("Object export permission changed. Select the object again.");
+				std::string xml;
+				{
+					Lock lock(gui_client.world_state->mutex);
+					xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + export_ob->serialiseToXML(/*tab depth=*/0);
+				}
 
 				FileUtils::writeEntireFileTextMode(QtUtils::toStdString(selected_filename), xml);
 
@@ -11883,6 +11969,35 @@ void MainWindow::on_actionSave_Object_To_Disk_triggered()
 				QtUtils::showErrorMessageDialog("Error saving object to disk: " + e.what(), this);
 			}
 		}
+	}
+}
+
+
+void MainWindow::on_actionExport_Object_GLB_triggered()
+{
+	try
+	{
+		const WorldObjectRef ob = gui_client.selected_ob;
+		if(ob.isNull()) throw glare::Exception("Please select an object before exporting.");
+		if(!canCopyObjectInClient(gui_client, *ob))
+			throw glare::Exception("You may copy or export only your own objects in your own parcels or personal world.");
+		const std::string export_host = gui_client.server_hostname, export_world = gui_client.server_worldname;
+		QString path = QFileDialog::getSaveFileName(this, tr("Export Object to GLB"),
+			QDir(settings->value("mainwindow/lastSaveObjectDir", QDir::homePath()).toString()).filePath("object-" + QtUtils::toQString(ob->uid.toString()) + ".glb"),
+			tr("glTF Binary (*.glb)"));
+		if(path.isEmpty()) return;
+		if(!path.endsWith(".glb", Qt::CaseInsensitive)) path += ".glb";
+		if(gui_client.server_hostname != export_host || gui_client.server_worldname != export_world || !canCopyObjectInClient(gui_client, *ob))
+			throw glare::Exception("Object export permission changed. Select the object again.");
+		settings->setValue("mainwindow/lastSaveObjectDir", QFileInfo(path).absolutePath());
+		ObjectGLBExport::start(gui_client, *ob, path, this, [this, path](const QString& error) {
+			if(error.isEmpty()) showInfoNotification("Saved object to '" + QtUtils::toStdString(path) + "'.");
+			else showErrorNotification(QtUtils::toStdString(error));
+		});
+	}
+	catch(glare::Exception& e)
+	{
+		showErrorNotification(e.what());
 	}
 }
 
@@ -12727,7 +12842,11 @@ void MainWindow::glWidgetMouseReleased(QMouseEvent* e)
 void MainWindow::setUIForSelectedObject() // Enable/disable delete object action etc..
 {
 	const bool have_selected_ob = gui_client.selected_ob.nonNull();
-	this->ui->actionCloneObject->setEnabled(have_selected_ob);
+	const bool can_copy = have_selected_ob && canCopyObjectInClient(gui_client, *gui_client.selected_ob);
+	this->ui->actionCloneObject->setEnabled(can_copy);
+	this->ui->actionCopy_Object->setEnabled(can_copy || (gui_client.selected_parcel.nonNull() && isGodUser(gui_client.logged_in_user_id)));
+	this->ui->actionSave_Object_To_Disk->setEnabled(can_copy);
+	this->ui->actionExport_Object_GLB->setEnabled(can_copy);
 	this->ui->actionDeleteObject->setEnabled(have_selected_ob);
 }
 
