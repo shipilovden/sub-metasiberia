@@ -306,6 +306,15 @@ try {
 }
 finally {
     if (Test-Path $tempRoot) {
-        Remove-Item -Path $tempRoot -Recurse -Force
+        $resolvedTempRoot = [System.IO.Path]::GetFullPath($tempRoot)
+        $resolvedTempParent = [System.IO.Path]::GetFullPath($env:TEMP).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        $tempName = [System.IO.Path]::GetFileName($resolvedTempRoot)
+        $tempItem = Get-Item -LiteralPath $resolvedTempRoot -Force
+        if (-not $resolvedTempRoot.StartsWith($resolvedTempParent, [System.StringComparison]::OrdinalIgnoreCase) -or
+            -not $tempName.StartsWith('metasiberia_installer_', [System.StringComparison]::Ordinal) -or
+            ($tempItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw "Refusing to remove unexpected installer temp path: $resolvedTempRoot"
+        }
+        Remove-Item -LiteralPath $resolvedTempRoot -Recurse -Force
     }
 }
