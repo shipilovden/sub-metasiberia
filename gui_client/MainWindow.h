@@ -345,6 +345,11 @@ private:
 	void configureEditAddSubmenu();
 	void refreshMainMenuActionIcons();
 	void refreshNavigationButtonIcons();
+	void createWorldBottomBar();
+	void refreshWorldBottomBar();
+	void syncWorldBottomBar();
+	QFrame* world_bottom_bar = nullptr;
+	QToolButton* world_bottom_buttons[7] = {};
 	void configureMainToolbarButtons();
 	void applyMainChromeThemeStylesheet();
 	void updateMenuTooltips();
@@ -371,6 +376,13 @@ public:
 
 	//------------------------------------------------- UIInterface -----------------------------------------------------------
 	virtual void appendChatMessage(const std::string& msg) override;
+	virtual void showAdminWorldEntry(UID avatar_uid, const std::string& username, const std::string& world_name, const Vec3d& position, double heading) override;
+	void updateAdminEntryNotifications();
+	void clearAdminEntryNotifications();
+	QScrollArea* admin_entry_notifications = nullptr;
+	QVBoxLayout* admin_entry_layout = nullptr;
+	std::vector<QFrame*> admin_entry_cards;
+	QTimer* admin_entry_join_timer = nullptr;
 	virtual void clearChatMessages() override;
 	virtual bool isShowParcelsEnabled() const override;
 	virtual void updateOnlineUsersList() override; // Works off world state avatars.

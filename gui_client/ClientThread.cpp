@@ -1646,6 +1646,22 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			else out_msg_queue->enqueue(new ErrorMessage(msg));
 			break;
 		}
+	case Protocol::AdminWorldEntryMessageID:
+		{
+			Reference<AdminWorldEntryMessage> msg = new AdminWorldEntryMessage();
+			msg->avatar_uid = readUIDFromStream(msg_buffer);
+			msg->user_id = readUserIDFromStream(msg_buffer);
+			msg->username = msg_buffer.readStringLengthFirst(1000);
+			msg->world_name = msg_buffer.readStringLengthFirst(1000);
+			msg->position.x = msg_buffer.readDouble();
+			msg->position.y = msg_buffer.readDouble();
+			msg->position.z = msg_buffer.readDouble();
+			msg->heading = msg_buffer.readDouble();
+			if(!msg->position.isFinite() || !isFinite(msg->heading))
+				throw glare::Exception("Invalid world entry coordinates.");
+			out_msg_queue->enqueue(msg);
+			break;
+		}
 	case Protocol::InfoMessageID:
 		{
 			//conPrint("Received InfoMessage msg.");
@@ -2106,7 +2122,11 @@ void ClientThread::runConnection()
 		if(peer_protocol_version >= 42)
 		{
 			// Send client capabilities
-			const uint32 client_capabilities = Protocol::STREAMING_COMPRESSED_OBJECT_SUPPORT | Protocol::SENDS_USER_MOVED_CHATBOT_MSGS | Protocol::AUTHORISED_OBJECT_COPY_SUPPORT;
+			const uint32 client_capabilities = Protocol::STREAMING_COMPRESSED_OBJECT_SUPPORT | Protocol::SENDS_USER_MOVED_CHATBOT_MSGS | Protocol::AUTHORISED_OBJECT_COPY_SUPPORT
+#if !defined(USE_SDL)
+				| Protocol::ADMIN_WORLD_ENTRY_SUPPORT
+#endif
+				;
 			socket->writeUInt32(client_capabilities);
 		}
 

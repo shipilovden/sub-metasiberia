@@ -26,9 +26,6 @@ function Resolve-DefaultSourceDir {
     $outputRoots.Add("C:\programming\substrata_output_qt")
     $outputRoots.Add("C:\programming\substrata_output")
     $outputRoots.Add("C:\programming\substrata_output_qt6")
-    $outputRoots.Add("C:\programming\substrata_output_sdl")
-
-    $fallbackConfig = if ($PreferredConfig -eq "Release") { "RelWithDebInfo" } else { "Release" }
 
     foreach ($root in $outputRoots) {
         if ([string]::IsNullOrWhiteSpace($root)) { continue }
@@ -37,8 +34,6 @@ function Resolve-DefaultSourceDir {
         $preferred = Join-Path $base $PreferredConfig
         if (Test-Path (Join-Path $preferred "gui_client.exe")) { return $preferred }
 
-        $fallback = Join-Path $base $fallbackConfig
-        if (Test-Path (Join-Path $fallback "gui_client.exe")) { return $fallback }
     }
 
     throw "Could not find gui_client.exe in any known output folder. Set -SourceDir explicitly if needed."
@@ -141,7 +136,33 @@ SectionEnd
 Section "Core files (required)" SEC_CORE
   SectionIn RO
   SetOutPath "`$INSTDIR"
-  File /r "$escapedSource\\*"
+  File "$escapedSource\\gui_client.exe"
+  File "$escapedSource\\browser_process.exe"
+  File "$escapedSource\\*.dll"
+  File "$escapedSource\\*.pak"
+  File "$escapedSource\\*.dat"
+  File "$escapedSource\\*.bin"
+  File "$escapedSource\\vk_swiftshader_icd.json"
+  File "$escapedSource\\licence.txt"
+
+  SetOutPath "`$INSTDIR\\data"
+  File /r "$escapedSource\\data\\*"
+  SetOutPath "`$INSTDIR\\gamepads"
+  File /r "$escapedSource\\gamepads\\*"
+  SetOutPath "`$INSTDIR\\imageformats"
+  File /r "$escapedSource\\imageformats\\*"
+  SetOutPath "`$INSTDIR\\locales"
+  File /r "$escapedSource\\locales\\*"
+  SetOutPath "`$INSTDIR\\mediaservice"
+  File /r "$escapedSource\\mediaservice\\*"
+  SetOutPath "`$INSTDIR\\platforms"
+  File /r "$escapedSource\\platforms\\*"
+  SetOutPath "`$INSTDIR\\resources"
+  File /r "$escapedSource\\resources\\*"
+  SetOutPath "`$INSTDIR\\styles"
+  File /r "$escapedSource\\styles\\*"
+
+  SetOutPath "`$INSTDIR"
   CopyFiles /SILENT "`$INSTDIR\\gui_client.exe" "`$INSTDIR\\Metasiberia.exe"
 
   WriteRegStr HKLM "Software\$Name" "Install_Dir" "`$INSTDIR"
@@ -266,6 +287,30 @@ if ([string]::IsNullOrWhiteSpace($SourceDir)) {
 
 if (-not (Test-Path (Join-Path $SourceDir "gui_client.exe"))) {
     throw "Source directory does not contain gui_client.exe: $SourceDir"
+}
+
+if ((Split-Path -Leaf $SourceDir) -ne $Config) {
+    throw "Source directory must match -Config $Config`: $SourceDir"
+}
+
+$requiredRuntimeFiles = @(
+    "browser_process.exe",
+    "libcef.dll",
+    "chrome_elf.dll",
+    "icudtl.dat",
+    "resources.pak",
+    "v8_context_snapshot.bin",
+    "locales\en-US.pak",
+    "data\resources\Jet_Ski_obj_3200017390617214853.bmesh",
+    "data\resources\jetski_low_lambert1_BaseColor_png_1351070408415712052.png",
+    "data\resources\metallic_roughness_png_14447245024160102495.png",
+    "data\resources\jet_ski_mats.xml",
+    "data\resources\summoned_jet_ski_script.xml"
+)
+foreach ($relativePath in $requiredRuntimeFiles) {
+    if (-not (Test-Path -LiteralPath (Join-Path $SourceDir $relativePath) -PathType Leaf)) {
+        throw "Required installer runtime file is missing: $relativePath in $SourceDir"
+    }
 }
 
 $versionTag = Resolve-Version -RequestedVersion $Version

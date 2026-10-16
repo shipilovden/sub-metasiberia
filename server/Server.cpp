@@ -1662,6 +1662,16 @@ void Server::clientUDPPortBecameKnown(UID client_avatar_uid, const IPAddress& ip
 }
 
 
+void Server::enqueueAdminWorldEntryForAllWorlds(const SocketBufferOutStream& packet_buffer)
+{
+	// Entry events are infrequent. Each recipient checks its authenticated role
+	// under its routing lock; normal broadcasts never contain this information.
+	Lock lock(worker_thread_manager.getMutex());
+	for(const auto& thread : worker_thread_manager.getThreads())
+		static_cast<WorkerThread*>(thread.ptr())->enqueueAdminWorldEntry(packet_buffer);
+}
+
+
 // Enqueues packet to all WorkerThreads connected to the same world.
 void Server::enqueuePacketToBroadcastForWorld(const SocketBufferOutStream& packet_buffer, ServerWorldState* world)
 {

@@ -21,6 +21,10 @@ public:
 	void create(Reference<OpenGLEngine>& engine, GUIClient* client, GLUIRef ui);
 	void destroy();
 	void setVisible(bool visible);
+	void setNativeToolbarEnabled(bool enabled);
+	void toggleExpanded();
+	bool isExpanded() const { return expanded; }
+	float occupiedHeightPixels() const; // Allows native notices to sit above the chat overlay.
 	void appendMessage(const std::string& name, const Colour3f& colour, const std::string& msg, bool user_message=false);
 	void viewportResized(int w,int h);
 	void setDrawAreaBottomLeftY(float y);
@@ -70,4 +74,5 @@ private:
 	Rect2f emoji_scroll_rect,history_rect;
 	bool expanded=true,visible=true,emoji_picker_open=false,focus_composer=false;
 	bool compact_categories=false;
+	bool native_toolbar_enabled=false;
 };

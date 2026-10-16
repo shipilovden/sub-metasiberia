@@ -42,8 +42,13 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MaterialBrowser", "Loading Poly Haven textures…", "Загрузка текстур Poly Haven…");
 	add("MaterialBrowser", "Could not load Poly Haven: %1", "Не удалось загрузить Poly Haven: %1");
 	add("MaterialBrowser", "Offline catalogue. Downloaded materials remain available.", "Каталог без подключения. Скачанные материалы доступны.");
+	add("MaterialBrowser", "Using the saved Poly Haven catalogue while checking for updates…", "Показан сохранённый каталог Poly Haven. Проверяем обновления…");
+	add("MaterialBrowser", "Offline catalogue. Showing saved Poly Haven textures; updates are unavailable.", "Каталог без подключения. Показаны сохранённые текстуры Poly Haven; обновления недоступны.");
 	add("MaterialBrowser", "No matching textures found.", "Подходящих текстур не найдено.");
 	add("MaterialBrowser", "%1 textures · Click a sphere to apply its 1K material.", "%1 текстур · Нажмите на сферу, чтобы применить материал 1K.");
+	add("MaterialBrowser", "Textures are listed, but Poly Haven provided no previews.", "Текстуры найдены, но Poly Haven не предоставил для них превью.");
+	add("MaterialBrowser", "All %1 texture previews loaded. Click a sphere to apply its 1K material.", "Загружены превью всех текстур: %1. Нажмите на сферу, чтобы применить материал 1K.");
+	add("MaterialBrowser", "Loading all texture previews: %1/%2 · Missing previews retry automatically.", "Загрузка всех превью: %1/%2 · Для отсутствующих превью загрузка повторяется автоматически.");
 	add("MaterialBrowser", "Loading %1 · 1K…", "Загрузка %1 · 1K…");
 	add("MaterialBrowser", "Could not load the material: %1", "Не удалось загрузить материал: %1");
 	add("MaterialBrowser", "1K material ready. Click another sphere to change it.", "Материал 1K готов. Нажмите на другую сферу для замены.");
@@ -1611,6 +1616,8 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("AboutDialog", "Author: <b>Denis Shipilov</b>", "Автор: <b>Denis Shipilov</b>");
 	add("AboutDialog", "X: %1", "X: %1");
 	add("AboutDialog", "Open-source foundations", "Проекты и открытые компоненты");
+	add("AboutDialog", "Poly Haven textures in the Material Browser and World Editor: %1 %2.", "Текстуры Poly Haven в браузере материалов и редакторе мира: %1 %2.");
+	add("AboutDialog", "Landscape sculpting ideas: %1. Source repository: %2.", "Идеи для скульптинга ландшафта: %1. Исходный репозиторий: %2.");
 	add("AboutDialog", "The X Bot and Y Bot avatars were taken from %1.", "Аватары X Bot и Y Bot взяты с сайта %1.");
 	add("AboutDialog", "Interface icons are provided by %1.", "Иконки интерфейса взяты из проекта %1.");
 	add("AboutDialog", "Scientific data", "Научные данные");

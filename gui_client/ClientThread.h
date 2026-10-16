@@ -92,6 +92,17 @@ public:
 	UID avatar_uid;
 };
 
+class AdminWorldEntryMessage : public ThreadMessage
+{
+public:
+	AdminWorldEntryMessage() : ThreadMessage(Msg_AdminWorldEntryMessage) {}
+	UID avatar_uid;
+	UserID user_id;
+	std::string username, world_name;
+	Vec3d position;
+	double heading;
+};
+
 
 class AvatarIsHereMessage : public ThreadMessage
 {

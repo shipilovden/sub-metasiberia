@@ -140,7 +140,7 @@ CEF runtime evidence in both directories includes `browser_process.exe`, `libcef
 
 Подтверждение build относится к compile/link/runtime-copy artifact validation. Для Tree, Voxel Editor и PubChem есть отдельные narrow runtime smokes ниже; они не заменяют manual editor UI/server/reconnect test.
 
-### Локальная Windows Release + NSIS installer без публикации
+### Локальная Windows RelWithDebInfo + NSIS installer без публикации
 
 Этот workflow создаёт локальный Windows installer существующими scripts. Он не выполняет commit, tag, push, GitHub Release, установку или запуск клиента. `scripts/publish_update.ps1` для локальной упаковки не использовать: у него нет build-only режима, он требует clean worktree, меняет версию и выполняет Git/publish операции.
 
@@ -152,16 +152,16 @@ CEF runtime evidence in both directories includes `browser_process.exe`, `libcef
    & "C:\Program Files (x86)\NSIS\makensis.exe" /VERSION
    ```
 
-3. Собрать и подготовить полный Release runtime каноническим Qt 5 wrapper без `-SkipConfigure` и без `-SkipRuntimeCopy`:
+3. Собрать и подготовить полный `RelWithDebInfo` runtime каноническим Qt 5 wrapper без `-SkipConfigure` и без `-SkipRuntimeCopy`. Это та же конфигурация, из которой владелец запускает клиент:
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass `
      -File C:\programming\qt_build.ps1 `
-     -Configs Release `
+     -Configs RelWithDebInfo `
      -Jobs 8
    ```
 
-   Если wrapper сообщает о dirty worktree, продолжать только после ручной проверки перечисленных изменений. Готовый runtime должен находиться в `C:\programming\substrata_output_qt\vs2022\cyberspace_x64\Release`, а `C:\programming\substrata_output_qt\build_manifest.json` должен содержать `status: success`, `success: true` и `runtime_ready: true` для `Release`.
+   Если wrapper сообщает о dirty worktree, продолжать только после ручной проверки перечисленных изменений. Готовый runtime должен находиться в `C:\programming\substrata_output_qt\vs2022\cyberspace_x64\RelWithDebInfo`, а `C:\programming\substrata_output_qt\build_manifest.json` должен содержать `status: success`, `success: true` и `runtime_ready: true` для `RelWithDebInfo`.
 
 4. Прочитать версию из того же header и создать installer существующим NSIS pipeline:
 
@@ -174,19 +174,19 @@ CEF runtime evidence in both directories includes `browser_process.exe`, `libcef
 
    powershell -NoProfile -ExecutionPolicy Bypass `
      -File C:\programming\substrata\scripts\create_simple_installer.ps1 `
-     -SourceDir C:\programming\substrata_output_qt\vs2022\cyberspace_x64\Release `
+     -SourceDir C:\programming\substrata_output_qt\vs2022\cyberspace_x64\RelWithDebInfo `
      -OutputDir C:\programming\substrata_output\installers `
      -AppName "Metasiberia Beta" `
      -Version $releaseVersion `
-     -Config Release
+     -Config RelWithDebInfo
    ```
 
-   Script должен вывести `Backend: NSIS`. Не использовать IExpress fallback для release: он не сохраняет полный набор вложенных runtime-файлов. Script перезаписывает одноимённый installer, если он уже существует.
+   Script должен вывести `Backend: NSIS`. Он проверяет точную конфигурацию и обязательные CEF/гидроцикловые ресурсы до упаковки. Не использовать IExpress fallback для release: он не сохраняет полный набор вложенных runtime-файлов. Script перезаписывает одноимённый installer, если он уже существует.
 
 5. Не запуская installer, проверить итоговые SHA-256:
 
    ```powershell
-   $releaseExe = 'C:\programming\substrata_output_qt\vs2022\cyberspace_x64\Release\gui_client.exe'
+   $releaseExe = 'C:\programming\substrata_output_qt\vs2022\cyberspace_x64\RelWithDebInfo\gui_client.exe'
    $installer = Join-Path 'C:\programming\substrata_output\installers' ("MetasiberiaBeta-Setup-v{0}.exe" -f $releaseVersion)
    Get-FileHash -Algorithm SHA256 -LiteralPath @($releaseExe, $installer)
    ```

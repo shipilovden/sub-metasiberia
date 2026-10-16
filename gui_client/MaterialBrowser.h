@@ -59,7 +59,9 @@ private:
 	void loadPolyHavenCatalog();
 	void rebuildCategories();
 	void filterPolyHavenMaterials();
-	void loadVisibleThumbnails();
+	void loadCatalogThumbnails();
+	void updateCatalogThumbnailStatus();
+	void applyCatalogThumbnail(const QString& url, const QIcon& icon);
 	void selectPolyHavenMaterial(QListWidgetItem* item);
 	void startMaterialDownload();
 	void retranslateBrowser();
@@ -76,11 +78,15 @@ private:
 	QPushButton* refresh = nullptr;
 	QJsonObject catalog;
 	QHash<QString, QIcon> thumbnail_icons;
-	QSet<QString> pending_thumbnails, failed_thumbnails;
+	QSet<QString> pending_thumbnails;
+	QHash<QString, int> thumbnail_attempts;
+	QHash<QString, qint64> thumbnail_retry_after;
+	int thumbnail_scan_offset = 0;
 	QString pending_material_id;
 	int selection_generation = 0;
 	bool catalog_loading = false;
 	bool material_loading = false;
+	bool thumbnail_preload_started = false;
 	std::shared_ptr<std::atomic<bool>> alive;
 
 	FlowLayout *				flow_layout;

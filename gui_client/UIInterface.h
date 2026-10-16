@@ -32,6 +32,7 @@ class UIInterface
 public:
 	virtual void appendChatMessage(const std::string& msg) = 0;
 	virtual void clearChatMessages() = 0;
+	virtual void showAdminWorldEntry(UID avatar_uid, const std::string& username, const std::string& world_name, const Vec3d& position, double heading) {}
 
 	virtual bool isShowParcelsEnabled() const = 0;
 

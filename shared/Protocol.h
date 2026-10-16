@@ -207,6 +207,9 @@ const uint32 UserExitedParcelMessage		= 6513;
 const uint32 InfoMessageID			= 7001;
 const uint32 ErrorMessageID			= 7002;
 const uint32 ServerAdminMessageID	= 7010; // Allows server to send a message like "Server going down for reboot soon"
+// Server -> authenticated superadmin only: avatar UID, user ID, username,
+// world name, position (3 doubles), heading in radians (double).
+const uint32 AdminWorldEntryMessageID = 7011;
 
 const uint32 LogInMessage			= 8000;
 const uint32 LogOutMessage			= 8001;
@@ -246,6 +249,7 @@ const uint32 STREAMING_COMPRESSED_OBJECT_SUPPORT	= 0x1; // Can the client handle
 const uint32 SENDS_USER_MOVED_CHATBOT_MSGS			= 0x2;//  Does the client send UserMovedNearToAvatar and userMovedAwayFromBotAvatar msgs?
 
 const uint32 AUTHORISED_OBJECT_COPY_SUPPORT = 0x4; // Uses source-UID CopyObject for clone/paste.
+const uint32 ADMIN_WORLD_ENTRY_SUPPORT = 0x8; // Can receive AdminWorldEntryMessageID. Does not grant permission.
 
 // Server capabilities
 const uint32 OBJECT_TEXTURE_BASISU_SUPPORT			= 0x1;
