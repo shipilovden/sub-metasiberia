@@ -6,6 +6,9 @@ Copyright Glare Technologies Limited 2024 -
 
 
 #include "GUIClient.h"
+#include "FontCoverage.h"
+#include "MCPTextMeshTools.h"
+#include <QtCore/QDir>
 #include <settings/SettingsStore.h>
 #include "ClientThread.h"
 #include "ModelLoading.h"
@@ -4198,6 +4201,7 @@ struct TextFontSetCacheKey
 
 static std::map<TextFontSetCacheKey, TextRendererFontFaceSizeSetRef> g_text_font_set_cache;
 static std::set<std::string> g_missing_text_font_reported;
+static FontCoverage g_world_text_font_coverage;
 
 
 static bool isSupportedWorldTextFontFile(const std::string& filename)
@@ -4265,7 +4269,7 @@ static TextRendererFontFaceSizeSet* getFontSetForWorldTextObject(GUIClient& gui_
 	if(ob.text_font.empty() || ob.text_font == "Default")
 		return gui_client.gl_ui->getFonts();
 
-	const std::string font_path = getResolvedWorldTextFontPath(gui_client, ob.text_font);
+	std::string font_path = getResolvedWorldTextFontPath(gui_client, ob.text_font);
 	if(font_path.empty())
 	{
 		if(g_missing_text_font_reported.insert(ob.text_font).second)
@@ -4274,6 +4278,28 @@ static TextRendererFontFaceSizeSet* getFontSetForWorldTextObject(GUIClient& gui_
 	}
 
 	TextRendererFontFaceSizeSet* default_fonts = gui_client.gl_ui->getFonts();
+	const QVector<uint> text_codepoints = QString::fromStdString(ob.content).toUcs4();
+	if(!g_world_text_font_coverage.supports(font_path, text_codepoints))
+	{
+		const std::string requested_font_path = font_path;
+		font_path = default_fonts->font_file_path;
+		if(!g_world_text_font_coverage.supports(font_path, text_codepoints))
+		{
+			const QDir font_dir(QString::fromStdString(gui_client.resources_dir_path + "/fonts"));
+			for(const QFileInfo& entry : font_dir.entryInfoList({"*.ttf", "*.otf", "*.woff", "*.fon"}, QDir::Files, QDir::Name))
+				if(g_world_text_font_coverage.supports(entry.absoluteFilePath().toStdString(), text_codepoints))
+				{
+					font_path = entry.absoluteFilePath().toStdString();
+					break;
+				}
+		}
+		if(!g_world_text_font_coverage.supports(font_path, text_codepoints))
+			font_path = requested_font_path;
+		else if(g_missing_text_font_reported.insert("coverage:" + requested_font_path).second)
+			gui_client.logMessage("[Text] Font '" + ob.text_font + "' lacks one or more characters in this text; rendering it with a bundled compatible font.");
+	}
+	if(font_path == default_fonts->font_file_path)
+		return default_fonts;
 	TextFontSetCacheKey cache_key;
 	cache_key.renderer = default_fonts->renderer.ptr();
 	cache_key.font_path = font_path;
@@ -4368,6 +4394,15 @@ void GUIClient::createGLAndPhysicsObsForText(const Matrix4f& ob_to_world_matrix,
 	TextRendererFontFaceSizeSet* use_fonts = getFontSetForWorldTextObject(*this, *ob);
 	if(use_fonts == NULL)
 		use_fonts = gl_ui->getFonts();
+	// Match the Unicode cmap used by the font coverage checker.
+	TextRendererFontFaceRef world_text_font = use_fonts->getFontFaceForSize(font_size_px);
+	if(FT_Select_Charmap(world_text_font->face, FT_ENCODING_UNICODE) != 0)
+	{
+		use_fonts = gl_ui->getFonts();
+		world_text_font = use_fonts->getFontFaceForSize(font_size_px);
+		if(FT_Select_Charmap(world_text_font->face, FT_ENCODING_UNICODE) != 0)
+			throw glare::Exception("The default text font has no Unicode character map.");
+	}
 
 	std::vector<GLUIText::CharPositionInfo> char_positions_font_coords;
 	Reference<OpenGLMeshRenderData> meshdata = GLUIText::makeMeshDataForText(opengl_engine, gl_ui->font_char_text_cache.ptr(), use_fonts, gl_ui->getEmojiFonts(), use_text, 
@@ -19697,7 +19732,25 @@ void GUIClient::objectEdited()
 			undo_buffer.startWorldObjectEdit(*this->selected_ob);
 
 		//ui->objectEditor->toObject(*this->selected_ob); // Sets changed_flags on object as well.
+		const bool selected_text_mesh = selected_ob->object_type == WorldObject::ObjectType_Generic &&
+			MCPTextMeshTools::isConvertedTextMeshURL(toStdString(selected_ob->model_url));
+		const std::string previous_text_mesh_font = selected_text_mesh ?
+			MCPTextMeshTools::convertedTextMeshFontName(toStdString(selected_ob->model_url)) : std::string();
 		ui_interface->objectEditorToObject(*this->selected_ob); // Sets changed_flags on object as well.
+		if(selected_text_mesh && BitUtils::isBitSet(selected_ob->changed_flags, WorldObject::TEXT_FONT_CHANGED))
+		{
+			try
+			{
+				MCPTextMeshTools::rebuildConvertedTextMeshForFont(*this, *selected_ob);
+			}
+			catch(const std::exception& e)
+			{
+				selected_ob->text_font = previous_text_mesh_font.empty() ? "Default" : previous_text_mesh_font;
+				BitUtils::zeroBit(selected_ob->changed_flags, WorldObject::TEXT_FONT_CHANGED);
+				ui_interface->setObjectEditorFromOb(*selected_ob, ui_interface->getSelectedMatIndex(), connectedToUsersWorldOrGodUser());
+				showErrorNotification(e.what());
+			}
+		}
 
 #if !defined(USE_SDL)
 		// A cultural record with a cached public image is always displayed as a

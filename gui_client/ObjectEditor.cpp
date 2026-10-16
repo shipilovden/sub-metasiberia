@@ -1,4 +1,5 @@
 #include "ObjectEditor.h"
+#include "MCPTextMeshTools.h"
 #include "EditorTextSync.h"
 #include "ParticleEmitterSettings.h"
 #include "RuntimeTranslation.h"
@@ -445,6 +446,8 @@ QIcon makeFontPreviewIcon(TextRendererRef renderer, const QString& preview_text,
 
 		TextRendererFontFaceSizeSetRef font_set = new TextRendererFontFaceSizeSet(renderer, font_path);
 		TextRendererFontFaceRef font = font_set->getFontFaceForSize(font_size_px);
+		if(FT_Select_Charmap(font->face, FT_ENCODING_UNICODE) != 0)
+			return QIcon();
 
 		const std::string preview_text_utf8 = QtUtils::toIndString(preview_text);
 		const TextRenderer::SizeInfo size_info = font->getTextSize(preview_text_utf8);
@@ -651,6 +654,7 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	font_warning_label(NULL),
 	compatible_fonts_checkbox(NULL),
 	compatible_font_button(NULL),
+	convert_text_to_mesh_button(NULL),
 	font_filter_timer(new QTimer(this)),
 	controls_editable(true),
 	text_font_feature_supported(true),
@@ -1117,11 +1121,15 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	compatible_font_button->hide();
 	this->formLayout->insertRow(18, compatible_fonts_checkbox);
 	this->formLayout->insertRow(19, compatible_font_button);
+	convert_text_to_mesh_button = new QPushButton(this);
+	convert_text_to_mesh_button->setObjectName("convertTextToMeshButton");
+	this->formLayout->insertRow(20, convert_text_to_mesh_button);
 	font_filter_timer->setSingleShot(true);
 	font_filter_timer->setInterval(200);
 	connect(font_filter_timer, &QTimer::timeout, this, &ObjectEditor::applyFontFilter);
 	connect(compatible_fonts_checkbox, &QCheckBox::toggled, this, &ObjectEditor::applyFontFilter);
 	connect(compatible_font_button, &QPushButton::clicked, this, &ObjectEditor::chooseCompatibleFont);
+	connect(convert_text_to_mesh_button, &QPushButton::clicked, this, &ObjectEditor::convertTextToMeshRequested);
 	connect(this->contentTextEdit, &QTextEdit::textChanged, this, &ObjectEditor::updateFontWarning);
 	if(this->fontComboBox->view())
 	{
@@ -2644,7 +2652,9 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	{
 		SignalBlocker b(this->fontComboBox);
 		// Set font combobox to the object's font
-		const QString font_name = ob.text_font.empty() ? QStringLiteral("Default") : QtUtils::toQString(ob.text_font);
+		const std::string mesh_font = MCPTextMeshTools::convertedTextMeshFontName(toStdString(ob.model_url));
+		const QString font_name = !mesh_font.empty() ? QtUtils::toQString(mesh_font) :
+			(ob.text_font.empty() ? QStringLiteral("Default") : QtUtils::toQString(ob.text_font));
 		int font_index = this->fontComboBox->findData(font_name);
 		if(font_index < 0)
 		{
@@ -3142,7 +3152,9 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 	const std::string new_text_font = QtUtils::toIndString(resolved_font_name);
 	if(text_font_feature_supported)
 	{
-		if(ob_out.text_font != new_text_font)
+		const std::string mesh_font = MCPTextMeshTools::convertedTextMeshFontName(toStdString(ob_out.model_url));
+		const std::string current_font = mesh_font.empty() ? ob_out.text_font : mesh_font;
+		if(current_font != new_text_font)
 			ob_out.changed_flags |= WorldObject::TEXT_FONT_CHANGED;
 		ob_out.text_font = new_text_font;
 		checkStringSize(ob_out.text_font, WorldObject::MAX_FONT_NAME_SIZE);
@@ -3414,6 +3426,7 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->contentTextEdit->setReadOnly(!editable);
 	this->fontComboBox->setEnabled(editable && text_font_feature_supported);
 	if(compatible_font_button) compatible_font_button->setEnabled(editable && text_font_feature_supported);
+	if(convert_text_to_mesh_button) convert_text_to_mesh_button->setEnabled(editable && text_font_feature_supported);
 	this->targetURLLineEdit->setReadOnly(!editable);
 
 	this->posXDoubleSpinBox->setReadOnly(!editable);
@@ -4763,6 +4776,9 @@ void ObjectEditor::updateFontWarning()
 	compatible_font_button->hide();
 	compatible_fonts_checkbox->setVisible(editing_object_type == WorldObject::ObjectType_Text);
 	const bool russian = currentUILanguageForObjectEditor(settings) == RuntimeTranslation::UILanguage::Russian;
+	convert_text_to_mesh_button->setText(russian ? QString::fromUtf8("Преобразовать в 3D-меш") : QStringLiteral("Convert to 3D mesh"));
+	convert_text_to_mesh_button->setVisible(editing_object_type == WorldObject::ObjectType_Text);
+	convert_text_to_mesh_button->setEnabled(controls_editable && text_font_feature_supported);
 	compatible_fonts_checkbox->setText(russian ? QString::fromUtf8("Поддерживает мой текст") : QStringLiteral("Supports my text"));
 	compatible_fonts_checkbox->setToolTip(russian ? QString::fromUtf8("Показывать шрифты со всеми символами текста. Текущий выбранный шрифт всегда остаётся в списке.") : QStringLiteral("Show fonts containing every character. The currently selected font always remains in the list."));
 	compatible_font_button->setText(russian ? QString::fromUtf8("Выбрать совместимый шрифт") : QStringLiteral("Choose a compatible font"));
@@ -4789,7 +4805,8 @@ void ObjectEditor::updateFontWarning()
 			}
 		}
 		if(!missing.empty())
-			warning = (russian ? QString::fromUtf8("В этом шрифте нет символов: ") : QStringLiteral("This font has no glyphs for: ")) + missing.join(" ");
+			warning = (russian ? QString::fromUtf8("В этом шрифте нет символов: ") : QStringLiteral("This font has no glyphs for: ")) + missing.join(" ") +
+				(russian ? QString::fromUtf8(". Для отображения этого текста автоматически используется совместимый шрифт.") : QStringLiteral(". A compatible font is used to display this text."));
 		if(!coverage.loaded)
 			warning = russian ? QString::fromUtf8("Не удалось загрузить выбранный шрифт.") : QStringLiteral("Could not load the selected font.");
 	}
