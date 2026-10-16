@@ -25,6 +25,7 @@ Copyright Glare Technologies Limited 2025 -
 #include <QtCore/QTimer>
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QEvent>
+#include <QtCore/QDateTime>
 #include "../qt/FlowLayout.h"
 #include "../shared/WorldMaterial.h"
 #include "ModelLoading.h"
@@ -40,15 +41,95 @@ Copyright Glare Technologies Limited 2025 -
 #include <IncludeXXHash.h>
 #include <Exception.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#include <winhttp.h>
+#endif
+
 
 static const int PREVIEW_SIZE = 160;
 
 namespace {
+#if defined(_WIN32)
+class PolyHavenPreviewHttpHandle
+{
+public:
+	explicit PolyHavenPreviewHttpHandle(HINTERNET handle_) : handle(handle_)
+	{
+		if(!handle) MCPTextures::fail(QStringLiteral("Poly Haven HTTPS handle error %1").arg(GetLastError()));
+	}
+	~PolyHavenPreviewHttpHandle() { WinHttpCloseHandle(handle); }
+	PolyHavenPreviewHttpHandle(const PolyHavenPreviewHttpHandle&) = delete;
+	PolyHavenPreviewHttpHandle& operator=(const PolyHavenPreviewHttpHandle&) = delete;
+	HINTERNET handle;
+};
+#endif
+
+QByteArray fetchPolyHavenPreview(const QUrl& url)
+{
+#if defined(_WIN32)
+	const QString host = url.host().toLower();
+	if(!url.isValid() || url.scheme() != "https" || !url.userInfo().isEmpty() || url.port(443) != 443 ||
+		(host != "cdn.polyhaven.com" && host != "dl.polyhaven.org" && host != "api.polyhaven.com"))
+		MCPTextures::fail("Unsupported Poly Haven preview URL.");
+
+	// The bundled Qt has no SSL backend. WinHTTP provides HTTPS, system proxy
+	// support and connection fallback across the CDN's resolved addresses.
+	// Reuse each worker's session so the full catalogue can share connections.
+	static thread_local PolyHavenPreviewHttpHandle session(WinHttpOpen(L"Metasiberia (Poly Haven previews)",
+		WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+	if(!WinHttpSetTimeouts(session.handle, 5000, 5000, 15000, 15000))
+		MCPTextures::fail(QStringLiteral("Poly Haven HTTPS timeout setup error %1").arg(GetLastError()));
+	const std::wstring host_w = host.toStdWString();
+	QString target = url.path(QUrl::FullyEncoded);
+	if(target.isEmpty()) target = "/";
+	if(url.hasQuery()) target += '?' + url.query(QUrl::FullyEncoded);
+	const std::wstring target_w = target.toStdWString();
+	PolyHavenPreviewHttpHandle connection(WinHttpConnect(session.handle, host_w.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0));
+	PolyHavenPreviewHttpHandle request(WinHttpOpenRequest(connection.handle, L"GET", target_w.c_str(), NULL,
+		WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE));
+	DWORD redirect_policy = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
+	if(!WinHttpSetOption(request.handle, WINHTTP_OPTION_REDIRECT_POLICY, &redirect_policy, sizeof(redirect_policy)))
+		MCPTextures::fail(QStringLiteral("Poly Haven HTTPS redirect setup error %1").arg(GetLastError()));
+	if(!WinHttpSendRequest(request.handle, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+		!WinHttpReceiveResponse(request.handle, NULL))
+		MCPTextures::fail(QStringLiteral("Poly Haven HTTPS request error %1").arg(GetLastError()));
+	DWORD status_code = 0;
+	DWORD status_size = sizeof(status_code);
+	if(!WinHttpQueryHeaders(request.handle, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+		WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &status_size, WINHTTP_NO_HEADER_INDEX))
+		MCPTextures::fail(QStringLiteral("Poly Haven HTTPS status error %1").arg(GetLastError()));
+	if(status_code != 200)
+		MCPTextures::fail(QStringLiteral("Poly Haven preview returned HTTP %1").arg(status_code));
+	QByteArray bytes;
+	char buffer[16384];
+	for(;;)
+	{
+		DWORD received = 0;
+		if(!WinHttpReadData(request.handle, buffer, sizeof(buffer), &received))
+			MCPTextures::fail(QStringLiteral("Poly Haven HTTPS read error %1").arg(GetLastError()));
+		if(received == 0) break;
+		if(bytes.size() + received > 4 * 1024 * 1024)
+			MCPTextures::fail("Poly Haven preview is too large.");
+		bytes.append(buffer, (int)received);
+	}
+	return bytes;
+#else
+	return MCPTextures::fetch(url, 4 * 1024 * 1024);
+#endif
+}
+
 class MaterialBrowserTask : public QRunnable
 {
 public:
 	explicit MaterialBrowserTask(std::function<void()> work_) : work(std::move(work_)) {}
-	void run() override { work(); }
+	void run() override
+	{
+		try { work(); }
+		catch(const glare::Exception& e) { conPrint("MaterialBrowser background task failed: " + e.what()); }
+		catch(const std::exception& e) { conPrint(std::string("MaterialBrowser background task failed: ") + e.what()); }
+		catch(...) { conPrint("MaterialBrowser background task failed with an unknown exception."); }
+	}
 private:
 	std::function<void()> work;
 };
@@ -141,17 +222,23 @@ void MaterialBrowser::init(QWidget* parent, const std::string& basedir_path_, co
 	retranslateBrowser();
 	connect(source_tabs, &QTabWidget::currentChanged, this, [this](int index) {
 		if(index == 1 && catalog.isEmpty()) loadPolyHavenCatalog();
-		if(index == 1) QTimer::singleShot(0, this, [this]() { loadVisibleThumbnails(); });
+		if(index == 1)
+		{
+			thumbnail_preload_started = true;
+			QTimer::singleShot(0, this, [this]() { loadCatalogThumbnails(); });
+		}
 	});
 	connect(refresh, &QPushButton::clicked, this, [this]() {
-		failed_thumbnails.clear();
+		thumbnail_attempts.clear();
+		thumbnail_retry_after.clear();
+		loadCatalogThumbnails();
 		loadPolyHavenCatalog();
 	});
 	connect(search, &QLineEdit::textChanged, this, [this]() { filterPolyHavenMaterials(); });
 	connect(sort, qOverload<int>(&QComboBox::currentIndexChanged), this, [this]() { filterPolyHavenMaterials(); });
 	connect(categories, &QTreeWidget::currentItemChanged, this, [this]() { filterPolyHavenMaterials(); });
 	connect(polyhaven_materials, &QListWidget::itemClicked, this, &MaterialBrowser::selectPolyHavenMaterial);
-	connect(polyhaven_materials->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() { loadVisibleThumbnails(); });
+	connect(polyhaven_materials->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() { loadCatalogThumbnails(); });
 
 	// Scan for all materials on disk, make preview buttons for them.
 
@@ -243,7 +330,7 @@ bool MaterialBrowser::eventFilter(QObject* watched, QEvent* event)
 {
 	if(polyhaven_materials && watched == polyhaven_materials->viewport() &&
 		(event->type() == QEvent::Resize || event->type() == QEvent::Show))
-		QTimer::singleShot(0, this, [this]() { loadVisibleThumbnails(); });
+		QTimer::singleShot(0, this, [this]() { loadCatalogThumbnails(); });
 	return QWidget::eventFilter(watched, event);
 }
 
@@ -254,9 +341,27 @@ void MaterialBrowser::loadPolyHavenCatalog()
 	refresh->setEnabled(false);
 	status->setText(tr("Loading Poly Haven textures…"));
 	const QString cache_path = QtUtils::toQString(appdata_path) + "/polyhaven_materials/catalog.json";
+	QJsonObject cached_catalog;
+	QFile cache_file(cache_path);
+	if(cache_file.open(QIODevice::ReadOnly) && cache_file.size() <= 24 * 1024 * 1024)
+		cached_catalog = QJsonDocument::fromJson(cache_file.readAll()).object();
+	if(cached_catalog.isEmpty())
+	{
+		// A fresh installation can browse the shipped previews without waiting for the API.
+		QFile bundled_catalog(QtUtils::toQString(basedir_path) + "/data/resources/polyhaven_previews/catalog.json");
+		if(bundled_catalog.open(QIODevice::ReadOnly) && bundled_catalog.size() <= 24 * 1024 * 1024)
+			cached_catalog = QJsonDocument::fromJson(bundled_catalog.readAll()).object();
+	}
+	if(!cached_catalog.isEmpty())
+	{
+		catalog = cached_catalog;
+		rebuildCategories();
+		filterPolyHavenMaterials();
+		status->setText(tr("Using the saved Poly Haven catalogue while checking for updates…"));
+	}
 	const QPointer<MaterialBrowser> guard(this);
 	const auto alive_guard = alive;
-	QThreadPool::globalInstance()->start(new MaterialBrowserTask([guard, alive_guard, cache_path]() {
+	QThreadPool::globalInstance()->start(new MaterialBrowserTask([guard, alive_guard, cache_path, has_cached_catalog = !cached_catalog.isEmpty()]() {
 		if(!alive_guard->load()) return;
 		QJsonObject result;
 		QString error;
@@ -264,16 +369,18 @@ void MaterialBrowser::loadPolyHavenCatalog()
 		{
 			result = MCPTextures::textureCatalog();
 			try { PolyHavenMaterialCache::save(cache_path, QJsonDocument(result).toJson(QJsonDocument::Compact)); }
+			catch(const glare::Exception&) {} // Cache write failures must not prevent browsing online.
 			catch(const std::exception&) {} // A read-only cache must not prevent browsing online.
+		}
+		catch(const glare::Exception& e)
+		{
+			error = QString::fromStdString(e.what());
 		}
 		catch(const std::exception& e)
 		{
 			error = QString::fromUtf8(e.what());
-			QFile file(cache_path);
-			if(file.open(QIODevice::ReadOnly) && file.size() <= 24 * 1024 * 1024)
-				result = QJsonDocument::fromJson(file.readAll()).object();
 		}
-		QMetaObject::invokeMethod(QCoreApplication::instance(), [guard, result, error]() {
+		QMetaObject::invokeMethod(QCoreApplication::instance(), [guard, result, error, has_cached_catalog]() {
 			if(!guard) return;
 			guard->catalog_loading = false;
 			guard->refresh->setEnabled(true);
@@ -283,8 +390,9 @@ void MaterialBrowser::loadPolyHavenCatalog()
 				guard->rebuildCategories();
 				guard->filterPolyHavenMaterials();
 			}
-			if(!error.isEmpty()) guard->status->setText(result.isEmpty() ?
-				guard->tr("Could not load Poly Haven: %1").arg(error) : guard->tr("Offline catalogue. Downloaded materials remain available."));
+			if(!error.isEmpty()) guard->status->setText(has_cached_catalog ?
+				guard->tr("Offline catalogue. Showing saved Poly Haven textures; updates are unavailable.") :
+				guard->tr("Could not load Poly Haven: %1").arg(error));
 		}, Qt::QueuedConnection);
 	}));
 }
@@ -368,55 +476,126 @@ void MaterialBrowser::filterPolyHavenMaterials()
 		if(thumbnail_icons.contains(url)) item->setIcon(thumbnail_icons.value(url));
 		if(id == selected_id) polyhaven_materials->setCurrentItem(item);
 	}
-	if(!material_loading) status->setText(matches.isEmpty() ? tr("No matching textures found.") : tr("%1 textures · Click a sphere to apply its 1K material.").arg(matches.size()));
-	QTimer::singleShot(0, this, [this]() { loadVisibleThumbnails(); });
+	if(!material_loading) updateCatalogThumbnailStatus();
+	QTimer::singleShot(0, this, [this]() { loadCatalogThumbnails(); });
 }
 
-void MaterialBrowser::loadVisibleThumbnails()
+void MaterialBrowser::applyCatalogThumbnail(const QString& url, const QIcon& icon)
 {
-	if(!polyhaven_materials->isVisible() || pending_thumbnails.size() >= 4) return;
-	const QRect visible = polyhaven_materials->viewport()->rect().adjusted(0, -202, 0, 202);
-	for(int i = 0; i < polyhaven_materials->count() && pending_thumbnails.size() < 4; ++i)
+	for(int i = 0; i < polyhaven_materials->count(); ++i)
 	{
 		QListWidgetItem* item = polyhaven_materials->item(i);
-		if(!polyhaven_materials->visualItemRect(item).intersects(visible)) continue;
-		const QString id = item->data(Qt::UserRole).toString();
-		const QString url = catalog.value(id).toObject().value("thumbnail_url").toString();
-		if(url.isEmpty() || thumbnail_icons.contains(url) || pending_thumbnails.contains(url) || failed_thumbnails.contains(url)) continue;
+		const QJsonObject asset = catalog.value(item->data(Qt::UserRole).toString()).toObject();
+		if(asset.value("thumbnail_url").toString() == url)
+			item->setIcon(icon);
+	}
+}
+
+void MaterialBrowser::updateCatalogThumbnailStatus()
+{
+	if(material_loading) return;
+	int total = 0;
+	int loaded = 0;
+	for(auto it = catalog.begin(); it != catalog.end(); ++it)
+	{
+		const QJsonObject asset = it.value().toObject();
+		if(asset.value("type").toInt(-1) != 1) continue;
+		const QString url = asset.value("thumbnail_url").toString();
+		if(url.isEmpty()) continue;
+		++total;
+		if(thumbnail_icons.contains(url)) ++loaded;
+	}
+	if(total == 0)
+		status->setText(tr("Textures are listed, but Poly Haven provided no previews."));
+	else if(loaded == total)
+		status->setText(tr("All %1 texture previews loaded. Click a sphere to apply its 1K material.").arg(total));
+	else
+		status->setText(tr("Loading all texture previews: %1/%2 · Missing previews retry automatically.").arg(loaded).arg(total));
+}
+
+void MaterialBrowser::loadCatalogThumbnails()
+{
+	if(!thumbnail_preload_started || catalog.isEmpty()) return;
+	updateCatalogThumbnailStatus();
+	if(pending_thumbnails.size() >= 4) return;
+	const QStringList ids = catalog.keys();
+	// Continue where the previous pass stopped, so failures near the start of
+	// the catalogue cannot repeatedly take every download slot.
+	for(int scanned = 0; scanned < ids.size() && pending_thumbnails.size() < 4; ++scanned)
+	{
+		thumbnail_scan_offset %= ids.size();
+		const QString id = ids.at(thumbnail_scan_offset++);
+		const QJsonObject asset = catalog.value(id).toObject();
+		if(asset.value("type").toInt(-1) != 1) continue;
+		const QString url = asset.value("thumbnail_url").toString();
+		if(url.isEmpty() || thumbnail_icons.contains(url) || pending_thumbnails.contains(url) || thumbnail_retry_after.contains(url)) continue;
 		pending_thumbnails.insert(url);
 		const QString cache_path = QtUtils::toQString(appdata_path) + "/polyhaven_materials/thumbs/" + PolyHavenMaterialCache::key(url) + ".png";
+		const QString bundled_path = QRegularExpression("^[a-z0-9_]{1,100}$").match(id).hasMatch() ?
+			QtUtils::toQString(basedir_path) + "/data/resources/polyhaven_previews/" + id + ".webp" : QString();
 		const QPointer<MaterialBrowser> guard(this);
 		const auto alive_guard = alive;
-		QThreadPool::globalInstance()->start(new MaterialBrowserTask([guard, alive_guard, id, url, cache_path]() {
+		QThreadPool::globalInstance()->start(new MaterialBrowserTask([guard, alive_guard, id, url, cache_path, bundled_path]() {
 			if(!alive_guard->load()) return;
 			QImage image;
+			QString error;
 			try
 			{
 				QFile file(cache_path);
 				if(file.open(QIODevice::ReadOnly) && file.size() <= 4 * 1024 * 1024)
 					image = MCPTextures::decode(file.readAll());
 			}
+			catch(const glare::Exception&) {} // A damaged cached preview must be downloaded again.
+			catch(const std::exception&) {}
+			if(image.isNull() && !bundled_path.isEmpty()) try
+			{
+				// Keep the complete shipped catalogue usable even when the CDN is unavailable.
+				QFile file(bundled_path);
+				if(file.open(QIODevice::ReadOnly) && file.size() <= 4 * 1024 * 1024)
+					image = MCPTextures::decode(file.readAll());
+			}
+			catch(const glare::Exception&) {} // Fall back to downloading if a resource is damaged.
 			catch(const std::exception&) {}
 			if(image.isNull()) try
 			{
-				const QByteArray bytes = MCPTextures::fetch(QUrl(url), 4 * 1024 * 1024);
+				const QByteArray bytes = fetchPolyHavenPreview(QUrl(url));
 				image = MCPTextures::decode(bytes);
-				try { PolyHavenMaterialCache::save(cache_path, bytes); } catch(const std::exception&) {}
+				try { PolyHavenMaterialCache::save(cache_path, bytes); }
+				catch(const glare::Exception&) {}
+				catch(const std::exception&) {}
 			}
-			catch(const std::exception&) {}
-			QMetaObject::invokeMethod(QCoreApplication::instance(), [guard, id, url, image]() {
+			catch(const glare::Exception& e) { error = QString::fromStdString(e.what()); }
+			catch(const std::exception& e) { error = QString::fromUtf8(e.what()); }
+			if(!image.isNull())
+				image = image.scaled(PREVIEW_SIZE, PREVIEW_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+			QMetaObject::invokeMethod(QCoreApplication::instance(), [guard, id, url, image, error]() {
 				if(!guard) return;
 				guard->pending_thumbnails.remove(url);
-				if(image.isNull()) guard->failed_thumbnails.insert(url);
+				if(image.isNull())
+				{
+					const int attempts = qMin(guard->thumbnail_attempts.value(url) + 1, 10);
+					guard->thumbnail_attempts.insert(url, attempts);
+					const int delay_ms = attempts >= 6 ? 60000 : 1000 * (1 << attempts);
+					const qint64 retry_after = QDateTime::currentMSecsSinceEpoch() + delay_ms;
+					guard->thumbnail_retry_after.insert(url, retry_after);
+					if(attempts == 1 || attempts == 10)
+						conPrint("Retrying Poly Haven thumbnail " + id.toStdString() + ": " + error.toStdString());
+					QTimer::singleShot(delay_ms, guard, [guard, url, retry_after]() {
+						if(!guard || guard->thumbnail_retry_after.value(url) != retry_after) return;
+						guard->thumbnail_retry_after.remove(url);
+						guard->loadCatalogThumbnails();
+					});
+				}
 				else
 				{
-					const QIcon icon(QPixmap::fromImage(image.scaled(PREVIEW_SIZE, PREVIEW_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+					guard->thumbnail_attempts.remove(url);
+					guard->thumbnail_retry_after.remove(url);
+					const QIcon icon(QPixmap::fromImage(image));
 					guard->thumbnail_icons.insert(url, icon);
-					for(int i = 0; i < guard->polyhaven_materials->count(); ++i)
-						if(guard->polyhaven_materials->item(i)->data(Qt::UserRole).toString() == id)
-							guard->polyhaven_materials->item(i)->setIcon(icon);
+					guard->applyCatalogThumbnail(url, icon);
 				}
-				guard->loadVisibleThumbnails();
+				guard->updateCatalogThumbnailStatus();
+				guard->loadCatalogThumbnails();
 			}, Qt::QueuedConnection);
 		}));
 	}
@@ -446,6 +625,7 @@ void MaterialBrowser::startMaterialDownload()
 		if(!alive_guard->load()) return;
 		QString path, error;
 		try { path = PolyHavenMaterialCache::download(cache_root, id, asset); }
+		catch(const glare::Exception& e) { error = QString::fromStdString(e.what()); }
 		catch(const std::exception& e) { error = QString::fromUtf8(e.what()); }
 		QMetaObject::invokeMethod(QCoreApplication::instance(), [guard, generation, path, error]() {
 			if(!guard) return;

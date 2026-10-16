@@ -45,6 +45,7 @@ public:
 
 	void enqueueDataToSend(const SocketBufferOutStream& packet); // threadsafe
 	void enqueueDataToSend(const ArrayRef<uint8> data); // threadsafe
+	void enqueueAdminWorldEntry(const SocketBufferOutStream& packet); // Checks authenticated superadmin and capability.
 	std::string getRoutingUserName() const;
 	UserID getRoutingUserID() const;
 	UID getRoutingAvatarUID() const;
@@ -61,6 +62,7 @@ private:
 	void sendPerWorldInitialDataToClient(ServerAllWorldsState* world_state, uint32 client_protocol_version);
 	void enqueuePacketToBroadcast(const SocketBufferOutStream& packet_buffer);
 	void setRoutingClientInfo(const UserID& user_id, const std::string& user_name, const UID& avatar_uid);
+	void notifyWorldEntry(UserID user_id, const std::string& user_name, UID avatar_uid);
 
 	Reference<SocketInterface> socket;
 	Server* server;
@@ -82,6 +84,12 @@ private:
 	UserID routing_client_user_id;
 	std::string routing_client_user_name;
 	UID routing_client_avatar_uid;
+	bool supports_admin_world_entries GUARDED_BY(routing_client_info_mutex) = false;
+	js::Vector<uint8, 16> admin_entry_data GUARDED_BY(routing_client_info_mutex);
+	// Accessed only by this connection's worker. Suppresses repeated CreateAvatar packets.
+	bool world_entry_reported = false;
+	UserID reported_entry_user = UserID::invalidUserID();
+	std::string entry_world_name;
 
 	bool write_trace; // Should we write a record of network traffic to disk for fuzz seeding?
 

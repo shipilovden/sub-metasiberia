@@ -1454,6 +1454,23 @@ void GUIClient::postConnectInitialise()
 	if(resource_manager->getExistingResourceForURL(DEFAULT_AVATAR_MODEL_URL).isNull())
 		resource_manager->addExternalResource(/*URL=*/DEFAULT_AVATAR_MODEL_URL, /*local (abs) path=*/resources_dir_path + "/" + toStdString(DEFAULT_AVATAR_MODEL_URL));
 
+	// Bundle the jet ski resources in the client so a newly summoned vehicle can be uploaded
+	// to the world server even when its resource cache is empty.
+	{
+		const URLString jetski_resource_urls[] = {
+			"Jet_Ski_obj_3200017390617214853.bmesh",
+			"jetski_low_lambert1_BaseColor_png_1351070408415712052.png",
+			"metallic_roughness_png_14447245024160102495.png"
+		};
+		for(size_t i = 0; i < staticArrayNumElems(jetski_resource_urls); ++i)
+		{
+			const URLString& url = jetski_resource_urls[i];
+			const std::string path = resources_dir_path + "/" + toStdString(url);
+			if(FileUtils::fileExists(path) && resource_manager->getExistingResourceForURL(url).isNull())
+				resource_manager->addExternalResource(/*URL=*/url, /*local (abs) path=*/path);
+		}
+	}
+
 	// Add the second built-in guest avatar when it is present in the client distribution.
 	const std::string guest_ybot_path = resources_dir_path + "/" + toStdString(GUEST_YBOT_MODEL_URL);
 	if(FileUtils::fileExists(guest_ybot_path) && resource_manager->getExistingResourceForURL(GUEST_YBOT_MODEL_URL).isNull())
@@ -15055,6 +15072,14 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			}
 		}
 		break;
+		case Msg_AdminWorldEntryMessage:
+		{
+			const auto* entry = checkedDowncastPtr<const AdminWorldEntryMessage>(msg);
+			if(isGodUser(logged_in_user_id) && connection_state == ServerConnectionState_Connected)
+				ui_interface->showAdminWorldEntry(entry->avatar_uid, entry->user_id.valid() ? entry->username : std::string(),
+					entry->world_name, entry->position, entry->heading);
+			break;
+		}
 		case Msg_AvatarCreatedMessage:
 		{
 			const AvatarCreatedMessage* m = checkedDowncastPtr<const AvatarCreatedMessage>(msg);
@@ -19253,6 +19278,7 @@ void GUIClient::summonBoat()
 
 void GUIClient::summonJetSki()
 {
+	conPrint("Summon jet ski requested.");
 	if(!this->logged_in_user_id.valid())
 		throw glare::Exception("You must be logged in to summon a Jet Ski.");
 
@@ -19283,6 +19309,7 @@ void GUIClient::summonJetSki()
 		{
 			WorldObject* ob = it.getValue().ptr();
 			if((ob->creator_id == logged_in_user_id) && // If we created this object
+				BitUtils::isBitSet(ob->flags, WorldObject::SUMMONED_FLAG) && // Server only allows summoning flagged vehicles.
 				ob->vehicle_script && ob->vehicle_script.isType<Scripting::BoatScript>() && // And it has a boat script
 				(ob->model_url == jetski_model_URL) &&
 				!isObjectVehicleBeingDrivenByOther(*ob)) // And another user is not riding it
@@ -19307,9 +19334,6 @@ void GUIClient::summonJetSki()
 	}
 
 	conPrint("Creating new jet ski object...");
-
-
-
 
 	// Load materials:
 	IndigoXMLDoc doc(this->resources_dir_path + "/jet_ski_mats.xml");

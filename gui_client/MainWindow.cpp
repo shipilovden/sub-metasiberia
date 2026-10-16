@@ -1884,13 +1884,12 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 
 	settings = new QSettings("Glare Technologies", "Metasiberia");
 	migrateLegacyQtSettings(*settings);
-	// MCP is opt-in.  Clear any development-era enabled default once before
-	// startup checks the setting, including installations that already passed
-	// the older migrations.
-	if(!settings->value(MainOptionsDialog::MCPDefaultsMigratedV4Key(), false).toBool())
+	// MCP is opt-in. Reset any previously saved enabled state once so startup
+	// never launches AI tools until the user enables the checkbox.
+	if(!settings->value(MainOptionsDialog::MCPDefaultsMigratedV5Key(), false).toBool())
 	{
 		settings->setValue(MainOptionsDialog::MCPEnabledKey(), false);
-		settings->setValue(MainOptionsDialog::MCPDefaultsMigratedV4Key(), true);
+		settings->setValue(MainOptionsDialog::MCPDefaultsMigratedV5Key(), true);
 	}
 
 	credential_manager.loadFromSettings(*settings);
@@ -2813,6 +2812,23 @@ void MainWindow::initialiseUI()
 	connect(ui->glWidget, SIGNAL(pasteShortcutActivated()), this, SLOT(glWidgetPasteShortcutTriggered()));
 	connect(ui->objectEditor, SIGNAL(objectTransformChanged()), this, SLOT(objectTransformEditedSlot()));
 	connect(ui->objectEditor, SIGNAL(objectChanged()), this, SLOT(objectEditedSlot()));
+	connect(ui->objectEditor, &ObjectEditor::convertTextToMeshRequested, this, [this]() {
+		if(gui_client.selected_ob.isNull())
+		{
+			showErrorNotification("Выберите текстовый объект перед преобразованием.");
+			return;
+		}
+		try
+		{
+			ui->glWidget->makeCurrent();
+			const QJsonObject args{{"uid", QString::number(gui_client.selected_ob->uid.value())}, {"depth_m", 0.1}};
+			MCPTextMeshTools::handle(gui_client, QStringLiteral("convert_text_to_mesh"), args);
+		}
+		catch(const std::exception& e)
+		{
+			showErrorNotification(e.what());
+		}
+	});
 	connect(ui->objectEditor, SIGNAL(scriptChangedFromEditorSignal()), this, SLOT(scriptChangedFromEditorSlot()));
 	connect(ui->objectEditor, SIGNAL(particleBurstNowSignal()), this, SLOT(particleBurstNowSlot()));
 	connect(ui->objectEditor, SIGNAL(particleClearParticlesSignal()), this, SLOT(particleClearParticlesSlot()));
@@ -3615,6 +3631,112 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_plain(ui->webcamDockWidget->toggleViewAction(), "video", QString::fromUtf8("▶"));
 	set_plain(ui->indigoViewDockWidget->toggleViewAction(), "sparkles", QString::fromUtf8("*"));
 	set_plain(ui->diagnosticsDockWidget->toggleViewAction(), "activity", QString::fromUtf8("⌁"));
+	refreshWorldBottomBar();
+}
+
+void MainWindow::createWorldBottomBar()
+{
+	if(world_bottom_bar) return;
+	world_bottom_bar = new QFrame(ui->centralwidget);
+	world_bottom_bar->setObjectName("worldBottomBar");
+	world_bottom_bar->setFixedHeight(22);
+	world_bottom_bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	world_bottom_bar->setStyleSheet(
+		"QFrame#worldBottomBar { background: palette(window); border: 1px solid palette(mid); border-radius: 3px; }"
+		"QToolButton { background: palette(button); border: 1px solid palette(mid); border-radius: 3px; padding: 0px; }"
+		"QToolButton:hover { border-color: palette(highlight); }"
+		"QToolButton:checked, QToolButton:pressed { background: palette(mid); border-color: palette(highlight); }"
+		"QToolButton:focus { border-color: palette(highlight); }");
+	QGridLayout* layout = new QGridLayout(world_bottom_bar);
+	layout->setContentsMargins(10, 1, 10, 1);
+	layout->setHorizontalSpacing(8);
+	layout->setVerticalSpacing(0);
+	// Equal outer columns keep the four middle buttons centred in the world view.
+	layout->setColumnStretch(0, 1);
+	layout->setColumnStretch(2, 1);
+	QHBoxLayout* groups[3];
+	for(int i = 0; i < 3; ++i)
+	{
+		QWidget* group = new QWidget(world_bottom_bar);
+		groups[i] = new QHBoxLayout(group);
+		groups[i]->setContentsMargins(0, 0, 0, 0);
+		groups[i]->setSpacing(8);
+		layout->addWidget(group, 0, i, i == 0 ? Qt::AlignLeft : i == 2 ? Qt::AlignRight : Qt::AlignCenter);
+	}
+	const auto separator = [this]() {
+		QFrame* line = new QFrame(world_bottom_bar);
+		line->setFrameShape(QFrame::VLine);
+		line->setFixedSize(1, 14);
+		return line;
+	};
+	groups[2]->addWidget(separator());
+	const char* names[] = {"worldChatButton", "worldVehicleButton", "worldPhotoButton", "worldMicrophoneButton",
+		"worldWebcamButton", "worldGesturesButton", "worldManageGesturesButton"};
+	for(int i = 0; i < 7; ++i)
+	{
+		QToolButton* button = new QToolButton(world_bottom_bar);
+		world_bottom_buttons[i] = button;
+		button->setObjectName(names[i]);
+		button->setFixedSize(32, 18);
+		button->setIconSize(QSize(14, 14));
+		button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+		button->setCheckable(i != 6);
+		groups[i == 0 ? 0 : i < 5 ? 1 : 2]->addWidget(button);
+		connect(button, &QToolButton::clicked, this, [this, i]() {
+			ui->glWidget->makeCurrent();
+			using Action = GestureUI::ToolbarAction;
+			switch(i)
+			{
+			case 0: gui_client.chat_ui.toggleExpanded(); break;
+			case 1: gui_client.gesture_ui.activateToolbarAction(Action::Vehicle); break;
+			case 2: gui_client.gesture_ui.activateToolbarAction(Action::Photo); break;
+			case 3: gui_client.gesture_ui.activateToolbarAction(Action::Microphone); break;
+			case 4: setWebcamWindowVisible(!ui->webcamDockWidget->isVisible()); break;
+			case 5: gui_client.gesture_ui.activateToolbarAction(Action::Gestures); break;
+			case 6: gui_client.gesture_ui.activateToolbarAction(Action::ManageGestures); break;
+			}
+			ui->glWidget->setFocus(Qt::OtherFocusReason);
+			syncWorldBottomBar();
+		});
+	}
+	groups[0]->addWidget(separator());
+	ui->verticalLayout->setSpacing(0);
+	ui->verticalLayout->addWidget(world_bottom_bar);
+	refreshWorldBottomBar();
+	syncWorldBottomBar();
+}
+
+void MainWindow::refreshWorldBottomBar()
+{
+	if(!world_bottom_bar) return;
+	const QString icon_dir = LucideIconUtils::directoryForBasePath(base_dir_path);
+	const QColor foreground = palette().color(QPalette::WindowText);
+	const char* icons[] = {"messages-square", "car-front", "camera", "mic", "webcam", "person-standing", "plus"};
+	const char* english[] = {"Chat", "Summon vehicle", "Photo mode", "Microphone for voice chat", "Webcam", "Gestures", "Manage gestures"};
+	const char* russian[] = {"Чат", "Вызвать транспорт", "Фоторежим", "Микрофон голосового чата", "Веб-камера", "Жесты", "Управление жестами"};
+	for(int i = 0; i < 7; ++i)
+	{
+		LucideIconUtils::setButtonIcon(world_bottom_buttons[i], icon_dir, QString::fromLatin1(icons[i]), foreground, 14);
+		const QString label = QString::fromUtf8(current_ui_language == RuntimeTranslation::UILanguage::Russian ? russian[i] : english[i]);
+		world_bottom_buttons[i]->setToolTip(label);
+		world_bottom_buttons[i]->setAccessibleName(label);
+	}
+}
+
+void MainWindow::syncWorldBottomBar()
+{
+	updateAdminEntryNotifications();
+	if(!world_bottom_bar) return;
+	using Action = GestureUI::ToolbarAction;
+	const bool checked[] = {gui_client.chat_ui.isExpanded(),
+		gui_client.gesture_ui.toolbarActionChecked(Action::Vehicle),
+		gui_client.gesture_ui.toolbarActionChecked(Action::Photo),
+		gui_client.gesture_ui.toolbarActionChecked(Action::Microphone),
+		ui->webcamDockWidget->isVisible(), gui_client.gesture_ui.toolbarActionChecked(Action::Gestures)};
+	for(int i = 0; i < 6; ++i)
+		if(world_bottom_buttons[i]->isChecked() != checked[i]) world_bottom_buttons[i]->setChecked(checked[i]);
+	const bool visible = gui_client.gesture_ui.toolbarVisible();
+	if(world_bottom_bar->isHidden() == visible) world_bottom_bar->setVisible(visible);
 }
 
 
@@ -3979,6 +4101,9 @@ void MainWindow::afterGLInitInitialise()
 	const auto device_pixel_ratio = ui->glWidget->devicePixelRatio(); // For retina screens this is 2, meaning the gl viewport width is in physical pixels, which have twice the density of qt pixel coordinates.
 
 	gui_client.afterGLInitInitialise((double)device_pixel_ratio, ui->glWidget->opengl_engine, fonts, emoji_fonts);
+	gui_client.gesture_ui.setNativeToolbarEnabled(true);
+	gui_client.chat_ui.setNativeToolbarEnabled(true);
+	createWorldBottomBar();
 	animation_editor_controller = new AnimationEditorController(animation_editor_panel, gui_client.base_dir_path,
 		settings, &gui_client, [main_gl_widget = QPointer<GlWidget>(ui->glWidget)]() {
 			if(main_gl_widget) main_gl_widget->makeCurrent();
@@ -4261,6 +4386,7 @@ void MainWindow::showInfoNotification(const std::string& message)
 
 void MainWindow::setTextAsNotLoggedIn()
 {
+	clearAdminEntryNotifications();
 	if(user_details)
 		user_details->setTextAsNotLoggedIn();
 }
@@ -4268,6 +4394,7 @@ void MainWindow::setTextAsNotLoggedIn()
 
 void MainWindow::setTextAsLoggedIn(const std::string& username)
 {
+	if(!isGodUser(gui_client.logged_in_user_id)) clearAdminEntryNotifications();
 	if(user_details)
 		user_details->setTextAsLoggedIn(username);
 
@@ -4709,6 +4836,8 @@ void MainWindow::showObjectEditor()
 
 void MainWindow::setObjectEditorEnabled(bool enabled)
 {
+	if(!ui || !ui->objectEditor)
+		return;
 	if(active_editor_kind == ActiveEditor_Scientific && scientific_object_editor)
 		scientific_object_editor->setControlsEnabled(enabled);
 	else if(active_editor_kind == ActiveEditor_Cultural && cultural_object_editor)
@@ -6224,7 +6353,7 @@ void MainWindow::showChatGroupSettings(const QString& group_id)
 
 void MainWindow::appendChatMessageWidget(const QString& html, bool private_message)
 {
-	if(!chat_messages_list_layout)
+	if(running_destructor || closing || !ui || !ui->chatWidget || !chat_messages_list_layout)
 		return;
 
 	const QString plain_text = plainTextFromChatHtml(html);
@@ -7254,8 +7383,226 @@ void MainWindow::teleportNearSelectedChatUser()
 }
 
 
+void MainWindow::showAdminWorldEntry(UID avatar_uid, const std::string& username, const std::string& world_name, const Vec3d& position, double heading)
+{
+	if(!isGodUser(gui_client.logged_in_user_id) || gui_client.connection_state != GUIClient::ServerConnectionState_Connected) return;
+	if(!admin_entry_notifications)
+	{
+		admin_entry_notifications = new QScrollArea(ui->glWidget);
+		admin_entry_notifications->setObjectName("adminEntryNotifications");
+		// GlWidget is a native QGLWidget. Give the overlay its own child surface.
+		admin_entry_notifications->setAttribute(Qt::WA_NativeWindow);
+		admin_entry_notifications->setWidgetResizable(true);
+		admin_entry_notifications->setFrameShape(QFrame::NoFrame);
+		admin_entry_notifications->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+		admin_entry_notifications->setFocusPolicy(Qt::NoFocus);
+		QWidget* contents = new QWidget(admin_entry_notifications);
+		admin_entry_layout = new QVBoxLayout(contents);
+		admin_entry_layout->setContentsMargins(0, 0, 0, 0);
+		admin_entry_layout->setSpacing(6);
+		admin_entry_layout->setAlignment(Qt::AlignTop);
+		admin_entry_notifications->setWidget(contents);
+	}
+	const bool russian = current_ui_language == RuntimeTranslation::UILanguage::Russian;
+	const QString name = username.empty() ? (russian ? QString::fromUtf8("Гость №%1") : QStringLiteral("Guest #%1")).arg(avatar_uid.value()) : QtUtils::toQString(username);
+	const QString world = world_name.empty() ? (russian ? QString::fromUtf8("Главный мир") : QStringLiteral("Main world")) : QtUtils::toQString(world_name);
+	QUrl location;
+	location.setScheme("sub");
+	location.setHost(QtUtils::toQString(gui_client.server_hostname));
+	location.setPath("/" + QtUtils::toQString(world_name));
+	QUrlQuery query;
+	query.addQueryItem("x", QString::number(position.x, 'g', 17));
+	query.addQueryItem("y", QString::number(position.y, 'g', 17));
+	query.addQueryItem("z", QString::number(position.z, 'g', 17));
+	query.addQueryItem("heading", QString::number(Maths::doubleMod(radToDegree(heading), 360.0), 'g', 12));
+	location.setQuery(query);
+	const QString address = location.toString(QUrl::FullyEncoded);
+	const QString key = QString::number(avatar_uid.value()) + "/" + QtUtils::toQString(world_name);
+	// A guest signing in updates the same visit with the authenticated name.
+	for(auto it = admin_entry_cards.begin(); it != admin_entry_cards.end(); ++it)
+		if((*it)->property("entryKey").toString() == key)
+		{
+			admin_entry_layout->removeWidget(*it);
+			(*it)->hide(); (*it)->deleteLater();
+			admin_entry_cards.erase(it);
+			break;
+		}
+	QFrame* card = new QFrame(admin_entry_notifications->widget());
+	card->setObjectName("adminEntryCard");
+	card->setProperty("entryKey", key);
+	card->setStyleSheet("QFrame#adminEntryCard { background: palette(window); color: palette(window-text); border: 1px solid palette(mid); border-radius: 4px; } QLabel { border: none; }");
+	QVBoxLayout* card_layout = new QVBoxLayout(card);
+	card_layout->setContentsMargins(10, 8, 6, 8);
+	card_layout->setSpacing(6);
+	QHBoxLayout* row = new QHBoxLayout();
+	QLabel* text = new QLabel(card);
+	text->setTextFormat(Qt::PlainText);
+	text->setWordWrap(true);
+	text->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+	text->setMinimumWidth(0);
+	text->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+	const QString pattern = russian ? QString::fromUtf8("%1 вошёл в Метасибирь\nМир: %2\nКоординаты: X %3 · Y %4 · Z %5\n%6") :
+		QStringLiteral("%1 entered Metasiberia\nWorld: %2\nCoordinates: X %3 · Y %4 · Z %5\n%6");
+	text->setText(pattern.arg(name, world, QString::number(position.x, 'f', 2), QString::number(position.y, 'f', 2), QString::number(position.z, 'f', 2), address));
+	row->addWidget(text, 1);
+	QToolButton* close = new QToolButton(card);
+	close->setObjectName("dismissAdminEntry");
+	close->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
+	close->setFixedSize(20, 20);
+	close->setAutoRaise(true);
+	close->setToolTip(russian ? QString::fromUtf8("Закрыть сообщение") : QStringLiteral("Dismiss notification"));
+	close->setAccessibleName(close->toolTip());
+	row->addWidget(close, 0, Qt::AlignTop);
+	card_layout->addLayout(row);
+	QHBoxLayout* actions = new QHBoxLayout();
+	actions->addStretch(1);
+	QPushButton* join = new QPushButton(russian ? QString::fromUtf8("Присоединиться") : QStringLiteral("Join"), card);
+	join->setIcon(LucideIconUtils::tintedIcon(LucideIconUtils::directoryForBasePath(base_dir_path), QStringLiteral("navigation"), card->palette().color(QPalette::ButtonText), 16));
+	join->setToolTip(russian ? QString::fromUtf8("Перейти в мир рядом с этим аватаром") : QStringLiteral("Go to this world near the avatar"));
+	actions->addWidget(join);
+	QToolButton* copy_address = new QToolButton(card);
+	copy_address->setText(russian ? QString::fromUtf8("Копировать адрес") : QStringLiteral("Copy address"));
+	copy_address->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	copy_address->setIcon(LucideIconUtils::tintedIcon(LucideIconUtils::directoryForBasePath(base_dir_path), QStringLiteral("copy"), card->palette().color(QPalette::ButtonText), 16));
+	copy_address->setToolTip(russian ? QString::fromUtf8("Скопировать полный адрес в буфер обмена") : QStringLiteral("Copy the full address to the clipboard"));
+	actions->addWidget(copy_address);
+	card_layout->addLayout(actions);
+	const double heading_degrees = Maths::doubleMod(radToDegree(heading), 360.0);
+	QUrl join_location = location;
+	QUrlQuery join_query;
+	join_query.addQueryItem("x", QString::number(position.x - 2.0 * std::cos(heading), 'g', 17));
+	join_query.addQueryItem("y", QString::number(position.y - 2.0 * std::sin(heading), 'g', 17));
+	join_query.addQueryItem("z", QString::number(position.z, 'g', 17));
+	join_query.addQueryItem("heading", QString::number(heading_degrees, 'g', 12));
+	join_location.setQuery(join_query);
+	connect(join, &QPushButton::clicked, this, [this, avatar_uid, username, world_name, position, heading, join_location]() {
+		if(!isGodUser(gui_client.logged_in_user_id) || gui_client.connection_state != GUIClient::ServerConnectionState_Connected) return;
+		if(admin_entry_join_timer)
+		{
+			admin_entry_join_timer->stop(); admin_entry_join_timer->deleteLater(); admin_entry_join_timer = nullptr;
+		}
+		const auto try_join = [this, avatar_uid, username, world_name, position, heading]() -> bool
+		{
+			if(world_name != gui_client.server_worldname || gui_client.world_state.isNull()) return false;
+			Vec3d target_pos = position;
+			std::string target_name = username;
+			bool found = false;
+			{
+				WorldStateLock lock(gui_client.world_state->mutex);
+				auto it = gui_client.world_state->avatars.find(avatar_uid);
+				if(it != gui_client.world_state->avatars.end() && it->second->state != Avatar::State_Dead)
+				{
+					target_pos = it->second->pos;
+					target_name = it->second->getUseName();
+					found = true;
+				}
+			}
+			if(found)
+			{
+				Vec3d offset = gui_client.cam_controller.getFirstPersonPosition() - target_pos;
+				offset.z = 0.0;
+				double len = std::sqrt(offset.x * offset.x + offset.y * offset.y);
+				if(len < 1.0e-3)
+				{
+					offset = Vec3d(-std::cos(heading), -std::sin(heading), 0.0);
+					len = 1.0;
+				}
+				const Vec3d new_pos = target_pos + offset * (2.0 / len);
+				gui_client.cam_controller.setFirstAndThirdPersonPositions(new_pos);
+				gui_client.player_physics.setEyePosition(new_pos);
+				showInfoNotification("Переход к игроку: " + target_name);
+				return true;
+			}
+			return false;
+		};
+		if(try_join()) return;
+		const std::string target_host = gui_client.server_hostname;
+		visitSubURL(join_location.toString(QUrl::FullyEncoded).toStdString());
+		// Switching worlds delivers the avatar list asynchronously. Use the live
+		// position as soon as this visitor appears, even if they moved after entry.
+		admin_entry_join_timer = new QTimer(this);
+		connect(admin_entry_join_timer, &QTimer::timeout, this, [this, try_join, target_host, world_name, attempts = 0]() mutable {
+			const bool valid = isGodUser(gui_client.logged_in_user_id) &&
+				gui_client.connection_state == GUIClient::ServerConnectionState_Connected &&
+				gui_client.server_hostname == target_host && gui_client.server_worldname == world_name;
+			if(!valid || try_join() || ++attempts >= 50)
+			{
+				admin_entry_join_timer->stop(); admin_entry_join_timer->deleteLater(); admin_entry_join_timer = nullptr;
+			}
+		});
+		admin_entry_join_timer->start(200);
+	});
+	connect(copy_address, &QToolButton::clicked, this, [this, address]() {
+		if(!isGodUser(gui_client.logged_in_user_id)) return;
+		if(QGuiApplication::clipboard()) QGuiApplication::clipboard()->setText(address);
+	});
+	connect(close, &QToolButton::clicked, this, [this, card]() {
+		const auto it = std::find(admin_entry_cards.begin(), admin_entry_cards.end(), card);
+		if(it != admin_entry_cards.end()) admin_entry_cards.erase(it);
+		admin_entry_layout->removeWidget(card);
+		card->hide(); card->deleteLater();
+		updateAdminEntryNotifications();
+	});
+	admin_entry_cards.insert(admin_entry_cards.begin(), card);
+	admin_entry_layout->insertWidget(0, card);
+	// Keep memory and layout work bounded during a long admin session.
+	if(admin_entry_cards.size() > 50)
+	{
+		QFrame* oldest = admin_entry_cards.back();
+		admin_entry_cards.pop_back();
+		admin_entry_layout->removeWidget(oldest);
+		oldest->hide(); oldest->deleteLater();
+	}
+	updateAdminEntryNotifications();
+	admin_entry_notifications->verticalScrollBar()->setValue(0);
+}
+
+void MainWindow::clearAdminEntryNotifications()
+{
+	if(admin_entry_join_timer)
+	{
+		admin_entry_join_timer->stop(); admin_entry_join_timer->deleteLater(); admin_entry_join_timer = nullptr;
+	}
+	for(QFrame* card : admin_entry_cards)
+	{
+		admin_entry_layout->removeWidget(card);
+		card->hide(); card->deleteLater();
+	}
+	admin_entry_cards.clear();
+	if(admin_entry_notifications) admin_entry_notifications->hide();
+}
+
+void MainWindow::updateAdminEntryNotifications()
+{
+	if(!admin_entry_notifications) return;
+	if(!isGodUser(gui_client.logged_in_user_id) || gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
+	{
+		clearAdminEntryNotifications();
+		return;
+	}
+	const int bottom = ui->glWidget->height() - (int)std::ceil(gui_client.chat_ui.occupiedHeightPixels()) - 8;
+	const int width = qMin(520, ui->glWidget->width() - 16);
+	const int available_height = qMin(400, bottom - 8);
+	if(admin_entry_cards.empty() || !gui_client.gesture_ui.toolbarVisible() || width < 120 || available_height < 60)
+	{
+		admin_entry_notifications->hide();
+		return;
+	}
+	const int content_height = admin_entry_layout->totalHeightForWidth(width - 24);
+	const int height = qMin(available_height, qMax(80, content_height));
+	const QRect rect(8, bottom - height, width, height);
+	if(admin_entry_notifications->geometry() != rect) admin_entry_notifications->setGeometry(rect);
+	if(admin_entry_notifications->isHidden()) admin_entry_notifications->show();
+	admin_entry_notifications->raise();
+}
+
 void MainWindow::appendChatMessage(const std::string& msg)
 {
+	// GUIClient can finish delivering a queued world event while MainWindow is
+	// shutting down. Do not touch widgets after close/destruction has started.
+	if(running_destructor || closing || !ui)
+		return;
+
 	const QString html = QtUtils::toQString(msg);
 	const QString plain_text = plainTextFromChatHtml(html);
 	for(int i = 0; i < chat_pending_attachment_echoes.size(); ++i)
@@ -7614,6 +7961,7 @@ void MainWindow::timerEvent(QTimerEvent* event)
 	mouse_cursor_state.alt_key_down = alt_key_down;
 	mouse_cursor_state.ctrl_key_down = ctrl_key_down;
 	gui_client.timerEvent(mouse_cursor_state);
+	syncWorldBottomBar();
 	if(log_first_frame)
 		logLifecycleTiming("first world update", first_frame_stage_timer);
 	ui->objectEditor->setParticleDiagnostics(gui_client.getSelectedParticleEmitterParticleCount(), gui_client.getTotalParticleCount());

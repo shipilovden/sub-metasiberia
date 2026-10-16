@@ -98,6 +98,7 @@ WorkerThread::~WorkerThread()
 void WorkerThread::setRoutingClientInfo(const UserID& user_id, const std::string& user_name, const UID& avatar_uid)
 {
 	Lock lock(routing_client_info_mutex);
+	if(routing_client_user_id != user_id) admin_entry_data.clear();
 	routing_client_user_id = user_id;
 	routing_client_user_name = user_name;
 	routing_client_avatar_uid = avatar_uid;
@@ -108,6 +109,48 @@ std::string WorkerThread::getRoutingUserName() const
 {
 	Lock lock(routing_client_info_mutex);
 	return routing_client_user_name;
+}
+
+void WorkerThread::enqueueAdminWorldEntry(const SocketBufferOutStream& packet)
+{
+	{
+		Lock lock(routing_client_info_mutex);
+		if(!supports_admin_world_entries || !isGodUser(routing_client_user_id)) return;
+		// Bound a slow recipient's private queue independently of world traffic.
+		if(admin_entry_data.size() + packet.buf.size() > 256 * 1024) admin_entry_data.clear();
+		const size_t offset = admin_entry_data.size();
+		admin_entry_data.resize(offset + packet.buf.size());
+		std::memcpy(admin_entry_data.data() + offset, packet.buf.data(), packet.buf.size());
+	}
+	event_fd.notify();
+}
+
+void WorkerThread::notifyWorldEntry(UserID user_id, const std::string& user_name, UID avatar_uid)
+{
+	if(world_entry_reported && reported_entry_user == user_id) return;
+	Vec3d position;
+	double heading;
+	{
+		WorldStateLock lock(server->world_state->mutex);
+		const auto& avatars = cur_world_state->getAvatars(lock);
+		const auto it = avatars.find(avatar_uid);
+		if(it == avatars.end() || it->second->state == Avatar::State_Dead) return;
+		position = it->second->pos;
+		heading = it->second->rotation.z;
+	}
+	if(!position.isFinite() || !isFinite(heading) || user_name.size() > 1000 || entry_world_name.size() > 1000) return;
+	world_entry_reported = true;
+	reported_entry_user = user_id;
+	SocketBufferOutStream packet(SocketBufferOutStream::DontUseNetworkByteOrder);
+	MessageUtils::initPacket(packet, Protocol::AdminWorldEntryMessageID);
+	writeToStream(avatar_uid, packet);
+	writeToStream(user_id, packet);
+	packet.writeStringLengthFirst(user_name);
+	packet.writeStringLengthFirst(entry_world_name);
+	packet.writeDouble(position.x); packet.writeDouble(position.y); packet.writeDouble(position.z);
+	packet.writeDouble(heading);
+	MessageUtils::updatePacketLengthField(packet);
+	server->enqueueAdminWorldEntryForAllWorlds(packet);
 }
 
 
@@ -1766,6 +1809,7 @@ void WorkerThread::doRun()
 
 			// Read name of world to connect to
 			const std::string initial_world_name = socket->readStringLengthFirst(1000);
+			entry_world_name = initial_world_name;
 			conPrintIfNotFuzzing("Client connecting to world '" + initial_world_name + "'...");
 			
 			{
@@ -1879,12 +1923,30 @@ void WorkerThread::doRun()
 				client_capabilities = socket->readUInt32();
 				conPrint("received client_capabilities of " + toString(client_capabilities) + " from client.");
 			}
+			{
+				Lock lock(routing_client_info_mutex);
+				supports_admin_world_entries = BitUtils::isBitSet(client_capabilities, Protocol::ADMIN_WORLD_ENTRY_SUPPORT);
+			}
 
 
 			assert(cur_world_state.nonNull());
 
 			while(!should_quit) // write to / read from socket loop
 			{
+				// Only this worker can change its authenticated identity. Drain the
+				// private queue here, rechecking authority before any socket write.
+				js::Vector<uint8, 16> private_entries;
+				{
+					Lock lock(routing_client_info_mutex);
+					if(isGodUser(routing_client_user_id) && supports_admin_world_entries)
+						private_entries = admin_entry_data;
+					admin_entry_data.clear();
+				}
+				if(private_entries.nonEmpty())
+				{
+					socket->writeData(private_entries.data(), private_entries.size());
+					socket->flush();
+				}
 				// See if we have any pending data to send in the data_to_send queue, and if so, send all pending data.
 				if(VERBOSE) conPrint("WorkerThread: checking for pending data to send...");
 
@@ -1959,6 +2021,8 @@ void WorkerThread::doRun()
 
 								this->cur_world_state = world_state->world_states[new_world_name];
 							}
+							if(entry_world_name != new_world_name) world_entry_reported = false;
+							entry_world_name = new_world_name;
 
 							sendPerWorldInitialDataToClient(world_state, client_protocol_version);
 
@@ -2272,6 +2336,7 @@ void WorkerThread::doRun()
 							}
 
 							conPrintIfNotFuzzing("New Avatar creation: username: '" + temp_avatar.name + "', model_url: '" + toStdString(temp_avatar.avatar_settings.model_url) + "'");
+							notifyWorldEntry(client_user_id, client_user_name, client_avatar_uid);
 
 							break;
 						}
@@ -3989,6 +4054,7 @@ void WorkerThread::doRun()
 								socket->flush();
 
 								request_missing_owned_resources();
+								notifyWorldEntry(client_user_id, client_user_name, client_avatar_uid);
 							}
 							else
 							{
@@ -4127,6 +4193,7 @@ void WorkerThread::doRun()
 
 									socket->writeData(scratch_packet.buf.data(), scratch_packet.buf.size());
 									socket->flush();
+									notifyWorldEntry(client_user_id, client_user_name, client_avatar_uid);
 								}
 								else
 								{

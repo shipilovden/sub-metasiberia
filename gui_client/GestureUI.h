@@ -45,6 +45,13 @@ public:
 
 	void setVisible(bool visible);
 
+	// Native desktop chrome reuses the existing actions and popup widgets.
+	enum class ToolbarAction { Vehicle, Photo, Microphone, Gestures, ManageGestures };
+	void setNativeToolbarEnabled(bool enabled);
+	void activateToolbarAction(ToolbarAction action);
+	bool toolbarActionChecked(ToolbarAction action) const;
+	bool toolbarVisible() const { return ui_visible; }
+
 	virtual void eventOccurred(GLUICallbackEvent& event) override; // From GLUICallbackHandler
 
 	// Get the current gesture being performed, according to the UI state (i.e. which button is toggled).
@@ -64,6 +71,9 @@ public:
 	void closeGestureManagerSoon(); // Defer close to avoid deleting manager while handling click event.
 
 private:
+	void hideNativeToolbarButtons();
+	bool native_toolbar_enabled = false;
+	bool ui_visible = true;
 	void rebuildGestureWidgets();
 	void updateWidgetPositions();
 //public:

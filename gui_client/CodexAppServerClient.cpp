@@ -77,41 +77,6 @@ QString CodexAppServerClient::findCodexExecutable() const
 }
 
 
-bool CodexAppServerClient::ensureMCPRegistration(const QString& endpoint)
-{
-	if(codex_executable.isEmpty())
-		return false;
-
-	QProcess query;
-	query.start(codex_executable, QStringList() << QStringLiteral("mcp") << QStringLiteral("get") << QStringLiteral("metasiberia"));
-	if(!query.waitForFinished(5000))
-		return false;
-
-	const QString existing = QString::fromUtf8(query.readAllStandardOutput());
-	if(query.exitStatus() == QProcess::NormalExit && query.exitCode() == 0 && existing.contains(endpoint))
-		return true;
-
-	// A missing server is safe to add automatically.  Replace a stale entry so
-	// the app-server cannot start with an old local port from a previous run.
-	if(query.exitStatus() != QProcess::NormalExit || query.exitCode() != 0)
-	{
-		QProcess add;
-		add.start(codex_executable, QStringList() << QStringLiteral("mcp") << QStringLiteral("add") << QStringLiteral("metasiberia") << QStringLiteral("--url") << endpoint);
-		if(!add.waitForFinished(8000) || add.exitStatus() != QProcess::NormalExit || add.exitCode() != 0)
-			return false;
-		return true;
-	}
-
-	QProcess remove;
-	remove.start(codex_executable, QStringList() << QStringLiteral("mcp") << QStringLiteral("remove") << QStringLiteral("metasiberia"));
-	if(!remove.waitForFinished(8000) || remove.exitStatus() != QProcess::NormalExit || remove.exitCode() != 0)
-		return false;
-	QProcess add;
-	add.start(codex_executable, QStringList() << QStringLiteral("mcp") << QStringLiteral("add") << QStringLiteral("metasiberia") << QStringLiteral("--url") << endpoint);
-	return add.waitForFinished(8000) && add.exitStatus() == QProcess::NormalExit && add.exitCode() == 0;
-}
-
-
 bool CodexAppServerClient::start(const QString& endpoint, const QString& cwd)
 {
 	if(isRunning())
@@ -126,9 +91,6 @@ bool CodexAppServerClient::start(const QString& endpoint, const QString& cwd)
 		return false;
 	}
 
-	if(!ensureMCPRegistration(endpoint))
-		emit statusChanged(tr("The Metasiberia MCP server was not registered automatically. Check the connection command."));
-
 	output_buffer.clear();
 	thread_id.clear();
 	next_request_id = 1;
@@ -142,14 +104,10 @@ bool CodexAppServerClient::start(const QString& endpoint, const QString& cwd)
 	metasiberia_mcp_ready = false;
 
 	process.setWorkingDirectory(working_directory);
-	process.start(codex_executable, QStringList() << QStringLiteral("-c") << QStringLiteral("mcp_servers.metasiberia.tool_timeout_sec=360")
+	process.start(codex_executable, QStringList() << QStringLiteral("-c") << QStringLiteral("mcp_servers.metasiberia.url=") + endpoint
+		<< QStringLiteral("-c") << QStringLiteral("mcp_servers.metasiberia.tool_timeout_sec=360")
 		<< QStringLiteral("-c") << QStringLiteral("features.image_generation=true")
 		<< QStringLiteral("app-server") << QStringLiteral("--stdio"));
-	if(!process.waitForStarted(5000))
-	{
-		emit error(tr("Could not start the local Codex app-server."));
-		return false;
-	}
 
 	emit statusChanged(tr("Starting Codex…"));
 	return true;

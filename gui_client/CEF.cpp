@@ -12,6 +12,7 @@ Copyright Glare Technologies Limited 2022 -
 #include <utils/ConPrint.h>
 #include <utils/StringUtils.h>
 #include <utils/Timer.h>
+#include <cstdint>
 #if CEF_SUPPORT  // CEF_SUPPORT will be defined in CMake (or not).
 #include <cef_app.h>
 #include <cef_client.h>
@@ -198,9 +199,17 @@ void CEF::initialiseCEF(const std::string& base_dir_path, const std::string& app
 	CefString(&settings.browser_subprocess_path).FromString(browser_process_path);
 #endif
 
-	// Set a root dir for the browser cache, as recommended by CEF (see cef_types.h)
-	// Otherwise a default cache dir is used that might clash with other applications using CEF.
-	const std::string root_cache_path = appdata_path + "/CEF_cache";
+	// CEF 120+ locks root_cache_path for the lifetime of a browser process.  Keep
+	// the installed client and a local build in separate persistent profiles so
+	// either can use embedded browsers while the other one is running.
+	uint64_t cache_path_hash = UINT64_C(14695981039346656037);
+	for(size_t i = 0; i < base_dir_path.size(); ++i)
+	{
+		const unsigned char c = (unsigned char)base_dir_path[i];
+		const unsigned char normalised_c = (c == '\\') ? '/' : ((c >= 'A' && c <= 'Z') ? (c - 'A' + 'a') : c);
+		cache_path_hash = (cache_path_hash ^ normalised_c) * UINT64_C(1099511628211);
+	}
+	const std::string root_cache_path = appdata_path + "/CEF_cache_" + toString(cache_path_hash);
 	CefString(&settings.root_cache_path).FromString(root_cache_path);
 
 
@@ -214,7 +223,7 @@ void CEF::initialiseCEF(const std::string& base_dir_path, const std::string& app
 #if CEF_VERSION_MAJOR >= 139
 		const int cef_exit_code = CefGetExitCode();
 		if(cef_exit_code == CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED)
-			CEF_init_failure_reason = "Only one Substrata app running an embedded browser at once is supported.";
+			CEF_init_failure_reason = "Another copy from this installation is already using its browser cache. Close it and restart this client.";
 		else
 			CEF_init_failure_reason = "Code " + toString(cef_exit_code);
 		conPrint("CefInitialize failed: " + CEF_init_failure_reason);

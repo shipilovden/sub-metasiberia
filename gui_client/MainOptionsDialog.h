@@ -65,6 +65,7 @@ public:
 	// persisted one of the earlier defaults.  MCP remains disabled until the
 	// user explicitly enables it in the AI Settings tab.
 	static const QString MCPDefaultsMigratedV4Key() { return "mcp_client/defaults_migrated_v4"; }
+	static const QString MCPDefaultsMigratedV5Key() { return "mcp_client/defaults_migrated_v5"; }
 
 	static int defaultMCPPort() { return 8095; }
 	static int minMCPPort() { return 1024; }

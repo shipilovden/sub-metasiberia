@@ -53,7 +53,6 @@ private slots:
 
 private:
 	QString findCodexExecutable() const;
-	bool ensureMCPRegistration(const QString& endpoint);
 	void sendRequest(const QString& method, const QJsonObject& params, int id);
 	void processLine(const QByteArray& line);
 

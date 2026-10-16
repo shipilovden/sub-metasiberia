@@ -360,6 +360,7 @@ static const float BUTTON_W_PIXELS = 50;
 
 void GestureUI::updateWidgetPositions()
 {
+	if(!ui_visible) return;
 	if(gl_ui.nonNull())
 	{
 		if(gesture_manager)
@@ -376,7 +377,8 @@ void GestureUI::updateWidgetPositions()
 		const int NUM_BUTTONS_PER_ROW = ((BUTTON_W * 7 + SPACING * 7) < 0.8f) ? 7 : 3;
 		const float GESTURES_LEFT_X = gestures_visible ? (1 - (BUTTON_W * NUM_BUTTONS_PER_ROW + SPACING * NUM_BUTTONS_PER_ROW)) : 1000;
 
-		const float gestures_bottom_margin = (GESTURES_LEFT_X < 0.3f) ? gl_ui->getUIWidthForDevIndepPixelWidth(120) : SPACING; // If gesture buttons would overlap with other buttons (e.g. on narrow screens), move up.
+		const float gestures_bottom_margin = native_toolbar_enabled ? gl_ui->getUIWidthForDevIndepPixelWidth(8) :
+			((GESTURES_LEFT_X < 0.3f) ? gl_ui->getUIWidthForDevIndepPixelWidth(120) : SPACING);
 		float max_gesture_buttons_y = -min_max_y + gestures_bottom_margin;
 		for(size_t i=0; i<gesture_buttons.size(); ++i)
 		{
@@ -407,7 +409,7 @@ void GestureUI::updateWidgetPositions()
 			expand_button->setPosAndDims(Vec2f(1 - TAB_BUTTON_W - SPACING, -min_max_y + SPACING), Vec2f(TAB_BUTTON_W, TAB_BUTTON_W/*BUTTON_H * 2 + SPACING*/));
 			expand_button->setVisible(!gestures_visible);
 
-			const float vehicle_button_x = -BUTTON_W * 1.5f - SPACING;
+			const float vehicle_button_x = native_toolbar_enabled ? gl_ui->getUIWidthForDevIndepPixelWidth(-76) : -BUTTON_W * 1.5f - SPACING;
 			vehicle_button->setPosAndDims(Vec2f(vehicle_button_x, -min_max_y + SPACING), Vec2f(BUTTON_W, BUTTON_H));
 
 			const float selfie_button_x = vehicle_button_x + BUTTON_W + SPACING;
@@ -427,7 +429,7 @@ void GestureUI::updateWidgetPositions()
 
 			if(vehicle_buttons_visible)
 			{
-				summon_jetski_button  ->setPos(Vec2f(vehicle_button_x, -min_max_y + BUTTON_W + 2*SPACING));
+				summon_jetski_button  ->setPos(Vec2f(vehicle_button_x, -min_max_y + (native_toolbar_enabled ? gl_ui->getUIWidthForDevIndepPixelWidth(8) : BUTTON_W + 2*SPACING)));
 				summon_snowboard_button->setPos(Vec2f(vehicle_button_x, summon_jetski_button->rect.getMax().y + SPACING));
 				summon_boat_button    ->setPos(Vec2f(vehicle_button_x, summon_snowboard_button->rect.getMax().y + SPACING));
 				summon_hovercar_button->setPos(Vec2f(vehicle_button_x, summon_boat_button->rect.getMax().y + SPACING));
@@ -437,6 +439,7 @@ void GestureUI::updateWidgetPositions()
 				collapse_vehicle_button->setPosAndDims(Vec2f(vehicle_button_x, summon_bike_button->rect.getMax().y + SPACING), Vec2f(collapse_button_h, collapse_button_w));
 			}
 		}
+		hideNativeToolbarButtons();
 	}
 }
 
@@ -449,9 +452,54 @@ void GestureUI::viewportResized(int w, int h)
 	}
 }
 
+void GestureUI::hideNativeToolbarButtons()
+{
+	if(!native_toolbar_enabled) return;
+	for(const GLUIButtonRef& button : {edit_gestures_button, expand_button, vehicle_button, photo_mode_button, microphone_button, webcam_button})
+		if(button.nonNull()) button->setVisible(false);
+	if(mic_level_image.nonNull()) mic_level_image->setVisible(false);
+}
+
+void GestureUI::setNativeToolbarEnabled(bool enabled)
+{
+	native_toolbar_enabled = enabled;
+	setVisible(ui_visible);
+}
+
+bool GestureUI::toolbarActionChecked(ToolbarAction action) const
+{
+	switch(action)
+	{
+	case ToolbarAction::Vehicle: return vehicle_buttons_visible;
+	case ToolbarAction::Photo: return photo_mode_button.nonNull() && photo_mode_button->toggled;
+	case ToolbarAction::Microphone: return microphone_button.nonNull() && microphone_button->toggled;
+	case ToolbarAction::Gestures: return gestures_visible;
+	default: return false;
+	}
+}
+
+void GestureUI::activateToolbarAction(ToolbarAction action)
+{
+	GLUIButtonRef button;
+	switch(action)
+	{
+	case ToolbarAction::Vehicle: button = vehicle_button; break;
+	case ToolbarAction::Photo: button = photo_mode_button; break;
+	case ToolbarAction::Microphone: button = microphone_button; break;
+	case ToolbarAction::Gestures: button = gestures_visible ? collapse_button : expand_button; break;
+	case ToolbarAction::ManageGestures: button = edit_gestures_button; break;
+	}
+	if(button.isNull() || !ui_visible) return;
+	if(button->toggleable) button->setToggled(!button->toggled);
+	GLUICallbackEvent event;
+	event.widget = button.ptr();
+	eventOccurred(event);
+}
+
 
 void GestureUI::setVisible(bool visible)
 {
+	ui_visible = visible;
 	if(gl_ui.nonNull())
 	{
 		for(size_t i=0; i<gesture_buttons.size(); ++i)
@@ -467,6 +515,8 @@ void GestureUI::setVisible(bool visible)
 		if(webcam_button.nonNull())
 			webcam_button->setVisible(visible);
 		mic_level_image->setVisible(visible);
+		if(visible) updateWidgetPositions();
+		hideNativeToolbarButtons();
 	}
 }
 

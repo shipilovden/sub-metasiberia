@@ -202,7 +202,7 @@ void ChatUI::updateVisibility() {
 	if((!show && focus==chat_line_edit) || (!picker && focus==emoji_search)) gl_ui->setKeyboardFocusWidget(nullptr);
 	chat_background->setVisible(show && !messages.empty()); chat_line_edit->setVisible(show);
 	emoji_button->setVisible(show); send_button->setVisible(show); collapse_button->setVisible(show);
-	expand_button->setVisible(visible && !expanded);
+	expand_button->setVisible(visible && !expanded && !native_toolbar_enabled);
 	new_messages_button->setVisible(visible && ((expanded && history_scroll>0) || read_state.unread>0));
 	reply_hint->setVisible(show && !reply_text.empty()); reply_cancel->setVisible(show && !reply_text.empty());
 	for(auto& m:messages) {
@@ -217,6 +217,24 @@ void ChatUI::updateVisibility() {
 		b->setVisible(picker && ChatOverlayLayout::visibleRow(b->getRect().getMin().y,b->getRect().getMax().y,emoji_scroll_rect.getMin().y,emoji_scroll_rect.getMax().y));
 }
 void ChatUI::setVisible(bool value) {visible=value;updateVisibility();}
+
+void ChatUI::setNativeToolbarEnabled(bool enabled) {native_toolbar_enabled=enabled;updateVisibility();}
+
+float ChatUI::occupiedHeightPixels() const {
+	if(!ready() || !visible) return 0;
+	float top=-gl_ui->getViewportMinMaxY();
+	if(expanded) top=collapse_button->getRect().getMax().y;
+	if(read_state.unread>0 || (expanded && history_scroll>0)) top=myMax(top,new_messages_button->getRect().getMax().y);
+	if(emoji_picker_open && expanded) top=myMax(top,emoji_window->getRect().getMax().y);
+	return (top+gl_ui->getViewportMinMaxY())/px(1);
+}
+
+void ChatUI::toggleExpanded() {
+	if(!ready()) return;
+	GLUICallbackEvent event;
+	event.widget=expanded?static_cast<GLUIWidget*>(collapse_button.ptr()):static_cast<GLUIWidget*>(expand_button.ptr());
+	eventOccurred(event);
+}
 void ChatUI::setDrawAreaBottomLeftY(float y) {draw_area_bottom_left_y=y;}
 void ChatUI::viewportResized(int,int) {
 	if(!ready()) return;

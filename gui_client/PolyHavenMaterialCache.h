@@ -43,6 +43,7 @@ inline bool isComplete(const QString& path)
 		}
 		return !material->colour_texture_url.empty() && !material->roughness.texture_url.empty();
 	}
+	catch(const glare::Exception&) { return false; }
 	catch(const std::exception&) { return false; }
 }
 
