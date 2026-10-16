@@ -92,6 +92,7 @@ signals:;
 	void removeLightmapSignal();
 	void posAndRot3DControlsToggled();
 	void openServerScriptLogSignal();
+	void convertTextToMeshRequested();
 	
 private slots:
 	void on_visitURLLabel_linkActivated(const QString& link);
@@ -191,6 +192,7 @@ private:
 	QLabel* font_warning_label;
 	QCheckBox* compatible_fonts_checkbox;
 	QPushButton* compatible_font_button;
+	QPushButton* convert_text_to_mesh_button;
 	QTimer* font_filter_timer;
 	QVector<QPair<QString, QString>> font_catalogue;
 	FontCoverage font_coverage;
