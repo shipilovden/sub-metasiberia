@@ -57,7 +57,7 @@ static std::string baseToolsListJSON()
     },
     {
       "name": "get_modeling_example",
-      "description": "Get annotated construction recipes, including parametric_building (persisted dimensioned architecture), photo_reference (model from attached photographs), mesh_loft (body from silhouette sections), mesh_bench, mesh_vase, mesh_arch, mesh_kiosk, mesh_robot, mesh_road, mesh_wall_opening, voxel_cottage, voxel_tower or timber_house (square timber/round logs). Read-only: adapt structure, dimensions and materials to the requested design.",
+      "description": "Get annotated construction recipes, including parametric_building (persisted dimensioned architecture), photo_reference (model from attached photographs), photo_building (multi-view building reconstruction workflow), photo_monument (photo-guided monument/statue workflow), mesh_loft (body from silhouette sections), mesh_bench, mesh_vase, mesh_arch, mesh_kiosk, mesh_robot, mesh_road, mesh_wall_opening, voxel_cottage, voxel_tower or timber_house (square timber/round logs). Read-only: adapt structure, dimensions and materials to the requested design.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -76,6 +76,8 @@ static std::string baseToolsListJSON()
               "mesh_robot",
               "mesh_loft",
               "photo_reference",
+              "photo_building",
+              "photo_monument",
               "mesh_curve_surface_assembly",
               "parametric_building",
               "timber_house"
@@ -147,7 +149,7 @@ static std::string baseToolsListJSON()
       "inputSchema": {
         "type": "object",
         "properties": {
-          "topic": {"type": "string", "enum": ["overview", "coding", "events", "objects", "materials", "avatars", "timers", "storage", "http", "audio", "animation", "particles", "limits", "examples", "xml", "winter", "all"]}
+          "topic": {"type": "string", "enum": ["overview", "coding", "events", "objects", "materials", "avatars", "physics", "timers", "storage", "http", "audio", "animation", "particles", "limits", "examples", "xml", "winter", "all"]}
         },
         "required": [],
         "additionalProperties": false

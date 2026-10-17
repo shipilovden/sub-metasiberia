@@ -413,6 +413,35 @@ static int luaGetWorldObjectForUID(lua_State* state)
 }
 
 
+// Optional lookup for event-driven scripts where an object may be removed
+// between events. Unlike getObjectForUID(), a missing UID returns nil rather
+// than raising a runtime error and disabling the evaluator.
+static int luaFindWorldObjectForUID(lua_State* state)
+{
+	checkNumArgs(state, /*num_args_required=*/1);
+	const UID uid((uint64)LuaUtils::getDoubleArg(state, /*index=*/1));
+
+	LuaScript* script = (LuaScript*)lua_getthreaddata(state);
+	LuaScriptEvaluator* script_evaluator = (LuaScriptEvaluator*)script->userdata;
+	bool found = false;
+#if GUI_CLIENT
+	SubstrataLuaVM* sub_lua_vm = script_evaluator->substrata_lua_vm.ptr();
+	WorldState* world_state = sub_lua_vm->gui_client->world_state.ptr();
+	checkHoldWorldStateMutex(script_evaluator, world_state);
+	found = world_state->objects.contains(uid);
+#elif SERVER
+	if(script_evaluator->cur_world_state_lock == nullptr)
+		throw glare::Exception("findObjectForUID(): current world state lock is missing" + errorContextString(state));
+	found = script_evaluator->world_state->getObjects(*script_evaluator->cur_world_state_lock).count(uid) != 0;
+#endif
+	if(found)
+		script_evaluator->pushWorldObjectTableOntoStack(uid);
+	else
+		lua_pushnil(state);
+	return 1;
+}
+
+
 static int luaVec3fConstructor(lua_State* state)
 {
 	checkNumArgs(state, /*num_args_required=*/3);
@@ -443,6 +472,8 @@ static int getCurrentTime(lua_State* state)
 
 static const int MAX_NUM_OB_EVENT_LISTENS = 100;
 
+static HandlerList* getEventHandlerList(ObjectEventHandlers& handlers, int event_name_atom);
+
 
 static int luaAddEventListener(lua_State* state)
 {
@@ -453,7 +484,7 @@ static int luaAddEventListener(lua_State* state)
 
 	checkNumArgs(state, /*num_args_required*/3);
 	if(lua_type(state, /*index=*/3) != LUA_TFUNCTION)
-		throw glare::Exception("createTimer(): arg 1 must be a function" + errorContextString(state));
+		throw glare::Exception("addEventListener(): arg 3 must be a function" + errorContextString(state));
 
 	int event_name_atom = -1;
 	const char* event_name = LuaUtils::getStringAndAtom(state, /*index=*/1, event_name_atom);
@@ -461,13 +492,11 @@ static int luaAddEventListener(lua_State* state)
 	// Get object UID
 	const UID ob_uid = UID((uint64)LuaUtils::getDoubleArg(state, /*index=*/2));
 
-
-	const void* handler_func_ptr = lua_topointer(state, /*index=*/3);
-	const int handler_func_ref = lua_ref(state, /*index=*/3); // Get a reference to the handler function
-
 	LuaScript* script = (LuaScript*)lua_getthreaddata(state); // NOTE: this double pointer-chasing sucks
 	LuaScriptEvaluator* script_evaluator = (LuaScriptEvaluator*)script->userdata;
-	
+
+	const void* handler_func_ptr = lua_topointer(state, /*index=*/3);
+
 #if GUI_CLIENT
 	SubstrataLuaVM* sub_lua_vm = script_evaluator->substrata_lua_vm.ptr();
 	WorldState* world_state = sub_lua_vm->gui_client->world_state.ptr();
@@ -508,6 +537,16 @@ static int luaAddEventListener(lua_State* state)
 
 	// ob may be null at this point
 	runtimeCheck(ob_event_handlers.nonNull()); // ob_event_handlers should be non-null
+	HandlerList* selected_handlers = getEventHandlerList(*ob_event_handlers, event_name_atom);
+	if(!selected_handlers)
+		throw glare::Exception("Unknown event '" + std::string(event_name) + "'" + errorContextString(state));
+	bool already_registered = false;
+	for(size_t i = 0; i < selected_handlers->handler_funcs.size(); ++i)
+		if(selected_handlers->handler_funcs[i].script.ob == script_evaluator && selected_handlers->handler_funcs[i].function_ptr == handler_func_ptr)
+			already_registered = true;
+	if(!already_registered && script_evaluator->num_obs_event_listening >= MAX_NUM_OB_EVENT_LISTENS)
+		throw glare::Exception("Script added too many event listeners, max is " + toString(MAX_NUM_OB_EVENT_LISTENS) + errorContextString(state));
+	const int handler_func_ref = lua_ref(state, /*index=*/3); // Get a reference to the handler function
 
 
 	HandlerFunc handler_func;
@@ -566,9 +605,9 @@ static int luaAddEventListener(lua_State* state)
 	if(added)
 	{
 		script_evaluator->num_obs_event_listening++;
-		if(script_evaluator->num_obs_event_listening > MAX_NUM_OB_EVENT_LISTENS)
-			throw glare::Exception("Script added too many event listeners, max is " + toString(MAX_NUM_OB_EVENT_LISTENS) + errorContextString(state));
 	}
+	else
+		lua_unref(state, handler_func_ref); // Duplicate registrations do not consume a slot or retain a Lua reference.
 
 #if GUI_CLIENT
 	if(added_spatial_event && ob)
@@ -576,6 +615,101 @@ static int luaAddEventListener(lua_State* state)
 #endif
 
 	return 0;
+}
+
+
+static HandlerList* getEventHandlerList(ObjectEventHandlers& handlers, int event_name_atom)
+{
+	switch(event_name_atom)
+	{
+	case Atom_onUserUsedObject: return &handlers.onUserUsedObject_handlers;
+	case Atom_onUserTouchedObject: return &handlers.onUserTouchedObject_handlers;
+	case Atom_onUserMovedNearToObject: return &handlers.onUserMovedNearToObject_handlers;
+	case Atom_onUserMovedAwayFromObject: return &handlers.onUserMovedAwayFromObject_handlers;
+	case Atom_onUserEnteredParcel: return &handlers.onUserEnteredParcel_handlers;
+	case Atom_onUserExitedParcel: return &handlers.onUserExitedParcel_handlers;
+	case Atom_onUserEnteredVehicle: return &handlers.onUserEnteredVehicle_handlers;
+	case Atom_onUserExitedVehicle: return &handlers.onUserExitedVehicle_handlers;
+	case Atom_onChatMessage: return &handlers.onChatMessage_handlers;
+	default: return nullptr;
+	}
+}
+
+
+static int luaRemoveEventListener(lua_State* state)
+{
+	checkNumArgs(state, /*num_args_required=*/3);
+	int event_name_atom = -1;
+	LuaUtils::getStringAndAtom(state, /*index=*/1, event_name_atom);
+	const UID ob_uid((uint64)LuaUtils::getDoubleArg(state, /*index=*/2));
+	if(lua_type(state, /*index=*/3) != LUA_TFUNCTION)
+		throw glare::Exception("removeEventListener(): arg 3 must be a function" + errorContextString(state));
+	const void* function_ptr = lua_topointer(state, /*index=*/3);
+
+	LuaScript* script = (LuaScript*)lua_getthreaddata(state);
+	LuaScriptEvaluator* script_evaluator = (LuaScriptEvaluator*)script->userdata;
+	Reference<ObjectEventHandlers> event_handlers;
+#if GUI_CLIENT
+	SubstrataLuaVM* sub_lua_vm = script_evaluator->substrata_lua_vm.ptr();
+	WorldState* world_state = sub_lua_vm->gui_client->world_state.ptr();
+	checkHoldWorldStateMutex(script_evaluator, world_state);
+	try
+	{
+		WorldObject* ob = getWorldObjectForUID(script_evaluator, ob_uid);
+		event_handlers = ob->getOrCreateEventHandlers();
+	}
+	catch(glare::Exception&)
+	{
+		auto it = world_state->pending_event_handlers.find(ob_uid);
+		if(it != world_state->pending_event_handlers.end())
+			event_handlers = it->second;
+	}
+#elif SERVER
+	if(script_evaluator->cur_world_state_lock == nullptr)
+		throw glare::Exception("removeEventListener(): current world state lock is missing" + errorContextString(state));
+	try
+	{
+		WorldObject* ob = getWorldObjectForUID(script_evaluator, ob_uid);
+		event_handlers = ob->getOrCreateEventHandlers();
+	}
+	catch(glare::Exception&)
+	{}
+#endif
+
+	bool removed = false;
+	if(event_handlers.nonNull())
+	{
+		HandlerList* handlers = getEventHandlerList(*event_handlers, event_name_atom);
+		if(!handlers)
+			throw glare::Exception("removeEventListener(): unknown event name" + errorContextString(state));
+		for(size_t i = 0; i < handlers->handler_funcs.size(); ++i)
+		{
+			const HandlerFunc handler = handlers->handler_funcs[i];
+			if(handler.script.ob == script_evaluator && handler.function_ptr == function_ptr)
+			{
+				handlers->removeHandlerAtIndex(i);
+				lua_unref(state, handler.handler_func_ref);
+				--script_evaluator->num_obs_event_listening;
+				removed = true;
+				break;
+			}
+		}
+	}
+
+#if GUI_CLIENT
+	if(removed && event_handlers.nonNull())
+	{
+		WorldObject* ob = nullptr;
+		try { ob = getWorldObjectForUID(script_evaluator, ob_uid); } catch(glare::Exception&) {}
+		if(ob && event_handlers->onUserMovedNearToObject_handlers.handler_funcs.empty() &&
+			event_handlers->onUserMovedAwayFromObject_handlers.handler_funcs.empty() &&
+			event_handlers->onUserEnteredParcel_handlers.handler_funcs.empty() &&
+			event_handlers->onUserExitedParcel_handlers.handler_funcs.empty())
+			sub_lua_vm->gui_client->scripted_ob_proximity_checker.removeObject(ob);
+	}
+#endif
+	lua_pushboolean(state, removed ? 1 : 0);
+	return 1;
 }
 
 
@@ -2204,6 +2338,8 @@ SubstrataLuaVM::SubstrataLuaVM(const SubstrataLuaVMArgs& args)
 	
 	lua_pushcfunction(lua_vm->state, luaGetWorldObjectForUID, /*debugname=*/"getObjectForUID");
 	lua_setglobal(lua_vm->state, "getObjectForUID");
+	lua_pushcfunction(lua_vm->state, luaFindWorldObjectForUID, /*debugname=*/"findObjectForUID");
+	lua_setglobal(lua_vm->state, "findObjectForUID");
 	
 	lua_pushcfunction(lua_vm->state, getCurrentTime, /*debugname=*/"getCurrentTime");
 	lua_setglobal(lua_vm->state, "getCurrentTime");
@@ -2219,6 +2355,8 @@ SubstrataLuaVM::SubstrataLuaVM(const SubstrataLuaVMArgs& args)
 	
 	lua_pushcfunction(lua_vm->state, luaAddEventListener, /*debugname=*/"addEventListener");
 	lua_setglobal(lua_vm->state, "addEventListener");
+	lua_pushcfunction(lua_vm->state, luaRemoveEventListener, /*debugname=*/"removeEventListener");
+	lua_setglobal(lua_vm->state, "removeEventListener");
 	
 	lua_pushcfunction(lua_vm->state, doHTTPGetRequestAsync, /*debugname=*/"doHTTPGetRequestAsync");
 	lua_setglobal(lua_vm->state, "doHTTPGetRequestAsync");

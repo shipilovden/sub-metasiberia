@@ -12849,8 +12849,16 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 							if(ob->physics_object)
 							{
-								// Update in physics engine
-								physics_world->setNewObToWorldTransform(*ob->physics_object, Vec4f((float)pos.x, (float)pos.y, (float)pos.z, 0.f), rot, useScaleForWorldOb(ob->scale).toVec4fVector());
+								// Scripted objects have kinematic bodies. Move them through Jolt so
+								// CharacterVirtual receives the platform velocity and carries avatars
+								// standing on Lua-driven lifts. Teleporting the body here resets its
+								// velocity to zero, so the platform looks animated but cannot transport
+								// the character.
+								const Vec4f physics_pos((float)pos.x, (float)pos.y, (float)pos.z, 0.f);
+								if(ob->physics_object->kinematic && !ob->physics_object->dynamic && dt > 0.0 && dt <= 0.25)
+									physics_world->moveKinematicObject(*ob->physics_object, physics_pos, rot, (float)dt);
+								else
+									physics_world->setNewObToWorldTransform(*ob->physics_object, physics_pos, rot, useScaleForWorldOb(ob->scale).toVec4fVector());
 							}
 
 							if(ob->audio_source.nonNull())
