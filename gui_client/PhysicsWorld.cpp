@@ -699,6 +699,10 @@ void computeToWorldAndToObMatrices(const Vec4f& translation, const Quatf& rot_qu
 
 void PhysicsWorld::moveKinematicObject(PhysicsObject& object, const Vec4f& translation, const Quatf& rot, float dt)
 {
+	assert(translation.isFinite());
+	object.pos = translation;
+	object.rot = rot;
+
 	if(!object.jolt_body_id.IsInvalid()) // If we are updating Jolt state, and this object has a corresponding Jolt object:
 	{
 		JPH::BodyInterface& body_interface = physics_system->GetBodyInterface();
