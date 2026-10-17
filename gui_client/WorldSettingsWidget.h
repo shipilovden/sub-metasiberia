@@ -14,6 +14,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtCore/QMutex>
 #include <QtCore/QPointF>
 #include <QtCore/QVector>
+#include <functional>
 #include <vector>
 
 
@@ -25,6 +26,7 @@ class QSlider;
 class QDoubleSpinBox;
 class QGroupBox;
 class QLabel;
+class QLineEdit;
 class QListWidget;
 class QPushButton;
 class QSpinBox;
@@ -38,7 +40,7 @@ class RealTerrainImportThread : public QThread
 {
 	Q_OBJECT
 public:
-	RealTerrainImportThread(double north, double south, double west, double east, const QVector<QPointF>& polygon, float water_z, QObject* parent = NULL);
+	RealTerrainImportThread(double north, double south, double west, double east, const QVector<QPointF>& polygon, float water_z, bool include_osm_features = true, QObject* parent = NULL);
 	~RealTerrainImportThread();
 	void cancelImport();
 
@@ -59,6 +61,7 @@ private:
 	double east;
 	QVector<QPointF> polygon;
 	float water_z;
+	bool include_osm_features;
 	QMutex client_mutex;
 	class HTTPClient* active_client;
 };
@@ -77,6 +80,12 @@ public:
 	void retranslateUiText();
 
 	void setFromWorldSettings(const WorldSettings& world_settings);
+	bool startMCPRealTerrainImport(double north, double south, double west, double east, int section_x, int section_y,
+		const std::function<void(bool, const QString&)>& completion, QString& error_out);
+	bool getMCPRealTerrainSelection(double& north, double& south, double& west, double& east, int& section_x, int& section_y,
+		QVector<QPointF>& polygon) const;
+	bool startMCPRealTerrainImportFromCurrentSelection(int section_x, int section_y, bool override_section,
+		const std::function<void(bool, const QString&)>& completion, QString& error_out);
 
 	void toWorldSettings(WorldSettings& world_settings_out);
 
@@ -122,6 +131,7 @@ private:
 	void retranslateSculptingTab();
 	void applyRecommendedWaterSurfSettings();
 	void updateTerrainMaterialPreview(int index);
+	void applyTerrainGridVisibility();
 	void browsePolyHavenTerrainTexture(int index);
 
 	//std::vector<TerrainSpecSectionWidget*> section_widgets;
@@ -132,17 +142,21 @@ private:
 	int terrain_material_browser_target;
 	QLabel* terrain_material_preview_labels[4];
 	QPushButton* terrain_material_clear_buttons[4];
-	QDoubleSpinBox* terrain_material_scale_spin_boxes[4];
-	QLabel* terrain_material_scale_labels[4];
+	QDoubleSpinBox* terrain_material_scale_x_spin_boxes[4];
+	QDoubleSpinBox* terrain_material_scale_y_spin_boxes[4];
+	QLabel* terrain_material_scale_x_labels[4];
+	QLabel* terrain_material_scale_y_labels[4];
 	QPushButton* terrain_material_clear_all_button;
 	QPushButton* terrain_relief_clear_all_button;
 	QPushButton* terrain_height_clear_button;
+	QCheckBox* terrain_grid_check_box;
 	QToolButton* world_terrain_sections_button;
 	QToolButton* world_materials_button;
 	QToolButton* world_terrain_geometry_button;
 
 	QTabWidget* settings_tabs;
 	QWidget* sculpting_tab;
+	QLabel* sculpting_mode_help_label;
 	QToolButton* sculpting_basic_accordion_button;
 	QWidget* sculpting_basic_panel;
 	QToolButton* sculpting_shape_accordion_button;
@@ -197,6 +211,8 @@ private:
 	QLabel* sculpting_status_label;
 	QGroupBox* real_terrain_group;
 	QLabel* real_terrain_map_label;
+	QLineEdit* real_terrain_search_edit;
+	QPushButton* real_terrain_search_button;
 	QComboBox* real_terrain_basemap_combo;
 	QLabel* real_terrain_section_x_label;
 	QLabel* real_terrain_section_y_label;
@@ -213,4 +229,6 @@ private:
 	QPushButton* real_terrain_import_button;
 	QLabel* real_terrain_status_label;
 	RealTerrainImportThread* real_terrain_import_thread;
+	bool real_terrain_import_include_osm_features;
+	std::function<void(bool, const QString&)> real_terrain_import_mcp_completion;
 };

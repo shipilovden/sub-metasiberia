@@ -12,6 +12,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "../shared/WorldMaterial.h"
 #include "MCPTextureTools.h"
 #include "MapWorldUtils.h"
+#include "LucideIconUtils.h"
 #include "../qt/SignalBlocker.h"
 #include "../shared/ResourceManager.h"
 #include <graphics/EXRDecoder.h>
@@ -33,6 +34,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtCore/QMetaObject>
 #include <QtCore/QBuffer>
 #include <QtCore/QUrl>
+#include <QtCore/QUrlQuery>
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonArray>
@@ -172,7 +174,7 @@ const double REAL_TERRAIN_MAX_MERCATOR_LATITUDE = 85.05112878;
 class RealTerrainMapWidget : public QWidget
 {
 public:
-	explicit RealTerrainMapWidget(QWidget* parent = NULL) : QWidget(parent), center_x(0), center_y(0), zoom(8), basemap(0),
+	explicit RealTerrainMapWidget(QWidget* parent = NULL) : QWidget(parent), center_x(0), center_y(0), zoom(8), basemap(1),
 		selection_active(false), dragging(false), freehand(false), panning(false)
 	{
 		setMinimumHeight(260);
@@ -185,6 +187,39 @@ public:
 
 	void setFreehand(bool enabled) { freehand = enabled; clearSelection(); }
 	void setBasemap(int source) { if(source != basemap) { basemap = source; tiles.clear(); requested.clear(); update(); } }
+	void centerOnLatLon(double latitude, double longitude, int target_zoom = 13)
+	{
+		latitude = myClamp(latitude, -REAL_TERRAIN_MAX_MERCATOR_LATITUDE, REAL_TERRAIN_MAX_MERCATOR_LATITUDE);
+		longitude = myClamp(longitude, -180.0, 180.0);
+		zoom = myClamp(target_zoom, 2, 19);
+		const double world_size = 256.0 * (1 << zoom);
+		center_x = (longitude + 180.0) / 360.0 * world_size;
+		const double lat_rad = latitude * 3.14159265358979323846 / 180.0;
+		center_y = (0.5 - std::log((1.0 + std::sin(lat_rad)) / (1.0 - std::sin(lat_rad))) /
+			(4.0 * 3.14159265358979323846)) * world_size;
+		clearSelection();
+		update();
+	}
+	void setSelectionFromLatLonBounds(double north, double south, double west, double east)
+	{
+		if(north <= south || east <= west) return;
+		centerOnLatLon((north + south) * 0.5, (west + east) * 0.5, zoom);
+		const QPointF origin = worldOrigin();
+		const double world_size = 256.0 * (1 << zoom);
+		auto toScreen = [world_size, origin](double latitude, double longitude) -> QPointF
+		{
+			latitude = myClamp(latitude, -REAL_TERRAIN_MAX_MERCATOR_LATITUDE, REAL_TERRAIN_MAX_MERCATOR_LATITUDE);
+			const double lat_rad = latitude * 3.14159265358979323846 / 180.0;
+			const double x = (longitude + 180.0) / 360.0 * world_size;
+			const double y = (0.5 - std::log((1.0 + std::sin(lat_rad)) / (1.0 - std::sin(lat_rad))) /
+				(4.0 * 3.14159265358979323846)) * world_size;
+			return QPointF(x, y) - origin;
+		};
+		selection_points.clear();
+		selection_points << toScreen(north, west) << toScreen(north, east) << toScreen(south, east) << toScreen(south, west);
+		selection_active = true;
+		update();
+	}
 	void zoomBy(int delta)
 	{
 		if(delta == 0) return;
@@ -440,17 +475,18 @@ static std::vector<float> terrainSelectionEdgeDistance(const QImage& selection_m
 
 static QString queryTerrainOSMFeatures(HTTPClient& client, double north, double south, double west, double east,
 	const QVector<QPointF>& selection, const QByteArray& height_data, float water_z,
-	QByteArray& material_png, QByteArray& tree_png, QByteArray& roads_png, QByteArray& buildings_png)
+	bool include_osm_features, QByteArray& material_png, QByteArray& tree_png, QByteArray& roads_png, QByteArray& buildings_png)
 {
 	const int n = REAL_TERRAIN_MAP_RESOLUTION;
 	const QImage selection_mask = rasterizeTerrainSelection(n, north, south, west, east, selection);
 	QImage roads_rgba(n, n, QImage::Format_RGBA8888); roads_rgba.fill(Qt::transparent);
 	QImage buildings_rgba(n, n, QImage::Format_RGBA8888); buildings_rgba.fill(Qt::transparent);
 	QVector<RealTerrainOSMFeature> roads, buildings;
-	QString feature_status = QCoreApplication::translate("WorldSettingsWidget", "OSM roads and buildings: unavailable; their masks are empty.");
+	QString feature_status = include_osm_features ? QCoreApplication::translate("WorldSettingsWidget", "OSM roads and buildings: unavailable; their masks are empty.") :
+		QCoreApplication::translate("WorldSettingsWidget", "Elevation imported without OSM roads or buildings.");
 	const double selected_width = (east-west) * 111320.0 * std::cos((north+south)*0.5*3.14159265358979323846/180.0);
 	const double selected_height = (north-south) * 111320.0;
-	if((east-west) <= 0.25 && (north-south) <= 0.25 && selected_width > 0 && selected_height > 0)
+	if(include_osm_features && (east-west) <= 0.25 && (north-south) <= 0.25 && selected_width > 0 && selected_height > 0)
 	{
 		const QString query = QStringLiteral("[out:json][timeout:20];(way[\"highway\"](%1,%2,%3,%4);way[\"building\"](%1,%2,%3,%4););out geom;")
 			.arg(south, 0, 'f', 7).arg(west, 0, 'f', 7).arg(north, 0, 'f', 7).arg(east, 0, 'f', 7);
@@ -495,7 +531,7 @@ static QString queryTerrainOSMFeatures(HTTPClient& client, double north, double 
 		}
 		if(!last_error.isEmpty()) feature_status = QCoreApplication::translate("WorldSettingsWidget", "OSM unavailable (%1); road/building masks are empty.").arg(last_error);
 	}
-	else feature_status = QCoreApplication::translate("WorldSettingsWidget", "Selected area is too large for OSM detail; road/building masks are empty.");
+	else if(include_osm_features) feature_status = QCoreApplication::translate("WorldSettingsWidget", "Selected area is too large for OSM detail; road/building masks are empty.");
 
 	auto map_point = [=](const QPointF& geo) { return QPointF((geo.x()-west)/(east-west)*(n-1), (north-geo.y())/(north-south)*(n-1)); };
 	{
@@ -563,14 +599,17 @@ static QString queryTerrainOSMFeatures(HTTPClient& client, double north, double 
 	}
 	material_png=encodeTerrainPng(material);
 	tree_png=encodeTerrainPng(tree);
-	roads_png=encodeTerrainPng(road_gray);
-	buildings_png=encodeTerrainPng(building_gray);
+	if(include_osm_features)
+	{
+		roads_png=encodeTerrainPng(road_gray);
+		buildings_png=encodeTerrainPng(building_gray);
+	}
 	return feature_status;
 }
 }
 
 
-RealTerrainImportThread::RealTerrainImportThread(double north_, double south_, double west_, double east_, const QVector<QPointF>& polygon_, float water_z_, QObject* parent)
+RealTerrainImportThread::RealTerrainImportThread(double north_, double south_, double west_, double east_, const QVector<QPointF>& polygon_, float water_z_, bool include_osm_features_, QObject* parent)
 : QThread(parent),
 	north(north_),
 	south(south_),
@@ -578,6 +617,7 @@ RealTerrainImportThread::RealTerrainImportThread(double north_, double south_, d
 	east(east_),
 	polygon(polygon_),
 	water_z(water_z_),
+	include_osm_features(include_osm_features_),
 	active_client(NULL)
 {}
 
@@ -699,10 +739,11 @@ void RealTerrainImportThread::run()
 			}
 		}
 
-		emit statusMessage(QCoreApplication::translate("WorldSettingsWidget", "Generating material, tree and OSM masks…"));
+		emit statusMessage(include_osm_features ? QCoreApplication::translate("WorldSettingsWidget", "Generating material, tree and OSM masks…") :
+			QCoreApplication::translate("WorldSettingsWidget", "Generating material and tree masks…"));
 		QByteArray material_png, tree_png, roads_png, buildings_png;
 		const QString feature_status = queryTerrainOSMFeatures(client, import_north, import_south, import_west, import_east,
-			polygon, heights, water_z, material_png, tree_png, roads_png, buildings_png);
+			polygon, heights, water_z, include_osm_features, material_png, tree_png, roads_png, buildings_png);
 		{
 			QMutexLocker lock(&client_mutex);
 			active_client = NULL;
@@ -736,11 +777,13 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	terrain_section_resize_drag_start_height(0),
 	terrain_material_browser_target(-1),
 	terrain_height_clear_button(NULL),
+	terrain_grid_check_box(NULL),
 	world_terrain_sections_button(NULL),
 	world_materials_button(NULL),
 	world_terrain_geometry_button(NULL),
 	settings_tabs(NULL),
 	sculpting_tab(NULL),
+	sculpting_mode_help_label(NULL),
 	sculpting_basic_accordion_button(NULL),
 	sculpting_basic_panel(NULL),
 	sculpting_shape_accordion_button(NULL),
@@ -788,6 +831,8 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	sculpting_status_label(NULL),
 	real_terrain_group(NULL),
 	real_terrain_map_label(NULL),
+	real_terrain_search_edit(NULL),
+	real_terrain_search_button(NULL),
 	real_terrain_basemap_combo(NULL),
 	real_terrain_section_x_label(NULL),
 	real_terrain_section_y_label(NULL),
@@ -803,7 +848,8 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	real_terrain_section_y_spin_box(NULL),
 	real_terrain_import_button(NULL),
 	real_terrain_status_label(NULL),
-	real_terrain_import_thread(NULL)
+	real_terrain_import_thread(NULL),
+	real_terrain_import_include_osm_features(true)
 {
 	setupUi(this);
 	for(int i=0; i<24; ++i) sculpting_island_buttons[i] = NULL;
@@ -812,8 +858,10 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	for(int i=0; i<4; ++i)
 	{
 		terrain_material_clear_buttons[i] = NULL;
-		terrain_material_scale_spin_boxes[i] = NULL;
-		terrain_material_scale_labels[i] = NULL;
+		terrain_material_scale_x_spin_boxes[i] = NULL;
+		terrain_material_scale_y_spin_boxes[i] = NULL;
+		terrain_material_scale_x_labels[i] = NULL;
+		terrain_material_scale_y_labels[i] = NULL;
 		terrain_material_preview_labels[i] = new QLabel(this);
 		terrain_material_preview_labels[i]->setFixedSize(56, 38);
 		terrain_material_preview_labels[i]->setAlignment(Qt::AlignCenter);
@@ -824,29 +872,41 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 		if(row_layout && file_widget)
 		{
 			row_layout->insertWidget(1, terrain_material_preview_labels[i]);
-			QLabel* scale_label = new QLabel(tr("Scale"), this);
-			scale_label->setObjectName(QString("terrainMaterialScale%1Label").arg(i));
-			scale_label->setToolTip(tr("Controls tiling for World > Surface material textures > colour slot %1 (%2). Higher values repeat it more often; lower values make its pattern larger.").arg(i).arg(terrain_layer_names[i]));
-			terrain_material_scale_labels[i] = scale_label;
-			row_layout->insertWidget(2, scale_label);
-			terrain_material_scale_spin_boxes[i] = new QDoubleSpinBox(this);
-			terrain_material_scale_spin_boxes[i]->setObjectName(QString("terrainMaterialScale%1SpinBox").arg(i));
-			terrain_material_scale_spin_boxes[i]->setRange(0.01, 100.0);
-			terrain_material_scale_spin_boxes[i]->setValue(1.0);
-			terrain_material_scale_spin_boxes[i]->setDecimals(2);
-			terrain_material_scale_spin_boxes[i]->setSingleStep(0.1);
-			terrain_material_scale_spin_boxes[i]->setSuffix(QStringLiteral(" ×"));
-			terrain_material_scale_spin_boxes[i]->setToolTip(tr("Controls tiling for World > Surface material textures > colour slot %1 (%2). Higher values repeat it more often; lower values make its pattern larger.").arg(i).arg(terrain_layer_names[i]));
-			row_layout->insertWidget(3, terrain_material_scale_spin_boxes[i]);
-			connect(terrain_material_scale_spin_boxes[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, i](double value)
+			const QString scale_tooltip = tr("Controls texture tiling on the %1 axis for colour slot %2 (%3). Higher values repeat the texture more often; lower values make its pattern larger.");
+			auto make_scale_control = [this, i, &terrain_layer_names, &scale_tooltip, row_layout](const QString& axis, int label_index, int spin_index, QLabel*& label_out, QDoubleSpinBox*& spin_out)
 			{
-				if(main_window && main_window->gui_client.opengl_engine)
-					main_window->gui_client.opengl_engine->setDetailTextureScale(i, (float)value);
-				settingsChangedSlot();
-			});
+				QLabel* label = new QLabel(axis, this);
+				label->setObjectName(QString("terrainMaterialScale%1%2Label").arg(i).arg(axis));
+				label->setToolTip(scale_tooltip.arg(axis).arg(i).arg(terrain_layer_names[i]));
+				label->setFixedWidth(10);
+				label_out = label;
+				row_layout->insertWidget(label_index, label);
+				QDoubleSpinBox* spin = new QDoubleSpinBox(this);
+				spin->setObjectName(QString("terrainMaterialScale%1%2SpinBox").arg(i).arg(axis));
+				spin->setRange(0.01, 100.0);
+				spin->setValue(1.0);
+				spin->setDecimals(2);
+				spin->setSingleStep(0.1);
+				spin->setSuffix(QStringLiteral(" ×"));
+				spin->setMinimumWidth(72);
+				spin->setMaximumWidth(88);
+				spin->setToolTip(scale_tooltip.arg(axis).arg(i).arg(terrain_layer_names[i]));
+				spin_out = spin;
+				row_layout->insertWidget(spin_index, spin);
+				connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, i](double)
+				{
+					applyTerrainGridVisibility();
+					settingsChangedSlot();
+				});
+			};
+			make_scale_control(tr("X"), 2, 3, terrain_material_scale_x_labels[i], terrain_material_scale_x_spin_boxes[i]);
+			make_scale_control(tr("Y"), 4, 5, terrain_material_scale_y_labels[i], terrain_material_scale_y_spin_boxes[i]);
 			terrain_material_clear_buttons[i] = new QPushButton(tr("Clear"), this);
 			terrain_material_clear_buttons[i]->setObjectName(QString("terrainMaterialClearButton%1").arg(i));
 			terrain_material_clear_buttons[i]->setToolTip(tr("Clear colour slot %1 (%2). The source image file is not deleted.").arg(i).arg(terrain_layer_names[i]));
+			LucideIconUtils::setButtonIcon(terrain_material_clear_buttons[i], LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("trash-2"), palette().color(QPalette::ButtonText), 16);
+			terrain_material_clear_buttons[i]->setText(QString());
+			terrain_material_clear_buttons[i]->setFixedWidth(30);
 			row_layout->addWidget(terrain_material_clear_buttons[i]);
 			connect(terrain_material_clear_buttons[i], &QPushButton::clicked, this, [this, file_widget, i]()
 			{
@@ -857,10 +917,16 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 			QPushButton* browser_button = new QPushButton(tr("Choose material"), this);
 			browser_button->setObjectName(QString("terrainMaterialBrowserButton%1").arg(i));
 			browser_button->setToolTip(tr("Choose a texture for colour slot %1 (%2). Assigning it here makes it available to the matching brush in Sculpting > Surface layers.").arg(i).arg(terrain_layer_names[i]));
+			LucideIconUtils::setButtonIcon(browser_button, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("image-plus"), palette().color(QPalette::ButtonText), 16);
+			browser_button->setText(QString());
+			browser_button->setFixedWidth(30);
 			row_layout->addWidget(browser_button);
 			QPushButton* poly_haven_button = new QPushButton(tr("Poly Haven"), this);
 			poly_haven_button->setObjectName(QString("terrainPolyHavenButton%1").arg(i));
 			poly_haven_button->setToolTip(tr("Search Poly Haven textures for colour slot %1 (%2), preview the albedo, then assign the result here.").arg(i).arg(terrain_layer_names[i]));
+			LucideIconUtils::setButtonIcon(poly_haven_button, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("search"), palette().color(QPalette::ButtonText), 16);
+			poly_haven_button->setText(QString());
+			poly_haven_button->setFixedWidth(30);
 			row_layout->addWidget(poly_haven_button);
 			connect(poly_haven_button, &QPushButton::clicked, this, [this, i]() { browsePolyHavenTerrainTexture(i); });
 			connect(browser_button, &QPushButton::clicked, this, [this, i]()
@@ -872,7 +938,7 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 					if(dock) { dock->show(); dock->raise(); }
 				}
 			});
-			connect(file_widget, &FileSelectWidget::filenameChanged, this, [this, i](QString&) { updateTerrainMaterialPreview(i); });
+			connect(file_widget, &FileSelectWidget::filenameChanged, this, [this, i](QString&) { updateTerrainMaterialPreview(i); applyTerrainGridVisibility(); });
 		}
 		updateTerrainMaterialPreview(i);
 	}
@@ -1013,7 +1079,7 @@ void WorldSettingsWidget::updateTerrainMaterialPreview(int index)
 	else
 	{
 		terrain_material_preview_labels[index]->setPixmap(QPixmap());
-		terrain_material_preview_labels[index]->setText(tr("No preview"));
+		terrain_material_preview_labels[index]->setText(QString());
 	}
 }
 
@@ -1243,33 +1309,125 @@ void WorldSettingsWidget::createSculptingTab()
 	// narrowed: labels wrap and editable fields consume the available width.
 	world_tab->setMinimumWidth(0);
 	world_tab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-	world_form_layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-	world_form_layout->setRowWrapPolicy(QFormLayout::WrapLongRows);
-	world_form_layout->setLabelAlignment(Qt::AlignLeft | Qt::AlignTop);
-	for(int i=0; i<world_form_layout->count(); ++i)
-	{
-		int row;
-		QFormLayout::ItemRole role;
-		world_form_layout->getItemPosition(i, &row, &role);
-		QLayoutItem* item = world_form_layout->itemAt(i);
-		QWidget* item_widget = item ? item->widget() : NULL;
-		if(!item_widget)
-			continue;
-
-		item_widget->setMinimumWidth(0);
-		if(role == QFormLayout::LabelRole)
-		{
-			if(QLabel* label = qobject_cast<QLabel*>(item_widget))
-				label->setWordWrap(true);
-			item_widget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-		}
-		else
-			item_widget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-	}
 	terrainSectionScrollArea->setMinimumWidth(0);
 	terrainSectionScrollArea->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
 	terrainSectionScrollAreaWidgetContents->setMinimumWidth(0);
 
+	// Split the generated world form into terrain, sky and water pages while
+	// keeping each existing control and its settings connections intact.
+	QWidget* sky_tab = new QWidget(this);
+	QWidget* water_tab = new QWidget(this);
+	QVBoxLayout* sky_layout = new QVBoxLayout(sky_tab);
+	QVBoxLayout* water_layout = new QVBoxLayout(water_tab);
+	sky_layout->setContentsMargins(0, 0, 0, 0);
+	water_layout->setContentsMargins(0, 0, 0, 0);
+	QFormLayout* sky_group_forms[4] = { NULL, NULL, NULL, NULL };
+	QFormLayout* water_group_forms[4] = { NULL, NULL, NULL, NULL };
+	const QString sky_section_titles[4] = { tr("Sun"), tr("Fog"), tr("Volumetric clouds"), tr("Cloud lighting and sunset") };
+	const QString water_section_titles[4] = { tr("Water level"), tr("Water reflections"), tr("Water surface and waves"), tr("Shore surf and foam") };
+	auto createAccordionGroups = [this](QWidget* page, QVBoxLayout* layout, const QString* titles, QFormLayout** group_forms)
+	{
+		for(int group_i=0; group_i<4; ++group_i)
+		{
+			QToolButton* button = new QToolButton(page);
+			button->setCheckable(true);
+			button->setChecked(group_i == 0);
+			button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+			button->setArrowType(group_i == 0 ? Qt::DownArrow : Qt::RightArrow);
+			button->setText(titles[group_i]);
+			QWidget* panel = new QWidget(page);
+			QFormLayout* form = new QFormLayout(panel);
+			form->setContentsMargins(8, 2, 2, 4);
+			form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+			form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+			form->setLabelAlignment(Qt::AlignLeft | Qt::AlignTop);
+			group_forms[group_i] = form;
+			panel->setVisible(group_i == 0);
+			layout->addWidget(button);
+			layout->addWidget(panel);
+			connect(button, &QToolButton::toggled, this, [button, panel](bool expanded)
+			{
+				panel->setVisible(expanded);
+				button->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+			});
+		}
+		layout->addStretch(1);
+	};
+	createAccordionGroups(sky_tab, sky_layout, sky_section_titles, sky_group_forms);
+	createAccordionGroups(water_tab, water_layout, water_section_titles, water_group_forms);
+	const int source_row_count = world_form_layout->rowCount();
+	std::vector<QFormLayout::TakeRowResult> source_rows((size_t)source_row_count);
+	for(int source_row=source_row_count-1; source_row>=0; --source_row)
+		source_rows[(size_t)source_row] = world_form_layout->takeRow(source_row);
+	int destination_rows[3] = { 0, 0, 0 };
+	int sky_group_rows[4] = { 0, 0, 0, 0 };
+	int water_group_rows[4] = { 0, 0, 0, 0 };
+	for(int source_row=0; source_row<source_row_count; ++source_row)
+	{
+		const QFormLayout::TakeRowResult row = source_rows[(size_t)source_row];
+		if(!row.labelItem && !row.fieldItem)
+			continue;
+		int destination = 0;
+		if((source_row >= 15 && source_row <= 18) || (source_row >= 51 && source_row <= 73))
+			destination = 2;
+		else if(source_row >= 19 && source_row <= 50)
+			destination = 1;
+		QFormLayout* form = world_form_layout;
+		int target_row = 0;
+		QWidget* target_parent = world_tab;
+		if(destination == 1)
+		{
+			const int group = source_row <= 22 ? 0 : source_row <= 28 ? 1 : source_row <= 42 ? 2 : 3;
+			form = sky_group_forms[group];
+			target_row = sky_group_rows[group]++;
+			target_parent = form->parentWidget();
+		}
+		else if(destination == 2)
+		{
+			const int group = source_row <= 18 ? 0 : source_row <= 55 ? 1 : source_row <= 64 ? 2 : 3;
+			form = water_group_forms[group];
+			target_row = water_group_rows[group]++;
+			target_parent = form->parentWidget();
+		}
+		else target_row = destination_rows[destination]++;
+		if(row.labelItem && row.labelItem->widget())
+			row.labelItem->widget()->setParent(target_parent);
+		if(row.fieldItem && row.fieldItem->widget())
+			row.fieldItem->widget()->setParent(target_parent);
+		if(row.labelItem)
+			form->setItem(target_row, QFormLayout::LabelRole, row.labelItem);
+		if(row.fieldItem)
+			form->setItem(target_row, row.labelItem ? QFormLayout::FieldRole : QFormLayout::SpanningRole, row.fieldItem);
+		if((source_row == 19 || source_row == 23 || source_row == 43 || source_row == 51 || source_row == 57 || source_row == 66) && row.labelItem && row.labelItem->widget())
+			row.labelItem->widget()->hide();
+	}
+	QWidget* world_pages[3] = { world_tab, sky_tab, water_tab };
+	for(int page_i=0; page_i<3; ++page_i)
+	{
+		QFormLayout* page_form = page_i == 0 ? world_form_layout : NULL;
+		if(!page_form) continue;
+		page_form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+		page_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+		page_form->setLabelAlignment(Qt::AlignLeft | Qt::AlignTop);
+		world_pages[page_i]->setMinimumWidth(0);
+		world_pages[page_i]->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+		for(int i=0; i<page_form->count(); ++i)
+		{
+			int row;
+			QFormLayout::ItemRole role;
+			page_form->getItemPosition(i, &row, &role);
+			QLayoutItem* item = page_form->itemAt(i);
+			QWidget* item_widget = item ? item->widget() : NULL;
+			if(!item_widget) continue;
+			item_widget->setMinimumWidth(0);
+			if(role == QFormLayout::LabelRole)
+			{
+				if(QLabel* form_label = qobject_cast<QLabel*>(item_widget)) form_label->setWordWrap(true);
+				item_widget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+			}
+			else item_widget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+		}
+	}
 	// Keep the imported section maps, paintable materials and terrain dimensions
 	// together while retaining their original controls and settings bindings.
 	QWidget* world_panels[3] = { new QWidget(world_tab), new QWidget(world_tab), new QWidget(world_tab) };
@@ -1283,7 +1441,7 @@ void WorldSettingsWidget::createSculptingTab()
 		world_panels[i]->setMinimumWidth(0);
 	}
 	int panel_row[3] = { 0, 0, 0 };
-	for(int source_row=0; source_row<=16; ++source_row)
+	for(int source_row=0; source_row<15; ++source_row)
 	{
 		const QFormLayout::TakeRowResult row = world_form_layout->takeRow(0);
 		const int panel = source_row < 2 ? 0 : source_row < 8 ? 1 : 2;
@@ -1299,6 +1457,19 @@ void WorldSettingsWidget::createSculptingTab()
 		world_materials_button = new QToolButton(world_tab),
 		world_terrain_geometry_button = new QToolButton(world_tab)
 	};
+	terrain_grid_check_box = new QCheckBox(world_tab);
+	terrain_grid_check_box->setObjectName(QStringLiteral("terrainGridCheckBox"));
+	terrain_grid_check_box->setChecked(true);
+	terrain_grid_check_box->setToolTip(tr("Show the project grid on terrain slots without an assigned material texture. This is a local display option."));
+	connect(terrain_grid_check_box, &QCheckBox::toggled, this, [this](bool visible)
+	{
+		if(main_window)
+		{
+			QSettings settings;
+			settings.setValue(QStringLiteral("WorldSettings/ShowDefaultTerrainGrid"), visible);
+		}
+		applyTerrainGridVisibility();
+	});
 	panel_forms[0]->addRow(terrain_relief_clear_all_button);
 	panel_forms[1]->insertRow(0, terrain_material_clear_all_button);
 	for(int i=0; i<3; ++i)
@@ -1313,23 +1484,33 @@ void WorldSettingsWidget::createSculptingTab()
 		world_form_layout->insertRow(i * 2 + 1, world_panels[i]);
 		QWidget* panel = world_panels[i];
 		if(!expanded) panel->hide();
-		connect(button, &QToolButton::toggled, this, [button, panel](bool expanded)
+		connect(button, &QToolButton::toggled, this, [this, button, panel](bool expanded)
 		{
+			if(expanded && button == world_terrain_sections_button)
+			{
+				QLayout* sections_layout = terrainSectionScrollAreaWidgetContents->layout();
+				if(sections_layout && sections_layout->count() == 0)
+					newTerrainSectionPushButtonClicked();
+			}
 			panel->setVisible(expanded);
 			button->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
 		});
 	}
+	world_form_layout->insertRow(0, terrain_grid_check_box);
 	world_terrain_sections_button->setText(tr("Terrain section maps"));
 	world_materials_button->setText(tr("Surface material textures"));
-	world_terrain_geometry_button->setText(tr("Terrain geometry and water"));
+	world_terrain_geometry_button->setText(tr("Terrain geometry"));
 	world_terrain_sections_button->setToolTip(tr("Expand or collapse height, material and object masks imported for each terrain section."));
 	world_materials_button->setToolTip(tr("Expand or collapse texture slots used by the paintable surface layers."));
-	world_terrain_geometry_button->setToolTip(tr("Expand or collapse terrain size, elevation and water level settings."));
+	world_terrain_geometry_button->setToolTip(tr("Expand or collapse terrain size, elevation and height map settings."));
+	terrain_grid_check_box->setText(tr("Show terrain grid when no material is assigned"));
 
 	settings_tabs = new QTabWidget(this);
 	settings_tabs->setMinimumWidth(0);
 	settings_tabs->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-	settings_tabs->addTab(world_tab, tr("World"));
+	settings_tabs->addTab(world_tab, tr("Terrain"));
+	settings_tabs->addTab(sky_tab, tr("Sky"));
+	settings_tabs->addTab(water_tab, tr("Water"));
 
 	sculpting_tab = new QWidget(settings_tabs);
 	QVBoxLayout* sculpting_layout = new QVBoxLayout(sculpting_tab);
@@ -1741,10 +1922,18 @@ void WorldSettingsWidget::createSculptingTab()
 	real_terrain_map_label = new QLabel(tr("Select an area on the map. Drag with the left mouse button; right-drag pans, wheel zooms."), real_terrain_group);
 	real_terrain_map_label->setWordWrap(true);
 	real_terrain_layout->addRow(real_terrain_map_label);
+	QHBoxLayout* map_search_layout = new QHBoxLayout();
+	real_terrain_search_edit = new QLineEdit(real_terrain_group);
+	real_terrain_search_edit->setPlaceholderText(tr("Search for a place or address"));
+	real_terrain_search_button = new QPushButton(tr("Search"), real_terrain_group);
+	map_search_layout->addWidget(real_terrain_search_edit, 1);
+	map_search_layout->addWidget(real_terrain_search_button);
+	real_terrain_layout->addRow(map_search_layout);
 	real_terrain_basemap_combo = new QComboBox(real_terrain_group);
 	real_terrain_basemap_combo->addItem(tr("Metasiberia Map"));
 	real_terrain_basemap_combo->addItem(tr("Topographic map"));
 	real_terrain_basemap_combo->addItem(tr("Satellite imagery"));
+	real_terrain_basemap_combo->setCurrentIndex(1);
 	real_terrain_layout->addRow(tr("Map layer"), real_terrain_basemap_combo);
 	real_terrain_map_widget = new RealTerrainMapWidget(real_terrain_group);
 	QHBoxLayout* map_zoom_layout = new QHBoxLayout();
@@ -1765,6 +1954,72 @@ void WorldSettingsWidget::createSculptingTab()
 	connect(real_terrain_basemap_combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { retranslateSculptingTab(); });
 	connect(real_terrain_zoom_out_button, &QPushButton::clicked, this, [this]() { real_terrain_map_widget->zoomBy(-1); });
 	connect(real_terrain_zoom_in_button, &QPushButton::clicked, this, [this]() { real_terrain_map_widget->zoomBy(1); });
+	connect(real_terrain_search_edit, &QLineEdit::returnPressed, real_terrain_search_button, &QPushButton::click);
+	connect(real_terrain_search_button, &QPushButton::clicked, this, [this]()
+	{
+		const QString query = real_terrain_search_edit->text().trimmed();
+		if(query.isEmpty())
+		{
+			real_terrain_status_label->setText(tr("Enter a place name or address."));
+			return;
+		}
+		real_terrain_search_button->setEnabled(false);
+		real_terrain_status_label->setText(tr("Searching for place…"));
+		QUrl url(QStringLiteral("https://nominatim.openstreetmap.org/search"));
+		QUrlQuery url_query;
+		url_query.addQueryItem(QStringLiteral("format"), QStringLiteral("jsonv2"));
+		url_query.addQueryItem(QStringLiteral("limit"), QStringLiteral("1"));
+		url_query.addQueryItem(QStringLiteral("q"), query);
+		url.setQuery(url_query);
+		const QString request_url = url.toString(QUrl::FullyEncoded);
+		QPointer<RealTerrainMapWidget> map(real_terrain_map_widget);
+		QPointer<QLabel> status(real_terrain_status_label);
+		QPointer<QPushButton> button(real_terrain_search_button);
+		QThreadPool::globalInstance()->start(QRunnable::create([map, status, button, query, request_url]()
+		{
+			double latitude = 0.0, longitude = 0.0;
+			QString error;
+			QString result_name;
+			try
+			{
+				HTTPClient client;
+				client.additional_headers.push_back("User-Agent: Metasiberia/0.0.25 (https://metasiberia.com/)");
+				client.additional_headers.push_back("Accept: application/json");
+				client.max_data_size = 2 * 1024 * 1024;
+				client.max_socket_buffer_size = 2 * 1024 * 1024;
+				std::string body;
+				const HTTPClient::ResponseInfo response = client.downloadFile(QtUtils::toStdString(request_url), body);
+				if(response.response_code != 200)
+					throw glare::Exception("Place search returned HTTP " + toString(response.response_code));
+				const QJsonDocument doc = QJsonDocument::fromJson(QByteArray(body.data(), (int)body.size()));
+				if(!doc.isArray() || doc.array().isEmpty() || !doc.array().first().isObject())
+					throw glare::Exception("No matching place was found.");
+				const QJsonObject first = doc.array().first().toObject();
+				bool lat_ok = false, lon_ok = false;
+				latitude = first.value(QStringLiteral("lat")).toString().toDouble(&lat_ok);
+				longitude = first.value(QStringLiteral("lon")).toString().toDouble(&lon_ok);
+				if(!lat_ok || !lon_ok || !std::isfinite(latitude) || !std::isfinite(longitude) ||
+					latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0)
+					throw glare::Exception("Place search returned invalid coordinates.");
+				result_name = first.value(QStringLiteral("display_name")).toString();
+			}
+			catch(const std::exception& e) { error = QString::fromUtf8(e.what()); }
+			catch(...) { error = QStringLiteral("Place search failed."); }
+			if(map)
+				QMetaObject::invokeMethod(map.data(), [map, status, button, latitude, longitude, result_name, error, query]()
+				{
+					if(!map) return;
+					if(button) button->setEnabled(true);
+					if(!error.isEmpty())
+					{
+						if(status) status->setText(error);
+						return;
+					}
+					map->centerOnLatLon(latitude, longitude);
+					if(status) status->setText(result_name.isEmpty() ? QObject::tr("Map centered on %1.").arg(query) : result_name);
+				}, Qt::QueuedConnection);
+		}));
+	});
 	QHBoxLayout* map_tool_layout = new QHBoxLayout();
 	real_terrain_rectangle_button = new QPushButton(tr("Rectangle"), real_terrain_group);
 	real_terrain_freehand_button = new QPushButton(tr("Freehand contour"), real_terrain_group);
@@ -1815,8 +2070,10 @@ void WorldSettingsWidget::createSculptingTab()
 		}
 		real_terrain_import_button->setEnabled(false);
 		real_terrain_status_label->setText(tr("Starting elevation download…"));
+		const bool include_osm_features = real_terrain_import_include_osm_features;
+		real_terrain_import_include_osm_features = true;
 		RealTerrainImportThread* worker = new RealTerrainImportThread(
-			north, south, west, east, polygon, (float)waterZDoubleSpinBox->value(), this);
+			north, south, west, east, polygon, (float)waterZDoubleSpinBox->value(), include_osm_features, this);
 		real_terrain_import_thread = worker;
 		connect(worker, &RealTerrainImportThread::tileProgress, this, [this](int completed, int total)
 		{
@@ -1865,8 +2122,8 @@ void WorldSettingsWidget::createSculptingTab()
 				};
 				const URLString material_map_url = save_mask_resource(material_mask_png, QStringLiteral("material"));
 				const URLString tree_map_url = save_mask_resource(tree_mask_png, QStringLiteral("trees"));
-				const URLString road_map_url = save_mask_resource(road_mask_png, QStringLiteral("roads"));
-				const URLString building_map_url = save_mask_resource(building_mask_png, QStringLiteral("buildings"));
+				const URLString road_map_url = road_mask_png.isEmpty() ? URLString() : save_mask_resource(road_mask_png, QStringLiteral("roads"));
+				const URLString building_map_url = building_mask_png.isEmpty() ? URLString() : save_mask_resource(building_mask_png, QStringLiteral("buildings"));
 
 				const int target_x = real_terrain_section_x_spin_box->value();
 				const int target_y = real_terrain_section_y_spin_box->value();
@@ -1896,31 +2153,60 @@ void WorldSettingsWidget::createSculptingTab()
 				SignalBlocker::setChecked(target_section->heightmapEnabledCheckBox, true);
 				target_section->maskMapURLFileSelectWidget->setFilename(QtUtils::toQString(material_map_url));
 				target_section->treeMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(tree_map_url));
-				target_section->roadMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(road_map_url));
-				target_section->buildingMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(building_map_url));
+				if(!road_map_url.empty()) target_section->roadMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(road_map_url));
+				if(!building_map_url.empty()) target_section->buildingMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(building_map_url));
 				SignalBlocker::setChecked(target_section->maskMapEnabledCheckBox, true);
 				SignalBlocker::setChecked(target_section->treeMaskMapEnabledCheckBox, true);
-				SignalBlocker::setChecked(target_section->roadMaskMapEnabledCheckBox, true);
-				SignalBlocker::setChecked(target_section->buildingMaskMapEnabledCheckBox, true);
-				real_terrain_status_label->setText(tr("Elevation and terrain layers imported into section (%1, %2). %3 Apply world settings to save them.").arg(target_x).arg(target_y).arg(feature_status));
+				if(!road_map_url.empty()) SignalBlocker::setChecked(target_section->roadMaskMapEnabledCheckBox, true);
+				if(!building_map_url.empty()) SignalBlocker::setChecked(target_section->buildingMaskMapEnabledCheckBox, true);
+				const QString imported_message = tr("Elevation and terrain layers imported into section (%1, %2). %3 Apply world settings to save them.").arg(target_x).arg(target_y).arg(feature_status);
+				real_terrain_status_label->setText(imported_message);
+				if(real_terrain_import_mcp_completion)
+				{
+					settingsChangedSlot();
+					const std::function<void(bool, const QString&)> completion = std::move(real_terrain_import_mcp_completion);
+					completion(true, tr("Imported terrain and submitted the updated world settings."));
+				}
 			}
 			catch(const std::exception& e)
 			{
-					real_terrain_status_label->setText(tr("Could not save terrain layers: %1").arg(QString::fromUtf8(e.what())));
+				const QString message = tr("Could not save terrain layers: %1").arg(QString::fromUtf8(e.what()));
+				real_terrain_status_label->setText(message);
+				if(real_terrain_import_mcp_completion)
+				{
+					const std::function<void(bool, const QString&)> completion = std::move(real_terrain_import_mcp_completion);
+					completion(false, message);
+				}
 			}
 			catch(const glare::Exception& e)
 			{
-				real_terrain_status_label->setText(tr("Could not save terrain layers: %1").arg(QString::fromStdString(e.what())));
+				const QString message = tr("Could not save terrain layers: %1").arg(QString::fromStdString(e.what()));
+				real_terrain_status_label->setText(message);
+				if(real_terrain_import_mcp_completion)
+				{
+					const std::function<void(bool, const QString&)> completion = std::move(real_terrain_import_mcp_completion);
+					completion(false, message);
+				}
 			}
 		});
 		connect(worker, &RealTerrainImportThread::importFailed, this, [this](const QString& message)
 		{
 			real_terrain_status_label->setText(tr("Elevation import failed: %1").arg(message));
+			if(real_terrain_import_mcp_completion)
+			{
+				const std::function<void(bool, const QString&)> completion = std::move(real_terrain_import_mcp_completion);
+				completion(false, message);
+			}
 		});
 		connect(worker, &QThread::finished, this, [this, worker]()
 		{
 			real_terrain_import_thread = NULL;
 			real_terrain_import_button->setEnabled(real_terrain_group->isEnabled());
+			if(real_terrain_import_mcp_completion)
+			{
+				const std::function<void(bool, const QString&)> completion = std::move(real_terrain_import_mcp_completion);
+				completion(false, tr("Terrain map import ended without producing a heightmap."));
+			}
 			worker->deleteLater();
 		});
 		worker->start();
@@ -1930,12 +2216,87 @@ void WorldSettingsWidget::createSculptingTab()
 	sculpting_status_label->setWordWrap(true);
 	sculpting_status_label->setText(tr("Free camera is enabled with this mode. Left-click the terrain to sculpt."));
 	sculpting_layout->addWidget(sculpting_status_label);
-	sculpting_layout->addStretch(1);
 
-	settings_tabs->addTab(sculpting_tab, tr("Sculpting"));
+	// Keep the mode switch visible above the tab bar. The tools themselves are
+	// split into focused pages; their controls are the same widgets as before.
+	QWidget* mode_header = new QWidget(this);
+	QVBoxLayout* mode_header_layout = new QVBoxLayout(mode_header);
+	mode_header_layout->setContentsMargins(4, 2, 4, 2);
+	mode_header_layout->setSpacing(2);
+	sculpting_layout->removeWidget(sculpting_mode_check_box);
+	sculpting_mode_check_box->setParent(mode_header);
+	sculpting_mode_help_label = new QLabel(mode_header);
+	sculpting_mode_help_label->setWordWrap(true);
+	mode_header_layout->addWidget(sculpting_mode_check_box);
+	mode_header_layout->addWidget(sculpting_mode_help_label);
+
+	QWidget* brushes_tab = new QWidget(this);
+	QWidget* shapes_tab = new QWidget(this);
+	QWidget* stamps_tab = new QWidget(this);
+	QWidget* islands_tab = new QWidget(this);
+	QWidget* layers_tab = new QWidget(this);
+	QWidget* map_tab = new QWidget(this);
+	QVBoxLayout* brushes_layout = new QVBoxLayout(brushes_tab);
+	QVBoxLayout* shapes_layout = new QVBoxLayout(shapes_tab);
+	QVBoxLayout* stamps_layout = new QVBoxLayout(stamps_tab);
+	QVBoxLayout* islands_layout = new QVBoxLayout(islands_tab);
+	QVBoxLayout* layers_layout = new QVBoxLayout(layers_tab);
+	QVBoxLayout* map_layout = new QVBoxLayout(map_tab);
+	auto moveSculptWidget = [sculpting_layout](QWidget* widget, QVBoxLayout* destination)
+	{
+		if(!widget || !destination) return;
+		sculpting_layout->removeWidget(widget);
+		widget->setParent(destination->parentWidget());
+		destination->addWidget(widget);
+	};
+	sculpting_layout->removeItem(history_layout);
+	brushes_layout->addLayout(history_layout);
+	sculpting_layout->removeItem(brush_layout);
+	brushes_layout->addLayout(brush_layout);
+	moveSculptWidget(sculpting_map_target_accordion_button, brushes_layout);
+	moveSculptWidget(sculpting_map_target_panel, brushes_layout);
+	moveSculptWidget(sculpting_basic_accordion_button, brushes_layout);
+	moveSculptWidget(sculpting_basic_panel, brushes_layout);
+	moveSculptWidget(sculpting_status_label, brushes_layout);
+	moveSculptWidget(sculpting_shape_accordion_button, shapes_layout);
+	moveSculptWidget(sculpting_shape_panel, shapes_layout);
+	moveSculptWidget(sculpting_stamp_accordion_button, stamps_layout);
+	moveSculptWidget(sculpting_stamp_panel, stamps_layout);
+	moveSculptWidget(island_headers[0], islands_layout);
+	moveSculptWidget(island_panels[0], islands_layout);
+	moveSculptWidget(island_headers[1], islands_layout);
+	moveSculptWidget(island_panels[1], islands_layout);
+	moveSculptWidget(sculpting_island_settings_group, islands_layout);
+	moveSculptWidget(sculpting_layers_accordion_button, layers_layout);
+	moveSculptWidget(sculpting_layers_group, layers_layout);
+	moveSculptWidget(island_headers[2], layers_layout);
+	moveSculptWidget(island_panels[2], layers_layout);
+	moveSculptWidget(real_terrain_group, map_layout);
+	brushes_layout->addStretch(1);
+	shapes_layout->addStretch(1);
+	stamps_layout->addStretch(1);
+	islands_layout->addStretch(1);
+	layers_layout->addStretch(1);
+	map_layout->addStretch(1);
+	delete sculpting_layout;
+	delete sculpting_tab;
+	settings_tabs->addTab(brushes_tab, tr("Brushes"));
+	settings_tabs->addTab(shapes_tab, tr("Shapes"));
+	settings_tabs->addTab(stamps_tab, tr("Stamps"));
+	settings_tabs->addTab(islands_tab, tr("Islands"));
+	settings_tabs->addTab(layers_tab, tr("Layers"));
+	settings_tabs->addTab(map_tab, tr("Map"));
 	QVBoxLayout* root_layout = new QVBoxLayout(this);
 	root_layout->setContentsMargins(0, 0, 0, 0);
+	root_layout->addWidget(mode_header);
 	root_layout->addWidget(settings_tabs);
+	connect(settings_tabs, &QTabWidget::currentChanged, this, [this](int tab_index)
+	{
+		const bool edit_tab = tab_index >= 3 && tab_index <= 7;
+		if(!edit_tab && sculpting_mode_check_box->isChecked())
+			sculpting_mode_check_box->setChecked(false);
+		sculpting_mode_check_box->setEnabled(edit_tab && main_window && main_window->connectedToUsersWorldOrGodUser());
+	});
 
 	connect(sculpting_mode_check_box, &QCheckBox::toggled, this, [this](bool enabled)
 	{
@@ -2113,7 +2474,6 @@ void WorldSettingsWidget::setSculptingControlsEnabled(bool enabled)
 	sculpting_real_islands_panel->setEnabled(enabled);
 	sculpting_fantasy_islands_panel->setEnabled(enabled);
 	sculpting_vegetation_panel->setEnabled(enabled);
-	real_terrain_group->setEnabled(enabled);
 	const int target = sculpting_map_target_combo->currentData().toInt();
 	const bool undoable = (target >= 0 && target <= 7) || (target >= 8 && target <= 34);
 	sculpting_undo_button->setEnabled(enabled && undoable);
@@ -2126,8 +2486,9 @@ void WorldSettingsWidget::retranslateSculptingTab()
 {
 	if(!settings_tabs)
 		return;
-	settings_tabs->setTabText(0, tr("World"));
-	settings_tabs->setTabText(1, tr("Sculpting"));
+	const QString tab_names[9] = { tr("Terrain"), tr("Sky"), tr("Water"), tr("Brushes"), tr("Shapes"), tr("Stamps"), tr("Islands"), tr("Layers"), tr("Map") };
+	for(int i=0; i<9 && i<settings_tabs->count(); ++i)
+		settings_tabs->setTabText(i, tab_names[i]);
 	QLabel* material_label_widgets[5] = { fghghdfgfg, label, label_2, label_3, label_4 };
 	const QString material_labels[5] = {
 		tr("Rock texture (slot 0)"), tr("Ground / sand texture (slot 1)"),
@@ -2135,19 +2496,22 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	};
 	for(int i=0; i<5; ++i)
 		material_label_widgets[i]->setText(material_labels[i]);
-	terrainMaterialHelpLabel->setText(tr("Colour slot 0 = Rock, 1 = Ground / sand, 2 = Vegetation, 3 = Overlay (beach, snow or another surface). Assign each texture here, set its scale here, then open Sculpting > Surface layers, select the matching slot and drag on the terrain. Vegetation also controls grass; tree placement uses a separate mask."));
+	terrainMaterialHelpLabel->setText(tr("Colour slot 0 = Rock, 1 = Ground / sand, 2 = Vegetation, 3 = Overlay (beach, snow or another surface). Assign each texture here, set its X and Y scale, then open Layers, select the matching slot and drag on the terrain. Vegetation also controls grass; tree placement uses a separate mask."));
+	terrain_grid_check_box->setText(tr("Show terrain grid when no material is assigned"));
+	terrain_grid_check_box->setToolTip(tr("Show the project grid on terrain slots without an assigned material texture. This is a local display option."));
 	world_terrain_sections_button->setText(tr("Terrain section maps"));
 	world_materials_button->setText(tr("Surface material textures"));
-	world_terrain_geometry_button->setText(tr("Terrain geometry and water"));
+	world_terrain_geometry_button->setText(tr("Terrain geometry"));
 	world_terrain_sections_button->setToolTip(tr("Expand or collapse height, material and object masks imported for each terrain section."));
 	world_materials_button->setToolTip(tr("Expand or collapse texture slots used by the paintable surface layers."));
-	world_terrain_geometry_button->setToolTip(tr("Expand or collapse terrain size, elevation and water level settings."));
+	world_terrain_geometry_button->setToolTip(tr("Expand or collapse terrain size, elevation and height map settings."));
 	for(int i=0; i<4; ++i)
 	{
 		if(terrain_material_clear_buttons[i])
 		{
-			terrain_material_clear_buttons[i]->setText(tr("Clear"));
+			terrain_material_clear_buttons[i]->setText(QString());
 			terrain_material_clear_buttons[i]->setToolTip(tr("Remove this texture from the world material slot. The file itself is not deleted."));
+			LucideIconUtils::setButtonIcon(terrain_material_clear_buttons[i], LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("trash-2"), palette().color(QPalette::ButtonText), 16);
 		}
 	}
 	terrain_material_clear_all_button->setText(tr("Clear all material textures"));
@@ -2156,7 +2520,8 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	terrain_relief_clear_all_button->setToolTip(tr("Remove the height map from every terrain section, leaving a flat surface at the configured base elevation. Material, vegetation, tree, road and building maps remain assigned."));
 	terrain_height_clear_button->setText(tr("Clear"));
 	terrain_height_clear_button->setToolTip(tr("Remove the rock micro-height texture from this world. The file itself is not deleted."));
-	sculpting_mode_check_box->setText(tr("Enable sculpting mode"));
+	sculpting_mode_check_box->setText(tr("Enable sculpting and editing mode"));
+	sculpting_mode_help_label->setText(tr("Enables the free camera and scene editing tools in Brushes, Shapes, Stamps, Islands and Layers. The mode turns off when you switch to Terrain, Sky, Water or Map."));
 	sculpting_map_target_accordion_button->setText(tr("Edit and generate"));
 	sculpting_map_target_accordion_button->setToolTip(tr("Expand or collapse the active terrain editing mode selector."));
 	sculpting_undo_button->setText(tr("Undo"));
@@ -2194,6 +2559,15 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	sculpting_map_target_label->setText(tr("Action"));
 	sculpting_map_target_label->setToolTip(tr("Choose the map changed by this mode: World > Terrain section maps > Height map, World > Terrain section maps > Tree mask, or World > Surface material textures > colour slot 0 (Rock), 1 (Ground / sand), 2 (Vegetation), or 3 (Overlay)."));
 	real_terrain_group->setTitle(tr("Real-world terrain"));
+	if(real_terrain_search_edit)
+		real_terrain_search_edit->setPlaceholderText(tr("Search for a place or address"));
+	if(real_terrain_search_button)
+	{
+		real_terrain_search_button->setText(QString());
+		real_terrain_search_button->setFixedWidth(34);
+		real_terrain_search_button->setToolTip(tr("Search"));
+		LucideIconUtils::setButtonIcon(real_terrain_search_button, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("search"), palette().color(QPalette::ButtonText), 16);
+	}
 	real_terrain_map_label->setText(tr("Select an area on the map. Drag with the left mouse button; right-drag pans, wheel zooms."));
 	real_terrain_basemap_combo->setItemText(0, tr("Metasiberia Map"));
 	real_terrain_basemap_combo->setItemText(1, tr("Topographic map"));
@@ -2203,6 +2577,7 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	real_terrain_rectangle_button->setText(tr("Rectangle"));
 	real_terrain_freehand_button->setText(tr("Freehand contour"));
 	real_terrain_clear_button->setText(tr("Clear selection"));
+	LucideIconUtils::setButtonIcon(real_terrain_clear_button, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("trash-2"), palette().color(QPalette::ButtonText), 16);
 	real_terrain_zoom_out_button->setText(tr("−"));
 	real_terrain_zoom_out_button->setToolTip(tr("Zoom out"));
 	real_terrain_zoom_in_button->setText(tr("+"));
@@ -2210,6 +2585,7 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	real_terrain_section_x_label->setText(tr("Target section X"));
 	real_terrain_section_y_label->setText(tr("Target section Y"));
 	real_terrain_import_button->setText(tr("Import terrain and layers"));
+	LucideIconUtils::setButtonIcon(real_terrain_import_button, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("mountain"), palette().color(QPalette::ButtonText), 16);
 	real_terrain_source_label->setText(tr("Imports height, material, tree, road and building maps into the chosen terrain section. OSM road/building detail is available for areas up to about 25 km across."));
 	const QString map_target_names[8] = {
 		tr("Terrain height"), tr("Rock material"), tr("Ground / sand material"), tr("Vegetation material"),
@@ -2362,8 +2738,165 @@ WorldSettingsWidget::~WorldSettingsWidget()
 void WorldSettingsWidget::init(MainWindow* main_window_)
 {
 	main_window = main_window_;
+	if(terrain_grid_check_box)
+	{
+		QSettings settings;
+		terrain_grid_check_box->setChecked(settings.value(QStringLiteral("WorldSettings/ShowDefaultTerrainGrid"), true).toBool());
+		applyTerrainGridVisibility();
+	}
 
 	updateControlsEditable();
+}
+
+
+void WorldSettingsWidget::applyTerrainGridVisibility()
+{
+	if(!main_window || !main_window->gui_client.opengl_engine || !terrain_grid_check_box)
+		return;
+	OpenGLEngine* engine = main_window->gui_client.opengl_engine.ptr();
+	if(!engine)
+		return;
+
+	OpenGLTextureRef grid_texture;
+	if(terrain_grid_check_box->isChecked())
+	{
+		const std::string grid_path = main_window->gui_client.resources_dir_path + "/grey_grid.png";
+		if(FileUtils::fileExists(grid_path))
+			grid_texture = engine->getTexture(grid_path);
+	}
+
+	ImageMapUInt8Ref blank_map = new ImageMapUInt8(1, 1, 4);
+	uint8* pixel = blank_map->getPixel(0, 0);
+	pixel[0] = pixel[1] = pixel[2] = pixel[3] = 255;
+	const OpenGLTextureRef blank_texture = engine->getOrLoadOpenGLTextureForMap2D(
+		OpenGLTextureKey("__metasiberia_map_world_blank_detail__"), *blank_map, TextureParams());
+
+	for(int i=0; i<4; ++i)
+	{
+		FileSelectWidget* file_widget = findChild<FileSelectWidget*>(QString("detailColMapURLs%1FileSelectWidget").arg(i));
+		// The grid is only a visual fallback.  Never replace a material explicitly
+		// assigned to a world slot.
+		if(file_widget && file_widget->filename().trimmed().isEmpty())
+		{
+			engine->setDetailTexture(i, grid_texture ? grid_texture : blank_texture);
+			engine->setDetailTextureScaleXY(i,
+				terrain_material_scale_x_spin_boxes[i] ? (float)terrain_material_scale_x_spin_boxes[i]->value() : 1.0f,
+				terrain_material_scale_y_spin_boxes[i] ? (float)terrain_material_scale_y_spin_boxes[i]->value() : 1.0f);
+		}
+		else
+			engine->setDetailTextureScaleXY(i,
+				terrain_material_scale_x_spin_boxes[i] ? (float)terrain_material_scale_x_spin_boxes[i]->value() : 1.0f,
+				terrain_material_scale_y_spin_boxes[i] ? (float)terrain_material_scale_y_spin_boxes[i]->value() : 1.0f);
+	}
+}
+
+
+bool WorldSettingsWidget::startMCPRealTerrainImport(double north, double south, double west, double east,
+	int section_x, int section_y, const std::function<void(bool, const QString&)>& completion, QString& error_out)
+{
+	if(real_terrain_import_thread)
+	{
+		error_out = tr("A terrain map import is already running.");
+		return false;
+	}
+	if(!main_window || !main_window->gui_client.resource_manager || !main_window->connectedToUsersWorldOrGodUser())
+	{
+		error_out = tr("Terrain import requires world owner or god write access.");
+		return false;
+	}
+	if(!std::isfinite(north) || !std::isfinite(south) || !std::isfinite(west) || !std::isfinite(east) ||
+		north <= south || north > REAL_TERRAIN_MAX_MERCATOR_LATITUDE || south < -REAL_TERRAIN_MAX_MERCATOR_LATITUDE ||
+		west < -180.0 || east > 180.0 || east <= west || (east - west) > 30.0 || (north - south) > 30.0 ||
+		section_x < -100 || section_x > 100 || section_y < -100 || section_y > 100)
+	{
+		error_out = tr("Invalid map bounds or terrain section coordinates.");
+		return false;
+	}
+	if((east - west) < 0.0001 || (north - south) < 0.0001)
+	{
+		error_out = tr("The selected map area is too small.");
+		return false;
+	}
+	real_terrain_map_widget->setSelectionFromLatLonBounds(north, south, west, east);
+	real_terrain_section_x_spin_box->setValue(section_x);
+	real_terrain_section_y_spin_box->setValue(section_y);
+	real_terrain_import_mcp_completion = completion;
+	real_terrain_import_include_osm_features = false;
+	real_terrain_import_button->click();
+	if(!real_terrain_import_thread)
+	{
+		error_out = real_terrain_status_label->text();
+		real_terrain_import_mcp_completion = {};
+		real_terrain_import_include_osm_features = true;
+		return false;
+	}
+	return true;
+}
+
+
+bool WorldSettingsWidget::getMCPRealTerrainSelection(double& north, double& south, double& west, double& east,
+	int& section_x, int& section_y, QVector<QPointF>& polygon) const
+{
+	section_x = real_terrain_section_x_spin_box ? real_terrain_section_x_spin_box->value() : 0;
+	section_y = real_terrain_section_y_spin_box ? real_terrain_section_y_spin_box->value() : 0;
+	if(!real_terrain_map_widget || !real_terrain_map_widget->hasSelection())
+	{
+		polygon.clear();
+		return false;
+	}
+	real_terrain_map_widget->getSelection(north, south, west, east);
+	polygon = real_terrain_map_widget->getSelectionPolygon();
+	return polygon.size() >= 3;
+}
+
+
+bool WorldSettingsWidget::startMCPRealTerrainImportFromCurrentSelection(int section_x, int section_y, bool override_section,
+	const std::function<void(bool, const QString&)>& completion, QString& error_out)
+{
+	if(real_terrain_import_thread)
+	{
+		error_out = tr("A terrain map import is already running.");
+		return false;
+	}
+	if(!main_window || !main_window->gui_client.resource_manager || !main_window->connectedToUsersWorldOrGodUser())
+	{
+		error_out = tr("Terrain import requires world owner or god write access.");
+		return false;
+	}
+	double north, south, west, east;
+	QVector<QPointF> polygon;
+	int selected_section_x, selected_section_y;
+	if(!getMCPRealTerrainSelection(north, south, west, east, selected_section_x, selected_section_y, polygon))
+	{
+		error_out = tr("Select an area on the real-world terrain map first; MCP can use the current rectangle or freehand contour.");
+		return false;
+	}
+	if((east-west)<0.0001 || (north-south)<0.0001)
+	{
+		error_out = tr("The selected map area is too small.");
+		return false;
+	}
+	if(override_section)
+	{
+		if(section_x < -100 || section_x > 100 || section_y < -100 || section_y > 100)
+		{
+			error_out = tr("Invalid terrain section coordinates.");
+			return false;
+		}
+		real_terrain_section_x_spin_box->setValue(section_x);
+		real_terrain_section_y_spin_box->setValue(section_y);
+	}
+	real_terrain_import_mcp_completion = completion;
+	real_terrain_import_include_osm_features = false;
+	real_terrain_import_button->click();
+	if(!real_terrain_import_thread)
+	{
+		error_out = real_terrain_status_label->text();
+		real_terrain_import_mcp_completion = {};
+		real_terrain_import_include_osm_features = true;
+		return false;
+	}
+	return true;
 }
 
 
@@ -2373,27 +2906,44 @@ void WorldSettingsWidget::retranslateUiText()
 	const QString terrain_layer_names[4] = { tr("Rock"), tr("Ground / sand"), tr("Vegetation"), tr("Overlay material") };
 	for(int i=0; i<4; ++i)
 	{
+		if(FileSelectWidget* file_widget = findChild<FileSelectWidget*>(QString("detailColMapURLs%1FileSelectWidget").arg(i)))
+		{
+			if(QPushButton* browse = file_widget->findChild<QPushButton*>(QStringLiteral("fileSelectButton")))
+			{
+				browse->setToolTip(tr("Browse"));
+				browse->setText(QString());
+				browse->setFixedWidth(30);
+				LucideIconUtils::setButtonIcon(browse, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("folder-open"), palette().color(QPalette::ButtonText), 16);
+			}
+		}
 		if(QPushButton* button = findChild<QPushButton*>(QString("terrainMaterialBrowserButton%1").arg(i)))
 		{
-			button->setText(tr("Choose material"));
+			button->setText(QString());
+			button->setFixedWidth(30);
+			LucideIconUtils::setButtonIcon(button, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("image-plus"), palette().color(QPalette::ButtonText), 16);
 			button->setToolTip(tr("Choose a texture for colour slot %1 (%2). Assigning it here makes it available to the matching brush in Sculpting > Surface layers.").arg(i).arg(terrain_layer_names[i]));
 		}
 		if(QPushButton* button = findChild<QPushButton*>(QString("terrainPolyHavenButton%1").arg(i)))
 		{
-			button->setText(tr("Poly Haven"));
+			button->setText(QString());
+			button->setFixedWidth(30);
+			LucideIconUtils::setButtonIcon(button, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("search"), palette().color(QPalette::ButtonText), 16);
 			button->setToolTip(tr("Search Poly Haven textures for colour slot %1 (%2), preview the albedo, then assign the result here.").arg(i).arg(terrain_layer_names[i]));
 		}
 		if(terrain_material_clear_buttons[i])
 		{
-			terrain_material_clear_buttons[i]->setText(tr("Clear"));
+			terrain_material_clear_buttons[i]->setText(QString());
+			terrain_material_clear_buttons[i]->setFixedWidth(30);
+			LucideIconUtils::setButtonIcon(terrain_material_clear_buttons[i], LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("trash-2"), palette().color(QPalette::ButtonText), 16);
 			terrain_material_clear_buttons[i]->setToolTip(tr("Clear colour slot %1 (%2). The source image file is not deleted.").arg(i).arg(terrain_layer_names[i]));
 		}
-		if(terrain_material_scale_spin_boxes[i])
-		{
-			terrain_material_scale_spin_boxes[i]->setToolTip(tr("Controls tiling for World > Surface material textures > colour slot %1 (%2). Higher values repeat it more often; lower values make its pattern larger.").arg(i).arg(terrain_layer_names[i]));
-			terrain_material_scale_labels[i]->setText(tr("Scale"));
-			terrain_material_scale_labels[i]->setToolTip(tr("Controls tiling for World > Surface material textures > colour slot %1 (%2). Higher values repeat it more often; lower values make its pattern larger.").arg(i).arg(terrain_layer_names[i]));
-		}
+		const QString scale_tooltip = tr("Controls texture tiling on the %1 axis for colour slot %2 (%3). Higher values repeat the texture more often; lower values make its pattern larger.");
+		if(terrain_material_scale_x_spin_boxes[i])
+			terrain_material_scale_x_spin_boxes[i]->setToolTip(scale_tooltip.arg(tr("X")).arg(i).arg(terrain_layer_names[i]));
+		if(terrain_material_scale_y_spin_boxes[i])
+			terrain_material_scale_y_spin_boxes[i]->setToolTip(scale_tooltip.arg(tr("Y")).arg(i).arg(terrain_layer_names[i]));
+		if(terrain_material_scale_x_labels[i]) terrain_material_scale_x_labels[i]->setText(tr("X"));
+		if(terrain_material_scale_y_labels[i]) terrain_material_scale_y_labels[i]->setText(tr("Y"));
 		if(terrain_material_preview_labels[i])
 			terrain_material_preview_labels[i]->setToolTip(tr("Preview of the texture assigned to World > Surface material textures > colour slot %1 (%2).").arg(i).arg(terrain_layer_names[i]));
 		updateTerrainMaterialPreview(i);
@@ -2539,7 +3089,10 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 		new_section_widget->roadMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.road_mask_map_URL));
 		new_section_widget->buildingMaskMapURLFileSelectWidget->setFilename(QtUtils::toQString(section_spec.building_mask_map_URL));
 		for(int map_i=0; map_i<5; ++map_i)
+		{
 			SignalBlocker::setValue(new_section_widget->mapScaleSpinBox(map_i), section_spec.map_scales[map_i]);
+			SignalBlocker::setValue(new_section_widget->mapScaleSpinBox(map_i, true), section_spec.map_scale_y[map_i]);
+		}
 		FileSelectWidget* section_map_fields[5] = {
 			new_section_widget->heightmapURLFileSelectWidget, new_section_widget->maskMapURLFileSelectWidget,
 			new_section_widget->treeMaskMapURLFileSelectWidget, new_section_widget->roadMaskMapURLFileSelectWidget,
@@ -2561,6 +3114,7 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 			update_preview();
 			connect(field, &FileSelectWidget::filenameChanged, this, [update_preview](QString&) { update_preview(); });
 			connect(new_section_widget->mapScaleSpinBox(map_i), QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &WorldSettingsWidget::settingsChangedSlot);
+			connect(new_section_widget->mapScaleSpinBox(map_i, true), QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &WorldSettingsWidget::settingsChangedSlot);
 		}
 		SignalBlocker::setChecked(new_section_widget->heightmapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG));
 		SignalBlocker::setChecked(new_section_widget->maskMapEnabledCheckBox, !BitUtils::isBitSet(section_spec.disabled_map_flags, TerrainSpecSection::MASK_MAP_DISABLED_FLAG));
@@ -2587,9 +3141,10 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 	detailColMapURLs3FileSelectWidget->setFilename(QtUtils::toQString(world_settings.terrain_spec.detail_col_map_URLs[3]));
 	for(int i=0; i<4; ++i)
 	{
-		SignalBlocker::setValue(terrain_material_scale_spin_boxes[i], world_settings.terrain_spec.detail_col_map_scales[i]);
+		SignalBlocker::setValue(terrain_material_scale_x_spin_boxes[i], world_settings.terrain_spec.detail_col_map_scales[i]);
+		SignalBlocker::setValue(terrain_material_scale_y_spin_boxes[i], world_settings.terrain_spec.detail_col_map_scale_y[i]);
 		if(main_window && main_window->gui_client.opengl_engine)
-			main_window->gui_client.opengl_engine->setDetailTextureScale(i, world_settings.terrain_spec.detail_col_map_scales[i]);
+			main_window->gui_client.opengl_engine->setDetailTextureScaleXY(i, world_settings.terrain_spec.detail_col_map_scales[i], world_settings.terrain_spec.detail_col_map_scale_y[i]);
 		updateTerrainMaterialPreview(i);
 	}
 	SignalBlocker::setChecked(detailColMapURLs0EnabledCheckBox, !BitUtils::isBitSet(world_settings.terrain_spec.disabled_detail_map_flags, TerrainSpec::DETAIL_COL_MAP_0_DISABLED_FLAG));
@@ -2652,6 +3207,7 @@ void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settin
 	SignalBlocker::setValue(waterFoamScaleWorldRealControl, world_settings.water_surface_settings.foam_scale);
 	SignalBlocker::setValue(waterFoamSpeedWorldRealControl, world_settings.water_surface_settings.foam_speed);
 	SignalBlocker::setValue(waterFoamFadeWorldRealControl, world_settings.water_surface_settings.foam_fade);
+	applyTerrainGridVisibility();
 }
 
 
@@ -2695,7 +3251,10 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 			section.road_mask_map_URL = getURLForFileSelectWidget(section_widget->roadMaskMapURLFileSelectWidget);
 			section.building_mask_map_URL = getURLForFileSelectWidget(section_widget->buildingMaskMapURLFileSelectWidget);
 			for(int map_i=0; map_i<5; ++map_i)
+			{
 				section.map_scales[map_i] = (float)section_widget->mapScaleSpinBox(map_i)->value();
+				section.map_scale_y[map_i] = (float)section_widget->mapScaleSpinBox(map_i, true)->value();
+			}
 			section.disabled_map_flags =
 				(section_widget->heightmapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG) |
 				(section_widget->maskMapEnabledCheckBox->isChecked() ? 0 : TerrainSpecSection::MASK_MAP_DISABLED_FLAG) |
@@ -2712,7 +3271,10 @@ void WorldSettingsWidget::toWorldSettings(WorldSettings& world_settings_out)
 	world_settings_out.terrain_spec.detail_col_map_URLs[2] = getURLForFileSelectWidget(detailColMapURLs2FileSelectWidget);
 	world_settings_out.terrain_spec.detail_col_map_URLs[3] = getURLForFileSelectWidget(detailColMapURLs3FileSelectWidget);
 	for(int i=0; i<4; ++i)
-		world_settings_out.terrain_spec.detail_col_map_scales[i] = (float)terrain_material_scale_spin_boxes[i]->value();
+	{
+		world_settings_out.terrain_spec.detail_col_map_scales[i] = (float)terrain_material_scale_x_spin_boxes[i]->value();
+		world_settings_out.terrain_spec.detail_col_map_scale_y[i] = (float)terrain_material_scale_y_spin_boxes[i]->value();
+	}
 	world_settings_out.terrain_spec.disabled_detail_map_flags =
 		(detailColMapURLs0EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_COL_MAP_0_DISABLED_FLAG) |
 		(detailColMapURLs1EnabledCheckBox->isChecked() ? 0 : TerrainSpec::DETAIL_COL_MAP_1_DISABLED_FLAG) |
@@ -2798,11 +3360,13 @@ void WorldSettingsWidget::updateControlsEditable()
 		if(QPushButton* button = findChild<QPushButton*>(QString("terrainPolyHavenButton%1").arg(i)))
 			button->setEnabled(editable);
 		if(terrain_material_clear_buttons[i]) terrain_material_clear_buttons[i]->setEnabled(editable);
-		if(terrain_material_scale_spin_boxes[i]) terrain_material_scale_spin_boxes[i]->setEnabled(editable);
+		if(terrain_material_scale_x_spin_boxes[i]) terrain_material_scale_x_spin_boxes[i]->setEnabled(editable);
+		if(terrain_material_scale_y_spin_boxes[i]) terrain_material_scale_y_spin_boxes[i]->setEnabled(editable);
 	}
 	terrain_material_clear_all_button->setEnabled(editable);
 	terrain_relief_clear_all_button->setEnabled(editable);
 	terrain_height_clear_button->setEnabled(editable);
+	real_terrain_group->setEnabled(editable);
 
 	detailColMapURLs0FileSelectWidget->setReadOnly(!editable);
 	detailColMapURLs1FileSelectWidget->setReadOnly(!editable);
@@ -2872,7 +3436,11 @@ void WorldSettingsWidget::updateControlsEditable()
 	applyPushButton->setEnabled(editable);
 	if(sculpting_mode_check_box)
 	{
-		sculpting_mode_check_box->setEnabled(editable);
+		const int tab_index = settings_tabs ? settings_tabs->currentIndex() : -1;
+		const bool edit_tab = tab_index >= 3 && tab_index <= 7;
+		if(!edit_tab && sculpting_mode_check_box->isChecked())
+			sculpting_mode_check_box->setChecked(false);
+		sculpting_mode_check_box->setEnabled(editable && edit_tab);
 		setSculptingControlsEnabled(editable && sculpting_mode_check_box->isChecked());
 	}
 }
@@ -2880,7 +3448,29 @@ void WorldSettingsWidget::updateControlsEditable()
 
 void WorldSettingsWidget::newTerrainSectionPushButtonClicked()
 {
-	TerrainSpecSectionWidget* new_section_widget = new TerrainSpecSectionWidget(this);
+	TerrainSpecSectionWidget* new_section_widget = new TerrainSpecSectionWidget(terrainSectionScrollAreaWidgetContents);
+	QSet<QPair<int, int>> occupied_coordinates;
+	for(int i=0; i<terrainSectionScrollAreaWidgetContents->layout()->count(); ++i)
+	{
+		if(TerrainSpecSectionWidget* section = dynamic_cast<TerrainSpecSectionWidget*>(terrainSectionScrollAreaWidgetContents->layout()->itemAt(i)->widget()))
+			occupied_coordinates.insert(qMakePair(section->xSpinBox->value(), section->ySpinBox->value()));
+	}
+	int section_x = 0;
+	int section_y = 0;
+	while(occupied_coordinates.contains(qMakePair(section_x, section_y)) && section_x < 100)
+		++section_x;
+	if(occupied_coordinates.contains(qMakePair(section_x, section_y)))
+	{
+		section_x = 0;
+		while(occupied_coordinates.contains(qMakePair(section_x, section_y)) && section_y < 100)
+		{
+			section_x = 0;
+			++section_y;
+		}
+	}
+	new_section_widget->xSpinBox->setValue(section_x);
+	new_section_widget->ySpinBox->setValue(section_y);
+	new_section_widget->updateControlsEditable(main_window && main_window->connectedToUsersWorldOrGodUser());
 
 	terrainSectionScrollAreaWidgetContents->layout()->addWidget(new_section_widget);
 
@@ -2891,6 +3481,26 @@ void WorldSettingsWidget::newTerrainSectionPushButtonClicked()
 	connect(new_section_widget->treeMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(new_section_widget->roadMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
 	connect(new_section_widget->buildingMaskMapEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(settingsChangedSlot()));
+	FileSelectWidget* section_map_fields[5] = {
+		new_section_widget->heightmapURLFileSelectWidget, new_section_widget->maskMapURLFileSelectWidget,
+		new_section_widget->treeMaskMapURLFileSelectWidget, new_section_widget->roadMaskMapURLFileSelectWidget,
+		new_section_widget->buildingMaskMapURLFileSelectWidget
+	};
+	for(int map_i=0; map_i<5; ++map_i)
+	{
+		FileSelectWidget* field = section_map_fields[map_i];
+		auto update_preview = [this, new_section_widget, field, map_i]()
+		{
+			QString image_path = field->filename();
+			if(!image_path.isEmpty() && !QFile::exists(image_path) && main_window && main_window->gui_client.resource_manager)
+				image_path = QtUtils::toQString(main_window->gui_client.resource_manager->pathForURL(toURLString(QtUtils::toStdString(image_path))));
+			new_section_widget->setMapPreviewPath(map_i, image_path);
+		};
+		update_preview();
+		connect(field, &FileSelectWidget::filenameChanged, this, [update_preview](QString&) { update_preview(); });
+		connect(new_section_widget->mapScaleSpinBox(map_i), QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &WorldSettingsWidget::settingsChangedSlot);
+		connect(new_section_widget->mapScaleSpinBox(map_i, true), QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &WorldSettingsWidget::settingsChangedSlot);
+	}
 }
 
 

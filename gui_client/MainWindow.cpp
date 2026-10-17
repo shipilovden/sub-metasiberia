@@ -20,6 +20,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QSemaphore>
 #include <QtCore/QBuffer>
 #include <QtCore/QEventLoop>
+#include <QtNetwork/QTcpSocket>
 #include <atomic>
 #include "CreateObjectsDialog.h"
 #include "webcam/WebcamWindow.h"
@@ -11588,6 +11589,7 @@ void MainWindow::startMCPClientServerIfEnabled()
 		const auto pending=std::make_shared<PendingTerrain>();
 		QMetaObject::invokeMethod(this, [this, pending, tool, args, render_server, render_world]() {
 			if(pending->cancelled.load()) return;
+			bool async_started = false;
 			try
 			{
 				if(!mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
@@ -11597,12 +11599,34 @@ void MainWindow::startMCPClientServerIfEnabled()
 				if(tool == "inspect_terrain")
 				{
 					QJsonArray sections;
+					double selection_north=0, selection_south=0, selection_west=0, selection_east=0;
+					int target_section_x=0, target_section_y=0;
+					QVector<QPointF> selection_polygon;
+					const bool has_real_world_selection = ui->worldSettingsWidget->getMCPRealTerrainSelection(
+						selection_north, selection_south, selection_west, selection_east, target_section_x, target_section_y, selection_polygon);
+					QJsonObject real_world_selection{{"active",has_real_world_selection},
+						{"target_section_x",target_section_x},{"target_section_y",target_section_y}};
+					if(has_real_world_selection)
+					{
+						QJsonArray polygon;
+						for(const QPointF& point : selection_polygon) polygon.append(QJsonArray{point.x(),point.y()});
+						real_world_selection.insert("bounds_wgs84",QJsonObject{{"north",selection_north},{"south",selection_south},
+							{"west",selection_west},{"east",selection_east}});
+						real_world_selection.insert("polygon_wgs84_lon_lat",polygon);
+					}
 					for(const TerrainSpecSection& section : terrain.section_specs)
 					{
 						const double x0=(section.x-0.5)*terrain.terrain_section_width_m, y0=(section.y-0.5)*terrain.terrain_section_width_m;
 						sections.append(QJsonObject{{"section_x",section.x},{"section_y",section.y},
 							{"bounds_xy_m",QJsonArray{x0,y0,x0+terrain.terrain_section_width_m,y0+terrain.terrain_section_width_m}},
 							{"heightmap_loaded",gui_client.terrain_system.nonNull() && gui_client.terrain_system->isHeightmapSectionLoaded(section.x,section.y)},
+							{"heightmap_scale",section.map_scales[0]},{"material_mask_scale",section.map_scales[1]},{"tree_mask_scale",section.map_scales[2]},
+							{"road_mask_scale",section.map_scales[3]},{"building_mask_scale",section.map_scales[4]},
+							{"heightmap_scale_x",section.map_scales[0]},{"heightmap_scale_y",section.map_scale_y[0]},
+							{"material_mask_scale_x",section.map_scales[1]},{"material_mask_scale_y",section.map_scale_y[1]},
+							{"tree_mask_scale_x",section.map_scales[2]},{"tree_mask_scale_y",section.map_scale_y[2]},
+							{"road_mask_scale_x",section.map_scales[3]},{"road_mask_scale_y",section.map_scale_y[3]},
+							{"building_mask_scale_x",section.map_scales[4]},{"building_mask_scale_y",section.map_scale_y[4]},
 							{"heightmap_exr_present",!section.heightmap_URL.empty()}, {"tree_mask_present",!section.tree_mask_map_URL.empty()},
 							{"road_mask_present",!section.road_mask_map_URL.empty()}, {"building_mask_present",!section.building_mask_map_URL.empty()},
 							{"terrain_mask_present",!section.mask_map_URL.empty()}, {"disabled_map_flags",(int)section.disabled_map_flags}});
@@ -11610,7 +11634,7 @@ void MainWindow::startMCPClientServerIfEnabled()
 					pending->result=QJsonObject{{"terrain_enabled",!terrain.section_specs.empty()}, {"section_width_m",terrain.terrain_section_width_m},
 						{"height_scale",terrain.terrain_height_scale}, {"base_height_m",terrain.default_terrain_z}, {"water_z_m",terrain.water_z},
 						{"heightmap_layer","EXR heightmap only; raw height values are multiplied by height_scale and offset by base_height_m"},
-						{"other_layers_preserved",true}, {"sections",sections}};
+						{"other_layers_preserved",true}, {"real_world_import_selection",real_world_selection}, {"sections",sections}};
 				}
 				else if(tool == "smooth_terrain")
 				{
@@ -11642,14 +11666,245 @@ void MainWindow::startMCPClientServerIfEnabled()
 						{"loaded_sections_edited",loaded_sections},{"unloaded_or_missing_sections_skipped",skipped_sections},
 						{"preserved_layers",QJsonArray{"terrain mask","tree mask","road mask","building mask","detail textures"}}};
 				}
+				else if(tool == "sculpt_terrain")
+				{
+					if(!gui_client.connectedToUsersWorldOrGodUser()) throw std::runtime_error("Terrain editing requires world owner or god permissions.");
+					if(gui_client.terrain_system.isNull()) throw std::runtime_error("Terrain sections are not loaded in the client. Move near the target area and retry.");
+					const QString requested_tool = args.value("tool").toString().trimmed().toLower();
+					static const std::pair<const char*, TerrainSculptTool> tools[] = {
+						{"ridge",TerrainSculptTool_Ridge},{"raise",TerrainSculptTool_Raise},{"lower",TerrainSculptTool_Lower},
+						{"soft_raise",TerrainSculptTool_SoftRaise},{"hard_raise",TerrainSculptTool_HardRaise},
+						{"soft_lower",TerrainSculptTool_SoftLower},{"hard_lower",TerrainSculptTool_HardLower},
+						{"pinch",TerrainSculptTool_Pinch},{"inflate",TerrainSculptTool_Inflate},{"deflate",TerrainSculptTool_Deflate},
+						{"clay",TerrainSculptTool_Clay},{"blob",TerrainSculptTool_Blob},{"amplify",TerrainSculptTool_Amplify},
+						{"dampen",TerrainSculptTool_Dampen},{"smooth",TerrainSculptTool_Smooth},{"polish",TerrainSculptTool_Polish},
+						{"sharpen",TerrainSculptTool_Sharpen},{"flatten",TerrainSculptTool_Flatten},{"plateau",TerrainSculptTool_Plateau},
+						{"ramp",TerrainSculptTool_Ramp},{"cliff",TerrainSculptTool_Cliff},{"wall",TerrainSculptTool_Wall},
+						{"basin",TerrainSculptTool_Basin},{"gorge",TerrainSculptTool_Gorge},{"berm",TerrainSculptTool_Berm},
+						{"saddle",TerrainSculptTool_Saddle},{"notch",TerrainSculptTool_Notch},{"lake",TerrainSculptTool_Lake},
+						{"fill",TerrainSculptTool_Fill},{"lowland",TerrainSculptTool_Lowland},{"coast",TerrainSculptTool_Coast},
+						{"shelf",TerrainSculptTool_Shelf},{"cove",TerrainSculptTool_Cove},{"spit",TerrainSculptTool_Spit},
+						{"river",TerrainSculptTool_River},{"channel",TerrainSculptTool_Channel},{"delta",TerrainSculptTool_Delta},
+						{"sea",TerrainSculptTool_Sea},{"stamp_volcano",TerrainSculptTool_StampVolcano},
+						{"stamp_crater",TerrainSculptTool_StampCrater},{"stamp_hill",TerrainSculptTool_StampHill},
+						{"stamp_cone",TerrainSculptTool_StampCone},{"stamp_mesa",TerrainSculptTool_StampMesa},
+						{"stamp_caldera",TerrainSculptTool_StampCaldera},{"stamp_ridge",TerrainSculptTool_StampRidge},
+						{"stamp_spire",TerrainSculptTool_StampSpire},{"stamp_pyramid",TerrainSculptTool_StampPyramid},
+						{"stamp_bowl",TerrainSculptTool_StampBowl},{"stamp_arch",TerrainSculptTool_StampArch},
+						{"stamp_atoll",TerrainSculptTool_StampAtoll},{"stamp_twin",TerrainSculptTool_StampTwin},
+						{"stamp_dunes",TerrainSculptTool_StampDunes},{"stamp_tor",TerrainSculptTool_StampTor},
+						{"stamp_ramp",TerrainSculptTool_StampRamp},{"island_classic",TerrainSculptTool_IslandClassic},
+						{"island_high",TerrainSculptTool_IslandHigh},{"island_low",TerrainSculptTool_IslandLow},
+						{"island_barrier",TerrainSculptTool_IslandBarrier},{"island_twin",TerrainSculptTool_IslandTwin},
+						{"island_caldera",TerrainSculptTool_IslandCaldera},{"island_mesa",TerrainSculptTool_IslandMesa},
+						{"island_rias",TerrainSculptTool_IslandRias},{"island_spit",TerrainSculptTool_IslandSpit},
+						{"island_arch",TerrainSculptTool_IslandArch},{"island_chain",TerrainSculptTool_IslandChain},
+						{"island_reef",TerrainSculptTool_IslandReef},{"island_ring",TerrainSculptTool_IslandRing},
+						{"island_crescent",TerrainSculptTool_IslandCrescent},{"island_star",TerrainSculptTool_IslandStar},
+						{"island_spiral",TerrainSculptTool_IslandSpiral},{"island_serpent",TerrainSculptTool_IslandSerpent},
+						{"island_shards",TerrainSculptTool_IslandShards},{"island_crystal",TerrainSculptTool_IslandCrystal},
+						{"island_plateau",TerrainSculptTool_IslandPlateau},{"island_mushroom",TerrainSculptTool_IslandMushroom},
+						{"island_heart",TerrainSculptTool_IslandHeart},{"island_needle",TerrainSculptTool_IslandNeedle},
+						{"island_lagoon_chain",TerrainSculptTool_IslandLagoonChain}
+					};
+					bool found_tool = false;
+					TerrainSculptTool sculpt_tool = TerrainSculptTool_Ridge;
+					for(const auto& entry : tools) if(requested_tool == QLatin1String(entry.first)) { sculpt_tool = entry.second; found_tool = true; break; }
+					if(!found_tool) throw std::runtime_error("Unknown native terrain sculpt tool. Use one of the tool names listed in the sculpt_terrain description.");
+					const QJsonArray points = args.value("points").toArray();
+					const double radius = args.value("radius_m").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double strength = args.value("strength_m").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double target = args.value("target_height_m").toDouble(0.0);
+					const double sea_floor = args.value("island_sea_floor_m").toDouble(-85.0);
+					const double land_base = args.value("island_land_base_m").toDouble(8.0);
+					const double peak = args.value("island_peak_m").toDouble(282.0);
+					const int seed = args.value("island_seed").toInt(42);
+					if(points.isEmpty() || points.size()>64 || !std::isfinite(radius) || radius<0.25 || radius>terrain.terrain_section_width_m*0.5 ||
+						!std::isfinite(strength) || strength<=0 || strength>1000 || !std::isfinite(target) ||
+						!std::isfinite(sea_floor) || !std::isfinite(land_base) || !std::isfinite(peak))
+						throw std::runtime_error("Invalid sculpt parameters. Use 1..64 points, radius 0.25 m..half a section, finite heights and strength 0..1000 m.");
+					std::vector<Vec3d> world_points;
+					world_points.reserve(points.size());
+					for(const QJsonValue& value : points)
+					{
+						if(!value.isObject()) throw std::runtime_error("Every sculpt point must contain numeric x and y coordinates.");
+						const QJsonObject p=value.toObject();
+						const double x=p.value("x").toDouble(std::numeric_limits<double>::quiet_NaN());
+						const double y=p.value("y").toDouble(std::numeric_limits<double>::quiet_NaN());
+						if(!std::isfinite(x)||!std::isfinite(y)) throw std::runtime_error("Every sculpt point must contain finite x and y coordinates in metres.");
+						const int x0=Maths::floorToInt((x-radius)/terrain.terrain_section_width_m+0.5), x1=Maths::floorToInt((x+radius)/terrain.terrain_section_width_m+0.5);
+						const int y0=Maths::floorToInt((y-radius)/terrain.terrain_section_width_m+0.5), y1=Maths::floorToInt((y+radius)/terrain.terrain_section_width_m+0.5);
+						for(int sy=y0; sy<=y1; ++sy) for(int sx=x0; sx<=x1; ++sx)
+							if(!gui_client.terrain_system->isHeightmapSectionLoaded(sx,sy))
+								throw std::runtime_error("A brush intersects an unloaded terrain section; no changes were made. Run inspect_terrain and choose fully loaded sections, or move the camera nearby first.");
+						world_points.push_back(Vec3d(x,y,0));
+					}
+					gui_client.terrain_system->beginSculptStroke();
+					bool changed=false;
+					for(size_t i=0;i<world_points.size();++i)
+						changed = gui_client.terrain_system->sculptAtWorld(world_points[i], i ? &world_points[i-1] : NULL, sculpt_tool,
+							(float)radius,(float)strength,(float)target,(float)sea_floor,(float)land_base,(float)peak,seed) || changed;
+					gui_client.terrain_system->endSculptStroke();
+					if(!changed) throw std::runtime_error("The sculpt operation did not change any loaded heightmap samples. Check the brush position, strength and tool-specific parameters.");
+					if(!gui_client.saveTerrainSculptingChanges()) throw std::runtime_error("Terrain was changed locally, but saving its EXR resource failed. Inspect the client log before retrying.");
+					pending->result=QJsonObject{{"changed",true},{"tool",requested_tool},{"stamps",points.size()},{"radius_m",radius},{"strength_m",strength},
+						{"saved","New EXR heightmap resource uploaded and world settings update queued."},{"undo_steps",1},
+						{"preserved_layers",QJsonArray{"terrain mask","tree mask","road mask","building mask","detail textures"}}};
+				}
+				else if(tool == "paint_terrain_map")
+				{
+					if(!gui_client.connectedToUsersWorldOrGodUser()) throw std::runtime_error("Terrain editing requires world owner or god permissions.");
+					if(gui_client.terrain_system.isNull()) throw std::runtime_error("Terrain sections are not loaded in the client. Move near the target area and retry.");
+					const QString layer=args.value("layer").toString();
+					const QString action=args.value("action").toString();
+					if(!args.value("center").isObject()) throw std::runtime_error("center {x,y} is required in world metres.");
+					const QJsonObject c=args.value("center").toObject();
+					const double x=c.value("x").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double y=c.value("y").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double radius=args.value("radius_m").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double strength=args.value("strength").toDouble(std::numeric_limits<double>::quiet_NaN());
+					const bool erase=action=="restore";
+					if((action!="paint" && !erase) || !std::isfinite(x)||!std::isfinite(y)||!std::isfinite(radius)||radius<0.25||radius>terrain.terrain_section_width_m*0.5||
+						!std::isfinite(strength)||strength<=0||strength>1) throw std::runtime_error("Invalid mask brush parameters.");
+					const bool tree=layer=="trees";
+					int channel=-1;
+					if(layer=="rock") channel=0; else if(layer=="ground") channel=1; else if(layer=="vegetation") channel=2; else if(layer=="overlay") channel=3;
+					else if(!tree) throw std::runtime_error("layer must be rock, ground, vegetation, overlay or trees.");
+					const int x0=Maths::floorToInt((x-radius)/terrain.terrain_section_width_m+0.5), x1=Maths::floorToInt((x+radius)/terrain.terrain_section_width_m+0.5);
+					const int y0=Maths::floorToInt((y-radius)/terrain.terrain_section_width_m+0.5), y1=Maths::floorToInt((y+radius)/terrain.terrain_section_width_m+0.5);
+					for(int sy=y0; sy<=y1; ++sy) for(int sx=x0; sx<=x1; ++sx)
+						if(!gui_client.terrain_system->isHeightmapSectionLoaded(sx,sy))
+							throw std::runtime_error("The mask brush intersects an unloaded terrain section; no changes were made. Run inspect_terrain and load the target area first.");
+					const bool allow_trees=args.value("allow_trees").toBool(true);
+					const bool changed=gui_client.terrain_system->paintTerrainMapAtWorld(Vec3d(x,y,0),(float)radius,(float)strength,tree?(allow_trees?0:1):channel,tree,erase);
+					if(!changed) throw std::runtime_error("The mask brush did not change any loaded terrain pixels.");
+					if(!gui_client.saveTerrainSculptingChanges()) throw std::runtime_error("Terrain mask changed locally, but saving its resource failed. Inspect the client log before retrying.");
+					pending->result=QJsonObject{{"changed",true},{"layer",layer},{"action",action},{"center",c},{"radius_m",radius},{"strength",strength},
+						{"saved","Updated terrain mask resource uploaded and world settings update queued."},{"undo_steps",1}};
+				}
+				else if(tool == "import_terrain_from_map")
+				{
+					const bool has_bounds=args.contains("bounds");
+					const bool has_section_x=args.contains("section_x"), has_section_y=args.contains("section_y");
+					if(has_bounds && !args.value("bounds").isObject()) throw std::runtime_error("bounds must contain north, south, west and east in WGS84 degrees.");
+					if(has_section_x != has_section_y) throw std::runtime_error("Provide both section_x and section_y, or omit both to use the currently selected terrain section.");
+					int current_x=0, current_y=0;
+					double ignored_north=0, ignored_south=0, ignored_west=0, ignored_east=0;
+					QVector<QPointF> ignored_polygon;
+					const bool has_selection=ui->worldSettingsWidget->getMCPRealTerrainSelection(
+						ignored_north,ignored_south,ignored_west,ignored_east,current_x,current_y,ignored_polygon);
+					const int section_x=has_section_x ? args.value("section_x").toInt(std::numeric_limits<int>::min()) : current_x;
+					const int section_y=has_section_y ? args.value("section_y").toInt(std::numeric_limits<int>::min()) : current_y;
+					QString error;
+					const auto completion=[pending,section_x,section_y](bool ok, const QString& message) {
+						if(ok) pending->result=QJsonObject{{"imported",true},{"section_x",section_x},{"section_y",section_y},{"status",message}};
+						else pending->error=message.toStdString();
+						pending->done.release();
+					};
+					bool started=false;
+					if(has_bounds)
+					{
+						const QJsonObject bounds=args.value("bounds").toObject();
+						started=ui->worldSettingsWidget->startMCPRealTerrainImport(
+							bounds.value("north").toDouble(std::numeric_limits<double>::quiet_NaN()),
+							bounds.value("south").toDouble(std::numeric_limits<double>::quiet_NaN()),
+							bounds.value("west").toDouble(std::numeric_limits<double>::quiet_NaN()),
+							bounds.value("east").toDouble(std::numeric_limits<double>::quiet_NaN()), section_x, section_y, completion, error);
+					}
+					else
+					{
+						if(!has_selection) throw std::runtime_error("No highlighted map area. Select a rectangle or freehand contour in World Settings > Sculpting > Real-world terrain, then retry; or provide explicit bounds.");
+						started=ui->worldSettingsWidget->startMCPRealTerrainImportFromCurrentSelection(section_x,section_y,has_section_x,completion,error);
+					}
+					if(!started) throw std::runtime_error(error.toStdString());
+					async_started=true;
+				}
+				else if(tool == "configure_terrain")
+				{
+					if(!gui_client.connectedToUsersWorldOrGodUser()) throw std::runtime_error("Terrain configuration requires world owner or god permissions.");
+					WorldSettings updated;
+					updated.copyNetworkStateFrom(gui_client.connected_world_settings);
+					TerrainSpec& spec=updated.terrain_spec;
+					bool changed=false;
+					auto setFiniteFloat = [&args, &changed](const char* key, float& destination, double minimum, double maximum)
+					{
+						if(!args.contains(QLatin1String(key))) return;
+						const double value=args.value(QLatin1String(key)).toDouble(std::numeric_limits<double>::quiet_NaN());
+						if(!std::isfinite(value)||value<minimum||value>maximum)
+							throw std::runtime_error(std::string("Invalid terrain setting: ")+key);
+						destination=(float)value;
+						changed=true;
+					};
+					setFiniteFloat("section_width_m",spec.terrain_section_width_m,8.0,1000000.0);
+					setFiniteFloat("base_height_m",spec.default_terrain_z,0.0,99999.0);
+					setFiniteFloat("height_scale",spec.terrain_height_scale,0.0,10000.0);
+					if(args.contains("exact_heightmap"))
+					{
+						if(!args.value("exact_heightmap").isBool()) throw std::runtime_error("exact_heightmap must be a boolean.");
+						if(args.value("exact_heightmap").toBool()) spec.flags |= TerrainSpec::EXACT_HEIGHTMAP_FLAG;
+						else spec.flags &= ~TerrainSpec::EXACT_HEIGHTMAP_FLAG;
+						changed=true;
+					}
+					const QJsonArray sections=args.value("sections").toArray();
+					if(sections.size()>256) throw std::runtime_error("At most 256 terrain sections can be configured in one call.");
+					const char* scale_keys[5]={"heightmap_scale","material_mask_scale","tree_mask_scale","road_mask_scale","building_mask_scale"};
+					const char* scale_x_keys[5]={"heightmap_scale_x","material_mask_scale_x","tree_mask_scale_x","road_mask_scale_x","building_mask_scale_x"};
+					const char* scale_y_keys[5]={"heightmap_scale_y","material_mask_scale_y","tree_mask_scale_y","road_mask_scale_y","building_mask_scale_y"};
+					const uint32 map_flags[5]={TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG,TerrainSpecSection::MASK_MAP_DISABLED_FLAG,
+						TerrainSpecSection::TREE_MASK_MAP_DISABLED_FLAG,TerrainSpecSection::ROAD_MASK_MAP_DISABLED_FLAG,TerrainSpecSection::BUILDING_MASK_MAP_DISABLED_FLAG};
+					const char* enabled_keys[5]={"enable_heightmap","enable_material_mask","enable_tree_mask","enable_road_mask","enable_building_mask"};
+					for(const QJsonValue& value : sections)
+					{
+						if(!value.isObject()) throw std::runtime_error("Every sections[] entry must be an object.");
+						const QJsonObject section_args=value.toObject();
+						const int sx=section_args.value("section_x").toInt(std::numeric_limits<int>::min());
+						const int sy=section_args.value("section_y").toInt(std::numeric_limits<int>::min());
+						auto section_it=std::find_if(spec.section_specs.begin(),spec.section_specs.end(),[sx,sy](const TerrainSpecSection& item){return item.x==sx&&item.y==sy;});
+						if(section_it==spec.section_specs.end()) throw std::runtime_error("configure_terrain only edits existing sections; import or create the section first.");
+						for(int i=0;i<5;++i)
+						{
+							if(section_args.contains(QLatin1String(scale_keys[i])))
+							{
+								const double scale=section_args.value(QLatin1String(scale_keys[i])).toDouble(std::numeric_limits<double>::quiet_NaN());
+								if(!std::isfinite(scale)||scale<0.01||scale>100.0) throw std::runtime_error(std::string("Invalid terrain map scale: ")+scale_keys[i]);
+								section_it->map_scales[i]=(float)scale;
+								section_it->map_scale_y[i]=(float)scale;
+								changed=true;
+							}
+							const char* axis_keys[2]={scale_x_keys[i],scale_y_keys[i]};
+							float* axis_scales[2]={&section_it->map_scales[i],&section_it->map_scale_y[i]};
+							for(int axis=0; axis<2; ++axis)
+								if(section_args.contains(QLatin1String(axis_keys[axis])))
+								{
+									const double scale=section_args.value(QLatin1String(axis_keys[axis])).toDouble(std::numeric_limits<double>::quiet_NaN());
+									if(!std::isfinite(scale)||scale<0.01||scale>100.0) throw std::runtime_error(std::string("Invalid terrain map scale: ")+axis_keys[axis]);
+									*axis_scales[axis]=(float)scale;
+									changed=true;
+								}
+							if(section_args.contains(QLatin1String(enabled_keys[i])))
+							{
+								if(!section_args.value(QLatin1String(enabled_keys[i])).isBool()) throw std::runtime_error(std::string(enabled_keys[i])+" must be a boolean.");
+								if(section_args.value(QLatin1String(enabled_keys[i])).toBool()) section_it->disabled_map_flags &= ~map_flags[i];
+								else section_it->disabled_map_flags |= map_flags[i];
+								changed=true;
+							}
+						}
+					}
+					if(!changed) throw std::runtime_error("Provide at least one terrain setting to change.");
+					ui->worldSettingsWidget->setFromWorldSettings(updated);
+					gui_client.worldSettingsChangedFromUI(updated);
+					pending->result=QJsonObject{{"changed",true},{"section_width_m",spec.terrain_section_width_m},{"base_height_m",spec.default_terrain_z},
+						{"height_scale",spec.terrain_height_scale},{"exact_heightmap",BitUtils::isBitSet(spec.flags,TerrainSpec::EXACT_HEIGHTMAP_FLAG)},
+						{"configured_sections",sections.size()},{"saved","World settings update queued."}};
+				}
 				else
 					throw std::runtime_error("Unknown terrain tool.");
 			}
 			catch(const std::exception& e) { pending->error=e.what(); }
 			catch(...) { pending->error="Terrain operation failed."; }
-			pending->done.release();
+			if(!async_started) pending->done.release();
 		}, Qt::QueuedConnection);
-		if(!pending->done.tryAcquire(1,15000)) { pending->cancelled.store(true); throw glare::Exception("Terrain operation timed out while the client was busy."); }
+		if(!pending->done.tryAcquire(1,600000)) { pending->cancelled.store(true); throw glare::Exception("Terrain operation timed out. A map import may still be running; check its progress in World Settings before retrying."); }
 		if(!pending->error.empty()) throw glare::Exception(pending->error);
 		return pending->result;
 	});
@@ -11666,6 +11921,19 @@ void MainWindow::startMCPClientServerIfEnabled()
 	try
 	{
 		mcp_web_thread_manager.addThread(new web::WebListenerThread(port, IPAddress("127.0.0.1"), shared_handler.getPointer(), NULL));
+		// WebListenerThread binds asynchronously. Do not launch Codex until the
+		// local endpoint accepts connections, or its initial MCP handshake can
+		// race the listener startup and fail with connection refused.
+		QTcpSocket readiness_socket;
+		readiness_socket.connectToHost(QStringLiteral("127.0.0.1"), (quint16)port);
+		if(!readiness_socket.waitForConnected(2000))
+		{
+			const QString error = readiness_socket.errorString();
+			readiness_socket.abort();
+			mcp_web_thread_manager.killThreadsBlocking();
+			throw glare::Exception("Local MCP endpoint did not start listening: " + QtUtils::toStdString(error));
+		}
+		readiness_socket.disconnectFromHost();
 		mcp_client_server_running = true;
 		mcp_server_hostname = gui_client.server_hostname;
 		mcp_worldname = gui_client.server_worldname;

@@ -27,7 +27,7 @@ public:
 	void retranslateMapClearButtons();
 	void clearHeightMap();
 	void setMapPreviewPath(int index, const QString& path);
-	QDoubleSpinBox* mapScaleSpinBox(int index) const;
+	QDoubleSpinBox* mapScaleSpinBox(int index, bool y_axis = false) const;
 signals:
 	void removeButtonClickedSignal();
 	void mapClearedSignal();
@@ -35,5 +35,7 @@ private:
 	QPushButton* map_clear_buttons[5];
 	QLabel* map_preview_labels[5];
 	QLabel* map_scale_labels[5];
+	QLabel* map_scale_y_labels[5];
 	QDoubleSpinBox* map_scale_spin_boxes[5];
+	QDoubleSpinBox* map_scale_y_spin_boxes[5];
 };

@@ -133,7 +133,10 @@ WorldSettings::WorldSettings()
 	terrain_spec.disabled_detail_map_flags = 0;
 	terrain_spec.flags = 0;
 	for(int i=0; i<4; ++i)
+	{
 		terrain_spec.detail_col_map_scales[i] = 1.f;
+		terrain_spec.detail_col_map_scale_y[i] = 1.f;
+	}
 
 	sun_phi = 1.f;
 	sun_theta = Maths::pi<float>() / 4;
@@ -152,14 +155,20 @@ TerrainSpecSection::TerrainSpecSection()
 	x(0), y(0), disabled_map_flags(0)
 {
 	for(int i=0; i<5; ++i)
+	{
 		map_scales[i] = 1.f;
+		map_scale_y[i] = 1.f;
+	}
 }
 
 
 TerrainSpec::TerrainSpec()
 {
 	for(int i=0; i<4; ++i)
+	{
 		detail_col_map_scales[i] = 1.f;
+		detail_col_map_scale_y[i] = 1.f;
+	}
 }
 
 
@@ -205,7 +214,7 @@ void WorldSettings::getDependencyURLSet(std::set<DependencyURL>& URLs_out)
 
 // v14 marks the new presentation defaults.  The payload is unchanged; the
 // version lets readers distinguish old v13 defaults from explicit settings.
-static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 17;
+static const uint32 WORLDSETTINGS_SERIALISATION_VERSION = 19;
 
 
 void WorldSettings::writeToStream(OutStream& stream) const
@@ -328,6 +337,15 @@ void WorldSettings::writeToStream(OutStream& stream) const
 	for(size_t i=0; i<terrain_spec.section_specs.size(); ++i)
 		for(int map_i=0; map_i<5; ++map_i)
 			buffer.writeFloat(terrain_spec.section_specs[i].map_scales[map_i]);
+
+	// New in v18: independent Y tiling for the four terrain colour layers.
+	for(int i=0; i<4; ++i)
+		buffer.writeFloat(terrain_spec.detail_col_map_scale_y[i]);
+
+	// New in v19: independent Y tiling for each terrain section map.
+	for(size_t i=0; i<terrain_spec.section_specs.size(); ++i)
+		for(int map_i=0; map_i<5; ++map_i)
+			buffer.writeFloat(terrain_spec.section_specs[i].map_scale_y[map_i]);
 
 	// Go back and write size of buffer to buffer size field
 	const uint32 buffer_size = (uint32)buffer.buf.size();
@@ -576,6 +594,8 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 	if(version >= 16 && buffer_stream.buf.size() - buffer_stream.getReadIndex() >= sizeof(float) * 4)
 		for(int i=0; i<4; ++i)
 			settings.terrain_spec.detail_col_map_scales[i] = myClamp(buffer_stream.readFloat(), 0.01f, 100.f);
+	for(int i=0; i<4; ++i)
+		settings.terrain_spec.detail_col_map_scale_y[i] = settings.terrain_spec.detail_col_map_scales[i];
 
 	// v17 appends five section map scales after the v16 material scales.
 	if(version >= 17)
@@ -585,6 +605,20 @@ void readWorldSettingsFromStream(InStream& stream_, WorldSettings& settings)
 			for(uint32 section_i=0; section_i<num_section_specs; ++section_i)
 				for(int map_i=0; map_i<5; ++map_i)
 					settings.terrain_spec.section_specs[section_i].map_scales[map_i] = myClamp(buffer_stream.readFloat(), 0.01f, 100.f);
+	}
+	for(size_t section_i=0; section_i<settings.terrain_spec.section_specs.size(); ++section_i)
+		for(int map_i=0; map_i<5; ++map_i)
+			settings.terrain_spec.section_specs[section_i].map_scale_y[map_i] = settings.terrain_spec.section_specs[section_i].map_scales[map_i];
+	if(version >= 18 && buffer_stream.buf.size() - buffer_stream.getReadIndex() >= sizeof(float) * 4)
+		for(int i=0; i<4; ++i)
+			settings.terrain_spec.detail_col_map_scale_y[i] = myClamp(buffer_stream.readFloat(), 0.01f, 100.f);
+	if(version >= 19)
+	{
+		const size_t section_scale_y_payload_size = (size_t)num_section_specs * sizeof(float) * 5;
+		if(buffer_stream.buf.size() - buffer_stream.getReadIndex() >= section_scale_y_payload_size)
+			for(uint32 section_i=0; section_i<num_section_specs; ++section_i)
+				for(int map_i=0; map_i<5; ++map_i)
+					settings.terrain_spec.section_specs[section_i].map_scale_y[map_i] = myClamp(buffer_stream.readFloat(), 0.01f, 100.f);
 	}
 
 	// We effectively skip any remaining data we have not processed by discarding buffer_stream.
@@ -603,6 +637,10 @@ bool TerrainSpec::operator==(const TerrainSpec& other) const
 		detail_col_map_scales[1] == other.detail_col_map_scales[1] &&
 		detail_col_map_scales[2] == other.detail_col_map_scales[2] &&
 		detail_col_map_scales[3] == other.detail_col_map_scales[3] &&
+		detail_col_map_scale_y[0] == other.detail_col_map_scale_y[0] &&
+		detail_col_map_scale_y[1] == other.detail_col_map_scale_y[1] &&
+		detail_col_map_scale_y[2] == other.detail_col_map_scale_y[2] &&
+		detail_col_map_scale_y[3] == other.detail_col_map_scale_y[3] &&
 		detail_height_map_URLs[0] == other.detail_height_map_URLs[0] &&
 		detail_height_map_URLs[1] == other.detail_height_map_URLs[1] &&
 		detail_height_map_URLs[2] == other.detail_height_map_URLs[2] &&
@@ -621,8 +659,9 @@ bool TerrainSpecSection::operator==(const TerrainSpecSection& other) const
 	return
 		x == other.x &&
 		y == other.y &&
-		map_scales[0] == other.map_scales[0] && map_scales[1] == other.map_scales[1] &&
+		map_scales[0] == other.map_scales[0] && map_scale_y[0] == other.map_scale_y[0] && map_scales[1] == other.map_scales[1] && map_scale_y[1] == other.map_scale_y[1] &&
 		map_scales[2] == other.map_scales[2] && map_scales[3] == other.map_scales[3] && map_scales[4] == other.map_scales[4] &&
+		map_scale_y[2] == other.map_scale_y[2] && map_scale_y[3] == other.map_scale_y[3] && map_scale_y[4] == other.map_scale_y[4] &&
 		heightmap_URL == other.heightmap_URL &&
 		mask_map_URL == other.mask_map_URL &&
 		tree_mask_map_URL == other.tree_mask_map_URL &&
