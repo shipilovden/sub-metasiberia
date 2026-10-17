@@ -42,7 +42,7 @@ struct TerrainPathSpecSection
 {
 	TerrainPathSpecSection()
 	{
-		for(int i=0; i<5; ++i) map_scales[i] = 1.f;
+		for(int i=0; i<5; ++i) { map_scales[i] = 1.f; map_scale_y[i] = 1.f; }
 	}
 
 	int x, y; // section coordinates.  (0,0) is section centered on world origin.
@@ -53,6 +53,7 @@ struct TerrainPathSpecSection
 	OpenGLTextureKey road_mask_map_path;
 	OpenGLTextureKey building_mask_map_path;
 	float map_scales[5];
+	float map_scale_y[5];
 };
 
 struct TerrainPathSpec
@@ -61,6 +62,8 @@ struct TerrainPathSpec
 
 	OpenGLTextureKey detail_col_map_paths[4];
 	OpenGLTextureKey detail_height_map_paths[4];
+	bool show_default_terrain_grid;
+	std::string terrain_grid_texture_path;
 
 	float terrain_section_width_m;
 	float terrain_height_scale;
@@ -175,7 +178,11 @@ struct TerrainDataSection
 	OpenGLTextureKey tree_mask_map_path;
 	OpenGLTextureKey road_mask_map_path;
 	OpenGLTextureKey building_mask_map_path;
-	float heightmap_scale, maskmap_scale, tree_maskmap_scale, road_maskmap_scale, building_maskmap_scale;
+	float heightmap_scale, heightmap_scale_y;
+	float maskmap_scale, maskmap_scale_y;
+	float tree_maskmap_scale, tree_maskmap_scale_y;
+	float road_maskmap_scale, road_maskmap_scale_y;
+	float building_maskmap_scale, building_maskmap_scale_y;
 
 	Map2DRef heightmap;
 	ImageMapFloatRef sculpt_heightmap;

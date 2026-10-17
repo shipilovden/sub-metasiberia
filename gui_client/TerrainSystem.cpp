@@ -448,10 +448,15 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 	for(int i=0; i<TERRAIN_DATA_SECTION_RES*TERRAIN_DATA_SECTION_RES; ++i)
 	{
 		terrain_data_sections[i].heightmap_scale = 1.f;
+		terrain_data_sections[i].heightmap_scale_y = 1.f;
 		terrain_data_sections[i].maskmap_scale = 1.f;
+		terrain_data_sections[i].maskmap_scale_y = 1.f;
 		terrain_data_sections[i].tree_maskmap_scale = 1.f;
+		terrain_data_sections[i].tree_maskmap_scale_y = 1.f;
 		terrain_data_sections[i].road_maskmap_scale = 1.f;
+		terrain_data_sections[i].road_maskmap_scale_y = 1.f;
 		terrain_data_sections[i].building_maskmap_scale = 1.f;
+		terrain_data_sections[i].building_maskmap_scale_y = 1.f;
 	}
 	for(size_t i=0; i<spec.section_specs.size(); ++i)
 	{
@@ -475,10 +480,15 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 			terrain_data_sections[dest_x + dest_y*TERRAIN_DATA_SECTION_RES].building_mask_map_path = section_spec.building_mask_map_path;
 			TerrainDataSection& section = terrain_data_sections[dest_x + dest_y*TERRAIN_DATA_SECTION_RES];
 			section.heightmap_scale = section_spec.map_scales[0];
+			section.heightmap_scale_y = section_spec.map_scale_y[0];
 			section.maskmap_scale = section_spec.map_scales[1];
+			section.maskmap_scale_y = section_spec.map_scale_y[1];
 			section.tree_maskmap_scale = section_spec.map_scales[2];
+			section.tree_maskmap_scale_y = section_spec.map_scale_y[2];
 			section.road_maskmap_scale = section_spec.map_scales[3];
+			section.road_maskmap_scale_y = section_spec.map_scale_y[3];
 			section.building_maskmap_scale = section_spec.map_scales[4];
+			section.building_maskmap_scale_y = section_spec.map_scale_y[4];
 		}
 	}
 
@@ -512,6 +522,24 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 		opengl_engine->setDetailTexture(1, default_ground);
 		opengl_engine->setDetailTexture(2, default_vegetation);
 		opengl_engine->setDetailTexture(3, default_overlay);
+		// The world settings UI may be created before TerrainSystem::init(), but
+		// this initialization replaces the engine-global detail textures. Apply
+		// the grid fallback here too, so worlds without assigned terrain materials
+		// keep the editor grid after terrain initialization.
+		if(spec.show_default_terrain_grid && !spec.terrain_grid_texture_path.empty())
+		{
+			const OpenGLTextureRef grid_texture = opengl_engine->getTexture(spec.terrain_grid_texture_path);
+			if(grid_texture)
+			{
+				for(int i = 0; i < 4; ++i)
+				{
+					if(spec.detail_col_map_paths[i].empty())
+					{
+						opengl_engine->setDetailTexture(i, grid_texture);
+					}
+				}
+			}
+		}
 	}
 
 	for(int i=0; i<4; ++i)
@@ -652,7 +680,7 @@ void TerrainSystem::updateReferenceMaskOverlay(int section_x, int section_y, Ter
 	const float z_depth = std::max(1.f, max_z - min_z);
 	const float z_centre = (min_z + max_z) * 0.5f;
 
-	auto create_decal = [&](const OpenGLTextureRef& texture, float map_scale) -> GLObjectRef
+	auto create_decal = [&](const OpenGLTextureRef& texture, float map_scale_x, float map_scale_y) -> GLObjectRef
 	{
 		if(texture.isNull())
 			return GLObjectRef();
@@ -667,7 +695,7 @@ void TerrainSystem::updateReferenceMaskOverlay(int section_x, int section_y, Ter
 		decal_ob->materials[0].decal = true;
 		decal_ob->ob_to_world_matrix =
 			Matrix4f::translationMatrix(section_x * terrain_section_w, section_y * terrain_section_w, z_centre) *
-			Matrix4f::scaleMatrix(terrain_section_w / myClamp(map_scale, 0.01f, 100.f), terrain_section_w / myClamp(map_scale, 0.01f, 100.f), z_depth) *
+			Matrix4f::scaleMatrix(terrain_section_w / myClamp(map_scale_x, 0.01f, 100.f), terrain_section_w / myClamp(map_scale_y, 0.01f, 100.f), z_depth) *
 			Matrix4f::translationMatrix(-0.5f, -0.5f, -0.5f);
 		opengl_engine->addObject(decal_ob);
 		return decal_ob;
@@ -685,7 +713,7 @@ void TerrainSystem::updateReferenceMaskOverlay(int section_x, int section_y, Ter
 			const size_t key_hash = std::hash<std::string>()(std::string("building|") + std::string(section.building_mask_map_path.begin(), section.building_mask_map_path.end()));
 			const OpenGLTextureKey texture_key = OpenGLTextureKey("__terrain_building_mask_" + toString(section_x) + "_" + toString(section_y) + "_" + toString(key_hash));
 			section.building_mask_gl_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(texture_key, *building_overlay, texture_params);
-			section.building_mask_decal_gl_ob = create_decal(section.building_mask_gl_tex, section.building_maskmap_scale);
+			section.building_mask_decal_gl_ob = create_decal(section.building_mask_gl_tex, section.building_maskmap_scale, section.building_maskmap_scale_y);
 		}
 	}
 
@@ -697,7 +725,7 @@ void TerrainSystem::updateReferenceMaskOverlay(int section_x, int section_y, Ter
 			const size_t key_hash = std::hash<std::string>()(std::string("road|") + std::string(section.road_mask_map_path.begin(), section.road_mask_map_path.end()));
 			const OpenGLTextureKey texture_key = OpenGLTextureKey("__terrain_road_mask_" + toString(section_x) + "_" + toString(section_y) + "_" + toString(key_hash));
 			section.road_mask_gl_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(texture_key, *road_overlay, texture_params);
-			section.road_mask_decal_gl_ob = create_decal(section.road_mask_gl_tex, section.road_maskmap_scale);
+			section.road_mask_decal_gl_ob = create_decal(section.road_mask_gl_tex, section.road_maskmap_scale, section.road_maskmap_scale_y);
 		}
 	}
 }
@@ -718,11 +746,11 @@ void TerrainSystem::updateReferenceMaskDecalTransforms(float camera_z)
 		TerrainDataSection& section = terrain_data_sections[x + y*TERRAIN_DATA_SECTION_RES];
 		const Matrix4f road_decal_transform =
 			Matrix4f::translationMatrix((x - TERRAIN_SECTION_OFFSET) * terrain_section_w, (y - TERRAIN_SECTION_OFFSET) * terrain_section_w, z_centre) *
-			Matrix4f::scaleMatrix(terrain_section_w / myClamp(section.road_maskmap_scale, 0.01f, 100.f), terrain_section_w / myClamp(section.road_maskmap_scale, 0.01f, 100.f), z_depth) *
+			Matrix4f::scaleMatrix(terrain_section_w / myClamp(section.road_maskmap_scale, 0.01f, 100.f), terrain_section_w / myClamp(section.road_maskmap_scale_y, 0.01f, 100.f), z_depth) *
 			Matrix4f::translationMatrix(-0.5f, -0.5f, -0.5f);
 		const Matrix4f building_decal_transform =
 			Matrix4f::translationMatrix((x - TERRAIN_SECTION_OFFSET) * terrain_section_w, (y - TERRAIN_SECTION_OFFSET) * terrain_section_w, z_centre) *
-			Matrix4f::scaleMatrix(terrain_section_w / myClamp(section.building_maskmap_scale, 0.01f, 100.f), terrain_section_w / myClamp(section.building_maskmap_scale, 0.01f, 100.f), z_depth) *
+			Matrix4f::scaleMatrix(terrain_section_w / myClamp(section.building_maskmap_scale, 0.01f, 100.f), terrain_section_w / myClamp(section.building_maskmap_scale_y, 0.01f, 100.f), z_depth) *
 			Matrix4f::translationMatrix(-0.5f, -0.5f, -0.5f);
 		if(section.road_mask_decal_gl_ob.nonNull())
 		{
@@ -1107,7 +1135,7 @@ bool TerrainSystem::sculptAtWorld(const Vec3d& hit_pos, const Vec3d* previous_hi
 		const int width = (int)map->getWidth();
 		const int height = (int)map->getHeight();
 		const float section_u = sectionMapCoord((float)(hit_pos.x / terrain_section_w + 0.5 - section_x), section->heightmap_scale);
-		const float section_v = sectionMapCoord((float)(hit_pos.y / terrain_section_w + 0.5 - section_y), section->heightmap_scale);
+		const float section_v = sectionMapCoord((float)(hit_pos.y / terrain_section_w + 0.5 - section_y), section->heightmap_scale_y);
 		const float pixel_cx = section_u * (width - 1);
 		// ImageMap::sampleSingleChannelHighQual() flips its input V coordinate
 		// before addressing raw pixels.  evalTerrainHeight() therefore passes
@@ -1116,7 +1144,7 @@ bool TerrainSystem::sculptAtWorld(const Vec3d& hit_pos, const Vec3d* previous_hi
 		// section and makes the terrain change away from the brush cursor.
 		const float pixel_cy = section_v * (height - 1);
 		const float pixel_radius_x = radius_m / terrain_section_w * (width - 1) * section->heightmap_scale;
-		const float pixel_radius_y = radius_m / terrain_section_w * (height - 1) * section->heightmap_scale;
+		const float pixel_radius_y = radius_m / terrain_section_w * (height - 1) * section->heightmap_scale_y;
 		const int x0 = myMax(0, (int)std::floor(pixel_cx - pixel_radius_x) - 1);
 		const int x1 = myMin(width - 1, (int)std::ceil(pixel_cx + pixel_radius_x) + 1);
 		const int y0 = myMax(0, (int)std::floor(pixel_cy - pixel_radius_y) - 1);
@@ -1674,12 +1702,13 @@ bool TerrainSystem::paintTerrainMapAtWorld(const Vec3d& hit_pos, float radius_m,
 
 		const int width = (int)editable->getWidth();
 		const int height = (int)editable->getHeight();
-		const float map_scale = myClamp(tree_mask ? section->tree_maskmap_scale : section->maskmap_scale, 0.01f, 100.f);
-		const float u = sectionMapCoord((float)(hit_pos.x / terrain_section_w + 0.5 - sx), map_scale);
-		const float v = sectionMapCoord((float)(hit_pos.y / terrain_section_w + 0.5 - sy), map_scale);
+		const float map_scale_x = myClamp(tree_mask ? section->tree_maskmap_scale : section->maskmap_scale, 0.01f, 100.f);
+		const float map_scale_y = myClamp(tree_mask ? section->tree_maskmap_scale_y : section->maskmap_scale_y, 0.01f, 100.f);
+		const float u = sectionMapCoord((float)(hit_pos.x / terrain_section_w + 0.5 - sx), map_scale_x);
+		const float v = sectionMapCoord((float)(hit_pos.y / terrain_section_w + 0.5 - sy), map_scale_y);
 		const float cx = u * (width - 1), cy = v * (height - 1);
-		const float rx = radius_m / terrain_section_w * (width - 1) * map_scale;
-		const float ry = radius_m / terrain_section_w * (height - 1) * map_scale;
+		const float rx = radius_m / terrain_section_w * (width - 1) * map_scale_x;
+		const float ry = radius_m / terrain_section_w * (height - 1) * map_scale_y;
 		const int x0 = myMax(0, (int)std::floor(cx - rx));
 		const int x1 = myMin(width - 1, (int)std::ceil(cx + rx));
 		const int y0 = myMax(0, (int)std::floor(cy - ry));
@@ -1692,8 +1721,8 @@ bool TerrainSystem::paintTerrainMapAtWorld(const Vec3d& hit_pos, float radius_m,
 			// Convert image pixels back through the section's map scale before
 			// testing the world-space brush radius. Otherwise scaled masks paint
 			// away from the visible brush (or cover the wrong area).
-			const float wx = (sx + ((float)x / (width - 1) - 0.5f) / map_scale) * terrain_section_w;
-			const float wy = (sy + ((float)y / (height - 1) - 0.5f) / map_scale) * terrain_section_w;
+			const float wx = (sx + ((float)x / (width - 1) - 0.5f) / map_scale_x) * terrain_section_w;
+			const float wy = (sy + ((float)y / (height - 1) - 0.5f) / map_scale_y) * terrain_section_w;
 			const float dx = wx - (float)hit_pos.x, dy = wy - (float)hit_pos.y;
 			const float t = std::sqrt(dx*dx + dy*dy) / radius_m;
 			if(t >= 1.f) continue;
@@ -2433,7 +2462,7 @@ Colour4f TerrainSystem::evalTerrainMask(float p_x, float p_y) const
 
 	const float section_nx = nx - Maths::floorToInt(nx);
 	const float section_ny = ny - Maths::floorToInt(ny);
-	return maskmap->vec3Sample(sectionMapCoord(section_nx, section.maskmap_scale), 1.f - sectionMapCoord(section_ny, section.maskmap_scale), /*wrap=*/false);
+	return maskmap->vec3Sample(sectionMapCoord(section_nx, section.maskmap_scale), 1.f - sectionMapCoord(section_ny, section.maskmap_scale_y), /*wrap=*/false);
 }
 
 
@@ -2461,7 +2490,7 @@ float TerrainSystem::evalTreeMask(float p_x, float p_y) const
 
 	const float section_nx = nx - Maths::floorToInt(nx);
 	const float section_ny = ny - Maths::floorToInt(ny);
-	return treemaskmap->sampleSingleChannelTiled(sectionMapCoord(section_nx, section.tree_maskmap_scale), 1.f - sectionMapCoord(section_ny, section.tree_maskmap_scale), /*channel=*/0);
+	return treemaskmap->sampleSingleChannelTiled(sectionMapCoord(section_nx, section.tree_maskmap_scale), 1.f - sectionMapCoord(section_ny, section.tree_maskmap_scale_y), /*channel=*/0);
 }
 
 
@@ -2573,10 +2602,10 @@ float TerrainSystem::evalTerrainHeight(float p_x, float p_y, float quad_w) const
 
 
 	const Map2D* terrain_mask_map = section.sculpt_maskmap.nonNull() ? static_cast<const Map2D*>(section.sculpt_maskmap.ptr()) : section.maskmap.ptr();
-	const Colour4f mask_val = terrain_mask_map ? terrain_mask_map->vec3Sample(sectionMapCoord(section_nx, section.maskmap_scale), 1.f - sectionMapCoord(section_ny, section.maskmap_scale), /*wrap=*/false) : Colour4f(0.f);
+	const Colour4f mask_val = terrain_mask_map ? terrain_mask_map->vec3Sample(sectionMapCoord(section_nx, section.maskmap_scale), 1.f - sectionMapCoord(section_ny, section.maskmap_scale_y), /*wrap=*/false) : Colour4f(0.f);
 			
 	// NOTE: textures are effectively flipped upside down in OpenGL, negate y to compensate.
-	const float heightmap_terrain_z = section.heightmap->sampleSingleChannelHighQual(sectionMapCoord(section_nx, section.heightmap_scale), 1.f - sectionMapCoord(section_ny, section.heightmap_scale), /*channel=*/0, /*wrap=*/false);
+	const float heightmap_terrain_z = section.heightmap->sampleSingleChannelHighQual(sectionMapCoord(section_nx, section.heightmap_scale), 1.f - sectionMapCoord(section_ny, section.heightmap_scale_y), /*channel=*/0, /*wrap=*/false);
 	//terrain_h = -300 + seaside_factor * 300 + non_flatten_factor * myMax(MIN_TERRAIN_Z, heightmap_terrain_z);// + detail_h;
 
 	//terrain_h = myMax(MIN_TERRAIN_Z, -300 + seaside_factor * 300 + non_flatten_factor * heightmap_terrain_z);// + detail_h;
@@ -3496,9 +3525,10 @@ void TerrainSystem::handleCompletedMakeChunkTask(const TerrainChunkGeneratedMsg&
 		{
 			const TerrainDataSection& section = terrain_data_sections[index_x + index_y * TERRAIN_DATA_SECTION_RES];
 			gl_ob->materials[0].albedo_texture = section.mask_gl_tex;
-			const float mask_scale = myClamp(section.maskmap_scale, 0.01f, 100.f);
-			gl_ob->materials[0].tex_matrix = Matrix2f(terrain_scale_factor * mask_scale, 0.f, 0.f, terrain_scale_factor * mask_scale);
-			gl_ob->materials[0].tex_translation = Vec2f(0.5f * (1.f - mask_scale) - section_x * mask_scale, 0.5f * (1.f - mask_scale) - section_y * mask_scale);
+			const float mask_scale_x = myClamp(section.maskmap_scale, 0.01f, 100.f);
+			const float mask_scale_y = myClamp(section.maskmap_scale_y, 0.01f, 100.f);
+			gl_ob->materials[0].tex_matrix = Matrix2f(terrain_scale_factor * mask_scale_x, 0.f, 0.f, terrain_scale_factor * mask_scale_y);
+			gl_ob->materials[0].tex_translation = Vec2f(0.5f * (1.f - mask_scale_x) - section_x * mask_scale_x, 0.5f * (1.f - mask_scale_y) - section_y * mask_scale_y);
 		}
 
 		// Since we are doing texture clamping, we need to make sure tex coords are mapped to [0, 1] with tex matrix

@@ -117,7 +117,9 @@ struct ShaderChunkInfo
 	float terrain_height_scale;
 	float water_level_z;
 	float heightmap_scale;
+	float heightmap_scale_y;
 	float maskmap_scale;
+	float maskmap_scale_y;
 	uint32 vert_data_offset_B;
 };
 
@@ -1742,7 +1744,8 @@ void TerrainScattering::updateGridScatterChunkWithComputeShader(int chunk_x_inde
 			const float corner_nx = Maths::fract(corner_p_x * terrain_scale_factor + 0.5f); // Normalised section coordinates.
 			const float corner_ny = Maths::fract(corner_p_y * terrain_scale_factor + 0.5f); // Normalised section coordinates.
 			const float step_n = query_nw / query_w_px;
-			const float map_scale = myClamp(section->maskmap_scale, 0.01f, 100.f);
+			const float map_scale_x = myClamp(section->maskmap_scale, 0.01f, 100.f);
+			const float map_scale_y = myClamp(section->maskmap_scale_y, 0.01f, 100.f);
 			for(int j=0; j<=query_w_px; ++j)
 			for(int i=0; i<=query_w_px; ++i)
 			{
@@ -1750,8 +1753,8 @@ void TerrainScattering::updateGridScatterChunkWithComputeShader(int chunk_x_inde
 				const float ny = corner_ny + (float)j * step_n;
 				assert(nx >= 0.f && nx <= 1.01f);
 				assert(ny >= 0.f && ny <= 1.01f);
-				const float map_nx = myClamp((nx - 0.5f) * map_scale + 0.5f, 0.f, 1.f);
-				const float map_ny = myClamp((ny - 0.5f) * map_scale + 0.5f, 0.f, 1.f);
+				const float map_nx = myClamp((nx - 0.5f) * map_scale_x + 0.5f, 0.f, 1.f);
+				const float map_ny = myClamp((ny - 0.5f) * map_scale_y + 0.5f, 0.f, 1.f);
 				const Colour4f mask_val = surface_map->vec3Sample(map_nx, 1.f - map_ny, /*wrap=*/false);
 				max_vegetation_val = myMax(max_vegetation_val, mask_val[2]);
 			}
@@ -1827,7 +1830,9 @@ void TerrainScattering::updateGridScatterChunkWithComputeShader(int chunk_x_inde
 		chunk_info.terrain_height_scale = terrain_system->spec.terrain_height_scale;
 		chunk_info.water_level_z = BitUtils::isBitSet(terrain_system->spec.flags, TerrainSpec::WATER_ENABLED_FLAG) ? terrain_system->spec.water_z : -100000.f;
 	chunk_info.heightmap_scale = section ? section->heightmap_scale : 1.f;
+	chunk_info.heightmap_scale_y = section ? section->heightmap_scale_y : 1.f;
 	chunk_info.maskmap_scale = section ? section->maskmap_scale : 1.f;
+	chunk_info.maskmap_scale_y = section ? section->maskmap_scale_y : 1.f;
 		chunk_info.vert_data_offset_B = (uint32)chunk.imposters_gl_ob->mesh_data->vbo_handle.offset;
 
 		chunk_info_ssbo->updateData(0, &chunk_info, sizeof(chunk_info));

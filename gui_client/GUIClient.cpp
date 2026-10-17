@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "FontCoverage.h"
 #include "MCPTextMeshTools.h"
 #include <QtCore/QDir>
+#include <QtCore/QSettings>
 #include <settings/SettingsStore.h>
 #include "ClientThread.h"
 #include "ModelLoading.h"
@@ -25346,13 +25347,19 @@ void GUIClient::updateGroundPlane()
 		// Convert URL-based terrain spec to path-based spec
 		const TerrainSpec& spec = this->connected_world_settings.terrain_spec;
 		TerrainPathSpec path_spec;
+		QSettings user_settings;
+		path_spec.show_default_terrain_grid = user_settings.value(QStringLiteral("WorldSettings/ShowDefaultTerrainGrid"), true).toBool();
+		path_spec.terrain_grid_texture_path = resources_dir_path + "/grey_grid.png";
 		path_spec.section_specs.resize(spec.section_specs.size());
 		for(size_t i=0; i<spec.section_specs.size(); ++i)
 		{
 			path_spec.section_specs[i].x = spec.section_specs[i].x;
 			path_spec.section_specs[i].y = spec.section_specs[i].y;
 			for(int map_i=0; map_i<5; ++map_i)
+			{
 				path_spec.section_specs[i].map_scales[map_i] = spec.section_specs[i].map_scales[map_i];
+				path_spec.section_specs[i].map_scale_y[map_i] = spec.section_specs[i].map_scale_y[map_i];
+			}
 			if(!spec.section_specs[i].heightmap_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::HEIGHTMAP_DISABLED_FLAG))
 				path_spec.section_specs[i].heightmap_path = resource_manager->pathForURL(spec.section_specs[i].heightmap_URL);
 			if(!spec.section_specs[i].mask_map_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::MASK_MAP_DISABLED_FLAG))
@@ -25370,7 +25377,7 @@ void GUIClient::updateGroundPlane()
 		URLString use_detail_height_map_URLs[4];
 		for(int i=0; i<4; ++i)
 		{
-			opengl_engine->setDetailTextureScale(i, spec.detail_col_map_scales[i]);
+			opengl_engine->setDetailTextureScaleXY(i, spec.detail_col_map_scales[i], spec.detail_col_map_scale_y[i]);
 			if(!spec.detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i))
 				use_detail_col_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_col_map_URLs[i])) + "basis")) : spec.detail_col_map_URLs[i];
 			if(!spec.detail_height_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << (4 + i)))
@@ -25557,8 +25564,15 @@ void GUIClient::updateGroundPlane()
 
 			const TextureParams tex_params;
 			const OpenGLTextureRef blank_detail_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(OpenGLTextureKey("__metasiberia_map_world_blank_detail__"), *blank_detail_map, tex_params);
+			const bool show_default_grid = user_settings.value(QStringLiteral("WorldSettings/ShowDefaultTerrainGrid"), true).toBool();
+			const OpenGLTextureRef grid_tex = show_default_grid ? opengl_engine->getTexture(resources_dir_path + "/grey_grid.png") : OpenGLTextureRef();
 			for(int i = 0; i < 4; ++i)
-				opengl_engine->setDetailTexture(i, blank_detail_tex);
+			{
+				const bool has_assigned_texture = !spec.detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i);
+				const OpenGLTextureRef& fallback_tex = (show_default_grid && !has_assigned_texture && grid_tex) ? grid_tex : blank_detail_tex;
+				opengl_engine->setDetailTexture(i, fallback_tex);
+				opengl_engine->setDetailTextureScaleXY(i, spec.detail_col_map_scales[i], spec.detail_col_map_scale_y[i]);
+			}
 		}
 	}
 

@@ -35,6 +35,7 @@ struct TerrainSpecSection
 	URLString building_mask_map_URL;
 	// UV frequency multipliers in height/material/tree/road/building order.
 	float map_scales[5];
+	float map_scale_y[5];
 
 	// A set bit means that the corresponding map is not used for rendering.
 	// Zero keeps all maps enabled, including for worlds written by older clients.
@@ -56,7 +57,8 @@ struct TerrainSpec
 
 	URLString detail_col_map_URLs[4];
 	URLString detail_height_map_URLs[4];
-	float detail_col_map_scales[4]; // UV frequency multipliers for colour layers; 1 keeps legacy tiling.
+	float detail_col_map_scales[4]; // X UV frequency multipliers for colour layers; 1 keeps legacy tiling.
+	float detail_col_map_scale_y[4]; // Y UV frequency multipliers for colour layers.
 
 	float terrain_section_width_m;
 	float terrain_height_scale; // Multiplier applied to raw heightmap values. Default value is 1.
