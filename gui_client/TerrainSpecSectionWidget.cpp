@@ -152,8 +152,8 @@ void TerrainSpecSectionWidget::retranslateMapClearButtons()
 		tr("Assign the height image in World > Terrain section maps > Height map. This controls terrain elevation. Scale changes the sampled area around the image centre."),
 		tr("Assign the RGBA weight image in World > Terrain section maps > Surface material mask. Its channels drive rock, ground or sand, and vegetation weights. Scale changes the sampled area around the image centre."),
 		tr("Assign the allow/deny image in World > Terrain section maps > Tree mask. This controls where trees may be placed. Scale changes the sampled area around the image centre."),
-		tr("Assign the road reference image in World > Terrain section maps > Road reference mask. It is shown as a decal on the terrain. Scale changes the sampled area around the image centre."),
-		tr("Assign the building reference image in World > Terrain section maps > Building reference mask. It is shown as a decal on the terrain. Scale changes the sampled area around the image centre.")
+		tr("Assign a road mask for colouring the terrain surface. It does not create road geometry. Scale changes the sampled area around the image centre."),
+		tr("Assign a building footprint mask for colouring the terrain surface. It does not create 3D buildings. Scale changes the sampled area around the image centre.")
 	};
 	FileSelectWidget* map_fields[5] = { heightmapURLFileSelectWidget, maskMapURLFileSelectWidget, treeMaskMapURLFileSelectWidget, roadMaskMapURLFileSelectWidget, buildingMaskMapURLFileSelectWidget };
 	QCheckBox* map_enabled[5] = { heightmapEnabledCheckBox, maskMapEnabledCheckBox, treeMaskMapEnabledCheckBox, roadMaskMapEnabledCheckBox, buildingMaskMapEnabledCheckBox };

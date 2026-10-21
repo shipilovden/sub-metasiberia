@@ -9,6 +9,7 @@ Copyright Glare Technologies Limited 2023 -
 #include "ThreadMessages.h"
 #include "TerrainScattering.h"
 #include "PhysicsObject.h"
+#include "TerrainVectorData.h"
 #include <opengl/IncludeOpenGL.h>
 #include <opengl/OpenGLTexture.h>
 #include <opengl/OpenGLEngine.h>
@@ -22,6 +23,8 @@ Copyright Glare Technologies Limited 2023 -
 #include <maths/vec3.h>
 #include <string>
 #include <map>
+#include <atomic>
+#include <memory>
 class OpenGLShader;
 class OpenGLMeshRenderData;
 class VertexBufferAllocator;
@@ -58,6 +61,8 @@ struct TerrainPathSpecSection
 
 struct TerrainPathSpec
 {
+	float detail_col_map_scale_x[4] = {1.f, 1.f, 1.f, 1.f};
+	float detail_col_map_scale_y[4] = {1.f, 1.f, 1.f, 1.f};
 	std::vector<TerrainPathSpecSection> section_specs;
 
 	OpenGLTextureKey detail_col_map_paths[4];
@@ -198,18 +203,17 @@ struct TerrainDataSection
 	Map2DRef treemaskmap;
 	Map2DRef road_maskmap;
 	Map2DRef building_maskmap;
-	OpenGLTextureRef road_mask_gl_tex;
-	OpenGLTextureRef building_mask_gl_tex;
-	GLObjectRef road_mask_decal_gl_ob;
-	GLObjectRef building_mask_decal_gl_ob;
+	std::shared_ptr<const TerrainVectorData::Data> road_vectors, building_vectors;
 };
 
 
 struct TerrainChunkData
 {
 	int vert_res_with_borders;
+	ImageMapUInt8Ref surface_material;
 	
 	Reference<OpenGLMeshRenderData> mesh_data;
+	Reference<OpenGLMeshRenderData> vector_mesh_data;
 
 	PhysicsShape physics_shape;
 };
@@ -218,7 +222,9 @@ struct TerrainChunkData
 class MakeTerrainChunkTask : public glare::Task
 {
 public:
+	MakeTerrainChunkTask() : cancelled(std::make_shared<std::atomic<bool>>(false)) {}
 	virtual void run(size_t thread_index) override;
+	virtual void cancelTask() override { cancelled->store(true); }
 
 	virtual void removedFromQueue() override;
 
@@ -226,6 +232,9 @@ public:
 	float chunk_x, chunk_y; // world-space coords of lower left corner of chunk.
 	float chunk_w; // Width of chunk in world-space (m)
 	bool build_physics_ob;
+	int surface_resolution;
+	float camera_distance;
+	std::shared_ptr<std::atomic<bool>> cancelled;
 
 	TerrainSystem* terrain;
 
@@ -247,6 +256,7 @@ public:
 	uint64 node_id;
 
 	TerrainChunkData chunk_data;
+	std::shared_ptr<std::atomic<bool>> cancelled;
 };
 
 
@@ -255,7 +265,9 @@ struct TerrainNode : public RefCounted
 {
 	GLARE_ALIGNED_16_NEW_DELETE
 
-	TerrainNode() : building(false), subtree_built(false) {}
+	TerrainNode() : building(false), subtree_built(false), build_failures(0) {}
+	~TerrainNode() { if(build_cancelled) build_cancelled->store(true); }
+	std::shared_ptr<std::atomic<bool>> build_cancelled;
 	
 	GLObjectRef gl_ob;
 	PhysicsObjectRef physics_ob;
@@ -264,6 +276,7 @@ struct TerrainNode : public RefCounted
 
 	// Objects that have been built, but not inserted into the world yet, because a parent node is waiting for all descendant nodes to finish building.
 	GLObjectRef pending_gl_ob;
+	GLObjectRef vector_gl_ob, pending_vector_gl_ob;
 	PhysicsObjectRef pending_physics_ob;
 
 	TerrainNode* parent;
@@ -273,6 +286,7 @@ struct TerrainNode : public RefCounted
 	uint64 id;
 	bool building;
 	bool subtree_built; // is subtree built?
+	int build_failures;
 	Reference<TerrainNode> children[4];
 
 	std::vector<GLObjectRef> old_subtree_gl_obs; // Objects that are still inserted into opengl engine
@@ -283,6 +297,7 @@ struct TerrainNode : public RefCounted
 class TerrainSystem : public RefCounted
 {
 public:
+	static OpenGLTextureRef defaultMaterialTexture(OpenGLEngine& engine, const std::string& resources_dir, int slot);
 	GLARE_ALIGNED_16_NEW_DELETE
 
 	TerrainSystem();
@@ -298,6 +313,7 @@ public:
 
 	// A texture that will be used by the terrain system has been loaded into OpenGL.
 	void handleTextureLoaded(const OpenGLTextureKey& path, const Map2DRef& map);
+	void setMaterialScale(int slot, float scale_x, float scale_y);
 
 	bool isTextureUsedByTerrain(const OpenGLTextureKey& path) const;
 
@@ -343,17 +359,18 @@ public:
 	float evalTerrainHeight(float p_x, float p_y, float quad_w) const;
 
 private:
-	void makeTerrainChunkMesh(float chunk_x, float chunk_y, float chunk_w, bool build_physics_ob, TerrainChunkData& chunk_data_out) const;
+	void makeTerrainChunkMesh(float chunk_x, float chunk_y, float chunk_w, bool build_physics_ob, TerrainChunkData& chunk_data_out, const std::atomic<bool>* cancelled = nullptr) const;
+	ImageMapUInt8Ref makeChunkSurfaceMaterial(float chunk_x, float chunk_y, float chunk_w, int resolution, const std::atomic<bool>& cancelled) const;
+	void makeChunkVectorMesh(float chunk_x, float chunk_y, float chunk_w, float camera_distance, TerrainChunkData& chunk, const std::atomic<bool>& cancelled) const;
 	void updateSubtree(TerrainNode* node, const Vec3d& campos);
 	void removeSubtree(TerrainNode* node, std::vector<GLObjectRef>& old_children_gl_obs_in_out, std::vector<PhysicsObjectRef>& old_children_phys_obs_in_out);
+	void rebuildRootSubtree(const Vec3d& campos);
 	void removeLeafGeometry(TerrainNode* node);
 	void createInteriorNodeSubtree(TerrainNode* node, const Vec3d& campos);
 	void createSubtree(TerrainNode* node, const Vec3d& campos);
 	void insertPendingMeshesForSubtree(TerrainNode* node);
 	bool areAllParentSubtreesBuilt(TerrainNode* node);
 	void removeAllNodeDataForSubtree(TerrainNode* node);
-	void updateReferenceMaskOverlay(int section_x, int section_y, TerrainDataSection& section);
-	void updateReferenceMaskDecalTransforms(float camera_z);
 	void rebuildAfterSculptIfNeeded();
 	void updateSculptedHeightmapTextures();
 	ImageMapFloatRef makeEditableHeightmap(TerrainDataSection& section);
@@ -379,7 +396,8 @@ private:
 	OpenGLEngine* opengl_engine;
 	PhysicsWorld* physics_world;
 	BiomeManager* biome_manager;
-	glare::TaskManager* task_manager;
+	// Isolate expensive surface baking from the world's model/texture loaders.
+	std::unique_ptr<glare::TaskManager> task_manager;
 	ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue;
 
 	TerrainScattering terrain_scattering;
@@ -425,6 +443,10 @@ private:
 	TerrainSculptStroke current_sculpt_stroke;
 	bool sculpt_stroke_active;
 	bool sculpt_geometry_rebuild_pending;
+	bool terrain_rebuild_pending;
+	// Immutable mip chains, copied by reference by chunk workers. Slots 0..3
+	// are editable terrain materials; 4..7 are road, footprint, path and piste.
+	std::vector<Map2DRef> surface_texture_mips[8];
 	bool sculpt_material_mask_upload_pending;
 	bool sculpt_tree_scattering_rebuild_pending;
 
@@ -444,7 +466,6 @@ private:
 	void updateWaterBathymetry(const Vec3d& campos);
 	Vec3d water_bathymetry_centre = Vec3d(1.e30);
 	double water_bathymetry_update_time = -1.0;
-	float reference_mask_camera_z;
 
 	glare::AtomicInt num_uncompleted_tasks;
 };

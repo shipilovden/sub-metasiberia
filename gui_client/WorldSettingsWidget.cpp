@@ -4,6 +4,8 @@ WorldSettingsWidget.cpp
 Copyright Glare Technologies Limited 2023 -
 =====================================================================*/
 #include "WorldSettingsWidget.h"
+#include "TerrainSystem.h"
+#include "TerrainVectorData.h"
 
 
 #include "MainWindow.h"
@@ -25,17 +27,25 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtCore/QMutexLocker>
 #include <QtCore/QUuid>
 #include <QtCore/QSettings>
+#include <QtCore/QCryptographicHash>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QEvent>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QRunnable>
 #include <QtCore/QPointer>
+#include <QtCore/QProcess>
 #include <QtCore/QThreadPool>
+#include <QtCore/QTimer>
 #include <QtCore/QObject>
 #include <QtCore/QMetaObject>
 #include <QtCore/QBuffer>
 #include <QtCore/QUrl>
 #include <QtCore/QUrlQuery>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
+#include <QtCore/QSaveFile>
+#include <QtCore/QStandardPaths>
+#include <QtCore/QQueue>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
@@ -46,9 +56,12 @@ Copyright Glare Technologies Limited 2023 -
 #include <QtGui/QPainterPath>
 #include <QtGui/QPixmap>
 #include <QtGui/QPolygonF>
+#include <QtGui/QResizeEvent>
 #include <QtGui/QWheelEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QMouseEvent>
+#include <QtCore/QDebug>
+#include <limits>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
@@ -84,6 +97,17 @@ Copyright Glare Technologies Limited 2023 -
 #include <cstring>
 #include <map>
 #include <memory>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <winhttp.h>
+#endif
 
 
 static QIcon makeTerrainLayerPreviewIcon(const QColor& colour)
@@ -167,12 +191,308 @@ static QIcon makeSculptToolPreviewIcon(int tool_id)
 
 namespace
 {
-const int REAL_TERRAIN_MAP_RESOLUTION = 512;
+// At 8192 m per section this gives 4 m per texel, close to the source
+// Terrarium imagery at zoom 14 for the latitudes used by the map importer.
+const int REAL_TERRAIN_MAP_RESOLUTION = 2048;
+// OSM footprints are narrower than elevation cells. Keep their surface overlay
+// at twice the raster resolution without increasing EXR and material memory.
+const int REAL_TERRAIN_FEATURE_RESOLUTION = 8192;
 const double REAL_TERRAIN_MAX_MERCATOR_LATITUDE = 85.05112878;
+
+static QString realTerrainGeorefKey(const MainWindow* window, int section_x, int section_y)
+{
+	const QByteArray identity = QByteArray::fromStdString(window->gui_client.server_hostname) + '/' +
+		QByteArray::fromStdString(window->gui_client.server_worldname) + '/' +
+		QByteArray::number(section_x) + '/' + QByteArray::number(section_y);
+	return QStringLiteral("WorldSettings/RealTerrainGeoref/") +
+		QString::fromLatin1(QCryptographicHash::hash(identity, QCryptographicHash::Sha256).toHex());
+}
+
+static QString realTerrainGridPreferenceKey(const MainWindow* window)
+{
+	const QByteArray identity=QByteArray::fromStdString(window->gui_client.server_hostname)+'/'+
+		QByteArray::fromStdString(window->gui_client.server_worldname);
+	return QStringLiteral("WorldSettings/ShowDefaultTerrainGrid/")+
+		QString::fromLatin1(QCryptographicHash::hash(identity, QCryptographicHash::Sha256).toHex());
+}
+
+static bool realTerrainBoundsFromHeightmapURL(const URLString& heightmap_url,
+	double& north, double& south, double& west, double& east)
+{
+	// Imported EXR resource URLs preserve the source filename. Keeping WGS84 bounds
+	// in that filename makes the map reference follow the world asset to other clients.
+	const QString url=QtUtils::toQString(heightmap_url);
+	static const QRegularExpression pattern(QStringLiteral("metasiberia_geo_v1_(\\d+)_(\\d+)_(\\d+)_(\\d+)_"));
+	const QRegularExpressionMatch match=pattern.match(url);
+	if(!match.hasMatch()) return false;
+	bool ok[4];
+	const qint64 values[4]={match.captured(1).toLongLong(&ok[0]),match.captured(2).toLongLong(&ok[1]),
+		match.captured(3).toLongLong(&ok[2]),match.captured(4).toLongLong(&ok[3])};
+	if(!ok[0] || !ok[1] || !ok[2] || !ok[3]) return false;
+	north=values[0]/1000000.0-90.0;
+	south=values[1]/1000000.0-90.0;
+	west=values[2]/1000000.0-180.0;
+	east=values[3]/1000000.0-180.0;
+	return north>south && east>west && north<=REAL_TERRAIN_MAX_MERCATOR_LATITUDE && south>=-REAL_TERRAIN_MAX_MERCATOR_LATITUDE &&
+		west>=-180.0 && east<=180.0;
+}
+
+// Tile downloads must finish quickly: a stalled tile should not hold the map's download queue for a minute.
+static QByteArray downloadRealTerrainMapTile(const std::string& url_string, int timeout_ms = 5000)
+{
+#if defined(_WIN32)
+	struct WinHttpHandle
+	{
+		explicit WinHttpHandle(HINTERNET value) : handle(value) {}
+		~WinHttpHandle() { if(handle) WinHttpCloseHandle(handle); }
+		HINTERNET handle;
+	};
+	const QUrl url(QString::fromStdString(url_string));
+	if(!url.isValid() || url.scheme() != QStringLiteral("https")) return QByteArray();
+	const std::wstring host(reinterpret_cast<const wchar_t*>(url.host().utf16()));
+	const QString path_and_query=url.path(QUrl::FullyEncoded) + (url.hasQuery() ? QStringLiteral("?") + url.query(QUrl::FullyEncoded) : QString());
+	const std::wstring path(reinterpret_cast<const wchar_t*>(path_and_query.utf16()));
+	WinHttpHandle session(WinHttpOpen(L"Metasiberia/0.0.25 (https://metasiberia.com/)", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+		WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+	if(!session.handle) { qWarning() << "Terrain map WinHTTP session failed:" << GetLastError(); return QByteArray(); }
+	WinHttpSetTimeouts(session.handle, 3000, 3000, timeout_ms, timeout_ms);
+	WinHttpHandle connection(WinHttpConnect(session.handle, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0));
+	if(!connection.handle) { qWarning() << "Terrain map connection failed:" << url.host() << GetLastError(); return QByteArray(); }
+	WinHttpHandle request(WinHttpOpenRequest(connection.handle, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER,
+		WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE));
+	if(!request.handle || !WinHttpSendRequest(request.handle, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+		WINHTTP_NO_REQUEST_DATA, 0, 0, 0) || !WinHttpReceiveResponse(request.handle, NULL))
+	{
+		qWarning() << "Terrain map request failed:" << url.host() << url.path() << GetLastError();
+		return QByteArray();
+	}
+	DWORD status=0, status_size=sizeof(status);
+	if(!WinHttpQueryHeaders(request.handle, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+		WINHTTP_HEADER_NAME_BY_INDEX, &status, &status_size, WINHTTP_NO_HEADER_INDEX) || status != 200)
+	{
+		qWarning() << "Terrain map HTTP status:" << url.host() << url.path() << status;
+		return QByteArray();
+	}
+	QByteArray data;
+	while(true)
+	{
+		DWORD available=0;
+		if(!WinHttpQueryDataAvailable(request.handle, &available)) { qWarning() << "Terrain map read failed:" << GetLastError(); return QByteArray(); }
+		if(available == 0) break;
+		if(available > 1024 * 1024 - (DWORD)data.size()) return QByteArray();
+		const int old_size=data.size();
+		data.resize(old_size + (int)available);
+		DWORD read=0;
+		if(!WinHttpReadData(request.handle, data.data() + old_size, available, &read)) { qWarning() << "Terrain map read failed:" << GetLastError(); return QByteArray(); }
+		if(read == 0) return QByteArray();
+		data.resize(old_size + (int)read);
+	}
+	return data;
+#else
+	HTTPClient client;
+	client.additional_headers.push_back("User-Agent: Metasiberia/0.0.25 (https://metasiberia.com/)");
+	client.max_data_size=1024 * 1024;
+	std::vector<uint8> bytes;
+	const HTTPClient::ResponseInfo response=client.downloadFile(url_string, bytes);
+	return response.response_code == 200 && !bytes.empty() ? QByteArray((const char*)bytes.data(), (int)bytes.size()) : QByteArray();
+#endif
+}
+
+static QByteArray postRealTerrainOSMQuery(HTTPClient& client, const std::string& url_string, const QString& query, QString& error_out)
+{
+#if defined(_WIN32)
+	(void)client;
+	const QUrl url(QString::fromStdString(url_string));
+	if(!url.isValid() || url.scheme() != QStringLiteral("https")) return QByteArray();
+	// On some Windows HTTPS connections WinHTTP loses the response from Overpass.
+	// Use the OS curl client with an argument list (no shell) and a bounded response.
+	QProcess process;
+	process.start(QStringLiteral("curl.exe"), QStringList{
+		QStringLiteral("--silent"), QStringLiteral("--show-error"), QStringLiteral("--fail"),
+		QStringLiteral("--max-time"), QStringLiteral("45"),
+		QStringLiteral("--max-filesize"), QStringLiteral("16777216"),
+		QStringLiteral("--user-agent"), QStringLiteral("Metasiberia/0.0.25 (https://metasiberia.com/)"),
+		QStringLiteral("--data-urlencode"), QStringLiteral("data=")+query, url.toString(QUrl::FullyEncoded)
+	});
+	if(!process.waitForStarted(5000)) { error_out=process.errorString(); return QByteArray(); }
+	if(!process.waitForFinished(50000))
+	{
+		error_out=process.errorString();
+		process.kill();
+		process.waitForFinished(1000);
+		return QByteArray();
+	}
+	const QByteArray data=process.readAllStandardOutput();
+	if(process.exitStatus()!=QProcess::NormalExit || process.exitCode()!=0 || data.size()>16*1024*1024)
+	{
+		error_out=QStringLiteral("curl %1: %2").arg(process.exitCode()).arg(QString::fromUtf8(process.readAllStandardError()).trimmed().left(200));
+		return QByteArray();
+	}
+	return data;
+#else
+	const QByteArray body="data="+QUrl::toPercentEncoding(query);
+	std::string response;
+	const HTTPClient::ResponseInfo result=client.sendPost(url_string, body.toStdString(), "application/x-www-form-urlencoded", response);
+	if(result.response_code!=200) error_out=QStringLiteral("HTTP %1").arg(result.response_code);
+	return result.response_code == 200 ? QByteArray::fromStdString(response) : QByteArray();
+#endif
+}
+
+static QByteArray downloadRealTerrainOSMMap(HTTPClient& client, double north, double south, double west, double east, QString& error_out)
+{
+	const QString url=QStringLiteral("https://api.openstreetmap.org/api/0.6/map.json?bbox=%1,%2,%3,%4")
+		.arg(west, 0, 'f', 7).arg(south, 0, 'f', 7).arg(east, 0, 'f', 7).arg(north, 0, 'f', 7);
+#if defined(_WIN32)
+	(void)client;
+	QProcess process;
+	process.start(QStringLiteral("curl.exe"), QStringList{
+		QStringLiteral("--silent"), QStringLiteral("--show-error"), QStringLiteral("--fail"),
+		QStringLiteral("--compressed"), QStringLiteral("--max-time"), QStringLiteral("40"),
+		QStringLiteral("--max-filesize"), QStringLiteral("33554432"),
+		QStringLiteral("--user-agent"), QStringLiteral("Metasiberia/0.0.25 (https://metasiberia.com/)"), url
+	});
+	if(!process.waitForStarted(5000)) { error_out=process.errorString(); return QByteArray(); }
+	if(!process.waitForFinished(45000))
+	{
+		error_out=process.errorString();
+		process.kill();
+		process.waitForFinished(1000);
+		return QByteArray();
+	}
+	const QByteArray data=process.readAllStandardOutput();
+	if(process.exitStatus()!=QProcess::NormalExit || process.exitCode()!=0 || data.size()>32*1024*1024)
+	{
+		error_out=QStringLiteral("curl %1: %2").arg(process.exitCode()).arg(QString::fromUtf8(process.readAllStandardError()).trimmed().left(200));
+		return QByteArray();
+	}
+	return data;
+#else
+	try
+	{
+		client.max_data_size=32u*1024u*1024u;
+		std::vector<uint8> bytes;
+		const HTTPClient::ResponseInfo response=client.downloadFile(url.toStdString(), bytes);
+		if(response.response_code!=200) { error_out=QStringLiteral("HTTP %1").arg(response.response_code); return QByteArray(); }
+		return QByteArray((const char*)bytes.data(), (int)bytes.size());
+	}
+	catch(const glare::Exception& e) { error_out=QString::fromStdString(e.what()); return QByteArray(); }
+#endif
+}
+
+static QString realTerrainTileKey(int source, int z, int x, int y)
+{
+	return QStringLiteral("%1/%2/%3/%4").arg(source).arg(z).arg(x).arg(y);
+}
+
+static QString realTerrainTileCachePath(int source, int z, int x, int y)
+{
+	const QString root = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+	return root.isEmpty() ? QString() : root + QStringLiteral("/real_terrain_tiles/%1/%2/%3/%4.png").arg(source).arg(z).arg(x).arg(y);
+}
+
+static QString realTerrainElevationTileCachePath(int z, int x, int y)
+{
+	const QString root = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+	return root.isEmpty() ? QString() : root + QStringLiteral("/real_terrain_elevation/%1/%2/%3.png").arg(z).arg(x).arg(y);
+}
 }
 
 class RealTerrainMapWidget : public QWidget
 {
+public:
+	struct ImportedArea
+	{
+		int section_x, section_y;
+		double north, south, west, east;
+		double scale_x, scale_y;
+	};
+	void setImportedAreas(const QVector<ImportedArea>& areas, double width_m)
+	{
+		bool changed=imported_areas.size()!=areas.size() || section_width_m!=width_m;
+		for(int i=0; !changed && i<areas.size(); ++i)
+		{
+			const ImportedArea& old=imported_areas[i];
+			const ImportedArea& area=areas[i];
+			changed=old.section_x!=area.section_x || old.section_y!=area.section_y ||
+				old.north!=area.north || old.south!=area.south || old.west!=area.west || old.east!=area.east ||
+				old.scale_x!=area.scale_x || old.scale_y!=area.scale_y;
+		}
+		imported_areas=areas;
+		section_width_m=width_m;
+		if(changed)
+		{
+			focused_area_index=-1;
+			focus_imported_area_pending=!areas.isEmpty();
+			if(isVisible()) focusImportedAreaForAvatar();
+		}
+		update();
+	}
+	void recordImportedArea(const ImportedArea& area, double width_m)
+	{
+		for(int i=0; i<imported_areas.size(); ++i)
+			if(imported_areas[i].section_x==area.section_x && imported_areas[i].section_y==area.section_y)
+			{
+				imported_areas[i]=area;
+				section_width_m=width_m;
+				update();
+				return;
+			}
+		imported_areas << area;
+		section_width_m=width_m;
+		update();
+	}
+	void setAvatarPosition(double x, double y, double forward_x, double forward_y)
+	{
+		avatar_x=x; avatar_y=y;
+		// ImageMap flips V internally: imported PNG/EXR rows increase with
+		// world +Y, i.e. south on this map. North is world -Y.
+		avatar_direction_deg=std::atan2(forward_x, -forward_y)*180.0/3.14159265358979323846;
+		const int avatar_area=areaIndexForAvatar();
+		if(isVisible() && (focus_imported_area_pending || (avatar_area>=0 && avatar_area!=focused_area_index)))
+			focusImportedAreaForAvatar();
+		update();
+	}
+	void focusImportedAreaForAvatar(bool if_avatar_offscreen = false)
+	{
+		if(imported_areas.isEmpty()) return;
+		const int avatar_area=areaIndexForAvatar();
+		const int index=avatar_area>=0 ? avatar_area : 0;
+		const ImportedArea& area=imported_areas[index];
+		if(!focus_imported_area_pending && index==focused_area_index &&
+			(!if_avatar_offscreen || avatar_area<0 || isAvatarVisibleOnMap(area))) return;
+		if(area.north<=area.south || area.east<=area.west) return;
+		auto mercator_y=[](double latitude, double world_size) -> double
+		{
+			const double lat_rad=myClamp(latitude, -REAL_TERRAIN_MAX_MERCATOR_LATITUDE,
+				REAL_TERRAIN_MAX_MERCATOR_LATITUDE)*3.14159265358979323846/180.0;
+			return (0.5-std::log((1.0+std::sin(lat_rad))/(1.0-std::sin(lat_rad)))/
+				(4.0*3.14159265358979323846))*world_size;
+		};
+		int fit_zoom=2;
+		for(int candidate=19; candidate>=2; --candidate)
+		{
+			const double world_size=256.0*(1<<candidate);
+			const double span_x=(area.east-area.west)/360.0*world_size;
+			const double span_y=mercator_y(area.south, world_size)-mercator_y(area.north, world_size);
+			if(span_x<=width()*0.85 && span_y<=height()*0.85) { fit_zoom=candidate; break; }
+		}
+		const QPointF old_origin=worldOrigin();
+		const int old_zoom=zoom;
+		zoom=fit_zoom;
+		const double world_size=256.0*(1<<zoom);
+		center_x=(area.west+area.east+360.0)/720.0*world_size;
+		center_y=(mercator_y(area.north, world_size)+mercator_y(area.south, world_size))*0.5;
+		const QPointF new_origin=worldOrigin();
+		const double factor=(double)(1<<zoom)/(double)(1<<old_zoom);
+		for(QPointF& point : selection_points) point=(old_origin+point)*factor-new_origin;
+		drag_start=(old_origin+drag_start)*factor-new_origin;
+		cursor_pos=(old_origin+cursor_pos)*factor-new_origin;
+		focused_area_index=index;
+		focus_imported_area_pending=false;
+		discardPendingTiles();
+		update();
+	}
+
 public:
 	explicit RealTerrainMapWidget(QWidget* parent = NULL) : QWidget(parent), center_x(0), center_y(0), zoom(8), basemap(1),
 		selection_active(false), dragging(false), freehand(false), panning(false)
@@ -183,10 +503,12 @@ public:
 		center_x = (55.75 + 180.0) / 360.0 * 256.0 * (1 << zoom);
 		const double lat = 55.75 * 3.14159265358979323846 / 180.0;
 		center_y = (0.5 - std::log((1.0 + std::sin(lat)) / (1.0 - std::sin(lat))) / (4.0 * 3.14159265358979323846)) * 256.0 * (1 << zoom);
+		// Leave room for the next search while requests for the previous view finish.
+		tile_pool.setMaxThreadCount(16);
 	}
 
 	void setFreehand(bool enabled) { freehand = enabled; clearSelection(); }
-	void setBasemap(int source) { if(source != basemap) { basemap = source; tiles.clear(); requested.clear(); update(); } }
+	void setBasemap(int source) { if(source != basemap) { basemap = source; discardPendingTiles(); update(); } }
 	void centerOnLatLon(double latitude, double longitude, int target_zoom = 13)
 	{
 		latitude = myClamp(latitude, -REAL_TERRAIN_MAX_MERCATOR_LATITUDE, REAL_TERRAIN_MAX_MERCATOR_LATITUDE);
@@ -197,6 +519,7 @@ public:
 		const double lat_rad = latitude * 3.14159265358979323846 / 180.0;
 		center_y = (0.5 - std::log((1.0 + std::sin(lat_rad)) / (1.0 - std::sin(lat_rad))) /
 			(4.0 * 3.14159265358979323846)) * world_size;
+		discardPendingTiles();
 		clearSelection();
 		update();
 	}
@@ -268,16 +591,35 @@ protected:
 		const QPointF origin = worldOrigin();
 		const int first_x = (int)std::floor(origin.x() / 256.0), first_y = (int)std::floor(origin.y() / 256.0);
 		const int last_x = (int)std::floor((origin.x() + width()) / 256.0), last_y = (int)std::floor((origin.y() + height()) / 256.0);
+		bool visible_tile_loaded = false, visible_tile_failed = false;
+		// Fetch a few coarse tiles first. They cover the view while detail tiles arrive.
+		if(zoom >= 4)
+		{
+			const int coarse_zoom = zoom - 2;
+			const double coarse_scale = 4.0 * 256.0;
+			for(int ty=(int)std::floor(origin.y() / coarse_scale); ty<=(int)std::floor((origin.y() + height()) / coarse_scale); ++ty)
+			for(int tx=(int)std::floor(origin.x() / coarse_scale); tx<=(int)std::floor((origin.x() + width()) / coarse_scale); ++tx)
+				requestTile(tx, ty, coarse_zoom);
+		}
 		for(int ty=first_y; ty<=last_y; ++ty)
 		for(int tx=first_x; tx<=last_x; ++tx)
 		{
 			const int wrapped_x = (tx % (1 << zoom) + (1 << zoom)) % (1 << zoom);
-			const QString key = QStringLiteral("%1/%2/%3/%4").arg(basemap).arg(zoom).arg(wrapped_x).arg(ty);
+			const QString key = realTerrainTileKey(basemap, zoom, wrapped_x, ty);
 			const QRectF target(tx * 256.0 - origin.x(), ty * 256.0 - origin.y(), 256, 256);
-			const auto it = tiles.constFind(key);
-			if(it != tiles.constEnd()) painter.drawImage(target, it.value());
-			else { painter.fillRect(target, QColor(232, 234, 227)); painter.setPen(QColor(200, 203, 197)); painter.drawRect(target); }
 			requestTile(tx, ty);
+			const auto it = tiles.constFind(key);
+			if(it != tiles.constEnd()) { painter.drawImage(target, it.value()); visible_tile_loaded = true; }
+			else if(drawCachedTerrainTile(painter, tx, ty, target)) visible_tile_loaded = true;
+			else { painter.fillRect(target, QColor(232, 234, 227)); painter.setPen(QColor(200, 203, 197)); painter.drawRect(target); }
+			if(failed.contains(key)) visible_tile_failed = true;
+		}
+		if(!visible_tile_loaded && visible_tile_failed)
+		{
+			painter.fillRect(rect().adjusted(12, height()/2 - 24, -12, -height()/2 + 24), QColor(30, 30, 30, 210));
+			painter.setPen(Qt::white);
+			painter.drawText(rect().adjusted(18, height()/2 - 20, -18, -height()/2 + 20), Qt::AlignCenter | Qt::TextWordWrap,
+				QCoreApplication::translate("WorldSettingsWidget", "Map tiles are unavailable. Retrying..."));
 		}
 		if(selection_active && !selection_points.isEmpty())
 		{
@@ -286,6 +628,46 @@ protected:
 			painter.setPen(QPen(QColor(255, 205, 60), 2));
 			painter.setBrush(QColor(255, 205, 60, 60));
 			if(poly.size() >= 3) painter.drawPolygon(poly); else if(poly.size() == 2) painter.drawLine(poly[0], poly[1]);
+		}
+		for(const ImportedArea& area : imported_areas)
+		{
+			if(area.north<=area.south || area.east<=area.west) continue;
+			const double world_size=256.0*(1<<zoom);
+			auto map_point=[world_size, origin](double latitude, double longitude) -> QPointF
+			{
+				const double lat_rad=myClamp(latitude, -REAL_TERRAIN_MAX_MERCATOR_LATITUDE,
+					REAL_TERRAIN_MAX_MERCATOR_LATITUDE)*3.14159265358979323846/180.0;
+				return QPointF((longitude+180.0)/360.0*world_size,
+					(0.5-std::log((1.0+std::sin(lat_rad))/(1.0-std::sin(lat_rad)))/
+					(4.0*3.14159265358979323846))*world_size)-origin;
+			};
+			painter.setPen(QPen(QColor(255, 205, 60, 210), 2));
+			painter.setBrush(Qt::NoBrush);
+			painter.drawRect(QRectF(map_point(area.north, area.west), map_point(area.south, area.east)));
+		}
+		for(const ImportedArea& area : imported_areas)
+		{
+			const double section_u=avatar_x/section_width_m+0.5-area.section_x;
+			const double section_v=avatar_y/section_width_m+0.5-area.section_y;
+			if(section_u<0.0 || section_u>1.0 || section_v<0.0 || section_v>1.0) continue;
+			const double u=myClamp((section_u-0.5)*myClamp(area.scale_x, 0.01, 100.0)+0.5, 0.0, 1.0);
+			const double v=myClamp((section_v-0.5)*myClamp(area.scale_y, 0.01, 100.0)+0.5, 0.0, 1.0);
+			const double lon=area.west+(area.east-area.west)*u;
+			const double lat=area.north-(area.north-area.south)*v;
+			const double world_size=256.0*(1<<zoom);
+			const double lat_rad=lat*3.14159265358979323846/180.0;
+			const QPointF marker((lon+180.0)/360.0*world_size,
+				(0.5-std::log((1.0+std::sin(lat_rad))/(1.0-std::sin(lat_rad)))/(4.0*3.14159265358979323846))*world_size);
+			painter.save();
+			painter.translate(marker-worldOrigin());
+			painter.rotate(avatar_direction_deg);
+			QPolygonF triangle;
+			triangle << QPointF(0,-13) << QPointF(8,9) << QPointF(0,5) << QPointF(-8,9);
+			painter.setPen(QPen(Qt::white, 2));
+			painter.setBrush(QColor(30, 104, 225));
+			painter.drawPolygon(triangle);
+			painter.restore();
+			break;
 		}
 	}
 	void mousePressEvent(QMouseEvent* e) override
@@ -299,7 +681,14 @@ protected:
 	}
 	void mouseMoveEvent(QMouseEvent* e) override
 	{
-		if(panning) { center_x -= e->pos().x() - last_mouse.x(); center_y -= e->pos().y() - last_mouse.y(); last_mouse=e->pos(); update(); return; }
+		if(panning)
+		{
+			const QPoint delta=e->pos()-last_mouse;
+			center_x-=delta.x(); center_y-=delta.y();
+			for(QPointF& point : selection_points) point+=delta;
+			drag_start+=delta; cursor_pos+=delta;
+			last_mouse=e->pos(); update(); return;
+		}
 		if(!dragging) return;
 		cursor_pos = e->pos();
 		if(freehand && (selection_points.isEmpty() || (selection_points.last() - e->pos()).manhattanLength() >= 3)) selection_points << e->pos();
@@ -308,7 +697,7 @@ protected:
 	}
 	void mouseReleaseEvent(QMouseEvent* e) override
 	{
-		if(e->button() == Qt::RightButton) { panning = false; return; }
+		if(e->button() == Qt::RightButton) { panning = false; discardPendingTiles(); update(); return; }
 		if(e->button() != Qt::LeftButton || !dragging) return;
 		dragging = false; cursor_pos=e->pos();
 		if(freehand && selection_points.size() > 2) selection_points << selection_points.first();
@@ -324,8 +713,82 @@ protected:
 		if(new_zoom == zoom) return;
 		zoomAt(new_zoom, e->position());
 	}
+	void resizeEvent(QResizeEvent* e) override
+	{
+		if(e->oldSize().isValid())
+		{
+			const QPointF delta((e->size().width()-e->oldSize().width())*0.5,
+				(e->size().height()-e->oldSize().height())*0.5);
+			for(QPointF& point : selection_points) point+=delta;
+			drag_start+=delta; cursor_pos+=delta;
+		}
+		QWidget::resizeEvent(e);
+	}
 
 private:
+	bool isAvatarVisibleOnMap(const ImportedArea& area) const
+	{
+		if(section_width_m<=0.0) return false;
+		const double u=myClamp((avatar_x/section_width_m+0.5-area.section_x-0.5)*
+			myClamp(area.scale_x, 0.01, 100.0)+0.5, 0.0, 1.0);
+		const double v=myClamp((avatar_y/section_width_m+0.5-area.section_y-0.5)*
+			myClamp(area.scale_y, 0.01, 100.0)+0.5, 0.0, 1.0);
+		const double lon=area.west+(area.east-area.west)*u;
+		const double lat=area.north-(area.north-area.south)*v;
+		const double world_size=256.0*(1<<zoom);
+		const double lat_rad=lat*3.14159265358979323846/180.0;
+		const QPointF marker((lon+180.0)/360.0*world_size,
+			(0.5-std::log((1.0+std::sin(lat_rad))/(1.0-std::sin(lat_rad)))/
+			(4.0*3.14159265358979323846))*world_size);
+		return rect().adjusted(10, 10, -10, -10).contains((marker-worldOrigin()).toPoint());
+	}
+	int areaIndexForAvatar() const
+	{
+		if(section_width_m<=0.0) return -1;
+		for(int i=0; i<imported_areas.size(); ++i)
+		{
+			const ImportedArea& area=imported_areas[i];
+			const double u=avatar_x/section_width_m+0.5-area.section_x;
+			const double v=avatar_y/section_width_m+0.5-area.section_y;
+			if(u>=0.0 && u<=1.0 && v>=0.0 && v<=1.0) return i;
+		}
+		return -1;
+	}
+	bool drawCachedTerrainTile(QPainter& painter, int x, int y, const QRectF& target) const
+	{
+		for(int parent_zoom=zoom-1; parent_zoom>=std::max(2, zoom-4); --parent_zoom)
+		{
+			const int scale = 1 << (zoom-parent_zoom);
+			const int parent_x = (int)std::floor((double)x / scale);
+			const int parent_y = (int)std::floor((double)y / scale);
+			const int limit = 1 << parent_zoom;
+			const auto it = tiles.constFind(realTerrainTileKey(basemap, parent_zoom,
+				(parent_x % limit + limit) % limit, parent_y));
+			if(it == tiles.constEnd()) continue;
+			const QImage& image = it.value();
+			const double source_width = (double)image.width() / scale;
+			const double source_height = (double)image.height() / scale;
+			painter.drawImage(target, image, QRectF((x-parent_x*scale)*source_width,
+				(y-parent_y*scale)*source_height, source_width, source_height));
+			return true;
+		}
+		if(zoom < 19)
+		{
+			bool drew_child = false;
+			for(int cy=0; cy<2; ++cy)
+			for(int cx=0; cx<2; ++cx)
+			{
+				const int child_x = x*2+cx, child_y = y*2+cy, limit = 1 << (zoom+1);
+				const auto it = tiles.constFind(realTerrainTileKey(basemap, zoom+1,
+					(child_x % limit + limit) % limit, child_y));
+				if(it == tiles.constEnd()) continue;
+				painter.drawImage(QRectF(target.x()+cx*128, target.y()+cy*128, 128, 128), it.value());
+				drew_child = true;
+			}
+			if(drew_child) return true;
+		}
+		return false;
+	}
 	QPointF worldOrigin() const { return QPointF(center_x - width()*0.5, center_y - height()*0.5); }
 	void zoomAt(int new_zoom, const QPointF& cursor)
 	{
@@ -341,41 +804,111 @@ private:
 			point = (old_origin + point) * factor - new_origin;
 		drag_start = (old_origin + drag_start) * factor - new_origin;
 		cursor_pos = (old_origin + cursor_pos) * factor - new_origin;
+		discardPendingTiles();
 		update();
 	}
-	void requestTile(int x, int y)
+	void discardPendingTiles()
 	{
-		const int limit = 1 << zoom;
+		++tile_generation;
+		tile_pool.clear();
+		requested.clear();
+		failed.clear();
+	}
+	void requestTile(int x, int y, int z)
+	{
+		// OpenTopoMap raster tiles stop at zoom 17; keep zooming by scaling the finest available tile.
+		if(basemap == 1 && z > 17)
+		{
+			const int scale = 1 << (z-17);
+			requestTile((int)std::floor((double)x / scale), (int)std::floor((double)y / scale), 17);
+			return;
+		}
+		const int limit = 1 << z;
 		if(y < 0 || y >= limit) return;
 		x = (x % limit + limit) % limit;
-		const QString key = QStringLiteral("%1/%2/%3/%4").arg(basemap).arg(zoom).arg(x).arg(y);
-		if(tiles.contains(key) || requested.contains(key)) return;
-		if(requested.size() >= 24) return;
+		const QString key = realTerrainTileKey(basemap, z, x, y);
+		if(tiles.contains(key) || requested.contains(key) || failed.contains(key)) return;
+		const QString cache_path = realTerrainTileCachePath(basemap, z, x, y);
+		QFile cached(cache_path);
+		if(cached.open(QIODevice::ReadOnly))
+		{
+			QImage image;
+			image.loadFromData(cached.readAll());
+			if(!image.isNull())
+			{
+				tiles.insert(key, image);
+				tile_order.enqueue(key);
+				while(tiles.size() > 384) tiles.remove(tile_order.dequeue());
+				return;
+			}
+		}
+		if(requested.size() >= 8) return;
 		requested.insert(key);
-		const int z = zoom;
 		const int source = basemap;
+		const quint64 generation = tile_generation;
 		QPointer<RealTerrainMapWidget> self(this);
-		QThreadPool::globalInstance()->start(QRunnable::create([self, key, x, y, z, source]()
+		tile_pool.start(QRunnable::create([self, key, x, y, z, source, generation]()
 		{
 			QImage image;
 			try
 			{
-				HTTPClient client; client.user_agent = "Metasiberia terrain map";
-				std::vector<uint8> data;
-				const std::string url = source == 1 ?
-					("https://tile.opentopomap.org/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png") :
-					source == 2 ?
-					("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/" + toString(z) + "/" + toString(y) + "/" + toString(x)) :
-					toStdString(MapWorldUtils::makeOSMTileURL("vr.metasiberia.com", x, y, z));
-				const HTTPClient::ResponseInfo r = client.downloadFile(url, data);
-				if(r.response_code == 200 && !data.empty()) image.loadFromData(data.data(), (uint)data.size());
+				const QString cache_path = realTerrainTileCachePath(source, z, x, y);
+				QFile cached(cache_path);
+				if(cached.open(QIODevice::ReadOnly)) image.loadFromData(cached.readAll());
+				cached.close();
+				if(image.isNull())
+				{
+					const char* topo_hosts[] = { "a.tile.opentopomap.org", "b.tile.opentopomap.org", "c.tile.opentopomap.org" };
+					for(int attempt=0; attempt<(source == 1 ? 2 : 1) && image.isNull(); ++attempt)
+					{
+						const std::string url = source == 1 ?
+							("https://" + std::string(attempt == 1 && z <= 15 ? "backup.opentopomap.org" : topo_hosts[(x + y + attempt) % 3]) +
+								"/" + toString(z) + "/" + toString(x) + "/" + toString(y) + ".png") :
+							source == 2 ?
+							("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/" + toString(z) + "/" + toString(y) + "/" + toString(x)) :
+							toStdString(MapWorldUtils::makeOSMTileURL("vr.metasiberia.com", x, y, z));
+						const QByteArray data=downloadRealTerrainMapTile(url);
+						if(!data.isEmpty() && image.loadFromData(data) && !cache_path.isEmpty())
+						{
+							QDir().mkpath(QFileInfo(cache_path).path());
+							QSaveFile output(cache_path);
+							if(output.open(QIODevice::WriteOnly) && output.write(data) == data.size()) output.commit();
+						}
+					}
+				}
 			}
 			catch(...) {}
-			if(self) QMetaObject::invokeMethod(self, [self, key, image]() { if(self) { self->requested.remove(key); if(!image.isNull()) self->tiles.insert(key, image); self->update(); } }, Qt::QueuedConnection);
+			if(self) QMetaObject::invokeMethod(self, [self, key, image, generation]() {
+				if(!self) return;
+				if(generation == self->tile_generation) self->requested.remove(key);
+				if(!image.isNull())
+				{
+					if(!self->tiles.contains(key))
+					{
+						self->tiles.insert(key, image);
+						self->tile_order.enqueue(key);
+						while(self->tiles.size() > 384) self->tiles.remove(self->tile_order.dequeue());
+					}
+				}
+				else if(generation == self->tile_generation)
+				{
+					qWarning().noquote() << "Terrain map tile download failed:" << key;
+					self->failed.insert(key);
+					QTimer::singleShot(3000, self.data(), [self, key, generation]() {
+						if(self && generation == self->tile_generation) { self->failed.remove(key); self->update(); }
+					});
+				}
+				self->update();
+			}, Qt::QueuedConnection);
 		}));
 	}
+	void requestTile(int x, int y) { requestTile(x, y, zoom); }
 	QHash<QString, QImage> tiles;
+	QQueue<QString> tile_order;
 	QSet<QString> requested;
+	QSet<QString> failed;
+	QThreadPool tile_pool;
+	quint64 tile_generation = 0;
 	double center_x, center_y;
 	int zoom;
 	int basemap;
@@ -383,6 +916,11 @@ private:
 	QPointF drag_start, cursor_pos;
 	QPoint last_mouse;
 	QVector<QPointF> selection_points;
+	QVector<ImportedArea> imported_areas;
+	double section_width_m=8192.0;
+	double avatar_x=0.0, avatar_y=0.0, avatar_direction_deg=0.0;
+	int focused_area_index=-1;
+	bool focus_imported_area_pending=false;
 };
 
 namespace
@@ -419,6 +957,8 @@ struct RealTerrainOSMFeature
 {
 	QVector<QPointF> points; // longitude, latitude
 	QString kind;
+	QVector<QVector<QPointF>> holes;
+	double width_m = 0.0;
 };
 
 static QByteArray encodeTerrainPng(const QImage& image)
@@ -428,6 +968,64 @@ static QByteArray encodeTerrainPng(const QImage& image)
 	if(!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
 		throw glare::Exception("could not encode a terrain mask as PNG");
 	return data;
+}
+
+static QByteArray encodeTerrainVectorPng(const QImage& image, const std::vector<TerrainVectorData::Segment>& segments)
+{
+	const QByteArray pixels=encodeTerrainPng(image);
+	const std::vector<uint8_t> png=TerrainVectorData::writePNG(reinterpret_cast<const uint8_t*>(pixels.constData()), (size_t)pixels.size(), segments);
+	return QByteArray(reinterpret_cast<const char*>(png.data()), (int)png.size());
+}
+
+// Clip original OSM edges, never trace the raster mask. Intersections with all
+// polygon edges split a line into intervals, so concave selections retain every
+// inside portion. Closing a clipped building would invent a wall at the boundary.
+static void appendTerrainVectorEdge(const QPointF& a, const QPointF& b, const QPolygonF& selection,
+	float width, uint32_t style, std::vector<TerrainVectorData::Segment>& output)
+{
+	if(!std::isfinite(a.x()) || !std::isfinite(a.y()) || !std::isfinite(b.x()) || !std::isfinite(b.y())) return;
+	const QPointF d=b-a;
+	if(std::abs(d.x())+std::abs(d.y())<1.0e-12) return;
+	double first=0, last=1;
+	auto clip_axis=[&](double origin, double delta) {
+		if(std::abs(delta)<1.0e-14) return origin>=0 && origin<=1;
+		double lo=(0-origin)/delta, hi=(1-origin)/delta;
+		if(lo>hi) std::swap(lo,hi);
+		first=std::max(first,lo); last=std::min(last,hi);
+		return last>first;
+	};
+	if(!clip_axis(a.x(),d.x()) || !clip_axis(a.y(),d.y())) return;
+	std::vector<double> cuts{first,last};
+	auto cross=[](const QPointF& u,const QPointF& v) { return u.x()*v.y()-u.y()*v.x(); };
+	for(int i=0;i<selection.size();++i)
+	{
+		const QPointF c=selection[i], edge=selection[(i+1)%selection.size()]-c;
+		const double determinant=cross(d,edge);
+		if(std::abs(determinant)<1.0e-14) continue;
+		const double t=cross(c-a,edge)/determinant, u=cross(c-a,d)/determinant;
+		if(t>first && t<last && u>=-1.0e-10 && u<=1.0+1.0e-10) cuts.push_back(t);
+	}
+	std::sort(cuts.begin(),cuts.end());
+	auto inside=[&](const QPointF& p) {
+		if(selection.isEmpty() || selection.containsPoint(p,Qt::OddEvenFill)) return true;
+		// Keep lines lying exactly on the selected polygon boundary.
+		for(int i=0;i<selection.size();++i)
+		{
+			const QPointF c=selection[i], e=selection[(i+1)%selection.size()]-c, v=p-c;
+			const double length2=e.x()*e.x()+e.y()*e.y();
+			const double dot=v.x()*e.x()+v.y()*e.y();
+			if(length2>0 && std::abs(cross(v,e))<=1.0e-10*std::sqrt(length2) && dot>=0 && dot<=length2) return true;
+		}
+		return false;
+	};
+	for(size_t i=1;i<cuts.size();++i)
+	{
+		if(cuts[i]-cuts[i-1]<1.0e-12 || !inside(a+d*((cuts[i-1]+cuts[i])*0.5))) continue;
+		if(output.size()>=TerrainVectorData::MAX_SEGMENTS) throw glare::Exception("selected area exceeds the terrain vector segment limit");
+		const QPointF start=a+d*cuts[i-1], end=a+d*cuts[i];
+		output.push_back({(float)myClamp(start.x(),0.0,1.0),(float)myClamp(start.y(),0.0,1.0),
+			(float)myClamp(end.x(),0.0,1.0),(float)myClamp(end.y(),0.0,1.0),width,style});
+	}
 }
 
 static QImage rasterizeTerrainSelection(int resolution, double north, double south, double west, double east, const QVector<QPointF>& selection)
@@ -475,141 +1073,444 @@ static std::vector<float> terrainSelectionEdgeDistance(const QImage& selection_m
 
 static QString queryTerrainOSMFeatures(HTTPClient& client, double north, double south, double west, double east,
 	const QVector<QPointF>& selection, const QByteArray& height_data, float water_z,
-	bool include_osm_features, QByteArray& material_png, QByteArray& tree_png, QByteArray& roads_png, QByteArray& buildings_png)
+	bool include_osm_features, QByteArray& material_png, QByteArray& tree_png, QByteArray& roads_png, QByteArray& buildings_png,
+	const std::function<void(int, int)>& osm_progress)
 {
 	const int n = REAL_TERRAIN_MAP_RESOLUTION;
 	const QImage selection_mask = rasterizeTerrainSelection(n, north, south, west, east, selection);
-	QImage roads_rgba(n, n, QImage::Format_RGBA8888); roads_rgba.fill(Qt::transparent);
-	QImage buildings_rgba(n, n, QImage::Format_RGBA8888); buildings_rgba.fill(Qt::transparent);
-	QVector<RealTerrainOSMFeature> roads, buildings;
-	QString feature_status = include_osm_features ? QCoreApplication::translate("WorldSettingsWidget", "OSM roads and buildings: unavailable; their masks are empty.") :
+	const int feature_n = REAL_TERRAIN_FEATURE_RESOLUTION;
+	QImage forests_rgba(n, n, QImage::Format_RGBA8888); forests_rgba.fill(Qt::transparent);
+	QImage clearings_rgba(n, n, QImage::Format_RGBA8888); clearings_rgba.fill(Qt::transparent);
+	QImage waters_rgba(n, n, QImage::Format_RGBA8888); waters_rgba.fill(Qt::transparent);
+	QImage rocks_rgba(n, n, QImage::Format_RGBA8888); rocks_rgba.fill(Qt::transparent);
+	QVector<RealTerrainOSMFeature> roads, buildings, forests, clearings, waters, streams, rocks;
+	QSet<qint64> seen_road_ids, seen_building_ids, seen_forest_ids, seen_clearing_ids, seen_water_ids, seen_stream_ids, seen_rock_ids;
+	auto append_way = [&](const QJsonObject& object, const QHash<qint64, QPointF>* nodes, const QVector<QVector<QPointF>>& holes = QVector<QVector<QPointF>>())
+	{
+		if(object.value(QStringLiteral("type")).toString() != QStringLiteral("way")) return;
+		const QJsonObject tags=object.value(QStringLiteral("tags")).toObject();
+		const QString road_kind=tags.value(QStringLiteral("highway")).toString();
+		static const QStringList ignored={ QStringLiteral("corridor"), QStringLiteral("construction"), QStringLiteral("proposed") };
+		const QString railway=tags.value(QStringLiteral("railway")).toString();
+		const QString piste=tags.value(QStringLiteral("piste:type")).toString();
+		const bool is_road=(!road_kind.isEmpty() && !ignored.contains(road_kind)) || !piste.isEmpty() || railway=="rail" || railway=="tram";
+		const QString building_tag=tags.value(QStringLiteral("building")).toString();
+		const bool is_building=(!building_tag.isEmpty() && building_tag!="no") || tags.value(QStringLiteral("building")).toBool();
+		const QString landuse=tags.value(QStringLiteral("landuse")).toString();
+		const QString natural=tags.value(QStringLiteral("natural")).toString();
+		const QString waterway=tags.value(QStringLiteral("waterway")).toString();
+		const bool is_forest=landuse==QStringLiteral("forest") || natural==QStringLiteral("wood");
+		const QString leisure=tags.value(QStringLiteral("leisure")).toString();
+		const bool is_clearing=landuse==QStringLiteral("meadow") || landuse==QStringLiteral("grass") || landuse==QStringLiteral("residential") ||
+			landuse==QStringLiteral("industrial") || landuse==QStringLiteral("commercial") || landuse==QStringLiteral("retail") ||
+			landuse==QStringLiteral("farmland") || landuse==QStringLiteral("farmyard") || landuse==QStringLiteral("construction") ||
+			natural==QStringLiteral("grassland") || natural==QStringLiteral("beach") || natural==QStringLiteral("sand") ||
+			leisure==QStringLiteral("pitch") || leisure==QStringLiteral("park") || tags.value("amenity")=="parking";
+		const bool is_rock=natural=="bare_rock" || natural=="scree" || natural=="shingle";
+		const bool is_water=natural==QStringLiteral("water") || waterway==QStringLiteral("riverbank") || landuse==QStringLiteral("reservoir");
+		const bool is_stream=waterway==QStringLiteral("stream") || waterway==QStringLiteral("river") || waterway==QStringLiteral("canal");
+		if(!is_road && !is_building && !is_forest && !is_clearing && !is_water && !is_stream && !is_rock) return;
+		QVector<QPointF> points;
+		if(nodes)
+		{
+			for(const QJsonValue& node_value : object.value(QStringLiteral("nodes")).toArray())
+			{
+				const qint64 node_id=node_value.toVariant().toLongLong();
+				if(!nodes->contains(node_id)) return;
+				points << nodes->value(node_id);
+			}
+		}
+		else for(const QJsonValue& point_value : object.value(QStringLiteral("geometry")).toArray())
+		{
+			const QJsonObject point=point_value.toObject();
+			points << QPointF(point.value(QStringLiteral("lon")).toDouble(), point.value(QStringLiteral("lat")).toDouble());
+		}
+		const qint64 id=object.value(QStringLiteral("id")).toVariant().toLongLong();
+		if(is_road && points.size()>=2 && !seen_road_ids.contains(id))
+		{
+			const double width=tags.value("width").toString().section(' ',0,0).replace(',', '.').toDouble();
+			roads << RealTerrainOSMFeature{points, road_kind.isEmpty() ? (railway.isEmpty() ? QStringLiteral("piste") : railway) : road_kind, holes,
+				std::isfinite(width) && width>0.0 && width<200.0 ? width : 0.0};
+			seen_road_ids.insert(id);
+		}
+		if(is_building && points.size()>=3 && !seen_building_ids.contains(id))
+		{
+			buildings << RealTerrainOSMFeature{points, QString(), holes};
+			seen_building_ids.insert(id);
+		}
+		const bool closed=points.size()>=4 && points.first()==points.last();
+		if(is_forest && closed && !seen_forest_ids.contains(id)) { forests << RealTerrainOSMFeature{points, QString(), holes}; seen_forest_ids.insert(id); }
+		if(is_clearing && closed && !seen_clearing_ids.contains(id)) { clearings << RealTerrainOSMFeature{points, landuse+":"+natural+":"+leisure, holes}; seen_clearing_ids.insert(id); }
+		if(is_water && closed && !seen_water_ids.contains(id)) { waters << RealTerrainOSMFeature{points, QString(), holes}; seen_water_ids.insert(id); }
+		if(is_rock && closed && !seen_rock_ids.contains(id)) { rocks << RealTerrainOSMFeature{points, QString(), holes}; seen_rock_ids.insert(id); }
+		if(is_stream && points.size()>=2 && !seen_stream_ids.contains(id)) { streams << RealTerrainOSMFeature{points, QString()}; seen_stream_ids.insert(id); }
+	};
+	// Forests, lakes and buildings are often multipolygons, with their tags on
+	// the relation rather than the boundary ways. Preserve inner rings as holes.
+	auto append_elements = [&](const QJsonArray& elements)
+	{
+		QHash<qint64, QPointF> nodes;
+		QHash<qint64, QJsonObject> ways;
+		QSet<qint64> area_boundary_ways;
+		for(const QJsonValue& value : elements)
+		{
+			const QJsonObject ob=value.toObject();
+			const qint64 id=ob.value("id").toVariant().toLongLong();
+			if(ob.value("type")=="node") nodes.insert(id, QPointF(ob.value("lon").toDouble(), ob.value("lat").toDouble()));
+			if(ob.value("type")=="way") ways.insert(id, ob);
+			const QJsonObject tags=ob.value("tags").toObject();
+			if(ob.value("type")=="relation" && tags.value("type")=="multipolygon" &&
+				(tags.contains("building") || tags.contains("natural") || tags.contains("landuse")))
+				for(const QJsonValue& member : ob.value("members").toArray())
+					if(member.toObject().value("type")=="way") area_boundary_ways.insert(member.toObject().value("ref").toVariant().toLongLong());
+		}
+		for(const QJsonValue& value : elements)
+			if(!area_boundary_ways.contains(value.toObject().value("id").toVariant().toLongLong()))
+				append_way(value.toObject(), nodes.isEmpty() ? nullptr : &nodes);
+		auto points_for = [&](const QJsonObject& ob)
+		{
+			QVector<QPointF> result;
+			if(ob.contains("geometry"))
+				for(const QJsonValue& value : ob.value("geometry").toArray())
+				{
+					if(!value.isObject()) return QVector<QPointF>();
+					const QJsonObject p=value.toObject();
+					result << QPointF(p.value("lon").toDouble(), p.value("lat").toDouble());
+				}
+			else for(const QJsonValue& value : ob.value("nodes").toArray())
+			{
+				const qint64 id=value.toVariant().toLongLong();
+				if(!nodes.contains(id)) return QVector<QPointF>();
+				result << nodes.value(id);
+			}
+			return result;
+		};
+		auto join_rings = [](QVector<QVector<QPointF>> parts)
+		{
+			QVector<QVector<QPointF>> rings;
+			while(!parts.isEmpty())
+			{
+				QVector<QPointF> ring=parts.takeLast();
+				bool changed=true;
+				while(changed && ring.first()!=ring.last())
+				{
+					changed=false;
+					for(int i=0; i<parts.size(); ++i)
+					{
+						QVector<QPointF> part=parts[i];
+						if(ring.last()==part.last() || ring.first()==part.first()) std::reverse(part.begin(), part.end());
+						if(ring.last()==part.first()) { part.removeFirst(); ring+=part; }
+						else if(ring.first()==part.last()) { part.removeLast(); part+=ring; ring=part; }
+						else continue;
+						parts.removeAt(i); changed=true; break;
+					}
+				}
+				if(ring.size()>=4 && ring.first()==ring.last()) rings << ring;
+			}
+			return rings;
+		};
+		for(const QJsonValue& value : elements)
+		{
+			const QJsonObject ob=value.toObject(), tags=ob.value("tags").toObject();
+			if(ob.value("type")!="relation" || tags.value("type")!="multipolygon") continue;
+			QVector<QVector<QPointF>> outer_parts, inner_parts;
+			for(const QJsonValue& member_value : ob.value("members").toArray())
+			{
+				const QJsonObject member=member_value.toObject();
+				if(member.value("type")!="way") continue;
+				const QVector<QPointF> points=points_for(member.contains("geometry") ? member : ways.value(member.value("ref").toVariant().toLongLong()));
+				if(points.size()<2) continue;
+				if(member.value("role")=="inner") inner_parts << points; else outer_parts << points;
+			}
+			const QVector<QVector<QPointF>> outers=join_rings(outer_parts), inners=join_rings(inner_parts);
+			for(int i=0; i<outers.size(); ++i)
+			{
+				QVector<QVector<QPointF>> holes;
+				for(const auto& inner : inners) if(QPolygonF(outers[i]).containsPoint(inner.first(), Qt::OddEvenFill)) holes << inner;
+				QJsonArray geometry;
+				for(const QPointF& p : outers[i]) geometry.append(QJsonObject{{"lon",p.x()},{"lat",p.y()}});
+				QJsonObject way{{"type","way"},{"tags",tags},{"geometry",geometry},
+					{"id",-(ob.value("id").toDouble()*1024.0+i+1.0)}};
+				append_way(way, nullptr, holes);
+			}
+		}
+	};
+	bool osm_query_succeeded = false;
+	QString feature_status = include_osm_features ? QCoreApplication::translate("WorldSettingsWidget", "OSM roads and buildings: unavailable; their masks were not updated.") :
 		QCoreApplication::translate("WorldSettingsWidget", "Elevation imported without OSM roads or buildings.");
 	const double selected_width = (east-west) * 111320.0 * std::cos((north+south)*0.5*3.14159265358979323846/180.0);
 	const double selected_height = (north-south) * 111320.0;
-	if(include_osm_features && (east-west) <= 0.25 && (north-south) <= 0.25 && selected_width > 0 && selected_height > 0)
+	if(include_osm_features && selected_width > 0 && selected_height > 0)
 	{
-		const QString query = QStringLiteral("[out:json][timeout:20];(way[\"highway\"](%1,%2,%3,%4);way[\"building\"](%1,%2,%3,%4););out geom;")
-			.arg(south, 0, 'f', 7).arg(west, 0, 'f', 7).arg(north, 0, 'f', 7).arg(east, 0, 'f', 7);
-		const QByteArray post_body = "data=" + QUrl::toPercentEncoding(query);
-		const char* endpoints[] = { "https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter" };
-		QString last_error;
-		for(const char* endpoint : endpoints)
+		QString api_error;
+		int api_tiles_x=std::max(1, (int)std::ceil((east-west)/0.4));
+		int api_tiles_y=std::max(1, (int)std::ceil((north-south)/0.4));
+		while((east-west)*(north-south)/(api_tiles_x*api_tiles_y)>0.20 && api_tiles_x*api_tiles_y<=64)
 		{
-			try
-			{
-				std::string response;
-				const HTTPClient::ResponseInfo result = client.sendPost(endpoint, post_body.toStdString(), "application/x-www-form-urlencoded", response);
-				if(result.response_code != 200) throw glare::Exception("Overpass returned HTTP " + toString(result.response_code));
-				QJsonParseError parse_error;
-				const QJsonDocument document = QJsonDocument::fromJson(QByteArray::fromStdString(response), &parse_error);
-				if(parse_error.error != QJsonParseError::NoError || !document.isObject()) throw glare::Exception("Overpass returned invalid JSON");
-				const QJsonArray elements = document.object().value(QStringLiteral("elements")).toArray();
-				static const QStringList ignored = { QStringLiteral("footway"), QStringLiteral("path"), QStringLiteral("cycleway"), QStringLiteral("pedestrian"), QStringLiteral("steps"), QStringLiteral("bridleway"), QStringLiteral("corridor"), QStringLiteral("construction"), QStringLiteral("proposed") };
-				for(const QJsonValue& element : elements)
-				{
-					const QJsonObject object = element.toObject();
-					if(object.value(QStringLiteral("type")).toString() != QStringLiteral("way")) continue;
-					const QJsonObject tags = object.value(QStringLiteral("tags")).toObject();
-					const QString road_kind = tags.value(QStringLiteral("highway")).toString();
-					const bool is_road = !road_kind.isEmpty() && !ignored.contains(road_kind);
-					const bool is_building = !tags.value(QStringLiteral("building")).toString().isEmpty() || tags.value(QStringLiteral("building")).toBool();
-					if(!is_road && !is_building) continue;
-					QVector<QPointF> points;
-					for(const QJsonValue& point_value : object.value(QStringLiteral("geometry")).toArray())
-					{
-						const QJsonObject point = point_value.toObject();
-						points << QPointF(point.value(QStringLiteral("lon")).toDouble(), point.value(QStringLiteral("lat")).toDouble());
-					}
-					if(is_road && points.size() >= 2) roads << RealTerrainOSMFeature{points, road_kind};
-					if(is_building && points.size() >= 3) buildings << RealTerrainOSMFeature{points, QString()};
-				}
-				feature_status = QCoreApplication::translate("WorldSettingsWidget", "OpenStreetMap features: %1 roads, %2 buildings.").arg(roads.size()).arg(buildings.size());
-				last_error.clear();
-				break;
-			}
-			catch(const std::exception& e) { last_error = QString::fromUtf8(e.what()); }
+			if((east-west)/api_tiles_x>(north-south)/api_tiles_y) ++api_tiles_x;
+			else ++api_tiles_y;
 		}
-		if(!last_error.isEmpty()) feature_status = QCoreApplication::translate("WorldSettingsWidget", "OSM unavailable (%1); road/building masks are empty.").arg(last_error);
+		if(api_tiles_x*api_tiles_y<=64)
+		{
+			bool all_api_tiles_succeeded=true;
+			for(int tile_y=0; tile_y<api_tiles_y && all_api_tiles_succeeded; ++tile_y)
+			for(int tile_x=0; tile_x<api_tiles_x && all_api_tiles_succeeded; ++tile_x)
+			{
+				if(QThread::currentThread()->isInterruptionRequested()) throw glare::Exception("terrain import cancelled");
+				if(osm_progress) osm_progress(tile_y*api_tiles_x+tile_x+1, api_tiles_x*api_tiles_y);
+				const double tile_south=south+(north-south)*tile_y/api_tiles_y;
+				const double tile_north=south+(north-south)*(tile_y+1)/api_tiles_y;
+				const double tile_west=west+(east-west)*tile_x/api_tiles_x;
+				const double tile_east=west+(east-west)*(tile_x+1)/api_tiles_x;
+				const QByteArray response=downloadRealTerrainOSMMap(client, tile_north, tile_south, tile_west, tile_east, api_error);
+				if(response.isEmpty()) { all_api_tiles_succeeded=false; break; }
+				QJsonParseError parse_error;
+				const QJsonDocument document=QJsonDocument::fromJson(response, &parse_error);
+				if(parse_error.error!=QJsonParseError::NoError || !document.isObject() || !document.object().value(QStringLiteral("elements")).isArray())
+				{ api_error=QStringLiteral("Invalid OpenStreetMap JSON"); all_api_tiles_succeeded=false; break; }
+				const QJsonArray elements=document.object().value(QStringLiteral("elements")).toArray();
+				append_elements(elements);
+			}
+			if(all_api_tiles_succeeded)
+			{
+				osm_query_succeeded=true;
+				feature_status=QCoreApplication::translate("WorldSettingsWidget", "OpenStreetMap features: %1 roads and paths, %2 buildings, %3 woods, %4 water areas.")
+					.arg(roads.size()).arg(buildings.size()).arg(forests.size()).arg(waters.size());
+			}
+			else { roads.clear(); buildings.clear(); forests.clear(); clearings.clear(); waters.clear(); streams.clear(); rocks.clear();
+				seen_road_ids.clear(); seen_building_ids.clear(); seen_forest_ids.clear(); seen_clearing_ids.clear(); seen_water_ids.clear(); seen_stream_ids.clear(); seen_rock_ids.clear(); }
+		}
+		else api_error=QStringLiteral("Selected area needs too many OpenStreetMap requests");
+		if(!osm_query_succeeded && selected_width <= 25000.0 && selected_height <= 25000.0)
+		{
+		const char* endpoints[] = {
+			"https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+			"https://overpass-api.de/api/interpreter",
+			"https://overpass.private.coffee/api/interpreter"
+		};
+		const int tiles_x=myClamp((int)std::ceil(selected_width/4000.0),1,4);
+		const int tiles_y=myClamp((int)std::ceil(selected_height/4000.0),1,4);
+		QString last_error;
+		bool all_tiles_succeeded=true;
+		for(int tile_y=0; tile_y<tiles_y && all_tiles_succeeded; ++tile_y)
+		for(int tile_x=0; tile_x<tiles_x && all_tiles_succeeded; ++tile_x)
+		{
+			if(osm_progress) osm_progress(tile_y*tiles_x+tile_x+1, tiles_x*tiles_y);
+			if(QThread::currentThread()->isInterruptionRequested()) throw glare::Exception("terrain import cancelled");
+			const double tile_south=south+(north-south)*tile_y/tiles_y;
+			const double tile_north=south+(north-south)*(tile_y+1)/tiles_y;
+			const double tile_west=west+(east-west)*tile_x/tiles_x;
+			const double tile_east=west+(east-west)*(tile_x+1)/tiles_x;
+			const QString query = QStringLiteral("[out:json][timeout:30];(way[\"highway\"](%1,%2,%3,%4);way[\"railway\"](%1,%2,%3,%4);way[\"leisure\"](%1,%2,%3,%4);way[\"amenity\"=\"parking\"](%1,%2,%3,%4);way[\"building\"](%1,%2,%3,%4);way[\"landuse\"](%1,%2,%3,%4);way[\"natural\"](%1,%2,%3,%4);way[\"waterway\"](%1,%2,%3,%4);way[\"piste:type\"](%1,%2,%3,%4);relation[\"type\"=\"multipolygon\"][\"building\"](%1,%2,%3,%4);relation[\"type\"=\"multipolygon\"][\"landuse\"](%1,%2,%3,%4);relation[\"type\"=\"multipolygon\"][\"natural\"](%1,%2,%3,%4););out geom;")
+				.arg(tile_south, 0, 'f', 7).arg(tile_west, 0, 'f', 7).arg(tile_north, 0, 'f', 7).arg(tile_east, 0, 'f', 7);
+			bool tile_succeeded=false;
+			QString tile_errors;
+			for(const char* endpoint : endpoints)
+			{
+				try
+				{
+					QString request_error;
+					const QByteArray response = postRealTerrainOSMQuery(client, endpoint, query, request_error);
+					if(response.isEmpty()) throw glare::Exception("Overpass request failed: " + request_error.toStdString());
+					QJsonParseError parse_error;
+					const QJsonDocument document = QJsonDocument::fromJson(response, &parse_error);
+					if(parse_error.error != QJsonParseError::NoError || !document.isObject() || !document.object().value(QStringLiteral("elements")).isArray())
+						throw glare::Exception("Overpass returned invalid JSON");
+					const QJsonArray elements = document.object().value(QStringLiteral("elements")).toArray();
+					append_elements(elements);
+					tile_succeeded=true;
+					last_error.clear();
+					break;
+				}
+				catch(const glare::Exception& e) { tile_errors += QStringLiteral("%1: %2; ").arg(QString::fromUtf8(endpoint), QString::fromStdString(e.what())); }
+				catch(const std::exception& e) { tile_errors += QStringLiteral("%1: %2; ").arg(QString::fromUtf8(endpoint), QString::fromUtf8(e.what())); }
+			}
+			if(!tile_succeeded)
+			{
+				last_error=QStringLiteral("tile %1,%2: %3").arg(tile_x).arg(tile_y).arg(tile_errors);
+				all_tiles_succeeded=false;
+			}
+		}
+		if(all_tiles_succeeded)
+		{
+			osm_query_succeeded=true;
+			feature_status=QCoreApplication::translate("WorldSettingsWidget", "OpenStreetMap features: %1 roads and paths, %2 buildings, %3 woods, %4 water areas.")
+				.arg(roads.size()).arg(buildings.size()).arg(forests.size()).arg(waters.size());
+		}
+		else feature_status=QCoreApplication::translate("WorldSettingsWidget", "OSM unavailable (%1); road/building masks were not updated.").arg(api_error+QStringLiteral("; ")+last_error);
+		}
+		else if(!osm_query_succeeded) feature_status=QCoreApplication::translate("WorldSettingsWidget", "OSM unavailable (%1); road/building masks were not updated.").arg(api_error);
 	}
-	else if(include_osm_features) feature_status = QCoreApplication::translate("WorldSettingsWidget", "Selected area is too large for OSM detail; road/building masks are empty.");
+	if(!osm_query_succeeded)
+	{
+		roads.clear(); buildings.clear(); forests.clear(); clearings.clear(); waters.clear(); streams.clear(); rocks.clear();
+	}
 
 	auto map_point = [=](const QPointF& geo) { return QPointF((geo.x()-west)/(east-west)*(n-1), (north-geo.y())/(north-south)*(n-1)); };
+	auto feature_point = [=](const QPointF& geo) { return QPointF((geo.x()-west)/(east-west)*(feature_n-1), (north-geo.y())/(north-south)*(feature_n-1)); };
+	auto vector_point = [=](const QPointF& geo) { return QPointF((geo.x()-west)/(east-west), (north-geo.y())/(north-south)); };
+	QPolygonF vector_selection;
+	for(const QPointF& point : selection) vector_selection << vector_point(point);
+	std::vector<TerrainVectorData::Segment> road_vectors, building_vectors;
+	QPolygonF selected_feature_polygon;
+	for(const QPointF& point : selection) selected_feature_polygon << feature_point(point);
+	QPainterPath selected_feature_path;
+	selected_feature_path.addPolygon(selected_feature_polygon);
+	selected_feature_path.closeSubpath();
+	QImage road_gray;
 	{
-		QPainter painter(&roads_rgba); painter.setRenderHint(QPainter::Antialiasing, true);
-		painter.setPen(QPen(Qt::white, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-		for(const RealTerrainOSMFeature& road : roads)
+		// RGB coverage: paved roads, unsealed paths, grass pistes. Black means
+		// no road. Keep this independent from material weights and tree placement.
+		QImage roads_rgba(feature_n, feature_n, QImage::Format_RGB32); roads_rgba.fill(Qt::black);
 		{
-			double width_m = 5.0;
-			if(road.kind == "motorway") width_m=12; else if(road.kind == "trunk") width_m=11; else if(road.kind == "primary") width_m=9;
-			else if(road.kind == "secondary") width_m=8; else if(road.kind == "tertiary") width_m=7; else if(road.kind == "residential" || road.kind == "unclassified") width_m=6;
-			const double cell_m = std::min(selected_width, selected_height)/(n-1);
-			painter.setPen(QPen(Qt::white, std::max(1.0, width_m/std::max(0.01, cell_m)), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-			for(int i=1; i<road.points.size(); ++i) painter.drawLine(map_point(road.points[i-1]), map_point(road.points[i]));
+			QPainter painter(&roads_rgba); painter.setRenderHint(QPainter::Antialiasing, true); painter.setClipPath(selected_feature_path);
+			for(const RealTerrainOSMFeature& road : roads)
+			{
+				double width_m = 5.0;
+				if(road.kind == "footway" || road.kind == "path" || road.kind == "cycleway" || road.kind == "steps") width_m=2;
+				else if(road.kind == "piste") width_m=18;
+				else if(road.kind == "rail" || road.kind == "tram") width_m=4;
+				else if(road.kind == "track" || road.kind == "bridleway") width_m=3.5;
+				else if(road.kind == "motorway") width_m=12; else if(road.kind == "trunk") width_m=11; else if(road.kind == "primary") width_m=9;
+				else if(road.kind == "secondary") width_m=8; else if(road.kind == "tertiary") width_m=7; else if(road.kind == "residential" || road.kind == "unclassified") width_m=6;
+				if(road.width_m>0.0) width_m=road.width_m;
+				const double cell_m = std::min(selected_width, selected_height)/(feature_n-1);
+				const bool unsealed=road.kind=="path" || road.kind=="track" || road.kind=="bridleway" || road.kind=="footway";
+				const bool major=road.kind=="motorway" || road.kind=="trunk" || road.kind=="primary" || road.kind=="secondary" ||
+					road.kind=="motorway_link" || road.kind=="trunk_link" || road.kind=="primary_link" || road.kind=="secondary_link";
+				const uint32_t vector_style=major ? 0 : ((unsealed || road.kind=="piste" || road.kind=="steps" || road.kind=="cycleway") ? 2 : 1);
+				const float vector_width=(float)myClamp(width_m/std::max(0.01,std::min(selected_width,selected_height)), 1.0e-9, 1.0);
+				for(int i=1;i<road.points.size();++i)
+					appendTerrainVectorEdge(vector_point(road.points[i-1]),vector_point(road.points[i]),vector_selection,vector_width,vector_style,road_vectors);
+				const QColor coverage=road.kind=="piste" ? QColor(0,0,255) : (unsealed ? QColor(0,255,0) : QColor(255,0,0));
+				painter.setPen(QPen(coverage, std::max(1.0, width_m/std::max(0.01, cell_m)), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+				for(int i=1; i<road.points.size(); ++i) painter.drawLine(feature_point(road.points[i-1]), feature_point(road.points[i]));
+			}
 		}
+		road_gray = roads_rgba.convertToFormat(QImage::Format_RGB888);
 	}
+	QImage building_gray;
 	{
-		QPainter painter(&buildings_rgba); painter.setRenderHint(QPainter::Antialiasing, true); painter.setPen(Qt::NoPen); painter.setBrush(Qt::white);
-		for(const RealTerrainOSMFeature& building : buildings)
+		QImage buildings_rgba(feature_n, feature_n, QImage::Format_RGBA8888); buildings_rgba.fill(Qt::transparent);
 		{
+			QPainter painter(&buildings_rgba); painter.setRenderHint(QPainter::Antialiasing, true); painter.setClipPath(selected_feature_path);
+			painter.setPen(Qt::NoPen); painter.setBrush(Qt::white);
+			for(const RealTerrainOSMFeature& building : buildings)
+			{
+				auto append_ring=[&](const QVector<QPointF>& ring) {
+					if(ring.size()<3) return;
+					const float width=(float)myClamp(0.5/std::max(0.01,std::min(selected_width,selected_height)),1.0e-9,1.0);
+					for(int i=0;i<ring.size();++i)
+						appendTerrainVectorEdge(vector_point(ring[i]),vector_point(ring[(i+1)%ring.size()]),vector_selection,width,3,building_vectors);
+				};
+				append_ring(building.points);
+				for(const auto& hole : building.holes) append_ring(hole);
+				QPolygonF polygon;
+				for(const QPointF& point : building.points) polygon << feature_point(point);
+				QPainterPath path; path.setFillRule(Qt::OddEvenFill); path.addPolygon(polygon); path.closeSubpath();
+				for(const auto& hole : building.holes)
+				{
+					QPolygonF inner; for(const QPointF& p : hole) inner << feature_point(p);
+					path.addPolygon(inner); path.closeSubpath();
+				}
+				if(polygon.size() >= 3) painter.drawPath(path);
+			}
+		}
+		building_gray = buildings_rgba.alphaChannel().convertToFormat(QImage::Format_Grayscale8);
+	}
+	auto draw_areas=[&](QImage& image, const QVector<RealTerrainOSMFeature>& areas, bool classify_open_land = false)
+	{
+		QPainter painter(&image); painter.setRenderHint(QPainter::Antialiasing, true);
+		painter.setPen(Qt::NoPen); painter.setBrush(Qt::white);
+		for(const RealTerrainOSMFeature& area : areas)
+		{
+			if(classify_open_land)
+			{
+				const bool grass=area.kind.startsWith("meadow:") || area.kind.startsWith("grass:") ||
+					area.kind.contains(":grassland:") || area.kind.endsWith(":pitch") || area.kind.endsWith(":park");
+				painter.setBrush(grass ? QColor(0,255,0) : QColor(255,0,0));
+			}
 			QPolygonF polygon;
-			for(const QPointF& point : building.points) polygon << map_point(point);
-			if(polygon.size() >= 3) painter.drawPolygon(polygon);
+			for(const QPointF& point : area.points) polygon << map_point(point);
+			QPainterPath path; path.setFillRule(Qt::OddEvenFill); path.addPolygon(polygon); path.closeSubpath();
+			for(const auto& hole : area.holes)
+			{
+				QPolygonF inner; for(const QPointF& p : hole) inner << map_point(p);
+				path.addPolygon(inner); path.closeSubpath();
+			}
+			painter.drawPath(path);
 		}
+	};
+	draw_areas(forests_rgba, forests);
+	draw_areas(clearings_rgba, clearings, true);
+	draw_areas(waters_rgba, waters);
+	draw_areas(rocks_rgba, rocks);
+	{
+		QPainter painter(&waters_rgba); painter.setRenderHint(QPainter::Antialiasing, true);
+		painter.setPen(QPen(Qt::white, std::max(1.0, 3.0/std::max(0.01, std::min(selected_width, selected_height)/(n-1))),
+			Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+		for(const RealTerrainOSMFeature& stream : streams)
+			for(int i=1; i<stream.points.size(); ++i) painter.drawLine(map_point(stream.points[i-1]), map_point(stream.points[i]));
 	}
-	QImage road_gray = roads_rgba.convertToFormat(QImage::Format_Grayscale8);
-	QImage building_gray = buildings_rgba.convertToFormat(QImage::Format_Grayscale8);
+	QImage road_gray_low = road_gray.scaled(n, n, Qt::IgnoreAspectRatio, Qt::SmoothTransformation).convertToFormat(QImage::Format_Grayscale8);
+	QImage building_gray_low = building_gray.scaled(n, n, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+	const QImage forest_gray = forests_rgba.alphaChannel().convertToFormat(QImage::Format_Grayscale8);
+	const QImage clearing_gray = clearings_rgba.alphaChannel().convertToFormat(QImage::Format_Grayscale8);
+	const QImage water_gray = waters_rgba.alphaChannel().convertToFormat(QImage::Format_Grayscale8);
+	const QImage rock_gray = rocks_rgba.alphaChannel().convertToFormat(QImage::Format_Grayscale8);
 	const float* heights = reinterpret_cast<const float*>(height_data.constData());
 	QImage material(n, n, QImage::Format_RGBA8888), tree(n, n, QImage::Format_Grayscale8);
-	const double cell_m = std::min(selected_width, selected_height)/(n-1);
 	for(int y=0; y<n; ++y)
 	{
 		uchar* material_row = material.scanLine(y);
 		uchar* tree_row = tree.scanLine(y);
-		uchar* road_row = road_gray.scanLine(y);
-		uchar* building_row = building_gray.scanLine(y);
+		uchar* road_row = road_gray_low.scanLine(y);
+		uchar* building_row = building_gray_low.scanLine(y);
 		const uchar* selection_row = selection_mask.constScanLine(y);
+		const uchar* forest_row = forest_gray.constScanLine(y);
+		const uchar* clearing_row = clearing_gray.constScanLine(y);
+		const uchar* water_row = water_gray.constScanLine(y);
+		const uchar* rock_row = rock_gray.constScanLine(y);
+		const uchar* clearing_colours = clearings_rgba.constScanLine(y);
 		for(int x=0; x<n; ++x)
 		{
-			const int i=y*n+x, left=y*n+std::max(0,x-1), right=y*n+std::min(n-1,x+1), up=std::max(0,y-1)*n+x, down=std::min(n-1,y+1)*n+x;
+			const int i=y*n+x;
 			const bool inside=selection_row[x]>=128;
 			if(!inside) { road_row[x]=0; building_row[x]=0; }
 			const float h=heights[i];
-			const float sx=std::fabs(heights[right]-heights[left])/(float)(std::max(1, std::min(n-1, x+1)-std::max(0,x-1))*cell_m);
-			const float sy=std::fabs(heights[down]-heights[up])/(float)(std::max(1, std::min(n-1, y+1)-std::max(0,y-1))*cell_m);
 			uchar r=0,g=255,b=0;
 			if(inside && h > water_z+4.0f)
 			{
-				if(std::sqrt(sx*sx+sy*sy)>0.25f) { r=255; g=0; b=0; }
-				else { r=0; g=0; b=255; }
+				// Slope alone does not identify bare rock. That heuristic painted
+				// most mountain slopes as jagged stone bands despite OSM land use.
+				// Reserve rock for mapped bare_rock/scree/shingle below.
+				r=0; g=0; b=255;
 			}
-			float beach_strength = 0.f;
-			const float height_above_water = h - water_z;
-			const float slope = std::sqrt(sx*sx + sy*sy);
-			if(inside && height_above_water > 0.15f && height_above_water < 4.0f && slope < 0.22f)
-			{
-				float inland = myClamp((height_above_water - 0.15f) / 3.85f, 0.f, 1.f);
-				inland = inland * inland * (3.f - 2.f * inland);
-				const float flatness = myClamp((0.22f - slope) / 0.14f, 0.f, 1.f);
-				beach_strength = (1.f - inland) * flatness;
-			}
+			if(inside && forest_row[x]>=128 && h>water_z+1.5f) { r=0; g=0; b=255; }
+			if(inside && clearing_row[x]>=128) { r=0; b=clearing_colours[x*4+1]>=128 ? 255 : 0; g=255-b; }
+			if(inside && rock_row[x]>=128) { r=255; g=0; b=0; }
+			if(inside && water_row[x]>=128) { r=0; g=255; b=0; }
 			const int o=x*4; material_row[o]=r; material_row[o+1]=g; material_row[o+2]=b;
-			material_row[o+3]=(uchar)myClamp((int)std::round(255.f * (1.f - beach_strength)), 0, 255);
-			tree_row[x]=(inside && h>water_z+1.5f && b>=128 && road_row[x]<16 && building_row[x]<16) ? 255 : 0;
+			material_row[o+3]=inside ? 255-water_row[x] : 255;
+			// Grass is a surface material, not permission to populate a town with
+			// trees. Only mapped woods allow trees in an OSM import.
+			tree_row[x]=(inside && forest_row[x]>=128 && road_row[x]<16 && building_row[x]<16 &&
+				clearing_row[x]<128 && water_row[x]<16 && rock_row[x]<128) ? 255 : 0;
 		}
 	}
 	material_png=encodeTerrainPng(material);
 	tree_png=encodeTerrainPng(tree);
-	if(include_osm_features)
+	if(osm_query_succeeded)
 	{
-		roads_png=encodeTerrainPng(road_gray);
-		buildings_png=encodeTerrainPng(building_gray);
+		roads_png=encodeTerrainVectorPng(road_gray,road_vectors);
+		buildings_png=encodeTerrainVectorPng(building_gray,building_vectors);
 	}
 	return feature_status;
 }
 }
 
 
-RealTerrainImportThread::RealTerrainImportThread(double north_, double south_, double west_, double east_, const QVector<QPointF>& polygon_, float water_z_, bool include_osm_features_, QObject* parent)
+RealTerrainImportThread::RealTerrainImportThread(double north_, double south_, double west_, double east_, const QVector<QPointF>& polygon_, float water_z_, float base_z_, bool include_osm_features_, QObject* parent)
 : QThread(parent),
 	north(north_),
 	south(south_),
@@ -617,6 +1518,7 @@ RealTerrainImportThread::RealTerrainImportThread(double north_, double south_, d
 	east(east_),
 	polygon(polygon_),
 	water_z(water_z_),
+	base_z(base_z_),
 	include_osm_features(include_osm_features_),
 	active_client(NULL)
 {}
@@ -650,7 +1552,7 @@ void RealTerrainImportThread::run()
 
 	try
 	{
-		if(!std::isfinite(north) || !std::isfinite(south) || !std::isfinite(west) || !std::isfinite(east) || !std::isfinite(water_z) || polygon.size() < 3 ||
+		if(!std::isfinite(north) || !std::isfinite(south) || !std::isfinite(west) || !std::isfinite(east) || !std::isfinite(water_z) || !std::isfinite(base_z) || polygon.size() < 3 ||
 			north > REAL_TERRAIN_MAX_MERCATOR_LATITUDE || south < -REAL_TERRAIN_MAX_MERCATOR_LATITUDE ||
 			north <= south || west < -180.0 || east > 180.0 || east <= west || (east - west) > 30.0 || (north - south) > 30.0)
 			throw glare::Exception("invalid map selection; choose an area within the visible map bounds");
@@ -671,7 +1573,7 @@ void RealTerrainImportThread::run()
 			import_east = (west + east) * 0.5 + half_lon_span;
 		}
 
-		int zoom = 14;
+		int zoom = 15;
 		RealTerrainTileRange range = realTerrainTileRange(import_north, import_south, import_west, import_east, zoom);
 		while(range.tile_count > 64 && zoom > 8)
 		{
@@ -693,28 +1595,54 @@ void RealTerrainImportThread::run()
 				throw glare::Exception("elevation import cancelled");
 			const std::string url = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/" +
 				toString(zoom) + "/" + toString(tile_x) + "/" + toString(tile_y) + ".png";
-			std::vector<uint8> response_data;
-			const HTTPClient::ResponseInfo response = client.downloadFile(url, response_data);
-			if(response.response_code != 200)
-				throw glare::Exception("elevation tile request failed with HTTP " + toString(response.response_code));
 			QImage tile;
-			if(!tile.loadFromData(response_data.data(), (uint)response_data.size(), "PNG") || tile.width() != 256 || tile.height() != 256)
-				throw glare::Exception("an elevation tile could not be decoded");
+			const QString cache_path = realTerrainElevationTileCachePath(zoom, tile_x, tile_y);
+			QFile cached(cache_path);
+			if(cached.open(QIODevice::ReadOnly)) tile.loadFromData(cached.readAll(), "PNG");
+			cached.close();
+			if(tile.width() != 256 || tile.height() != 256) tile = QImage();
+			if(tile.isNull())
+			{
+				QByteArray response_data;
+#if defined(_WIN32)
+				// The generic HTTPClient can lose the status line on some Windows HTTPS connections.
+				for(int attempt=0; attempt<3 && response_data.isEmpty(); ++attempt)
+				{
+					if(isInterruptionRequested()) throw glare::Exception("elevation import cancelled");
+					response_data = downloadRealTerrainMapTile(url, 12000);
+					if(response_data.isEmpty() && attempt < 2) QThread::msleep(250 * (attempt + 1));
+				}
+				if(response_data.isEmpty())
+					throw glare::Exception("elevation tile download failed after retries at " + toString(zoom) + "/" + toString(tile_x) + "/" + toString(tile_y));
+#else
+				std::vector<uint8> bytes;
+				const HTTPClient::ResponseInfo response = client.downloadFile(url, bytes);
+				if(response.response_code != 200)
+					throw glare::Exception("elevation tile request failed with HTTP " + toString(response.response_code));
+				response_data = QByteArray((const char*)bytes.data(), (int)bytes.size());
+#endif
+				if(!tile.loadFromData(response_data, "PNG") || tile.width() != 256 || tile.height() != 256)
+					throw glare::Exception("an elevation tile could not be decoded");
+				if(!cache_path.isEmpty())
+				{
+					QDir().mkpath(QFileInfo(cache_path).path());
+					QSaveFile output(cache_path);
+					if(output.open(QIODevice::WriteOnly) && output.write(response_data) == response_data.size()) output.commit();
+				}
+			}
 			tiles[std::make_pair(tile_x, tile_y)] = tile.convertToFormat(QImage::Format_RGBA8888);
 			emit tileProgress(++completed, tile_count);
 		}
 
 		QByteArray heights(REAL_TERRAIN_MAP_RESOLUTION * REAL_TERRAIN_MAP_RESOLUTION * (int)sizeof(float), Qt::Uninitialized);
 		float* height_values = reinterpret_cast<float*>(heights.data());
-		const int tile_limit = (1 << zoom) - 1;
+		float min_elevation = std::numeric_limits<float>::max();
 		for(int py=0; py<REAL_TERRAIN_MAP_RESOLUTION; ++py)
 		{
 			const uchar* selection_row = selection_mask.constScanLine(py);
 			const double v = (double)py / (double)(REAL_TERRAIN_MAP_RESOLUTION - 1);
 			const double sample_lat = import_north + (import_south - import_north) * v;
 			const double mercator_y = realTerrainMercatorY(sample_lat, zoom) * 256.0;
-			const int tile_y = myClamp((int)std::floor(mercator_y / 256.0), 0, tile_limit);
-			const int pixel_y = myClamp((int)std::floor(mercator_y - tile_y * 256.0), 0, 255);
 			for(int px=0; px<REAL_TERRAIN_MAP_RESOLUTION; ++px)
 			{
 				const double u = (double)px / (double)(REAL_TERRAIN_MAP_RESOLUTION - 1);
@@ -722,33 +1650,58 @@ void RealTerrainImportThread::run()
 				const bool inside_selection = selection_row[px] >= 128;
 				if(!inside_selection)
 				{
-					height_values[py * REAL_TERRAIN_MAP_RESOLUTION + px] = water_z;
+					height_values[py * REAL_TERRAIN_MAP_RESOLUTION + px] = base_z;
 					continue;
 				}
 				const double mercator_x = realTerrainMercatorX(sample_lon, zoom) * 256.0;
-				const int tile_x = myClamp((int)std::floor(mercator_x / 256.0), 0, tile_limit);
-				const int pixel_x = myClamp((int)std::floor(mercator_x - tile_x * 256.0), 0, 255);
-				const auto tile_it = tiles.find(std::make_pair(tile_x, tile_y));
-				if(tile_it == tiles.end())
-					throw glare::Exception("elevation tile coverage is incomplete");
-				const uchar* rgba = tile_it->second.constScanLine(pixel_y) + pixel_x * 4;
-				const float source_height = (float)(rgba[0] * 256.0 + rgba[1] + rgba[2] / 256.0 - 32768.0);
-				const double shoreline = myClamp(edge_distance[(size_t)py*REAL_TERRAIN_MAP_RESOLUTION+px] / 5.0, 0.0, 1.0);
-				const double smooth_shoreline = shoreline * shoreline * (3.0 - 2.0 * shoreline);
-				height_values[py * REAL_TERRAIN_MAP_RESOLUTION + px] = (float)(water_z + (source_height - water_z) * smooth_shoreline);
+				// Sample pixel centres bilinearly, including across tile boundaries.
+				// Nearest-neighbour sampling made the old 512 px map visibly blocky.
+				auto elevation_at = [&](int image_x, int image_y) -> float
+				{
+					image_x = myClamp(image_x, range.min_x * 256, (range.max_x + 1) * 256 - 1);
+					image_y = myClamp(image_y, range.min_y * 256, (range.max_y + 1) * 256 - 1);
+					const auto tile_it = tiles.find(std::make_pair(image_x / 256, image_y / 256));
+					if(tile_it == tiles.end()) throw glare::Exception("elevation tile coverage is incomplete");
+					const uchar* rgba = tile_it->second.constScanLine(image_y % 256) + (image_x % 256) * 4;
+					return (float)(rgba[0] * 256.0 + rgba[1] + rgba[2] / 256.0 - 32768.0);
+				};
+				const double image_x = mercator_x - 0.5, image_y = mercator_y - 0.5;
+				const int x0 = (int)std::floor(image_x), y0 = (int)std::floor(image_y);
+				const float fx = (float)(image_x - x0), fy = (float)(image_y - y0);
+				const float h0 = elevation_at(x0, y0) * (1.f - fx) + elevation_at(x0 + 1, y0) * fx;
+				const float h1 = elevation_at(x0, y0 + 1) * (1.f - fx) + elevation_at(x0 + 1, y0 + 1) * fx;
+				const float source_height = h0 * (1.f - fy) + h1 * fy;
+				min_elevation = std::min(min_elevation, source_height);
+				height_values[py * REAL_TERRAIN_MAP_RESOLUTION + px] = source_height;
 			}
+		}
+		// Terrarium values are sea-level elevations. Keep their relative relief, but place
+		// the lowest selected point at the world's base surface. Fade the perimeter over
+		// a meaningful distance so the imported section meets adjacent flat terrain.
+		if(min_elevation == std::numeric_limits<float>::max())
+			throw glare::Exception("the selected area contains no elevation samples");
+		for(int py=0; py<REAL_TERRAIN_MAP_RESOLUTION; ++py)
+		for(int px=0; px<REAL_TERRAIN_MAP_RESOLUTION; ++px)
+		{
+			const size_t i=(size_t)py*REAL_TERRAIN_MAP_RESOLUTION+px;
+			if(selection_mask.constScanLine(py)[px] < 128) continue;
+			const double edge=myClamp(edge_distance[i] / (REAL_TERRAIN_MAP_RESOLUTION * 0.25), 0.0, 1.0);
+			const double blend=edge*edge*(3.0-2.0*edge);
+			height_values[i]=(float)(base_z + (height_values[i]-min_elevation)*blend);
 		}
 
 		emit statusMessage(include_osm_features ? QCoreApplication::translate("WorldSettingsWidget", "Generating material, tree and OSM masks…") :
 			QCoreApplication::translate("WorldSettingsWidget", "Generating material and tree masks…"));
 		QByteArray material_png, tree_png, roads_png, buildings_png;
 		const QString feature_status = queryTerrainOSMFeatures(client, import_north, import_south, import_west, import_east,
-			polygon, heights, water_z, include_osm_features, material_png, tree_png, roads_png, buildings_png);
+			polygon, heights, water_z, include_osm_features, material_png, tree_png, roads_png, buildings_png,
+			[this](int current, int total) { emit statusMessage(QCoreApplication::translate("WorldSettingsWidget", "Loading OpenStreetMap data: %1 / %2").arg(current).arg(total)); });
 		{
 			QMutexLocker lock(&client_mutex);
 			active_client = NULL;
 		}
-		emit importReady(heights, material_png, tree_png, roads_png, buildings_png, feature_status);
+		emit importReady(heights, material_png, tree_png, roads_png, buildings_png, feature_status,
+			import_north, import_south, import_west, import_east);
 	}
 	catch(const glare::Exception& e)
 	{
@@ -777,6 +1730,7 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 	terrain_section_resize_drag_start_height(0),
 	terrain_material_browser_target(-1),
 	terrain_height_clear_button(NULL),
+	terrain_apply_button(NULL),
 	terrain_grid_check_box(NULL),
 	world_terrain_sections_button(NULL),
 	world_materials_button(NULL),
@@ -991,7 +1945,7 @@ WorldSettingsWidget::WorldSettingsWidget(QWidget* parent)
 
 	connect(this->newTerrainSectionPushButton, SIGNAL(clicked()), this, SLOT(newTerrainSectionPushButtonClicked()));
 
-	connect(this->applyPushButton, SIGNAL(clicked()), this, SLOT(applySettingsSlot()));
+	connect(this->applyPushButton, SIGNAL(clicked()), this, SLOT(applyWaterSettingsSlot()));
 
 	this->waterZDoubleSpinBox->setMinimum(-std::numeric_limits<double>::infinity());
 	this->waterZDoubleSpinBox->setMaximum( std::numeric_limits<double>::infinity());
@@ -1466,6 +2420,7 @@ void WorldSettingsWidget::createSculptingTab()
 		if(main_window)
 		{
 			QSettings settings;
+			settings.setValue(realTerrainGridPreferenceKey(main_window), visible);
 			settings.setValue(QStringLiteral("WorldSettings/ShowDefaultTerrainGrid"), visible);
 		}
 		applyTerrainGridVisibility();
@@ -1504,6 +2459,10 @@ void WorldSettingsWidget::createSculptingTab()
 	world_materials_button->setToolTip(tr("Expand or collapse texture slots used by the paintable surface layers."));
 	world_terrain_geometry_button->setToolTip(tr("Expand or collapse terrain size, elevation and height map settings."));
 	terrain_grid_check_box->setText(tr("Show terrain grid when no material is assigned"));
+	terrain_apply_button = new QPushButton(tr("Apply world settings"), world_tab);
+	terrain_apply_button->setObjectName(QStringLiteral("terrainApplyWorldSettingsButton"));
+	world_form_layout->addRow(terrain_apply_button);
+	connect(terrain_apply_button, &QPushButton::clicked, this, &WorldSettingsWidget::applySettingsSlot);
 
 	settings_tabs = new QTabWidget(this);
 	settings_tabs->setMinimumWidth(0);
@@ -2043,7 +3002,7 @@ void WorldSettingsWidget::createSculptingTab()
 	real_terrain_layout->addRow(real_terrain_section_y_label, real_terrain_section_y_spin_box);
 	real_terrain_import_button = new QPushButton(tr("Import terrain and layers"), real_terrain_group);
 	real_terrain_layout->addRow(real_terrain_import_button);
-	real_terrain_source_label = new QLabel(tr("Imports height, material, tree, road and building maps into the chosen terrain section. OSM road/building detail is available for areas up to about 25 km across."), real_terrain_group);
+	real_terrain_source_label = new QLabel(tr("Imports terrain, roads, paths, building footprints, woods, open land and water from OSM. Masks place materials on the terrain; surface textures are included. Buildings remain flat. Large areas can take longer to download."), real_terrain_group);
 	real_terrain_source_label->setWordWrap(true);
 	real_terrain_layout->addRow(real_terrain_source_label);
 	real_terrain_status_label = new QLabel(real_terrain_group);
@@ -2073,7 +3032,7 @@ void WorldSettingsWidget::createSculptingTab()
 		const bool include_osm_features = real_terrain_import_include_osm_features;
 		real_terrain_import_include_osm_features = true;
 		RealTerrainImportThread* worker = new RealTerrainImportThread(
-			north, south, west, east, polygon, (float)waterZDoubleSpinBox->value(), include_osm_features, this);
+			 north, south, west, east, polygon, (float)waterZDoubleSpinBox->value(), (float)defaultTerrainZDoubleSpinBox->value(), include_osm_features, this);
 		real_terrain_import_thread = worker;
 		connect(worker, &RealTerrainImportThread::tileProgress, this, [this](int completed, int total)
 		{
@@ -2083,7 +3042,7 @@ void WorldSettingsWidget::createSculptingTab()
 		connect(worker, &RealTerrainImportThread::importReady, this, [this](const QByteArray& metres,
 			const QByteArray& material_mask_png, const QByteArray& tree_mask_png,
 			const QByteArray& road_mask_png, const QByteArray& building_mask_png,
-			const QString& feature_status)
+			const QString& feature_status, double import_north, double import_south, double import_west, double import_east)
 		{
 			try
 			{
@@ -2099,8 +3058,13 @@ void WorldSettingsWidget::createSculptingTab()
 				for(size_t i=0; i<num_values; ++i)
 					heightmap->getData()[i] /= terrain_height_scale;
 
-				const std::string temp_path = PlatformUtils::getTempDirPath() + "/metasiberia_real_terrain_" +
-					QtUtils::toStdString(QUuid::createUuid().toString(QUuid::WithoutBraces)) + ".exr";
+				const QString georef_name=QStringLiteral("metasiberia_geo_v1_%1_%2_%3_%4_%5.exr")
+					.arg(qRound64((import_north+90.0)*1000000.0))
+					.arg(qRound64((import_south+90.0)*1000000.0))
+					.arg(qRound64((import_west+180.0)*1000000.0))
+					.arg(qRound64((import_east+180.0)*1000000.0))
+					.arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+				const std::string temp_path = PlatformUtils::getTempDirPath() + "/" + QtUtils::toStdString(georef_name);
 				EXRDecoder::SaveOptions options;
 				options.compression_method = EXRDecoder::CompressionMethod_PIZ;
 				options.bit_depth = EXRDecoder::BitDepth_32;
@@ -2120,10 +3084,10 @@ void WorldSettingsWidget::createSculptingTab()
 					if(FileUtils::fileExists(path)) FileUtils::deleteFile(path);
 					return url;
 				};
-				const URLString material_map_url = save_mask_resource(material_mask_png, QStringLiteral("material"));
+				const URLString material_map_url = save_mask_resource(material_mask_png, QStringLiteral("material_v2"));
 				const URLString tree_map_url = save_mask_resource(tree_mask_png, QStringLiteral("trees"));
-				const URLString road_map_url = road_mask_png.isEmpty() ? URLString() : save_mask_resource(road_mask_png, QStringLiteral("roads"));
-				const URLString building_map_url = building_mask_png.isEmpty() ? URLString() : save_mask_resource(building_mask_png, QStringLiteral("buildings"));
+				const URLString road_map_url = road_mask_png.isEmpty() ? URLString() : save_mask_resource(road_mask_png, QStringLiteral("roads_v2_vectors_v1"));
+				const URLString building_map_url = building_mask_png.isEmpty() ? URLString() : save_mask_resource(building_mask_png, QStringLiteral("buildings_vectors_v1"));
 
 				const int target_x = real_terrain_section_x_spin_box->value();
 				const int target_y = real_terrain_section_y_spin_box->value();
@@ -2159,14 +3123,28 @@ void WorldSettingsWidget::createSculptingTab()
 				SignalBlocker::setChecked(target_section->treeMaskMapEnabledCheckBox, true);
 				if(!road_map_url.empty()) SignalBlocker::setChecked(target_section->roadMaskMapEnabledCheckBox, true);
 				if(!building_map_url.empty()) SignalBlocker::setChecked(target_section->buildingMaskMapEnabledCheckBox, true);
-				const QString imported_message = tr("Elevation and terrain layers imported into section (%1, %2). %3 Apply world settings to save them.").arg(target_x).arg(target_y).arg(feature_status);
-				real_terrain_status_label->setText(imported_message);
+				applyTerrainGridVisibility();
+				if(main_window)
+				{
+					QSettings settings;
+					const QString key=realTerrainGeorefKey(main_window, target_x, target_y);
+					settings.setValue(key+QStringLiteral("/heightmap"), QtUtils::toQString(map_url));
+					settings.setValue(key+QStringLiteral("/north"), import_north);
+					settings.setValue(key+QStringLiteral("/south"), import_south);
+					settings.setValue(key+QStringLiteral("/west"), import_west);
+					settings.setValue(key+QStringLiteral("/east"), import_east);
+					real_terrain_map_widget->recordImportedArea({target_x, target_y, import_north, import_south, import_west, import_east,
+						target_section->mapScaleSpinBox(0)->value(), target_section->mapScaleSpinBox(0, true)->value()},
+						terrainSectionWidthDoubleSpinBox->value());
+				}
 				if(real_terrain_import_mcp_completion)
 				{
 					settingsChangedSlot();
+					real_terrain_status_label->setText(tr("Elevation and terrain layers imported into section (%1, %2). %3 World settings applied automatically.").arg(target_x).arg(target_y).arg(feature_status));
 					const std::function<void(bool, const QString&)> completion = std::move(real_terrain_import_mcp_completion);
-					completion(true, tr("Imported terrain and submitted the updated world settings."));
+					completion(true, tr("Imported terrain and submitted the updated world settings. %1").arg(feature_status));
 				}
+				else real_terrain_status_label->setText(tr("Elevation and terrain layers imported into section (%1, %2). %3 Open Terrain and click Apply world settings to save them.").arg(target_x).arg(target_y).arg(feature_status));
 			}
 			catch(const std::exception& e)
 			{
@@ -2296,6 +3274,13 @@ void WorldSettingsWidget::createSculptingTab()
 		if(!edit_tab && sculpting_mode_check_box->isChecked())
 			sculpting_mode_check_box->setChecked(false);
 		sculpting_mode_check_box->setEnabled(edit_tab && main_window && main_window->connectedToUsersWorldOrGodUser());
+		if(tab_index==8 && real_terrain_map_widget && main_window)
+		{
+			Vec3d position, angles;
+			main_window->gui_client.getCurrentAvatarPoseForNetworking(position, angles);
+			real_terrain_map_widget->setAvatarPosition(position.x, position.y, std::cos(angles.x), std::sin(angles.x));
+			real_terrain_map_widget->focusImportedAreaForAvatar(true);
+		}
 	});
 
 	connect(sculpting_mode_check_box, &QCheckBox::toggled, this, [this](bool enabled)
@@ -2505,6 +3490,8 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	world_terrain_sections_button->setToolTip(tr("Expand or collapse height, material and object masks imported for each terrain section."));
 	world_materials_button->setToolTip(tr("Expand or collapse texture slots used by the paintable surface layers."));
 	world_terrain_geometry_button->setToolTip(tr("Expand or collapse terrain size, elevation and height map settings."));
+	terrain_apply_button->setText(tr("Apply world settings"));
+	applyPushButton->setText(tr("Apply water settings"));
 	for(int i=0; i<4; ++i)
 	{
 		if(terrain_material_clear_buttons[i])
@@ -2586,7 +3573,7 @@ void WorldSettingsWidget::retranslateSculptingTab()
 	real_terrain_section_y_label->setText(tr("Target section Y"));
 	real_terrain_import_button->setText(tr("Import terrain and layers"));
 	LucideIconUtils::setButtonIcon(real_terrain_import_button, LucideIconUtils::directoryForBasePath(QtUtils::toStdString(QCoreApplication::applicationDirPath())), QStringLiteral("mountain"), palette().color(QPalette::ButtonText), 16);
-	real_terrain_source_label->setText(tr("Imports height, material, tree, road and building maps into the chosen terrain section. OSM road/building detail is available for areas up to about 25 km across."));
+	real_terrain_source_label->setText(tr("Imports terrain, roads, paths, building footprints, woods, open land and water from OSM. Masks place materials on the terrain; surface textures are included. Buildings remain flat. Large areas can take longer to download."));
 	const QString map_target_names[8] = {
 		tr("Terrain height"), tr("Rock material"), tr("Ground / sand material"), tr("Vegetation material"),
 		tr("Allow trees"), tr("Erase trees"), tr("Restore source map"), tr("Overlay material (e.g. beach / snow)")
@@ -2738,6 +3725,16 @@ WorldSettingsWidget::~WorldSettingsWidget()
 void WorldSettingsWidget::init(MainWindow* main_window_)
 {
 	main_window = main_window_;
+	QTimer* avatar_map_timer = new QTimer(this);
+	avatar_map_timer->setInterval(100);
+	connect(avatar_map_timer, &QTimer::timeout, this, [this]()
+	{
+		if(!real_terrain_map_widget || !real_terrain_map_widget->isVisible() || !main_window) return;
+		Vec3d position, angles;
+		main_window->gui_client.getCurrentAvatarPoseForNetworking(position, angles);
+		real_terrain_map_widget->setAvatarPosition(position.x, position.y, std::cos(angles.x), std::sin(angles.x));
+	});
+	avatar_map_timer->start();
 	if(terrain_grid_check_box)
 	{
 		QSettings settings;
@@ -2758,27 +3755,37 @@ void WorldSettingsWidget::applyTerrainGridVisibility()
 		return;
 
 	OpenGLTextureRef grid_texture;
-	if(terrain_grid_check_box->isChecked())
+	bool has_material_mask = false;
+	for(int i=0; i<terrainSectionScrollAreaWidgetContents->layout()->count(); ++i)
+	{
+		QWidget* child = terrainSectionScrollAreaWidgetContents->layout()->itemAt(i)->widget();
+		TerrainSpecSectionWidget* section = dynamic_cast<TerrainSpecSectionWidget*>(child);
+		if(section && section->maskMapEnabledCheckBox->isChecked() && !section->maskMapURLFileSelectWidget->filename().trimmed().isEmpty())
+		{
+			has_material_mask = true;
+			break;
+		}
+	}
+	if(terrain_grid_check_box->isChecked() && !has_material_mask)
 	{
 		const std::string grid_path = main_window->gui_client.resources_dir_path + "/grey_grid.png";
 		if(FileUtils::fileExists(grid_path))
 			grid_texture = engine->getTexture(grid_path);
 	}
 
-	ImageMapUInt8Ref blank_map = new ImageMapUInt8(1, 1, 4);
-	uint8* pixel = blank_map->getPixel(0, 0);
-	pixel[0] = pixel[1] = pixel[2] = pixel[3] = 255;
-	const OpenGLTextureRef blank_texture = engine->getOrLoadOpenGLTextureForMap2D(
-		OpenGLTextureKey("__metasiberia_map_world_blank_detail__"), *blank_map, TextureParams());
-
 	for(int i=0; i<4; ++i)
 	{
 		FileSelectWidget* file_widget = findChild<FileSelectWidget*>(QString("detailColMapURLs%1FileSelectWidget").arg(i));
+		if(main_window->gui_client.terrain_system.nonNull())
+			main_window->gui_client.terrain_system->setMaterialScale(i,
+				terrain_material_scale_x_spin_boxes[i] ? (float)terrain_material_scale_x_spin_boxes[i]->value() : 1.f,
+				terrain_material_scale_y_spin_boxes[i] ? (float)terrain_material_scale_y_spin_boxes[i]->value() : 1.f);
 		// The grid is only a visual fallback.  Never replace a material explicitly
 		// assigned to a world slot.
 		if(file_widget && file_widget->filename().trimmed().isEmpty())
 		{
-			engine->setDetailTexture(i, grid_texture ? grid_texture : blank_texture);
+			const OpenGLTextureRef fallback=TerrainSystem::defaultMaterialTexture(*engine, main_window->gui_client.resources_dir_path, i);
+			engine->setDetailTexture(i, grid_texture ? grid_texture : fallback);
 			engine->setDetailTextureScaleXY(i,
 				terrain_material_scale_x_spin_boxes[i] ? (float)terrain_material_scale_x_spin_boxes[i]->value() : 1.0f,
 				terrain_material_scale_y_spin_boxes[i] ? (float)terrain_material_scale_y_spin_boxes[i]->value() : 1.0f);
@@ -2821,7 +3828,7 @@ bool WorldSettingsWidget::startMCPRealTerrainImport(double north, double south, 
 	real_terrain_section_x_spin_box->setValue(section_x);
 	real_terrain_section_y_spin_box->setValue(section_y);
 	real_terrain_import_mcp_completion = completion;
-	real_terrain_import_include_osm_features = false;
+	real_terrain_import_include_osm_features = true;
 	real_terrain_import_button->click();
 	if(!real_terrain_import_thread)
 	{
@@ -2887,7 +3894,7 @@ bool WorldSettingsWidget::startMCPRealTerrainImportFromCurrentSelection(int sect
 		real_terrain_section_y_spin_box->setValue(section_y);
 	}
 	real_terrain_import_mcp_completion = completion;
-	real_terrain_import_include_osm_features = false;
+	real_terrain_import_include_osm_features = true;
 	real_terrain_import_button->click();
 	if(!real_terrain_import_thread)
 	{
@@ -3073,6 +4080,49 @@ bool WorldSettingsWidget::eventFilter(QObject* watched, QEvent* event)
 void WorldSettingsWidget::setFromWorldSettings(const WorldSettings& world_settings)
 {
 	QSignalBlocker blocker(this);
+	QVector<RealTerrainMapWidget::ImportedArea> imported_areas;
+	if(main_window)
+	{
+		QSettings settings;
+		for(const TerrainSpecSection& section : world_settings.terrain_spec.section_specs)
+		{
+			if(section.heightmap_URL.empty()) continue;
+			double north=0, south=0, west=0, east=0;
+			if(realTerrainBoundsFromHeightmapURL(section.heightmap_URL, north, south, west, east))
+			{
+				imported_areas << RealTerrainMapWidget::ImportedArea{section.x, section.y, north, south, west, east,
+					section.map_scales[0], section.map_scale_y[0]};
+				continue;
+			}
+			const QString key=realTerrainGeorefKey(main_window, section.x, section.y);
+			if(settings.value(key+QStringLiteral("/heightmap")).toString() != QtUtils::toQString(section.heightmap_URL)) continue;
+			bool north_ok=false, south_ok=false, west_ok=false, east_ok=false;
+			north=settings.value(key+QStringLiteral("/north")).toDouble(&north_ok);
+			south=settings.value(key+QStringLiteral("/south")).toDouble(&south_ok);
+			west=settings.value(key+QStringLiteral("/west")).toDouble(&west_ok);
+			east=settings.value(key+QStringLiteral("/east")).toDouble(&east_ok);
+			if(north_ok && south_ok && west_ok && east_ok && north>south && east>west)
+				imported_areas << RealTerrainMapWidget::ImportedArea{section.x, section.y, north, south, west, east,
+					section.map_scales[0], section.map_scale_y[0]};
+		}
+	}
+	if(real_terrain_map_widget)
+	{
+		if(main_window)
+		{
+			Vec3d position, angles;
+			main_window->gui_client.getCurrentAvatarPoseForNetworking(position, angles);
+			real_terrain_map_widget->setAvatarPosition(position.x, position.y, std::cos(angles.x), std::sin(angles.x));
+		}
+		real_terrain_map_widget->setImportedAreas(imported_areas, world_settings.terrain_spec.terrain_section_width_m);
+	}
+	if(terrain_grid_check_box && main_window)
+	{
+		QSettings settings;
+		const bool show_grid=settings.value(realTerrainGridPreferenceKey(main_window), imported_areas.isEmpty()).toBool();
+		SignalBlocker::setChecked(terrain_grid_check_box, show_grid);
+		settings.setValue(QStringLiteral("WorldSettings/ShowDefaultTerrainGrid"), show_grid);
+	}
 
 	QtUtils::ClearLayout(terrainSectionScrollAreaWidgetContents->layout(), /*delete widgets=*/true);
 
@@ -3366,6 +4416,7 @@ void WorldSettingsWidget::updateControlsEditable()
 	terrain_material_clear_all_button->setEnabled(editable);
 	terrain_relief_clear_all_button->setEnabled(editable);
 	terrain_height_clear_button->setEnabled(editable);
+	terrain_apply_button->setEnabled(editable);
 	real_terrain_group->setEnabled(editable);
 
 	detailColMapURLs0FileSelectWidget->setReadOnly(!editable);
@@ -3517,6 +4568,43 @@ void WorldSettingsWidget::removeTerrainSectionButtonClickedSlot()
 void WorldSettingsWidget::applySettingsSlot()
 {
 	settingsChangedSlot();
+}
+
+
+void WorldSettingsWidget::applyWaterSettingsSlot()
+{
+	if(!main_window || !main_window->connectedToUsersWorldOrGodUser()) return;
+	try
+	{
+		WorldSettings updated;
+		updated.copyNetworkStateFrom(main_window->gui_client.connected_world_settings);
+		updated.terrain_spec.water_z=(float)waterZDoubleSpinBox->value();
+		updated.terrain_spec.flags=(updated.terrain_spec.flags & ~TerrainSpec::WATER_ENABLED_FLAG) |
+			(waterCheckBox->isChecked() ? TerrainSpec::WATER_ENABLED_FLAG : 0);
+		updated.water_reflection_settings.cloud_reflection_enabled=waterCloudReflectionEnabledCheckBox->isChecked();
+		updated.water_reflection_settings.cloud_reflection_strength=(float)cloudWaterReflectionWorldRealControl->value();
+		updated.water_reflection_settings.cloud_reflection_samples=(float)waterCloudReflectionSamplesWorldRealControl->value();
+		updated.water_reflection_settings.cloud_reflection_fade=(float)waterCloudReflectionFadeWorldRealControl->value();
+		updated.water_surface_settings.wave_amplitude=(float)waterWaveAmplitudeWorldRealControl->value();
+		updated.water_surface_settings.wave_length=(float)waterWaveLengthWorldRealControl->value();
+		updated.water_surface_settings.wave_steepness=(float)waterWaveSteepnessWorldRealControl->value();
+		updated.water_surface_settings.wave_speed=(float)waterWaveSpeedWorldRealControl->value();
+		updated.water_surface_settings.wave_direction_deg=(float)waterWaveDirectionWorldRealControl->value();
+		updated.water_surface_settings.wave_direction_spread_deg=(float)waterWaveSpreadWorldRealControl->value();
+		updated.water_surface_settings.secondary_wave_scale=(float)waterSecondaryWaveScaleWorldRealControl->value();
+		updated.water_surface_settings.surf_enabled=waterSurfEnabledCheckBox->isChecked();
+		updated.water_surface_settings.underwater_caustics_enabled=waterCausticsEnabledCheckBox->isChecked();
+		updated.water_surface_settings.surf_strength=(float)waterSurfStrengthWorldRealControl->value();
+		updated.water_surface_settings.shoreline_width=(float)waterShorelineWidthWorldRealControl->value();
+		updated.water_surface_settings.foam_scale=(float)waterFoamScaleWorldRealControl->value();
+		updated.water_surface_settings.foam_speed=(float)waterFoamSpeedWorldRealControl->value();
+		updated.water_surface_settings.foam_fade=(float)waterFoamFadeWorldRealControl->value();
+		main_window->gui_client.worldSettingsChangedFromUI(updated);
+	}
+	catch(const glare::Exception& e)
+	{
+		QMessageBox::warning(this, tr("Error"), QString::fromStdString(e.what()));
+	}
 }
 
 

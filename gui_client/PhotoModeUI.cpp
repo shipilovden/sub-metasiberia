@@ -1293,6 +1293,45 @@ public:
 };
 
 
+void PhotoModeUI::sendPhotoToTelegram(const std::string& image_path, const std::string& caption)
+{
+	if(!gui_client->logged_in_user_id.valid())
+	{
+		gui_client->showErrorNotification("Войдите в аккаунт, чтобы отправить фотографию в Telegram.");
+		return;
+	}
+	std::string bot_token = settings->getStringValue("telegram/bot_token", "");
+	if(bot_token.empty()) bot_token = getOptionalEnvVar("METASIBERIA_TELEGRAM_BOT_TOKEN");
+	std::string chat_id = settings->getStringValue("telegram/photo_upload_chat_id", "");
+	if(chat_id.empty()) chat_id = getOptionalEnvVar("METASIBERIA_TELEGRAM_PHOTO_CHAT_ID");
+	if(bot_token.empty() || chat_id.empty())
+	{
+		gui_client->showErrorNotification("Отправка фото в Telegram не настроена: задайте telegram/bot_token и telegram/photo_upload_chat_id.");
+		return;
+	}
+	try
+	{
+		Reference<Map2D> image = ImageDecoding::decodeImage(".", image_path);
+		if(!image.isType<ImageMapUInt8>())
+			throw glare::Exception("Unsupported photo image format.");
+		const std::string jpeg_path = PlatformUtils::getTempDirPath() + "/metasiberia_telegram_photo_" + toString(FileChecksum::fileChecksum(image_path)) + ".jpg";
+		JPEGDecoder::save(image.downcast<ImageMapUInt8>(), jpeg_path, JPEGDecoder::SaveOptions());
+
+		Reference<UploadPhotoToTelegramThread> thread = new UploadPhotoToTelegramThread();
+		thread->caption = caption;
+		thread->upload_image_jpeg_path = jpeg_path;
+		thread->bot_token = bot_token;
+		thread->chat_id = chat_id;
+		thread->out_msg_queue = &gui_client->msg_queue;
+		upload_thread_manager.addThread(thread);
+	}
+	catch(glare::Exception& e)
+	{
+		gui_client->showErrorNotification("Не удалось подготовить фотографию для Telegram: " + e.what());
+	}
+}
+
+
 class UploadPhotoToVKThread : public MessageableThread
 {
 public:

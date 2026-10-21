@@ -57,6 +57,7 @@ public:
 	void disablePhotoModeUI();
 	bool isPhotoModeEnabled();
 	void requestPhotoUpload();
+	void sendPhotoToTelegram(const std::string& image_path, const std::string& caption);
 
 	void autofocusDistSet(double dist);
 

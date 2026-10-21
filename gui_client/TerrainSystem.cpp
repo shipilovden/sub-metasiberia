@@ -4,6 +4,8 @@ TerrainSystem.cpp
 Copyright Glare Technologies Limited 2023 -
 =====================================================================*/
 #include "TerrainSystem.h"
+#include "TerrainVectorMesh.h"
+#include <utils/MemMappedFile.h>
 
 static float sectionMapCoord(float coord, float scale);
 
@@ -28,6 +30,8 @@ static float sectionMapCoord(float coord, float scale);
 #include "graphics/EXRDecoder.h"
 #include "graphics/jpegdecoder.h"
 #include "graphics/SRGBUtils.h"
+#include "graphics/CompressedImage.h"
+#include "graphics/ImageMapSequence.h"
 #include "opengl/GLMeshBuilding.h"
 #include "opengl/MeshPrimitiveBuilding.h"
 #include "meshoptimizer/src/meshoptimizer.h"
@@ -38,56 +42,245 @@ static float sectionMapCoord(float coord, float scale);
 #include <limits>
 
 
-// Build a single RGBA decal texture from TerrainGen's independent grayscale
-// reference masks.  The alpha channel controls coverage; the RGB colour keeps
-// roads and building footprints visually distinct from the terrain materials.
-static float sampleReferenceMaskAtPixel(const Map2D* mask, size_t x, size_t y, size_t output_width, size_t output_height)
+// Sample a grayscale reference mask at the UV used by the terrain material.
+static float sampleReferenceMask(const Map2D* mask, float u, float v, size_t channel = 0)
 {
-	if(!mask)
+	if(!mask || u < 0.f || v < 0.f || u > 1.f || v > 1.f)
 		return 0.f;
 
-	// TerrainGen exports ordinary 8-bit PNGs.  Read those pixels directly so
-	// applying a 1024^2 mask never performs millions of expensive filtered
-	// samples on the UI/render thread.
 	if(const ImageMapUInt8* image = dynamic_cast<const ImageMapUInt8*>(mask))
 	{
 		const size_t source_width = image->getWidth();
 		const size_t source_height = image->getHeight();
-		if(source_width > 0 && source_height > 0 && image->getN() > 0)
+		if(source_width > 0 && source_height > 0 && image->getN() > channel)
 		{
-			const size_t source_x = std::min(x * source_width / output_width, source_width - 1);
-			const size_t source_y = std::min(y * source_height / output_height, source_height - 1);
-			return (float)image->getPixel(source_x, source_y)[0] * (1.f / 255.f);
+			const float px = myClamp(u * source_width - 0.5f, 0.f, (float)source_width - 1.f);
+			const float py = myClamp(v * source_height - 0.5f, 0.f, (float)source_height - 1.f);
+			const size_t x = (size_t)px, y = (size_t)py;
+			const size_t x1 = std::min(x + 1, source_width - 1), y1 = std::min(y + 1, source_height - 1);
+			const float a = px - x, b = py - y;
+			return ((1-a)*(1-b)*image->getPixel(x,y)[channel] + a*(1-b)*image->getPixel(x1,y)[channel] +
+				(1-a)*b*image->getPixel(x,y1)[channel] + a*b*image->getPixel(x1,y1)[channel]) * (1.f/255.f);
 		}
+		return 0.f;
 	}
 
-	const float u = ((float)x + 0.5f) / (float)output_width;
-	const float v = ((float)y + 0.5f) / (float)output_height;
-	return mask->sampleSingleChannelHighQual(u, v, /*channel=*/0, /*wrap=*/false);
+	// Map2D sampling uses V upwards; PNG rows and terrain section Y run downwards.
+	return mask->sampleSingleChannelHighQual(myClamp(u, 0.f, 1.f), 1.f - myClamp(v, 0.f, 1.f), channel, /*wrap=*/false);
 }
 
-static ImageMapUInt8Ref makeReferenceMaskOverlay(const Map2D* mask, uint8 red, uint8 green, uint8 blue, float alpha_scale)
+static std::vector<Map2DRef> makeSurfaceMipChain(const Map2DRef& image)
 {
-	if(!mask || mask->getMapWidth() == 0 || mask->getMapHeight() == 0)
-		return ImageMapUInt8Ref();
+	std::vector<Map2DRef> levels;
+	if(image.isNull() || image.isType<CompressedImage>() || image->isDXTImageMap()) return levels;
+	if(const ImageMapSequenceUInt8* sequence = dynamic_cast<const ImageMapSequenceUInt8*>(image.ptr()))
+		return sequence->images.empty() ? levels : makeSurfaceMipChain(sequence->images[0]);
+	levels.push_back(image);
+	while(levels.back()->getMapWidth() > 1 || levels.back()->getMapHeight() > 1)
+	{
+		const Map2D& prev = *levels.back();
+		levels.push_back(prev.resizeMidQuality(std::max(1, (int)prev.getMapWidth()/2),
+			std::max(1, (int)prev.getMapHeight()/2), NULL));
+	}
+	return levels;
+}
 
-	const size_t width = mask->getMapWidth();
-	const size_t height = mask->getMapHeight();
-	ImageMapUInt8Ref overlay = new ImageMapUInt8(width, height, 4);
+static std::vector<Map2DRef> defaultSurfaceMipChain(const std::string& directory, const std::string& filename)
+{
+	// Immutable CPU images are reusable across world changes. Do not decode
+	// and downsample the same five photographs on every world entry.
+	static Mutex cache_mutex;
+	static std::map<std::string, std::vector<Map2DRef>> cache;
+	Lock lock(cache_mutex);
+	const std::string path = directory + filename;
+	auto found = cache.find(path);
+	if(found != cache.end()) return found->second;
+	if(!FileUtils::fileExists(path)) return std::vector<Map2DRef>();
+	const auto levels = makeSurfaceMipChain(JPEGDecoder::decode(directory, path));
+	cache[path] = levels;
+	return levels;
+}
+
+// Filter before baking: sampling a 2K photograph once per distant terrain
+// texel aliases the photograph into a repeating checkerboard. GPU mipmaps
+// cannot repair aliasing that has already been baked into the colour map.
+static Colour4f sampleSurface(const std::vector<Map2DRef>& levels, float wx, float wy,
+	float pixel_w, float scale_x, float scale_y, const Colour4f& fallback)
+{
+	if(levels.empty()) return fallback;
+	const float sx = myClamp(scale_x, 0.01f, 100.f) * 0.25f;
+	const float sy = myClamp(scale_y, 0.01f, 100.f) * 0.25f;
+	const float footprint = pixel_w * std::max(sx * levels[0]->getMapWidth(), sy * levels[0]->getMapHeight());
+	const float lod = myClamp(std::log2(std::max(1.f, footprint)), 0.f, (float)levels.size()-1.f);
+	const size_t a = (size_t)lod, b = std::min(a+1, levels.size()-1);
+	Colour4f colour = levels[a]->vec3Sample(wx*sx, -wy*sy, true) * (1.f-(lod-a)) +
+		levels[b]->vec3Sample(wx*sx, -wy*sy, true) * (lod-a);
+	if(levels[0]->getGamma() == 1.f)
+	{
+		// EXR/float detail maps are already linear, unlike JPEG/PNG colours.
+		for(int c=0; c<4; ++c) colour[c] = myClamp(colour[c], 0.f, 1.f);
+		colour = fastApproxLinearSRGBToNonLinearSRGB(colour);
+	}
+	return colour;
+}
+
+static float sampleMaskArea(const Map2D* mask, float u, float v, float du, float dv, size_t channel = 0)
+{
+	if(!mask || channel >= mask->numChannels()) return 0.f;
+	// Integrate coverage, rather than threshold it. Subpixel roads and edges
+	// then contribute their area to the final opaque material at a distance.
+	const int nx = myClamp((int)std::ceil(du * mask->getMapWidth()), 1, 4);
+	const int ny = myClamp((int)std::ceil(dv * mask->getMapHeight()), 1, 4);
+	float sum = 0.f;
+	for(int y=0; y<ny; ++y)
+	for(int x=0; x<nx; ++x)
+		sum += sampleReferenceMask(mask, u + ((x+0.5f)/nx-0.5f)*du, v + ((y+0.5f)/ny-0.5f)*dv, channel);
+	return sum / (nx*ny);
+}
+
+static float sampleMaskDilated(const Map2D* mask, float u, float v, float du, float dv, size_t channel = 0)
+{
+	float coverage = 0.f;
+	for(int y=-1; y<=1; ++y)
+	for(int x=-1; x<=1; ++x)
+		coverage = std::max(coverage, sampleReferenceMask(mask, u + x*du, v + y*dv, channel));
+	return coverage;
+}
+
+static const int TERRAIN_SURFACE_BORDER = 4;
+
+static int terrainSurfaceResolution(float chunk_w, float camera_distance)
+{
+	// Budget by projected size, not land area. Baking every distant chunk at
+	// 2K saturated the loader queue and retained gigabytes of queued images.
+	// Keep up to 16 texels/metre nearby, with filtered coverage at a distance.
+	const float projected = 256.f * chunk_w / std::max(5.f, camera_distance);
+	const int target = myClamp((int)std::ceil(std::min(chunk_w * 16.f, projected)), 128, 1024);
+	int resolution = 128;
+	while(resolution < target) resolution *= 2;
+	return resolution;
+}
+
+// Compose coverage and materials into the terrain's own opaque surface.
+// There is no second nearly coincident mesh, projected decal or alpha cutoff.
+static ImageMapUInt8Ref makeTerrainSurfaceMaterial(const TerrainDataSection* sections,
+	float chunk_x, float chunk_y, float chunk_w, float section_w,
+	const std::vector<Map2DRef>* textures, const TerrainPathSpec& spec, int resolution, const std::atomic<bool>& cancelled)
+{
+	// Detail follows the terrain LOD instead of stretching one section texture
+	// over kilometres. Build it on the existing chunk worker, not the UI thread.
+	const size_t inner_width = (size_t)resolution;
+	const size_t width = inner_width + 2*TERRAIN_SURFACE_BORDER;
+	const size_t height = width;
+	const float pixel_w = chunk_w / inner_width;
+	ImageMapUInt8Ref result = new ImageMapUInt8(width, height, 3);
+	const float pixel_uv = pixel_w / section_w;
+	const Colour4f fallback[4] = {Colour4f(0.43f,0.44f,0.40f,1.f), Colour4f(0.40f,0.34f,0.24f,1.f),
+		Colour4f(0.27f,0.38f,0.16f,1.f), Colour4f(0.68f,0.60f,0.43f,1.f)};
+	int last_section = -1;
+	const Map2D* roads = NULL;
+	const Map2D* buildings = NULL;
+	const Map2D* materials = NULL;
+	bool classified_roads = false, imported_water = false;
+	float road_sx=1.f, road_sy=1.f, building_sx=1.f, building_sy=1.f, material_sx=1.f, material_sy=1.f;
 
 	for(size_t y=0; y<height; ++y)
 	for(size_t x=0; x<width; ++x)
 	{
-		const float alpha = std::min(1.f, std::max(0.f, sampleReferenceMaskAtPixel(mask, x, y, width, height) * alpha_scale));
-
-		uint8* const pixel = overlay->getPixel(x, y);
-		pixel[0] = red;
-		pixel[1] = green;
-		pixel[2] = blue;
-		pixel[3] = (uint8)(alpha * 255.f + 0.5f);
+		if(x == 0 && cancelled.load(std::memory_order_relaxed)) return ImageMapUInt8Ref();
+		const float wx = chunk_x + ((float)x+0.5f-TERRAIN_SURFACE_BORDER)*pixel_w;
+		const float wy = chunk_y + ((float)y+0.5f-TERRAIN_SURFACE_BORDER)*pixel_w;
+		const int section_x = Maths::floorToInt(wx / section_w + 0.5f);
+		const int section_y = Maths::floorToInt(wy / section_w + 0.5f);
+		const int ix = section_x + TerrainSystem::TERRAIN_SECTION_OFFSET;
+		const int iy = section_y + TerrainSystem::TERRAIN_SECTION_OFFSET;
+		if(ix < 0 || ix >= TerrainSystem::TERRAIN_DATA_SECTION_RES || iy < 0 || iy >= TerrainSystem::TERRAIN_DATA_SECTION_RES)
+		{
+			const Colour4f colour = sampleSurface(textures[0], wx, wy, pixel_w, spec.detail_col_map_scale_x[0], spec.detail_col_map_scale_y[0], fallback[0]);
+			for(int c=0; c<3; ++c) result->getPixel(x,y)[c] = (uint8)myClamp((int)std::round(colour[c]*255.f),0,255);
+			continue;
+		}
+		const int index = ix + iy * TerrainSystem::TERRAIN_DATA_SECTION_RES;
+		if(index != last_section)
+		{
+			last_section = index;
+			const TerrainDataSection& section = sections[index];
+			// Vector-bearing resources are drawn from original OSM edges. Keep
+			// raster fallback only for legacy resources without vector metadata.
+			roads = section.road_vectors ? NULL : section.road_maskmap.ptr();
+			buildings = section.building_vectors ? NULL : section.building_maskmap.ptr();
+			materials = section.sculpt_maskmap ? static_cast<const Map2D*>(section.sculpt_maskmap.ptr()) : section.maskmap.ptr();
+			classified_roads = section.road_mask_map_path.find("_roads_v2_") != std::string::npos;
+			imported_water = section.mask_map_path.find("_material_v2_") != std::string::npos;
+			road_sx = myClamp(section.road_maskmap_scale, 0.01f, 100.f);
+			road_sy = myClamp(section.road_maskmap_scale_y, 0.01f, 100.f);
+			building_sx = myClamp(section.building_maskmap_scale, 0.01f, 100.f);
+			building_sy = myClamp(section.building_maskmap_scale_y, 0.01f, 100.f);
+			material_sx = myClamp(section.maskmap_scale, 0.01f, 100.f);
+			material_sy = myClamp(section.maskmap_scale_y, 0.01f, 100.f);
+		}
+		const float u = wx / section_w - section_x + 0.5f, v = wy / section_w - section_y + 0.5f;
+		const float road_u=(u-0.5f)*road_sx+0.5f, road_v=(v-0.5f)*road_sy+0.5f;
+		const float building_u=(u-0.5f)*building_sx+0.5f, building_v=(v-0.5f)*building_sy+0.5f;
+		const float paved=sampleMaskArea(roads, road_u, road_v, pixel_uv*road_sx, pixel_uv*road_sy);
+		const float path=classified_roads ? sampleMaskArea(roads, road_u, road_v, pixel_uv*road_sx, pixel_uv*road_sy, 1) : 0.f;
+		const float piste=classified_roads ? sampleMaskArea(roads, road_u, road_v, pixel_uv*road_sx, pixel_uv*road_sy, 2) : 0.f;
+		const float building=sampleMaskArea(buildings, building_u, building_v, pixel_uv*building_sx, pixel_uv*building_sy);
+		const float road_casing = roads ? std::max(
+			sampleMaskDilated(roads, road_u, road_v, 1.f/roads->getMapWidth(), 1.f/roads->getMapHeight(), 0),
+			classified_roads ? std::max(sampleMaskDilated(roads, road_u, road_v, 1.f/roads->getMapWidth(), 1.f/roads->getMapHeight(), 1),
+				sampleMaskDilated(roads, road_u, road_v, 1.f/roads->getMapWidth(), 1.f/roads->getMapHeight(), 2)) : 0.f) : 0.f;
+	const float building_casing = buildings ? sampleMaskDilated(buildings, building_u, building_v,
+		1.f/buildings->getMapWidth(), 1.f/buildings->getMapHeight()) : 0.f;
+		const float mu = sectionMapCoord(u, material_sx), mv = sectionMapCoord(v, material_sy);
+		float weights[3];
+		float total = 0.f;
+		for(int c=0; c<3; ++c)
+		{
+			weights[c] = sampleMaskArea(materials, mu, mv, pixel_uv*material_sx, pixel_uv*material_sy, c);
+			total += weights[c];
+		}
+		if(total < 0.001f) { weights[materials ? 1 : 0] = 1.f; total = 1.f; }
+		Colour4f colour(0.f);
+		for(int c=0; c<3; ++c)
+			if(weights[c] > 0.f)
+				colour += sampleSurface(textures[c], wx, wy, pixel_w, spec.detail_col_map_scale_x[c], spec.detail_col_map_scale_y[c], fallback[c]) * (weights[c]/total);
+		// PNG decoders may omit an all-opaque alpha channel. Missing alpha is
+		// opaque, not a mask that turns the entire section into water.
+		const float overlay = materials && materials->numChannels() >= 4 ?
+			1.f-sampleMaskArea(materials, mu, mv, pixel_uv*material_sx, pixel_uv*material_sy, 3) : 0.f;
+		if(overlay > 0.f)
+		{
+			const Colour4f cover = imported_water ? Colour4f(0.18f,0.35f,0.42f,1.f) :
+				sampleSurface(textures[3], wx, wy, pixel_w, spec.detail_col_map_scale_x[3], spec.detail_col_map_scale_y[3], fallback[3]);
+			colour = colour*(1.f-overlay) + cover*overlay;
+		}
+		uint8* const pixel=result->getPixel(x, y);
+		// OSM masks retain antialiased coverage. Draw a narrow dark casing from
+		// the source mask before the fills, like a conventional vector map. This
+		// keeps roads and building footprints legible on noisy terrain materials.
+		const float road_coverage = std::max(paved, std::max(path, piste));
+		const float road_edge = myClamp(road_casing-road_coverage, 0.f, 1.f);
+		colour = colour*(1.f-road_edge) + Colour4f(0.12f,0.115f,0.10f,1.f)*road_edge;
+		const float building_edge = myClamp(building_casing-building, 0.f, 1.f);
+		colour = colour*(1.f-building_edge) + Colour4f(0.16f,0.15f,0.13f,1.f)*building_edge;
+		const float coverage[4] = {piste, path, paved, building};
+		const Colour4f feature_fallback[4] = {Colour4f(0.38f,0.48f,0.24f,1.f),
+			Colour4f(0.48f,0.41f,0.30f,1.f), Colour4f(0.60f,0.59f,0.54f,1.f),
+			Colour4f(0.72f,0.71f,0.67f,1.f)};
+		for(int f=0; f<4; ++f)
+		{
+			if(coverage[f] <= 0.f) continue;
+			// Imported footprints are already anti-aliased. Neutral cartographic
+			// fills stay readable at every LOD; the linework is no longer hidden
+			// under high-frequency asphalt/concrete photographs.
+			Colour4f feature = feature_fallback[f];
+			colour = colour*(1.f-coverage[f]) + feature*coverage[f];
+		}
+		for(int c=0; c<3; ++c) pixel[c] = (uint8)myClamp((int)std::round(colour[c] * 255.f), 0, 255);
 	}
 
-	return overlay;
+	return result;
 }
 
 
@@ -221,9 +414,9 @@ static float terrainIslandMask(int kind, float u, float v, int seed)
 TerrainSystem::TerrainSystem()
 {
 	num_uncompleted_tasks = 0;
-	reference_mask_camera_z = 0.f;
 	sculpt_stroke_active = false;
 	sculpt_geometry_rebuild_pending = false;
+	terrain_rebuild_pending = false;
 	sculpt_material_mask_upload_pending = false;
 	sculpt_tree_scattering_rebuild_pending = false;
 }
@@ -231,6 +424,10 @@ TerrainSystem::TerrainSystem()
 
 TerrainSystem::~TerrainSystem()
 {
+	// Also cover partially initialised systems and exceptional teardown paths.
+	for(const auto& entry : id_to_node_map)
+		if(entry.second->build_cancelled) entry.second->build_cancelled->store(true);
+	if(task_manager) task_manager->cancelAndWaitForTasksToComplete();
 }
 
 
@@ -343,7 +540,7 @@ static const bool GEOMORPHING_SUPPORT = false;
 static float world_w = 32768;//8192*4;   TODO: make this just large enough to enclose all defined terrain sections.
 // static float CHUNK_W = 512.f;
 static int chunk_res = 127; // quad res per patch
-const float quad_w_screenspace_target = 0.032f;
+const float quad_w_screenspace_target = 0.016f;
 //const float quad_w_screenspace_target = 0.004f;
 static const int max_depth = 14;
 
@@ -415,6 +612,23 @@ static IndexBufAllocationHandle createIndexBufferForChunkWithRes(OpenGLEngine* o
 }
 
 
+OpenGLTextureRef TerrainSystem::defaultMaterialTexture(OpenGLEngine& engine, const std::string& resources_dir, int slot)
+{
+	const char* textures[] = {"rocky_terrain_02_diff_2k.jpg", "forest_ground_04_diff_2k.jpg", "grass_ground_diff_2k.jpg"};
+	if(slot >= 0 && slot < 3)
+	{
+		const std::string path = resources_dir + "/terrain_materials/" + textures[slot];
+		if(FileUtils::fileExists(path))
+			return engine.getTexture(path);
+	}
+	const uint8 colours[4][3] = {{128,128,128}, {174,145,96}, {72,112,48}, {188,160,112}};
+	const int i = myClamp(slot, 0, 3);
+	ImageMapUInt8Ref colour = new ImageMapUInt8(1, 1, 3);
+	std::memcpy(colour->getData(), colours[i], 3);
+	return engine.getOrLoadOpenGLTextureForMap2D(OpenGLTextureKey("__terrain_fallback_material_" + toString(i)), *colour);
+}
+
+
 void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_dir_path, OpenGLEngine* opengl_engine_, PhysicsWorld* physics_world_, BiomeManager* biome_manager_, const Vec3d& campos, glare::TaskManager* task_manager_, 
 	glare::StackAllocator& bump_allocator, ThreadSafeQueue<Reference<ThreadMessage> >* out_msg_queue_)
 {
@@ -422,12 +636,19 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 	opengl_engine = opengl_engine_;
 	physics_world = physics_world_;
 	biome_manager = biome_manager_;
-	task_manager = task_manager_;
+	task_manager.reset(new glare::TaskManager("Terrain chunks", 2));
 	out_msg_queue = out_msg_queue_;
 
 	terrain_section_w = spec_.terrain_section_width_m;
 	terrain_scale_factor = 1.f / spec_.terrain_section_width_m;
-	reference_mask_camera_z = (float)campos.z;
+	const std::string surface_dir = base_dir_path + "/data/resources/terrain_materials/";
+	const char* surface_files[3] = {"rocky_terrain_02_diff_2k.jpg", "forest_ground_04_diff_2k.jpg", "grass_ground_diff_2k.jpg"};
+	const bool needs_surface = std::any_of(spec.section_specs.begin(), spec.section_specs.end(), [](const TerrainPathSpecSection& section) {
+		return !section.mask_map_path.empty() || !section.road_mask_map_path.empty() || !section.building_mask_map_path.empty();
+	});
+	for(int i=0; i<3; ++i)
+		if(needs_surface)
+			surface_texture_mips[i] = defaultSurfaceMipChain(surface_dir, surface_files[i]);
 
 	next_id = 0;
 
@@ -504,24 +725,8 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 		}
 	}
 	{
-		auto makeDefaultTerrainColour = [&](const std::string& key, uint8 r, uint8 g, uint8 b) -> OpenGLTextureRef
-		{
-			ImageMapUInt8Ref colour = new ImageMapUInt8(1, 1, 4);
-			uint8* pixel = colour->getPixel(0, 0);
-			pixel[0] = r;
-			pixel[1] = g;
-			pixel[2] = b;
-			pixel[3] = 255;
-			return opengl_engine->getOrLoadOpenGLTextureForMap2D(OpenGLTextureKey(key), *colour);
-		};
-		const OpenGLTextureRef default_ground = makeDefaultTerrainColour("__terrain_default_ground__", 174, 145, 96);
-		const OpenGLTextureRef default_vegetation = makeDefaultTerrainColour("__terrain_default_vegetation__", 72, 112, 48);
-		const OpenGLTextureRef default_spare = makeDefaultTerrainColour("__terrain_default_spare__", 128, 128, 128);
-		const OpenGLTextureRef default_overlay = makeDefaultTerrainColour("__terrain_default_overlay__", 188, 160, 112);
-		opengl_engine->setDetailTexture(0, default_spare);
-		opengl_engine->setDetailTexture(1, default_ground);
-		opengl_engine->setDetailTexture(2, default_vegetation);
-		opengl_engine->setDetailTexture(3, default_overlay);
+		for(int i=0; i<4; ++i)
+			opengl_engine->setDetailTexture(i, defaultMaterialTexture(*opengl_engine, base_dir_path + "/data/resources", i));
 		// The world settings UI may be created before TerrainSystem::init(), but
 		// this initialization replaces the engine-global detail textures. Apply
 		// the grid fallback here too, so worlds without assigned terrain materials
@@ -644,124 +849,17 @@ void TerrainSystem::init(const TerrainPathSpec& spec_, const std::string& base_d
 	terrain_scattering.init(base_dir_path, this, opengl_engine_, physics_world, biome_manager_, campos, bump_allocator);
 }
 
-void TerrainSystem::updateReferenceMaskOverlay(int section_x, int section_y, TerrainDataSection& section)
+void TerrainSystem::setMaterialScale(int slot, float scale_x, float scale_y)
 {
-	if(section.road_mask_decal_gl_ob.nonNull())
+	if(slot < 0 || slot >= 4) return;
+	Lock lock(heightmaps_mutex);
+	scale_x = myClamp(scale_x, 0.01f, 100.f);
+	scale_y = myClamp(scale_y, 0.01f, 100.f);
+	if(spec.detail_col_map_scale_x[slot] != scale_x || spec.detail_col_map_scale_y[slot] != scale_y)
 	{
-		opengl_engine->removeObject(section.road_mask_decal_gl_ob);
-		section.road_mask_decal_gl_ob = NULL;
-	}
-	if(section.building_mask_decal_gl_ob.nonNull())
-	{
-		opengl_engine->removeObject(section.building_mask_decal_gl_ob);
-		section.building_mask_decal_gl_ob = NULL;
-	}
-	section.road_mask_gl_tex = NULL;
-	section.building_mask_gl_tex = NULL;
-
-	TextureParams texture_params;
-	texture_params.use_sRGB = false;
-	texture_params.allow_compression = false;
-	// Reference masks are raster images.  Bilinear filtering removes the
-	// visible 4 m / pixel stair-steps when a 2048 px mask covers an 8192 m
-	// terrain section.  Mipmaps stay disabled so the lines do not disappear
-	// when the camera is close to the terrain.
-	texture_params.filtering = OpenGLTexture::Filtering_Bilinear;
-	texture_params.wrapping = OpenGLTexture::Wrapping_Clamp;
-	texture_params.use_mipmaps = false;
-
-	// Terrain decals are projected onto the already-rendered terrain.  The
-	// decal renderer needs the camera to remain outside the projection cube;
-	// keep its top just below the current camera and update it as the camera
-	// moves.  The terrain visible from the camera is then inside the cube.
-	const float min_z = spec.default_terrain_z - 1000.f;
-	const float max_z = std::max(min_z + 1.f, reference_mask_camera_z - 1.f);
-
-	const float z_depth = std::max(1.f, max_z - min_z);
-	const float z_centre = (min_z + max_z) * 0.5f;
-
-	auto create_decal = [&](const OpenGLTextureRef& texture, float map_scale_x, float map_scale_y) -> GLObjectRef
-	{
-		if(texture.isNull())
-			return GLObjectRef();
-
-		GLObjectRef decal_ob = opengl_engine->allocateObject();
-		decal_ob->mesh_data = opengl_engine->getCubeMeshData();
-		decal_ob->materials.resize(1);
-		decal_ob->materials[0].albedo_linear_rgb = Colour3f(1.f);
-		decal_ob->materials[0].albedo_texture = texture;
-		decal_ob->materials[0].simple_double_sided = true;
-		decal_ob->materials[0].cast_shadows = false;
-		decal_ob->materials[0].decal = true;
-		decal_ob->ob_to_world_matrix =
-			Matrix4f::translationMatrix(section_x * terrain_section_w, section_y * terrain_section_w, z_centre) *
-			Matrix4f::scaleMatrix(terrain_section_w / myClamp(map_scale_x, 0.01f, 100.f), terrain_section_w / myClamp(map_scale_y, 0.01f, 100.f), z_depth) *
-			Matrix4f::translationMatrix(-0.5f, -0.5f, -0.5f);
-		opengl_engine->addObject(decal_ob);
-		return decal_ob;
-	};
-
-	// Keep the two masks as separate decals.  A building mask must not replace
-	// or recolour road pixels in the combined image.
-	if(section.building_maskmap.nonNull())
-	{
-		// Keep reference building areas visible without the strong red/orange cast
-		// that can be mistaken for a sculpting warning or a terrain height limit.
-		ImageMapUInt8Ref building_overlay = makeReferenceMaskOverlay(section.building_maskmap.ptr(), 145, 151, 158, 0.28f);
-		if(building_overlay.nonNull())
-		{
-			const size_t key_hash = std::hash<std::string>()(std::string("building|") + std::string(section.building_mask_map_path.begin(), section.building_mask_map_path.end()));
-			const OpenGLTextureKey texture_key = OpenGLTextureKey("__terrain_building_mask_" + toString(section_x) + "_" + toString(section_y) + "_" + toString(key_hash));
-			section.building_mask_gl_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(texture_key, *building_overlay, texture_params);
-			section.building_mask_decal_gl_ob = create_decal(section.building_mask_gl_tex, section.building_maskmap_scale, section.building_maskmap_scale_y);
-		}
-	}
-
-	if(section.road_maskmap.nonNull())
-	{
-		ImageMapUInt8Ref road_overlay = makeReferenceMaskOverlay(section.road_maskmap.ptr(), 24, 24, 24, 0.95f);
-		if(road_overlay.nonNull())
-		{
-			const size_t key_hash = std::hash<std::string>()(std::string("road|") + std::string(section.road_mask_map_path.begin(), section.road_mask_map_path.end()));
-			const OpenGLTextureKey texture_key = OpenGLTextureKey("__terrain_road_mask_" + toString(section_x) + "_" + toString(section_y) + "_" + toString(key_hash));
-			section.road_mask_gl_tex = opengl_engine->getOrLoadOpenGLTextureForMap2D(texture_key, *road_overlay, texture_params);
-			section.road_mask_decal_gl_ob = create_decal(section.road_mask_gl_tex, section.road_maskmap_scale, section.road_maskmap_scale_y);
-		}
-	}
-}
-
-
-void TerrainSystem::updateReferenceMaskDecalTransforms(float camera_z)
-{
-	reference_mask_camera_z = camera_z;
-
-	const float min_z = spec.default_terrain_z - 1000.f;
-	const float max_z = std::max(min_z + 1.f, reference_mask_camera_z - 1.f);
-	const float z_depth = std::max(1.f, max_z - min_z);
-	const float z_centre = (min_z + max_z) * 0.5f;
-
-	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
-	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
-	{
-		TerrainDataSection& section = terrain_data_sections[x + y*TERRAIN_DATA_SECTION_RES];
-		const Matrix4f road_decal_transform =
-			Matrix4f::translationMatrix((x - TERRAIN_SECTION_OFFSET) * terrain_section_w, (y - TERRAIN_SECTION_OFFSET) * terrain_section_w, z_centre) *
-			Matrix4f::scaleMatrix(terrain_section_w / myClamp(section.road_maskmap_scale, 0.01f, 100.f), terrain_section_w / myClamp(section.road_maskmap_scale_y, 0.01f, 100.f), z_depth) *
-			Matrix4f::translationMatrix(-0.5f, -0.5f, -0.5f);
-		const Matrix4f building_decal_transform =
-			Matrix4f::translationMatrix((x - TERRAIN_SECTION_OFFSET) * terrain_section_w, (y - TERRAIN_SECTION_OFFSET) * terrain_section_w, z_centre) *
-			Matrix4f::scaleMatrix(terrain_section_w / myClamp(section.building_maskmap_scale, 0.01f, 100.f), terrain_section_w / myClamp(section.building_maskmap_scale_y, 0.01f, 100.f), z_depth) *
-			Matrix4f::translationMatrix(-0.5f, -0.5f, -0.5f);
-		if(section.road_mask_decal_gl_ob.nonNull())
-		{
-			section.road_mask_decal_gl_ob->ob_to_world_matrix = road_decal_transform;
-			opengl_engine->setObjectTransformData(*section.road_mask_decal_gl_ob);
-		}
-		if(section.building_mask_decal_gl_ob.nonNull())
-		{
-			section.building_mask_decal_gl_ob->ob_to_world_matrix = building_decal_transform;
-			opengl_engine->setObjectTransformData(*section.building_mask_decal_gl_ob);
-		}
+		spec.detail_col_map_scale_x[slot] = scale_x;
+		spec.detail_col_map_scale_y[slot] = scale_y;
+		terrain_rebuild_pending = true;
 	}
 }
 
@@ -770,6 +868,47 @@ void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2
 {
 	// conPrint("TerrainSystem::handleTextureLoaded(): path: '" + toStdString(path) + "'");
 	ZoneScoped; // Tracy profiler
+	std::shared_ptr<const TerrainVectorData::Data> loaded_vectors;
+	for(const auto& section : spec.section_specs)
+		if(!path.empty() && (section.road_mask_map_path == path || section.building_mask_map_path == path))
+		{
+			try
+			{
+				MemMappedFile file(toStdString(path));
+				loaded_vectors = TerrainVectorData::readPNG(static_cast<const uint8_t*>(file.fileData()), file.fileSize());
+			}
+			catch(const glare::Exception& e) { conPrint(std::string("Terrain vector resource: ") + e.what()); }
+			break;
+		}
+	// Build filtered material data outside the geometry/sculpting lock.
+	std::vector<Map2DRef> loaded_surface;
+	for(int i=0; i<4; ++i)
+		if(spec.detail_col_map_paths[i] == path)
+		{
+			Map2DRef colour_map = map;
+#if !defined(EMSCRIPTEN)
+			// Basis/KTX maps hold compressed GPU blocks, not CPU-sampleable pixels.
+			// Read their already uploaded colour once; never call the stub sampling
+			// or resize methods on CompressedImage from a terrain worker.
+			if(map.isType<CompressedImage>() || map->isDXTImageMap())
+			{
+				OpenGLTextureRef texture = opengl_engine->getTextureIfLoaded(OpenGLTextureKey(path));
+				if(texture.nonNull() && texture->getTextureTarget() == GL_TEXTURE_2D)
+				{
+					int level = 0;
+					while(level+1 < texture->getNumMipMapLevelsAllocated() &&
+						std::max(texture->xRes() >> level, texture->yRes() >> level) > 2048) ++level;
+					ImageMapUInt8Ref pixels = new ImageMapUInt8(std::max((size_t)1, texture->xRes() >> level),
+						std::max((size_t)1, texture->yRes() >> level), 4);
+					texture->bind();
+					glGetTexImage(GL_TEXTURE_2D, level, GL_RGBA, GL_UNSIGNED_BYTE, pixels->getData());
+					texture->unbind();
+					colour_map = pixels;
+				}
+			}
+#endif
+			loaded_surface = makeSurfaceMipChain(colour_map);
+		}
 	Lock heightmap_lock(heightmaps_mutex);
 
 	assert(opengl_engine->isOpenGLTextureInsertedForKey(OpenGLTextureKey(path)));
@@ -781,6 +920,8 @@ void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2
 		if(spec.detail_col_map_paths[i] == path)
 		{
 			opengl_engine->setDetailTexture(i, opengl_engine->getTextureIfLoaded(OpenGLTextureKey(path)));
+			surface_texture_mips[i] = loaded_surface;
+			terrain_needs_rebuild = true;
 		}
 
 		if(spec.detail_height_map_paths[i] == path)
@@ -795,14 +936,12 @@ void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2
 	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
 	{
 		TerrainDataSection& section = terrain_data_sections[x + y*TERRAIN_DATA_SECTION_RES];
-		bool reference_mask_changed = false;
 
 		if(section.heightmap_path == path)
 		{
 			section.heightmap = map;
 			section.heightmap_gl_tex = opengl_engine->getTextureIfLoaded(OpenGLTextureKey(path));
 			terrain_needs_rebuild = true;
-			reference_mask_changed = true;
 		}
 		if(section.mask_map_path == path)
 		{
@@ -818,23 +957,22 @@ void TerrainSystem::handleTextureLoaded(const OpenGLTextureKey& path, const Map2
 		if(section.road_mask_map_path == path)
 		{
 			section.road_maskmap = map;
-			reference_mask_changed = true;
+			section.road_vectors = loaded_vectors;
+			terrain_needs_rebuild = true;
 		}
 		if(section.building_mask_map_path == path)
 		{
 			section.building_maskmap = map;
-			reference_mask_changed = true;
+			section.building_vectors = loaded_vectors;
+			terrain_needs_rebuild = true;
 		}
 
-		if(reference_mask_changed)
-			updateReferenceMaskOverlay(x - TERRAIN_SECTION_OFFSET, y - TERRAIN_SECTION_OFFSET, section);
 	}
 
 	if(terrain_needs_rebuild)
 	{
-		// Reload terrain:
-		removeSubtree(root_node.ptr(), root_node->old_subtree_gl_obs, root_node->old_subtree_phys_obs);
-
+		// Batch texture arrivals into one chunk rebuild on the next frame.
+		terrain_rebuild_pending = true;
 		terrain_scattering.rebuild();
 	}
 }
@@ -2118,8 +2256,8 @@ void TerrainSystem::rebuildAfterSculptIfNeeded()
 	// When the first brush stroke converts a source RGB mask to RGBA (for the
 	// overlay layer), existing terrain chunks still hold the old texture Ref.
 	// Rebuild those chunks once so their material binds the new RGBA texture.
-	if(sculpt_geometry_rebuild_pending)
-		removeSubtree(root_node.ptr(), root_node->old_subtree_gl_obs, root_node->old_subtree_phys_obs);
+	if(sculpt_geometry_rebuild_pending || sculpt_material_mask_upload_pending)
+		terrain_rebuild_pending = true;
 	if(sculpt_geometry_rebuild_pending || sculpt_tree_scattering_rebuild_pending)
 		terrain_scattering.rebuild();
 	sculpt_geometry_rebuild_pending = false;
@@ -2167,19 +2305,19 @@ void TerrainSystem::updateSculptedHeightmapTextures()
 		TerrainDataSection& section = terrain_data_sections[x + y * TERRAIN_DATA_SECTION_RES];
 		if(!section.sculpt_maskmap_texture_dirty || section.sculpt_maskmap.isNull())
 			continue;
-		ImageMapUInt8* map = section.sculpt_maskmap.ptr();
-		const ArrayRef<uint8> bytes(map->getData(), map->getDataSize());
-		if(section.mask_gl_tex.nonNull() && section.mask_gl_tex->xRes() == (int)map->getWidth() &&
-			section.mask_gl_tex->yRes() == (int)map->getHeight() &&
+		const ImageMapUInt8* texture_map = section.sculpt_maskmap.ptr();
+		const ArrayRef<uint8> bytes(texture_map->getData(), texture_map->getDataSize());
+		if(section.mask_gl_tex.nonNull() && section.mask_gl_tex->xRes() == (int)texture_map->getWidth() &&
+			section.mask_gl_tex->yRes() == (int)texture_map->getHeight() &&
 			section.mask_gl_tex->getFormat() == OpenGLTextureFormat::Format_RGBA_Linear_Uint8)
 		{
-			section.mask_gl_tex->loadIntoExistingTexture(0, map->getWidth(), map->getHeight(),
-				map->getWidth() * map->getN(), bytes, /*bind_needed=*/true);
+			section.mask_gl_tex->loadIntoExistingTexture(0, texture_map->getWidth(), texture_map->getHeight(),
+				texture_map->getWidth() * texture_map->getN(), bytes, /*bind_needed=*/true);
 		}
 		else
 		{
-			const OpenGLTextureFormat format = map->getN() >= 4 ? OpenGLTextureFormat::Format_RGBA_Linear_Uint8 : OpenGLTextureFormat::Format_RGB_Linear_Uint8;
-			section.mask_gl_tex = new OpenGLTexture(map->getWidth(), map->getHeight(), opengl_engine, bytes, format,
+			const OpenGLTextureFormat format = texture_map->getN() >= 4 ? OpenGLTextureFormat::Format_RGBA_Linear_Uint8 : OpenGLTextureFormat::Format_RGB_Linear_Uint8;
+			section.mask_gl_tex = new OpenGLTexture(texture_map->getWidth(), texture_map->getHeight(), opengl_engine, bytes, format,
 				OpenGLTexture::Filtering_Bilinear, OpenGLTexture::Wrapping_Clamp, /*has_mipmaps=*/false);
 			section.mask_gl_tex->setDebugName("Sculpted terrain material mask");
 			sculpt_geometry_rebuild_pending = true;
@@ -2198,6 +2336,8 @@ bool TerrainSystem::isTerrainFullyBuilt()
 // Remove any opengl and physics objects inserted into the opengl and physics engines, in the subtree with given root node.
 void TerrainSystem::removeAllNodeDataForSubtree(TerrainNode* node)
 {
+	if(node->vector_gl_ob.nonNull())
+		opengl_engine->removeObject(node->vector_gl_ob);
 	if(node->gl_ob.nonNull())
 		opengl_engine->removeObject(node->gl_ob);
 	if(node->physics_ob.nonNull())
@@ -2217,21 +2357,13 @@ void TerrainSystem::removeAllNodeDataForSubtree(TerrainNode* node)
 
 void TerrainSystem::shutdown()
 {
-	// Wait for any MakeTerrainChunkTasks to finish, since they have pointers to this object
-	const int max_num_wait_iters = 10000;
-	int z = 0;
-	assert(num_uncompleted_tasks >= 0);
-	while(num_uncompleted_tasks != 0)
-	{
-		assert(num_uncompleted_tasks >= 0);
-		PlatformUtils::Sleep(1);
-		z++;
-		if(z > max_num_wait_iters)
-		{
-			conPrint("Internal error: failed to wait for all MakeTerrainChunkTasks: num_uncompleted_tasks=" + toString(num_uncompleted_tasks));
-			break;
-		}
-	}
+	// Never destroy maps/physics while a worker still holds our raw pointer.
+	// This queue belongs exclusively to terrain: cancelling it does not cancel
+	// model or texture downloads needed by the destination world.
+	for(const auto& entry : id_to_node_map)
+		if(entry.second->build_cancelled) entry.second->build_cancelled->store(true);
+	if(task_manager) task_manager->cancelAndWaitForTasksToComplete();
+	assert(num_uncompleted_tasks == 0);
 
 	terrain_scattering.shutdown();
 
@@ -2250,26 +2382,17 @@ void TerrainSystem::shutdown()
 	opengl_engine->getCurrentScene()->water_coast_texture = nullptr;
 	water_bathymetry_update_time = -1.0;
 
-	for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
-	for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
-	{
-		TerrainDataSection& section = terrain_data_sections[x + y*TERRAIN_DATA_SECTION_RES];
-		if(section.road_mask_decal_gl_ob.nonNull())
-			opengl_engine->removeObject(section.road_mask_decal_gl_ob);
-		if(section.building_mask_decal_gl_ob.nonNull())
-			opengl_engine->removeObject(section.building_mask_decal_gl_ob);
-		section.road_mask_decal_gl_ob = NULL;
-		section.building_mask_decal_gl_ob = NULL;
-		section.road_mask_gl_tex = NULL;
-		section.building_mask_gl_tex = NULL;
-	}
 }
 void TerrainSystem::updateCampos(const Vec3d& campos, glare::StackAllocator& bump_allocator)
 {
 	updateWaterMeshCentre(campos);
 	rebuildAfterSculptIfNeeded();
+	if(terrain_rebuild_pending)
+	{
+		rebuildRootSubtree(campos);
+		terrain_rebuild_pending = false;
+	}
 	updateWaterBathymetry(campos);
-	updateReferenceMaskDecalTransforms((float)campos.z);
 	updateSubtree(root_node.ptr(), campos);
 
 	terrain_scattering.updateCampos(campos, bump_allocator);
@@ -2480,6 +2603,20 @@ float TerrainSystem::evalTreeMask(float p_x, float p_y) const
 		return 1;
 	const TerrainDataSection& section = terrain_data_sections[section_x + section_y*TERRAIN_DATA_SECTION_RES]; // terrain_data_sections.elem(section_x, section_y);
 	const Map2D* treemaskmap = section.sculpt_treemaskmap.nonNull() ? static_cast<const Map2D*>(section.sculpt_treemaskmap.ptr()) : section.treemaskmap.ptr();
+	const float section_nx = nx - Maths::floorToInt(nx);
+	const float section_ny = ny - Maths::floorToInt(ny);
+	// Reference masks remain authoritative even for older imports whose tree
+	// masks did not exclude roads/buildings (or were generated at lower resolution).
+	const float road_u = sectionMapCoord(section_nx, section.road_maskmap_scale);
+	const float road_v = sectionMapCoord(section_ny, section.road_maskmap_scale_y);
+	float road_coverage = sampleReferenceMask(section.road_maskmap.ptr(), road_u, road_v);
+	if(section.road_mask_map_path.find("_roads_v2_") != std::string::npos)
+		road_coverage = std::max(road_coverage, std::max(sampleReferenceMask(section.road_maskmap.ptr(), road_u, road_v, 1),
+			sampleReferenceMask(section.road_maskmap.ptr(), road_u, road_v, 2)));
+	if(road_coverage > 0.05f ||
+		sampleReferenceMask(section.building_maskmap.ptr(), sectionMapCoord(section_nx, section.building_maskmap_scale),
+		sectionMapCoord(section_ny, section.building_maskmap_scale_y)) > 0.05f)
+		return 0.f;
 	if(!treemaskmap)
 	{
 		// With no configured mask, preserve the historical "trees allowed" default.
@@ -2488,8 +2625,6 @@ float TerrainSystem::evalTreeMask(float p_x, float p_y) const
 		return section.tree_mask_map_path.empty() ? 1.f : 0.f;
 	}
 
-	const float section_nx = nx - Maths::floorToInt(nx);
-	const float section_ny = ny - Maths::floorToInt(ny);
 	return treemaskmap->sampleSingleChannelTiled(sectionMapCoord(section_nx, section.tree_maskmap_scale), 1.f - sectionMapCoord(section_ny, section.tree_maskmap_scale_y), /*channel=*/0);
 }
 
@@ -2738,13 +2873,14 @@ float TerrainSystem::evalTerrainHeight(float p_x, float p_y, float quad_w) const
 }
 
 
-void TerrainSystem::makeTerrainChunkMesh(float chunk_x, float chunk_y, float chunk_w, bool build_physics_ob, TerrainChunkData& chunk_data_out) const
+void TerrainSystem::makeTerrainChunkMesh(float chunk_x, float chunk_y, float chunk_w, bool build_physics_ob, TerrainChunkData& chunk_data_out, const std::atomic<bool>* cancelled) const
 {
 	// Keep all height queries for this generated mesh on one immutable map
 	// state.  In particular, sculptAtWorld() may copy-on-write the source map
 	// before updating its pixels, so locking only individual reads is not
 	// sufficient to guarantee a coherent chunk.
 	Lock heightmap_lock(heightmaps_mutex);
+	if(cancelled && cancelled->load(std::memory_order_relaxed)) return;
 
 	//Timer timer;
 	/*
@@ -2815,7 +2951,7 @@ done:
 	}
 
 	const size_t normal_size_B = 4;
-	size_t vert_size_B = sizeof(Vec3f) + normal_size_B; // position, normal
+	size_t vert_size_B = sizeof(Vec3f) + normal_size_B + sizeof(Vec2f); // position, normal, world-space UV
 	if(GEOMORPHING_SUPPORT)
 		vert_size_B += sizeof(float) + normal_size_B; // morph-z, morph-normal
 
@@ -2861,6 +2997,16 @@ done:
 	meshdata.vertex_spec.attributes.push_back(normal_attrib);
 	in_vert_offset_B += normal_size_B;
 
+	VertexAttrib uv_attrib;
+	uv_attrib.enabled = true;
+	uv_attrib.num_comps = 2;
+	uv_attrib.type = GL_FLOAT;
+	uv_attrib.normalised = false;
+	uv_attrib.stride = (uint32)vert_size_B;
+	uv_attrib.offset = (uint32)in_vert_offset_B;
+	meshdata.vertex_spec.attributes.push_back(uv_attrib);
+	in_vert_offset_B += sizeof(Vec2f);
+
 	size_t morph_offset_B, morph_normal_offset_B;
 	if(GEOMORPHING_SUPPORT)
 	{
@@ -2897,6 +3043,7 @@ done:
 	for(int y=0; y<interior_vert_res; ++y)
 	for(int x=0; x<interior_vert_res; ++x)
 	{
+		if(x == 0 && cancelled && cancelled->load(std::memory_order_relaxed)) return;
 		const float p_x = x * quad_w + chunk_x;
 		const float p_y = y * quad_w + chunk_y;
 	// 	const float dx = 0.1f;
@@ -2927,6 +3074,7 @@ done:
 	for(int y=0; y<vert_res_with_borders; ++y)
 	for(int x=0; x<vert_res_with_borders; ++x)
 	{
+		if(x == 0 && cancelled && cancelled->load(std::memory_order_relaxed)) return;
 		float p_x; // x coordinate, object space
 		int src_x; // x index to use reading from raw_heightfield
 		float z_offset = 0;
@@ -3019,6 +3167,8 @@ done:
 
 		const uint32 packed_normal = packNormal(normal);
 		std::memcpy(vert_data + vert_size_B * (y * vert_res_with_borders + x) + sizeof(float) * 3, &packed_normal, sizeof(uint32));
+		const Vec2f world_uv(chunk_x + p_x, chunk_y + p_y);
+		std::memcpy(vert_data + vert_size_B * (y * vert_res_with_borders + x) + sizeof(float) * 3 + normal_size_B, &world_uv, sizeof(Vec2f));
 
 		// Morph z-displacement:
 		// Starred vertices, without the morph displacement, should have the position that the lower LOD level triangle would have, below.
@@ -3101,8 +3251,133 @@ done:
 }
 
 
+void TerrainSystem::makeChunkVectorMesh(float chunk_x, float chunk_y, float chunk_w, float camera_distance, TerrainChunkData& chunk, const std::atomic<bool>& cancelled) const
+{
+	struct Source { std::shared_ptr<const TerrainVectorData::Data> data; int x,y; float sx,sy; };
+	std::vector<Source> sources;
+	{
+		Lock lock(heightmaps_mutex);
+		for(int y=0;y<TERRAIN_DATA_SECTION_RES;++y)
+		for(int x=0;x<TERRAIN_DATA_SECTION_RES;++x)
+		{
+			const int section_x=x-TERRAIN_SECTION_OFFSET, section_y=y-TERRAIN_SECTION_OFFSET;
+			const double left=(section_x-.5)*terrain_section_w, top=(section_y-.5)*terrain_section_w;
+			if(left>=chunk_x+chunk_w || left+terrain_section_w<=chunk_x || top>=chunk_y+chunk_w || top+terrain_section_w<=chunk_y) continue;
+			const TerrainDataSection& s=terrain_data_sections[x+y*TERRAIN_DATA_SECTION_RES];
+			if(s.road_vectors) sources.push_back({s.road_vectors,section_x,section_y,myClamp(s.road_maskmap_scale,.01f,100.f),myClamp(s.road_maskmap_scale_y,.01f,100.f)});
+			if(s.building_vectors) sources.push_back({s.building_vectors,section_x,section_y,myClamp(s.building_maskmap_scale,.01f,100.f),myClamp(s.building_maskmap_scale_y,.01f,100.f)});
+		}
+	}
+	if(sources.empty() || cancelled.load(std::memory_order_relaxed)) return;
+	const OpenGLMeshRenderData& base=*chunk.mesh_data;
+	TerrainVectorMesh::Builder builder(base.vert_data.data(),base.vertex_spec.vertStride(),chunk.vert_res_with_borders,chunk_w,cancelled);
+	const double lift=std::min(.5,.06+std::max(0.f,camera_distance)*.00008);
+	for(const Source& source:sources)
+	{
+		builder.bounds_min={std::max(0.0,(source.x-.5)*terrain_section_w-chunk_x),std::max(0.0,(source.y-.5)*terrain_section_w-chunk_y),0};
+		builder.bounds_max={std::min(double(chunk_w),(source.x+.5)*terrain_section_w-chunk_x),std::min(double(chunk_w),(source.y+.5)*terrain_section_w-chunk_y),0};
+		for(const TerrainVectorData::Segment& segment:source.data->segments)
+		{
+			if(cancelled.load(std::memory_order_relaxed)) return;
+			const TerrainVectorMesh::Point a={((segment.ax-.5)/source.sx+source.x)*terrain_section_w-chunk_x,((segment.ay-.5)/source.sy+source.y)*terrain_section_w-chunk_y,0};
+			const TerrainVectorMesh::Point b={((segment.bx-.5)/source.sx+source.x)*terrain_section_w-chunk_x,((segment.by-.5)/source.sy+source.y)*terrain_section_w-chunk_y,0};
+			const double dx=segment.bx-segment.ax,dy=segment.by-segment.ay,length=std::hypot(dx,dy);
+			if(length<1.e-12) continue;
+			const double width=segment.width*terrain_section_w*length/(source.sx*source.sy*std::hypot(dx/source.sx,dy/source.sy));
+			if(segment.style==3)
+			{
+				builder.stroke(a,b,width+.65,4,lift+.08);
+				builder.stroke(a,b,width,5,lift+.12);
+			}
+			else
+			{
+				builder.stroke(a,b,width+.8,0,lift);
+				builder.stroke(a,b,width,int(segment.style)+1,lift+.04);
+			}
+		}
+	}
+	size_t count=0;
+	for(const auto& layer:builder.layers) count+=layer.size();
+	if(count==0 || cancelled.load(std::memory_order_relaxed)) return;
+	Reference<OpenGLMeshRenderData> mesh=new OpenGLMeshRenderData();
+	mesh->vert_data.setAllocator(opengl_engine->mem_allocator);
+	mesh->vert_data.resize(count*16);
+	mesh->vert_index_buffer.resize(count);
+	mesh->setIndexType(GL_UNSIGNED_INT);
+	mesh->has_uvs=false;
+	mesh->has_shading_normals=true;
+	mesh->num_materials_referenced=6;
+	mesh->vertex_spec.attributes.assign(base.vertex_spec.attributes.begin(),base.vertex_spec.attributes.begin()+2);
+	for(auto& attribute:mesh->vertex_spec.attributes) attribute.stride=16;
+	mesh->vertex_spec.checkValid();
+	mesh->batches.resize(6);
+	mesh->aabb_os=js::AABBox::emptyAABBox();
+	size_t index=0;
+	for(size_t layer=0;layer<builder.layers.size();++layer)
+	{
+		mesh->batches[layer].material_index=(uint32)layer;
+		mesh->batches[layer].num_indices=(uint32)builder.layers[layer].size();
+		mesh->batches[layer].prim_start_offset_B=(uint32)(index*sizeof(uint32));
+		for(const TerrainVectorMesh::Vertex& v:builder.layers[layer])
+		{
+			if((index&4095)==0 && cancelled.load(std::memory_order_relaxed)) return;
+			const float pos[3]={v.x,v.y,v.z};
+			const uint32 normal=packNormal(Vec4f(v.nx,v.ny,v.nz,0));
+			std::memcpy(mesh->vert_data.data()+index*16,pos,12);
+			std::memcpy(mesh->vert_data.data()+index*16+12,&normal,4);
+			mesh->vert_index_buffer[index]=(uint32)index;
+			mesh->aabb_os.enlargeToHoldPoint(Vec4f(v.x,v.y,v.z,1));
+			++index;
+		}
+	}
+	chunk.vector_mesh_data=mesh;
+}
+
+
+ImageMapUInt8Ref TerrainSystem::makeChunkSurfaceMaterial(float chunk_x, float chunk_y, float chunk_w, int resolution, const std::atomic<bool>& cancelled) const
+{
+	TerrainDataSection snapshot[TERRAIN_DATA_SECTION_RES*TERRAIN_DATA_SECTION_RES];
+	std::vector<Map2DRef> textures[8];
+	TerrainPathSpec surface_spec;
+	bool has_maps = false;
+	const float gutter = TERRAIN_SURFACE_BORDER*chunk_w/resolution;
+	{
+		Lock lock(heightmaps_mutex);
+		if(cancelled.load(std::memory_order_relaxed)) return ImageMapUInt8Ref();
+		// Chunks can straddle sections when a user chooses a non-power-of-two
+		// section size. Select the source per texel instead of by chunk centre.
+		for(int y=0; y<TERRAIN_DATA_SECTION_RES; ++y)
+		for(int x=0; x<TERRAIN_DATA_SECTION_RES; ++x)
+		{
+			const int index = x+y*TERRAIN_DATA_SECTION_RES;
+			snapshot[index] = terrain_data_sections[index];
+			const float left = (x-TERRAIN_SECTION_OFFSET-0.5f)*terrain_section_w;
+			const float top = (y-TERRAIN_SECTION_OFFSET-0.5f)*terrain_section_w;
+			if(left < chunk_x+chunk_w && left+terrain_section_w > chunk_x &&
+				top < chunk_y+chunk_w && top+terrain_section_w > chunk_y)
+				has_maps |= snapshot[index].maskmap.nonNull() || snapshot[index].sculpt_maskmap.nonNull() ||
+					snapshot[index].road_maskmap.nonNull() || snapshot[index].building_maskmap.nonNull();
+			const bool overlaps_with_gutter = left < chunk_x+chunk_w+gutter && left+terrain_section_w > chunk_x-gutter &&
+				top < chunk_y+chunk_w+gutter && top+terrain_section_w > chunk_y-gutter;
+			if(snapshot[index].sculpt_maskmap.nonNull() && overlaps_with_gutter)
+			{
+				ImageMapUInt8Ref copy = new ImageMapUInt8();
+				*copy = *snapshot[index].sculpt_maskmap;
+				snapshot[index].sculpt_maskmap = copy;
+			}
+			else snapshot[index].sculpt_maskmap = NULL;
+		}
+		for(int i=0; i<8; ++i) textures[i] = surface_texture_mips[i];
+		surface_spec = spec;
+	}
+	if(!has_maps) return ImageMapUInt8Ref();
+	return makeTerrainSurfaceMaterial(snapshot, chunk_x, chunk_y, chunk_w, terrain_section_w, textures, surface_spec, resolution, cancelled);
+}
+
+
 void TerrainSystem::removeLeafGeometry(TerrainNode* node)
 {
+	checkRemoveObAndSetRefToNull(opengl_engine, node->vector_gl_ob);
 	checkRemoveObAndSetRefToNull(opengl_engine, node->gl_ob);
 	checkRemoveObAndSetRefToNull(physics_world, node->physics_ob);
 }
@@ -3110,17 +3385,40 @@ void TerrainSystem::removeLeafGeometry(TerrainNode* node)
 
 void TerrainSystem::removeSubtree(TerrainNode* node, std::vector<GLObjectRef>& old_subtree_gl_obs_in_out, std::vector<PhysicsObjectRef>& old_subtree_phys_obs_in_out)
 {
-	ContainerUtils::append(old_subtree_gl_obs_in_out, node->old_subtree_gl_obs);
-	ContainerUtils::append(old_subtree_phys_obs_in_out, node->old_subtree_phys_obs);
+	if(node->build_cancelled) node->build_cancelled->store(true);
+	node->pending_gl_ob = NULL;
+	node->pending_vector_gl_ob = NULL;
+	node->pending_physics_ob = NULL;
+	if(&old_subtree_gl_obs_in_out != &node->old_subtree_gl_obs)
+	{
+		ContainerUtils::append(old_subtree_gl_obs_in_out, node->old_subtree_gl_obs);
+		node->old_subtree_gl_obs.clear();
+	}
+	if(&old_subtree_phys_obs_in_out != &node->old_subtree_phys_obs)
+	{
+		ContainerUtils::append(old_subtree_phys_obs_in_out, node->old_subtree_phys_obs);
+		node->old_subtree_phys_obs.clear();
+	}
 
 	if(node->children[0].isNull()) // If this is a leaf node:
 	{
 		// Remove mesh for leaf node, if any
 		//removeLeafGeometry(node);
+		if(node->vector_gl_ob.nonNull())
+		{
+			old_subtree_gl_obs_in_out.push_back(node->vector_gl_ob);
+			node->vector_gl_ob = NULL;
+		}
 		if(node->gl_ob.nonNull())
+		{
 			old_subtree_gl_obs_in_out.push_back(node->gl_ob);
+			node->gl_ob = NULL;
+		}
 		if(node->physics_ob.nonNull())
+		{
 			old_subtree_phys_obs_in_out.push_back(node->physics_ob);
+			node->physics_ob = NULL;
+		}
 	}
 	else // Else if this node is an interior node:
 	{
@@ -3136,6 +3434,27 @@ void TerrainSystem::removeSubtree(TerrainNode* node, std::vector<GLObjectRef>& o
 			node->children[i] = NULL;
 		}
 	}
+}
+
+
+void TerrainSystem::rebuildRootSubtree(const Vec3d& campos)
+{
+	task_manager->removeQueuedTasks();
+	// Keep the old geometry visible until all replacement chunks have arrived.
+	// Give the new root a fresh ID so results from tasks started before this
+	// rebuild cannot be inserted into the replacement subtree.
+	removeSubtree(root_node.ptr(), root_node->old_subtree_gl_obs, root_node->old_subtree_phys_obs);
+	root_node->pending_gl_ob = NULL;
+	root_node->pending_vector_gl_ob = NULL;
+	root_node->pending_physics_ob = NULL;
+	root_node->building = false;
+	root_node->build_failures = 0;
+	root_node->subtree_built = false;
+	root_node->aabb = js::AABBox(Vec4f(-world_w/2, -world_w/2, -1, 1), Vec4f(world_w/2, world_w/2, 1, 1));
+	id_to_node_map.clear();
+	root_node->id = next_id++;
+	id_to_node_map[root_node->id] = root_node.ptr();
+	createSubtree(root_node.ptr(), campos);
 }
 
 
@@ -3231,10 +3550,14 @@ void TerrainSystem::createSubtree(TerrainNode* node, const Vec3d& campos)
 
 		// Create geometry for it
 		MakeTerrainChunkTask* task = new MakeTerrainChunkTask();
+		node->build_cancelled = task->cancelled;
 		task->node_id = node->id;
 		task->chunk_x = node->aabb.min_[0];
 		task->chunk_y = node->aabb.min_[1];
 		task->chunk_w = node->aabb.max_[0] - node->aabb.min_[0];
+		task->surface_resolution = terrainSurfaceResolution(task->chunk_w, min_dist);
+		task->camera_distance = min_dist;
+		if(node->build_failures) task->surface_resolution = std::max(128, task->surface_resolution/2);
 		task->build_physics_ob = min_dist <= MAX_PHYSICS_DIST;
 		//task->build_physics_ob = (max_depth - node->depth) < 3;
 		task->terrain = this;
@@ -3262,13 +3585,27 @@ void TerrainSystem::updateSubtree(TerrainNode* cur, const Vec3d& campos)
 
 	if(cur->children[0].isNull()) // If 'cur' is a leaf node (has no children, so is not interior node):
 	{
+		// Retry a failed allocation once, at a smaller surface budget. Never
+		// leave a node permanently marked as an outstanding worker task.
+		if(!cur->building && !cur->subtree_built && cur->build_failures == 1)
+		{
+			createSubtree(cur, campos);
+			return;
+		}
 		if(desired_depth > cur->depth) // If the desired lod level is greater than the leaf's lod level, we want to split the leaf into 4 child nodes
 		{
+			if(cur->build_cancelled) cur->build_cancelled->store(true);
+			cur->pending_gl_ob = NULL;
+			cur->pending_vector_gl_ob = NULL;
+			cur->pending_physics_ob = NULL;
+			cur->building = false;
 			// Remove mesh for leaf node, if any
 			//removeLeafGeometry(cur);
 			// Don't remove leaf geometry yet, wait until subtree geometry is fully built to replace it.
 			//cur->num_children_built = 0;
 			if(cur->gl_ob.nonNull()) cur->old_subtree_gl_obs.push_back(cur->gl_ob);
+			if(cur->vector_gl_ob.nonNull()) cur->old_subtree_gl_obs.push_back(cur->vector_gl_ob);
+			cur->vector_gl_ob = NULL;
 			cur->gl_ob = NULL;
 			if(cur->physics_ob.nonNull()) cur->old_subtree_phys_obs.push_back(cur->physics_ob);
 			cur->physics_ob = NULL;
@@ -3306,10 +3643,14 @@ void TerrainSystem::updateSubtree(TerrainNode* cur, const Vec3d& campos)
 				num_uncompleted_tasks++;
 
 				MakeTerrainChunkTask* task = new MakeTerrainChunkTask();
+				cur->build_cancelled = task->cancelled;
 				task->node_id = cur->id;
 				task->chunk_x = cur->aabb.min_[0];
 				task->chunk_y = cur->aabb.min_[1];
 				task->chunk_w = cur->aabb.max_[0] - cur->aabb.min_[0];
+				task->surface_resolution = terrainSurfaceResolution(task->chunk_w, min_dist);
+				task->camera_distance = min_dist;
+				if(cur->build_failures) task->surface_resolution = std::max(128, task->surface_resolution/2);
 				task->build_physics_ob = min_dist <= MAX_PHYSICS_DIST;
 				//task->build_physics_ob = (max_depth - cur->depth) < 3;
 				task->terrain = this;
@@ -3348,6 +3689,12 @@ void TerrainSystem::insertPendingMeshesForSubtree(TerrainNode* node)
 
 	if(node->children[0].isNull()) // If leaf node:
 	{
+		if(node->pending_vector_gl_ob.nonNull())
+		{
+			node->vector_gl_ob = node->pending_vector_gl_ob;
+			opengl_engine->addObject(node->vector_gl_ob);
+			node->pending_vector_gl_ob = NULL;
+		}
 		if(node->pending_gl_ob.nonNull())
 		{
 //FAILING			assert(node->gl_ob.isNull());
@@ -3432,8 +3779,17 @@ void TerrainSystem::handleCompletedMakeChunkTask(const TerrainChunkGeneratedMsg&
 	if(res != id_to_node_map.end())
 	{
 		TerrainNode& node = *res->second;
+		// Node IDs restart in every world. Only accept the exact build requested
+		// by this node; an old world's queued completion must never be inserted.
+		if(!msg.cancelled || msg.cancelled->load() || node.build_cancelled != msg.cancelled) return;
 
 		node.building = false;
+		if(msg.chunk_data.mesh_data.isNull())
+		{
+			++node.build_failures;
+			conPrint("Terrain chunk could not be generated; retaining previous terrain geometry.");
+			return;
+		}
 		if(node.children[0].nonNull()) // If this is an interior node:
 			return; // Discard the obsolete built mesh.  This will happen if a leaf node gets converted to an interior node while the mesh is building.
 
@@ -3528,7 +3884,28 @@ void TerrainSystem::handleCompletedMakeChunkTask(const TerrainChunkGeneratedMsg&
 			const float mask_scale_x = myClamp(section.maskmap_scale, 0.01f, 100.f);
 			const float mask_scale_y = myClamp(section.maskmap_scale_y, 0.01f, 100.f);
 			gl_ob->materials[0].tex_matrix = Matrix2f(terrain_scale_factor * mask_scale_x, 0.f, 0.f, terrain_scale_factor * mask_scale_y);
-			gl_ob->materials[0].tex_translation = Vec2f(0.5f * (1.f - mask_scale_x) - section_x * mask_scale_x, 0.5f * (1.f - mask_scale_y) - section_y * mask_scale_y);
+			// ImageMap already flips V internally. CPU heights read PNG row Y at
+			// world +Y, so GPU masks must also increase V with world +Y.
+			// The terrain shader adds 0.5 when sampling the mask.
+			gl_ob->materials[0].tex_translation = Vec2f(-section_x * mask_scale_x, -section_y * mask_scale_y);
+		}
+		if(msg.chunk_data.surface_material.nonNull())
+		{
+			const ImageMapUInt8& image = *msg.chunk_data.surface_material;
+			OpenGLTextureRef overlay_texture = new OpenGLTexture(image.getWidth(), image.getHeight(), opengl_engine,
+				ArrayRef<uint8>(image.getData(), image.getDataSize()), OpenGLTextureFormat::Format_SRGB_Uint8,
+				OpenGLTexture::Filtering_Fancy, OpenGLTexture::Wrapping_Clamp, /*has_mipmaps=*/true);
+			// Use the terrain mesh itself. A second mesh offset by centimetres
+			// loses depth precision in a kilometre-scale scene and causes stripes.
+			OpenGLMaterial& overlay_mat = gl_ob->materials[0];
+			overlay_mat = OpenGLMaterial();
+			overlay_mat.albedo_linear_rgb = Colour3f(1.f);
+			overlay_mat.albedo_texture = overlay_texture;
+			overlay_mat.roughness = 1.f;
+			const float extent = (float)(image.getWidth()-2*TERRAIN_SURFACE_BORDER) / image.getWidth();
+			const float border = (float)TERRAIN_SURFACE_BORDER / image.getWidth();
+			overlay_mat.tex_matrix = Matrix2f(extent / msg.chunk_w, 0.f, 0.f, extent / msg.chunk_w);
+			overlay_mat.tex_translation = Vec2f(border-msg.chunk_x*extent/msg.chunk_w, border-msg.chunk_y*extent/msg.chunk_w);
 		}
 
 		// Since we are doing texture clamping, we need to make sure tex coords are mapped to [0, 1] with tex matrix
@@ -3550,6 +3927,29 @@ void TerrainSystem::handleCompletedMakeChunkTask(const TerrainChunkGeneratedMsg&
 		physics_ob->kinematic = false;
 		physics_ob->dynamic = false;
 
+		GLObjectRef vector_ob;
+		if(msg.chunk_data.vector_mesh_data.nonNull())
+		{
+			const Reference<OpenGLMeshRenderData>& vector_mesh=msg.chunk_data.vector_mesh_data;
+			vector_mesh->vbo_handle=opengl_engine->vert_buf_allocator->allocateVertexDataSpace(vector_mesh->vertex_spec.vertStride(),vector_mesh->vert_data.data(),vector_mesh->vert_data.dataSizeBytes());
+			vector_mesh->indices_vbo_handle=opengl_engine->vert_buf_allocator->allocateIndexDataSpace(vector_mesh->vert_index_buffer.data(),vector_mesh->vert_index_buffer.dataSizeBytes());
+			opengl_engine->vert_buf_allocator->getOrCreateAndAssignVAOForMesh(*vector_mesh,vector_mesh->vertex_spec);
+			vector_mesh->vert_data.clearAndFreeMem();
+			vector_mesh->vert_index_buffer.clearAndFreeMem();
+			vector_ob=opengl_engine->allocateObject();
+			vector_ob->ob_to_world_matrix=Matrix4f::translationMatrix(msg.chunk_x,msg.chunk_y,0);
+			vector_ob->mesh_data=vector_mesh;
+			const Colour3f colours[6]={Colour3f(.035f,.04f,.045f),Colour3f(.8f,.65f,.16f),Colour3f(.67f,.68f,.69f),
+				Colour3f(.55f,.40f,.23f),Colour3f(.8f,.78f,.72f),Colour3f(.055f,.06f,.065f)};
+			vector_ob->materials.resize(6);
+			for(int i=0;i<6;++i)
+			{
+				vector_ob->materials[i].albedo_linear_rgb=colours[i];
+				vector_ob->materials[i].roughness=1.f;
+				vector_ob->materials[i].cast_shadows=false;
+			}
+		}
+		node.pending_vector_gl_ob = vector_ob;
 		node.pending_gl_ob = gl_ob;
 		node.pending_physics_ob = physics_ob;
 
@@ -3597,38 +3997,56 @@ void TerrainSystem::handleCompletedMakeChunkTask(const TerrainChunkGeneratedMsg&
 
 void MakeTerrainChunkTask::run(size_t thread_index)
 {
+	// Account for every exit, including cancellation and allocation failures.
+	struct Completion
+	{
+		glare::AtomicInt* count;
+		~Completion() { (*count)--; }
+	} completion = {num_uncompleted_tasks_ptr};
+	Reference<TerrainChunkGeneratedMsg> msg;
 	try
 	{
-		assert((*num_uncompleted_tasks_ptr) >= 0);
-
-		// Make terrain
-		terrain->makeTerrainChunkMesh(chunk_x, chunk_y, chunk_w, build_physics_ob, /*chunk data out=*/chunk_data);
-
-		// Send message to out-message-queue (e.g. to MainWindow), saying that we have finished the work.
-		TerrainChunkGeneratedMsg* msg = new TerrainChunkGeneratedMsg();
+		if(cancelled->load()) return;
+		msg = new TerrainChunkGeneratedMsg();
 		msg->chunk_x = chunk_x;
 		msg->chunk_y = chunk_y;
 		msg->chunk_w = chunk_w;
-		//msg->lod_level = lod_level;
-		msg->chunk_data = chunk_data;
 		msg->node_id = node_id;
-		out_msg_queue->enqueue(msg);
+		msg->cancelled = cancelled;
+		terrain->makeTerrainChunkMesh(chunk_x, chunk_y, chunk_w, build_physics_ob, chunk_data, cancelled.get());
+		if(cancelled->load()) return;
+		terrain->makeChunkVectorMesh(chunk_x, chunk_y, chunk_w, camera_distance, chunk_data, *cancelled);
+		if(cancelled->load()) return;
+		chunk_data.surface_material = terrain->makeChunkSurfaceMaterial(chunk_x, chunk_y, chunk_w, surface_resolution, *cancelled);
+		if(cancelled->load()) return;
 
-		// Make water
-		//TerrainSystem::makeTerrainChunkMesh(chunk_x_i, chunk_y_i, lod_level, /*water=*/true, chunk_data);
+		msg->chunk_data = chunk_data;
+		out_msg_queue->enqueue(msg);
+		return;
 	}
 	catch(glare::Exception& e)
 	{
 		conPrint(e.what());
 	}
-
-	assert((*num_uncompleted_tasks_ptr) >= 0);
-	(*num_uncompleted_tasks_ptr)--;
+	catch(const std::exception& e)
+	{
+		conPrint(std::string("Terrain chunk generation failed: ") + e.what());
+	}
+	// A failure completion releases the node's building state on the UI thread.
+	// Release large buffers before enqueueing, especially after bad_alloc.
+	chunk_data = TerrainChunkData();
+	if(msg.nonNull() && !cancelled->load())
+	{
+		msg->chunk_data = TerrainChunkData();
+		try { out_msg_queue->enqueue(msg); }
+		catch(const std::exception&) { conPrint("Unable to enqueue terrain failure notification."); }
+	}
 }
 
 
 void MakeTerrainChunkTask::removedFromQueue()
 {
+	cancelTask();
 	assert((*num_uncompleted_tasks_ptr) >= 0);
 	(*num_uncompleted_tasks_ptr)--;
 }

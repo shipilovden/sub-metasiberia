@@ -31,6 +31,12 @@ class QListWidgetItem;
 class QPushButton;
 class RealControl;
 class ParticleCurveWidget;
+class ParticleColourCurveWidget;
+class ParticleSpritePreviewLabel;
+class QTabWidget;
+class QToolButton;
+class QGridLayout;
+class QVBoxLayout;
 
 
 class ObjectEditor : public QWidget, public Ui::ObjectEditor
@@ -136,6 +142,7 @@ private slots:
 	void clearParticleAudio();
 	void showParticleHelp();
 	void updateParticlePreviewThumbnail();
+	void updateParticleSpritePreview();
 	void applyPortalStylePreset();
 	void resetPortalMaterials();
 	void setPortalTargetMainWorld();
@@ -165,6 +172,8 @@ private:
 	void setGaussianSplatControlsFromContent(const std::string& content);
 	struct GaussianSplatRenderSettings gaussianSplatControlsToSettings() const;
 	void createParticleEditorUI();
+	void organiseParticleEditorUI(QGridLayout* source);
+	void setParticleEditorLayout(bool enabled);
 	void retranslateDynamicParticleUI();
 	void loadCustomParticlePresets();
 	void setParticleControlsFromContent(const std::string& content);
@@ -180,6 +189,8 @@ private:
 	int selected_mat_index;
 
 	QTimer* edit_timer;
+	QTimer* particlePreviewTimer = nullptr;
+	float particlePreviewPhase = 0.f;
 
 	ShaderEditorDialog* shader_editor;
 
@@ -262,6 +273,13 @@ private:
 	QLabel* gaussianSplatTipLabel;
 
 	QGroupBox* particleGroupBox;
+	QTabWidget* particleTabs = nullptr;
+	QVector<QToolButton*> particleSectionButtons;
+	struct ParticleSharedPanel { QWidget* widget; QVBoxLayout* target; int original_index; };
+	QVector<ParticleSharedPanel> particleSharedPanels;
+	bool particleLayoutActive = false;
+	QLabel* particleCustomDirectionLabels[3] = {};
+	RealControl* particleCustomDirectionControls[3] = {};
 	QPushButton* particleHelpPushButton;
 	QLabel* particlePresetLabel;
 	QComboBox* particlePresetComboBox;
@@ -283,6 +301,21 @@ private:
 	QLineEdit* particleSpritePathLineEdit;
 	QPushButton* particleSpriteBrowsePushButton;
 	QPushButton* particleSpriteClearPushButton;
+	ParticleSpritePreviewLabel* particleSpritePreviewLabel = nullptr;
+	QLabel* particleSpriteUVXLabel = nullptr; RealControl* particleSpriteUVXControl = nullptr;
+	QLabel* particleSpriteUVYLabel = nullptr; RealControl* particleSpriteUVYControl = nullptr;
+	QLabel* particleSpriteUVWidthLabel = nullptr; RealControl* particleSpriteUVWidthControl = nullptr;
+	QLabel* particleSpriteUVHeightLabel = nullptr; RealControl* particleSpriteUVHeightControl = nullptr;
+	QLabel* particleSpriteColumnsLabel = nullptr; RealControl* particleSpriteColumnsControl = nullptr;
+	QLabel* particleSpriteRowsLabel = nullptr; RealControl* particleSpriteRowsControl = nullptr;
+	QLabel* particleSpriteFirstFrameLabel = nullptr; RealControl* particleSpriteFirstFrameControl = nullptr;
+	QLabel* particleSpriteFrameCountLabel = nullptr; RealControl* particleSpriteFrameCountControl = nullptr;
+	QLabel* particleSpriteFPSLabel = nullptr; RealControl* particleSpriteFPSControl = nullptr;
+	QLabel* particleSpriteFrameRateJitterLabel = nullptr;
+	QLabel* particleSpriteAnimationLabel = nullptr;
+	QComboBox* particleSpriteAnimationComboBox = nullptr;
+	QCheckBox* particleSpriteRandomStartCheckBox = nullptr;
+	RealControl* particleSpriteFrameRateJitterControl = nullptr;
 	QCheckBox* particleAudioEnabledCheckBox;
 	QLabel* particleAudioURLLabel;
 	QLineEdit* particleAudioURLLineEdit;
@@ -320,6 +353,8 @@ private:
 	RealControl* particleTurbulenceSpinBox;
 	QLabel* particleLifetimeLabel;
 	RealControl* particleLifetimeSpinBox;
+	QLabel* particleLifetimeJitterLabel = nullptr;
+	RealControl* particleLifetimeJitterSpinBox = nullptr;
 	QLabel* particleStartWidthLabel;
 	RealControl* particleStartWidthSpinBox;
 	QLabel* particleEndWidthLabel;
@@ -340,6 +375,8 @@ private:
 	QPushButton* particleColourPushButton;
 	QLabel* particleEndColourLabel;
 	QPushButton* particleEndColourPushButton;
+	QLabel* particleColourCurveLabel = nullptr;
+	ParticleColourCurveWidget* particleColourCurveWidget = nullptr;
 	QLabel* particleColourJitterLabel;
 	RealControl* particleColourJitterSpinBox;
 	QLabel* particleTrailLengthLabel;

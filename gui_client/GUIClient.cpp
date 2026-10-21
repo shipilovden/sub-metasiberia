@@ -6790,6 +6790,16 @@ static float evaluateParticleEmitterCurve(const ParticleEmitterSettings::Curve c
 	return t;
 }
 
+static float evaluateEmitterPointCurve(const std::array<float,5>& times,const std::array<float,5>& values,int count,float t)
+{
+	t=myClamp(t,0.f,1.f); count=myClamp(count,2,5); if(t<=times[0])return values[0]; for(int i=0;i<count-1;++i)if(t<=times[i+1])return Maths::lerp(values[i],values[i+1],(t-times[i])/myMax(times[i+1]-times[i],.001f)); return values[count-1];
+}
+
+static Colour3f evaluateEmitterColourCurve(const std::array<float,5>& times,const std::array<Colour3f,5>& values,int count,float t)
+{
+	t=myClamp(t,0.f,1.f); count=myClamp(count,2,5); if(t<=times[0])return values[0]; for(int i=0;i<count-1;++i)if(t<=times[i+1]){const float f=(t-times[i])/myMax(times[i+1]-times[i],.001f);return Colour3f(Maths::lerp(values[i].r,values[i+1].r,f),Maths::lerp(values[i].g,values[i+1].g,f),Maths::lerp(values[i].b,values[i+1].b,f));} return values[count-1];
+}
+
 
 static std::string defaultParticleSpriteForKind(const ParticleEmitterSettings::ParticleKind kind)
 {
@@ -10468,7 +10478,13 @@ bool GUIClient::saveTerrainSculptingChanges(const WorldSettings* base_world_sett
 	}
 	for(size_t i=0; i<mask_maps.size(); ++i)
 	{
-		const std::string temp_path = PlatformUtils::getTempDirPath() + "/metasiberia_terrain_mask_" + toString(frame_num) + "_" + toString(i) + ".png";
+		bool imported_water_mask = false;
+		if(!mask_maps[i].tree_mask)
+			for(const TerrainSpecSection& section : new_world_settings.terrain_spec.section_specs)
+				if(section.x == mask_maps[i].x && section.y == mask_maps[i].y)
+					imported_water_mask = toStdString(section.mask_map_URL).find("_material_v2_") != std::string::npos;
+		const std::string temp_path = PlatformUtils::getTempDirPath() + (imported_water_mask ? "/metasiberia_material_v2_" : "/metasiberia_terrain_mask_") +
+			toString(frame_num) + "_" + toString(i) + ".png";
 		try
 		{
 			PNGDecoder::write(*mask_maps[i].map, temp_path);
@@ -11098,7 +11114,8 @@ void GUIClient::updateParticleEmitters(const double dt)
 			else
 				dir = particle_base_dir;
 
-			const float lifetime_s = myMax(emitter_settings.lifetime_s, 0.05f);
+			const float lifetime_mult=myMax(0.05f,1.f+emitter_settings.lifetime_jitter*(-1.f+2.f*rng.unitRandom()));
+			const float lifetime_s = myMax(emitter_settings.lifetime_s*lifetime_mult, 0.05f);
 			const float speed_mult = myMax(0.f, 1.f + emitter_settings.speed_jitter * (-1.f + 2.f * rng.unitRandom()));
 			const float size_mult = myMax(0.01f, 1.f + emitter_settings.size_jitter * (-1.f + 2.f * rng.unitRandom()));
 			const float opacity_mult = myMax(0.f, 1.f + emitter_settings.opacity_jitter * (-1.f + 2.f * rng.unitRandom()));
@@ -11133,8 +11150,25 @@ void GUIClient::updateParticleEmitters(const double dt)
 			particle.cur_opacity = particle.start_opacity;
 			particle.size_curve = particleCurveFromEmitterCurve(emitter_settings.size_curve);
 			particle.size_curve_mid = emitter_settings.size_curve_mid;
+			particle.size_curve_points=emitter_settings.size_curve_points;
+			particle.size_curve_times=emitter_settings.size_curve_times; particle.size_curve_point_count=emitter_settings.size_curve_point_count;
+			particle.size_curve_points_enabled=emitter_settings.size_curve_points_enabled;
 			particle.opacity_curve = particleCurveFromEmitterCurve(emitter_settings.opacity_curve);
 			particle.opacity_curve_mid = emitter_settings.opacity_curve_mid;
+			particle.opacity_curve_points=emitter_settings.opacity_curve_points;
+			particle.opacity_curve_times=emitter_settings.opacity_curve_times; particle.opacity_curve_point_count=emitter_settings.opacity_curve_point_count;
+			particle.opacity_curve_points_enabled=emitter_settings.opacity_curve_points_enabled;
+			particle.colour_curve_points=emitter_settings.colour_curve_points;
+			particle.colour_curve_times=emitter_settings.colour_curve_times; particle.colour_curve_point_count=emitter_settings.colour_curve_point_count;
+			particle.colour_curve_enabled=emitter_settings.colour_curve_enabled;
+			particle.sprite_uv_x=emitter_settings.sprite_uv_x; particle.sprite_uv_y=emitter_settings.sprite_uv_y;
+			particle.sprite_uv_width=emitter_settings.sprite_uv_width; particle.sprite_uv_height=emitter_settings.sprite_uv_height;
+			particle.sprite_atlas_columns=emitter_settings.sprite_atlas_columns; particle.sprite_atlas_rows=emitter_settings.sprite_atlas_rows;
+			particle.sprite_first_frame=emitter_settings.sprite_first_frame; particle.sprite_frame_count=emitter_settings.sprite_frame_count;
+			particle.sprite_frames_per_second=emitter_settings.sprite_frames_per_second; particle.sprite_loop=emitter_settings.sprite_loop;
+			particle.sprite_animation_mode=(int)emitter_settings.sprite_animation_mode;
+			particle.sprite_random_start_frame=emitter_settings.sprite_random_start_frame;
+			particle.sprite_frame_rate_jitter=emitter_settings.sprite_frame_rate_jitter;
 			particle.trail_length = emitter_settings.trail_length;
 			particle.theta = degreeToRad(emitter_settings.rotation_deg + emitter_settings.rotation_jitter_deg * (-1.f + 2.f * rng.unitRandom()));
 			particle.theta_speed = degreeToRad(emitter_settings.spin_deg_per_sec + emitter_settings.spin_jitter_deg_per_sec * (-1.f + 2.f * rng.unitRandom()));
@@ -11161,11 +11195,11 @@ void GUIClient::updateParticleEmitters(const double dt)
 				particle.pos -= dir * (emitter_settings.trail_length * trail_t);
 				const float trail_age_t = myClamp(trail_t * 0.70f, 0.f, 0.86f);
 				particle.age_s = myMax(particle.age_s, trail_age_t * lifetime_s);
-				const float size_curve_v = evaluateParticleEmitterCurve(emitter_settings.size_curve, trail_age_t, emitter_settings.size_curve_mid);
-				const float opacity_t = evaluateParticleEmitterCurve(emitter_settings.opacity_curve, trail_age_t, emitter_settings.opacity_curve_mid);
+				const float size_curve_v = emitter_settings.size_curve_points_enabled?evaluateEmitterPointCurve(emitter_settings.size_curve_times,emitter_settings.size_curve_points,emitter_settings.size_curve_point_count,trail_age_t):evaluateParticleEmitterCurve(emitter_settings.size_curve, trail_age_t, emitter_settings.size_curve_mid);
+				const float opacity_t = emitter_settings.opacity_curve_points_enabled?evaluateEmitterPointCurve(emitter_settings.opacity_curve_times,emitter_settings.opacity_curve_points,emitter_settings.opacity_curve_point_count,trail_age_t):evaluateParticleEmitterCurve(emitter_settings.opacity_curve, trail_age_t, emitter_settings.opacity_curve_mid);
 				particle.width = Maths::lerp(particle.start_width, particle.end_width, size_curve_v);
 				particle.cur_opacity = Maths::lerp(particle.start_opacity, particle.end_opacity, opacity_t);
-				particle.colour = Colour3f(
+				particle.colour = emitter_settings.colour_curve_enabled?evaluateEmitterColourCurve(emitter_settings.colour_curve_times,emitter_settings.colour_curve_points,emitter_settings.colour_curve_point_count,trail_age_t):Colour3f(
 					Maths::lerp(particle.start_colour.r, particle.end_colour.r, trail_age_t),
 					Maths::lerp(particle.start_colour.g, particle.end_colour.g, trail_age_t),
 					Maths::lerp(particle.start_colour.b, particle.end_colour.b, trail_age_t)
@@ -11181,11 +11215,11 @@ void GUIClient::updateParticleEmitters(const double dt)
 				particle.age_s = preview_age_s;
 				particle.pos += particle.vel * (preview_age_s * path_scale);
 
-				const float size_curve_v = evaluateParticleEmitterCurve(emitter_settings.size_curve, age_t, emitter_settings.size_curve_mid);
-				const float opacity_t = evaluateParticleEmitterCurve(emitter_settings.opacity_curve, age_t, emitter_settings.opacity_curve_mid);
+				const float size_curve_v = emitter_settings.size_curve_points_enabled?evaluateEmitterPointCurve(emitter_settings.size_curve_times,emitter_settings.size_curve_points,emitter_settings.size_curve_point_count,age_t):evaluateParticleEmitterCurve(emitter_settings.size_curve, age_t, emitter_settings.size_curve_mid);
+				const float opacity_t = emitter_settings.opacity_curve_points_enabled?evaluateEmitterPointCurve(emitter_settings.opacity_curve_times,emitter_settings.opacity_curve_points,emitter_settings.opacity_curve_point_count,age_t):evaluateParticleEmitterCurve(emitter_settings.opacity_curve, age_t, emitter_settings.opacity_curve_mid);
 				particle.width = Maths::lerp(particle.start_width, particle.end_width, size_curve_v);
 				particle.cur_opacity = Maths::lerp(particle.start_opacity, particle.end_opacity, opacity_t);
-				particle.colour = Colour3f(
+				particle.colour = emitter_settings.colour_curve_enabled?evaluateEmitterColourCurve(emitter_settings.colour_curve_times,emitter_settings.colour_curve_points,emitter_settings.colour_curve_point_count,age_t):Colour3f(
 					Maths::lerp(particle.start_colour.r, particle.end_colour.r, age_t),
 					Maths::lerp(particle.start_colour.g, particle.end_colour.g, age_t),
 					Maths::lerp(particle.start_colour.b, particle.end_colour.b, age_t)
@@ -25371,12 +25405,20 @@ void GUIClient::updateGroundPlane()
 			if(!spec.section_specs[i].building_mask_map_URL.empty() && !BitUtils::isBitSet(spec.section_specs[i].disabled_map_flags, TerrainSpecSection::BUILDING_MASK_MAP_DISABLED_FLAG))
 				path_spec.section_specs[i].building_mask_map_path = resource_manager->pathForURL(spec.section_specs[i].building_mask_map_URL);
 		}
+		// The grid is a fallback for terrain without a material map.  If an
+		// imported material mask is present, distinct fallback material colours
+		// must remain visible even when no detail textures have been assigned.
+		for(size_t i=0; i<path_spec.section_specs.size(); ++i)
+			if(!path_spec.section_specs[i].mask_map_path.empty())
+				path_spec.show_default_terrain_grid = false;
 
 		// Convert to .basis extensions if the server supports basis generation of terrain detail maps.
 		URLString use_detail_col_map_URLs[4];
 		URLString use_detail_height_map_URLs[4];
 		for(int i=0; i<4; ++i)
 		{
+			path_spec.detail_col_map_scale_x[i] = spec.detail_col_map_scales[i];
+			path_spec.detail_col_map_scale_y[i] = spec.detail_col_map_scale_y[i];
 			opengl_engine->setDetailTextureScaleXY(i, spec.detail_col_map_scales[i], spec.detail_col_map_scale_y[i]);
 			if(!spec.detail_col_map_URLs[i].empty() && !BitUtils::isBitSet(spec.disabled_detail_map_flags, 1u << i))
 				use_detail_col_map_URLs[i] = this->server_has_basisu_terrain_detail_maps ? (toURLString(eatExtension(toStdString(spec.detail_col_map_URLs[i])) + "basis")) : spec.detail_col_map_URLs[i];
@@ -25554,7 +25596,7 @@ void GUIClient::updateGroundPlane()
 		terrain_system = new TerrainSystem();
 		terrain_system->init(path_spec, this->base_dir_path, opengl_engine.ptr(), this->physics_world.ptr(), biome_manager, this->cam_controller.getPosition(), &this->model_and_texture_loader_task_manager, stack_allocator, &this->msg_queue);
 
-		if(isMetasiberiaMapWorld())
+		if(isMetasiberiaMapWorld() && path_spec.show_default_terrain_grid)
 		{
 			ImageMapUInt8Ref blank_detail_map = new ImageMapUInt8(1, 1, 4);
 			blank_detail_map->getPixel(0, 0)[0] = 255;

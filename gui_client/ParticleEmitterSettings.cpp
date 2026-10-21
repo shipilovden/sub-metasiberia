@@ -262,8 +262,26 @@ size_t firstNonWhitespace(const std::string& s)
 
 void clampSettings(ParticleEmitterSettings& s)
 {
+	auto clamp_times=[](std::array<float,5>& times,int& count) {
+		count=clampInt(count,2,5); times[0]=0.f; times[count-1]=1.f;
+		for(int i=1;i<count-1;++i) times[i]=(float)clampDouble(times[i],times[i-1]+0.01,1.0-(count-1-i)*0.01);
+		for(int i=count;i<5;++i) times[i]=(float)i*.25f;
+	};
+	clamp_times(s.size_curve_times,s.size_curve_point_count);
+	clamp_times(s.opacity_curve_times,s.opacity_curve_point_count);
+	clamp_times(s.colour_curve_times,s.colour_curve_point_count);
 	if(s.sprite_path.size() > 4096)
 		s.sprite_path.resize(4096);
+	s.sprite_uv_x = (float)clampDouble(s.sprite_uv_x, 0.0, 0.999);
+	s.sprite_uv_y = (float)clampDouble(s.sprite_uv_y, 0.0, 0.999);
+	s.sprite_uv_width = (float)clampDouble(s.sprite_uv_width, 0.001, 1.0 - s.sprite_uv_x);
+	s.sprite_uv_height = (float)clampDouble(s.sprite_uv_height, 0.001, 1.0 - s.sprite_uv_y);
+	s.sprite_atlas_columns = clampInt(s.sprite_atlas_columns, 1, 64);
+	s.sprite_atlas_rows = clampInt(s.sprite_atlas_rows, 1, 64);
+	s.sprite_first_frame = clampInt(s.sprite_first_frame, 0, s.sprite_atlas_columns * s.sprite_atlas_rows - 1);
+	s.sprite_frame_count = clampInt(s.sprite_frame_count, 1, s.sprite_atlas_columns * s.sprite_atlas_rows - s.sprite_first_frame);
+	s.sprite_frames_per_second = (float)clampDouble(s.sprite_frames_per_second, 0.0, 120.0);
+	s.sprite_frame_rate_jitter = (float)clampDouble(s.sprite_frame_rate_jitter, 0.0, 1.0);
 	if(s.audio_url.size() > 4096)
 		s.audio_url.resize(4096);
 	s.rate_per_sec       = (float)clampDouble(s.rate_per_sec,       0.0,   400.0);
@@ -284,13 +302,16 @@ void clampSettings(ParticleEmitterSettings& s)
 	s.spread_deg         = (float)clampDouble(s.spread_deg,         0.0,   180.0);
 	s.turbulence_strength = (float)clampDouble(s.turbulence_strength, 0.0, 50.0);
 	s.lifetime_s         = (float)clampDouble(s.lifetime_s,         0.05,  120.0);
+	s.lifetime_jitter    = (float)clampDouble(s.lifetime_jitter,    0.0,     1.0);
 	s.start_width        = (float)clampDouble(s.start_width,        0.005, 100.0);
 	s.end_width          = (float)clampDouble(s.end_width,          0.005, 100.0);
 	s.size_curve_mid     = (float)clampDouble(s.size_curve_mid,     0.0,     1.0);
+	for(size_t i=0;i<s.size_curve_points.size();++i) s.size_curve_points[i]=(float)clampDouble(s.size_curve_points[i],0.0,1.0);
 	s.size_jitter        = (float)clampDouble(s.size_jitter,        0.0,     1.0);
 	s.opacity            = (float)clampDouble(s.opacity,            0.0,   1.0);
 	s.end_opacity        = (float)clampDouble(s.end_opacity,        0.0,   1.0);
 	s.opacity_curve_mid  = (float)clampDouble(s.opacity_curve_mid,  0.0,     1.0);
+	for(size_t i=0;i<s.opacity_curve_points.size();++i) s.opacity_curve_points[i]=(float)clampDouble(s.opacity_curve_points[i],0.0,1.0);
 	s.opacity_jitter     = (float)clampDouble(s.opacity_jitter,     0.0,     1.0);
 	s.colour_jitter      = (float)clampDouble(s.colour_jitter,      0.0,     1.0);
 	s.trail_length       = (float)clampDouble(s.trail_length,       0.0,   100.0);
@@ -500,6 +521,16 @@ ParticleEmitterSettings::ParticleEmitterSettings()
 	audio_fade_in_s(0.25f),
 	audio_fade_out_s(0.35f)
 {
+	sprite_uv_x=0.f; sprite_uv_y=0.f; sprite_uv_width=1.f; sprite_uv_height=1.f;
+	sprite_atlas_columns=1; sprite_atlas_rows=1; sprite_first_frame=0; sprite_frame_count=1; sprite_frames_per_second=0.f; sprite_loop=true;
+	sprite_animation_mode=SpriteAnimation_Loop; sprite_random_start_frame=false; sprite_frame_rate_jitter=0.f;
+	size_curve_points={{0.f,0.4375f,0.75f,0.9375f,1.f}}; size_curve_points_enabled=false;
+	size_curve_times={{0.f,0.25f,0.5f,0.75f,1.f}}; size_curve_point_count=5;
+	opacity_curve_points={{0.f,0.4375f,0.75f,0.9375f,1.f}}; opacity_curve_points_enabled=false;
+	opacity_curve_times=size_curve_times; opacity_curve_point_count=5;
+	colour_curve_points={{start_colour, Colour3f(0.72f,0.72f,0.72f), Colour3f(0.62f,0.62f,0.62f), Colour3f(0.52f,0.52f,0.52f), end_colour}};
+	colour_curve_enabled=false;
+	colour_curve_times=size_curve_times; colour_curve_point_count=5;
 }
 
 
@@ -1475,6 +1506,20 @@ ParticleEmitterSettings ParticleEmitterSettings::fromContent(const std::string& 
 		settings.shape = shapeFromString(root.getChildStringValueWithDefaultVal(parser, "shape", shapeToString(settings.shape)));
 		settings.render_mode = renderModeFromString(root.getChildStringValueWithDefaultVal(parser, "render_mode", renderModeToString(settings.render_mode)));
 		settings.sprite_path = root.getChildStringValueWithDefaultVal(parser, "sprite_path", settings.sprite_path);
+		settings.sprite_uv_x=(float)root.getChildDoubleValueWithDefaultVal(parser,"sprite_uv_x",settings.sprite_uv_x);
+		settings.sprite_uv_y=(float)root.getChildDoubleValueWithDefaultVal(parser,"sprite_uv_y",settings.sprite_uv_y);
+		settings.sprite_uv_width=(float)root.getChildDoubleValueWithDefaultVal(parser,"sprite_uv_width",settings.sprite_uv_width);
+		settings.sprite_uv_height=(float)root.getChildDoubleValueWithDefaultVal(parser,"sprite_uv_height",settings.sprite_uv_height);
+		settings.sprite_atlas_columns=root.getChildIntValueWithDefaultVal(parser,"sprite_atlas_columns",settings.sprite_atlas_columns);
+		settings.sprite_atlas_rows=root.getChildIntValueWithDefaultVal(parser,"sprite_atlas_rows",settings.sprite_atlas_rows);
+		settings.sprite_first_frame=root.getChildIntValueWithDefaultVal(parser,"sprite_first_frame",settings.sprite_first_frame);
+		settings.sprite_frame_count=root.getChildIntValueWithDefaultVal(parser,"sprite_frame_count",settings.sprite_frame_count);
+		settings.sprite_frames_per_second=(float)root.getChildDoubleValueWithDefaultVal(parser,"sprite_frames_per_second",settings.sprite_frames_per_second);
+		settings.sprite_loop=root.getChildBoolValueWithDefaultVal(parser,"sprite_loop",settings.sprite_loop);
+		settings.sprite_animation_mode=(SpriteAnimationMode)clampInt(root.getChildIntValueWithDefaultVal(parser,"sprite_animation_mode",settings.sprite_loop?SpriteAnimation_Loop:SpriteAnimation_Once),SpriteAnimation_Loop,SpriteAnimation_PingPong);
+		settings.sprite_loop=settings.sprite_animation_mode==SpriteAnimation_Loop;
+		settings.sprite_random_start_frame=root.getChildBoolValueWithDefaultVal(parser,"sprite_random_start_frame",settings.sprite_random_start_frame);
+		settings.sprite_frame_rate_jitter=(float)root.getChildDoubleValueWithDefaultVal(parser,"sprite_frame_rate_jitter",settings.sprite_frame_rate_jitter);
 		settings.custom_dir_x = (float)root.getChildDoubleValueWithDefaultVal(parser, "custom_dir_x", settings.custom_dir_x);
 		settings.custom_dir_y = (float)root.getChildDoubleValueWithDefaultVal(parser, "custom_dir_y", settings.custom_dir_y);
 		settings.custom_dir_z = (float)root.getChildDoubleValueWithDefaultVal(parser, "custom_dir_z", settings.custom_dir_z);
@@ -1487,19 +1532,32 @@ ParticleEmitterSettings ParticleEmitterSettings::fromContent(const std::string& 
 		settings.spread_deg = (float)root.getChildDoubleValueWithDefaultVal(parser, "spread_deg", settings.spread_deg);
 		settings.turbulence_strength = (float)root.getChildDoubleValueWithDefaultVal(parser, "turbulence_strength", settings.turbulence_strength);
 		settings.lifetime_s = (float)root.getChildDoubleValueWithDefaultVal(parser, "lifetime_s", settings.lifetime_s);
+		settings.lifetime_jitter = (float)root.getChildDoubleValueWithDefaultVal(parser,"lifetime_jitter",settings.lifetime_jitter);
 		settings.start_width = (float)root.getChildDoubleValueWithDefaultVal(parser, "start_width", settings.start_width);
 		settings.end_width = (float)root.getChildDoubleValueWithDefaultVal(parser, "end_width", settings.end_width);
 		settings.size_curve = curveFromString(root.getChildStringValueWithDefaultVal(parser, "size_curve", curveToString(settings.size_curve)));
 		settings.size_curve_mid = (float)root.getChildDoubleValueWithDefaultVal(parser, "size_curve_mid", settings.size_curve_mid);
+		settings.size_curve_points_enabled=root.getChildBoolValueWithDefaultVal(parser,"size_curve_points_enabled",settings.size_curve_points_enabled);
+		for(size_t i=0;i<5;++i) settings.size_curve_points[i]=(float)root.getChildDoubleValueWithDefaultVal(parser,"size_curve_point_"+std::to_string(i),settings.size_curve_points[i]);
+		settings.size_curve_point_count=root.getChildIntValueWithDefaultVal(parser,"size_curve_point_count",settings.size_curve_point_count);
+		for(size_t i=0;i<5;++i) settings.size_curve_times[i]=(float)root.getChildDoubleValueWithDefaultVal(parser,"size_curve_time_"+std::to_string(i),settings.size_curve_times[i]);
 		settings.size_jitter = (float)root.getChildDoubleValueWithDefaultVal(parser, "size_jitter", settings.size_jitter);
 		settings.opacity = (float)root.getChildDoubleValueWithDefaultVal(parser, "opacity", settings.opacity);
 		settings.end_opacity = (float)root.getChildDoubleValueWithDefaultVal(parser, "end_opacity", settings.end_opacity);
 		settings.opacity_curve = curveFromString(root.getChildStringValueWithDefaultVal(parser, "opacity_curve", curveToString(settings.opacity_curve)));
 		settings.opacity_curve_mid = (float)root.getChildDoubleValueWithDefaultVal(parser, "opacity_curve_mid", settings.opacity_curve_mid);
+		settings.opacity_curve_points_enabled=root.getChildBoolValueWithDefaultVal(parser,"opacity_curve_points_enabled",settings.opacity_curve_points_enabled);
+		for(size_t i=0;i<5;++i) settings.opacity_curve_points[i]=(float)root.getChildDoubleValueWithDefaultVal(parser,"opacity_curve_point_"+std::to_string(i),settings.opacity_curve_points[i]);
+		settings.opacity_curve_point_count=root.getChildIntValueWithDefaultVal(parser,"opacity_curve_point_count",settings.opacity_curve_point_count);
+		for(size_t i=0;i<5;++i) settings.opacity_curve_times[i]=(float)root.getChildDoubleValueWithDefaultVal(parser,"opacity_curve_time_"+std::to_string(i),settings.opacity_curve_times[i]);
 		settings.opacity_jitter = (float)root.getChildDoubleValueWithDefaultVal(parser, "opacity_jitter", settings.opacity_jitter);
 		settings.colour = colourFromHex(root.getChildStringValueWithDefaultVal(parser, "colour", colourToHex(settings.colour)), settings.colour);
 		settings.start_colour = colourFromHex(root.getChildStringValueWithDefaultVal(parser, "start_colour", colourToHex(settings.colour)), settings.colour);
 		settings.end_colour = colourFromHex(root.getChildStringValueWithDefaultVal(parser, "end_colour", colourToHex(settings.start_colour)), settings.start_colour);
+		settings.colour_curve_enabled=root.getChildBoolValueWithDefaultVal(parser,"colour_curve_enabled",settings.colour_curve_enabled);
+		for(size_t i=0;i<5;++i) settings.colour_curve_points[i]=colourFromHex(root.getChildStringValueWithDefaultVal(parser,"colour_curve_point_"+std::to_string(i),colourToHex(i==0?settings.start_colour:settings.end_colour)),i==0?settings.start_colour:settings.end_colour);
+		settings.colour_curve_point_count=root.getChildIntValueWithDefaultVal(parser,"colour_curve_point_count",settings.colour_curve_point_count);
+		for(size_t i=0;i<5;++i) settings.colour_curve_times[i]=(float)root.getChildDoubleValueWithDefaultVal(parser,"colour_curve_time_"+std::to_string(i),settings.colour_curve_times[i]);
 		settings.colour_jitter = (float)root.getChildDoubleValueWithDefaultVal(parser, "colour_jitter", settings.colour_jitter);
 		settings.trail_length = (float)root.getChildDoubleValueWithDefaultVal(parser, "trail_length", settings.trail_length);
 		settings.glow_strength = (float)root.getChildDoubleValueWithDefaultVal(parser, "glow_strength", settings.glow_strength);
@@ -1568,6 +1626,9 @@ std::string ParticleEmitterSettings::serialiseToContent(const ParticleEmitterSet
 	s << "  \"shape\": \"" << shapeToString(settings.shape) << "\",\n";
 	s << "  \"render_mode\": \"" << renderModeToString(settings.render_mode) << "\",\n";
 	s << "  \"sprite_path\": \"" << jsonEscape(settings.sprite_path) << "\",\n";
+	s << "  \"sprite_uv_x\": "<<settings.sprite_uv_x<<", \"sprite_uv_y\": "<<settings.sprite_uv_y<<", \"sprite_uv_width\": "<<settings.sprite_uv_width<<", \"sprite_uv_height\": "<<settings.sprite_uv_height<<",\n";
+	s << "  \"sprite_atlas_columns\": "<<settings.sprite_atlas_columns<<", \"sprite_atlas_rows\": "<<settings.sprite_atlas_rows<<", \"sprite_first_frame\": "<<settings.sprite_first_frame<<", \"sprite_frame_count\": "<<settings.sprite_frame_count<<", \"sprite_frames_per_second\": "<<settings.sprite_frames_per_second<<", \"sprite_loop\": "<<(settings.sprite_loop?"true":"false")<<",\n";
+	s << "  \"sprite_animation_mode\": "<<(int)settings.sprite_animation_mode<<", \"sprite_random_start_frame\": "<<(settings.sprite_random_start_frame?"true":"false")<<", \"sprite_frame_rate_jitter\": "<<settings.sprite_frame_rate_jitter<<",\n";
 	s << "  \"custom_dir_x\": " << settings.custom_dir_x << ",\n";
 	s << "  \"custom_dir_y\": " << settings.custom_dir_y << ",\n";
 	s << "  \"custom_dir_z\": " << settings.custom_dir_z << ",\n";
@@ -1580,19 +1641,29 @@ std::string ParticleEmitterSettings::serialiseToContent(const ParticleEmitterSet
 	s << "  \"spread_deg\": " << settings.spread_deg << ",\n";
 	s << "  \"turbulence_strength\": " << settings.turbulence_strength << ",\n";
 	s << "  \"lifetime_s\": " << settings.lifetime_s << ",\n";
+	s << "  \"lifetime_jitter\": " << settings.lifetime_jitter << ",\n";
 	s << "  \"start_width\": " << settings.start_width << ",\n";
 	s << "  \"end_width\": " << settings.end_width << ",\n";
 	s << "  \"size_curve\": \"" << curveToString(settings.size_curve) << "\",\n";
 	s << "  \"size_curve_mid\": " << settings.size_curve_mid << ",\n";
+	s << "  \"size_curve_points_enabled\": "<<(settings.size_curve_points_enabled?"true":"false")<<",\n";
+	s << "  \"size_curve_point_count\": "<<settings.size_curve_point_count<<",\n";
+	for(size_t i=0;i<5;++i) s<<"  \"size_curve_point_"<<i<<"\": "<<settings.size_curve_points[i]<<", \"size_curve_time_"<<i<<"\": "<<settings.size_curve_times[i]<<",\n";
 	s << "  \"size_jitter\": " << settings.size_jitter << ",\n";
 	s << "  \"opacity\": " << settings.opacity << ",\n";
 	s << "  \"end_opacity\": " << settings.end_opacity << ",\n";
 	s << "  \"opacity_curve\": \"" << curveToString(settings.opacity_curve) << "\",\n";
 	s << "  \"opacity_curve_mid\": " << settings.opacity_curve_mid << ",\n";
+	s << "  \"opacity_curve_points_enabled\": "<<(settings.opacity_curve_points_enabled?"true":"false")<<",\n";
+	s << "  \"opacity_curve_point_count\": "<<settings.opacity_curve_point_count<<",\n";
+	for(size_t i=0;i<5;++i) s<<"  \"opacity_curve_point_"<<i<<"\": "<<settings.opacity_curve_points[i]<<", \"opacity_curve_time_"<<i<<"\": "<<settings.opacity_curve_times[i]<<",\n";
 	s << "  \"opacity_jitter\": " << settings.opacity_jitter << ",\n";
 	s << "  \"colour\": \"" << colourToHex(settings.colour) << "\",\n";
 	s << "  \"start_colour\": \"" << colourToHex(settings.start_colour) << "\",\n";
 	s << "  \"end_colour\": \"" << colourToHex(settings.end_colour) << "\",\n";
+	s << "  \"colour_curve_enabled\": "<<(settings.colour_curve_enabled?"true":"false")<<",\n";
+	s << "  \"colour_curve_point_count\": "<<settings.colour_curve_point_count<<",\n";
+	for(size_t i=0;i<5;++i) s<<"  \"colour_curve_point_"<<i<<"\": \""<<colourToHex(settings.colour_curve_points[i])<<"\", \"colour_curve_time_"<<i<<"\": "<<settings.colour_curve_times[i]<<",\n";
 	s << "  \"colour_jitter\": " << settings.colour_jitter << ",\n";
 	s << "  \"trail_length\": " << settings.trail_length << ",\n";
 	s << "  \"glow_strength\": " << settings.glow_strength << ",\n";

@@ -58,6 +58,10 @@
 #include <QtWidgets/QStyle>
 #include <QtWidgets/QTextBrowser>
 #include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QTabBar>
+#include <QtWidgets/QToolButton>
+#include <QtWidgets/QScrollArea>
 #include <QtCore/QTimer>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QSignalBlocker>
@@ -313,7 +317,7 @@ public:
 	:	QWidget(parent),
 		curve(ParticleEmitterSettings::Curve_Linear),
 		custom_mid(0.5f),
-		dragging(false)
+		dragging(false), edited(false), drag_point(2), point_count(5)
 	{
 		setMinimumHeight(54);
 		setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -322,15 +326,22 @@ public:
 
 	void setChangedCallback(const std::function<void()>& callback) { changed_callback = callback; }
 
-	void setCurve(ParticleEmitterSettings::Curve new_curve, float new_custom_mid)
+	void setCurve(ParticleEmitterSettings::Curve new_curve, float new_custom_mid, const std::array<float,5>& points, const std::array<float,5>& point_times, int new_point_count, bool points_enabled)
 	{
 		curve = new_curve;
 		custom_mid = myClamp(new_custom_mid, 0.f, 1.f);
+		edited=points_enabled;
+		point_count=myClamp(new_point_count,2,5);
+		for(int i=0;i<5;++i) { times[i]=points_enabled ? point_times[i] : (float)i*.25f; values[i]=points_enabled ? myClamp(points[i],0.f,1.f) : previewCurveValue(curve,(float)i*0.25f,custom_mid); }
 		update();
 	}
 
 	ParticleEmitterSettings::Curve currentCurve() const { return curve; }
 	float currentCustomMid() const { return custom_mid; }
+	std::array<float,5> currentPoints() const { return values; }
+	std::array<float,5> currentTimes() const { return times; }
+	int currentPointCount() const { return point_count; }
+	bool pointsEnabled() const { return edited; }
 
 protected:
 	virtual void paintEvent(QPaintEvent*) override
@@ -355,7 +366,7 @@ protected:
 		for(int i=0; i<=64; ++i)
 		{
 			const float t = (float)i / 64.f;
-			const float value = previewCurveValue(curve, t, custom_mid);
+			const float value=edited ? valueAt(t) : previewCurveValue(curve,t,custom_mid);
 			const QPointF pt(r.left() + r.width() * t, r.bottom() - r.height() * value);
 			if(i == 0) path.moveTo(pt);
 			else path.lineTo(pt);
@@ -363,10 +374,8 @@ protected:
 		p.setPen(QPen(QColor(62, 198, 255), 2.2));
 		p.drawPath(path);
 
-		const QPointF mid_pt(r.left() + r.width() * 0.5, r.bottom() - r.height() * previewCurveValue(curve, 0.5f, custom_mid));
-		p.setBrush(QColor(255, 255, 255));
 		p.setPen(QPen(QColor(8, 8, 8), 1));
-		p.drawEllipse(mid_pt, 3.8, 3.8);
+		for(int i=0;i<point_count;++i) { const float t=edited?times[i]:(float)i/(point_count-1); const float v=edited?values[i]:previewCurveValue(curve,t,custom_mid); const QPointF pt(r.left()+r.width()*t,r.bottom()-r.height()*v); p.setBrush(i==drag_point&&dragging?QColor(255,205,70):QColor(255,255,255)); p.drawEllipse(pt,4.2,4.2); }
 
 		p.setPen(QColor(196, 202, 208));
 		p.drawText(r.adjusted(6, 2, -6, -2), Qt::AlignRight | Qt::AlignTop, curveLabel(curve));
@@ -374,17 +383,33 @@ protected:
 
 	virtual void mousePressEvent(QMouseEvent* e) override
 	{
+		const QRectF r=rect().adjusted(5,5,-5,-5);
+		if(e->button()==Qt::RightButton && edited && point_count>2)
+		{
+			const int nearest=nearestPoint(e->pos(),r);
+			if(nearest>0 && nearest<point_count-1) { for(int i=nearest;i<point_count-1;++i){times[i]=times[i+1];values[i]=values[i+1];} --point_count; update(); if(changed_callback) changed_callback(); }
+			return;
+		}
 		if(e->button() == Qt::LeftButton)
 		{
-			dragging = true;
-			setCustomFromY(e->pos().y());
+			if(!edited) { for(int i=0;i<5;++i){times[i]=(float)i*.25f;values[i]=previewCurveValue(curve,times[i],custom_mid);} point_count=5; edited=true; }
+			int nearest=nearestPoint(e->pos(),r);
+			if(nearest<0 && point_count<5)
+			{
+				const float t=myClamp((float)((e->pos().x()-r.left())/myMax(r.width(),1.0)),0.f,1.f);
+				int insert=1; while(insert<point_count-1 && times[insert]<t) ++insert;
+				for(int i=point_count;i>insert;--i){times[i]=times[i-1];values[i]=values[i-1];}
+				times[insert]=myClamp(t,times[insert-1]+.01f,times[insert+1]-.01f); values[insert]=myClamp((float)((r.bottom()-e->pos().y())/myMax(r.height(),1.0)),0.f,1.f); ++point_count; nearest=insert;
+			}
+			drag_point=nearest<0?nearestPoint(e->pos(),r):nearest; dragging=drag_point>=0;
+			if(dragging) { curve=ParticleEmitterSettings::Curve_Custom; setCustomFromPos(e->pos()); }
 		}
 	}
 
 	virtual void mouseMoveEvent(QMouseEvent* e) override
 	{
 		if(dragging)
-			setCustomFromY(e->pos().y());
+			setCustomFromPos(e->pos());
 	}
 
 	virtual void mouseReleaseEvent(QMouseEvent*) override
@@ -405,17 +430,32 @@ protected:
 			curve = ParticleEmitterSettings::Curve_SmoothStep;
 		else
 			curve = ParticleEmitterSettings::Curve_Linear;
+		edited=false;
 		update();
 		if(changed_callback)
 			changed_callback();
 	}
 
 private:
-	void setCustomFromY(int y)
+	float valueAt(float t) const
+	{
+		if(t<=times[0]) return values[0];
+		for(int i=0;i<point_count-1;++i) if(t<=times[i+1]) return Maths::lerp(values[i],values[i+1],(t-times[i])/myMax(times[i+1]-times[i],.001f));
+		return values[point_count-1];
+	}
+	int nearestPoint(const QPoint& pos,const QRectF& r) const
+	{
+		int best=-1; double distance=9.0*9.0;
+		for(int i=0;i<point_count;++i) { const float t=edited?times[i]:(float)i/(point_count-1); const float v=edited?values[i]:previewCurveValue(curve,t,custom_mid); const double dx=pos.x()-(r.left()+r.width()*t),dy=pos.y()-(r.bottom()-r.height()*v),d=dx*dx+dy*dy; if(d<distance){distance=d;best=i;} }
+		return best;
+	}
+	void setCustomFromPos(const QPoint& pos)
 	{
 		const QRectF r = rect().adjusted(5, 5, -5, -5);
 		curve = ParticleEmitterSettings::Curve_Custom;
-		custom_mid = myClamp((float)((r.bottom() - (qreal)y) / myMax(r.height(), 1.0)), 0.f, 1.f);
+		if(drag_point>0 && drag_point<point_count-1) times[drag_point]=myClamp((float)((pos.x()-r.left())/myMax(r.width(),1.0)),times[drag_point-1]+.01f,times[drag_point+1]-.01f);
+		values[drag_point] = myClamp((float)((r.bottom() - (qreal)pos.y()) / myMax(r.height(), 1.0)), 0.f, 1.f);
+		custom_mid = values[2];
 		update();
 		if(changed_callback)
 			changed_callback();
@@ -424,7 +464,76 @@ private:
 	ParticleEmitterSettings::Curve curve;
 	float custom_mid;
 	bool dragging;
+	bool edited;
+	int drag_point;
+	std::array<float,5> values;
+	std::array<float,5> times;
+	int point_count;
 	std::function<void()> changed_callback;
+};
+
+
+class ParticleColourCurveWidget : public QWidget
+{
+public:
+	ParticleColourCurveWidget(QWidget* parent=0) : QWidget(parent), enabled(false), point_count(5), dragging(false), drag_point(-1) { setMinimumHeight(54); setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed); setToolTip(QStringLiteral("Drag keys to move them; right-click an inner key to remove it; double-click to edit its colour")); for(int i=0;i<5;++i) times[i]=(float)i*.25f; }
+	void setColors(const std::array<Colour3f,5>& c, const std::array<float,5>& t, int count, bool active) { colors=c; times=t; point_count=myClamp(count,2,5); enabled=active; update(); }
+	std::array<Colour3f,5> currentColors() const { return colors; }
+	std::array<float,5> currentTimes() const { return times; }
+	int currentPointCount() const { return point_count; }
+	bool isEnabled() const { return enabled; }
+	void setChangedCallback(const std::function<void()>& cb) { changed_callback=cb; }
+protected:
+	void paintEvent(QPaintEvent*) override
+	{
+		QPainter p(this); p.setRenderHint(QPainter::Antialiasing,true); const QRect r=rect().adjusted(5,8,-5,-8);
+		for(int x=0;x<r.width();++x) { const float t=(float)x/(float)myMax(r.width()-1,1); const Colour3f c=colourAt(t); p.setPen(QColor((int)(c.r*255),(int)(c.g*255),(int)(c.b*255))); p.drawLine(r.left()+x,r.top(),r.left()+x,r.bottom()); }
+		p.setPen(QPen(QColor(90,90,90),1)); p.setBrush(Qt::NoBrush); p.drawRect(r);
+		for(int i=0;i<point_count;++i) { const QRect swatch((int)(r.left()+r.width()*times[i])-5,r.bottom()-5,10,10); p.setBrush(QColor((int)(colors[i].r*255),(int)(colors[i].g*255),(int)(colors[i].b*255))); p.drawRect(swatch); }
+	}
+	void mousePressEvent(QMouseEvent* e) override { const QRect r=rect().adjusted(5,8,-5,-8); int nearest=nearestPoint(e->pos(),r); if(e->button()==Qt::RightButton && point_count>2 && nearest>0 && nearest<point_count-1){for(int i=nearest;i<point_count-1;++i){times[i]=times[i+1];colors[i]=colors[i+1];}--point_count;enabled=true;update();if(changed_callback)changed_callback();return;} if(e->button()==Qt::LeftButton){if(nearest<0&&point_count<5){const float t=myClamp((float)(e->pos().x()-r.left())/myMax(r.width(),1),.01f,.99f);int insert=1;while(insert<point_count-1&&times[insert]<t)++insert;for(int i=point_count;i>insert;--i){times[i]=times[i-1];colors[i]=colors[i-1];}times[insert]=myClamp(t,times[insert-1]+.01f,times[insert+1]-.01f);colors[insert]=colourAt(t);++point_count;nearest=insert;}drag_point=nearest;dragging=nearest>=0;}}
+	void mouseMoveEvent(QMouseEvent* e) override { if(!dragging)return; const QRect r=rect().adjusted(5,8,-5,-8); if(drag_point>0&&drag_point<point_count-1)times[drag_point]=myClamp((float)(e->pos().x()-r.left())/myMax(r.width(),1),times[drag_point-1]+.01f,times[drag_point+1]-.01f);enabled=true;update();if(changed_callback)changed_callback(); }
+	void mouseReleaseEvent(QMouseEvent*) override { dragging=false; }
+	void mouseDoubleClickEvent(QMouseEvent* e) override
+	{
+		const QRect r=rect().adjusted(5,8,-5,-8); const int i=nearestPoint(e->pos(),r); if(i<0)return; const Colour3f& c=colors[i];
+		QColor picked=QColorDialog::getColor(QColor((int)(c.r*255),(int)(c.g*255),(int)(c.b*255)),this);
+		if(picked.isValid()) { colors[i]=Colour3f(picked.redF(),picked.greenF(),picked.blueF()); enabled=true; update(); if(changed_callback) changed_callback(); }
+	}
+private:
+	int nearestPoint(const QPoint& pos,const QRect& r) const { int best=-1;double dist=9.0*9.0;for(int i=0;i<point_count;++i){const double dx=pos.x()-(r.left()+r.width()*times[i]),dy=pos.y()-(r.bottom()-5),d=dx*dx+dy*dy;if(d<dist){dist=d;best=i;}}return best; }
+	Colour3f colourAt(float t) const { if(t<=times[0])return colors[0];for(int i=0;i<point_count-1;++i)if(t<=times[i+1]){const float f=(t-times[i])/myMax(times[i+1]-times[i],.001f);return Colour3f(Maths::lerp(colors[i].r,colors[i+1].r,f),Maths::lerp(colors[i].g,colors[i+1].g,f),Maths::lerp(colors[i].b,colors[i+1].b,f));}return colors[point_count-1]; }
+	std::array<Colour3f,5> colors;
+	std::array<float,5> times;
+	int point_count;
+	bool dragging;
+	int drag_point;
+	bool enabled;
+	std::function<void()> changed_callback;
+};
+
+
+class ParticleSpritePreviewLabel : public QLabel
+{
+public:
+	explicit ParticleSpritePreviewLabel(QWidget* parent=0) : QLabel(parent), dragging(false) { setMouseTracking(true); setCursor(Qt::CrossCursor); }
+	void setSelectionCallback(const std::function<void(const QRectF&,bool)>& cb) { selection_callback=cb; }
+protected:
+	void mousePressEvent(QMouseEvent* e) override { if(e->button()==Qt::LeftButton){drag_start=e->pos();dragging=true;} else QLabel::mousePressEvent(e); }
+	void mouseReleaseEvent(QMouseEvent* e) override
+	{
+		if(e->button()!=Qt::LeftButton || !dragging){QLabel::mouseReleaseEvent(e);return;}
+		dragging=false; const QRect area=contentsRect().adjusted(2,2,-2,-2); const QPoint a=drag_start,b=e->pos();
+		const bool is_drag=(a-b).manhattanLength()>5;
+		const QRect target=area.adjusted(12,10,-12,-10);
+		const float x0=myClamp((float)(myMin(a.x(),b.x())-target.left())/myMax(target.width(),1),0.f,1.f),y0=myClamp((float)(myMin(a.y(),b.y())-target.top())/myMax(target.height(),1),0.f,1.f);
+		const float x1=myClamp((float)(myMax(a.x(),b.x())-target.left())/myMax(target.width(),1),0.f,1.f),y1=myClamp((float)(myMax(a.y(),b.y())-target.top())/myMax(target.height(),1),0.f,1.f);
+		if(selection_callback) selection_callback(is_drag?QRectF(x0,y0,myMax(x1-x0,.005f),myMax(y1-y0,.005f)):QRectF(x0,y0,0,0),!is_drag);
+	}
+private:
+	QPoint drag_start;
+	bool dragging;
+	std::function<void(const QRectF&,bool)> selection_callback;
 };
 
 
@@ -1626,6 +1735,7 @@ void ObjectEditor::createParticleEditorUI()
 
 	this->particlePreviewLabel = new QLabel(this->particleGroupBox);
 	this->particlePreviewLabel->setMinimumHeight(74);
+	this->particlePreviewLabel->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);
 	this->particlePreviewLabel->setAlignment(Qt::AlignCenter);
 	this->particlePreviewLabel->setFrameShape(QFrame::StyledPanel);
 	grid->addWidget(this->particlePreviewLabel, row++, 0, 1, 2);
@@ -1779,8 +1889,50 @@ void ObjectEditor::createParticleEditorUI()
 		connect(control, SIGNAL(valueChanged(double)), this, SLOT(updateParticlePreviewThumbnail()));
 		return control;
 	};
+	this->particleSpriteUVXControl=add_real_control(this->particleSpriteUVXLabel,"Sprite UV X",0.0,0.999,0.001,0.0,1.0,1000,"");
+	this->particleSpriteUVYControl=add_real_control(this->particleSpriteUVYLabel,"Sprite UV Y",0.0,0.999,0.001,0.0,1.0,1000,"");
+	this->particleSpriteUVWidthControl=add_real_control(this->particleSpriteUVWidthLabel,"Sprite UV Width",0.001,1.0,0.001,0.0,1.0,1000,"");
+	this->particleSpriteUVHeightControl=add_real_control(this->particleSpriteUVHeightLabel,"Sprite UV Height",0.001,1.0,0.001,0.0,1.0,1000,"");
+	this->particleSpriteColumnsControl=add_real_control(this->particleSpriteColumnsLabel,"Atlas Columns",1,64,1,1,64,63,"");
+	this->particleSpriteRowsControl=add_real_control(this->particleSpriteRowsLabel,"Atlas Rows",1,64,1,1,64,63,"");
+	this->particleSpriteFirstFrameControl=add_real_control(this->particleSpriteFirstFrameLabel,"First Frame",0,4095,1,0,64,64,"");
+	this->particleSpriteFrameCountControl=add_real_control(this->particleSpriteFrameCountLabel,"Frame Count",1,4096,1,1,64,64,"");
+	this->particleSpriteFPSControl=add_real_control(this->particleSpriteFPSLabel,"Frames Per Second",0,120,1,0,60,60," fps");
+	this->particleSpriteFrameRateJitterControl=add_real_control(this->particleSpriteFrameRateJitterLabel,"Frame Rate Jitter",0,1,0.01,0,1,100,"");
+	this->particleSpriteAnimationLabel=new QLabel(this->particleGroupBox);
+	this->particleSpriteAnimationComboBox=new QComboBox(this->particleGroupBox);
+	this->particleSpriteAnimationComboBox->addItem(QStringLiteral("Loop"),(int)ParticleEmitterSettings::SpriteAnimation_Loop);
+	this->particleSpriteAnimationComboBox->addItem(QStringLiteral("Once"),(int)ParticleEmitterSettings::SpriteAnimation_Once);
+	this->particleSpriteAnimationComboBox->addItem(QStringLiteral("Ping-pong"),(int)ParticleEmitterSettings::SpriteAnimation_PingPong);
+	grid->addWidget(this->particleSpriteAnimationLabel,row,0); grid->addWidget(this->particleSpriteAnimationComboBox,row++,1);
+	this->particleSpriteRandomStartCheckBox=new QCheckBox(QCoreApplication::translate("ObjectEditor","Random Start Frame"),this->particleGroupBox);
+	grid->addWidget(this->particleSpriteRandomStartCheckBox,row++,0,1,2);
+	this->particleSpritePreviewLabel=new ParticleSpritePreviewLabel(this->particleGroupBox);
+	this->particleSpritePreviewLabel->setMinimumHeight(96); this->particleSpritePreviewLabel->setAlignment(Qt::AlignCenter); this->particleSpritePreviewLabel->setFrameShape(QFrame::StyledPanel);
+	this->particleSpritePreviewLabel->setToolTip(QCoreApplication::translate("ObjectEditor", "Drag to select a texture region; click a cell to choose the first animation frame."));
+	this->particleSpritePreviewLabel->setSelectionCallback([this](const QRectF& selection,bool click)
+	{
+		const QString path=this->particleSpritePathLineEdit->text(); QImage source(path);
+		if(source.isNull()) return;
+		if(click)
+		{
+			const int cols=myMax(1,(int)std::round(particleSpriteColumnsControl->value())), rows=myMax(1,(int)std::round(particleSpriteRowsControl->value()));
+			const int col=myClamp((int)(selection.x()*cols),0,cols-1), row=myClamp((int)(selection.y()*rows),0,rows-1);
+			const int frame=row*cols+col; if(frame<cols*rows) { particleSpriteFirstFrameControl->setValue(frame); emit objectChanged(); }
+		}
+		else
+		{
+			const float old_x=(float)particleSpriteUVXControl->value(),old_y=(float)particleSpriteUVYControl->value(),old_w=(float)particleSpriteUVWidthControl->value(),old_h=(float)particleSpriteUVHeightControl->value();
+			particleSpriteUVXControl->setValue(old_x+(float)selection.x()*old_w); particleSpriteUVYControl->setValue(old_y+(float)selection.y()*old_h);
+			particleSpriteUVWidthControl->setValue((float)selection.width()*old_w); particleSpriteUVHeightControl->setValue((float)selection.height()*old_h); emit objectChanged(); updateParticleSpritePreview();
+		}
+	});
+	grid->addWidget(this->particleSpritePreviewLabel,row++,0,1,2);
 
 	this->particleAudioEnabledCheckBox = new QCheckBox(this->particleGroupBox);
+	const char* direction_labels[] = {"Direction X", "Direction Y", "Direction Z"};
+	for(int axis=0; axis<3; ++axis)
+		particleCustomDirectionControls[axis] = add_real_control(particleCustomDirectionLabels[axis], direction_labels[axis], -1.e9, 1.e9, 0.01, -1.0, 1.0, 200, "");
 	grid->addWidget(this->particleAudioEnabledCheckBox, row++, 0, 1, 2);
 
 	this->particleAudioURLLabel = new QLabel(this->particleGroupBox);
@@ -1822,6 +1974,7 @@ void ObjectEditor::createParticleEditorUI()
 	this->particleSpreadSpinBox      = add_real_control(this->particleSpreadLabel,      "Spread",          0.0,   180.0, 1.0,      0.0,    180.0, 180, " deg");
 	this->particleTurbulenceSpinBox  = add_real_control(this->particleTurbulenceLabel,  "Turbulence",      0.0,    50.0, 0.05,     0.0,      8.0, 200, " m/s^2");
 	this->particleLifetimeSpinBox    = add_real_control(this->particleLifetimeLabel,    "Lifetime",        0.05,  120.0, 0.1,      0.05,    20.0, 200, " s");
+	this->particleLifetimeJitterSpinBox=add_real_control(this->particleLifetimeJitterLabel,"Lifetime Jitter",0.0,1.0,0.01,0.0,1.0,100,"");
 	this->particleStartWidthSpinBox  = add_real_control(this->particleStartWidthLabel,  "Start Size",      0.005, 100.0, 0.05,     0.005,    5.0, 200, " m");
 	this->particleEndWidthSpinBox    = add_real_control(this->particleEndWidthLabel,    "End Size",        0.005, 100.0, 0.05,     0.005,    5.0, 200, " m");
 
@@ -1852,6 +2005,10 @@ void ObjectEditor::createParticleEditorUI()
 	this->particleEndColourPushButton->setFixedWidth(42);
 	grid->addWidget(this->particleEndColourLabel, row, 0);
 	grid->addWidget(this->particleEndColourPushButton, row++, 1, Qt::AlignLeft);
+	this->particleColourCurveLabel=new QLabel(this->particleGroupBox);
+	this->particleColourCurveWidget=new ParticleColourCurveWidget(this->particleGroupBox);
+	this->particleColourCurveWidget->setChangedCallback([this]() { emit objectChanged(); updateParticlePreviewThumbnail(); });
+	grid->addWidget(this->particleColourCurveLabel,row,0); grid->addWidget(this->particleColourCurveWidget,row++,1);
 	this->particleColourJitterSpinBox = add_real_control(this->particleColourJitterLabel, "Colour Jitter", 0.0, 1.0, 0.05, 0.0, 1.0, 100, "");
 	this->particleTrailLengthSpinBox = add_real_control(this->particleTrailLengthLabel, "Trail Length", 0.0, 100.0, 0.05, 0.0, 10.0, 200, " m");
 	this->particleGlowStrengthSpinBox = add_real_control(this->particleGlowStrengthLabel, "Glow Strength", 0.2, 8.0, 0.1, 0.2, 5.0, 160, "");
@@ -1905,6 +2062,9 @@ void ObjectEditor::createParticleEditorUI()
 
 	connect(this->particleEnabledCheckBox, SIGNAL(toggled(bool)), this, SIGNAL(objectChanged()));
 	connect(this->particleEnabledCheckBox, SIGNAL(toggled(bool)), this, SLOT(updateParticlePreviewThumbnail()));
+	particlePreviewTimer=new QTimer(this); particlePreviewTimer->setInterval(40);
+	connect(particlePreviewTimer,&QTimer::timeout,this,[this]() { if(editing_particle_emitter) { particlePreviewPhase=std::fmod(particlePreviewPhase+0.035f,1.f); updateParticlePreviewThumbnail(); updateParticleSpritePreview(); } });
+	particlePreviewTimer->start();
 	connect(this->particleHelpPushButton, SIGNAL(clicked(bool)), this, SLOT(showParticleHelp()));
 	connect(this->particlePresetComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(particlePresetChanged(int)));
 	connect(this->particleSavePresetPushButton, SIGNAL(clicked(bool)), this, SLOT(saveParticlePreset()));
@@ -1920,6 +2080,17 @@ void ObjectEditor::createParticleEditorUI()
 	connect(this->particleSpriteLibraryComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(particleSpriteLibraryChanged(int)));
 	connect(this->particleSpritePathLineEdit, SIGNAL(textChanged(QString)), this, SIGNAL(objectChanged()));
 	connect(this->particleSpritePathLineEdit, SIGNAL(textChanged(QString)), this, SLOT(updateParticlePreviewThumbnail()));
+	connect(this->particleSpritePathLineEdit, SIGNAL(textChanged(QString)), this, SLOT(updateParticleSpritePreview()));
+	connect(this->particleSpriteUVXControl,SIGNAL(valueChanged(double)),this,SLOT(updateParticleSpritePreview()));
+	connect(this->particleSpriteUVYControl,SIGNAL(valueChanged(double)),this,SLOT(updateParticleSpritePreview()));
+	connect(this->particleSpriteUVWidthControl,SIGNAL(valueChanged(double)),this,SLOT(updateParticleSpritePreview()));
+	connect(this->particleSpriteUVHeightControl,SIGNAL(valueChanged(double)),this,SLOT(updateParticleSpritePreview()));
+	connect(this->particleSpriteColumnsControl,SIGNAL(valueChanged(double)),this,SLOT(updateParticleSpritePreview()));
+	connect(this->particleSpriteRowsControl,SIGNAL(valueChanged(double)),this,SLOT(updateParticleSpritePreview()));
+	connect(this->particleSpriteFirstFrameControl,SIGNAL(valueChanged(double)),this,SLOT(updateParticleSpritePreview()));
+	connect(this->particleSpriteAnimationComboBox,SIGNAL(currentIndexChanged(int)),this,SIGNAL(objectChanged()));
+	connect(this->particleSpriteRandomStartCheckBox,SIGNAL(toggled(bool)),this,SIGNAL(objectChanged()));
+	connect(this->particleSpriteFrameRateJitterControl,SIGNAL(valueChanged(double)),this,SLOT(updateParticleSpritePreview()));
 	connect(this->particleSpriteBrowsePushButton, SIGNAL(clicked(bool)), this, SLOT(browseParticleSprite()));
 	connect(this->particleSpriteClearPushButton, SIGNAL(clicked(bool)), this, SLOT(clearParticleSprite()));
 	connect(this->particleAudioEnabledCheckBox, SIGNAL(toggled(bool)), this, SIGNAL(objectChanged()));
@@ -1939,8 +2110,151 @@ void ObjectEditor::createParticleEditorUI()
 	connect(this->particleCollideSurfacesCheckBox, SIGNAL(toggled(bool)), this, SIGNAL(objectChanged()));
 	connect(this->particleDieOnSurfaceCheckBox, SIGNAL(toggled(bool)), this, SIGNAL(objectChanged()));
 
-	this->verticalLayout->insertWidget(2, this->particleGroupBox);
+	this->verticalLayout->insertWidget(0, this->particleGroupBox);
+	organiseParticleEditorUI(grid);
 	this->particleGroupBox->hide();
+}
+
+
+void ObjectEditor::organiseParticleEditorUI(QGridLayout* source)
+{
+	particleTabs = new QTabWidget(particleGroupBox);
+	particleTabs->setObjectName("particleSettingsTabs");
+	particleTabs->setDocumentMode(true);
+	particleTabs->setUsesScrollButtons(true);
+	particleTabs->setElideMode(Qt::ElideNone);
+	particleTabs->tabBar()->setExpanding(false);
+	const char* tabs[] = {"Emitter", "Appearance", "Motion", "Physics", "Sound", "Object"};
+	QVBoxLayout* pages[6];
+	for(int i=0; i<6; ++i)
+	{
+		QScrollArea* scroll = new QScrollArea(particleTabs);
+		scroll->setWidgetResizable(true);
+		scroll->setFrameShape(QFrame::NoFrame);
+		scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+		QWidget* page = new QWidget(scroll);
+		pages[i] = new QVBoxLayout(page);
+		pages[i]->setContentsMargins(6,6,6,6);
+		pages[i]->setSpacing(6);
+		pages[i]->setAlignment(Qt::AlignTop);
+		scroll->setWidget(page);
+		scroll->setProperty("particleTabTitle", tabs[i]);
+		particleTabs->addTab(scroll, QString::fromLatin1(tabs[i]));
+	}
+	auto section = [this,&pages](int tab, const char* title, bool open) -> QVBoxLayout*
+	{
+		QToolButton* button = new QToolButton(particleTabs);
+		button->setProperty("particleSectionTitle", title);
+		button->setText(QString::fromLatin1(title));
+		button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+		button->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+		button->setCheckable(true); button->setChecked(open);
+		button->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
+		QWidget* body = new QWidget(particleTabs);
+		QVBoxLayout* layout = new QVBoxLayout(body);
+		layout->setContentsMargins(6,2,2,6);
+		body->setVisible(open);
+		pages[tab]->addWidget(button); pages[tab]->addWidget(body);
+		connect(button,&QToolButton::toggled,this,[button,body](bool expanded) {
+			button->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+			body->setVisible(expanded);
+		});
+		particleSectionButtons.push_back(button);
+		return layout;
+	};
+	// Move complete existing rows, including nested button layouts. Existing
+	// controls, signals, presets and permission handling keep their identity.
+	auto group = [&](int tab,const char* title,bool open,std::initializer_list<QWidget*> anchors)
+	{
+		QVBoxLayout* body=section(tab,title,open);
+		QGridLayout* grid=new QGridLayout(); body->addLayout(grid);
+		grid->setColumnStretch(1,1); grid->setHorizontalSpacing(8); grid->setVerticalSpacing(6);
+		int dest_row=0;
+		for(QWidget* anchor:anchors)
+		{
+			std::function<bool(QLayoutItem*)> contains = [&](QLayoutItem* item) {
+				if(item->widget()==anchor) return true;
+				if(item->layout()) for(int k=0;k<item->layout()->count();++k) if(contains(item->layout()->itemAt(k))) return true;
+				return false;
+			};
+			int old_row=-1,col,rs,cs;
+			for(int k=0;k<source->count();++k) if(contains(source->itemAt(k))) { source->getItemPosition(k,&old_row,&col,&rs,&cs);break; }
+			if(old_row<0) continue;
+			for(int k=source->count()-1;k>=0;--k)
+			{
+				int r; source->getItemPosition(k,&r,&col,&rs,&cs); if(r!=old_row) continue;
+				QLayoutItem* item=source->takeAt(k);
+				if(item->widget())
+				{
+					if(col==0 && cs==1)
+						if(QLabel* label=qobject_cast<QLabel*>(item->widget()))
+						{
+							label->setWordWrap(true);
+							label->setMaximumWidth(150);
+						}
+					grid->addWidget(item->widget(),dest_row,col,rs,cs,item->alignment()); delete item;
+				}
+				else if(item->layout()) { QLayout* layout=item->layout(); layout->setParent(nullptr); grid->addLayout(layout,dest_row,col,rs,cs); }
+				else grid->addItem(item,dest_row,col,rs,cs);
+			}
+			++dest_row;
+		}
+	};
+	group(0,"Preset and preview",true,{particleEnabledCheckBox,particlePreviewLabel,particlePresetLabel,particleBurstNowPushButton,particleDiagnosticsLabel});
+	group(0,"Emission and lifetime",true,{particleShapeLabel,particleRadiusLabel,particleRateLabel,particleLifetimeLabel,particleLifetimeJitterLabel});
+	group(0,"Bursts",false,{particleBurstEnabledCheckBox,particleBurstCountLabel,particleBurstIntervalLabel});
+	group(0,"Limits and distance",false,{particleFrameCapLabel,particleMaxParticlesLabel,particleMaxDistanceLabel});
+	group(1,"Sprite and rendering",true,{particleKindLabel,particleRenderModeLabel,particleSpriteLibraryLabel,particleSpritePathLabel,particleGlowStrengthLabel,particleTrailLengthLabel});
+	group(1,"Sprite atlas and crop",false,{particleSpriteUVXLabel,particleSpriteUVYLabel,particleSpriteUVWidthLabel,particleSpriteUVHeightLabel,particleSpriteColumnsLabel,particleSpriteRowsLabel,particleSpriteFirstFrameLabel,particleSpriteFrameCountLabel,particleSpriteFPSLabel,particleSpriteFrameRateJitterLabel,particleSpriteAnimationLabel,particleSpriteRandomStartCheckBox,particleSpritePreviewLabel});
+	group(1,"Size over lifetime",false,{particleStartWidthLabel,particleEndWidthLabel,particleSizeCurveLabel,particleSizeJitterLabel});
+	group(1,"Colour and opacity",false,{particleColourLabel,particleEndColourLabel,particleColourCurveLabel,particleColourJitterLabel,particleOpacityLabel,particleEndOpacityLabel,particleOpacityCurveLabel,particleOpacityJitterLabel});
+	group(1,"Sprite rotation",false,{particleRotationLabel,particleRotationJitterLabel,particleSpinLabel,particleSpinJitterLabel});
+	group(2,"Direction and speed",true,{particleDirectionLabel,particleCustomDirectionLabels[0],particleCustomDirectionLabels[1],particleCustomDirectionLabels[2],particleSpeedLabel,particleSpeedJitterLabel,particleSpreadLabel});
+	group(2,"Wind and turbulence",false,{particleWindXLabel,particleWindYLabel,particleWindZLabel,particleTurbulenceLabel});
+	group(2,"Attractor and vortex",false,{particleVortexStrengthLabel,particleAttractorStrengthLabel,particleAttractorRadiusLabel,particleRadialAccelLabel});
+	group(2,"Black hole",false,{particleBlackHoleCheckBox,particleEventHorizonLabel});
+	group(3,"Forces and resistance",true,{particleGravityScaleLabel,particleBuoyancyLiftLabel,particleLinearDampingLabel,particleDragAreaLabel,particleMassLabel});
+	group(3,"Surface collisions",false,{particleCollideSurfacesCheckBox,particleDieOnSurfaceCheckBox,particleRestitutionLabel,particleCollisionFrictionLabel});
+	group(4,"Sound source",true,{particleAudioEnabledCheckBox,particleAudioURLLabel,particleAudioLoopCheckBox,particleAudioVolumeLabel});
+	group(4,"Audible area",false,{particleAudioActivationDistanceLabel,particleAudioMinDistanceLabel,particleAudioMaxDistanceLabel});
+	group(4,"Sound fades",false,{particleAudioFadeInLabel,particleAudioFadeOutLabel});
+	// Keep any future controls reachable until they are assigned to a group.
+	if(source->count())
+	{
+		QVBoxLayout* extra=section(0,"Additional settings",false);
+		QGridLayout* grid=new QGridLayout(); extra->addLayout(grid);
+		while(source->count())
+		{
+			int r,c,rs,cs; source->getItemPosition(0,&r,&c,&rs,&cs);
+			QLayoutItem* item=source->takeAt(0);
+			if(item->widget()) { grid->addWidget(item->widget(),r,c,rs,cs);delete item; }
+			else if(item->layout()) { item->layout()->setParent(nullptr);grid->addLayout(item->layout(),r,c,rs,cs); }
+			else grid->addItem(item,r,c,rs,cs);
+		}
+	}
+	delete source;
+	QVBoxLayout* root=new QVBoxLayout(particleGroupBox); root->setContentsMargins(0,0,0,0);root->addWidget(particleTabs);
+	const char* shared_titles[]={"Object information", "Transform and script", "Emitter model materials", "Emitter object physics"};
+	QWidget* shared_widgets[]={widget_11,groupBox_2,materialsGroupBox,physicsSettingsGroupBox};
+	for(int i=0;i<4;++i)
+		particleSharedPanels.push_back({shared_widgets[i],section(5,shared_titles[i],i==1),verticalLayout->indexOf(shared_widgets[i])});
+}
+
+
+void ObjectEditor::setParticleEditorLayout(bool enabled)
+{
+	if(particleLayoutActive==enabled) return;
+	particleLayoutActive=enabled;
+	for(const auto& panel:particleSharedPanels)
+	{
+		const bool visible=!panel.widget->isHidden();
+		if(enabled) { verticalLayout->removeWidget(panel.widget);panel.target->addWidget(panel.widget); }
+		else { panel.target->removeWidget(panel.widget);verticalLayout->insertWidget(panel.original_index,panel.widget); }
+		panel.widget->setVisible(visible);
+	}
+	bottomSpacer->changeSize(0,enabled ? 0 : 100,QSizePolicy::Minimum,enabled ? QSizePolicy::Fixed : QSizePolicy::Expanding);
+	verticalLayout->setStretchFactor(particleGroupBox,enabled ? 1 : 0);
+	verticalLayout->invalidate();
 }
 
 
@@ -1955,7 +2269,17 @@ void ObjectEditor::retranslateDynamicParticleUI()
 		return translateObjectEditorRuntimeText(ui_language, source_text);
 	};
 
-	this->particleGroupBox->setTitle(tr_particle("Particle Editor"));
+	this->particleGroupBox->setTitle(QString());
+	for(int i=0;i<particleTabs->count();++i)
+		particleTabs->setTabText(i,tr_particle(particleTabs->widget(i)->property("particleTabTitle").toByteArray().constData()));
+	for(QToolButton* button:particleSectionButtons)
+		button->setText(tr_particle(button->property("particleSectionTitle").toByteArray().constData()));
+	const char* direction_labels[]={"Direction X","Direction Y","Direction Z"};
+	for(int axis=0;axis<3;++axis)
+	{
+		particleCustomDirectionLabels[axis]->setText(tr_particle(direction_labels[axis]));
+		particleCustomDirectionControls[axis]->setToolTip(tr_particle("Used with Custom direction. The direction vector is normalized by the emitter."));
+	}
 	this->particleEnabledCheckBox->setText(tr_particle("Enabled"));
 	this->particleHelpPushButton->setText(tr_particle("?"));
 	this->particlePresetLabel->setText(tr_particle("Preset"));
@@ -2040,6 +2364,14 @@ void ObjectEditor::retranslateDynamicParticleUI()
 	this->particleSpriteLibraryComboBox->setItemText(18, tr_particle("Shard"));
 	this->particleSpriteLibraryComboBox->setItemText(19, tr_particle("Smoke Wisp"));
 	this->particleSpritePathLabel->setText(tr_particle("Sprite Texture"));
+	this->particleSpriteUVXLabel->setText(tr_particle("Sprite UV X")); this->particleSpriteUVYLabel->setText(tr_particle("Sprite UV Y"));
+	this->particleSpriteUVWidthLabel->setText(tr_particle("Sprite UV Width")); this->particleSpriteUVHeightLabel->setText(tr_particle("Sprite UV Height"));
+	this->particleSpriteColumnsLabel->setText(tr_particle("Atlas Columns")); this->particleSpriteRowsLabel->setText(tr_particle("Atlas Rows"));
+	this->particleSpriteFirstFrameLabel->setText(tr_particle("First Frame")); this->particleSpriteFrameCountLabel->setText(tr_particle("Frame Count")); this->particleSpriteFPSLabel->setText(tr_particle("Frames Per Second"));
+	this->particleSpriteAnimationLabel->setText(tr_particle("Sprite Animation"));
+	this->particleSpriteAnimationComboBox->setItemText(0,tr_particle("Loop")); this->particleSpriteAnimationComboBox->setItemText(1,tr_particle("Once")); this->particleSpriteAnimationComboBox->setItemText(2,tr_particle("Ping-pong"));
+	this->particleSpriteRandomStartCheckBox->setText(tr_particle("Random Start Frame"));
+	this->particleSpriteFrameRateJitterLabel->setText(tr_particle("Frame Rate Jitter"));
 	this->particleSpriteBrowsePushButton->setText(tr_particle("..."));
 	this->particleSpriteClearPushButton->setText(tr_particle("Clear"));
 	this->particleAudioEnabledCheckBox->setText(tr_particle("Enable particle sound"));
@@ -2063,9 +2395,11 @@ void ObjectEditor::retranslateDynamicParticleUI()
 	this->particleSpreadLabel->setText(tr_particle("Spread"));
 	this->particleTurbulenceLabel->setText(tr_particle("Turbulence"));
 	this->particleLifetimeLabel->setText(tr_particle("Lifetime"));
+	this->particleLifetimeJitterLabel->setText(tr_particle("Lifetime Jitter"));
 	this->particleStartWidthLabel->setText(tr_particle("Start Size"));
 	this->particleEndWidthLabel->setText(tr_particle("End Size"));
 	this->particleSizeCurveLabel->setText(tr_particle("Size Curve"));
+	this->particleColourCurveLabel->setText(tr_particle("Colour over Lifetime"));
 	this->particleSizeJitterLabel->setText(tr_particle("Size Jitter"));
 	this->particleOpacityLabel->setText(tr_particle("Opacity"));
 	this->particleEndOpacityLabel->setText(tr_particle("End Opacity"));
@@ -2206,6 +2540,7 @@ void ObjectEditor::retranslateDynamicParticleUI()
 	set_pair_tooltip(this->particleBurstIntervalLabel, this->particleBurstIntervalSpinBox, "Time between automatic bursts.");
 	set_pair_tooltip(this->particleMaxDistanceLabel, this->particleMaxDistanceSpinBox, "Maximum camera distance where the emitter keeps spawning particles.");
 	set_tooltip(this->particleBurstNowPushButton, "Trigger one burst immediately.");
+	set_tooltip(this->particleSpritePreviewLabel, "Drag to crop the sprite atlas and click a cell to set the first frame. Use Burst Now to preview built-in and shared sprites through the world renderer.");
 	set_tooltip(this->particleClearParticlesPushButton, "Remove all currently live particles from this emitter.");
 	set_pair_tooltip(this->particleDiagnosticsLabel, this->particleDiagnosticsValueLabel, "Live performance and particle-count diagnostics for this emitter.");
 	set_pair_tooltip(this->particleWindXLabel, this->particleWindXSpinBox, "Constant wind acceleration on the world X axis.");
@@ -2265,6 +2600,9 @@ void ObjectEditor::setParticleControlsFromContent(const std::string& content)
 void ObjectEditor::setParticleControlsFromSettings(const ParticleEmitterSettings& emitter_settings)
 {
 	SignalBlocker::setChecked(this->particleEnabledCheckBox, emitter_settings.enabled);
+	SignalBlocker::setValue(particleCustomDirectionControls[0],emitter_settings.custom_dir_x);
+	SignalBlocker::setValue(particleCustomDirectionControls[1],emitter_settings.custom_dir_y);
+	SignalBlocker::setValue(particleCustomDirectionControls[2],emitter_settings.custom_dir_z);
 	{
 		SignalBlocker blocker(this->particlePresetComboBox);
 		const int index = this->particlePresetComboBox->findData(QtUtils::toQString(emitter_settings.preset_name));
@@ -2304,6 +2642,13 @@ void ObjectEditor::setParticleControlsFromSettings(const ParticleEmitterSettings
 		QSignalBlocker blocker(this->particleSpritePathLineEdit);
 		this->particleSpritePathLineEdit->setText(QtUtils::toQString(emitter_settings.sprite_path));
 	}
+	SignalBlocker::setValue(particleSpriteUVXControl,emitter_settings.sprite_uv_x); SignalBlocker::setValue(particleSpriteUVYControl,emitter_settings.sprite_uv_y);
+	SignalBlocker::setValue(particleSpriteUVWidthControl,emitter_settings.sprite_uv_width); SignalBlocker::setValue(particleSpriteUVHeightControl,emitter_settings.sprite_uv_height);
+	SignalBlocker::setValue(particleSpriteColumnsControl,emitter_settings.sprite_atlas_columns); SignalBlocker::setValue(particleSpriteRowsControl,emitter_settings.sprite_atlas_rows);
+	SignalBlocker::setValue(particleSpriteFirstFrameControl,emitter_settings.sprite_first_frame); SignalBlocker::setValue(particleSpriteFrameCountControl,emitter_settings.sprite_frame_count);
+	SignalBlocker::setValue(particleSpriteFPSControl,emitter_settings.sprite_frames_per_second); SignalBlocker::setValue(particleSpriteFrameRateJitterControl,emitter_settings.sprite_frame_rate_jitter);
+	{ SignalBlocker blocker(particleSpriteAnimationComboBox); particleSpriteAnimationComboBox->setCurrentIndex(particleSpriteAnimationComboBox->findData((int)emitter_settings.sprite_animation_mode)); }
+	SignalBlocker::setChecked(particleSpriteRandomStartCheckBox,emitter_settings.sprite_random_start_frame);
 	{
 		SignalBlocker blocker(this->particleSpriteLibraryComboBox);
 		const int index = this->particleSpriteLibraryComboBox->findData(QtUtils::toQString(emitter_settings.sprite_path));
@@ -2331,13 +2676,14 @@ void ObjectEditor::setParticleControlsFromSettings(const ParticleEmitterSettings
 	SignalBlocker::setValue(this->particleSpreadSpinBox, emitter_settings.spread_deg);
 	SignalBlocker::setValue(this->particleTurbulenceSpinBox, emitter_settings.turbulence_strength);
 	SignalBlocker::setValue(this->particleLifetimeSpinBox, emitter_settings.lifetime_s);
+	SignalBlocker::setValue(this->particleLifetimeJitterSpinBox,emitter_settings.lifetime_jitter);
 	SignalBlocker::setValue(this->particleStartWidthSpinBox, emitter_settings.start_width);
 	SignalBlocker::setValue(this->particleEndWidthSpinBox, emitter_settings.end_width);
-	this->particleSizeCurveWidget->setCurve(emitter_settings.size_curve, emitter_settings.size_curve_mid);
+	this->particleSizeCurveWidget->setCurve(emitter_settings.size_curve, emitter_settings.size_curve_mid,emitter_settings.size_curve_points,emitter_settings.size_curve_times,emitter_settings.size_curve_point_count,emitter_settings.size_curve_points_enabled);
 	SignalBlocker::setValue(this->particleSizeJitterSpinBox, emitter_settings.size_jitter);
 	SignalBlocker::setValue(this->particleOpacitySpinBox, emitter_settings.opacity);
 	SignalBlocker::setValue(this->particleEndOpacitySpinBox, emitter_settings.end_opacity);
-	this->particleOpacityCurveWidget->setCurve(emitter_settings.opacity_curve, emitter_settings.opacity_curve_mid);
+	this->particleOpacityCurveWidget->setCurve(emitter_settings.opacity_curve, emitter_settings.opacity_curve_mid,emitter_settings.opacity_curve_points,emitter_settings.opacity_curve_times,emitter_settings.opacity_curve_point_count,emitter_settings.opacity_curve_points_enabled);
 	SignalBlocker::setValue(this->particleOpacityJitterSpinBox, emitter_settings.opacity_jitter);
 	SignalBlocker::setValue(this->particleColourJitterSpinBox, emitter_settings.colour_jitter);
 	SignalBlocker::setValue(this->particleTrailLengthSpinBox, emitter_settings.trail_length);
@@ -2371,8 +2717,12 @@ void ObjectEditor::setParticleControlsFromSettings(const ParticleEmitterSettings
 
 	this->particle_col = emitter_settings.start_colour;
 	this->particle_end_col = emitter_settings.end_colour;
+	std::array<Colour3f,5> colour_points=emitter_settings.colour_curve_points;
+	if(!emitter_settings.colour_curve_enabled) for(size_t i=0;i<5;++i) { const float t=(float)i*.25f; colour_points[i]=Colour3f(Maths::lerp(emitter_settings.start_colour.r,emitter_settings.end_colour.r,t),Maths::lerp(emitter_settings.start_colour.g,emitter_settings.end_colour.g,t),Maths::lerp(emitter_settings.start_colour.b,emitter_settings.end_colour.b,t)); }
+	this->particleColourCurveWidget->setColors(colour_points,emitter_settings.colour_curve_times,emitter_settings.colour_curve_point_count,emitter_settings.colour_curve_enabled);
 	updateParticleColourButton();
 	updateParticlePreviewThumbnail();
+	updateParticleSpritePreview();
 }
 
 
@@ -2383,6 +2733,9 @@ ParticleEmitterSettings ObjectEditor::particleControlsToSettings() const
 
 	emitter_settings.preset_name = QtUtils::toStdString(this->particlePresetComboBox->currentData().toString());
 	emitter_settings.enabled = this->particleEnabledCheckBox->isChecked();
+	emitter_settings.custom_dir_x=(float)particleCustomDirectionControls[0]->value();
+	emitter_settings.custom_dir_y=(float)particleCustomDirectionControls[1]->value();
+	emitter_settings.custom_dir_z=(float)particleCustomDirectionControls[2]->value();
 	const QString kind = this->particleKindComboBox->currentData().toString();
 	emitter_settings.kind = particleKindFromData(kind);
 	const QString direction = this->particleDirectionComboBox->currentData().toString();
@@ -2401,6 +2754,13 @@ ParticleEmitterSettings ObjectEditor::particleControlsToSettings() const
 	const QString render_mode = this->particleRenderModeComboBox->currentData().toString();
 	emitter_settings.render_mode = (render_mode == QStringLiteral("additive_glow")) ? ParticleEmitterSettings::RenderMode_AdditiveGlow : ParticleEmitterSettings::RenderMode_Soft;
 	emitter_settings.sprite_path = QtUtils::toStdString(this->particleSpritePathLineEdit->text().trimmed());
+	emitter_settings.sprite_uv_x=(float)particleSpriteUVXControl->value(); emitter_settings.sprite_uv_y=(float)particleSpriteUVYControl->value();
+	emitter_settings.sprite_uv_width=(float)particleSpriteUVWidthControl->value(); emitter_settings.sprite_uv_height=(float)particleSpriteUVHeightControl->value();
+	emitter_settings.sprite_atlas_columns=(int)std::round(particleSpriteColumnsControl->value()); emitter_settings.sprite_atlas_rows=(int)std::round(particleSpriteRowsControl->value());
+	emitter_settings.sprite_first_frame=(int)std::round(particleSpriteFirstFrameControl->value()); emitter_settings.sprite_frame_count=(int)std::round(particleSpriteFrameCountControl->value());
+	emitter_settings.sprite_frames_per_second=(float)particleSpriteFPSControl->value();
+	emitter_settings.sprite_animation_mode=(ParticleEmitterSettings::SpriteAnimationMode)particleSpriteAnimationComboBox->currentData().toInt(); emitter_settings.sprite_loop=emitter_settings.sprite_animation_mode==ParticleEmitterSettings::SpriteAnimation_Loop;
+	emitter_settings.sprite_random_start_frame=particleSpriteRandomStartCheckBox->isChecked(); emitter_settings.sprite_frame_rate_jitter=(float)particleSpriteFrameRateJitterControl->value();
 	emitter_settings.audio_enabled = this->particleAudioEnabledCheckBox->isChecked();
 	emitter_settings.audio_url = QtUtils::toStdString(this->particleAudioURLLineEdit->text().trimmed());
 	emitter_settings.audio_loop = this->particleAudioLoopCheckBox->isChecked();
@@ -2420,19 +2780,23 @@ ParticleEmitterSettings ObjectEditor::particleControlsToSettings() const
 	emitter_settings.spread_deg = (float)this->particleSpreadSpinBox->value();
 	emitter_settings.turbulence_strength = (float)this->particleTurbulenceSpinBox->value();
 	emitter_settings.lifetime_s = (float)this->particleLifetimeSpinBox->value();
+	emitter_settings.lifetime_jitter=(float)this->particleLifetimeJitterSpinBox->value();
 	emitter_settings.start_width = (float)this->particleStartWidthSpinBox->value();
 	emitter_settings.end_width = (float)this->particleEndWidthSpinBox->value();
 	emitter_settings.size_curve = this->particleSizeCurveWidget->currentCurve();
 	emitter_settings.size_curve_mid = this->particleSizeCurveWidget->currentCustomMid();
+	emitter_settings.size_curve_points=this->particleSizeCurveWidget->currentPoints(); emitter_settings.size_curve_times=this->particleSizeCurveWidget->currentTimes(); emitter_settings.size_curve_point_count=this->particleSizeCurveWidget->currentPointCount(); emitter_settings.size_curve_points_enabled=this->particleSizeCurveWidget->pointsEnabled();
 	emitter_settings.size_jitter = (float)this->particleSizeJitterSpinBox->value();
 	emitter_settings.opacity = (float)this->particleOpacitySpinBox->value();
 	emitter_settings.end_opacity = (float)this->particleEndOpacitySpinBox->value();
 	emitter_settings.opacity_curve = this->particleOpacityCurveWidget->currentCurve();
 	emitter_settings.opacity_curve_mid = this->particleOpacityCurveWidget->currentCustomMid();
+	emitter_settings.opacity_curve_points=this->particleOpacityCurveWidget->currentPoints(); emitter_settings.opacity_curve_times=this->particleOpacityCurveWidget->currentTimes(); emitter_settings.opacity_curve_point_count=this->particleOpacityCurveWidget->currentPointCount(); emitter_settings.opacity_curve_points_enabled=this->particleOpacityCurveWidget->pointsEnabled();
 	emitter_settings.opacity_jitter = (float)this->particleOpacityJitterSpinBox->value();
 	emitter_settings.colour = this->particle_col;
 	emitter_settings.start_colour = this->particle_col;
 	emitter_settings.end_colour = this->particle_end_col;
+	emitter_settings.colour_curve_points=this->particleColourCurveWidget->currentColors(); emitter_settings.colour_curve_times=this->particleColourCurveWidget->currentTimes(); emitter_settings.colour_curve_point_count=this->particleColourCurveWidget->currentPointCount(); emitter_settings.colour_curve_enabled=this->particleColourCurveWidget->isEnabled();
 	emitter_settings.colour_jitter = (float)this->particleColourJitterSpinBox->value();
 	emitter_settings.trail_length = (float)this->particleTrailLengthSpinBox->value();
 	emitter_settings.glow_strength = (float)this->particleGlowStrengthSpinBox->value();
@@ -2897,6 +3261,7 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	}
 
 	this->particleGroupBox->setVisible(this->editing_particle_emitter);
+	setParticleEditorLayout(this->editing_particle_emitter);
 	this->gaussianSplatGroupBox->setVisible(this->editing_gaussian_splat);
 	this->portalGroupBox->setVisible(ob.object_type == WorldObject::ObjectType_Portal);
 
@@ -3501,6 +3866,7 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->cameraScreenMaterialIndexSpinBox->setReadOnly(!editable);
 
 	this->particleEnabledCheckBox->setEnabled(editable);
+	for(RealControl* control:particleCustomDirectionControls) control->setReadOnly(!editable);
 	this->particlePresetComboBox->setEnabled(editable);
 	this->particleSavePresetPushButton->setEnabled(editable);
 	this->particleDeletePresetPushButton->setEnabled(editable);
@@ -4289,6 +4655,7 @@ void ObjectEditor::on_particleColourPushButton_clicked(bool checked)
 		this->particle_col.r = new_col.red()   / 255.f;
 		this->particle_col.g = new_col.green() / 255.f;
 		this->particle_col.b = new_col.blue()  / 255.f;
+		if(!particleColourCurveWidget->isEnabled()) { std::array<Colour3f,5> pts; std::array<float,5> ts; for(int i=0;i<5;++i){float t=i*.25f;ts[i]=t;pts[i]=Colour3f(Maths::lerp(particle_col.r,particle_end_col.r,t),Maths::lerp(particle_col.g,particle_end_col.g,t),Maths::lerp(particle_col.b,particle_end_col.b,t));} particleColourCurveWidget->setColors(pts,ts,5,false); }
 
 		updateParticleColourButton();
 		updateParticlePreviewThumbnail();
@@ -4316,6 +4683,7 @@ void ObjectEditor::on_particleEndColourPushButton_clicked(bool checked)
 		this->particle_end_col.r = new_col.red()   / 255.f;
 		this->particle_end_col.g = new_col.green() / 255.f;
 		this->particle_end_col.b = new_col.blue()  / 255.f;
+		if(!particleColourCurveWidget->isEnabled()) { std::array<Colour3f,5> pts; std::array<float,5> ts; for(int i=0;i<5;++i){float t=i*.25f;ts[i]=t;pts[i]=Colour3f(Maths::lerp(particle_col.r,particle_end_col.r,t),Maths::lerp(particle_col.g,particle_end_col.g,t),Maths::lerp(particle_col.b,particle_end_col.b,t));} particleColourCurveWidget->setColors(pts,ts,5,false); }
 
 		updateParticleColourButton();
 		updateParticlePreviewThumbnail();
@@ -4649,6 +5017,13 @@ void ObjectEditor::updateParticlePreviewThumbnail()
 	if(!this->particlePreviewLabel || !this->particleRateSpinBox || !this->particleSizeCurveWidget || !this->particleOpacityCurveWidget)
 		return;
 
+	const bool custom_direction=particleDirectionComboBox->currentData().toString()==QStringLiteral("custom");
+	for(int axis=0;axis<3;++axis)
+	{
+		particleCustomDirectionLabels[axis]->setVisible(custom_direction);
+		particleCustomDirectionControls[axis]->setVisible(custom_direction);
+	}
+
 	if(!this->editing_particle_emitter)
 	{
 		this->particlePreviewLabel->clear();
@@ -4656,6 +5031,8 @@ void ObjectEditor::updateParticlePreviewThumbnail()
 	}
 
 	const ParticleEmitterSettings s = particleControlsToSettings();
+	auto point_curve=[](const std::array<float,5>& points,float t) { const float x=myClamp(t,0.f,1.f)*4.f;const int k=myMin((int)x,3);return Maths::lerp(points[k],points[k+1],x-k); };
+	auto colour_curve=[](const std::array<Colour3f,5>& points,float t) { const float x=myClamp(t,0.f,1.f)*4.f;const int k=myMin((int)x,3);const float f=x-k;return Colour3f(Maths::lerp(points[k].r,points[k+1].r,f),Maths::lerp(points[k].g,points[k+1].g,f),Maths::lerp(points[k].b,points[k+1].b,f)); };
 	const int W = myMax(180, this->particlePreviewLabel->width() > 0 ? this->particlePreviewLabel->width() : 220);
 	const int H = 76;
 	QPixmap pix(W, H);
@@ -4689,20 +5066,17 @@ void ObjectEditor::updateParticlePreviewThumbnail()
 	const int samples = 34;
 	for(int i=0; i<samples; ++i)
 	{
-		const float t = (float)i / (float)(samples - 1);
-		const float size_t = previewCurveValue(s.size_curve, t, s.size_curve_mid);
-		const float opacity_t = previewCurveValue(s.opacity_curve, t, s.opacity_curve_mid);
+		const float t = std::fmod((float)i / (float)samples + particlePreviewPhase,1.f);
+		const float size_t = s.size_curve_points_enabled ? point_curve(s.size_curve_points,t) : previewCurveValue(s.size_curve, t, s.size_curve_mid);
+		const float opacity_t = s.opacity_curve_points_enabled ? point_curve(s.opacity_curve_points,t) : previewCurveValue(s.opacity_curve, t, s.opacity_curve_mid);
 		const float width = Maths::lerp(s.start_width, s.end_width, size_t);
 		const float alpha = Maths::lerp(s.opacity, s.end_opacity, opacity_t);
 		const float x = 16.f + (W - 32.f) * t;
 		const float flow = s.direction == ParticleEmitterSettings::Direction_Down ? 1.f : -1.f;
 		const float y = H * 0.55f + flow * (H * 0.28f) * t + std::sin((float)i * 1.7f) * myMin(12.f, s.turbulence_strength * 2.2f);
 		const float radius = myClamp(width * 10.f, 2.0f, 18.0f);
-		QColor col(
-			(int)myClamp(Maths::lerp(s.start_colour.r, s.end_colour.r, t) * 255.f, 0.f, 255.f),
-			(int)myClamp(Maths::lerp(s.start_colour.g, s.end_colour.g, t) * 255.f, 0.f, 255.f),
-			(int)myClamp(Maths::lerp(s.start_colour.b, s.end_colour.b, t) * 255.f, 0.f, 255.f)
-		);
+		const Colour3f curve_col=s.colour_curve_enabled?colour_curve(s.colour_curve_points,t):Colour3f(Maths::lerp(s.start_colour.r,s.end_colour.r,t),Maths::lerp(s.start_colour.g,s.end_colour.g,t),Maths::lerp(s.start_colour.b,s.end_colour.b,t));
+		QColor col((int)myClamp(curve_col.r*255.f,0.f,255.f),(int)myClamp(curve_col.g*255.f,0.f,255.f),(int)myClamp(curve_col.b*255.f,0.f,255.f));
 		col.setAlpha((int)myClamp(alpha * 220.f, 0.f, 245.f));
 		if(s.trail_length > 0.f && i > 0)
 		{
@@ -4731,6 +5105,36 @@ void ObjectEditor::updateParticlePreviewThumbnail()
 	p.setPen(QPen(QColor(82, 92, 102), 1));
 	p.drawRect(pix.rect().adjusted(0, 0, -1, -1));
 	this->particlePreviewLabel->setPixmap(pix);
+}
+
+
+void ObjectEditor::updateParticleSpritePreview()
+{
+	if(!particleSpritePreviewLabel) return;
+	const int w=myMax(220,particleSpritePreviewLabel->width()); const int h=myMax(80,particleSpritePreviewLabel->height());
+	QPixmap pix(w,h); pix.fill(QColor(24,26,30)); QPainter p(&pix); p.setRenderHint(QPainter::Antialiasing,true);
+	const QString path=particleSpritePathLineEdit->text().trimmed(); QImage source(path);
+	if(source.isNull())
+	{
+		p.setPen(QColor(190,195,202)); p.drawText(pix.rect().adjusted(8,8,-8,-8),Qt::AlignCenter,path.isEmpty()?QStringLiteral("Choose a local sprite to preview its atlas"):QStringLiteral("Sprite preview is available for local image files"));
+	}
+	else
+	{
+		const int cols=myMax(1,(int)std::round(particleSpriteColumnsControl->value())), rows=myMax(1,(int)std::round(particleSpriteRowsControl->value()));
+		const int first=myClamp((int)std::round(particleSpriteFirstFrameControl->value()),0,cols*rows-1), count=myClamp((int)std::round(particleSpriteFrameCountControl->value()),1,cols*rows-first);
+		const int frame=first+(int)(particlePreviewPhase*(float)count);
+		const int col=frame%cols, row=frame/cols;
+		const QRectF crop(particleSpriteUVXControl->value()*source.width(),particleSpriteUVYControl->value()*source.height(),particleSpriteUVWidthControl->value()*source.width(),particleSpriteUVHeightControl->value()*source.height());
+		const QRectF cell(crop.x()+crop.width()*col/cols,crop.y()+crop.height()*row/rows,crop.width()/cols,crop.height()/rows);
+		const QRect target=pix.rect().adjusted(12,10,-12,-10);
+		p.fillRect(target,QColor(35,37,42));
+		p.drawImage(target,source,crop);
+		p.setPen(QPen(QColor(90,180,255,170),1));
+		for(int c=0;c<=cols;++c) p.drawLine(QPointF(target.left()+target.width()*(double)c/cols,target.top()),QPointF(target.left()+target.width()*(double)c/cols,target.bottom()));
+		for(int r=0;r<=rows;++r) p.drawLine(QPointF(target.left(),target.top()+target.height()*(double)r/rows),QPointF(target.right(),target.top()+target.height()*(double)r/rows));
+		p.setPen(QPen(QColor(255,205,70),2)); p.drawRect(QRect(target.left()+target.width()*col/cols,target.top()+target.height()*row/rows,target.width()/cols,target.height()/rows));
+	}
+	p.setPen(QPen(QColor(82,92,102),1)); p.drawRect(pix.rect().adjusted(0,0,-1,-1)); particleSpritePreviewLabel->setPixmap(pix);
 }
 
 

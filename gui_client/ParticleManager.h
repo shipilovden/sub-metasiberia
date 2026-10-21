@@ -17,6 +17,7 @@ Copyright Glare Technologies Limited 2023 -
 #include <utils/Reference.h>
 #include <map>
 #include <set>
+#include <array>
 class OpenGLShader;
 class OpenGLMeshRenderData;
 class VertexBufferAllocator;
@@ -50,7 +51,9 @@ struct Particle
 		radial_accel(0.f), linear_damping(0.f), buoyancy_lift(0.f), collision_friction(0.f),
 		use_lifetime_curve(false), age_s(0.f), lifetime_s(1.f), start_width(1.f), end_width(1.f), start_opacity(1.f), end_opacity(0.f),
 		size_curve(Curve_Linear), size_curve_mid(0.5f), opacity_curve(Curve_Linear), opacity_curve_mid(0.5f), trail_length(0.f), collide_surfaces(true), die_when_hit_surface(false),
-		black_hole_mode(false), event_horizon_radius(0.f), particle_type(ParticleType_Smoke), additive_glow(false), glow_strength(1.f) {}
+		black_hole_mode(false), event_horizon_radius(0.f), particle_type(ParticleType_Smoke), additive_glow(false), glow_strength(1.f),
+		size_curve_point_count(5), size_curve_points_enabled(false), opacity_curve_point_count(5), opacity_curve_points_enabled(false), colour_curve_point_count(5), colour_curve_enabled(false), sprite_uv_x(0.f), sprite_uv_y(0.f), sprite_uv_width(1.f), sprite_uv_height(1.f),
+		sprite_atlas_columns(1), sprite_atlas_rows(1), sprite_first_frame(0), sprite_frame_count(1), sprite_frames_per_second(0.f), sprite_loop(true), sprite_animation_mode(0), sprite_random_start_frame(false), sprite_random_phase(0), sprite_frame_rate_jitter(0.f), sprite_current_frame(-1) { size_curve_points={{0.f,0.4375f,0.75f,0.9375f,1.f}}; opacity_curve_points=size_curve_points; size_curve_times={{0.f,0.25f,0.5f,0.75f,1.f}}; opacity_curve_times=size_curve_times; colour_curve_times=size_curve_times; }
 
 	Vec4f pos;
 	Vec4f vel;
@@ -97,8 +100,29 @@ struct Particle
 	float end_opacity;
 	Curve size_curve;
 	float size_curve_mid;
+	std::array<float,5> size_curve_points;
+	std::array<float,5> size_curve_times;
+	int size_curve_point_count;
+	bool size_curve_points_enabled;
 	Curve opacity_curve;
 	float opacity_curve_mid;
+	std::array<float,5> opacity_curve_points;
+	std::array<float,5> opacity_curve_times;
+	int opacity_curve_point_count;
+	bool opacity_curve_points_enabled;
+	std::array<Colour3f,5> colour_curve_points;
+	std::array<float,5> colour_curve_times;
+	int colour_curve_point_count;
+	bool colour_curve_enabled;
+	float sprite_uv_x, sprite_uv_y, sprite_uv_width, sprite_uv_height;
+	int sprite_atlas_columns, sprite_atlas_rows, sprite_first_frame, sprite_frame_count;
+	float sprite_frames_per_second;
+	bool sprite_loop;
+	int sprite_animation_mode;
+	bool sprite_random_start_frame;
+	int sprite_random_phase;
+	float sprite_frame_rate_jitter;
+	int sprite_current_frame;
 	float trail_length;
 
 	bool collide_surfaces;

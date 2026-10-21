@@ -294,6 +294,8 @@ private:
 	virtual bool eventFilter(QObject* obj, QEvent* event) override;
 	void rebuildChatEmojiPopupContents();
 	void sendChatOrEmojiMessage(const std::string& message);
+	void setChatReplyTarget(const QString& plain_text);
+	void clearChatReplyTarget();
 	void setupChatPlayerControls();
 	void refreshChatPlayerControls();
 	void rebuildChatUserRows();
@@ -305,6 +307,7 @@ private:
 	void appendChatMessageWidget(const QString& html, bool private_message);
 	void appendLocalChatMessage(const QString& html, bool private_message, bool remember_in_history = true);
 	void appendLocalChatAttachmentMessage(const QStringList& selected_filenames);
+	void sendChatAttachmentFiles(const QStringList& selected_filenames);
 	QString chatHistoryFilePath() const;
 	void loadChatHistoryFromDisk();
 	void saveChatHistoryToDisk() const;
@@ -530,6 +533,9 @@ public:
 	std::string appdata_path;
 private:
 	ArgumentParser parsed_args;
+	// The startup guest check and the server's GuestModeMessage can both request this modal.
+	// QDialog::exec() runs a nested event loop, so guard against a second reentrant instance.
+	bool guest_avatar_selection_dialog_active = false;
 
 	Timer total_timer;
 
@@ -607,6 +613,8 @@ public:
 	QWidget* chat_users_panel;
 	QWidget* chat_main_panel;
 	QWidget* chat_input_panel;
+	QLabel* chat_reply_preview_label = nullptr;
+	QString chat_reply_text;
 	QSplitter* chat_body_splitter;
 	QWidget* chat_messages_page;
 	QWidget* chat_groups_page;

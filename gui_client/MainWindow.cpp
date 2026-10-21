@@ -178,6 +178,20 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtGui/QScreen>
 #include <QtGamepad/QGamepadManager>
 #include <QtGamepad/QGamepad>
+#if defined(_WIN32) && !defined(USE_SDL)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <shobjidl_core.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.ApplicationModel.DataTransfer.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.Storage.Streams.h>
+#include <winrt/base.h>
+#pragma comment(lib, "runtimeobject.lib")
+#endif
 #include "../qt/QtUtils.h"
 #ifdef _MSC_VER
 #pragma warning(pop) // Re-enable warnings
@@ -2279,6 +2293,12 @@ bool MainWindow::prepareGuestAvatarSelectionIfNeeded(const std::string& server_h
 
 void MainWindow::showGuestAvatarSelection()
 {
+	// Both startup and Msg_GuestModeMessage can reach this function. The modal exec loop
+	// processes client events, so a second request may arrive before the first is closed.
+	if(guest_avatar_selection_dialog_active)
+		return;
+	guest_avatar_selection_dialog_active = true;
+
 	// Expected distribution layout for the two guest avatars:
 	//   data/resources/xbot.bmesh and xbot.png
 	//   data/resources/ybot.bmesh and ybot.png
@@ -2289,7 +2309,9 @@ void MainWindow::showGuestAvatarSelection()
 		screen_rect.left() + (screen_rect.width() - dialog.width()) / 2,
 		screen_rect.top() + (screen_rect.height() - dialog.height()) / 2);
 
-	if(dialog.exec() == QDialog::Accepted && !dialog.selectedModelURL().isEmpty())
+	const int result = dialog.exec();
+	guest_avatar_selection_dialog_active = false;
+	if(result == QDialog::Accepted && !dialog.selectedModelURL().isEmpty())
 		gui_client.setGuestAvatarModelURL(URLString(QtUtils::toStdString(dialog.selectedModelURL())));
 
 	// Closing the window keeps the safe default Xbot and still releases the pending avatar creation.
@@ -4965,6 +4987,31 @@ static QString chatRoleLabelForName(const std::string& name)
 }
 
 
+static QString chat_lucide_icon_directory;
+
+
+static QString chatIconForLegacyGlyph(const QString& text)
+{
+	if(text == QString::fromUtf8("↻")) return QStringLiteral("refresh-cw");
+	if(text == QString::fromUtf8("⌄")) return QStringLiteral("sliders-horizontal");
+	if(text == QString::fromUtf8("⌕")) return QStringLiteral("search");
+	if(text == QString::fromUtf8("⌫")) return QStringLiteral("trash-2");
+	if(text == QString::fromUtf8("↑")) return QStringLiteral("arrow-up");
+	if(text == QString::fromUtf8("↓")) return QStringLiteral("arrow-down");
+	if(text == QString::fromUtf8("×")) return QStringLiteral("x");
+	if(text == QStringLiteral("+")) return QStringLiteral("plus");
+	if(text == QString::fromUtf8("📎")) return QStringLiteral("paperclip");
+	if(text == QString::fromUtf8("☺")) return QStringLiteral("smile");
+	if(text == QString::fromUtf8("⋯") || text == QString::fromUtf8("⋮")) return QStringLiteral("ellipsis-vertical");
+	if(text == QString::fromUtf8("✉")) return QStringLiteral("mail");
+	if(text == QString::fromUtf8("♙")) return QStringLiteral("user-round");
+	if(text == QString::fromUtf8("↩")) return QStringLiteral("reply");
+	if(text == QString::fromUtf8("♡")) return QStringLiteral("heart");
+	if(text == QString::fromUtf8("⚙")) return QStringLiteral("settings");
+	return QString();
+}
+
+
 static QToolButton* makeChatToolButton(QWidget* parent, const QString& text, const QString& tooltip, const char* kind)
 {
 	QToolButton* button = new QToolButton(parent);
@@ -4973,6 +5020,14 @@ static QToolButton* makeChatToolButton(QWidget* parent, const QString& text, con
 	button->setCursor(Qt::PointingHandCursor);
 	button->setProperty("chatKind", kind);
 	button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	const QString icon_name = chatIconForLegacyGlyph(text);
+	if(!icon_name.isEmpty() && !chat_lucide_icon_directory.isEmpty() &&
+		LucideIconUtils::setButtonIcon(button, chat_lucide_icon_directory, icon_name, button->palette().color(QPalette::ButtonText), 16))
+	{
+		button->setText(QString());
+		button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+		button->setIconSize(QSize(16, 16));
+	}
 	return button;
 }
 
@@ -4995,9 +5050,20 @@ static QToolButton* makeCompactChatActionButton(QWidget* parent, const QString& 
 }
 
 
+static void setChatButtonIcon(QAbstractButton* button, const QString& icon_name, int size = 16)
+{
+	if(!button || chat_lucide_icon_directory.isEmpty())
+		return;
+	LucideIconUtils::setButtonIcon(button, chat_lucide_icon_directory, icon_name, button->palette().color(QPalette::ButtonText), size);
+}
+
+
 static bool isChatImageAttachmentPath(const QString& path)
 {
-	const QString lower = QFileInfo(path).suffix().toLower();
+	const QUrl url(path);
+	const QString local_suffix = QFileInfo(path).suffix().toLower();
+	const QString url_suffix = QFileInfo(url.path()).suffix().toLower();
+	const QString lower = local_suffix.isEmpty() ? url_suffix : local_suffix;
 	return lower == "png" || lower == "jpg" || lower == "jpeg" || lower == "webp" || lower == "bmp" || lower == "gif";
 }
 
@@ -5123,7 +5189,7 @@ static QString cssChatColour(const QColor& colour)
 }
 
 
-static QString chatMessageRowStyle(bool private_message, bool attachment_message, bool system_message, bool reply_message)
+static QString chatMessageRowStyle(bool private_message, bool attachment_message, bool system_message, bool reply_message, bool reply_target = false)
 {
 	const QPalette palette = QApplication::palette();
 	const QColor base = palette.color(QPalette::Base);
@@ -5153,6 +5219,11 @@ static QString chatMessageRowStyle(bool private_message, bool attachment_message
 	{
 		background = mixChatColour(background, highlight, 0.10);
 		border = mixChatColour(border, link, 0.55);
+	}
+	if(reply_target)
+	{
+		background = mixChatColour(base, highlight, 0.22);
+		border = highlight;
 	}
 
 	return QString(
@@ -5319,6 +5390,7 @@ void MainWindow::applyChatThemeStylesheet()
 		"QFrame#chatMessagesPage { background: %9; border: 1px solid %4; border-radius: 7px; }"
 		"QLabel#chatMessageBody { color: %2; }"
 		"QLabel#chatReplyPreview { color: %7; background: %6; border-left: 3px solid %7; border-radius: 5px; padding: 4px 7px; }"
+		"QFrame#chatComposerReplyPreview { background: %6; border: 1px solid %7; border-radius: 6px; }"
 		"QLabel#chatMessageTimeLabel { color: %10; font-size: 11px; }"
 		"QLabel#chatOnlineDot { color: #34c759; font-size: 18px; }"
 		"QLabel#chatMutedText { color: %10; }"
@@ -5372,6 +5444,7 @@ void MainWindow::setupChatPlayerControls()
 	ui->chatDockWidgetContents->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	ui->chatWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	ui->chatDockWidget->resize(360, 360);
+	chat_lucide_icon_directory = LucideIconUtils::directoryForBasePath(base_dir_path);
 	ui->chatWidget->setObjectName("chatWidget");
 	ui->chatWidget->setAutoFillBackground(true);
 	applyChatThemeStylesheet();
@@ -5400,10 +5473,17 @@ void MainWindow::setupChatPlayerControls()
 	chat_tabs_bar->addTab(tr("Чат"));
 	chat_tabs_bar->addTab(tr("Личные"));
 	chat_tabs_bar->addTab(tr("Группы"));
-	chat_tabs_bar->addTab(QString::fromUtf8("🔔"));
+	chat_tabs_bar->addTab(tr("Уведомления"));
 	chat_tabs_bar->setTabToolTip(4, tr("Уведомления"));
-	chat_tabs_bar->addTab(QString::fromUtf8("⚙"));
+	chat_tabs_bar->addTab(tr("Настройки"));
 	chat_tabs_bar->setTabToolTip(5, tr("Настройки"));
+	const QColor tab_icon_colour = chat_tabs_bar->palette().color(QPalette::ButtonText);
+	const QString tab_icons[] = {"user-round", "messages-square", "mail", "users-round", "bell", "settings"};
+	for(int tab_i = 0; tab_i < 6; ++tab_i)
+	{
+		if(QFileInfo::exists(QDir(chat_lucide_icon_directory).filePath(tab_icons[tab_i] + QStringLiteral(".svg"))))
+			chat_tabs_bar->setTabIcon(tab_i, LucideIconUtils::tintedIcon(chat_lucide_icon_directory, tab_icons[tab_i], tab_icon_colour, 15));
+	}
 	root_layout->addWidget(chat_tabs_bar);
 
 	QSplitter* body_splitter = new QSplitter(Qt::Horizontal, chat_root);
@@ -5459,6 +5539,8 @@ void MainWindow::setupChatPlayerControls()
 
 	QPushButton* update_users_button = new QPushButton(QString::fromUtf8("↻"), users_panel);
 	update_users_button->setProperty("chatKind", "toolbar");
+	setChatButtonIcon(update_users_button, QStringLiteral("refresh-cw"));
+	update_users_button->setText(QString());
 	update_users_button->setToolTip(tr("Обновить список игроков"));
 	update_users_button->setCursor(Qt::PointingHandCursor);
 	update_users_button->setFixedHeight(28);
@@ -5564,6 +5646,8 @@ void MainWindow::setupChatPlayerControls()
 	groups_title_label->setStyleSheet("QLabel { font-weight: 700; }");
 	QToolButton* create_group_button = makeChatToolButton(chat_groups_page, QString::fromUtf8("+"), tr("Создать группу"), "toolbar");
 	create_group_button->setFixedSize(28, 28);
+	create_group_button->setEnabled(false);
+	create_group_button->setToolTip(tr("Групповые чаты и группы пока не поддерживаются сервером."));
 	groups_header_layout->addWidget(groups_title_label, 1);
 	groups_header_layout->addWidget(create_group_button);
 	groups_page_layout->addLayout(groups_header_layout);
@@ -5589,6 +5673,8 @@ void MainWindow::setupChatPlayerControls()
 	sound_enabled_cb->setChecked(ui->actionMute_Audio ? !ui->actionMute_Audio->isChecked() : true);
 	QCheckBox* notifications_cb = new QCheckBox(tr("Уведомления включены"), chat_settings_page);
 	notifications_cb->setChecked(settings ? settings->value("chat/notifications_enabled", true).toBool() : true);
+	notifications_cb->setEnabled(false);
+	notifications_cb->setToolTip(tr("Системные уведомления пока не подключены. Вкладка «Уведомления» показывает события входа и выхода в чате."));
 	QCheckBox* timestamps_cb = new QCheckBox(tr("Показывать время сообщений"), chat_settings_page);
 	timestamps_cb->setChecked(settings ? settings->value("chat/show_timestamps", true).toBool() : true);
 	QCheckBox* compact_cb = new QCheckBox(tr("Компактная лента сообщений"), chat_settings_page);
@@ -5598,16 +5684,28 @@ void MainWindow::setupChatPlayerControls()
 	network_private_cb->setChecked(settings ? settings->value("chat/network_private_messages_enabled_v2", true).toBool() : true);
 	QPushButton* clear_history_button = new QPushButton(tr("Очистить историю чата"), chat_settings_page);
 	clear_history_button->setProperty("chatKind", "toolbar");
+	setChatButtonIcon(clear_history_button, QStringLiteral("trash-2"));
 	QPushButton* export_history_button = new QPushButton(tr("Экспортировать историю HTML"), chat_settings_page);
 	export_history_button->setProperty("chatKind", "toolbar");
+	setChatButtonIcon(export_history_button, QStringLiteral("file-output"));
 	QPushButton* blocked_players_button = new QPushButton(tr("Заблокированные игроки"), chat_settings_page);
 	blocked_players_button->setProperty("chatKind", "toolbar");
+	setChatButtonIcon(blocked_players_button, QStringLiteral("user-round"));
+	blocked_players_button->setEnabled(false);
+	blocked_players_button->setToolTip(tr("Блокировка игроков и список блокировок пока не поддерживаются сервером."));
 	QPushButton* report_button = new QPushButton(tr("Пожаловаться"), chat_settings_page);
 	report_button->setProperty("chatKind", "toolbar");
+	setChatButtonIcon(report_button, QStringLiteral("info"));
+	report_button->setEnabled(false);
+	report_button->setToolTip(tr("Отправка жалоб пока не поддерживается сервером."));
 	QPushButton* pin_chat_button = new QPushButton(tr("Закрепить чат"), chat_settings_page);
 	pin_chat_button->setProperty("chatKind", "toolbar");
+	setChatButtonIcon(pin_chat_button, QStringLiteral("star"));
+	pin_chat_button->setEnabled(false);
+	pin_chat_button->setToolTip(tr("Закрепление чата пока не поддерживается."));
 	QPushButton* help_button = new QPushButton(tr("Помощь"), chat_settings_page);
 	help_button->setProperty("chatKind", "toolbar");
+	setChatButtonIcon(help_button, QStringLiteral("circle-question-mark"));
 	settings_layout->addWidget(sound_enabled_cb);
 	settings_layout->addWidget(notifications_cb);
 	settings_layout->addWidget(timestamps_cb);
@@ -5649,6 +5747,21 @@ void MainWindow::setupChatPlayerControls()
 	QHBoxLayout* input_layout = new QHBoxLayout(input_panel);
 	input_layout->setContentsMargins(6, 4, 6, 4);
 	input_layout->setSpacing(4);
+	QFrame* reply_preview = new QFrame(chat_panel);
+	reply_preview->setObjectName("chatComposerReplyPreview");
+	QHBoxLayout* reply_preview_layout = new QHBoxLayout(reply_preview);
+	reply_preview_layout->setContentsMargins(8, 4, 4, 4);
+	QLabel* reply_preview_label = new QLabel(reply_preview);
+	chat_reply_preview_label = reply_preview_label;
+	reply_preview_label->setWordWrap(true);
+	reply_preview_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+	QToolButton* cancel_reply_button = makeChatToolButton(reply_preview, QString::fromUtf8("×"), tr("Отменить ответ"), "icon");
+	cancel_reply_button->setFixedSize(26, 26);
+	reply_preview_layout->addWidget(reply_preview_label, 1);
+	reply_preview_layout->addWidget(cancel_reply_button);
+	reply_preview->hide();
+	chat_layout->addWidget(reply_preview);
+	connect(cancel_reply_button, &QToolButton::clicked, this, [this]() { clearChatReplyTarget(); });
 
 	ui->chatEmojiButton->setParent(input_panel);
 	ui->chatEmojiButton->setProperty("chatKind", "icon");
@@ -5662,6 +5775,11 @@ void MainWindow::setupChatPlayerControls()
 	ui->chatPushButton->setProperty("chatKind", "primary");
 	ui->chatPushButton->setCursor(Qt::PointingHandCursor);
 	ui->chatPushButton->setFixedSize(34, 30);
+	if(LucideIconUtils::setButtonIcon(ui->chatPushButton, chat_lucide_icon_directory, QStringLiteral("send"), ui->chatPushButton->palette().color(QPalette::ButtonText), 16))
+	{
+		ui->chatPushButton->setText(QString());
+		ui->chatPushButton->setIconSize(QSize(16, 16));
+	}
 
 	input_layout->addWidget(quick_attach_button);
 	input_layout->addWidget(ui->chatMessageLineEdit, 1);
@@ -5683,14 +5801,18 @@ void MainWindow::setupChatPlayerControls()
 	connect(update_users_button, &QPushButton::clicked, this, [this]() { refreshChatPlayerControls(); showInfoNotification("Список игроков обновлен."); });
 	connect(users_options_button, &QToolButton::clicked, this, [this, users_options_button]() {
 		QMenu menu(this);
-		QAction* sort_action = menu.addAction(tr("Сортировка по нику"));
+		QAction* sort_action = menu.addAction(tr("Обратный алфавитный порядок"));
 		sort_action->setCheckable(true);
-		sort_action->setChecked(true);
+		sort_action->setChecked(settings ? settings->value("chat/sort_players_descending", false).toBool() : false);
 		QAction* show_offline = menu.addAction(tr("Показывать offline"));
 		show_offline->setEnabled(false);
-		menu.addSeparator();
-		menu.addAction(tr("Поиск игроков"))->setEnabled(false);
+		show_offline->setToolTip(tr("Список игроков получает только участников текущего мира."));
 		menu.exec(users_options_button->mapToGlobal(QPoint(0, users_options_button->height())));
+		if(sort_action->isChecked() != (settings ? settings->value("chat/sort_players_descending", false).toBool() : false))
+		{
+			if(settings) settings->setValue("chat/sort_players_descending", sort_action->isChecked());
+			rebuildChatUserRows();
+		}
 	});
 	connect(filter_button, &QToolButton::clicked, this, [this]() {
 		if(chat_tabs_bar && chat_tabs_bar->currentIndex() == 2 && chat_private_conversation_open)
@@ -5709,9 +5831,6 @@ void MainWindow::setupChatPlayerControls()
 	connect(quick_attach_button, &QToolButton::clicked, this, &MainWindow::showChatAttachmentMenu);
 	connect(quick_emoji_button, &QToolButton::clicked, this, &MainWindow::toggleChatEmojiPopup);
 	connect(quick_more_button, &QToolButton::clicked, this, &MainWindow::showChatMoreSendMenu);
-	connect(blocked_players_button, &QPushButton::clicked, this, [this]() { showInfoNotification("Список заблокированных игроков пока пуст."); });
-	connect(report_button, &QPushButton::clicked, this, [this]() { showInfoNotification("Жалоба будет отправлена модераторам после выбора сообщения или игрока."); });
-	connect(pin_chat_button, &QPushButton::clicked, this, [this]() { showInfoNotification("Чат закреплен в текущей области."); });
 	connect(help_button, &QPushButton::clicked, this, [this]() {
 		if(ui && ui->helpInfoDockWidget)
 		{
@@ -6069,7 +6188,9 @@ void MainWindow::rebuildChatUserRows()
 		return;
 	}
 
-	const std::vector<AvatarNameInfo> names = collectChatAvatarNameInfos(gui_client, /*include_self=*/true);
+	std::vector<AvatarNameInfo> names = collectChatAvatarNameInfos(gui_client, /*include_self=*/true);
+	if(settings && settings->value("chat/sort_players_descending", false).toBool())
+		std::reverse(names.begin(), names.end());
 	if(chat_online_count_label)
 		chat_online_count_label->setText(tr("Онлайн (%1)").arg((int)names.size()));
 
@@ -6112,6 +6233,16 @@ void MainWindow::rebuildChatUserRows()
 		avatar->setGeometry(0, 0, 32, 32);
 		avatar->setStyleSheet(QString("QLabel { background: %1; color: #ffffff; border-radius: 16px; font-weight: 700; }")
 			.arg(chatCssColour(chatAvatarBackgroundColour(info))));
+		if(info.is_self && settings)
+		{
+			const QString own_profile_photo_path = settings->value(QStringLiteral("chat/profile_photo_path")).toString();
+			QPixmap photo(own_profile_photo_path);
+			if(!photo.isNull())
+			{
+				avatar->setPixmap(photo.scaled(32, 32, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+				avatar->setStyleSheet(QStringLiteral("QLabel { border-radius: 16px; border: 1px solid #77727e; }") );
+			}
+		}
 		QLabel* status_dot = new QLabel(QString::fromUtf8("●"), avatar_wrap);
 		status_dot->setGeometry(24, 22, 12, 12);
 		status_dot->setAlignment(Qt::AlignCenter);
@@ -6196,7 +6327,7 @@ void MainWindow::rebuildChatGroupRows()
 
 	if(chat_groups.isEmpty())
 	{
-		QLabel* empty_label = new QLabel(tr("Групп пока нет. Нажмите +, чтобы создать группу."), ui ? ui->chatWidget : this);
+		QLabel* empty_label = new QLabel(tr("Групповые чаты пока не поддерживаются сервером."), ui ? ui->chatWidget : this);
 		empty_label->setObjectName("chatMutedText");
 		empty_label->setAlignment(Qt::AlignCenter);
 		empty_label->setWordWrap(true);
@@ -6288,6 +6419,8 @@ void MainWindow::showChatGroupSettings(const QString& group_id)
 	description_edit->setPlaceholderText(tr("Описание"));
 	QCheckBox* notifications_cb = new QCheckBox(tr("Уведомления группы включены"), &dialog);
 	notifications_cb->setChecked(group.notifications_enabled);
+	notifications_cb->setEnabled(false);
+	notifications_cb->setToolTip(tr("Групповые уведомления появятся после подключения групповых чатов к серверу."));
 	QCheckBox* invite_only_cb = new QCheckBox(tr("Закрытая группа: вступление только по приглашению"), &dialog);
 	invite_only_cb->setChecked(group.invite_only);
 	QListWidget* members_list = new QListWidget(&dialog);
@@ -6296,7 +6429,9 @@ void MainWindow::showChatGroupSettings(const QString& group_id)
 
 	QHBoxLayout* member_buttons_layout = new QHBoxLayout();
 	QPushButton* add_member_button = new QPushButton(tr("Добавить игрока"), &dialog);
+	setChatButtonIcon(add_member_button, QStringLiteral("user-round"));
 	QPushButton* remove_member_button = new QPushButton(tr("Удалить"), &dialog);
+	setChatButtonIcon(remove_member_button, QStringLiteral("trash-2"));
 	member_buttons_layout->addWidget(add_member_button);
 	member_buttons_layout->addWidget(remove_member_button);
 
@@ -6384,7 +6519,7 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 	message_row->setProperty("chatAttachmentMessage", attachment_message);
 	message_row->setProperty("chatSystemMessage", system_message);
 	message_row->setProperty("chatReplyMessage", reply_message);
-	message_row->setStyleSheet(chatMessageRowStyle(private_message, attachment_message, system_message, reply_message));
+	message_row->setStyleSheet(chatMessageRowStyle(private_message, attachment_message, system_message, reply_message, false));
 	QHBoxLayout* row_layout = new QHBoxLayout(message_row);
 	row_layout->setContentsMargins(10, chat_compact_message_view ? 6 : 9, 10, chat_compact_message_view ? 6 : 9);
 	row_layout->setSpacing(8);
@@ -6430,7 +6565,8 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 		{
 			const QString local_path = attachment.local_path;
 			const QFileInfo file_info(local_path);
-			if(isChatImageAttachmentPath(local_path))
+			const bool image_attachment = isChatImageAttachmentPath(local_path) || isChatImageAttachmentPath(attachment.display_name) || isChatImageAttachmentPath(attachment.resource_url);
+			if(image_attachment && !local_path.isEmpty())
 			{
 				QImageReader reader(local_path);
 				reader.setAutoTransform(true);
@@ -6450,7 +6586,7 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 				}
 			}
 
-			if(local_path.isEmpty() && !attachment.resource_url.isEmpty() && isChatImageAttachmentPath(attachment.resource_url))
+			if(local_path.isEmpty() && !attachment.resource_url.isEmpty() && image_attachment)
 			{
 				QLabel* image_label = new QLabel(tr("Загрузка..."), message_row);
 				image_label->setMinimumSize(120, 70);
@@ -6508,9 +6644,10 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 
 			QToolButton* file_button = new QToolButton(message_row);
 			const QString display_name = attachment.display_name.isEmpty() ? (file_info.fileName().isEmpty() ? attachment.resource_url : file_info.fileName()) : attachment.display_name;
-			file_button->setText(QString::fromUtf8("📎 %1").arg(display_name));
+			file_button->setText(display_name);
 			file_button->setToolTip(local_path.isEmpty() ? attachment.resource_url : local_path);
-			file_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+			setChatButtonIcon(file_button, QStringLiteral("paperclip"));
+			file_button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 			file_button->setCursor(Qt::PointingHandCursor);
 			const QPalette palette = QApplication::palette();
 			file_button->setStyleSheet(QString("QToolButton { background: %1; border: 1px solid %2; border-radius: 6px; padding: 5px 8px; color: %3; } QToolButton:hover { border-color: %4; }")
@@ -6542,7 +6679,7 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 	text_layout->addWidget(reaction_label);
 	row_layout->addLayout(text_layout, 1);
 
-	QToolButton* reply_button = makeChatToolButton(message_row, QString::fromUtf8("↩"), tr("Цитировать в черновике (текстовая цитата)"), "icon");
+	QToolButton* reply_button = makeChatToolButton(message_row, QString::fromUtf8("↩"), tr("Ответить на сообщение"), "icon");
 	QToolButton* like_button = makeChatToolButton(message_row, QString::fromUtf8("♡"), tr("Реакция"), "icon");
 	like_button->setEnabled(false);
 	like_button->setToolTip(tr("Реакции недоступны: синхронизация с сервером не поддерживается."));
@@ -6554,14 +6691,7 @@ void MainWindow::appendChatMessageWidget(const QString& html, bool private_messa
 	connect(reply_button, &QToolButton::clicked, this, [this, plain_text]() {
 		if(!ui || !ui->chatMessageLineEdit)
 			return;
-		const QString quoted_draft = tr("Цитата: ") + plain_text.left(90) + "\n" + ui->chatMessageLineEdit->text();
-		if(quoted_draft.size() > ui->chatMessageLineEdit->maxLength())
-		{
-			showErrorNotification("Цитата не добавлена: черновик достиг максимальной длины.");
-			return;
-		}
-		ui->chatMessageLineEdit->setText(quoted_draft);
-		ui->chatMessageLineEdit->setFocus();
+		setChatReplyTarget(plain_text);
 	});
 	connect(message_more_button, &QToolButton::clicked, this, [this, message_row, plain_text, message_more_button]() {
 		showChatMessageContextMenu(message_row, plain_text, message_more_button);
@@ -6605,8 +6735,9 @@ void MainWindow::showChatMessageContextMenu(QFrame* message_row, const QString& 
 
 	QMenu menu(this);
 	menu.setToolTipsVisible(true);
-	QAction* reply_action = menu.addAction(tr("Цитировать в черновике"));
-	reply_action->setToolTip(tr("Добавить текстовую цитату перед черновиком. Связь с исходным сообщением не создаётся."));
+	QAction* reply_action = menu.addAction(tr("Ответить на сообщение"));
+	LucideIconUtils::setActionIcon(reply_action, chat_lucide_icon_directory, QStringLiteral("reply"), palette().color(QPalette::ButtonText), 16);
+	reply_action->setToolTip(tr("Покажет выбранное сообщение над полем ввода и добавит цитату в ответ."));
 	QMenu* reactions_menu = menu.addMenu(tr("Реакция"));
 	QAction* thumbs_up_action = reactions_menu->addAction(QString::fromUtf8("👍"));
 	QAction* heart_action = reactions_menu->addAction(QString::fromUtf8("❤️"));
@@ -6622,11 +6753,13 @@ void MainWindow::showChatMessageContextMenu(QFrame* message_row, const QString& 
 		action->setToolTip(reactions_unavailable);
 	}
 	QAction* copy_action = menu.addAction(tr("Копировать текст"));
+	LucideIconUtils::setActionIcon(copy_action, chat_lucide_icon_directory, QStringLiteral("copy"), palette().color(QPalette::ButtonText), 16);
 	QAction* report_action = menu.addAction(tr("Пожаловаться"));
 	report_action->setEnabled(false);
 	report_action->setToolTip(tr("Отправка жалоб на сервер не поддерживается."));
 	menu.addSeparator();
 	QAction* delete_action = menu.addAction(tr("Удалить"));
+	LucideIconUtils::setActionIcon(delete_action, chat_lucide_icon_directory, QStringLiteral("trash-2"), palette().color(QPalette::ButtonText), 16);
 
 	const QPoint menu_pos = anchor_button ?
 		anchor_button->mapToGlobal(QPoint(0, anchor_button->height())) :
@@ -6637,14 +6770,7 @@ void MainWindow::showChatMessageContextMenu(QFrame* message_row, const QString& 
 
 	if(selected == reply_action && ui && ui->chatMessageLineEdit)
 	{
-		const QString quoted_draft = tr("Цитата: ") + plain_text.left(90) + "\n" + ui->chatMessageLineEdit->text();
-		if(quoted_draft.size() > ui->chatMessageLineEdit->maxLength())
-		{
-			showErrorNotification("Цитата не добавлена: черновик достиг максимальной длины.");
-			return;
-		}
-		ui->chatMessageLineEdit->setText(quoted_draft);
-		ui->chatMessageLineEdit->setFocus();
+		setChatReplyTarget(plain_text);
 	}
 	else if(selected == copy_action && QGuiApplication::clipboard())
 	{
@@ -6721,7 +6847,8 @@ void MainWindow::applyChatMessageDisplaySettings()
 			row->property("chatPrivateMessage").toBool(),
 			row->property("chatAttachmentMessage").toBool(),
 			row->property("chatSystemMessage").toBool(),
-			row->property("chatReplyMessage").toBool()
+			row->property("chatReplyMessage").toBool(),
+			row->property("chatReplyTarget").toBool()
 		);
 		if(row->property("chatSearchCurrent").toBool())
 			row_style += QString("QFrame#chatMessageRow, QFrame#chatMessageRow:hover { border: 2px solid %1; }")
@@ -6740,11 +6867,12 @@ void MainWindow::updateChatMessageVisibility()
 		return;
 
 	const QString query = chat_message_search_edit ? chat_message_search_edit->text().trimmed() : QString();
+	const bool notifications_view = chat_tabs_bar && chat_tabs_bar->currentIndex() == 4;
 	const QList<QFrame*> rows = chat_messages_scroll_area->findChildren<QFrame*>("chatMessageRow");
 	for(QFrame* row : rows)
 	{
 		const bool private_row = row->property("chatPrivateMessage").toBool();
-		bool in_conversation = !private_row;
+		bool in_conversation = notifications_view ? row->property("chatSystemMessage").toBool() : !private_row;
 		if(chat_showing_private_messages)
 		{
 			const QString row_peer = row->property("chatPrivatePeer").toString();
@@ -6992,13 +7120,16 @@ void MainWindow::showChatUserProfile(UID avatar_uid)
 	dialog.setObjectName("chatProfileDialog");
 	dialog.setMinimumWidth(420);
 	dialog.setStyleSheet(
-		"QDialog#chatProfileDialog { background: #ffffff; color: #111827; }"
+		"QDialog#chatProfileDialog { background: #2b292d; color: #eeeeef; }"
+		"QLabel { background: transparent; color: #eeeeef; }"
 		"QLabel#chatProfileName { font-size: 18px; font-weight: 700; }"
-		"QLabel#chatProfileStatus { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; border-radius: 5px; padding: 4px 8px; }"
-		"QLabel#chatProfileRole { background: #f7f9fc; color: #374151; border: 1px solid #dbe3ee; border-radius: 5px; padding: 4px 8px; }"
-		"QLabel#chatProfileKey { color: #697386; }"
-		"QPushButton { background: #ffffff; border: 1px solid #dbe3ee; border-radius: 5px; padding: 7px 10px; }"
-		"QPushButton:hover { background: #eef5ff; border-color: #a9c7ff; }"
+		"QLabel#chatProfileStatus { background: #20372a; color: #9ce6b2; border: 1px solid #355c42; border-radius: 6px; padding: 4px 8px; }"
+		"QLabel#chatProfileRole { background: #343238; color: #dedde1; border: 1px solid #4a474e; border-radius: 6px; padding: 4px 8px; }"
+		"QLabel#chatProfileKey { color: #aaa7b0; }"
+		"QFrame#chatProfileDivider { color: #4a474e; }"
+		"QPushButton { background: #343238; color: #eeeeef; border: 1px solid #4a474e; border-radius: 6px; padding: 7px 10px; }"
+		"QPushButton:hover { background: #403d45; border-color: #8c83a0; }"
+		"QPushButton:disabled { color: #77747d; background: #302e33; }"
 	);
 
 	QVBoxLayout* main_layout = new QVBoxLayout(&dialog);
@@ -7012,13 +7143,24 @@ void MainWindow::showChatUserProfile(UID avatar_uid)
 	avatar_label->setFixedSize(74, 74);
 	avatar_label->setStyleSheet(QString("QLabel { background: %1; color: #ffffff; border-radius: 37px; font-size: 24px; font-weight: 700; }")
 		.arg(chatCssColour(chatAvatarBackgroundColour(info))));
+	const QString profile_photo_path = settings ? settings->value(QStringLiteral("chat/profile_photo_path")).toString() : QString();
+	if(info.is_self && !profile_photo_path.isEmpty())
+	{
+		QPixmap profile_photo(profile_photo_path);
+		if(!profile_photo.isNull())
+		{
+			avatar_label->setPixmap(profile_photo.scaled(74, 74, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+			avatar_label->setStyleSheet(QStringLiteral("QLabel { border-radius: 37px; border: 2px solid #66616d; }") );
+		}
+	}
 	top_layout->addWidget(avatar_label);
 
 	QVBoxLayout* title_layout = new QVBoxLayout();
 	QLabel* name_label = new QLabel(QtUtils::toQString(info.name), &dialog);
 	name_label->setObjectName("chatProfileName");
 	name_label->setStyleSheet(QString("QLabel#chatProfileName { color: %1; font-size: 18px; font-weight: 700; }").arg(chatCssColour(info.colour)));
-	QLabel* status_label = new QLabel(tr("Онлайн"), &dialog);
+	const QString profile_status = info.is_self && settings ? settings->value(QStringLiteral("chat/profile_status")).toString().trimmed() : QString();
+	QLabel* status_label = new QLabel(profile_status.isEmpty() ? tr("Онлайн") : tr("Онлайн · %1").arg(profile_status), &dialog);
 	status_label->setObjectName("chatProfileStatus");
 	QLabel* role_label = new QLabel(chatRoleLabelForName(info.name), &dialog);
 	role_label->setObjectName("chatProfileRole");
@@ -7034,6 +7176,7 @@ void MainWindow::showChatUserProfile(UID avatar_uid)
 	main_layout->addLayout(top_layout);
 
 	QFrame* line = new QFrame(&dialog);
+	line->setObjectName("chatProfileDivider");
 	line->setFrameShape(QFrame::HLine);
 	line->setStyleSheet("QFrame { color: #e5eaf2; }");
 	main_layout->addWidget(line);
@@ -7056,7 +7199,7 @@ void MainWindow::showChatUserProfile(UID avatar_uid)
 	add_field(4, tr("Уровень:"), tr("нет данных"));
 	add_field(5, tr("Опыт:"), tr("нет данных"));
 	add_field(6, tr("Регистрация:"), tr("нет данных"));
-	add_field(7, tr("Язык:"), tr("Русский"));
+	add_field(7, tr("Язык:"), tr("нет данных"));
 	add_field(8, tr("Группа:"), tr("нет данных"));
 	if(have_pos)
 		add_field(9, tr("Позиция:"), QtUtils::toQString(
@@ -7064,15 +7207,57 @@ void MainWindow::showChatUserProfile(UID avatar_uid)
 			doubleToStringNDecimalPlaces(avatar_pos.y, 2) + ", " +
 			doubleToStringNDecimalPlaces(avatar_pos.z, 2)));
 	main_layout->addLayout(details_layout);
+	if(info.is_self)
+	{
+		QLabel* local_profile_note = new QLabel(tr("Фото и короткий статус хранятся в настройках этого клиента; сервер пока не синхронизирует их с другими игроками."), &dialog);
+		local_profile_note->setObjectName("chatProfileKey");
+		local_profile_note->setWordWrap(true);
+		main_layout->addWidget(local_profile_note);
+	}
 
 	QHBoxLayout* button_layout = new QHBoxLayout();
 	button_layout->addStretch(1);
+	QPushButton* edit_profile_button = nullptr;
+	if(info.is_self)
+	{
+		edit_profile_button = new QPushButton(tr("Настроить профиль"), &dialog);
+		setChatButtonIcon(edit_profile_button, QStringLiteral("user-round-cog"));
+		button_layout->addWidget(edit_profile_button);
+	}
 	QPushButton* private_button = new QPushButton(tr("Личное сообщение"), &dialog);
+	setChatButtonIcon(private_button, QStringLiteral("messages-square"));
 	private_button->setEnabled(!info.is_self);
 	QPushButton* close_button = new QPushButton(tr("Закрыть"), &dialog);
+	setChatButtonIcon(close_button, QStringLiteral("x"));
 	button_layout->addWidget(private_button);
 	button_layout->addWidget(close_button);
 	main_layout->addLayout(button_layout);
+	if(edit_profile_button)
+	{
+		connect(edit_profile_button, &QPushButton::clicked, &dialog, [this, &dialog, avatar_label, status_label]() {
+			const QString selected_photo = QFileDialog::getOpenFileName(&dialog, tr("Фото профиля"),
+				settings ? settings->value(QStringLiteral("chat/profile_photo_path")).toString() : QString(),
+				tr("Изображения (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"));
+			if(!selected_photo.isEmpty())
+			{
+				QPixmap photo(selected_photo);
+				if(!photo.isNull())
+				{
+					if(settings) settings->setValue(QStringLiteral("chat/profile_photo_path"), selected_photo);
+					avatar_label->setPixmap(photo.scaled(74, 74, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+					avatar_label->setStyleSheet(QStringLiteral("QLabel { border-radius: 37px; border: 2px solid #66616d; }") );
+				}
+			}
+			bool ok = false;
+			const QString current_status = settings ? settings->value(QStringLiteral("chat/profile_status")).toString() : QString();
+			const QString new_status = QInputDialog::getText(&dialog, tr("Статус профиля"), tr("Короткий статус:"), QLineEdit::Normal, current_status, &ok).trimmed();
+			if(ok && new_status.size() <= 80)
+			{
+				if(settings) settings->setValue(QStringLiteral("chat/profile_status"), new_status);
+				status_label->setText(new_status.isEmpty() ? tr("Онлайн") : tr("Онлайн · %1").arg(new_status));
+			}
+		});
+	}
 
 	connect(private_button, &QPushButton::clicked, &dialog, [&dialog, this, avatar_uid]() {
 		dialog.accept();
@@ -7095,21 +7280,35 @@ void MainWindow::showChatUserContextMenu(UID avatar_uid, const QPoint& global_po
 	}
 
 	QMenu menu(this);
+	menu.setToolTipsVisible(true);
 	QAction* private_action = menu.addAction(tr("Личное сообщение"));
 	private_action->setEnabled(!info.is_self);
+	LucideIconUtils::setActionIcon(private_action, chat_lucide_icon_directory, QStringLiteral("messages-square"), palette().color(QPalette::ButtonText), 16);
 	QAction* profile_action = menu.addAction(tr("Показать профиль"));
+	LucideIconUtils::setActionIcon(profile_action, chat_lucide_icon_directory, QStringLiteral("user-round"), palette().color(QPalette::ButtonText), 16);
 	menu.addSeparator();
 	QAction* add_friend_action = menu.addAction(tr("Добавить в друзья"));
 	QAction* invite_group_action = menu.addAction(tr("Пригласить в группу"));
 	QAction* voice_action = menu.addAction(tr("Пригласить в голосовой чат"));
 	QAction* inventory_action = menu.addAction(tr("Посмотреть инвентарь"));
 	QAction* trade_action = menu.addAction(tr("Передать предмет"));
+	for(QAction* unavailable_action : {add_friend_action, invite_group_action, voice_action, inventory_action, trade_action})
+	{
+		unavailable_action->setEnabled(false);
+		unavailable_action->setToolTip(tr("Эта функция пока не поддерживается сервером."));
+	}
 	QAction* teleport_action = menu.addAction(tr("Телепортироваться"));
 	teleport_action->setEnabled(!info.is_self);
+	LucideIconUtils::setActionIcon(teleport_action, chat_lucide_icon_directory, QStringLiteral("navigation"), palette().color(QPalette::ButtonText), 16);
 	menu.addSeparator();
 	QAction* report_action = menu.addAction(tr("Пожаловаться"));
 	QAction* block_action = menu.addAction(tr("Заблокировать"));
 	QAction* mute_action = menu.addAction(tr("Заглушить сообщения"));
+	for(QAction* unavailable_action : {report_action, block_action, mute_action})
+	{
+		unavailable_action->setEnabled(false);
+		unavailable_action->setToolTip(tr("Модерация и блокировка пока не поддерживаются сервером."));
+	}
 	menu.addSeparator();
 	QAction* copy_name_action = menu.addAction(tr("Копировать ник"));
 	QAction* copy_uid_action = menu.addAction(tr("Копировать UID"));
@@ -7146,17 +7345,22 @@ void MainWindow::showChatUserContextMenu(UID avatar_uid, const QPoint& global_po
 			QGuiApplication::clipboard()->setText(QtUtils::toQString(info.avatar_uid.toString()));
 		showInfoNotification("UID скопирован: " + info.avatar_uid.toString());
 	}
-	else if(selected == add_friend_action || selected == invite_group_action || selected == voice_action ||
-		selected == inventory_action || selected == trade_action || selected == report_action ||
-		selected == block_action || selected == mute_action)
-	{
-		showInfoNotification(QtUtils::toStdString(selected->text() + tr(" будет подключено позже.")));
-	}
 }
 
 
 void MainWindow::showChatAttachmentMenu()
 {
+	const QStringList selected_filenames = QFileDialog::getOpenFileNames(this, tr("Прикрепить файлы"), QString(), tr("Все файлы (*.*)"));
+	if(selected_filenames.isEmpty())
+		return;
+	sendChatAttachmentFiles(selected_filenames);
+}
+
+
+void MainWindow::sendChatAttachmentFiles(const QStringList& selected_filenames)
+{
+	if(selected_filenames.isEmpty())
+		return;
 	if(!gui_client.logged_in_user_id.valid())
 	{
 		showErrorNotification("Войдите в аккаунт, чтобы отправить вложение.");
@@ -7167,10 +7371,6 @@ void MainWindow::showChatAttachmentMenu()
 		showErrorNotification("Нет соединения. Вложение не загружено и не отправлено.");
 		return;
 	}
-	const QStringList selected_filenames = QFileDialog::getOpenFileNames(this, tr("Прикрепить файлы"), QString(), tr("Все файлы (*.*)"));
-	if(selected_filenames.isEmpty())
-		return;
-
 	if(!ui || !ui->chatMessageLineEdit)
 		return;
 	const bool private_send = chat_showing_private_messages;
@@ -7247,15 +7447,30 @@ void MainWindow::showChatAttachmentMenu()
 void MainWindow::showChatMoreSendMenu()
 {
 	QMenu menu(this);
+	menu.setToolTipsVisible(true);
 	QAction* screenshot_action = menu.addAction(tr("Сделать снимок экрана"));
+	LucideIconUtils::setActionIcon(screenshot_action, chat_lucide_icon_directory, QStringLiteral("camera"), palette().color(QPalette::ButtonText), 16);
 	QAction* voice_action = menu.addAction(tr("Записать голосовое сообщение"));
+	LucideIconUtils::setActionIcon(voice_action, chat_lucide_icon_directory, QStringLiteral("mic"), palette().color(QPalette::ButtonText), 16);
 	QAction* contact_action = menu.addAction(tr("Отправить контакт"));
+	LucideIconUtils::setActionIcon(contact_action, chat_lucide_icon_directory, QStringLiteral("user-round"), palette().color(QPalette::ButtonText), 16);
 	QAction* coordinates_action = menu.addAction(tr("Отправить координаты"));
+	LucideIconUtils::setActionIcon(coordinates_action, chat_lucide_icon_directory, QStringLiteral("map-pin"), palette().color(QPalette::ButtonText), 16);
 	QAction* poll_action = menu.addAction(tr("Создать опрос"));
+	LucideIconUtils::setActionIcon(poll_action, chat_lucide_icon_directory, QStringLiteral("messages-square"), palette().color(QPalette::ButtonText), 16);
 	QAction* item_action = menu.addAction(tr("Поделиться предметом"));
+	LucideIconUtils::setActionIcon(item_action, chat_lucide_icon_directory, QStringLiteral("package"), palette().color(QPalette::ButtonText), 16);
 	QAction* quest_action = menu.addAction(tr("Поделиться квестом"));
+	LucideIconUtils::setActionIcon(quest_action, chat_lucide_icon_directory, QStringLiteral("sparkles"), palette().color(QPalette::ButtonText), 16);
 	QAction* link_action = menu.addAction(tr("Отправить ссылку"));
+	LucideIconUtils::setActionIcon(link_action, chat_lucide_icon_directory, QStringLiteral("external-link"), palette().color(QPalette::ButtonText), 16);
 	QAction* export_action = menu.addAction(tr("Экспортировать историю переписки"));
+	LucideIconUtils::setActionIcon(export_action, chat_lucide_icon_directory, QStringLiteral("file-output"), palette().color(QPalette::ButtonText), 16);
+	for(QAction* unavailable_action : {screenshot_action, voice_action, contact_action, poll_action, item_action, quest_action, export_action})
+	{
+		unavailable_action->setEnabled(false);
+		unavailable_action->setToolTip(tr("Эта команда пока не реализована в чате."));
+	}
 
 	QWidget* source_widget = qobject_cast<QWidget*>(sender());
 	const QPoint menu_pos = source_widget ? source_widget->mapToGlobal(QPoint(0, source_widget->height())) : QCursor::pos();
@@ -7283,14 +7498,6 @@ void MainWindow::showChatMoreSendMenu()
 		return;
 	}
 
-	(void)screenshot_action;
-	(void)voice_action;
-	(void)contact_action;
-	(void)poll_action;
-	(void)item_action;
-	(void)quest_action;
-	(void)export_action;
-	showInfoNotification(QtUtils::toStdString(selected->text() + tr(" будет подключено позже.")));
 }
 
 
@@ -11322,6 +11529,83 @@ QImage MainWindow::capturePhotoFrame(const QVariantMap& values, const QSize& req
 }
 
 
+#if defined(_WIN32) && !defined(USE_SDL)
+namespace
+{
+struct WindowsPhotoShareState
+{
+	winrt::Windows::ApplicationModel::DataTransfer::DataTransferManager manager{ nullptr };
+	winrt::event_token data_requested_token{};
+};
+
+WindowsPhotoShareState& getWindowsPhotoShareState()
+{
+	static WindowsPhotoShareState* state = new WindowsPhotoShareState();
+	return *state;
+}
+
+void showWindowsPhotoShareUI(HWND owner, QImage image, QString caption, QPointer<MainWindow> main_window)
+{
+	auto show_error = [main_window](const QString& message) {
+		if(main_window)
+			QMetaObject::invokeMethod(main_window.data(), [main_window, message]() { if(main_window) QMessageBox::warning(main_window, QObject::tr("Не удалось поделиться фото"), message); }, Qt::QueuedConnection);
+	};
+	try
+	{
+		// Qt owns the GUI thread's COM apartment; initialize WinRT on that thread
+		// before creating the in-memory bitmap passed to the Windows share sheet.
+		static bool winrt_apartment_initialized = false;
+		if(!winrt_apartment_initialized)
+		{
+			winrt::init_apartment(winrt::apartment_type::single_threaded);
+			winrt_apartment_initialized = true;
+		}
+		if(image.isNull())
+			throw std::runtime_error("The captured photo is empty.");
+		QByteArray encoded_image;
+		QBuffer image_buffer(&encoded_image);
+		if(!image_buffer.open(QIODevice::WriteOnly) || !image.save(&image_buffer, "PNG"))
+			throw std::runtime_error("Could not encode the captured photo for sharing.");
+		winrt::Windows::Storage::Streams::InMemoryRandomAccessStream image_stream;
+		winrt::Windows::Storage::Streams::DataWriter image_writer(image_stream);
+		const auto* image_bytes = reinterpret_cast<const uint8_t*>(encoded_image.constData());
+		image_writer.WriteBytes(winrt::array_view<uint8_t const>(image_bytes, image_bytes + encoded_image.size()));
+		image_writer.StoreAsync().get();
+		image_stream.Seek(0);
+		const auto bitmap_reference = winrt::Windows::Storage::Streams::RandomAccessStreamReference::CreateFromStream(image_stream);
+		using namespace winrt::Windows::ApplicationModel::DataTransfer;
+		auto interop = winrt::get_activation_factory<DataTransferManager, IDataTransferManagerInterop>();
+		DataTransferManager manager{ nullptr };
+		winrt::check_hresult(interop->GetForWindow(owner, winrt::guid_of<DataTransferManager>(), winrt::put_abi(manager)));
+		WindowsPhotoShareState& state = getWindowsPhotoShareState();
+		if(state.manager && state.data_requested_token.value != 0)
+			state.manager.DataRequested(state.data_requested_token);
+		state.manager = manager;
+		state.data_requested_token = manager.DataRequested([bitmap_reference, caption](DataTransferManager const&, DataRequestedEventArgs const& args)
+			{
+				DataRequest request = args.Request();
+				request.Data().Properties().Title(L"Metasiberia photo");
+				request.Data().RequestedOperation(DataPackageOperation::Copy);
+				request.Data().SetBitmap(bitmap_reference);
+				if(!caption.trimmed().isEmpty()) request.Data().SetText(caption.toStdWString());
+			});
+		winrt::check_hresult(interop->ShowShareUIForWindow(owner));
+	}
+	catch(const winrt::hresult_error& error)
+	{
+		show_error(QStringLiteral("Windows не смогла передать фотографию приложениям: %1 (HRESULT 0x%2)")
+			.arg(QString::fromWCharArray(error.message().c_str()))
+			.arg(static_cast<quint32>(error.code().value), 8, 16, QLatin1Char('0')));
+	}
+	catch(const std::exception& error)
+	{
+		show_error(QStringLiteral("Не удалось открыть файл фотографии: %1").arg(QString::fromLocal8Bit(error.what())));
+	}
+}
+}
+#endif
+
+
 void MainWindow::capturePhoto(const QVariantMap& values)
 {
 	if(!native_photo_video_gl_ready || !gui_client.photo_mode_ui.isPhotoModeEnabled()) return;
@@ -11361,6 +11645,195 @@ void MainWindow::capturePhoto(const QVariantMap& values)
 			if(!metadata_file.open(QIODevice::WriteOnly) || metadata_file.write(json) != json.size() || !metadata_file.commit())
 				showErrorNotification("Photo saved, but camera settings could not be saved.");
 		}
+
+		// Keep the captured image available in a dedicated preview.
+		auto* preview_dialog = new QDialog(this);
+		preview_dialog->setAttribute(Qt::WA_DeleteOnClose);
+		preview_dialog->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+		preview_dialog->setModal(false);
+		preview_dialog->setMinimumSize(560, 420);
+		preview_dialog->setStyleSheet(QStringLiteral(
+			"QDialog { background: #29292e; color: #f0f0f2; border: 1px solid #4b4b52; }"
+			"QLabel { color: #e5e5e8; }"
+			"QPushButton { background: #39393f; color: #f2f2f4; border: 1px solid #515159; border-radius: 4px; padding: 6px 10px; }"
+			"QPushButton:hover { background: #484850; border-color: #777780; }"
+			"QPushButton:pressed { background: #242428; }"
+			"QLineEdit, QTextEdit { background: #1e1e22; color: #f2f2f4; border: 1px solid #4b4b52; border-radius: 4px; padding: 5px; selection-background-color: #596b91; }"
+			"QToolButton { background: transparent; color: #f2f2f4; border: none; border-radius: 4px; padding: 4px 8px; }"
+			"QToolButton:hover { background: #484850; }"
+		));
+		QVBoxLayout* preview_layout = new QVBoxLayout(preview_dialog);
+		preview_layout->setContentsMargins(0, 0, 0, 12);
+		preview_layout->setSpacing(8);
+		QWidget* title_bar = new QWidget(preview_dialog);
+		title_bar->setStyleSheet(QStringLiteral("background: #202024; border-bottom: 1px solid #414147;"));
+		QHBoxLayout* title_layout = new QHBoxLayout(title_bar);
+		title_layout->setContentsMargins(14, 4, 8, 4);
+		QLabel* title_label = new QLabel(tr("Предпросмотр фотографии"), title_bar);
+		QToolButton* title_close_button = new QToolButton(title_bar);
+		title_close_button->setText(QStringLiteral("×"));
+		title_close_button->setToolTip(tr("Закрыть"));
+		title_close_button->setFixedSize(30, 26);
+		title_layout->addWidget(title_label);
+		title_layout->addStretch(1);
+		title_layout->addWidget(title_close_button);
+		preview_layout->addWidget(title_bar);
+		QLabel* photo_preview = new QLabel(preview_dialog);
+		photo_preview->setAlignment(Qt::AlignCenter);
+		photo_preview->setMinimumSize(520, 300);
+		photo_preview->setStyleSheet(QStringLiteral("QLabel { background: #17171b; border: 1px solid #45454d; border-radius: 5px; }") );
+		const QRect available = QGuiApplication::primaryScreen() ? QGuiApplication::primaryScreen()->availableGeometry() : QRect(0, 0, 1280, 900);
+		const QSize preview_size(qMax(480, qMin(1100, available.width() - 160)), qMax(280, qMin(720, available.height() - 260)));
+		photo_preview->setPixmap(QPixmap::fromImage(image).scaled(preview_size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+		preview_layout->addWidget(photo_preview, 1);
+		QLabel* photo_path_label = new QLabel(QDir::toNativeSeparators(path), preview_dialog);
+		photo_path_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+		photo_path_label->setWordWrap(true);
+		photo_path_label->setStyleSheet(QStringLiteral("color: #b9bac4;"));
+		QVBoxLayout* details_layout = new QVBoxLayout();
+		details_layout->setContentsMargins(14, 0, 14, 0);
+		details_layout->setSpacing(6);
+		details_layout->addWidget(photo_path_label);
+		QLabel* caption_label = new QLabel(tr("Текст публикации"), preview_dialog);
+		details_layout->addWidget(caption_label);
+		QTextEdit* caption_edit = new QTextEdit(preview_dialog);
+		caption_edit->setPlaceholderText(tr("Добавьте текст к фотографии…"));
+		caption_edit->setMaximumHeight(76);
+		details_layout->addWidget(caption_edit);
+		QPushButton* copy_caption_button = new QPushButton(tr("Копировать текст публикации"), preview_dialog);
+		details_layout->addWidget(copy_caption_button, 0, Qt::AlignRight);
+		connect(copy_caption_button, &QPushButton::clicked, preview_dialog, [this, caption_edit]() {
+			if(QGuiApplication::clipboard())
+			{
+				QGuiApplication::clipboard()->setText(caption_edit->toPlainText().trimmed());
+				showInfoNotification("Текст публикации скопирован.");
+			}
+		});
+		QString client_link = url_widget ? QtUtils::toQString(url_widget->getURL()) : QStringLiteral("sub://vr.metasiberia.com/");
+		QString host = gui_client.server_hostname.empty() ? QStringLiteral("vr.metasiberia.com") : QtUtils::toQString(gui_client.server_hostname);
+		host = QtUtils::toQString(canonicaliseHostPortForMetasiberia(QtUtils::toStdString(host)));
+		const QString scheme = hostIsLocalForWebMode(QtUtils::toStdString(host)) ? QStringLiteral("http://") : QStringLiteral("https://");
+		const QString web_link = scheme + host + QtUtils::toQString(gui_client.getCurrentWebClientURLPath());
+		auto addLinkRow = [this, preview_dialog, details_layout](const QString& title, const QString& value) {
+			QHBoxLayout* row = new QHBoxLayout();
+			row->setSpacing(6);
+			QLabel* label = new QLabel(title, preview_dialog);
+			label->setMinimumWidth(105);
+			QLineEdit* field = new QLineEdit(value, preview_dialog);
+			field->setReadOnly(true);
+			QPushButton* copy = new QPushButton(QObject::tr("Копировать"), preview_dialog);
+			QObject::connect(copy, &QPushButton::clicked, preview_dialog, [value]() {
+				if(QGuiApplication::clipboard()) QGuiApplication::clipboard()->setText(value);
+			});
+			row->addWidget(label);
+			row->addWidget(field, 1);
+			row->addWidget(copy);
+			details_layout->addLayout(row);
+		};
+		addLinkRow(tr("Ссылка клиента"), client_link);
+		addLinkRow(tr("Ссылка веба"), web_link);
+		preview_layout->addLayout(details_layout);
+		QHBoxLayout* actions_layout = new QHBoxLayout();
+		actions_layout->setSpacing(8);
+		auto* share_social_button = new QPushButton(tr("Поделиться…"), preview_dialog);
+		auto* copy_photo_button = new QPushButton(tr("Копировать фото"), preview_dialog);
+		auto* send_chat_button = new QPushButton(tr("Отправить в чат"), preview_dialog);
+		auto* open_folder_button = new QPushButton(tr("Открыть папку"), preview_dialog);
+		auto* close_preview_button = new QPushButton(tr("Закрыть"), preview_dialog);
+		actions_layout->addWidget(share_social_button);
+		actions_layout->addWidget(copy_photo_button);
+		actions_layout->addWidget(send_chat_button);
+		actions_layout->addWidget(open_folder_button);
+		actions_layout->addStretch(1);
+		actions_layout->addWidget(close_preview_button);
+		preview_layout->addLayout(actions_layout);
+		connect(title_close_button, &QToolButton::clicked, preview_dialog, &QDialog::close);
+		connect(copy_photo_button, &QPushButton::clicked, preview_dialog, [this, image]() {
+			if(QGuiApplication::clipboard())
+			{
+				QGuiApplication::clipboard()->setImage(image);
+				showInfoNotification("Фото скопировано в буфер обмена.");
+			}
+		});
+		connect(share_social_button, &QPushButton::clicked, preview_dialog, [this, preview_dialog, share_social_button, image, caption_edit, client_link, web_link, path]() {
+			QMenu menu(preview_dialog);
+			const QString caption = caption_edit->toPlainText().trimmed();
+				auto sharePhotoThroughWindows = [this, preview_dialog, path, caption, image]() {
+#if defined(_WIN32) && !defined(USE_SDL)
+				showInfoNotification("Подготовляю фото для отправки…");
+					showWindowsPhotoShareUI(reinterpret_cast<HWND>(this->winId()), image, caption, QPointer<MainWindow>(this));
+#else
+				Q_UNUSED(path);
+				Q_UNUSED(caption);
+					Q_UNUSED(image);
+				showErrorNotification("Передача фотографии через системное меню доступна в Windows-клиенте.");
+#endif
+			};
+			struct SocialNetworkTarget
+			{
+				const char* name;
+				const char* url;
+			};
+			const SocialNetworkTarget social_networks[] = {
+				{"Telegram", "https://web.telegram.org/"},
+				{"WhatsApp", "https://web.whatsapp.com/"},
+				{"VK", "https://vk.com/feed"},
+				{"Facebook", "https://www.facebook.com/"},
+				{"X (Twitter)", "https://x.com/"},
+				{"Threads", "https://www.threads.net/"},
+				{"Bluesky", "https://bsky.app/"},
+				{"Reddit", "https://www.reddit.com/submit"},
+				{"LinkedIn", "https://www.linkedin.com/feed/"},
+				{"Pinterest", "https://www.pinterest.com/pin-builder/"}
+			};
+			for(const SocialNetworkTarget& network : social_networks)
+			{
+				QAction* action = menu.addAction(QString::fromLatin1(network.name));
+				action->setToolTip(tr("Открыть сайт в браузере. Фото будет скопировано для вставки в публикацию или чат."));
+				const QString network_name = QString::fromLatin1(network.name);
+				const QUrl network_url(QString::fromLatin1(network.url));
+				connect(action, &QAction::triggered, preview_dialog, [this, image, network_name, network_url]() {
+					QClipboard* clipboard = QGuiApplication::clipboard();
+					if(!clipboard)
+				{
+						showErrorNotification("Не удалось скопировать фото для публикации.");
+						return;
+				}
+					clipboard->setImage(image);
+					if(!clipboard->mimeData() || !clipboard->mimeData()->hasImage())
+					{
+						showErrorNotification("Фото не попало в буфер обмена.");
+						return;
+					}
+					if(!QDesktopServices::openUrl(network_url))
+					{
+						showErrorNotification("Не удалось открыть сайт в браузере: " + network_name.toStdString());
+						return;
+					}
+					showInfoNotification("Фото скопировано. В " + network_name.toStdString() + " создайте публикацию или чат и вставьте его сочетанием Ctrl+V.");
+				});
+			}
+			menu.addSeparator();
+			QAction* share_file_action = menu.addAction(tr("Поделиться в других приложениях…"));
+			connect(share_file_action, &QAction::triggered, preview_dialog, sharePhotoThroughWindows);
+			menu.addSeparator();
+			QAction* copy_action = menu.addAction(tr("Скопировать текст и обе ссылки"));
+			connect(copy_action, &QAction::triggered, preview_dialog, [this, caption, client_link, web_link]() {
+				if(QGuiApplication::clipboard()) QGuiApplication::clipboard()->setText(caption + QStringLiteral("\n") + tr("Клиент: ") + client_link + QStringLiteral("\n") + tr("Веб: ") + web_link);
+				showInfoNotification("Текст и ссылки скопированы.");
+			});
+			menu.exec(share_social_button->mapToGlobal(QPoint(0, share_social_button->height())));
+		});
+		connect(send_chat_button, &QPushButton::clicked, preview_dialog, [this, path]() {
+			sendChatAttachmentFiles(QStringList() << path);
+		});
+		connect(open_folder_button, &QPushButton::clicked, preview_dialog, [this, directory]() {
+			if(!QDesktopServices::openUrl(QUrl::fromLocalFile(directory)))
+				showErrorNotification("Не удалось открыть папку с фотографией.");
+		});
+		connect(close_preview_button, &QPushButton::clicked, preview_dialog, &QDialog::close);
+		preview_dialog->resize(qMin(preview_size.width() + 28, available.width() - 40), qMin(preview_size.height() + 330, available.height() - 60));
+		preview_dialog->show();
 	}
 	catch(const glare::Exception& e)
 	{
@@ -11636,6 +12109,37 @@ void MainWindow::startMCPClientServerIfEnabled()
 						{"heightmap_layer","EXR heightmap only; raw height values are multiplied by height_scale and offset by base_height_m"},
 						{"other_layers_preserved",true}, {"real_world_import_selection",real_world_selection}, {"sections",sections}};
 				}
+				else if(tool == "inspect_world_environment")
+				{
+					const WorldSettings& world_settings=gui_client.connected_world_settings;
+					const VolumetricCloudWorldSettings& clouds=world_settings.volumetric_cloud_settings;
+					const CloudLightingWorldSettings& lighting=world_settings.cloud_lighting_settings;
+					const WaterReflectionWorldSettings& reflection=world_settings.water_reflection_settings;
+					const WaterSurfaceWorldSettings& water=world_settings.water_surface_settings;
+					pending->result=QJsonObject{
+						{"water_enabled",BitUtils::isBitSet(terrain.flags,TerrainSpec::WATER_ENABLED_FLAG)}, {"water_level_m",terrain.water_z},
+						{"sun_angle_from_vertical_deg",::radToDegree(world_settings.sun_theta)}, {"sun_azimuth_deg",::radToDegree(world_settings.sun_phi)},
+						{"fog_layer_0_density",world_settings.fog_settings.layer_0_A}, {"fog_layer_0_height_m",world_settings.fog_settings.layer_0_scale_height},
+						{"fog_layer_1_density",world_settings.fog_settings.layer_1_A}, {"fog_layer_1_height_m",world_settings.fog_settings.layer_1_scale_height},
+						{"clouds_enabled",clouds.enabled}, {"cloud_bottom_z_m",clouds.bottom_z}, {"cloud_top_z_m",clouds.top_z},
+						{"cloud_coverage",clouds.coverage}, {"cloud_density",clouds.density}, {"cloud_wind_speed_mps",clouds.wind_speed},
+						{"cloud_underside_darkness",lighting.underside_darkness}, {"cloud_edge_softness",clouds.edge_softness},
+						{"cloud_horizon_fade",clouds.horizon_fade}, {"cloud_shape_scale_m",clouds.shape_period},
+						{"cloud_detail_scale_m",clouds.detail_period}, {"cloud_draw_distance_m",clouds.max_march_dist},
+						{"cloud_wind_direction_deg",clouds.wind_direction_deg}, {"cloud_scattering",lighting.scattering_scale},
+						{"cloud_direct_sun",lighting.direct_sun_strength}, {"cloud_sky_light",lighting.sky_light_strength},
+						{"cloud_sunset_response",lighting.sunset_response}, {"cloud_ground_contribution",lighting.ground_contribution},
+						{"cloud_forward_scattering",lighting.phase_g}, {"cloud_phase_blend",lighting.phase_blend},
+						{"cloud_multiple_scattering",lighting.multi_scattering}, {"clouds_reflect_in_water",reflection.cloud_reflection_enabled},
+						{"water_reflection_strength",reflection.cloud_reflection_strength}, {"water_reflection_quality",reflection.cloud_reflection_samples},
+						{"water_reflection_horizon_fade",reflection.cloud_reflection_fade}, {"wave_height_m",water.wave_amplitude},
+						{"wave_length_m",water.wave_length}, {"wave_steepness",water.wave_steepness}, {"wave_speed",water.wave_speed},
+						{"wave_direction_deg",water.wave_direction_deg}, {"wave_direction_spread_deg",water.wave_direction_spread_deg},
+						{"secondary_wave_scale",water.secondary_wave_scale}, {"shore_surf_enabled",water.surf_enabled},
+						{"underwater_caustics_enabled",water.underwater_caustics_enabled}, {"shore_surf_strength",water.surf_strength},
+						{"shoreline_foam_width_m",water.shoreline_width}, {"foam_scale",water.foam_scale},
+						{"foam_speed",water.foam_speed}, {"foam_fade",water.foam_fade}};
+				}
 				else if(tool == "smooth_terrain")
 				{
 					if(!args.value("center").isObject()) throw std::runtime_error("center {x,y} is required in world metres.");
@@ -11813,7 +12317,7 @@ void MainWindow::startMCPClientServerIfEnabled()
 					}
 					else
 					{
-						if(!has_selection) throw std::runtime_error("No highlighted map area. Select a rectangle or freehand contour in World Settings > Sculpting > Real-world terrain, then retry; or provide explicit bounds.");
+						if(!has_selection) throw std::runtime_error("No highlighted map area. Select a rectangle or freehand contour in World Settings > Map > Real-world terrain, then retry; or provide explicit bounds.");
 						started=ui->worldSettingsWidget->startMCPRealTerrainImportFromCurrentSelection(section_x,section_y,has_section_x,completion,error);
 					}
 					if(!started) throw std::runtime_error(error.toStdString());
@@ -11897,11 +12401,102 @@ void MainWindow::startMCPClientServerIfEnabled()
 						{"height_scale",spec.terrain_height_scale},{"exact_heightmap",BitUtils::isBitSet(spec.flags,TerrainSpec::EXACT_HEIGHTMAP_FLAG)},
 						{"configured_sections",sections.size()},{"saved","World settings update queued."}};
 				}
+				else if(tool == "configure_world_environment")
+				{
+					if(!gui_client.connectedToUsersWorldOrGodUser()) throw std::runtime_error("World environment editing requires world owner or god permissions.");
+					WorldSettings updated;
+					updated.copyNetworkStateFrom(gui_client.connected_world_settings);
+					bool changed=false;
+					auto setFiniteFloat = [&args, &changed](const char* key, float& destination, double minimum, double maximum)
+					{
+						if(!args.contains(QLatin1String(key))) return;
+						const QJsonValue json_value=args.value(QLatin1String(key));
+						const double value=json_value.toDouble(std::numeric_limits<double>::quiet_NaN());
+						if(!json_value.isDouble() || !std::isfinite(value) || value<minimum || value>maximum)
+							throw std::runtime_error(std::string("Invalid world environment setting: ")+key);
+						destination=(float)value;
+						changed=true;
+					};
+					auto setBool = [&args, &changed](const char* key, bool& destination)
+					{
+						if(!args.contains(QLatin1String(key))) return;
+						if(!args.value(QLatin1String(key)).isBool()) throw std::runtime_error(std::string(key)+" must be a boolean.");
+						destination=args.value(QLatin1String(key)).toBool();
+						changed=true;
+					};
+					TerrainSpec& spec=updated.terrain_spec;
+					if(args.contains("water_enabled"))
+					{
+						if(!args.value("water_enabled").isBool()) throw std::runtime_error("water_enabled must be a boolean.");
+						if(args.value("water_enabled").toBool()) spec.flags |= TerrainSpec::WATER_ENABLED_FLAG;
+						else spec.flags &= ~TerrainSpec::WATER_ENABLED_FLAG;
+						changed=true;
+					}
+					setFiniteFloat("water_level_m",spec.water_z,-1000000.0,1000000.0);
+					setFiniteFloat("sun_angle_from_vertical_deg",updated.sun_theta,0.0,120.0);
+					if(args.contains("sun_angle_from_vertical_deg")) updated.sun_theta=::degreeToRad(updated.sun_theta);
+					setFiniteFloat("sun_azimuth_deg",updated.sun_phi,0.0,720.0);
+					if(args.contains("sun_azimuth_deg")) updated.sun_phi=::degreeToRad(updated.sun_phi);
+					setFiniteFloat("fog_layer_0_density",updated.fog_settings.layer_0_A,0.0,1.0);
+					setFiniteFloat("fog_layer_0_height_m",updated.fog_settings.layer_0_scale_height,0.1,10000.0);
+					setFiniteFloat("fog_layer_1_density",updated.fog_settings.layer_1_A,0.0,1.0);
+					setFiniteFloat("fog_layer_1_height_m",updated.fog_settings.layer_1_scale_height,0.1,10000.0);
+					VolumetricCloudWorldSettings& clouds=updated.volumetric_cloud_settings;
+					CloudLightingWorldSettings& lighting=updated.cloud_lighting_settings;
+					WaterReflectionWorldSettings& reflection=updated.water_reflection_settings;
+					WaterSurfaceWorldSettings& water=updated.water_surface_settings;
+					setBool("clouds_enabled",clouds.enabled);
+					setFiniteFloat("cloud_bottom_z_m",clouds.bottom_z,0.0,100000.0);
+					setFiniteFloat("cloud_top_z_m",clouds.top_z,0.0,100000.0);
+					setFiniteFloat("cloud_coverage",clouds.coverage,0.0,1.0);
+					setFiniteFloat("cloud_density",clouds.density,0.0,0.02);
+					setFiniteFloat("cloud_wind_speed_mps",clouds.wind_speed,0.0,200.0);
+					setFiniteFloat("cloud_underside_darkness",lighting.underside_darkness,0.0,1.0);
+					setFiniteFloat("cloud_edge_softness",clouds.edge_softness,0.0,1.0);
+					setFiniteFloat("cloud_horizon_fade",clouds.horizon_fade,0.0,1.0);
+					setFiniteFloat("cloud_shape_scale_m",clouds.shape_period,100.0,100000.0);
+					setFiniteFloat("cloud_detail_scale_m",clouds.detail_period,50.0,10000.0);
+					setFiniteFloat("cloud_draw_distance_m",clouds.max_march_dist,100.0,100000.0);
+					setFiniteFloat("cloud_wind_direction_deg",clouds.wind_direction_deg,0.0,360.0);
+					setFiniteFloat("cloud_scattering",lighting.scattering_scale,0.0,2.0);
+					setFiniteFloat("cloud_direct_sun",lighting.direct_sun_strength,0.0,4.0);
+					setFiniteFloat("cloud_sky_light",lighting.sky_light_strength,0.0,4.0);
+					setFiniteFloat("cloud_sunset_response",lighting.sunset_response,0.0,4.0);
+					setFiniteFloat("cloud_ground_contribution",lighting.ground_contribution,0.0,2.0);
+					setFiniteFloat("cloud_forward_scattering",lighting.phase_g,-0.85,0.85);
+					setFiniteFloat("cloud_phase_blend",lighting.phase_blend,0.0,1.0);
+					setFiniteFloat("cloud_multiple_scattering",lighting.multi_scattering,0.0,1.0);
+					setBool("clouds_reflect_in_water",reflection.cloud_reflection_enabled);
+					setFiniteFloat("water_reflection_strength",reflection.cloud_reflection_strength,0.0,1.0);
+					setFiniteFloat("water_reflection_quality",reflection.cloud_reflection_samples,8.0,48.0);
+					setFiniteFloat("water_reflection_horizon_fade",reflection.cloud_reflection_fade,0.0,1.0);
+					setFiniteFloat("wave_height_m",water.wave_amplitude,0.0,10.0);
+					setFiniteFloat("wave_length_m",water.wave_length,0.5,500.0);
+					setFiniteFloat("wave_steepness",water.wave_steepness,0.0,1.0);
+					setFiniteFloat("wave_speed",water.wave_speed,0.0,8.0);
+					setFiniteFloat("wave_direction_deg",water.wave_direction_deg,0.0,360.0);
+					setFiniteFloat("wave_direction_spread_deg",water.wave_direction_spread_deg,0.0,180.0);
+					setFiniteFloat("secondary_wave_scale",water.secondary_wave_scale,0.0,1.0);
+					setBool("shore_surf_enabled",water.surf_enabled);
+					setBool("underwater_caustics_enabled",water.underwater_caustics_enabled);
+					setFiniteFloat("shore_surf_strength",water.surf_strength,0.0,2.0);
+					setFiniteFloat("shoreline_foam_width_m",water.shoreline_width,0.1,100.0);
+					setFiniteFloat("foam_scale",water.foam_scale,0.05,10.0);
+					setFiniteFloat("foam_speed",water.foam_speed,0.0,8.0);
+					setFiniteFloat("foam_fade",water.foam_fade,0.0,1.0);
+					if(!changed) throw std::runtime_error("Provide at least one world environment setting to change.");
+					if(!(clouds.bottom_z < clouds.top_z)) throw std::runtime_error("Cloud layer bottom must be below its top.");
+					ui->worldSettingsWidget->setFromWorldSettings(updated);
+					gui_client.worldSettingsChangedFromUI(updated);
+					pending->result=QJsonObject{{"changed",true},{"water_enabled",BitUtils::isBitSet(spec.flags,TerrainSpec::WATER_ENABLED_FLAG)},
+						{"water_level_m",spec.water_z},{"clouds_enabled",clouds.enabled},{"cloud_bottom_z_m",clouds.bottom_z},
+						{"cloud_top_z_m",clouds.top_z},{"saved","World settings update queued."}};
+				}
 				else
 					throw std::runtime_error("Unknown terrain tool.");
 			}
 			catch(const std::exception& e) { pending->error=e.what(); }
-			catch(...) { pending->error="Terrain operation failed."; }
+			catch(...) { pending->error="World settings operation failed."; }
 			if(!async_started) pending->done.release();
 		}, Qt::QueuedConnection);
 		if(!pending->done.tryAcquire(1,600000)) { pending->cancelled.store(true); throw glare::Exception("Terrain operation timed out. A map import may still be running; check its progress in World Settings before retrying."); }
@@ -13035,7 +13630,12 @@ void MainWindow::sendChatMessageSlot()
 {
 	//conPrint("MainWindow::sendChatMessageSlot()");
 
-	const std::string message = stripHeadAndTailWhitespace(QtUtils::toIndString(ui->chatMessageLineEdit->text()));
+	if(!ui || !ui->chatMessageLineEdit || ui->chatMessageLineEdit->text().trimmed().isEmpty())
+		return;
+	QString outgoing_text = ui->chatMessageLineEdit->text().trimmed();
+	if(!chat_reply_text.isEmpty())
+		outgoing_text = tr("Ответ: %1\n%2").arg(chat_reply_text, outgoing_text);
+	const std::string message = stripHeadAndTailWhitespace(QtUtils::toIndString(outgoing_text));
 	if(message.empty())
 		return;
 	if(!gui_client.logged_in_user_id.valid())
@@ -13066,6 +13666,57 @@ void MainWindow::sendChatMessageSlot()
 	sendChatOrEmojiMessage(message);
 
 	ui->chatMessageLineEdit->clear();
+	clearChatReplyTarget();
+}
+
+
+void MainWindow::setChatReplyTarget(const QString& plain_text)
+{
+	if(plain_text.trimmed().isEmpty() || !chat_reply_preview_label)
+		return;
+	chat_reply_text = plain_text.trimmed().left(240);
+	chat_reply_preview_label->setText(tr("Ответ на сообщение: %1").arg(chat_reply_text));
+	if(QWidget* preview = chat_reply_preview_label->parentWidget())
+		preview->show();
+	if(ui && ui->chatMessageLineEdit)
+		ui->chatMessageLineEdit->setFocus();
+	if(chat_messages_scroll_area)
+	{
+		for(QFrame* row : chat_messages_scroll_area->findChildren<QFrame*>("chatMessageRow"))
+			row->setProperty("chatReplyTarget", row->property("chatMessagePlainText").toString() == plain_text);
+		applyChatMessageDisplaySettings();
+		const QString highlighted_text = chat_reply_text;
+		QTimer::singleShot(2200, this, [this, highlighted_text]() {
+			if(chat_reply_text == highlighted_text && !chat_reply_text.isEmpty() && chat_messages_scroll_area)
+			{
+				for(QFrame* row : chat_messages_scroll_area->findChildren<QFrame*>("chatMessageRow"))
+					if(row->property("chatReplyTarget").toBool())
+					{
+						row->setProperty("chatReplyTarget", false);
+						break;
+					}
+				applyChatMessageDisplaySettings();
+			}
+		});
+	}
+}
+
+
+void MainWindow::clearChatReplyTarget()
+{
+	chat_reply_text.clear();
+	if(chat_reply_preview_label)
+	{
+		chat_reply_preview_label->clear();
+		if(QWidget* preview = chat_reply_preview_label->parentWidget())
+			preview->hide();
+	}
+	if(chat_messages_scroll_area)
+	{
+		for(QFrame* row : chat_messages_scroll_area->findChildren<QFrame*>("chatMessageRow"))
+			row->setProperty("chatReplyTarget", false);
+		applyChatMessageDisplaySettings();
+	}
 }
 
 

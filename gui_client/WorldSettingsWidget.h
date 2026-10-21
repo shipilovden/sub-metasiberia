@@ -40,7 +40,7 @@ class RealTerrainImportThread : public QThread
 {
 	Q_OBJECT
 public:
-	RealTerrainImportThread(double north, double south, double west, double east, const QVector<QPointF>& polygon, float water_z, bool include_osm_features = true, QObject* parent = NULL);
+	RealTerrainImportThread(double north, double south, double west, double east, const QVector<QPointF>& polygon, float water_z, float base_z, bool include_osm_features = true, QObject* parent = NULL);
 	~RealTerrainImportThread();
 	void cancelImport();
 
@@ -48,7 +48,8 @@ public:
 	void tileProgress(int completed, int total);
 	void statusMessage(const QString& message);
 	void importReady(const QByteArray& metres, const QByteArray& material_mask_png, const QByteArray& tree_mask_png,
-		const QByteArray& road_mask_png, const QByteArray& building_mask_png, const QString& feature_status);
+		const QByteArray& road_mask_png, const QByteArray& building_mask_png, const QString& feature_status,
+		double import_north, double import_south, double import_west, double import_east);
 	void importFailed(const QString& message);
 
 protected:
@@ -61,6 +62,7 @@ private:
 	double east;
 	QVector<QPointF> polygon;
 	float water_z;
+	float base_z;
 	bool include_osm_features;
 	QMutex client_mutex;
 	class HTTPClient* active_client;
@@ -114,6 +116,7 @@ protected slots:
 	void removeTerrainSectionButtonClickedSlot();
 
 	void applySettingsSlot();
+	void applyWaterSettingsSlot();
 
 	void settingsChangedSlot();
 	void waterSurfEnabledToggledSlot(bool enabled);
@@ -149,6 +152,7 @@ private:
 	QPushButton* terrain_material_clear_all_button;
 	QPushButton* terrain_relief_clear_all_button;
 	QPushButton* terrain_height_clear_button;
+	QPushButton* terrain_apply_button;
 	QCheckBox* terrain_grid_check_box;
 	QToolButton* world_terrain_sections_button;
 	QToolButton* world_materials_button;

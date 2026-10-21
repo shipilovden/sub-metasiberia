@@ -43,6 +43,31 @@ static float evaluateParticleCurve(const Particle::Curve curve, const float t_, 
 	return t;
 }
 
+static float evaluateParticlePointCurve(const std::array<float,5>& times, const std::array<float,5>& points, const int count_, const float t)
+{
+	const int count=myClamp(count_,2,5); const float x=myClamp(t,0.f,1.f);
+	for(int i=1;i<count;++i) if(x<=times[i]) return Maths::lerp(points[i-1],points[i],(x-times[i-1])/myMax(times[i]-times[i-1],1.0e-4f));
+	return points[count-1];
+}
+
+static Colour3f evaluateParticleColourCurve(const std::array<float,5>& times, const std::array<Colour3f,5>& points, const int count_, const float t)
+{
+	const int count=myClamp(count_,2,5); const float x=myClamp(t,0.f,1.f);
+	for(int i=1;i<count;++i) if(x<=times[i]) { const float f=(x-times[i-1])/myMax(times[i]-times[i-1],1.0e-4f); return Colour3f(Maths::lerp(points[i-1].r,points[i].r,f),Maths::lerp(points[i-1].g,points[i].g,f),Maths::lerp(points[i-1].b,points[i].b,f)); }
+	return points[count-1];
+}
+
+static void setParticleSpriteFrame(OpenGLMaterial& material, const Particle& particle, const int frame)
+{
+	const int columns=myMax(1,particle.sprite_atlas_columns), rows=myMax(1,particle.sprite_atlas_rows);
+	const int cell=frame % (columns*rows);
+	const float cell_w=particle.sprite_uv_width/(float)columns, cell_h=particle.sprite_uv_height/(float)rows;
+	const float u=particle.sprite_uv_x+(float)(cell%columns)*cell_w;
+	const float v=particle.sprite_uv_y+(float)(cell/columns)*cell_h;
+	material.tex_matrix=Matrix2f(cell_w,0.f,0.f,cell_h);
+	material.tex_translation=Vec2f(u,v);
+}
+
 
 static uint8 toByte(const float x)
 {
@@ -506,6 +531,11 @@ void ParticleManager::addParticle(const Particle& particle_)
 		use_index = particles.size();
 		particles.resize(use_index + 1);
 	}
+	Particle particle = particle_;
+	if(particle.sprite_random_start_frame && particle.sprite_frame_count>1)
+		particle.sprite_random_phase = (int)rng.nextUInt((uint32)particle.sprite_frame_count);
+	if(particle.sprite_frame_rate_jitter>0.f)
+		particle.sprite_frames_per_second *= myMax(0.f,1.f+particle.sprite_frame_rate_jitter*(-1.f+2.f*rng.unitRandom()));
 
 
 	// Add gl ob
@@ -523,6 +553,7 @@ void ParticleManager::addParticle(const Particle& particle_)
 	ob->materials[0].emission_scale = particle_.additive_glow ? myMax(1.f, glow) : 1.f;
 	ob->materials[0].cast_shadows = false;
 	ob->materials[0].simple_double_sided = true;
+	setParticleSpriteFrame(ob->materials[0],particle,myMax(0,particle.sprite_first_frame+particle.sprite_random_phase));
 	if(particle_.custom_sprite_texture.nonNull())
 	{
 		ob->materials[0].albedo_texture             = particle_.custom_sprite_texture;
@@ -558,8 +589,8 @@ void ParticleManager::addParticle(const Particle& particle_)
 	ob->ob_to_world_matrix.e[1] = particle_.theta; // Since object-space vert positions are just (0,0,0) for particle geometry, we can store info in the model matrix.
 	opengl_engine->addObject(ob);
 
-	Particle particle = particle_;
 	particle.gl_ob = ob;
+	particle.sprite_current_frame=particle.sprite_first_frame+particle.sprite_random_phase;
 
 	particles[use_index] = particle;
 }
@@ -729,13 +760,28 @@ void ParticleManager::think(const float dt)
 			particle.age_s += dt;
 			const float lifetime = myMax(particle.lifetime_s, 0.001f);
 			const float t = myClamp(particle.age_s / lifetime, 0.f, 1.f);
-			particle.width = Maths::lerp(particle.start_width, particle.end_width, evaluateParticleCurve(particle.size_curve, t, particle.size_curve_mid));
-			particle.cur_opacity = Maths::lerp(particle.start_opacity, particle.end_opacity, evaluateParticleCurve(particle.opacity_curve, t, particle.opacity_curve_mid));
-			particle.colour = Colour3f(
+			const float size_curve_value=particle.size_curve_points_enabled ? evaluateParticlePointCurve(particle.size_curve_times,particle.size_curve_points,particle.size_curve_point_count,t) : evaluateParticleCurve(particle.size_curve, t, particle.size_curve_mid);
+			particle.width = Maths::lerp(particle.start_width, particle.end_width, size_curve_value);
+			const float opacity_curve_value=particle.opacity_curve_points_enabled ? evaluateParticlePointCurve(particle.opacity_curve_times,particle.opacity_curve_points,particle.opacity_curve_point_count,t) : evaluateParticleCurve(particle.opacity_curve, t, particle.opacity_curve_mid);
+			particle.cur_opacity = Maths::lerp(particle.start_opacity, particle.end_opacity, opacity_curve_value);
+			particle.colour = particle.colour_curve_enabled ? evaluateParticleColourCurve(particle.colour_curve_times,particle.colour_curve_points,particle.colour_curve_point_count,t) : Colour3f(
 				Maths::lerp(particle.start_colour.r, particle.end_colour.r, t),
 				Maths::lerp(particle.start_colour.g, particle.end_colour.g, t),
 				Maths::lerp(particle.start_colour.b, particle.end_colour.b, t)
 			);
+			const int frame_count=myMax(1,particle.sprite_frame_count);
+			const int step=(int)std::floor(particle.age_s*particle.sprite_frames_per_second)+particle.sprite_random_phase;
+			int frame_offset=0;
+			if(particle.sprite_animation_mode==1) frame_offset=myMin(step,frame_count-1);
+			else if(particle.sprite_animation_mode==2 && frame_count>1) { const int period=2*(frame_count-1); const int phase=step%period; frame_offset=phase<frame_count?phase:period-phase; }
+			else frame_offset=step%frame_count;
+			const int animated_frame=particle.sprite_first_frame+frame_offset;
+			if(animated_frame!=particle.sprite_current_frame)
+			{
+				particle.sprite_current_frame=animated_frame;
+				setParticleSpriteFrame(particle.gl_ob->materials[0],particle,animated_frame);
+				opengl_engine->updateAllMaterialDataOnGPU(*particle.gl_ob);
+			}
 
 			const float glow = particle.additive_glow ? particle.glow_strength : 1.f;
 			particle.gl_ob->materials[0].albedo_linear_rgb = particle.colour;

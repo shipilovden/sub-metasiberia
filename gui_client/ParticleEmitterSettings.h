@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2026 -
 
 
 #include <graphics/colour3.h>
+#include <array>
 #include <string>
 
 
@@ -62,6 +63,7 @@ struct ParticleEmitterSettings
 		RenderMode_Soft,
 		RenderMode_AdditiveGlow
 	};
+	enum SpriteAnimationMode { SpriteAnimation_Loop, SpriteAnimation_Once, SpriteAnimation_PingPong };
 
 	ParticleEmitterSettings();
 
@@ -79,6 +81,14 @@ struct ParticleEmitterSettings
 	Shape shape;
 	RenderMode render_mode;
 	std::string sprite_path;
+	// Normalised sprite crop and row-major atlas animation settings.
+	float sprite_uv_x, sprite_uv_y, sprite_uv_width, sprite_uv_height;
+	int sprite_atlas_columns, sprite_atlas_rows, sprite_first_frame, sprite_frame_count;
+	float sprite_frames_per_second;
+	bool sprite_loop;
+	SpriteAnimationMode sprite_animation_mode;
+	bool sprite_random_start_frame;
+	float sprite_frame_rate_jitter;
 	float custom_dir_x;
 	float custom_dir_y;
 	float custom_dir_z;
@@ -91,19 +101,32 @@ struct ParticleEmitterSettings
 	float spread_deg;
 	float turbulence_strength;
 	float lifetime_s;
+	float lifetime_jitter;
 	float start_width;
 	float end_width;
 	Curve size_curve;
 	float size_curve_mid;
+	std::array<float, 5> size_curve_points;
+	std::array<float, 5> size_curve_times;
+	int size_curve_point_count;
+	bool size_curve_points_enabled;
 	float size_jitter;
 	float opacity;
 	float end_opacity;
 	Curve opacity_curve;
 	float opacity_curve_mid;
+	std::array<float, 5> opacity_curve_points;
+	std::array<float, 5> opacity_curve_times;
+	int opacity_curve_point_count;
+	bool opacity_curve_points_enabled;
 	float opacity_jitter;
 	Colour3f colour;
 	Colour3f start_colour;
 	Colour3f end_colour;
+	std::array<Colour3f, 5> colour_curve_points;
+	std::array<float, 5> colour_curve_times;
+	int colour_curve_point_count;
+	bool colour_curve_enabled;
 	float colour_jitter;
 	float trail_length;
 	float glow_strength;
