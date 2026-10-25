@@ -3447,11 +3447,11 @@ QJsonObject NeuroControlWidget::handleMCPRequest(const QString& tool, const QJso
 			{"glossary", "NEUROCONTROL_GLOSSARY_RU.md"}, {"datasets", "NEUROCONTROL_DATASETS.md"},
 			{"models", "NEUROCONTROL_MODELS.md"}, {"tools", "NEUROCONTROL_MCP_TOOLS.md"},
 			{"experiments", "NEUROCONTROL_EXPERIMENTS.md"}, {"troubleshooting", "NEUROCONTROL_TROUBLESHOOTING.md"},
-			{"medical_eeg", "NEUROCONTROL_MEDICAL_EEG.md"}, {"ai_instructions", "NEUROCONTROL_AI_INSTRUCTIONS.md"}
+			{"medical_eeg", "NEUROCONTROL_MEDICAL_EEG.md"}, {"ai_instructions", "NEUROCONTROL_SAFE_USE.md"}
 		};
 		const QString topic = arguments.value(QStringLiteral("topic")).toString();
 		if(!documents.contains(topic)) return neuroMCPError("KNOWLEDGE_TOPIC_NOT_FOUND", "Укажите один из разделов: overview, architecture, glossary, datasets, models, tools, experiments, troubleshooting, medical_eeg, ai_instructions.");
-		const QString path = root_dir.filePath(QStringLiteral("docs/mcp/%1").arg(documents.value(topic)));
+		const QString path = root_dir.filePath(QStringLiteral("knowledge/%1").arg(documents.value(topic)));
 		if(!pathIsWithin(neuro_root, path)) return neuroMCPError("KNOWLEDGE_PATH_NOT_ALLOWED", "Файл базы знаний находится вне каталога NeuroControl.");
 		QFile file(path);
 		if(!file.open(QIODevice::ReadOnly) || file.size() > 128 * 1024) return neuroMCPError("KNOWLEDGE_DOCUMENT_UNAVAILABLE", QStringLiteral("Не удалось прочитать документ %1.").arg(documents.value(topic)));

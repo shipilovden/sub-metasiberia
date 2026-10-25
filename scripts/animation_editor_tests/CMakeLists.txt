@@ -10,7 +10,10 @@ add_test(NAME panel COMMAND animation_panel_test)
 
 # Build only the importer's CPU dependencies; no client entry point, GL or network.
 set(GLARE_CORE_DIR "C:/programming/glare-core" CACHE PATH "Engine source headers")
-set(NATIVE_OUTPUT_DIR "C:/programming/substrata_output_qt/vs2022/cyberspace_x64/RelWithDebInfo" CACHE PATH "Native libraries")
+set(NATIVE_OUTPUT_DIR "" CACHE PATH "Isolated native build directory containing libs.lib")
+if(NOT EXISTS "${NATIVE_OUTPUT_DIR}/libs.lib")
+  message(FATAL_ERROR "Set NATIVE_OUTPUT_DIR to the verified isolated Qt build output containing libs.lib")
+endif()
 add_executable(animation_import_test import.cpp interpolation.cpp orientation.cpp vrm_object.cpp ../../gui_client/AnimationImport.cpp
   ../../gui_client/GestureAnimationRetarget.cpp
   ../../gui_client/AnimationFBXImport.cpp ../../gui_client/AnimationGLBTracks.cpp
@@ -19,6 +22,7 @@ target_include_directories(animation_import_test PRIVATE ${GLARE_CORE_DIR} ${GLA
   ${GLARE_CORE_DIR}/tracy/public ${GLARE_CORE_DIR}/zstd/lib/common ${GLARE_CORE_DIR}/zstd/lib
   ${GLARE_CORE_DIR}/Imath/src/Imath ${GLARE_CORE_DIR}/Imath/config_windows)
 target_compile_definitions(animation_import_test PRIVATE NOMINMAX _USE_MATH_DEFINES UNICODE _UNICODE COMPILE_SSE4_CODE=1)
+target_compile_definitions(animation_import_test PRIVATE ANIMATION_TEST_IDLE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../resources/animations/Idle.subanim")
 set_source_files_properties(../../third_party/ufbx/ufbx.c PROPERTIES COMPILE_DEFINITIONS "UFBX_MINIMAL;UFBX_NO_STDIO")
 target_link_libraries(animation_import_test PRIVATE Qt5::Core "${NATIVE_OUTPUT_DIR}/libs.lib" ws2_32 Iphlpapi)
 foreach(unit graphics/AnimationData graphics/FormatDecoderGLTF graphics/BatchedMesh maths/Matrix4f

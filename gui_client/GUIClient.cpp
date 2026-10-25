@@ -4285,7 +4285,6 @@ static std::string getResolvedWorldTextFontPath(GUIClient& gui_client, const std
 	font_dirs.push_back("resources/fonts");
 	font_dirs.push_back("../resources/fonts");
 	font_dirs.push_back("../../resources/fonts");
-	font_dirs.push_back("C:/programming/substrata/resources/fonts");
 
 	for(size_t i=0; i<font_dirs.size(); ++i)
 	{
@@ -9823,7 +9822,10 @@ void GUIClient::takeXRScreenshot()
 
 	try
 	{
-		const std::string dir = "C:/programming/substrata/vr_screenshots";
+		if(appdata_path.empty())
+			throw glare::Exception("Application data directory is unavailable for XR screenshots.");
+		const std::string dir = FileUtils::join(appdata_path, "vr_screenshots");
+		FileUtils::createDirIfDoesNotExist(dir);
 
 		// Find the next free filename.
 		std::string path;

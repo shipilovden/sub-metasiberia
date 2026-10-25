@@ -2,8 +2,6 @@
 
 set(CURRENT_TARGET gui_client)
 
-option(ENABLE_NEUROCONTROL "Build experimental NeuroControl support" OFF)
-
 if(NOT USE_SDL)
 	if(ENABLE_NEUROCONTROL)
 		set(MSVC_RUNTIME dynamic)
@@ -1431,6 +1429,18 @@ if(NOT USE_SDL)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
 			$<TARGET_FILE:BoardController> $<TARGET_FILE:DataHandler> $<TARGET_FILE:MLModule>
 			$<TARGET_FILE_DIR:${CURRENT_TARGET}>)
+	if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+		set(NEUROCONTROL_ONNXRUNTIME_DLL
+			"${CMAKE_SOURCE_DIR}/third_party/brainflow/third_party/onnxruntime/runtimes/win-x64/native/onnxruntime_x64.dll")
+		if(NOT EXISTS "${NEUROCONTROL_ONNXRUNTIME_DLL}")
+			message(FATAL_ERROR "NeuroControl requires the vendored Windows x64 ONNX Runtime DLL: ${NEUROCONTROL_ONNXRUNTIME_DLL}")
+		endif()
+		add_custom_command(TARGET ${CURRENT_TARGET} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${NEUROCONTROL_ONNXRUNTIME_DLL}" "$<TARGET_FILE_DIR:${CURRENT_TARGET}>"
+			COMMENT "Copy NeuroControl ONNX Runtime beside gui_client.exe"
+			VERBATIM)
+	endif()
 	endif()
 	# Animation-only FBX reader: no tessellation, OBJ, caches, or filesystem IO.
 	set_source_files_properties(${CMAKE_SOURCE_DIR}/third_party/ufbx/ufbx.c

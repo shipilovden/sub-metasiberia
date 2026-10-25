@@ -313,8 +313,8 @@ def copyCyberspaceResources(substrata_repos_dir, glare_core_repos_dir, dist_dir,
 	# Copy OpenGL data.
 	FileUtils.cp_r("#{glare_core_repos_dir}/opengl/gl_data", dist_dir + "/data", :verbose => true)
 
-	# Copy licence.txt
-	FileUtils.cp_r(substrata_repos_dir + "/docs/licence.txt", dist_dir + "/", :verbose => true)
+	# Preserve the bundled third-party notices under the installer-facing filename.
+	FileUtils.cp_r(substrata_repos_dir + "/licenses/THIRD_PARTY_NOTICES.txt", dist_dir + "/licence.txt", :verbose => true)
 
 	# Make sure files are group/other readable, they weren't for some reason.  The Dir.glob gets all files (recursively) in dir.
 	FileUtils.chmod("u=wr,go=rr", Dir.glob("#{dist_dir}/data/shaders/*.*"))

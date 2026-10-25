@@ -5336,9 +5336,6 @@ void ObjectEditor::loadAvailableFonts()
 	possible_paths.push_back("../resources/fonts");
 	possible_paths.push_back("../../resources/fonts");
 	
-	// Try 5: absolute development path fallback.
-	possible_paths.push_back("C:/programming/substrata/resources/fonts");
-	
 	for(const auto& fonts_dir : possible_paths)
 	{
 		try

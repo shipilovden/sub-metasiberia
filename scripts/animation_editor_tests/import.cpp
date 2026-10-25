@@ -27,7 +27,9 @@ int main(int argc, char** argv)
 			return 0;
 		}
 		testInterpolation();
-		testOrientation("C:/programming/substrata/resources/animations/Idle.subanim");
+		require(argc >= 2, "animation fixture directory argument is required");
+		const std::string idle_path = ANIMATION_TEST_IDLE_PATH;
+		testOrientation(idle_path);
 		QTemporaryDir temp;
 		require(temp.isValid(), "temp");
 		QDir dir(QString::fromLocal8Bit(argv[1]));
@@ -57,7 +59,7 @@ int main(int argc, char** argv)
 			}
 			const auto fast = AnimationImport::importFile(first.subanim_path, temp.filePath(QString::number(count++)+".subanim"), "Fast", 2);
 			const auto canonical = AnimationImport::importFile(input, temp.filePath(QString::number(count++)+".subanim"), "World compatible", 1, {},
-				"C:/programming/substrata/resources/animations/Idle.subanim");
+				QString::fromUtf8(idle_path.c_str()));
 			require(std::fabs(canonical.duration_seconds-first.duration_seconds)<.001, "canonical conversion changed clip duration");
 			require(std::fabs(fast.duration_seconds * 2 - first.duration_seconds) < 0.001, "speed bake");
 			require(first.animation_data->animations[0]->name == first.name.toStdString(), "name mismatch");

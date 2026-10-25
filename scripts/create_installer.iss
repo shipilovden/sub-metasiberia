@@ -12,8 +12,18 @@
 #define MyAppAuthor "Denis Shipilov"
 #define MyAppURL "https://vr.metasiberia.com/"
 #define MyAppExeName "gui_client.exe"
-#define SourceDir "C:\programming\substrata_output\vs2022\cyberspace_x64\RelWithDebInfo"
-#define OutputDir "C:\programming\substrata_output\installers"
+#ifndef SourceDir
+  #if GetEnv("CYBERSPACE_OUTPUT") == ""
+    #error "Set CYBERSPACE_OUTPUT or define SourceDir when compiling this installer."
+  #endif
+  #define SourceDir AddBackslash(GetEnv("CYBERSPACE_OUTPUT")) + "vs2022\cyberspace_x64\RelWithDebInfo"
+#endif
+#ifndef OutputDir
+  #if GetEnv("CYBERSPACE_OUTPUT") == ""
+    #error "Set CYBERSPACE_OUTPUT or define OutputDir when compiling this installer."
+  #endif
+  #define OutputDir AddBackslash(GetEnv("CYBERSPACE_OUTPUT")) + "installers"
+#endif
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.

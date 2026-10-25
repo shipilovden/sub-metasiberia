@@ -4,7 +4,7 @@
 
 param(
     [string]$SourceDir = "",
-    [string]$OutputDir = "C:\programming\substrata_output\installers",
+    [string]$OutputDir = "",
     [string]$AppName = "Metasiberia Beta",
     [string]$Version = "",
     [ValidateSet("Release", "RelWithDebInfo")]
@@ -22,10 +22,6 @@ function Resolve-DefaultSourceDir {
         $outputRoots.Add($env:CYBERSPACE_OUTPUT)
     }
 
-    # Common local output roots (in order of preference).
-    $outputRoots.Add("C:\programming\substrata_output_qt")
-    $outputRoots.Add("C:\programming\substrata_output")
-    $outputRoots.Add("C:\programming\substrata_output_qt6")
 
     foreach ($root in $outputRoots) {
         if ([string]::IsNullOrWhiteSpace($root)) { continue }
@@ -36,7 +32,7 @@ function Resolve-DefaultSourceDir {
 
     }
 
-    throw "Could not find gui_client.exe in any known output folder. Set -SourceDir explicitly if needed."
+    throw "Could not find gui_client.exe. Set -SourceDir or CYBERSPACE_OUTPUT explicitly."
 }
 
 function Resolve-Version {
@@ -47,7 +43,7 @@ function Resolve-Version {
         return "v$RequestedVersion"
     }
 
-    $versionHeader = "C:\programming\substrata\shared\Version.h"
+    $versionHeader = Join-Path $PSScriptRoot '..\shared\Version.h'
     if (Test-Path $versionHeader) {
         $match = Select-String -Path $versionHeader -Pattern 'cyberspace_version\s*=\s*"([^"]+)"' | Select-Object -First 1
         if ($match -and $match.Matches.Count -gt 0) {
@@ -81,9 +77,9 @@ function New-NsisInstaller {
         [string]$TempDir
     )
 
-    $iconPath = "C:\programming\substrata\icons\metasiberia.ico"
+    $iconPath = Join-Path $PSScriptRoot '..\icons\metasiberia.ico'
     if (-not (Test-Path $iconPath)) {
-        $iconPath = "C:\programming\substrata\icons\substrata.ico"
+        $iconPath = Join-Path $PSScriptRoot '..\icons\substrata.ico'
     }
 
     if (-not (Test-Path $iconPath)) {
@@ -283,6 +279,15 @@ $stringBlock
 
 if ([string]::IsNullOrWhiteSpace($SourceDir)) {
     $SourceDir = Resolve-DefaultSourceDir -PreferredConfig $Config
+}
+
+if ([string]::IsNullOrWhiteSpace($OutputDir)) {
+    $outputRoot = if (-not [string]::IsNullOrWhiteSpace($env:CYBERSPACE_OUTPUT)) {
+        $env:CYBERSPACE_OUTPUT
+    } else {
+        [IO.Path]::GetTempPath()
+    }
+    $OutputDir = Join-Path $outputRoot "MetasiberiaInstallers"
 }
 
 if (-not (Test-Path (Join-Path $SourceDir "gui_client.exe"))) {

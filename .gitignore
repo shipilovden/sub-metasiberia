@@ -16,3 +16,48 @@ vr_screenshots/
 # Generated Python bytecode
 __pycache__/
 *.pyc
+
+# Internal AI agent instructions; keep local for Codex and other tools.
+AGENTS.md
+
+# Internal project documentation; keep the working copy available locally.
+/docs/
+
+# Local operator, deployment, publishing, and diagnostic tooling.
+/scripts/diagnostics/
+/scripts/deploy_web_to_metasiberia_v2.ps1
+/scripts/publish_update.ps1
+/scripts/publish_wiki_to_github.ps1
+/scripts/metasiberia_backup_pull.ps1
+/scripts/metasiberia_map_maintenance.py
+/scripts/capture_site_for_figma.ps1
+/scripts/import_site_capture_to_figma_via_talk_to_figma.ps1
+/scripts/snapshot_site_pages.ps1
+/scripts/snapshot_web_from_metasiberia_v2.ps1
+/scripts/start_figma_mcp_socket.ps1
+/scripts/start_vive_recording_sync.ps1
+/scripts/sync_vive_recordings.py
+/scripts/analyze_xr_pose_trace.py
+/scripts/stage_qt_integration_runtime.ps1
+
+# Local server service and deployment configuration.
+/systemd/
+
+# Local website capture and Figma import tooling.
+/tools/site_capture/
+/tools/figma/metasiberia_site_importer/
+
+# Private NeuroControl working documentation and research notes.
+/neurocontrol/docs/
+/neurocontrol/README.md
+/neurocontrol/calibration/README.md
+/neurocontrol/classification/README.md
+/neurocontrol/simulation/README.md
+
+# Local SDL CI workflows; preserved in the private repository, excluded from public publication.
+/.github/workflows/cmake-configure-linux.yml
+/.github/workflows/windows-main-ci.yml
+
+# Local build wrapper and contributor note
+/scripts/build_neurocontrol_windows.ps1
+/resonance-audio/nick notes.txt

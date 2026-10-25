@@ -13,7 +13,7 @@ def fail(message: str) -> None:
 root = Path(sys.argv[1]).resolve()
 registry_path = root / "gui_client" / "MCPClientHandler.cpp"
 widget_path = root / "gui_client" / "NeuroControlWidget.cpp"
-tools_doc_path = root / "neurocontrol" / "docs" / "mcp" / "NEUROCONTROL_MCP_TOOLS.md"
+tools_doc_path = root / "neurocontrol" / "knowledge" / "NEUROCONTROL_MCP_TOOLS.md"
 importer_path = root / "neurocontrol" / "tools" / "prepare_recording.py"
 
 registry_source = registry_path.read_text(encoding="utf-8")
@@ -59,8 +59,8 @@ if 'read_bids_event_sidecars' not in importer_source or '"transformations"' not 
     fail("the importer must preserve available event sidecars and record every conversion")
 if '"path"' not in registry_source.split('neuroToolSchema("neuro.load_recording"', 1)[1].split("));", 1)[0]:
     fail("neuro.load_recording schema must advertise the bounded path selector")
-if "EDF/EDF+" not in tools_doc or "BDF" not in tools_doc or "datasets/processed" not in tools_doc:
-    fail("the MCP guide must document the generic formats and bounded data roots")
+if "EDF/EDF+" not in tools_doc or "BDF" not in tools_doc or "float32" not in tools_doc:
+    fail("the MCP guide must document supported EEG formats and prepared sample representation")
 for prediction_field in ('"candidate_command"', '"awaiting_confirmation"', '"consecutive_candidate_windows"', '"class_command"'):
     if prediction_field not in widget_source:
         fail(f"neuro.get_prediction must distinguish candidate from emitted command ({prediction_field})")
@@ -135,12 +135,31 @@ expected_docs = {
     "NEUROCONTROL_EXPERIMENTS.md",
     "NEUROCONTROL_TROUBLESHOOTING.md",
     "NEUROCONTROL_MEDICAL_EEG.md",
-    "NEUROCONTROL_AI_INSTRUCTIONS.md",
+    "NEUROCONTROL_SAFE_USE.md",
 }
-docs_dir = root / "neurocontrol" / "docs" / "mcp"
-missing_docs = sorted(name for name in expected_docs if not (docs_dir / name).is_file())
+knowledge_dir = root / "neurocontrol" / "knowledge"
+missing_docs = sorted(name for name in expected_docs if not (knowledge_dir / name).is_file())
 if missing_docs:
     fail(f"knowledge files are missing: {missing_docs}")
+for knowledge_path in sorted(knowledge_dir.glob("*.md")):
+    text = knowledge_path.read_text(encoding="utf-8")
+    if re.search(r"\b[A-Z]:\\(?:Users|programming)\\|\b(?:\d{1,3}\.){3}\d{1,3}\b|@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", text):
+        fail(f"public knowledge file contains a local path, IP address, or email indicator: {knowledge_path.name}")
+    if "Сообщение пользователя от" in text or "docs/mcp/" in text:
+        fail(f"public knowledge file contains private note markers: {knowledge_path.name}")
+
+resource_region = registry_source.split("QJsonArray neuroKnowledgeResources()", 1)[1].split(
+    "QMap<QString, QString> neuroKnowledgeFileNames()", 1
+)[0]
+resource_topics = re.findall(r'\{"([a-z_]+)", "NEUROCONTROL_[A-Z_]+\.md"\}', resource_region)
+if len(resource_topics) != 10 or len(set(resource_topics)) != 10:
+    fail(f"expected 10 unique public knowledge topics, found {len(set(resource_topics))}")
+if "NEUROCONTROL_SAFE_USE.md" not in resource_region:
+    fail("the ai_instructions MCP topic must resolve to the public safe-use document")
+if "neurocontrol/knowledge" not in registry_source or 'QStringLiteral("knowledge/%1")' not in registry_source:
+    fail("MCP resources must load from the public knowledge directory")
+if 'QStringLiteral("knowledge/%1")' not in widget_source or 'QStringLiteral("docs/mcp/%1")' in widget_source:
+    fail("neuro.get_knowledge must load public knowledge files without falling back to private docs")
 if "47" not in tools_doc or "neuro.configure_lsl" not in tools_doc or "neuro.run_lsl_diagnostic" not in tools_doc or "neuro.start_lsl_recording" not in tools_doc:
     fail("the MCP tools guide does not document the current 47-tool registry and LSL recording workflow")
 

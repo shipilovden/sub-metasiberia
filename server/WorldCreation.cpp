@@ -812,12 +812,7 @@ void WorldCreation::createParcelsAndRoads(Reference<ServerAllWorldsState> world_
 		if(false)
 		{
 			PCG32 rng(1);
-
-#ifdef WIN32
-			Map2DRef road_map = PNGDecoder::decode("D:\\art\\substrata\\parcels\\roads.png");
-#else
-			Map2DRef road_map = PNGDecoder::decode("/home/nick/substrata/roads.png");
-#endif
+			Map2DRef road_map = PNGDecoder::decode("resources/roads.png");
 
 			for(int i=0; i<300; ++i)
 				makeRandomParcel(/*region botleft=*/Vec2d(335.f, 75), /*region topright=*/Vec2d(335.f + 130.f, 205.f), rng, next_id, world_state->getRootWorldState(), road_map,

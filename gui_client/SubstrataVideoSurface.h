@@ -119,8 +119,7 @@ public:
 
 	virtual QList<QVideoFrame::PixelFormat>	supportedPixelFormats(QAbstractVideoBuffer::HandleType handle_type) const override
 	{
-		// NOTE: opengl texture rendering not supported with Qt on windows currently, see D3DPresentEngine::supportsTextureRendering()
-		// in D:\programming\qt\qt-everywhere-src-5.13.2\qtmultimedia\src\plugins\common\evr\evrd3dpresentengine.cpp
+		// OpenGL texture rendering depends on the active Qt platform backend.
 
 		/*QList<QVideoFrame::PixelFormat> formats;
 		formats.push_back(QVideoFrame::Format_RGB24);

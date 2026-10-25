@@ -216,7 +216,7 @@ QJsonArray neuroKnowledgeResources()
 		const QMap<QString, QString> docs{{"overview", "NEUROCONTROL_OVERVIEW.md"}, {"architecture", "NEUROCONTROL_ARCHITECTURE.md"},
 			{"glossary", "NEUROCONTROL_GLOSSARY_RU.md"}, {"datasets", "NEUROCONTROL_DATASETS.md"}, {"models", "NEUROCONTROL_MODELS.md"},
 			{"tools", "NEUROCONTROL_MCP_TOOLS.md"}, {"experiments", "NEUROCONTROL_EXPERIMENTS.md"}, {"troubleshooting", "NEUROCONTROL_TROUBLESHOOTING.md"},
-			{"medical_eeg", "NEUROCONTROL_MEDICAL_EEG.md"}, {"ai_instructions", "NEUROCONTROL_AI_INSTRUCTIONS.md"}};
+			{"medical_eeg", "NEUROCONTROL_MEDICAL_EEG.md"}, {"ai_instructions", "NEUROCONTROL_SAFE_USE.md"}};
 		for(auto it = docs.cbegin(); it != docs.cend(); ++it)
 		{
 			const QString uri = QStringLiteral("metasiberia://neurocontrol/%1").arg(it.key());
@@ -233,7 +233,7 @@ QMap<QString, QString> neuroKnowledgeFileNames()
 	return {{"overview", "NEUROCONTROL_OVERVIEW.md"}, {"architecture", "NEUROCONTROL_ARCHITECTURE.md"},
 		{"glossary", "NEUROCONTROL_GLOSSARY_RU.md"}, {"datasets", "NEUROCONTROL_DATASETS.md"}, {"models", "NEUROCONTROL_MODELS.md"},
 		{"tools", "NEUROCONTROL_MCP_TOOLS.md"}, {"experiments", "NEUROCONTROL_EXPERIMENTS.md"}, {"troubleshooting", "NEUROCONTROL_TROUBLESHOOTING.md"},
-		{"medical_eeg", "NEUROCONTROL_MEDICAL_EEG.md"}, {"ai_instructions", "NEUROCONTROL_AI_INSTRUCTIONS.md"}};
+		{"medical_eeg", "NEUROCONTROL_MEDICAL_EEG.md"}, {"ai_instructions", "NEUROCONTROL_SAFE_USE.md"}};
 }
 
 
@@ -247,15 +247,15 @@ bool isPathWithinDirectory(const QString& root, const QString& path)
 }
 
 
-QString findNeuroDocsRoot()
+QString findNeuroKnowledgeRoot()
 {
 	for(QString start : {QDir::currentPath(), QFileInfo(QString::fromUtf8(__FILE__)).absolutePath()})
 	{
 		QDir dir(start);
 		for(int depth = 0; depth < 10; ++depth)
 		{
-			if(dir.exists(QStringLiteral("neurocontrol/docs/mcp"))) return dir.filePath(QStringLiteral("neurocontrol"));
-			if(dir.dirName() == QStringLiteral("neurocontrol") && dir.exists(QStringLiteral("docs/mcp"))) return dir.absolutePath();
+			if(dir.exists(QStringLiteral("neurocontrol/knowledge"))) return dir.filePath(QStringLiteral("neurocontrol"));
+			if(dir.dirName() == QStringLiteral("neurocontrol") && dir.exists(QStringLiteral("knowledge"))) return dir.absolutePath();
 			if(!dir.cdUp()) break;
 		}
 	}
@@ -574,8 +574,8 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 					writeJSONRPCError(reply_info, id_json, -32602, "Unknown NeuroControl knowledge resource.");
 					return;
 				}
-				const QString docs_root = findNeuroDocsRoot();
-				const QString path = docs_root.isEmpty() ? QString() : QDir(docs_root).filePath(QStringLiteral("docs/mcp/%1").arg(docs.value(topic)));
+				const QString docs_root = findNeuroKnowledgeRoot();
+				const QString path = docs_root.isEmpty() ? QString() : QDir(docs_root).filePath(QStringLiteral("knowledge/%1").arg(docs.value(topic)));
 				if(path.isEmpty() || !QFileInfo::exists(path) || !isPathWithinDirectory(docs_root, path))
 				{
 					writeJSONRPCError(reply_info, id_json, -32603, "NeuroControl knowledge document is unavailable.");

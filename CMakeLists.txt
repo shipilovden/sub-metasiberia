@@ -32,6 +32,11 @@ endif()
 # Set the real project name
 project (${PROJECT_NAME})
 
+# NeuroControl is part of the standard Windows Qt client. Keep this option at
+# the root so the output-safety checks below see its default before any
+# subdirectory is configured. Pass -DENABLE_NEUROCONTROL=OFF for diagnostics.
+option(ENABLE_NEUROCONTROL "Build NeuroControl EEG/BCI support" ON)
+
 # Visual Studio may automatically rerun CMake during a build. Lock that
 # regeneration to the isolated output root chosen at configure time; otherwise
 # an absent or changed CYBERSPACE_OUTPUT could silently redirect artifacts into
@@ -55,12 +60,12 @@ if(WIN32 AND CMAKE_GENERATOR MATCHES "Visual Studio")
 	if(NOT _cyberspace_output_actual_normalized STREQUAL _cyberspace_output_expected_normalized)
 		message(FATAL_ERROR "CYBERSPACE_OUTPUT changed or differs from CYBERSPACE_OUTPUT_EXPECTED. Refusing to configure/build. Expected '${_cyberspace_output_expected}', got '$ENV{CYBERSPACE_OUTPUT}'.")
 	endif()
-	if(NOT _cyberspace_output_expected_normalized MATCHES "^c:/programming/substrata_nc_output_(off|on)_[a-z0-9_-]+$")
-		message(FATAL_ERROR "Output root must be an isolated C:/programming/substrata_nc_output_<off|on>_<label> directory; got '${_cyberspace_output_expected}'.")
+	if(NOT _cyberspace_output_expected_normalized MATCHES "^c:/programming/(metasiberia|substrata_nc)_output_(off|on)_[a-z0-9_-]+$")
+		message(FATAL_ERROR "Output root must be an isolated C:/programming/metasiberia_output_<off|on>_<label> directory; got '${_cyberspace_output_expected}'.")
 	endif()
-	if(ENABLE_NEUROCONTROL AND NOT _cyberspace_output_expected_normalized MATCHES "^c:/programming/substrata_nc_output_on_")
+	if(ENABLE_NEUROCONTROL AND NOT _cyberspace_output_expected_normalized MATCHES "^c:/programming/(metasiberia|substrata_nc)_output_on_")
 		message(FATAL_ERROR "ENABLE_NEUROCONTROL=ON requires a dedicated output_on directory.")
-	elseif(NOT ENABLE_NEUROCONTROL AND _cyberspace_output_expected_normalized MATCHES "^c:/programming/substrata_nc_output_on_")
+	elseif(NOT ENABLE_NEUROCONTROL AND _cyberspace_output_expected_normalized MATCHES "^c:/programming/(metasiberia|substrata_nc)_output_on_")
 		message(FATAL_ERROR "ENABLE_NEUROCONTROL=OFF cannot use an output_on directory.")
 	endif()
 	set(CYBERSPACE_OUTPUT_EXPECTED "${_cyberspace_output_expected}" CACHE PATH "Expected isolated output root for Windows integration builds" FORCE)
@@ -277,7 +282,7 @@ MESSAGE("FUZZING: ${FUZZING}")
 if(EMSCRIPTEN)
 	set(jpegturbodir "${GLARE_CORE_LIBS_ENV}/libjpeg-turbo/libjpeg-turbo-emscripten-build")
 elseif(WIN32)
-	set(jpegturbodir "${GLARE_CORE_LIBS_ENV}/libjpeg-turbo/libjpeg-turbo-${SUBSTRATA_JPEGTURBO_VERSION}-vs${CYBERSPACE_VS_VER}-install") # e.g. D:\programming\libjpeg-turbo\libjpeg-turbo-vs2019-install
+	set(jpegturbodir "${GLARE_CORE_LIBS_ENV}/libjpeg-turbo/libjpeg-turbo-${SUBSTRATA_JPEGTURBO_VERSION}-vs${CYBERSPACE_VS_VER}-install")
 else()
 	set(jpegturbodir "${GLARE_CORE_LIBS_ENV}/libjpeg-turbo/libjpeg-turbo-${SUBSTRATA_JPEGTURBO_VERSION}-install")
 	#set(jpegturbodir "${GLARE_CORE_LIBS_ENV}/libjpeg-turbo-builds/build")
