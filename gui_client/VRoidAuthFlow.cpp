@@ -18,9 +18,6 @@ See VRoidAuthFlow.h
 #include "HTTPClient.h"
 
 #include <QtCore/QDateTime>
-#include <QtCore/QDir>
-#include <QtCore/QFile>
-#include <QtCore/QRegularExpression>
 #include <QtCore/QSettings>
 #include <QtCore/QUrl>
 #include <QtCore/QUrlQuery>
@@ -90,71 +87,10 @@ static QString vroidClientSecret()
 }
 
 
-static bool tryLoadVRoidCredentialsFromLocalSecrets(QString& out_client_id, QString& out_client_secret)
-{
-	static bool attempted_load = false;
-	static QString cached_client_id;
-	static QString cached_client_secret;
-
-	if(!attempted_load)
-	{
-		attempted_load = true;
-
-		QStringList candidate_paths;
-		candidate_paths << "C:/programming/AGENTS_SECRETS.local.md";
-		candidate_paths << "C:\\programming\\AGENTS_SECRETS.local.md";
-		candidate_paths << QDir::currentPath() + "/AGENTS_SECRETS.local.md";
-
-		const QRegularExpression re(
-			"###\\s*VRoid Hub OAuth \\(Metasiberia\\).*?(?:Application ID|Client ID)\\s*:\\s*`?([^`\\r\\n]+)`?.*?(?:Secret|Client Secret)\\s*:\\s*`?([^`\\r\\n]+)`?",
-			QRegularExpression::DotMatchesEverythingOption | QRegularExpression::CaseInsensitiveOption
-		);
-
-		for(int i = 0; i < candidate_paths.size(); ++i)
-		{
-			QFile f(candidate_paths[i]);
-			if(!f.open(QIODevice::ReadOnly | QIODevice::Text))
-				continue;
-
-			const QString text = QString::fromUtf8(f.readAll());
-			f.close();
-
-			const QRegularExpressionMatch m = re.match(text);
-			if(m.hasMatch())
-			{
-				cached_client_id = m.captured(1).trimmed();
-				cached_client_secret = m.captured(2).trimmed();
-				if(!cached_client_id.isEmpty() && !cached_client_secret.isEmpty())
-					break;
-			}
-		}
-	}
-
-	if(cached_client_id.isEmpty() || cached_client_secret.isEmpty())
-		return false;
-
-	out_client_id = cached_client_id;
-	out_client_secret = cached_client_secret;
-	return true;
-}
-
-
 static void resolveVRoidCredentials(QString& out_client_id, QString& out_client_secret)
 {
 	out_client_id = vroidClientId();
 	out_client_secret = vroidClientSecret();
-
-	if(!out_client_id.isEmpty() && !out_client_secret.isEmpty())
-		return;
-
-	QString file_client_id, file_client_secret;
-	if(tryLoadVRoidCredentialsFromLocalSecrets(file_client_id, file_client_secret))
-	{
-		if(out_client_id.isEmpty())
-			out_client_id = file_client_id;
-		if(out_client_secret.isEmpty())
-			out_client_secret = file_client_secret;
-	}
 }
 
 
@@ -329,7 +265,7 @@ void VRoidAuthFlow::startLogin()
 	resolveVRoidCredentials(client_id, client_secret);
 	if(client_id.isEmpty() || client_secret.isEmpty())
 	{
-		emit loginFailed("VRoid OAuth is not configured. Set METASIBERIA_VROID_CLIENT_ID / METASIBERIA_VROID_CLIENT_SECRET, or add VRoid credentials to C:\\programming\\AGENTS_SECRETS.local.md.");
+		emit loginFailed("VRoid OAuth is not configured. Set METASIBERIA_VROID_CLIENT_ID and METASIBERIA_VROID_CLIENT_SECRET.");
 		return;
 	}
 

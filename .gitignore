@@ -61,3 +61,6 @@ AGENTS.md
 # Local build wrapper and contributor note
 /scripts/build_neurocontrol_windows.ps1
 /resonance-audio/nick notes.txt
+
+# Keep the local photo-mode test guide out of the public tree.
+/scripts/photo_mode_tests/README.md

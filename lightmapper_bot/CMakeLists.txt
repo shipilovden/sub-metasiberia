@@ -164,10 +164,12 @@ else()
 endif()
 
 
-# Use $ENV{INDIGO_OUTPUT}?
+if(NOT DEFINED ENV{INDIGO_TRUNK_DIR} OR "$ENV{INDIGO_TRUNK_DIR}" STREQUAL "")
+  message(FATAL_ERROR "Set INDIGO_TRUNK_DIR before building lightmapper_bot.")
+endif()
 
 target_link_libraries(${CURRENT_TARGET}
 #${MYSQL_CONNECTOR_LIB}
-debug 		C:/programming/indigo/output/vs2022/indigo_x64/Debug/indigo_sdk_lib.lib
-optimized 	C:/programming/indigo/output/vs2022/indigo_x64/RelWithDebInfo/indigo_sdk_lib.lib
+debug 		"$ENV{INDIGO_TRUNK_DIR}/output/vs2022/indigo_x64/Debug/indigo_sdk_lib.lib"
+optimized 	"$ENV{INDIGO_TRUNK_DIR}/output/vs2022/indigo_x64/RelWithDebInfo/indigo_sdk_lib.lib"
 )

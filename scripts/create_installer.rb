@@ -6,7 +6,8 @@ require 'fileutils'
 require 'date'
 
 # Configuration
-SOURCE_DIR = ENV['CYBERSPACE_OUTPUT'] || 'C:/programming/substrata_output'
+SOURCE_DIR = ENV['CYBERSPACE_OUTPUT']
+abort 'Set CYBERSPACE_OUTPUT to the runtime output root before creating an installer.' if SOURCE_DIR.nil? || SOURCE_DIR.empty?
 BUILD_DIR = File.join(SOURCE_DIR, 'vs2022/cyberspace_x64/RelWithDebInfo')
 OUTPUT_DIR = File.join(SOURCE_DIR, 'installers')
 INNO_SETUP_PATH = 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe'

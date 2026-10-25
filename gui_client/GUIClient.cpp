@@ -629,8 +629,10 @@ static std::string xrGetQuest2ControllerModelPath(bool right_hand)
 	const std::string side_dir  = right_hand ? "right" : "left";
 
 	std::vector<std::string> candidate_paths;
-	// Locally-staged copy of the SteamVR Oculus Quest 2 render models (independent of a SteamVR install).
-	candidate_paths.push_back("C:/programming/substrata_xr_assets/quest2_controllers/" + side_dir + "/" + file_name);
+	// Optional locally-staged copy of the SteamVR Oculus Quest 2 render models.
+	const std::string xr_assets_dir = getOptionalEnvVar("METASIBERIA_XR_ASSET_DIR");
+	if(!xr_assets_dir.empty())
+		candidate_paths.push_back(xr_assets_dir + "/quest2_controllers/" + side_dir + "/" + file_name);
 	// Fall back to the models shipped with SteamVR if present.
 	const std::string steamvr_dir = right_hand ? "oculus_quest2_controller_right" : "oculus_quest2_controller_left";
 	candidate_paths.push_back("C:/Program Files (x86)/Steam/steamapps/common/SteamVR/resources/rendermodels/" + steamvr_dir + "/" + file_name);
@@ -642,7 +644,7 @@ static std::string xrGetQuest2ControllerModelPath(bool right_hand)
 // Tunable correction mapping the OpenXR grip pose to the Quest 2 render-model origin.
 // The SteamVR Oculus render-model origin does not coincide with the OpenXR grip pose, so the model needs a
 // rotation + translation to sit naturally in the hand. The parameters are loaded from a small text file so they can be
-// tuned in-headset without rebuilding: C:/programming/substrata_xr_assets/quest2_controller_transform.txt
+// tuned in-headset without rebuilding via METASIBERIA_XR_ASSET_DIR/quest2_controller_transform.txt
 // Format (one "key value" per line): pitch <deg>, yaw <deg>, roll <deg>, tx <m>, ty <m>, tz <m>
 // Axes are the engine-space grip basis: X = right, Y = forward, Z = up.
 static float g_quest2_model_pitch_deg = -45.f;
@@ -653,7 +655,10 @@ static float g_quest2_model_world_up_metres = 0.f; // Pure world-space vertical 
 
 static void loadQuest2ControllerTransformParamsFromFile()
 {
-	const std::string path = "C:/programming/substrata_xr_assets/quest2_controller_transform.txt";
+	const std::string xr_assets_dir = getOptionalEnvVar("METASIBERIA_XR_ASSET_DIR");
+	if(xr_assets_dir.empty())
+		return;
+	const std::string path = xr_assets_dir + "/quest2_controller_transform.txt";
 	try
 	{
 		if(!FileUtils::fileExists(path))

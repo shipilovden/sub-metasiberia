@@ -9,7 +9,10 @@ target_link_libraries(animation_panel_test PRIVATE Qt5::Widgets Qt5::Svg Qt5::Te
 add_test(NAME panel COMMAND animation_panel_test)
 
 # Build only the importer's CPU dependencies; no client entry point, GL or network.
-set(GLARE_CORE_DIR "C:/programming/glare-core" CACHE PATH "Engine source headers")
+set(GLARE_CORE_DIR "$ENV{GLARE_CORE_TRUNK_DIR}" CACHE PATH "Engine source headers")
+if(NOT GLARE_CORE_DIR)
+  message(FATAL_ERROR "Set GLARE_CORE_DIR or GLARE_CORE_TRUNK_DIR to the engine source root")
+endif()
 set(NATIVE_OUTPUT_DIR "" CACHE PATH "Isolated native build directory containing libs.lib")
 if(NOT EXISTS "${NATIVE_OUTPUT_DIR}/libs.lib")
   message(FATAL_ERROR "Set NATIVE_OUTPUT_DIR to the verified isolated Qt build output containing libs.lib")

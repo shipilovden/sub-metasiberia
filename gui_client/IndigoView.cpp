@@ -110,11 +110,19 @@ void IndigoView::initialise(const std::string& base_dir_path)
 		this->context = new Indigo::IndigoContext();
 
 #ifndef NDEBUG
-		const std::string dll_dir = "C:/programming/indigo/output/vs2022/indigo_x64/Debug";
+		const std::string indigo_config = "Debug";
 #else
-		const std::string dll_dir = "C:/programming/indigo/output/vs2022/indigo_x64/RelWithDebInfo";
+		const std::string indigo_config = "RelWithDebInfo";
 #endif
-		//const std::string dll_dir = base_dir_path; // base_dir_path is the dir the main executable is in.
+		std::string dll_dir = base_dir_path; // Packaged builds may place Indigo runtime DLLs beside the client.
+		try
+		{
+			const std::string indigo_trunk_dir = PlatformUtils::getEnvironmentVariable("INDIGO_TRUNK_DIR");
+			if(!indigo_trunk_dir.empty())
+				dll_dir = indigo_trunk_dir + "/output/vs2022/indigo_x64/" + indigo_config;
+		}
+		catch(glare::Exception&)
+		{}
 
 		Indigo::String error_msg;
 		indResult res = this->context->initialise(toIndigoString(dll_dir), Indigo::IndigoContext::getDefaultAppDataPath(), error_msg);

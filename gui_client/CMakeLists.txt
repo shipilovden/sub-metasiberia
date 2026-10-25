@@ -1601,8 +1601,8 @@ elseif(WIN32)
 	
 	if(INDIGO_SUPPORT)
 		target_link_libraries(${CURRENT_TARGET}
-			debug 		C:/programming/indigo/output/vs2022/indigo_x64/Debug/indigo_sdk_lib.lib
-			optimized 	C:/programming/indigo/output/vs2022/indigo_x64/RelWithDebInfo/indigo_sdk_lib.lib
+			debug 		"${INDIGO_TRUNK_DIR_ENV}/output/vs2022/indigo_x64/Debug/indigo_sdk_lib.lib"
+			optimized 	"${INDIGO_TRUNK_DIR_ENV}/output/vs2022/indigo_x64/RelWithDebInfo/indigo_sdk_lib.lib"
 		)
 	endif()
 	
