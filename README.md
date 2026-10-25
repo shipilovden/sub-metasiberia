@@ -4,8 +4,6 @@
 [![Build](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
 [![UI](https://img.shields.io/badge/UI-Qt%205%20%7C%20SDL%20%7C%20Qt%206%20experimental-41CD52)](https://www.qt.io/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Web-1F6FEB)](https://github.com/shipilovden/sub-metasiberia)
-[![Windows CI](https://img.shields.io/github/actions/workflow/status/shipilovden/sub-metasiberia/windows-main-ci.yml?branch=master&label=Windows%20CI)](https://github.com/shipilovden/sub-metasiberia/actions/workflows/windows-main-ci.yml)
-[![Linux Configure](https://img.shields.io/github/actions/workflow/status/shipilovden/sub-metasiberia/cmake-configure-linux.yml?branch=master&label=Linux%20Configure)](https://github.com/shipilovden/sub-metasiberia/actions/workflows/cmake-configure-linux.yml)
 [![License](https://img.shields.io/github/license/shipilovden/sub-metasiberia)](LICENCE)
 [![Stars](https://img.shields.io/github/stars/shipilovden/sub-metasiberia?style=social)](https://github.com/shipilovden/sub-metasiberia/stargazers)
 [![Signup](https://img.shields.io/website?url=https%3A%2F%2Fvr.metasiberia.com%2Fsignup&up_message=online&down_message=offline&label=signup&logo=googlechrome)](https://vr.metasiberia.com/signup)
