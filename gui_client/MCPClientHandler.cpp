@@ -29,6 +29,8 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonArray>
+#include <QtCore/QMap>
+#include <QtCore/QDir>
 
 
 namespace
@@ -126,7 +128,192 @@ void writeJSONRPCError(web::ReplyInfo& reply_info, const std::string& id_json, i
 }
 
 
-std::string spliceRenderViewIntoToolsList(const std::string& response, bool animation_available, bool text_mesh_available)
+QJsonObject neuroToolSchema(const QString& name, const QString& description, const QJsonObject& properties,
+	const QStringList& required, bool read_only)
+{
+	const QJsonObject input_schema{{"type", "object"}, {"properties", properties}, {"required", QJsonArray::fromStringList(required)}, {"additionalProperties", false}};
+	return QJsonObject{{"name", name}, {"description", description}, {"inputSchema", input_schema},
+		{"annotations", QJsonObject{{"readOnlyHint", read_only}, {"destructiveHint", !read_only}, {"openWorldHint", false}}}};
+}
+
+
+QJsonArray neuroControlToolSchemas()
+{
+	static const QJsonArray schemas = [] {
+		const auto stringProperty = [](const QString& description) { return QJsonObject{{"type", "string"}, {"description", description}}; };
+		const auto numberProperty = [](const QString& description, double minimum, double maximum) { return QJsonObject{{"type", "number"}, {"description", description}, {"minimum", minimum}, {"maximum", maximum}}; };
+		const auto booleanProperty = [](const QString& description) { return QJsonObject{{"type", "boolean"}, {"description", description}}; };
+		QJsonArray a;
+		const QJsonObject no_args;
+		a.append(neuroToolSchema("neuro.get_status", "Прочитать фактическое состояние NeuroControl в этом Qt-клиенте: источник, запись, модель, пороги, воспроизведение, управление, трассу контроллера и сведения о запущенном файле/версии клиента.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.list_sources", "Перечислить доступные источники ЭЭГ и указать, какие из них реально могут управлять аватаром.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.configure_lsl", "Автоматически найти установленный официальный пакет LabRecorder, проверить x64 PE, обязательные экспорты и загрузку lsl.dll, затем сохранить путь в пользовательских настройках. Работает асинхронно; поток не ищет и не подключает.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.discover_lsl_streams", "Асинхронно найти числовые LSL-потоки через настроенную lsl.dll. Если библиотека ещё не готова, сначала запускается её безопасная автоконфигурация; результат читайте через neuro.get_lsl_status. ЭЭГ не передаётся.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.get_lsl_status", "Получить найденные потоки, метаданные выбранного потока, скорость приёма, паузы, ошибки и качество исходных timestamps отдельно от монотонного времени получения. Сырые отсчёты не возвращаются.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.run_lsl_diagnostic", "Снять ограниченную сводку уже подключённого LSL-приёма заданной длительности, сохранить Markdown-отчёт без сырых ЭЭГ и автоматически отключить поток по завершении. Результат читайте через neuro.get_lsl_status.",
+			QJsonObject{{"duration_seconds", QJsonObject{{"type", "integer"}, {"minimum", 1}, {"maximum", 300}, {"default", 15}, {"description", "Длительность наблюдения; по умолчанию 15 секунд."}}}}, {}, false));
+		a.append(neuroToolSchema("neuro.get_lsl_timestamps", "Прочитать не более 200 последних пар исходной метки LSL и монотонного времени получения из ограниченного буфера; значения ЭЭГ не передаются.",
+			QJsonObject{{"limit", QJsonObject{{"type", "integer"}, {"minimum", 1}, {"maximum", 200}}}}, {}, true));
+		a.append(neuroToolSchema("neuro.connect_lsl_stream", "Асинхронно подключить выбранный по UID поток из neuro.get_lsl_status только для графиков и диагностики. Классификатор и аватар не подключаются.",
+			QJsonObject{{"stream_uid", stringProperty("UID из neuro.get_lsl_status.")},
+			{"units_override", QJsonObject{{"type", "string"}, {"enum", QJsonArray{"auto", "microvolts", "volts", "millivolts"}}, {"description", "По умолчанию единицы из XML; явное переопределение требуется, если они неизвестны."}}}}, {"stream_uid"}, false));
+		a.append(neuroToolSchema("neuro.disconnect_lsl_stream", "Отключить LSL-поток без блокировки Qt и оставить нейроуправление выключенным.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.start_lsl_recording", "Начать lossless-запись подключённого float32 LSL-потока в ограниченный бинарный файл и JSON sidecar; запись идёт в фоне независимо от графика.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.stop_lsl_recording", "Запросить штатное завершение текущей LSL-записи; дождитесь state=complete через neuro.get_lsl_recording_status.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.get_lsl_recording_status", "Получить состояние записи/загрузки, полный список каналов и метаданные загруженной LSL-записи. Сырые EEG-отсчёты не передаются.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.list_lsl_recordings", "Перечислить сохранённые локальные LSL-записи и их состояние; путь ограничен каталогом данных приложения.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.load_lsl_recording", "Асинхронно проверить checksum и структуру завершённой LSL-записи, восстановить каналы и загрузить её для архивного воспроизведения; живой поток должен быть отключён.", QJsonObject{{"recording_id", stringProperty("Безопасный recording_id из neuro.list_lsl_recordings.")}}, {"recording_id"}, false));
+		a.append(neuroToolSchema("neuro.play_lsl_recording", "Запустить только визуальное воспроизведение сохранённой LSL-записи по расчётной шкале sample_index / nominal_rate_hz; исходные timestamps остаются доступными отдельно. Классификация и аватар не используются.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.resume_playback", "Продолжить приостановленное воспроизведение EDF или сохранённой LSL-записи; LSL-воспроизведение остаётся только визуальным.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.stop_lsl_recording_playback", "Остановить архивное воспроизведение LSL-записи, оставив её загруженной.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.seek_lsl_recording", "Перейти к позиции в загруженной LSL-записи; значения исходных timestamps при этом не меняются.", QJsonObject{{"position_seconds", numberProperty("Позиция от 0 до длительности записи по номинальной частоте.", 0.0, 86400.0)}}, {"position_seconds"}, false));
+		a.append(neuroToolSchema("neuro.get_lsl_recording_timestamps", "Получить ограниченную страницу исходных LSL timestamps и времени приёма из загруженной записи. Время приёма может быть общим для отсчётов одного чанка; значения ЭЭГ не передаются.", QJsonObject{{"offset", QJsonObject{{"type", "integer"}, {"minimum", 0}, {"maximum", 1000000000}}}, {"limit", QJsonObject{{"type", "integer"}, {"minimum", 1}, {"maximum", 1000}}}}, {}, true));
+		a.append(neuroToolSchema("neuro.configure_lsl_visualization", "Настроить окно графика, вертикальный масштаб и видимые каналы в текущем виджете «Сигналы ЭЭГ» без изменения сохранённых данных.", QJsonObject{{"window_seconds", QJsonObject{{"type", "integer"}, {"minimum", 2}, {"maximum", 30}}}, {"amplitude_scale_uv", numberProperty("Вертикальный масштаб в микровольтах.", 5.0, 1000.0)}, {"visible_channels", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}, {"maxItems", 256}}}, {"detail_channel", stringProperty("Если указан, показать только этот канал подробно.")}}, {}, false));
+		a.append(neuroToolSchema("neuro.list_recordings", "Рекурсивно найти поддерживаемые EDF/EDF+, BDF и проверенные пары F32/JSON в ограниченных каталогах neurocontrol/datasets/raw и processed. Возвращает безопасные ID, метаданные, события и целостность; сырые отсчёты не передаются.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.get_recording_info", "Получить метаданные текущей записи либо найденной по ID/пути внутри разрешённых каталогов datasets/raw и datasets/processed.", QJsonObject{{"recording_id", stringProperty("Безопасный ID из neuro.list_recordings. Используйте либо его, либо path.")}, {"path", stringProperty("Полный путь к файлу внутри neurocontrol/datasets/raw (EDF/BDF) или datasets/processed (F32/JSON). Путь за пределами этих каталогов отклоняется.")}}, {}, true));
+		a.append(neuroToolSchema("neuro.list_models", "Перечислить JSON-модели только из каталога neurocontrol/models.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.get_model_info", "Получить параметры модели и фактический отчёт проверки, если он существует.", QJsonObject{{"model_id", stringProperty("Необязательное имя модели из neuro.list_models. Без него возвращаются сведения о загруженной модели.")}}, {}, true));
+		a.append(neuroToolSchema("neuro.evaluate_model", "Асинхронно проверить указанную модель на размеченной подготовленной записи, рассчитать метрики и сохранить отдельный отчёт без изменения исходной модели или старых метрик.", QJsonObject{{"model_id", stringProperty("Имя JSON-модели из neuro.list_models.")}, {"recording_id", stringProperty("ID подготовленной записи, например S001R14.")}}, {"model_id", "recording_id"}, false));
+		a.append(neuroToolSchema("neuro.check_model_compatibility", "Сравнить частоту дискретизации и точный порядок каналов выбранной модели с текущей загруженной записью.", QJsonObject{{"model_id", stringProperty("Необязательное имя модели из neuro.list_models; по умолчанию — загруженная модель.")}}, {}, true));
+		a.append(neuroToolSchema("neuro.get_signal_info", "Получить параметры и счётчики текущего потока: частоту, каналы, количество принятых и локально отброшенных из буфера отсчётов. Локальные отбросы не равны потерям источника.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.get_spectrum", "Получить текущий спектр выбранного канала, рассчитанный тем же виджетом, что отображает спектр ЭЭГ.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.get_prediction", "Получить последний класс-кандидат отдельно от команды, отправленной контроллеру, счётчик двухоконного подтверждения, оба порога, причину STOP и соответствующую трассу контроллера.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.get_avatar_status", "Получить фактическое решение контроллера аватара, причины фильтрации, применённый ввод и измеренную скорость.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.get_diagnostics", "Прочитать журнал NeuroControl и последнюю трассу. Необязательный фильтр уровня: INFO, WARNING, ERROR или DEBUG.", QJsonObject{{"limit", QJsonObject{{"type", "integer"}, {"minimum", 1}, {"maximum", 500}}}, {"level", stringProperty("Необязательный уровень журнала.")}}, {}, true));
+		a.append(neuroToolSchema("neuro.get_training_status", "Проверить состояние асинхронной подготовки EDF, аудита, обучения или оценки выбранной модели; возвращает последний отчёт оценки.", no_args, {}, true));
+		a.append(neuroToolSchema("neuro.list_experiments", "Перечислить локальные сеансы журналирования NeuroControl, их состояние и краткие итоговые счётчики. Инструменты принимают только безопасный ID сеанса, не принимают произвольные пути и не передают сырые данные ЭЭГ.", QJsonObject{{"limit", QJsonObject{{"type", "integer"}, {"minimum", 1}, {"maximum", 100}, {"description", "Максимум сеансов в ответе; по умолчанию 20."}}}}, {}, true));
+		a.append(neuroToolSchema("neuro.get_experiment_summary", "Прочитать параметры и итоговую статистику локального сеанса NeuroControl по безопасному session_id из neuro.list_experiments. Доступ ограничен каталогом экспериментов этого клиента.", QJsonObject{{"session_id", stringProperty("Безопасный ID из neuro.list_experiments.")}}, {"session_id"}, true));
+		a.append(neuroToolSchema("neuro.get_experiment_events", "Постранично прочитать JSONL-события локального сеанса NeuroControl. Используйте next_cursor_bytes из предыдущего ответа; каждый ответ ограничен 200 событиями и 2 МиБ. Сырые отсчёты ЭЭГ не журналируются и не передаются.", QJsonObject{{"session_id", stringProperty("Безопасный ID из neuro.list_experiments.")}, {"cursor_bytes", QJsonObject{{"type", "integer"}, {"minimum", 0}, {"maximum", 67108864}, {"description", "Байтовый курсор из предыдущего ответа; по умолчанию 0."}}}, {"limit", QJsonObject{{"type", "integer"}, {"minimum", 1}, {"maximum", 200}, {"description", "Число событий; по умолчанию 100."}}}}, {"session_id"}, true));
+		const QJsonObject topic_property{{"type", "string"}, {"enum", QJsonArray{"overview", "architecture", "glossary", "datasets", "models", "tools", "experiments", "troubleshooting", "medical_eeg", "ai_instructions"}}};
+		a.append(neuroToolSchema("neuro.get_knowledge", "Прочитать один тематический документ NeuroControl на русском языке из встроенной базы знаний.", QJsonObject{{"topic", topic_property}}, {"topic"}, true));
+		const QJsonObject source_property{{"type", "string"}, {"enum", QJsonArray{"recorded_edf", "brainflow_synthetic", "live_eeg", "lsl_live", "lsl_recorded"}}};
+		a.append(neuroToolSchema("neuro.select_source", "Выбрать EDF/F32, Synthetic Board, LSL в реальном времени или уже загруженную архивную LSL-запись. LSL-источники и синтетический поток не могут управлять аватаром; прямой драйвер физического устройства недоступен.", QJsonObject{{"source_id", source_property}}, {"source_id"}, false));
+		a.append(neuroToolSchema("neuro.load_recording", "Загрузить любую корректную EDF/EDF+, BDF или подготовленную пару F32/JSON по ID из neuro.list_recordings либо полному пути внутри разрешённых каталогов. Сырые EDF/BDF подготавливаются существующим асинхронным импортёром; F32 проверяется по метаданным, размеру и SHA-256. Воспроизведение и управление аватаром не запускаются.", QJsonObject{{"recording_id", stringProperty("Безопасный ID из neuro.list_recordings. Укажите recording_id или path, но не оба.")}, {"path", stringProperty("Полный путь только к файлу внутри neurocontrol/datasets/raw (EDF/BDF) или datasets/processed (F32/JSON). Любой иной путь отклоняется.")}}, {}, false));
+		a.append(neuroToolSchema("neuro.load_model", "Загрузить JSON-модель из разрешённого каталога neurocontrol/models.", QJsonObject{{"model_id", stringProperty("Имя файла модели из neuro.list_models, с .json или без.")}}, {"model_id"}, false));
+		a.append(neuroToolSchema("neuro.start_playback", "Запустить выбранный EDF или визуализацию BrainFlow Synthetic Board. Synthetic Board никогда не выдаёт команд аватару.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.pause_playback", "Поставить текущее воспроизведение на паузу.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.stop_playback", "Остановить поток/воспроизведение, снять разрешение NeuroControl и отправить STOP контроллеру.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.seek_playback", "Перейти к позиции в текущей загруженной записи EDF.", QJsonObject{{"position_seconds", numberProperty("Позиция от 0 до длительности записи в секундах.", 0.0, 86400.0)}}, {"position_seconds"}, false));
+		a.append(neuroToolSchema("neuro.set_avatar_control", "Явно разрешить/запретить управление аватаром. Разрешение возможно только при совместимой модели и активном воспроизведении реальной записи EDF.", QJsonObject{{"enabled", booleanProperty("true — запросить разрешение; false — немедленно снять разрешение и отправить STOP.")}}, {"enabled"}, false));
+		a.append(neuroToolSchema("neuro.emergency_stop", "НЕМЕДЛЕННО установить STOP и снять разрешение управления; если фоновое отключение LSL ещё завершается, ответ укажет lsl_cleanup_pending, а neuro.get_lsl_status покажет завершение рабочего потока.", no_args, {}, false));
+		a.append(neuroToolSchema("neuro.train_model", "Запустить существующее обучение CSP + LDA в отдельном процессе. Поддерживаются только настроенные задачи PhysioNet feet/hands и разрешённые параметры; результат проверяется через neuro.get_training_status.",
+			QJsonObject{{"task", QJsonObject{{"type", "string"}, {"enum", QJsonArray{"feet", "hands"}}}},
+			{"low_hz", numberProperty("Нижняя частота фильтра, Гц.", 0.5, 40)}, {"high_hz", numberProperty("Верхняя частота фильтра, Гц.", 5, 79)},
+			{"window_seconds", numberProperty("Длительность эпохи, секунды.", 1, 8)}, {"step_seconds", numberProperty("Шаг окна, секунды.", 0.5, 8)},
+			{"offset_seconds", numberProperty("Смещение от начала события, секунды.", 0, 3)}, {"threshold", numberProperty("Порог положительного класса.", 0.55, 0.95)},
+			{"notch_50", booleanProperty("Включить режекторный фильтр 50 Гц.")}, {"channels", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}, {"minItems", 2}, {"maxItems", 64}}}}, {}, false));
+		a.append(neuroToolSchema("neuro.run_diagnostics", "Выполнить безопасную проверку состояния файлов, Python, записи, модели, совместимости, данных и контроллера без запуска оборудования или внешних команд.", no_args, {}, true));
+		return a;
+	}();
+	return schemas;
+}
+
+
+QJsonArray neuroKnowledgeResources()
+{
+	static const QJsonArray resources = [] {
+		QJsonArray a;
+		const QMap<QString, QString> docs{{"overview", "NEUROCONTROL_OVERVIEW.md"}, {"architecture", "NEUROCONTROL_ARCHITECTURE.md"},
+			{"glossary", "NEUROCONTROL_GLOSSARY_RU.md"}, {"datasets", "NEUROCONTROL_DATASETS.md"}, {"models", "NEUROCONTROL_MODELS.md"},
+			{"tools", "NEUROCONTROL_MCP_TOOLS.md"}, {"experiments", "NEUROCONTROL_EXPERIMENTS.md"}, {"troubleshooting", "NEUROCONTROL_TROUBLESHOOTING.md"},
+			{"medical_eeg", "NEUROCONTROL_MEDICAL_EEG.md"}, {"ai_instructions", "NEUROCONTROL_AI_INSTRUCTIONS.md"}};
+		for(auto it = docs.cbegin(); it != docs.cend(); ++it)
+		{
+			const QString uri = QStringLiteral("metasiberia://neurocontrol/%1").arg(it.key());
+			a.append(QJsonObject{{"uri", uri}, {"name", it.key()}, {"title", it.value()}, {"mimeType", "text/markdown"}, {"description", QStringLiteral("Тематическая документация NeuroControl на русском языке.")}});
+		}
+		return a;
+	}();
+	return resources;
+}
+
+
+QMap<QString, QString> neuroKnowledgeFileNames()
+{
+	return {{"overview", "NEUROCONTROL_OVERVIEW.md"}, {"architecture", "NEUROCONTROL_ARCHITECTURE.md"},
+		{"glossary", "NEUROCONTROL_GLOSSARY_RU.md"}, {"datasets", "NEUROCONTROL_DATASETS.md"}, {"models", "NEUROCONTROL_MODELS.md"},
+		{"tools", "NEUROCONTROL_MCP_TOOLS.md"}, {"experiments", "NEUROCONTROL_EXPERIMENTS.md"}, {"troubleshooting", "NEUROCONTROL_TROUBLESHOOTING.md"},
+		{"medical_eeg", "NEUROCONTROL_MEDICAL_EEG.md"}, {"ai_instructions", "NEUROCONTROL_AI_INSTRUCTIONS.md"}};
+}
+
+
+bool isPathWithinDirectory(const QString& root, const QString& path)
+{
+	const QString canonical_root = QDir(root).canonicalPath();
+	const QString canonical_path = QFileInfo(path).canonicalFilePath();
+	if(canonical_root.isEmpty() || canonical_path.isEmpty()) return false;
+	const QString relative = QDir(canonical_root).relativeFilePath(canonical_path);
+	return relative != QStringLiteral("..") && !relative.startsWith(QStringLiteral("../")) && !QDir::isAbsolutePath(relative);
+}
+
+
+QString findNeuroDocsRoot()
+{
+	for(QString start : {QDir::currentPath(), QFileInfo(QString::fromUtf8(__FILE__)).absolutePath()})
+	{
+		QDir dir(start);
+		for(int depth = 0; depth < 10; ++depth)
+		{
+			if(dir.exists(QStringLiteral("neurocontrol/docs/mcp"))) return dir.filePath(QStringLiteral("neurocontrol"));
+			if(dir.dirName() == QStringLiteral("neurocontrol") && dir.exists(QStringLiteral("docs/mcp"))) return dir.absolutePath();
+			if(!dir.cdUp()) break;
+		}
+	}
+	return QString();
+}
+
+
+std::string spliceNeuroResourcesIntoList(const std::string& response)
+{
+	QJsonDocument document = QJsonDocument::fromJson(QByteArray::fromStdString(response));
+	if(document.isNull()) return response;
+	QJsonObject root = document.object();
+	if(root.contains(QStringLiteral("error")) || !root.value(QStringLiteral("result")).isObject()) return response;
+	QJsonObject result = root.value(QStringLiteral("result")).toObject();
+	QJsonArray resources = result.value(QStringLiteral("resources")).toArray();
+	for(const QJsonValue& resource : neuroKnowledgeResources())
+	{
+		const QString uri = resource.toObject().value(QStringLiteral("uri")).toString();
+		for(int i = resources.size() - 1; i >= 0; --i)
+			if(resources.at(i).toObject().value(QStringLiteral("uri")).toString() == uri) resources.removeAt(i);
+		resources.append(resource);
+	}
+	result.insert(QStringLiteral("resources"), resources);
+	root.insert(QStringLiteral("result"), result);
+	document.setObject(root);
+	return document.toJson(QJsonDocument::Compact).toStdString();
+}
+
+
+std::string spliceNeuroResourcesIntoInitializeResponse(const std::string& response)
+{
+	QJsonDocument document = QJsonDocument::fromJson(QByteArray::fromStdString(response));
+	if(document.isNull() || !document.isObject()) return response;
+	QJsonObject root = document.object();
+	if(root.contains(QStringLiteral("error")) || !root.value(QStringLiteral("result")).isObject()) return response;
+	QJsonObject result = root.value(QStringLiteral("result")).toObject();
+	QJsonObject capabilities = result.value(QStringLiteral("capabilities")).toObject();
+	QJsonObject resources = capabilities.value(QStringLiteral("resources")).toObject();
+	resources.insert(QStringLiteral("subscribe"), false);
+	resources.insert(QStringLiteral("listChanged"), false);
+	capabilities.insert(QStringLiteral("resources"), resources);
+	result.insert(QStringLiteral("capabilities"), capabilities);
+	const QString neuro_instructions = QStringLiteral(
+		"MetaSiberia NeuroControl is a local research module. Use neuro.* tools to inspect the live Qt widget and approved local project data; read metasiberia://neurocontrol resources or neuro.get_knowledge for verified documentation. "
+		"For past experiments, call neuro.list_experiments, then neuro.get_experiment_summary and page neuro.get_experiment_events with the returned session_id/cursor. These tools expose only the client's bounded local journal, never arbitrary paths or raw EEG samples. "
+		"Treat recorded EEG and BrainFlow Synthetic Board as different sources: synthetic data never represents brain activity and must never authorize avatar control. "
+		"LSL is a separate live visualization and diagnostics source; on the user's request use neuro.get_status, neuro.select_source, neuro.configure_lsl, neuro.discover_lsl_streams, neuro.get_lsl_status, neuro.connect_lsl_stream, neuro.configure_lsl_visualization, neuro.get_lsl_timestamps, neuro.run_lsl_diagnostic, neuro.start_lsl_recording, neuro.stop_lsl_recording, neuro.get_lsl_recording_status and neuro.disconnect_lsl_stream in sequence. The diagnostic tool observes the requested interval, saves a metadata-only report and disconnects automatically. After the recording is finalized and the live stream is disconnected, use neuro.list_lsl_recordings and neuro.load_lsl_recording to verify and load it; archived display and timestamp pages are available through neuro.play_lsl_recording, neuro.pause_playback, neuro.resume_playback, neuro.seek_lsl_recording, neuro.get_lsl_recording_timestamps and neuro.stop_lsl_recording_playback. LSL live and archived playback never feed the current classifier or avatar controller. "
+		"If discovery finds no streams, do not infer that a running Neurosoft application is publishing EEG; report that no numeric LSL stream is visible and ask the user to enable Neurosoft's supported LSL export/registration. Never simulate medical-device UI actions or change device settings. "
+		"For state-changing actions, first inspect neuro.get_status and act only on the user's explicit request. Keep raw EEG on this computer. Report unavailable hardware or rejected commands with the returned reason.");
+	const QString existing_instructions = result.value(QStringLiteral("instructions")).toString().trimmed();
+	result.insert(QStringLiteral("instructions"), existing_instructions.isEmpty() ? neuro_instructions : existing_instructions + QStringLiteral("\n\n") + neuro_instructions);
+	root.insert(QStringLiteral("result"), result);
+	document.setObject(root);
+	return document.toJson(QJsonDocument::Compact).toStdString();
+}
+
+
+std::string spliceRenderViewIntoToolsList(const std::string& response, bool animation_available, bool text_mesh_available, bool neuro_control_available)
 {
 	// This handler is part of the Qt local bridge. Parse the envelope rather than
 	// matching raw JSON text: the server may pretty-print its tool schema.
@@ -152,6 +339,15 @@ std::string spliceRenderViewIntoToolsList(const std::string& response, bool anim
 	for(const QJsonValue& tool : MCPImages::schemas()) tools.append(tool);
 	if(animation_available) for(const QJsonValue& tool : MCPAnimationTools::schemas()) tools.append(tool);
 	if(text_mesh_available) for(const QJsonValue& tool : MCPTextMeshTools::schemas()) tools.append(tool);
+	if(neuro_control_available)
+	{
+		// The connected desktop client owns this registry. Replace any server
+		// copy on every tools/list response so a newer server cannot leave stale
+		// schemas behind or advertise duplicate names after reconnect/version drift.
+		for(int i = tools.size() - 1; i >= 0; --i)
+			if(tools.at(i).toObject().value(QStringLiteral("name")).toString().startsWith(QStringLiteral("neuro."))) tools.removeAt(i);
+		for(const QJsonValue& schema : neuroControlToolSchemas()) tools.append(schema);
+	}
 	result.insert("tools", tools);
 	root.insert("result", result);
 	document.setObject(root);
@@ -167,12 +363,13 @@ bool isFiniteVec(const Vec3d& v)
 } // anonymous namespace
 
 
-MCPClientRequestHandler::MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback_, const MCPClientStatusCallback& status_callback_, const std::function<bool()>& poly_haven_enabled_, const MCPClientTerrainCallback& terrain_callback_, const MCPClientTerrainCallback& animation_callback_, const MCPClientTerrainCallback& text_mesh_callback_)
+MCPClientRequestHandler::MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback_, const MCPClientStatusCallback& status_callback_, const std::function<bool()>& poly_haven_enabled_, const MCPClientTerrainCallback& terrain_callback_, const MCPClientTerrainCallback& animation_callback_, const MCPClientTerrainCallback& text_mesh_callback_, const MCPClientNeuroControlCallback& neuro_control_callback_)
 :	server_hostname(forwarding_target.server_hostname),
 	render_callback(render_callback_),
 	terrain_callback(terrain_callback_),
 	animation_callback(animation_callback_),
 	text_mesh_callback(text_mesh_callback_),
+	neuro_control_callback(neuro_control_callback_),
 	status_callback(status_callback_),
 	poly_haven_enabled(poly_haven_enabled_),
 	keepalive_configured(false)
@@ -363,11 +560,79 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 			web::ResponseUtils::writeRawString(reply_info, "HTTP/1.1 202 Accepted\r\nConnection: Keep-Alive\r\nContent-Length: 0\r\n\r\n");
 			return;
 		}
+		if(method == "resources/read" && root.hasChild("params"))
+		{
+			const QJsonObject json_request = QJsonDocument::fromJson(QByteArray::fromStdString(body)).object();
+			const QString uri = json_request.value(QStringLiteral("params")).toObject().value(QStringLiteral("uri")).toString();
+			const QString prefix = QStringLiteral("metasiberia://neurocontrol/");
+			if(uri.startsWith(prefix) && neuro_control_callback)
+			{
+				const QString topic = uri.mid(prefix.size());
+				const QMap<QString, QString> docs = neuroKnowledgeFileNames();
+				if(!docs.contains(topic))
+				{
+					writeJSONRPCError(reply_info, id_json, -32602, "Unknown NeuroControl knowledge resource.");
+					return;
+				}
+				const QString docs_root = findNeuroDocsRoot();
+				const QString path = docs_root.isEmpty() ? QString() : QDir(docs_root).filePath(QStringLiteral("docs/mcp/%1").arg(docs.value(topic)));
+				if(path.isEmpty() || !QFileInfo::exists(path) || !isPathWithinDirectory(docs_root, path))
+				{
+					writeJSONRPCError(reply_info, id_json, -32603, "NeuroControl knowledge document is unavailable.");
+					return;
+				}
+				QFile file(path);
+				if(!file.open(QIODevice::ReadOnly) || file.size() > 128 * 1024)
+				{
+					writeJSONRPCError(reply_info, id_json, -32603, "NeuroControl knowledge document could not be read.");
+					return;
+				}
+				const QJsonObject contents{{"uri", uri}, {"mimeType", "text/markdown"}, {"text", QString::fromUtf8(file.readAll())}};
+				writeJSONRPCResult(reply_info, id_json, QJsonDocument(QJsonObject{{"contents", QJsonArray{contents}}}).toJson(QJsonDocument::Compact).toStdString());
+				return;
+			}
+		}
 
 		if(method == "tools/call" && root.hasChild("params"))
 		{
 			const JSONNode& params = root.getChildObject(parser, "params");
 			const QString name=QString::fromStdString(params.getChildStringValue(parser,"name"));
+			if(name.startsWith(QStringLiteral("neuro.")))
+			{
+				try
+				{
+					if(!neuro_control_callback) throw glare::Exception("NeuroControl tools are unavailable in this client build.");
+					const QJsonObject request = QJsonDocument::fromJson(QByteArray::fromStdString(body)).object();
+					const QJsonValue arg_value = request.value(QStringLiteral("params")).toObject().value(QStringLiteral("arguments"));
+					if(!arg_value.isUndefined() && !arg_value.isObject()) throw glare::Exception("NeuroControl tool arguments must be an object.");
+					QJsonObject tool_result = neuro_control_callback(name, arg_value.toObject());
+					const QJsonObject error = tool_result.take(QStringLiteral("_mcp_error")).toObject();
+					const bool is_error = !error.isEmpty();
+					const QJsonObject structured = is_error ? QJsonObject{{"error", error}} : tool_result;
+					const QString response_text = is_error ? QStringLiteral("%1: %2").arg(error.value(QStringLiteral("code")).toString(), error.value(QStringLiteral("message")).toString()) :
+						QString::fromUtf8(QJsonDocument(structured).toJson(QJsonDocument::Compact));
+					const QJsonObject envelope{{"isError", is_error}, {"structuredContent", structured},
+						{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", response_text}}}}};
+					writeJSONRPCResult(reply_info, id_json, QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
+				}
+				catch(const glare::Exception& e)
+				{
+					const QString message = QString::fromStdString(e.what());
+					const QJsonObject error{{"code", "MCP_CALLBACK_FAILED"}, {"message", message}};
+					const QJsonObject envelope{{"isError", true}, {"structuredContent", QJsonObject{{"error", error}}},
+						{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", QStringLiteral("MCP_CALLBACK_FAILED: %1").arg(message)}}}}};
+					writeJSONRPCResult(reply_info, id_json, QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
+				}
+				catch(const std::exception& e)
+				{
+					const QString message = QString::fromUtf8(e.what());
+					const QJsonObject error{{"code", "MCP_CALLBACK_FAILED"}, {"message", message}};
+					const QJsonObject envelope{{"isError", true}, {"structuredContent", QJsonObject{{"error", error}}},
+						{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", QStringLiteral("MCP_CALLBACK_FAILED: %1").arg(message)}}}}};
+					writeJSONRPCResult(reply_info, id_json, QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
+				}
+				return;
+			}
 			if(MCPAnimationTools::handles(name) || MCPTextMeshTools::handles(name))
 			{
 				try {
@@ -441,9 +706,17 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 	try
 	{
 		reportStatus("Handling MCP '" + method + "' method.");
+		// Keep NeuroControl tool registration on this desktop bridge. Its
+		// tools/list response is composed locally below, and tools/call is
+		// dispatched to the live widget above. Sending the registry upstream
+		// couples discovery to server limits and version, though the server does
+		// not execute these desktop-only tools.
 		std::string response = forwardToServer(body);
-			if(method == "tools/list" && (render_callback || terrain_callback || animation_callback || text_mesh_callback))
-				response = spliceRenderViewIntoToolsList(response, (bool)animation_callback, (bool)text_mesh_callback);
+		if(method == "initialize" && neuro_control_callback)
+			response = spliceNeuroResourcesIntoInitializeResponse(response);
+		if(method == "tools/list" && (render_callback || terrain_callback || animation_callback || text_mesh_callback || neuro_control_callback))
+			response = spliceRenderViewIntoToolsList(response, (bool)animation_callback, (bool)text_mesh_callback, (bool)neuro_control_callback);
+		if(method == "resources/list" && neuro_control_callback) response = spliceNeuroResourcesIntoList(response);
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, response.data(), response.size(), /*content type=*/"application/json");
 	}
 	catch(glare::Exception& e)
@@ -499,5 +772,5 @@ bool MCPClientSharedRequestHandler::isConfigured() const
 
 Reference<web::RequestHandler> MCPClientSharedRequestHandler::getOrMakeRequestHandler()
 {
-	return new MCPClientRequestHandler(forwarding_target, render_callback, status_callback, poly_haven_enabled, terrain_callback, animation_callback, text_mesh_callback);
+	return new MCPClientRequestHandler(forwarding_target, render_callback, status_callback, poly_haven_enabled, terrain_callback, animation_callback, text_mesh_callback, neuro_control_callback);
 }

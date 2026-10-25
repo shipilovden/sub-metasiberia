@@ -59,6 +59,7 @@ class RenderStatsWidget;
 class MiniDmpSender;
 class UpdateManager;
 class AIDockWidget;
+class NeuroControlWidget;
 class WebcamWindow;
 class AvatarSettingsWidget;
 class ScientificObjectEditor;
@@ -675,6 +676,7 @@ public:
 	CredentialManager credential_manager;
 	ThreadManager mcp_web_thread_manager;
 	bool mcp_client_server_running;
+	std::atomic<bool> mcp_shutdown_requested{false};
 	std::atomic<bool> mcp_poly_haven_enabled{false};
 	bool mcp_connection_error_reported;
 	std::string mcp_server_hostname;
@@ -695,6 +697,8 @@ public:
 	WebcamWindow* webcam_window;
 
 	QDockWidget* avatar_dock_widget;
+	QDockWidget* neuro_control_dock_widget = nullptr;
+	NeuroControlWidget* neuro_control_widget = nullptr;
 	AvatarSettingsWidget* avatar_settings_widget;
 	QDockWidget* map_dock_widget;
 	QWidget* map_dock_map_widget;

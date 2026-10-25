@@ -66,6 +66,9 @@ Copyright Glare Technologies Limited 2024 -
 #include <networking/IPAddress.h>
 #if !defined(USE_SDL)
 #include <QtCore/QString>
+#if defined(ENABLE_NEUROCONTROL)
+#include "../neurocontrol/avatar/NeuroCommand.h"
+#endif
 #endif
 #include <string>
 #include <map>
@@ -601,6 +604,13 @@ public:
 	void updateObjectsWithDiagnosticVis();
 
 	void processPlayerPhysicsInput(float dt, bool world_render_has_keyboard_focus, PlayerPhysicsInput& input_out);
+#if !defined(USE_SDL) && defined(ENABLE_NEUROCONTROL)
+	std::uint64_t resetNeuroControlStream();
+	void setNeuroControlEEGHeartbeat(std::uint64_t stream_generation, std::uint64_t sample_index,
+		double sample_timestamp_seconds, bool valid);
+	void setNeuroControlEnabled(bool enabled);
+	void setNeuroControlCommand(const neurocontrol::Command& command);
+#endif
 	void updateXRControllerLocomotion(float dt, bool& move_key_pressed, PlayerPhysicsInput& input_out);
 	void updateXRControllerVisuals();
 	void updateXRHandGuideVisuals();
@@ -1388,6 +1398,16 @@ public:
 
 
 	bool SHIFT_down, CTRL_down, A_down, W_down, S_down, D_down, space_down, C_down, left_down, right_down, up_down, down_down, B_down;
+#if !defined(USE_SDL) && defined(ENABLE_NEUROCONTROL)
+	bool neuro_control_enabled = false;
+	neurocontrol::Command neuro_control_command;
+	neurocontrol::EEGDataHeartbeat neuro_control_eeg_heartbeat;
+	std::uint64_t neuro_control_stream_generation = 0;
+	std::uint64_t neuro_control_last_sample_index = 0;
+	bool neuro_control_motion_command_armed = false;
+	neurocontrol::ControllerTrace neuro_control_trace;
+	bool neuro_control_trace_available = false;
+#endif
 
 	js::Vector<Reference<ThreadMessage>, 16> temp_msgs;
 

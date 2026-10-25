@@ -32,6 +32,40 @@ endif()
 # Set the real project name
 project (${PROJECT_NAME})
 
+# Visual Studio may automatically rerun CMake during a build. Lock that
+# regeneration to the isolated output root chosen at configure time; otherwise
+# an absent or changed CYBERSPACE_OUTPUT could silently redirect artifacts into
+# a shared runtime directory.
+if(WIN32 AND CMAKE_GENERATOR MATCHES "Visual Studio")
+	if(NOT DEFINED ENV{CYBERSPACE_OUTPUT} OR "$ENV{CYBERSPACE_OUTPUT}" STREQUAL "")
+		message(FATAL_ERROR "CYBERSPACE_OUTPUT must be set to the isolated integration output root before configure/build.")
+	endif()
+	if(NOT DEFINED CYBERSPACE_OUTPUT_EXPECTED OR CYBERSPACE_OUTPUT_EXPECTED STREQUAL "")
+		message(FATAL_ERROR "CYBERSPACE_OUTPUT_EXPECTED is required. Configure through scripts/build_neurocontrol_windows.ps1.")
+	endif()
+
+	get_filename_component(_cyberspace_output_actual "$ENV{CYBERSPACE_OUTPUT}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+	get_filename_component(_cyberspace_output_expected "${CYBERSPACE_OUTPUT_EXPECTED}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+	string(REPLACE "\\" "/" _cyberspace_output_actual "${_cyberspace_output_actual}")
+	string(REPLACE "\\" "/" _cyberspace_output_expected "${_cyberspace_output_expected}")
+	string(REGEX REPLACE "/+$" "" _cyberspace_output_actual "${_cyberspace_output_actual}")
+	string(REGEX REPLACE "/+$" "" _cyberspace_output_expected "${_cyberspace_output_expected}")
+	string(TOLOWER "${_cyberspace_output_actual}" _cyberspace_output_actual_normalized)
+	string(TOLOWER "${_cyberspace_output_expected}" _cyberspace_output_expected_normalized)
+	if(NOT _cyberspace_output_actual_normalized STREQUAL _cyberspace_output_expected_normalized)
+		message(FATAL_ERROR "CYBERSPACE_OUTPUT changed or differs from CYBERSPACE_OUTPUT_EXPECTED. Refusing to configure/build. Expected '${_cyberspace_output_expected}', got '$ENV{CYBERSPACE_OUTPUT}'.")
+	endif()
+	if(NOT _cyberspace_output_expected_normalized MATCHES "^c:/programming/substrata_nc_output_(off|on)_[a-z0-9_-]+$")
+		message(FATAL_ERROR "Output root must be an isolated C:/programming/substrata_nc_output_<off|on>_<label> directory; got '${_cyberspace_output_expected}'.")
+	endif()
+	if(ENABLE_NEUROCONTROL AND NOT _cyberspace_output_expected_normalized MATCHES "^c:/programming/substrata_nc_output_on_")
+		message(FATAL_ERROR "ENABLE_NEUROCONTROL=ON requires a dedicated output_on directory.")
+	elseif(NOT ENABLE_NEUROCONTROL AND _cyberspace_output_expected_normalized MATCHES "^c:/programming/substrata_nc_output_on_")
+		message(FATAL_ERROR "ENABLE_NEUROCONTROL=OFF cannot use an output_on directory.")
+	endif()
+	set(CYBERSPACE_OUTPUT_EXPECTED "${_cyberspace_output_expected}" CACHE PATH "Expected isolated output root for Windows integration builds" FORCE)
+endif()
+
 
 if(WIN32)
 	# Remove the MinSizeRel config.

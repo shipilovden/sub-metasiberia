@@ -39,6 +39,7 @@ struct MCPClientRenderResult
 typedef std::function<void (const MCPClientRenderRequest&, MCPClientRenderResult&)> MCPClientRenderCallback;
 typedef std::function<void (const std::string&)> MCPClientStatusCallback;
 typedef std::function<QJsonObject (const QString&, const QJsonObject&)> MCPClientTerrainCallback;
+typedef std::function<QJsonObject (const QString&, const QJsonObject&)> MCPClientNeuroControlCallback;
 
 
 struct MCPClientForwardingTarget
@@ -67,7 +68,7 @@ web::WebListenerThread API.
 class MCPClientRequestHandler : public web::RequestHandler
 {
 public:
-	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback, const MCPClientTerrainCallback& animation_callback, const MCPClientTerrainCallback& text_mesh_callback);
+	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback, const MCPClientTerrainCallback& animation_callback, const MCPClientTerrainCallback& text_mesh_callback, const MCPClientNeuroControlCallback& neuro_control_callback);
 
 	virtual void handleRequest(const web::RequestInfo& request_info, web::ReplyInfo& reply_info) override;
 
@@ -81,6 +82,7 @@ private:
 	MCPClientTerrainCallback terrain_callback;
 	MCPClientTerrainCallback animation_callback;
 	MCPClientTerrainCallback text_mesh_callback;
+	MCPClientNeuroControlCallback neuro_control_callback;
 	MCPClientStatusCallback status_callback;
 	std::function<bool()> poly_haven_enabled;
 
@@ -117,6 +119,7 @@ public:
 	void setTerrainCallback(const MCPClientTerrainCallback& callback) { terrain_callback = callback; }
 	void setTextMeshCallback(const MCPClientTerrainCallback& callback) { text_mesh_callback = callback; }
 	void setAnimationCallback(const MCPClientTerrainCallback& callback) { animation_callback = callback; }
+	void setNeuroControlCallback(const MCPClientNeuroControlCallback& callback) { neuro_control_callback = callback; }
 
 	bool isConfigured() const;
 
@@ -129,5 +132,6 @@ private:
 	MCPClientTerrainCallback terrain_callback;
 	MCPClientTerrainCallback animation_callback;
 	MCPClientTerrainCallback text_mesh_callback;
+	MCPClientNeuroControlCallback neuro_control_callback;
 	MCPClientStatusCallback status_callback;
 };

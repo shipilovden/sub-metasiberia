@@ -244,12 +244,35 @@ void CEF::shutdownCEF()
 
 	if(CEF_initialised && glare_cef_app)
 	{
-		// Wait until browser processes are shut down
+		// Browser-owning objects normally request closure during GUIClient
+		// teardown. Request it here as well for any browser still registered,
+		// otherwise the wait below can never finish for an unrequested browser.
+		LifeSpanHandler::BrowserList browsers_to_close = glare_cef_app->lifespan_handler->mBrowserList;
+		if(!browsers_to_close.empty())
+			conPrint("Lifecycle: requesting closure of " + toString(browsers_to_close.size()) + " remaining CEF browser(s).");
+		for(LifeSpanHandler::BrowserList::const_iterator i = browsers_to_close.begin(); i != browsers_to_close.end(); ++i)
+		{
+			if(*i && (*i)->GetHost())
+				(*i)->GetHost()->CloseBrowser(/*force_close=*/true);
+		}
+		browsers_to_close.clear();
+
+		// Pump CEF's UI callbacks until every OnBeforeClose has removed its
+		// browser. Log progress so an externally stalled browser is diagnosable.
+		Timer shutdown_timer;
+		double last_progress_log_seconds = -5.0;
 		while(!glare_cef_app->lifespan_handler->mBrowserList.empty())
 		{
-			PlatformUtils::Sleep(1);
 			CefDoMessageLoopWork();
+			if(shutdown_timer.elapsed() - last_progress_log_seconds >= 5.0)
+			{
+				last_progress_log_seconds = shutdown_timer.elapsed();
+				conPrint("Lifecycle: CEF shutdown waiting " + shutdown_timer.elapsedStringMSWIthNSigFigs() +
+					"; remaining browsers: " + toString(glare_cef_app->lifespan_handler->mBrowserList.size()) + ".");
+			}
+			PlatformUtils::Sleep(1);
 		}
+		conPrint("Lifecycle: CEF browsers closed after " + shutdown_timer.elapsedStringMSWIthNSigFigs() + ".");
 
 		glare_cef_app->lifespan_handler = CefRefPtr<LifeSpanHandler>();
 

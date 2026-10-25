@@ -417,6 +417,10 @@ void CodexAppServerClient::processLine(const QByteArray& line)
 			"the avatar only; do not relocate the user to inspect or claim a missing model is visible. "
 			"If tools fail, show the actual error; do not invent a successful creation. Never claim support for an editor action "
 			"listed as not exposed. Delete objects only when requested. Respond in the user's language."));
+#if defined(ENABLE_NEUROCONTROL)
+		params2.insert(QStringLiteral("developerInstructions"), params2.value(QStringLiteral("developerInstructions")).toString() + QStringLiteral(
+			" For EEG/BCI/NeuroControl requests, use the local neuro.* MCP tools rather than guessing or reading arbitrary files. Start with neuro.get_status; call neuro.get_knowledge with the relevant topic or read the metasiberia://neurocontrol resources for technical explanations. Prefer live tool results over static docs. Mutations are allowed only when the user explicitly requests them; never enable avatar control unless the user asks, and use neuro.emergency_stop immediately when requested. Synthetic Board is artificial and never proves brain control. Distinguish model probability, classifier decision, safety rejection, controller input and measured avatar motion. Report model threshold, controller safety floor and effective threshold separately. Never call this a medical device or claim clinical efficacy."));
+#endif
 		sendRequest(QStringLiteral("thread/start"), params2, next_request_id++);
 		model_request_id = next_request_id++;
 		sendRequest(QStringLiteral("model/list"), QJsonObject{{"limit", 100}}, model_request_id);

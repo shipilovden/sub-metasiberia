@@ -14,6 +14,9 @@
 
 Metasiberia is a virtual world project inspired by and based on the open-source Substrata software.
 
+The Windows Qt NeuroControl integration and its OFF/ON build boundary are
+documented in [the integration guide](docs/NEUROCONTROL_WINDOWS_INTEGRATION.md).
+
 ## Quick Access
 
 - **🧭 Server site**: [https://vr.metasiberia.com/](https://vr.metasiberia.com/)

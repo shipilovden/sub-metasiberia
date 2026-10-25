@@ -1,0 +1,112 @@
+name: Deploy Cpp libs
+
+on: [push]
+
+jobs:
+  CppWindows:
+    runs-on: windows-2022
+
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix:
+        msvc_runtime: [static, dynamic]
+        build_type: [Release, Debug]
+        arch: [Win32, x64]
+
+    steps:
+    - name: Clone Repository
+      uses: actions/checkout@v2
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1.0.2
+    # compile and prepare everything
+    # need to build SimpleCBLE outside from BrainFlow because they have different Windows System Versions
+    - name: Compile SimpleCBLE ${{ matrix.build_type }} ${{ matrix.arch }} with MSVC runtime ${{ matrix.msvc_runtime }}
+      run: |
+        mkdir %GITHUB_WORKSPACE%\third_party\SimpleBLE\simplecble\%BUILD%_%RUNTIME%_%ARCH%
+        cd %GITHUB_WORKSPACE%\third_party\SimpleBLE\simplecble\%BUILD%_%RUNTIME%_%ARCH%
+        cmake -G "Visual Studio 17 2022" -A %ARCH% -DMSVC_RUNTIME=%RUNTIME% -DCMAKE_SYSTEM_VERSION=10.0.19041.0 -DCMAKE_INSTALL_PREFIX=%GITHUB_WORKSPACE%\artifacts\%ARCH%_%BUILD%_%RUNTIME%\ ..
+        cmake --build . --target install --config %BUILD% -j 2 --parallel 2
+      shell: cmd
+      env:
+        RUNTIME: ${{ matrix.msvc_runtime }}
+        BUILD: ${{ matrix.build_type }}
+        ARCH: ${{ matrix.arch }}
+    - name: Compile ${{ matrix.build_type }} ${{ matrix.arch }} with MSVC runtime ${{ matrix.msvc_runtime }}
+      run: |
+        mkdir %GITHUB_WORKSPACE%\%BUILD%_%RUNTIME%_%ARCH%
+        cd %GITHUB_WORKSPACE%\%BUILD%_%RUNTIME%_%ARCH%
+        cmake -DBUILD_BLUETOOTH=ON -DBUILD_ONNX=ON -DBUILD_OYMOTION_SDK=ON -DWARNINGS_AS_ERRORS=OFF -G "Visual Studio 17 2022" -A %ARCH% -DCMAKE_SYSTEM_VERSION=8.1 -DMSVC_RUNTIME=%RUNTIME% -DCMAKE_INSTALL_PREFIX=..\artifacts\%ARCH%_%BUILD%_%RUNTIME%\ ..
+        cmake --build . --target install --config %BUILD% -j 2 --parallel 2
+      shell: cmd
+      env:
+        RUNTIME: ${{ matrix.msvc_runtime }}
+        BUILD: ${{ matrix.build_type }}
+        ARCH: ${{ matrix.arch }}
+
+    # Start Deploy Stage
+    - name: Upload ${{ matrix.build_type }} ${{ matrix.arch }} with MSVC runtime ${{ matrix.msvc_runtime }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: compiled_libs_${{ matrix.arch }}_${{ matrix.build_type }}_${{ matrix.msvc_runtime }}
+        path: artifacts
+
+  CppUnix:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix:
+        build_type: [Release, Debug]
+        os: [ubuntu-latest, macos-14]
+
+    steps:
+    - name: Clone Repository
+      uses: actions/checkout@v2
+    - name: Setup CMake
+      uses: lukka/get-cmake@v4.3.2
+      with:
+        cmakeVersion: '3.21.4'
+    - name: Install Ninja
+      if: (matrix.os == 'macos-14')
+      run: |
+        if ! command -v ninja; then
+          brew install ninja
+        fi
+        ninja --version
+    # build SimpleCBLE outside from brainflow because of different deployment targets
+    - name: Compile SimpleCBLE MacOS
+      if: (matrix.os == 'macos-14')
+      run: |
+        mkdir $GITHUB_WORKSPACE/third_party/SimpleBLE/simplecble/build
+        cd $GITHUB_WORKSPACE/third_party/SimpleBLE/simplecble/build
+        cmake -G Ninja -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/artifacts/macos_$BUILD -DCMAKE_BUILD_TYPE=$BUILD ..
+        ninja
+        ninja install
+        ls -l $GITHUB_WORKSPACE/artifacts/macos_$BUILD/
+      env:
+        BUILD: ${{ matrix.build_type }}
+    - name: Compile BrainFlow for MacOS
+      if: (matrix.os == 'macos-14')
+      run: |
+        mkdir $GITHUB_WORKSPACE/build
+        cd $GITHUB_WORKSPACE/build
+        cmake -G Ninja -DBUILD_BLUETOOTH=ON -DWARNINGS_AS_ERRORS=ON -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/artifacts/macos_$BUILD -DCMAKE_BUILD_TYPE=$BUILD ..
+        ninja
+        ninja install
+        ls -l $GITHUB_WORKSPACE/artifacts/macos_$BUILD/
+      env:
+        BUILD: ${{ matrix.build_type }}
+    - name: Compile BrainFlow in ManyLinux
+      if: (matrix.os == 'ubuntu-latest')
+      run: |
+        docker pull dockcross/manylinux_2_28-x64:20240418-88c04a4
+        docker run -e GITHUB_WORKSPACE=$GITHUB_WORKSPACE -e BUILD=$BUILD -v $GITHUB_WORKSPACE:$GITHUB_WORKSPACE dockcross/manylinux_2_28-x64:20240418-88c04a4 /bin/bash -c "yum install -y bluez-libs-devel dbus-devel && /opt/python/cp36-cp36m/bin/pip3.6 install cmake==3.21.4 && cd $GITHUB_WORKSPACE && mkdir build_docker && cd build_docker && /opt/_internal/cpython-3.6.15/bin/cmake -DBUILD_BLE=ON -DBUILD_BLUETOOTH=ON -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/artifacts/linux_${BUILD} -DCMAKE_BUILD_TYPE=$BUILD .. && make && make install"
+      env:
+        BUILD: ${{ matrix.build_type }}
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: compiled_libs_${{ matrix.os }}_${{ matrix.build_type }}
+        path: artifacts

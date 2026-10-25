@@ -15,6 +15,9 @@ Copyright Glare Technologies Limited 2024 -
 #include "UpdateManager.h"
 #include "AIConnectionDialog.h"
 #include "AIDockWidget.h"
+#if defined(ENABLE_NEUROCONTROL)
+#include "NeuroControlWidget.h"
+#endif
 #include "MCPClientHandler.h"
 #include "MCPTextMeshTools.h"
 #include <QtCore/QSemaphore>
@@ -280,6 +283,34 @@ static void logLifecycleTiming(const char* stage, Timer& timer)
 		log_file->flush();
 	}
 	timer.reset();
+}
+
+
+static void logLifecycleStart(const char* stage)
+{
+	const std::string message = std::string("Lifecycle: ") + stage + " started";
+	conPrint(message);
+	if(log_file)
+	{
+		log_file->getFileStream() << message << '\n';
+		log_file->flush();
+	}
+}
+
+
+static bool waitForMCPReply(QSemaphore& reply, const std::atomic<bool>& shutdown_requested,
+	std::atomic<bool>& cancelled, int timeout_ms)
+{
+	int waited_ms = 0;
+	while(waited_ms < timeout_ms && !shutdown_requested.load())
+	{
+		const int wait_ms = std::min(50, timeout_ms - waited_ms);
+		if(reply.tryAcquire(1, wait_ms))
+			return true;
+		waited_ms += wait_ms;
+	}
+	cancelled.store(true);
+	return false;
 }
 
 
@@ -1691,12 +1722,13 @@ static void applyEditorDockTitleBarTheme(QDockWidget* dock_widget, const QPalett
 	const bool animation_panel = dock_widget->objectName() == QStringLiteral("animationEditorDockWidget");
 	const bool chat_panel = dock_widget->objectName() == QStringLiteral("chatDockWidget");
 	const bool ai_panel = dock_widget->objectName() == QStringLiteral("aiDockWidget");
+	const bool neuro_control_panel = dock_widget->objectName() == QStringLiteral("neuroControlDockWidget");
 	const bool add_object_panel = dock_widget->objectName() == QStringLiteral("addObjectDockWidget");
 	const bool material_panel = dock_widget->objectName() == QStringLiteral("materialBrowserDockWidget");
 	// These editors deliberately keep a dark title strip in every theme and
 	// activation state, including when floating. Only the title is overridden.
-	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || add_object_panel || material_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
-	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || add_object_panel || material_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
+	const QColor background = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || neuro_control_panel || add_object_panel || material_panel) ? QColor("#34343a") : palette.color(QPalette::Window);
+	const QColor foreground = (photo_panel || avatar_panel || animation_panel || chat_panel || ai_panel || neuro_control_panel || add_object_panel || material_panel) ? QColor("#e4e4e7") : palette.color(QPalette::WindowText);
 	const QColor hover = foreground.lightness() > background.lightness() ? background.lighter(132) : background.darker(104);
 	// Own the custom title's colours locally, including when the dock floats.
 	// Do not depend on reapplying the main-window stylesheet to refresh it.
@@ -2557,6 +2589,20 @@ void MainWindow::initialiseUI()
 	resizeDocks(QList<QDockWidget*>() << ai_dock_widget, QList<int>() << 440, Qt::Horizontal);
 	ai_dock_widget->hide();
 
+#if defined(ENABLE_NEUROCONTROL)
+	neuro_control_dock_widget = new QDockWidget(tr("Нейроуправление"), this);
+	neuro_control_dock_widget->setObjectName(QStringLiteral("neuroControlDockWidget"));
+	neuro_control_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	neuro_control_widget = new NeuroControlWidget(&gui_client, neuro_control_dock_widget);
+	neuro_control_dock_widget->setWidget(neuro_control_widget);
+	installEditorDockTitleBar(neuro_control_dock_widget);
+	addDockWidget(Qt::LeftDockWidgetArea, neuro_control_dock_widget);
+	neuro_control_dock_widget->hide();
+	connect(neuro_control_dock_widget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+		if(!visible && neuro_control_widget) neuro_control_widget->stop();
+	});
+#endif
+
 	// Add dock widgets to Window menu
 	ui->menuWindow->addSeparator();
 	ui->menuWindow->addAction(ui->editorDockWidget->toggleViewAction());
@@ -2569,6 +2615,9 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(photo_video_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(document_editor_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(ai_dock_widget->toggleViewAction());
+#if defined(ENABLE_NEUROCONTROL)
+	ui->menuWindow->addAction(neuro_control_dock_widget->toggleViewAction());
+#endif
 	ui->menuWindow->addAction(ui->chatDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->helpInfoDockWidget->toggleViewAction());
 	ui->menuWindow->addAction(ui->webcamDockWidget->toggleViewAction());
@@ -2733,6 +2782,14 @@ void MainWindow::initialiseUI()
 		this->ui->diagnosticsDockWidget->hide();
 		this->ui->worldSettingsDockWidget->hide();
 	}
+
+#if defined(ENABLE_NEUROCONTROL)
+	// Keep NeuroControl beside World Settings even if an older saved window state
+	// placed its new dock on the opposite side of the viewport.
+	neuro_control_dock_widget->setFloating(false);
+	addDockWidget(Qt::LeftDockWidgetArea, neuro_control_dock_widget);
+	tabifyDockWidget(ui->worldSettingsDockWidget, neuro_control_dock_widget);
+#endif
 
 	// Make it so the toolbar can't be hidden, as it's confusing for users when it disappears.
 	ui->toolBar->toggleViewAction()->setEnabled(false);
@@ -3362,6 +3419,14 @@ void MainWindow::refreshTranslatedUiText()
 	ui->worldSettingsWidget->retranslateUiText();
 	ui->environmentOptionsWidget->retranslateUi(ui->environmentOptionsWidget);
 	setWindowTitle(QtUtils::toQString(computeWindowTitle()));
+#if defined(ENABLE_NEUROCONTROL)
+	if(neuro_control_dock_widget)
+	{
+		neuro_control_dock_widget->setWindowTitle(tr("Нейроуправление"));
+		if(neuro_control_dock_widget->toggleViewAction())
+			neuro_control_dock_widget->toggleViewAction()->setText(neuro_control_dock_widget->windowTitle());
+	}
+#endif
 
 	this->ui->helpInfoLabel->setText(defaultHelpInfoMessageText());
 
@@ -3647,6 +3712,12 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_plain(ui->materialBrowserDockWidget->toggleViewAction(), "palette", QString::fromUtf8("◐"));
 	set_plain(ui->environmentDockWidget->toggleViewAction(), "cloud-sun", QString::fromUtf8("☼"));
 	set_plain(ui->worldSettingsDockWidget->toggleViewAction(), "globe", QString::fromUtf8("◎"));
+	if(ai_dock_widget)
+		set_accent(ai_dock_widget->toggleViewAction(), "bot", "#A78BFA", QStringLiteral("AI"));
+#if defined(ENABLE_NEUROCONTROL)
+	if(neuro_control_dock_widget)
+		set_plain(neuro_control_dock_widget->toggleViewAction(), "brain", QString::fromUtf8("◉"));
+#endif
 	if(map_dock_widget)
 		set_plain(map_dock_widget->toggleViewAction(), "map", QString::fromUtf8("▱"));
 	set_plain(ui->chatDockWidget->toggleViewAction(), "messages-square", QString::fromUtf8("▣"));
@@ -3942,6 +4013,9 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	applyEditorDockTitleBarTheme(ui->chatDockWidget, palette);
 	applyEditorDockTitleBarTheme(ui->materialBrowserDockWidget, palette);
 	applyEditorDockTitleBarTheme(ai_dock_widget, palette);
+#if defined(ENABLE_NEUROCONTROL)
+	applyEditorDockTitleBarTheme(neuro_control_dock_widget, palette);
+#endif
 
 	if(ui->menubar)
 	{
@@ -4191,6 +4265,14 @@ void MainWindow::afterGLInitInitialise()
 MainWindow::~MainWindow()
 {
 	running_destructor = true; // Set this to not append log messages during destruction, causes assert failure in Qt.
+#if defined(ENABLE_NEUROCONTROL)
+	if(neuro_control_dock_widget)
+	{
+		delete neuro_control_dock_widget; // Release the data source while GUIClient still exists.
+		neuro_control_dock_widget = nullptr;
+		neuro_control_widget = nullptr;
+	}
+#endif
 	stopMCPClientServer();
 	if(animation_editor_controller) animation_editor_controller->shutdown();
 	if(photo_path_timer) photo_path_timer->stop();
@@ -4255,6 +4337,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	}
 
 	closing = true;
+	Timer shutdown_stage_timer;
+	logLifecycleStart("close preparation");
 	photo_path_timer->stop();
 	photo_video_timer->stop();
 #if defined(_WIN32)
@@ -4263,8 +4347,6 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	photo_video_recorder.reset(); // Finish the MP4 before tearing down the scene.
 	if(photo_video_settings_panel) photo_video_settings_panel->cancelCapture();
 	native_photo_video_gl_ready = false;
-	Timer shutdown_stage_timer;
-
 	// If we are in fullscreen mode, exit it before we save the window state.  This is because we want to start next time not in fullscreen mode.
 	if(this->isFullScreen())
 		exitFromFullScreenMode();
@@ -4277,8 +4359,19 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	// Keep the GL widget alive until its context-dependent cleanup has finished.
 	hide();
 	logLifecycleTiming("close window", shutdown_stage_timer);
+	logLifecycleStart("MCP shutdown");
+	stopMCPClientServer();
+	logLifecycleTiming("MCP shutdown", shutdown_stage_timer);
 
 	ui->glWidget->makeCurrent();
+#if defined(ENABLE_NEUROCONTROL)
+	if(neuro_control_widget)
+	{
+		logLifecycleStart("NeuroControl stop");
+		neuro_control_widget->stop();
+		logLifecycleTiming("NeuroControl stop", shutdown_stage_timer);
+	}
+#endif
 	if(avatar_settings_widget)
 		avatar_settings_widget->shutdownGL();
 	if(animation_editor_controller) animation_editor_controller->shutdown();
@@ -4287,6 +4380,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
 	ui->glWidget->makeCurrent();
 
 	ui->glWidget->setPhotoSettings(QVariantMap(), false);
+	logLifecycleStart("client shutdown");
 	gui_client.shutdown();
 	logLifecycleTiming("client shutdown", shutdown_stage_timer);
 
@@ -4295,12 +4389,14 @@ void MainWindow::closeEvent(QCloseEvent* event)
 
 
 	this->opengl_engine = NULL;
+	logLifecycleStart("OpenGL shutdown");
 	ui->glWidget->shutdown(); // Shuts down OpenGL Engine.
 	logLifecycleTiming("OpenGL shutdown", shutdown_stage_timer);
 
 	if(log_window) log_window->close();
 
 	in_CEF_message_loop = true;
+	logLifecycleStart("browser shutdown");
 	CEF::shutdownCEF();
 	logLifecycleTiming("browser shutdown", shutdown_stage_timer);
 	in_CEF_message_loop = false;
@@ -10848,6 +10944,14 @@ void MainWindow::on_actionReset_Layout_triggered()
 {
 	ui->editorDockWidget->setFloating(false);
 	this->addDockWidget(Qt::LeftDockWidgetArea, ui->editorDockWidget);
+#if defined(ENABLE_NEUROCONTROL)
+	if(neuro_control_dock_widget)
+	{
+		neuro_control_dock_widget->setFloating(false);
+		addDockWidget(Qt::LeftDockWidgetArea, neuro_control_dock_widget);
+		tabifyDockWidget(ui->worldSettingsDockWidget, neuro_control_dock_widget);
+	}
+#endif
 	ui->editorDockWidget->show();
 
 	ui->chatDockWidget->setFloating(false);
@@ -10961,7 +11065,6 @@ void MainWindow::on_actionSignUp_triggered()
 
 		conPrint("username: " + username);
 		conPrint("email:    " + email);
-		conPrint("password: " + password);
 		//this->last_login_username = username;
 
 		// Make message packet and enqueue to send
@@ -11931,10 +12034,11 @@ void MainWindow::on_actionAI_triggered()
 
 void MainWindow::startMCPClientServerIfEnabled()
 {
-	if(mcp_client_server_running || !settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool())
+	if(mcp_client_server_running || closing || !settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool())
 		return;
 	if(gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
 		return;
+	mcp_shutdown_requested.store(false);
 	// LoginDialog writes credentials through a temporary manager. Reload the
 	// member before taking the MCP forwarding snapshot so a newly entered
 	// password is used immediately, without requiring a client restart.
@@ -11946,6 +12050,36 @@ void MainWindow::startMCPClientServerIfEnabled()
 	shared_handler->setPolyHavenEnabledCallback([this]() { return mcp_poly_haven_enabled.load(); });
 	const std::string render_server = gui_client.server_hostname, render_world = gui_client.server_worldname;
 	const UserID animation_user = gui_client.logged_in_user_id;
+#if defined(ENABLE_NEUROCONTROL)
+	shared_handler->setNeuroControlCallback([this, render_server, render_world, animation_user](const QString& tool, const QJsonObject& args) -> QJsonObject {
+		struct PendingNeuroRequest {
+			QSemaphore done;
+			std::atomic<bool> cancelled{false};
+			QJsonObject result;
+			std::string error;
+		};
+		const auto pending = std::make_shared<PendingNeuroRequest>();
+		QMetaObject::invokeMethod(this, [this, pending, tool, args, render_server, render_world, animation_user]() {
+			if(pending->cancelled.load()) return;
+			try {
+				if(closing || !mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
+					gui_client.server_hostname != render_server || gui_client.server_worldname != render_world || gui_client.logged_in_user_id != animation_user)
+					throw std::runtime_error("World/account changed during the MCP session. Reconnect AI before NeuroControl operations.");
+				if(!neuro_control_widget) throw std::runtime_error("NeuroControl panel is not initialized.");
+				pending->result = neuro_control_widget->handleMCPRequest(tool, args);
+			} catch(const glare::Exception& e) { pending->error = e.what(); }
+			catch(const std::exception& e) { pending->error = e.what(); }
+			catch(...) { pending->error = "NeuroControl operation failed."; }
+			pending->done.release();
+		}, Qt::QueuedConnection);
+		// Queue to the UI thread; never call Qt widgets from the MCP listener worker.
+		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 15000))
+			throw glare::Exception(mcp_shutdown_requested.load() ? "NeuroControl request cancelled because MCP is shutting down." :
+				"NeuroControl request timed out before the UI thread replied. Check the panel before retrying a mutation.");
+		if(!pending->error.empty()) throw glare::Exception(pending->error);
+		return pending->result;
+	});
+#endif
 	shared_handler->setAnimationCallback([this, render_server, render_world, animation_user](const QString& tool, const QJsonObject& args) -> QJsonObject {
 		struct PendingAnimation {
 			QSemaphore done;
@@ -11974,10 +12108,9 @@ void MainWindow::startMCPClientServerIfEnabled()
 			pending->done.release();
 		}, Qt::QueuedConnection);
 		// Endpoint shutdown joins workers on the GUI thread: never use BlockingQueuedConnection.
-		if(!pending->done.tryAcquire(1, 10000)) {
-			pending->cancelled.store(true);
-			throw glare::Exception("Animation editor request timed out. Inspect animation_editor_list before retrying a mutation.");
-		}
+		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 10000))
+			throw glare::Exception(mcp_shutdown_requested.load() ? "Animation editor request cancelled because MCP is shutting down." :
+				"Animation editor request timed out. Inspect animation_editor_list before retrying a mutation.");
 		if(!pending->error.empty()) throw glare::Exception(pending->error);
 		return pending->result;
 	});
@@ -12002,10 +12135,9 @@ void MainWindow::startMCPClientServerIfEnabled()
 			catch(...) { pending->error = "Text conversion failed."; }
 			pending->done.release();
 		}, Qt::QueuedConnection);
-		if(!pending->done.tryAcquire(1, 15000)) {
-			pending->cancelled.store(true);
-			throw glare::Exception("Text conversion timed out. Inspect the object before retrying to avoid a duplicate edit.");
-		}
+		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 15000))
+			throw glare::Exception(mcp_shutdown_requested.load() ? "Text conversion cancelled because MCP is shutting down." :
+				"Text conversion timed out. Inspect the object before retrying to avoid a duplicate edit.");
 		if(!pending->error.empty()) throw glare::Exception(pending->error);
 		return pending->result;
 	});
@@ -12048,7 +12180,9 @@ void MainWindow::startMCPClientServerIfEnabled()
 			pending->done.release();
 		}, Qt::QueuedConnection);
 		// Never use BlockingQueuedConnection: endpoint shutdown joins workers on the GUI thread.
-		if(!pending->done.tryAcquire(1, 10000)) { pending->cancelled.store(true); throw glare::Exception("Scene render timed out. Retry when the client is responsive."); }
+		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 10000))
+			throw glare::Exception(mcp_shutdown_requested.load() ? "Scene render cancelled because MCP is shutting down." :
+				"Scene render timed out. Retry when the client is responsive.");
 		if(!pending->error.empty()) throw glare::Exception(pending->error);
 		result = std::move(pending->image);
 	});
@@ -12499,7 +12633,9 @@ void MainWindow::startMCPClientServerIfEnabled()
 			catch(...) { pending->error="World settings operation failed."; }
 			if(!async_started) pending->done.release();
 		}, Qt::QueuedConnection);
-		if(!pending->done.tryAcquire(1,600000)) { pending->cancelled.store(true); throw glare::Exception("Terrain operation timed out. A map import may still be running; check its progress in World Settings before retrying."); }
+		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 600000))
+			throw glare::Exception(mcp_shutdown_requested.load() ? "Terrain operation cancelled because MCP is shutting down." :
+				"Terrain operation timed out. A map import may still be running; check its progress in World Settings before retrying.");
 		if(!pending->error.empty()) throw glare::Exception(pending->error);
 		return pending->result;
 	});
@@ -12546,6 +12682,7 @@ void MainWindow::startMCPClientServerIfEnabled()
 
 void MainWindow::stopMCPClientServer()
 {
+	mcp_shutdown_requested.store(true);
 	if(ai_dock_widget) ai_dock_widget->stopCodex();
 	if(!mcp_client_server_running)
 		return;
@@ -15118,7 +15255,10 @@ int main(int argc, char *argv[])
 		const bool com_init_success = WMFVideoReader::initialiseCOM();
 #endif
 
+		Timer startup_stage_timer;
+		logLifecycleStart("static client initialization");
 		GUIClient::staticInit();
+		logLifecycleTiming("static client initialization", startup_stage_timer);
 
 
 		const std::string cyberspace_base_dir_path = PlatformUtils::getResourceDirectoryPath();
@@ -15295,7 +15435,7 @@ int main(int argc, char *argv[])
 			// We want to call connectToServer as quickly as possible to hide the latency of setting up the TLS connection to the server.
 			// So do the bare minimum of initialisation, call connectToServer, then do the reset (setting up UI etc.)
 
-			Timer startup_stage_timer;
+			logLifecycleStart("window construction");
 			MainWindow mw(cyberspace_base_dir_path, appdata_path, parsed_args);
 			logLifecycleTiming("window construction", startup_stage_timer);
 			mw.minidump_sender = minidump_sender;
@@ -15317,6 +15457,7 @@ int main(int argc, char *argv[])
 
 			server_URL = canonicaliseMetasiberiaSubURLHost(server_URL);
 
+			logLifecycleStart("server connection");
 			try
 			{
 				URLParseResults parse_results = URLParser::parseURL(server_URL);
@@ -15328,10 +15469,12 @@ int main(int argc, char *argv[])
 			{
 				QtUtils::showErrorMessageDialog(e.what(), &mw);
 			}
+			logLifecycleTiming("server connection", startup_stage_timer);
 
 			// Do rest of initialisation now we have called connectToServer().
+			logLifecycleStart("post-connect resource initialization");
 			mw.gui_client.postConnectInitialise();
-			logLifecycleTiming("resource initialisation", startup_stage_timer);
+			logLifecycleTiming("post-connect resource initialization", startup_stage_timer);
 
 			bool enable_CEF = true;
 			try
@@ -15343,9 +15486,10 @@ int main(int argc, char *argv[])
 			catch(glare::Exception& )
 			{}
 
+			logLifecycleStart("CEF initialization");
 			if(enable_CEF)
 				CEF::initialiseCEF(cyberspace_base_dir_path, appdata_path);
-			logLifecycleTiming("browser initialisation", startup_stage_timer);
+			logLifecycleTiming("CEF initialization", startup_stage_timer);
 
 			open_even_filter->main_window = &mw;
 
@@ -15355,6 +15499,7 @@ int main(int argc, char *argv[])
 			if(parsed_args.isArgPresent("--testscreenshot"))
 				mw.test_screenshot_taking = true;
 
+			logLifecycleStart("UI initialization");
 			mw.initialiseUI();
 			logLifecycleTiming("UI initialisation", startup_stage_timer);
 
@@ -15368,6 +15513,7 @@ int main(int argc, char *argv[])
 					mw.logMessage("CEF initialised successfully.");
 			}
 
+			logLifecycleStart("OpenGL initialization");
 			mw.show(); // Calls glWidget->initializeGL() which initialises OpenGLEngine.
 			logLifecycleTiming("OpenGL initialisation", startup_stage_timer);
 
@@ -15380,26 +15526,34 @@ int main(int argc, char *argv[])
 				mw.logMessage(msg);
 				
 				QtUtils::showErrorMessageDialog(msg, &mw);
-				return 1;
+				// Route partial startup through the ordinary close path so GUIClient,
+				// CEF, WMF, logging and static networking state are all released.
+				app_exec_res = 1;
+				mw.close();
 			}
-			mw.opengl_engine = mw.ui->glWidget->opengl_engine;
-			mw.gui_client.opengl_engine = mw.opengl_engine;
+			else
+			{
+				mw.opengl_engine = mw.ui->glWidget->opengl_engine;
+				mw.gui_client.opengl_engine = mw.opengl_engine;
 
-			mw.gui_client.cam_controller.setFirstAndThirdPersonPositions(Vec3d(0,0,4.7));
-			mw.ui->glWidget->setCameraController(&mw.gui_client.cam_controller);
-			mw.gui_client.cam_controller.setMoveScale(0.3f);
-
-
-
-			mw.afterGLInitInitialise();
-			logLifecycleTiming("scene initialisation", startup_stage_timer);
-
-			if(guest_avatar_selection_needed)
-				mw.showGuestAvatarSelection();
+				mw.gui_client.cam_controller.setFirstAndThirdPersonPositions(Vec3d(0,0,4.7));
+				mw.ui->glWidget->setCameraController(&mw.gui_client.cam_controller);
+				mw.gui_client.cam_controller.setMoveScale(0.3f);
 
 
-			app_exec_res = app.exec();
 
+				logLifecycleStart("scene initialization");
+				mw.afterGLInitInitialise();
+				logLifecycleTiming("scene initialisation", startup_stage_timer);
+
+				if(guest_avatar_selection_needed)
+					mw.showGuestAvatarSelection();
+
+
+				app_exec_res = app.exec();
+				logLifecycleTiming("Qt event loop", startup_stage_timer);
+
+			}
 			open_even_filter->main_window = NULL;
 		} // End scope of MainWindow mw
 

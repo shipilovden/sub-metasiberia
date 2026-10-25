@@ -1,0 +1,58 @@
+name: Run Android NDK
+
+on: [push, pull_request]
+
+jobs:
+  RunAndroid:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        os: [ubuntu-latest]
+
+    env:
+      ANDROID_NDK_VERSION: 25.1.8937393
+      ANDROID_API_LEVEL: android-31
+
+    steps:
+    - name: Clone Repository
+      uses: actions/checkout@v2
+    - name: Setup Java
+      uses: actions/setup-java@v1
+      with:
+        java-version: 11.0.3
+    - name: Install Ninja
+      run: |
+        sudo -H apt-get update -y
+        sudo -H apt-get install -y ninja-build zip unzip python3-setuptools python3-pygments
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    - name: Setup CMake
+      uses: lukka/get-cmake@v4.3.2
+      with:
+        cmakeVersion: '3.21.4'
+    - name: Install NDK
+      run: |
+        echo "y" | sudo -H ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;${ANDROID_NDK_VERSION}" "platforms;${ANDROID_API_LEVEL}" --sdk_root=${ANDROID_SDK_ROOT}
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    - name: Compile BrainFlow
+      run: |
+        for ABI in arm64-v8a armeabi-v7a x86 x86_64; do
+          mkdir $GITHUB_WORKSPACE/build-$ABI
+          cd $GITHUB_WORKSPACE/build-$ABI
+          cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}/build/cmake/android.toolchain.cmake -DANDROID_ABI=$ABI -DCMAKE_BUILD_TYPE=Release -DANDROID_NATIVE_API_LEVEL=${ANDROID_API_LEVEL} ..
+          ninja
+        done
+    - name: Build Android AAR
+      run: python3 $GITHUB_WORKSPACE/tools/build_android_aar.py --android-sdk-root ${ANDROID_SDK_ROOT} --android-api-level ${ANDROID_API_LEVEL} --output $GITHUB_WORKSPACE/tools/brainflow-android.aar
+    - name: Install AWS CLI
+      run: sudo -H python3 -m pip install awscli==1.35.24
+    - name: Upload To AWS
+      if: ${{ github.event_name == 'push' && github.repository == 'brainflow-dev/brainflow' }}
+      run: aws s3 cp $GITHUB_WORKSPACE/tools/brainflow-android.aar s3://brainflow/$GITHUB_SHA/brainflow-android.aar
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

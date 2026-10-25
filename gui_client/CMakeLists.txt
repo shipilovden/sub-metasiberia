@@ -2,7 +2,38 @@
 
 set(CURRENT_TARGET gui_client)
 
+option(ENABLE_NEUROCONTROL "Build experimental NeuroControl support" OFF)
+
 if(NOT USE_SDL)
+	if(ENABLE_NEUROCONTROL)
+		set(MSVC_RUNTIME dynamic)
+		set(BRAINFLOW_COPY_TO_PACKAGE_DIRS OFF)
+		set(BUILD_SYNCHRONI_SDK OFF)
+		set(BUILD_BLUETOOTH OFF)
+		set(BUILD_BLE OFF)
+		set(BUILD_ONNX OFF)
+		set(BUILD_TESTS OFF)
+		add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/brainflow ${CMAKE_BINARY_DIR}/brainflow_build EXCLUDE_FROM_ALL)
+		# The vendored project otherwise places its DLLs in its source tree.
+		# Keep all integration build artifacts inside this build directory.
+		function(neurocontrol_redirect_brainflow_outputs source_directory)
+			get_property(brainflow_targets DIRECTORY "${source_directory}" PROPERTY BUILDSYSTEM_TARGETS)
+			foreach(brainflow_target IN LISTS brainflow_targets)
+				get_target_property(brainflow_imported ${brainflow_target} IMPORTED)
+				if(NOT brainflow_imported)
+					set_target_properties(${brainflow_target} PROPERTIES
+						ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/brainflow_artifacts"
+						LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/brainflow_artifacts"
+						RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/brainflow_artifacts")
+				endif()
+			endforeach()
+			get_property(brainflow_subdirectories DIRECTORY "${source_directory}" PROPERTY SUBDIRECTORIES)
+			foreach(brainflow_subdirectory IN LISTS brainflow_subdirectories)
+				neurocontrol_redirect_brainflow_outputs("${brainflow_subdirectory}")
+			endforeach()
+		endfunction()
+		neurocontrol_redirect_brainflow_outputs("${CMAKE_SOURCE_DIR}/third_party/brainflow")
+	endif()
 	programAvailable(${INDIGO_QT_DIR}/bin/moc)
 endif()
 
@@ -1373,6 +1404,34 @@ ${settings}
 )
 
 if(NOT USE_SDL)
+	if(ENABLE_NEUROCONTROL)
+		target_compile_definitions(${CURRENT_TARGET} PRIVATE ENABLE_NEUROCONTROL=1)
+	add_library(neurocontrol_brainflow STATIC
+		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/BrainflowSyntheticSource.cpp
+		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/BrainflowSyntheticSource.h)
+	if(MSVC)
+		target_compile_options(neurocontrol_brainflow PRIVATE /utf-8)
+	endif()
+	target_link_libraries(neurocontrol_brainflow PRIVATE Brainflow)
+	target_sources(${CURRENT_TARGET} PRIVATE
+		${CMAKE_SOURCE_DIR}/gui_client/NeuroControlWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/NeuroControlWidget.h
+		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/LslEegSource.cpp
+		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/LslEegSource.h
+		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/LslRecordingFile.cpp
+		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/LslRecordingFile.h
+		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/EegSource.h
+		${CMAKE_SOURCE_DIR}/neurocontrol/processing/NeuroClassifier.cpp
+		${CMAKE_SOURCE_DIR}/neurocontrol/processing/NeuroClassifier.h
+		${CMAKE_SOURCE_DIR}/neurocontrol/experiments/NeuroExperimentLogger.cpp
+		${CMAKE_SOURCE_DIR}/neurocontrol/experiments/NeuroExperimentLogger.h
+		${CMAKE_SOURCE_DIR}/neurocontrol/avatar/NeuroCommand.h)
+	target_link_libraries(${CURRENT_TARGET} neurocontrol_brainflow)
+	add_custom_command(TARGET ${CURRENT_TARGET} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE:BoardController> $<TARGET_FILE:DataHandler> $<TARGET_FILE:MLModule>
+			$<TARGET_FILE_DIR:${CURRENT_TARGET}>)
+	endif()
 	# Animation-only FBX reader: no tessellation, OBJ, caches, or filesystem IO.
 	set_source_files_properties(${CMAKE_SOURCE_DIR}/third_party/ufbx/ufbx.c
 		PROPERTIES COMPILE_DEFINITIONS "UFBX_MINIMAL;UFBX_NO_STDIO")
@@ -1394,6 +1453,7 @@ if(MSVC)
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarGearPreviewWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/GearInventoryPanel.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/NeuroControlWidget.cpp
 		PROPERTIES COMPILE_OPTIONS "/utf-8"
 	)
 endif()

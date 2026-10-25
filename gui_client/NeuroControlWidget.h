@@ -1,0 +1,291 @@
+#pragma once
+
+#include <QtCore/QElapsedTimer>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonObject>
+#include <QtCore/QString>
+#include <QtCore/QStringList>
+#include <QtWidgets/QWidget>
+#include "../neurocontrol/avatar/NeuroCommand.h"
+#include "../neurocontrol/acquisition/LslEegSource.h"
+#include <deque>
+#include <memory>
+#include <cstdint>
+#include <utility>
+#include <string>
+#include <vector>
+
+class GUIClient;
+class QCheckBox;
+class QComboBox;
+class QLabel;
+class QProgressBar;
+class QPushButton;
+class QSlider;
+class QTabWidget;
+class QTextEdit;
+class QTextBrowser;
+class QTimer;
+class QListWidget;
+class QProcess;
+class QDoubleSpinBox;
+class SpectrumView;
+class WaveformView;
+struct NeuroControlSyntheticReader;
+struct NeuroControlLslDiscovery;
+struct NeuroControlLslConfiguration;
+struct NeuroControlLslReader;
+struct NeuroControlLslRecordingLoad;
+namespace neurocontrol { class NeuroClassifier; class NeuroExperimentLogger; struct Model; }
+
+// Qt-only research panel. Recorded EDF is converted by neurocontrol/tools to
+// sample-major .f32 plus annotation JSON; the original EDF remains untouched.
+class NeuroControlWidget final : public QWidget
+{
+public:
+	explicit NeuroControlWidget(GUIClient* client, QWidget* parent = nullptr);
+	~NeuroControlWidget() override;
+	void stop();
+	QJsonObject handleMCPRequest(const QString& tool, const QJsonObject& arguments);
+
+private:
+	void loadRecording();
+	void loadRecordingPath(const QString& path);
+	bool prepareAndLoadRecording(const QString& path);
+	void loadModel();
+	void saveModelCopy();
+	void start();
+	void tick();
+	void sendTestTurn(bool left);
+	void appendDiagnostic(const QString& text);
+	void publishStop();
+	void updateChannels(const std::vector<std::string>& names,
+		const std::vector<std::string>& types = {}, const std::vector<std::string>& units = {});
+	void updateRecordingMetadata(const QJsonObject& metadata);
+	void pausePlayback();
+	void resumePlayback();
+	void seekPlayback(int sample);
+	void runPythonScript(const QString& script, const QStringList& arguments, bool training);
+	void loadModelPath(const QString& path);
+	void refreshTrainingReport(const QString& path);
+	void refreshDiagnosticsSummary();
+	void refreshSpectrum();
+	void refreshDatasetStatus();
+	void refreshOverviewStatus();
+	void refreshControlAvailability();
+	void refreshDiagnosticView();
+	void startExperimentSession();
+	void appendExperimentEvent(QJsonObject event);
+	void recordControllerTelemetry();
+	void scanLsl();
+	void configureLslLibrary(bool discover_after_configuration = false);
+	void connectLsl();
+	void disconnectLsl();
+	void startLslRecording();
+	void requestStopLslRecording();
+	void loadLslRecording(const QString& recording_id);
+	void startLslRecordingPlayback();
+	void stopLslRecordingPlayback();
+	QJsonObject lslRecordingStatusJson() const;
+	QJsonArray listLslRecordingsJson() const;
+	void startLslDiagnostic(int duration_seconds);
+	void finishLslDiagnostic(const QString& completion_reason);
+	void pollLsl();
+	QJsonObject lslStatusJson() const;
+
+	GUIClient* client_;
+	QTabWidget* tabs_;
+	QComboBox* source_;
+	QComboBox* lsl_streams_;
+	QComboBox* lsl_units_override_;
+	QPushButton* lsl_scan_button_;
+	QPushButton* lsl_connect_button_;
+	QPushButton* lsl_disconnect_button_;
+	QPushButton* lsl_record_button_;
+	QPushButton* lsl_record_stop_button_;
+	QPushButton* lsl_record_load_button_;
+	QPushButton* lsl_record_play_button_;
+	QLabel* lsl_details_label_;
+	QLabel* lsl_recording_status_label_;
+	QLabel* recording_label_;
+	QLabel* model_label_;
+	QLabel* state_label_;
+	QLabel* source_status_label_;
+	QLabel* dataset_status_label_;
+	QLabel* dataset_training_status_;
+	QLabel* model_details_label_;
+	QLabel* recognition_details_label_;
+	QLabel* system_details_label_;
+	QLabel* avatar_status_label_;
+	QLabel* avatar_action_label_;
+	QLabel* avatar_prediction_label_;
+	QLabel* playback_time_label_;
+	QProgressBar* confidence_;
+	QProgressBar* avatar_confidence_;
+	QProgressBar* positive_class_probability_;
+	QProgressBar* negative_class_probability_;
+	QCheckBox* control_enabled_;
+	QCheckBox* avatar_control_enabled_;
+	QCheckBox* test_forward_;
+	QCheckBox* plot_paused_;
+	QCheckBox* plot_auto_scale_;
+	QTextEdit* diagnostics_;
+	WaveformView* overview_waveform_;
+	WaveformView* waveform_;
+	SpectrumView* spectrum_;
+	QListWidget* channel_list_;
+	QComboBox* time_window_;
+	QComboBox* spectrum_channel_;
+	QDoubleSpinBox* vertical_scale_;
+	QComboBox* playback_speed_;
+	QComboBox* training_task_;
+	QDoubleSpinBox* low_cutoff_;
+	QDoubleSpinBox* high_cutoff_;
+	QDoubleSpinBox* epoch_seconds_;
+	QDoubleSpinBox* epoch_step_seconds_;
+	QDoubleSpinBox* event_offset_seconds_;
+	QDoubleSpinBox* confidence_threshold_;
+	QCheckBox* notch_filter_;
+	QListWidget* training_channels_;
+	QSlider* seek_slider_;
+	QPushButton* start_button_;
+	QPushButton* pause_button_;
+	QPushButton* train_button_;
+	QPushButton* download_button_;
+	QPushButton* save_model_button_;
+	QPushButton* audit_button_;
+	QComboBox* diagnostic_filter_;
+	QComboBox* diagnostic_category_filter_;
+	QProcess* training_process_ = nullptr;
+	QTextBrowser* training_result_;
+	QLabel* training_status_;
+	QProgressBar* training_progress_;
+	QLabel* diagnostics_summary_;
+	QTimer* timer_;
+	QTimer* lsl_poll_timer_;
+	QElapsedTimer elapsed_;
+	double playback_epoch_monotonic_seconds_ = 0.0;
+	std::unique_ptr<neurocontrol::NeuroClassifier> classifier_;
+	std::unique_ptr<neurocontrol::NeuroExperimentLogger> experiment_logger_;
+	std::unique_ptr<NeuroControlSyntheticReader> synthetic_reader_;
+	std::shared_ptr<NeuroControlLslDiscovery> lsl_discovery_;
+	std::shared_ptr<NeuroControlLslConfiguration> lsl_library_configuration_;
+	std::shared_ptr<NeuroControlLslReader> lsl_reader_;
+	std::shared_ptr<NeuroControlLslRecordingLoad> lsl_recording_load_;
+	QVector<neurocontrol::LslStreamDescriptor> lsl_discovered_;
+	QString lsl_library_path_;
+	QString lsl_library_state_ = QStringLiteral("not_checked");
+	QString lsl_library_error_;
+	QString lsl_library_provenance_;
+	QString lsl_library_sha256_;
+	QString lsl_recordings_directory_;
+	QString lsl_discovery_state_ = QStringLiteral("idle");
+	QString lsl_discovery_message_;
+	QString lsl_connection_state_ = QStringLiteral("disconnected");
+	QString lsl_error_;
+	neurocontrol::LslStreamDescriptor lsl_active_stream_;
+	neurocontrol::LslTimestampDiagnostics lsl_timestamp_diagnostics_;
+	std::deque<std::pair<double, double>> lsl_recent_timestamps_;
+	std::uint64_t lsl_pause_events_ = 0;
+	std::uint64_t lsl_reconnects_ = 0;
+	std::uint64_t lsl_errors_ = 0;
+	bool lsl_discovery_after_configuration_ = false;
+	bool lsl_diagnostic_running_ = false;
+	QString lsl_diagnostic_state_ = QStringLiteral("idle");
+	QString lsl_diagnostic_started_at_utc_;
+	QString lsl_diagnostic_completed_at_utc_;
+	QString lsl_diagnostic_report_path_;
+	QString lsl_diagnostic_report_markdown_;
+	int lsl_diagnostic_duration_seconds_ = 0;
+	QElapsedTimer lsl_diagnostic_elapsed_;
+	std::uint64_t lsl_diagnostic_start_received_ = 0;
+	std::uint64_t lsl_diagnostic_start_drops_ = 0;
+	std::uint64_t lsl_diagnostic_start_pauses_ = 0;
+	std::uint64_t lsl_diagnostic_start_reconnects_ = 0;
+	std::uint64_t lsl_diagnostic_start_errors_ = 0;
+	neurocontrol::LslTimestampDiagnostics lsl_diagnostic_start_timestamps_;
+	QJsonObject lsl_diagnostic_result_;
+	QJsonObject lsl_recording_status_;
+	QJsonObject lsl_loaded_recording_metadata_;
+	std::vector<float> lsl_recording_playback_samples_;
+	std::vector<double> lsl_recording_source_timestamps_;
+	std::vector<double> lsl_recording_arrival_timestamps_;
+	std::vector<double> lsl_recording_unit_to_volts_;
+	QString lsl_loaded_recording_id_;
+	QString lsl_loaded_recording_path_;
+	std::uint64_t lsl_recording_playback_start_sample_ = 0;
+	double lsl_recording_playback_rate_hz_ = 0.0;
+	bool lsl_recording_playback_ = false;
+	bool lsl_recording_load_in_progress_ = false;
+	std::vector<float> recorded_samples_;
+	std::vector<std::string> model_channels_;
+	std::vector<std::string> recording_channels_;
+	std::vector<std::string> active_channels_;
+	std::vector<std::string> active_channel_types_;
+	std::vector<std::string> active_channel_units_;
+	std::vector<std::pair<int, std::string>> event_marks_;
+	int sample_rate_ = 0;
+	int channel_count_ = 0;
+	neurocontrol::CommandType model_positive_command_ = neurocontrol::CommandType::Forward;
+	neurocontrol::CommandType model_negative_command_ = neurocontrol::CommandType::Stop;
+	bool model_turn_mapping_experimental_ = false;
+	double model_threshold_ = 0.75;
+	double applied_threshold_ = 0.75;
+	std::uint64_t next_command_event_id_ = 0;
+	std::uint64_t neuro_stream_generation_ = 0;
+	neurocontrol::CommandType last_reported_command_ = neurocontrol::CommandType::Stop;
+	bool has_reported_command_ = false;
+	QString last_reported_classifier_state_;
+	int next_sample_ = 0;
+	int playback_start_sample_ = 0;
+	int diagnostic_repeat_count_ = 0;
+	int test_generation_ = 0;
+	std::uint64_t received_samples_ = 0;
+	std::uint64_t dropped_samples_ = 0;
+	std::uint64_t rate_sample_snapshot_ = 0;
+	qint64 last_diagnostic_time_ms_ = 0;
+	qint64 last_rate_update_ms_ = 0;
+	QElapsedTimer lsl_rate_clock_;
+	qint64 last_experiment_telemetry_ms_ = 0;
+	double receive_rate_hz_ = 0.0;
+	bool rate_measured_ = false;
+	double last_inference_ms_ = 0.0;
+	QString last_classification_time_;
+	QString last_diagnostic_;
+	QString last_diagnostic_category_;
+	QString last_experiment_controller_signature_;
+	QString last_error_;
+	QString active_job_id_;
+	QString active_job_kind_;
+	QString loaded_recording_metadata_path_;
+	std::uint64_t next_job_id_ = 0;
+	bool last_job_finished_ = false;
+	bool last_job_success_ = false;
+	int last_job_exit_code_ = -1;
+	QJsonObject last_prediction_;
+	QJsonObject last_evaluation_report_;
+	QStringList diagnostic_entries_;
+	QString training_script_path_;
+	QString evaluation_script_path_;
+	QString download_script_path_;
+	QString audit_script_path_;
+	QString prepare_recording_script_path_;
+	QString prepared_metadata_path_;
+	QString last_evaluation_report_path_;
+	QString evaluation_model_id_;
+	QString evaluation_recording_id_;
+	QString python_path_;
+	QString model_positive_label_;
+	QString model_negative_label_;
+	QString loaded_model_path_;
+	QJsonObject model_metadata_;
+	QString dataset_status_text_;
+	bool dataset_verified_ = false;
+	bool active_job_is_audit_ = false;
+	bool active_job_is_training_ = false;
+	bool active_job_is_preparing_ = false;
+	bool active_job_is_evaluation_ = false;
+	bool playing_ = false;
+	bool paused_ = false;
+	bool updating_seek_slider_ = false;
+};

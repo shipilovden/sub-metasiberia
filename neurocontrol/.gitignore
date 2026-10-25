@@ -1,0 +1,13 @@
+# Recordings, derived data and trained models stay local.
+datasets/raw/*
+datasets/processed/*
+datasets/samples/*
+models/*
+!datasets/raw/.gitkeep
+!datasets/processed/.gitkeep
+!datasets/samples/.gitkeep
+!models/.gitkeep
+.venv/
+build/
+__pycache__/
+*.pyc

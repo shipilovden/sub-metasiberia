@@ -2461,7 +2461,12 @@ void GUIClient::shutdown()
 		return;
 	shutdown_started = true;
 	Timer shutdown_timer;
+	Timer shutdown_total_timer;
+	conPrint("Lifecycle: GUIClient shutdown started.");
+	conPrint("Lifecycle: close fullscreen viewer started.");
 	closeFullscreenViewer();
+	conPrint("Lifecycle: close fullscreen viewer took " + shutdown_timer.elapsedStringMSWIthNSigFigs());
+	shutdown_timer.reset();
 	if(terrain_sculpt_stroke_active && terrain_system.nonNull())
 	{
 		terrain_system->endSculptStroke();
@@ -2472,6 +2477,7 @@ void GUIClient::shutdown()
 	{
 		// Sculpted maps are uploaded asynchronously. Do not tear down the upload
 		// workers or disconnect before their URLs can be committed to the world.
+		conPrint("Lifecycle: pending world-upload drain started.");
 		Timer upload_wait_timer;
 		while(num_resources_uploading > 0 && upload_wait_timer.elapsed() < 15.0)
 			PlatformUtils::Sleep(10);
@@ -2485,6 +2491,7 @@ void GUIClient::shutdown()
 		}
 		else
 			conPrint("Could not finish uploading terrain maps before shutdown; world settings were not sent.");
+		conPrint("Lifecycle: pending world-upload drain took " + upload_wait_timer.elapsedStringMSWIthNSigFigs());
 	}
 	// Destroy/close all OpenGL stuff, because once glWidget is destroyed, the OpenGL context is destroyed, so we can't free stuff properly.
 	hideTerrainSculptBrushOverlay();
@@ -2499,12 +2506,20 @@ void GUIClient::shutdown()
 
 	load_item_queue.clear();
 
+	shutdown_timer.reset();
+	conPrint("Lifecycle: loader-task drain started.");
+	conPrint("Lifecycle: model/texture task wait started.");
 	model_and_texture_loader_task_manager.removeQueuedTasks();
 	model_and_texture_loader_task_manager.waitForTasksToComplete();
+	conPrint("Lifecycle: model/texture tasks completed.");
+	conPrint("Lifecycle: voxel-editor task wait started.");
 	voxel_editor_mesh_task_manager.removeQueuedTasks();
 	voxel_editor_mesh_task_manager.waitForTasksToComplete();
+	conPrint("Lifecycle: voxel-editor tasks completed.");
 
+	conPrint("Lifecycle: OpenGL worker joins started.");
 	opengl_worker_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: OpenGL worker joins completed.");
 	conPrint("Lifecycle: loader shutdown took " + shutdown_timer.elapsedStringMSWIthNSigFigs());
 	shutdown_timer.reset();
 
@@ -2560,6 +2575,7 @@ void GUIClient::shutdown()
 
 	removeAllFloatingChatMessages();
 
+	conPrint("Lifecycle: world/network cleanup started.");
 	disconnectFromServerAndClearAllObjects();
 
 	conPrint("Lifecycle: world/network shutdown took " + shutdown_timer.elapsedStringMSWIthNSigFigs());
@@ -2686,15 +2702,32 @@ void GUIClient::shutdown()
 	car_body_gl_object = NULL;
 	mouseover_selected_gl_ob = NULL;
 
-	
+	shutdown_timer.reset();
+	conPrint("Lifecycle: remaining worker joins started.");
+	conPrint("Lifecycle: client thread manager join started.");
 	client_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: client thread manager join completed.");
+	conPrint("Lifecycle: UDP worker join started.");
 	client_udp_handler_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: UDP worker join completed.");
+	conPrint("Lifecycle: microphone worker join started.");
 	mic_read_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: microphone worker join completed.");
+	conPrint("Lifecycle: resource upload worker join started.");
 	resource_upload_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: resource upload worker join completed.");
+	conPrint("Lifecycle: resource download worker join started.");
 	resource_download_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: resource download worker join completed.");
+	conPrint("Lifecycle: network resource worker join started.");
 	net_resource_download_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: network resource worker join completed.");
+	conPrint("Lifecycle: resource database worker join started.");
 	save_resources_db_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: resource database worker join completed.");
+	conPrint("Lifecycle: garbage collector worker join started.");
 	garbage_deleter_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: garbage collector worker join completed.");
 	
 
 	model_and_texture_loader_task_manager.cancelAndWaitForTasksToComplete();
@@ -2703,6 +2736,7 @@ void GUIClient::shutdown()
 	this->msg_queue.clear();
 
 	opengl_worker_thread_manager.killThreadsBlocking();
+	conPrint("Lifecycle: remaining worker joins took " + shutdown_timer.elapsedStringMSWIthNSigFigs());
 	if(opengl_upload_thread)
 	{
 		// Make sure the allocators are destroyed after opengl_upload_thread as opengl_upload_thread has a message queue that might have messages from these allocators.
@@ -2726,6 +2760,7 @@ void GUIClient::shutdown()
 	this->opengl_engine = NULL;
 
 	texture_server = NULL;
+	conPrint("Lifecycle: GUIClient shutdown completed in " + shutdown_total_timer.elapsedStringMSWIthNSigFigs() + ".");
 }
 
 
@@ -9213,6 +9248,80 @@ void GUIClient::updateObjectsWithDiagnosticVis()
 }
 
 
+#if !defined(USE_SDL) && defined(ENABLE_NEUROCONTROL)
+std::uint64_t GUIClient::resetNeuroControlStream()
+{
+	if(++neuro_control_stream_generation == 0) ++neuro_control_stream_generation;
+	neuro_control_command = neurocontrol::Command();
+	neuro_control_eeg_heartbeat = neurocontrol::EEGDataHeartbeat();
+	neuro_control_last_sample_index = 0;
+	neuro_control_motion_command_armed = false;
+	neuro_control_trace = neurocontrol::ControllerTrace();
+	neuro_control_trace_available = false;
+	return neuro_control_stream_generation;
+}
+
+void GUIClient::setNeuroControlEEGHeartbeat(std::uint64_t stream_generation, std::uint64_t sample_index,
+	double sample_timestamp_seconds, bool valid)
+{
+	if(stream_generation != neuro_control_stream_generation || sample_index == 0 ||
+		sample_index <= neuro_control_last_sample_index) return;
+	const double now_seconds = Clock::getTimeSinceInit();
+	const bool sequential = neuro_control_last_sample_index == 0 || sample_index == neuro_control_last_sample_index + 1;
+	const bool previous_heartbeat_fresh = !neuro_control_eeg_heartbeat.available ||
+		(std::isfinite(now_seconds - neuro_control_eeg_heartbeat.timestamp_seconds) &&
+		 now_seconds - neuro_control_eeg_heartbeat.timestamp_seconds <= neurocontrol::kNeuroDataHeartbeatTimeoutSeconds);
+	const bool sample_timestamp_fresh = std::isfinite(sample_timestamp_seconds) &&
+		sample_timestamp_seconds <= now_seconds + 0.05 &&
+		now_seconds - sample_timestamp_seconds <= neurocontrol::kNeuroDataHeartbeatTimeoutSeconds;
+	neuro_control_last_sample_index = sample_index;
+	neuro_control_eeg_heartbeat.stream_generation = stream_generation;
+	neuro_control_eeg_heartbeat.sample_index = sample_index;
+	neuro_control_eeg_heartbeat.timestamp_seconds = std::min(now_seconds, sample_timestamp_seconds);
+	neuro_control_eeg_heartbeat.available = true;
+	neuro_control_eeg_heartbeat.valid = valid && sequential && sample_timestamp_fresh;
+	if(!previous_heartbeat_fresh) neuro_control_motion_command_armed = false;
+	if(!neuro_control_eeg_heartbeat.valid) neuro_control_motion_command_armed = false;
+}
+
+void GUIClient::setNeuroControlEnabled(bool enabled)
+{
+	neuro_control_enabled = enabled;
+	neuro_control_command = neurocontrol::Command();
+	neuro_control_eeg_heartbeat = neurocontrol::EEGDataHeartbeat();
+	neuro_control_last_sample_index = 0;
+	neuro_control_motion_command_armed = false;
+	neuro_control_trace_available = false;
+}
+
+void GUIClient::setNeuroControlCommand(const neurocontrol::Command& command)
+{
+	if(command.source == neurocontrol::CommandSource::RecordedEeg &&
+		command.stream_generation != neuro_control_stream_generation) return;
+	neuro_control_command = command;
+	if(command.source == neurocontrol::CommandSource::RecordedEeg)
+	{
+		if(command.type == neurocontrol::CommandType::Stop)
+			neuro_control_motion_command_armed = false;
+		else if(command.quality == neurocontrol::SignalQuality::Good &&
+			std::isfinite(command.confidence) && std::isfinite(command.minimum_confidence) &&
+			command.confidence >= std::max(0.75, command.minimum_confidence) &&
+			neuro_control_eeg_heartbeat.available && neuro_control_eeg_heartbeat.valid &&
+			neuro_control_eeg_heartbeat.stream_generation == neuro_control_stream_generation &&
+			command.sample_index == neuro_control_eeg_heartbeat.sample_index &&
+			std::isfinite(Clock::getTimeSinceInit() - neuro_control_eeg_heartbeat.timestamp_seconds) &&
+			Clock::getTimeSinceInit() - neuro_control_eeg_heartbeat.timestamp_seconds <= neurocontrol::kNeuroDataHeartbeatTimeoutSeconds &&
+			std::isfinite(command.timestamp_seconds - command.sample_timestamp_seconds) &&
+			command.timestamp_seconds - command.sample_timestamp_seconds >= 0.0 &&
+			command.timestamp_seconds - command.sample_timestamp_seconds <= neurocontrol::kNeuroDataHeartbeatTimeoutSeconds)
+			neuro_control_motion_command_armed = true;
+		else
+			neuro_control_motion_command_armed = false;
+	}
+}
+#endif
+
+
 void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboard_focus, PlayerPhysicsInput& input_out)
 {
 	bool move_key_pressed = false;
@@ -9379,6 +9488,72 @@ void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboa
 
 		hud_ui.setCrosshairDotVisible(!isXRActive() && !last_cursor_movement_was_from_mouse);
 	}
+
+#if !defined(USE_SDL)
+	// The EEG adapter enters through the same movement/turning functions as the
+	// keyboard. Physical input takes precedence, and a stale or poor signal is
+	// always equivalent to STOP. Only the explicit test source may turn without
+	// a trained turn class.
+#if defined(ENABLE_NEUROCONTROL)
+	const bool physical_move_active = move_key_pressed || S_down || left_down || right_down ||
+		std::abs(ui_interface->gamepadAxisLeftX()) > 0.1f || std::abs(ui_interface->gamepadAxisLeftY()) > 0.1f ||
+		std::abs(ui_interface->gamepadAxisRightX()) > 0.1f;
+	const bool avatar_movement_allowed = cam_controller.current_cam_mode == CameraController::CameraMode_Standard && vehicle_controller_inside.isNull();
+	const double neuro_now_seconds = Clock::getTimeSinceInit();
+	const neurocontrol::MotionEvaluation neuro_evaluation = neuro_control_command.source == neurocontrol::CommandSource::RecordedEeg ?
+		neurocontrol::evaluateRecordedEEGMotion(neuro_control_command, neuro_control_eeg_heartbeat,
+			neuro_control_stream_generation, neuro_control_motion_command_armed, neuro_control_enabled,
+			physical_move_active, avatar_movement_allowed, neuro_now_seconds) :
+		neurocontrol::evaluateMotion(neuro_control_command, neuro_control_enabled,
+			physical_move_active, avatar_movement_allowed, neuro_now_seconds);
+	const neurocontrol::MotionDecision neuro_motion = neuro_evaluation.motion;
+	if(neuro_motion.forward || neuro_motion.turn != 0)
+	{
+		if(neuro_motion.forward)
+		{
+			const float selfie_factor = cam_controller.selfieModeEnabled() ? -1.f : 1.f;
+			player_physics.processMoveForwards(selfie_factor, /*runpressed=*/false, cam_controller);
+			input_out.W_down = true;
+			move_key_pressed = true;
+		}
+		if(neuro_motion.turn < 0)
+		{
+			cam_controller.updateRotation(0, dt * -200.f);
+			input_out.left_down = true;
+		}
+		else if(neuro_motion.turn > 0)
+		{
+			cam_controller.updateRotation(0, dt * 200.f);
+			input_out.right_down = true;
+		}
+	}
+	if(neuro_control_command.event_id != 0)
+	{
+		neuro_control_trace.event_id = neuro_control_command.event_id;
+		neuro_control_trace.evaluated_at_seconds = neuro_now_seconds;
+		neuro_control_trace.command_age_seconds = neuro_evaluation.command_age_seconds;
+		neuro_control_trace.classifier_maximum_age_seconds = neuro_control_command.maximum_age_seconds;
+		neuro_control_trace.eeg_data_age_seconds = neuro_evaluation.eeg_data_age_seconds;
+		neuro_control_trace.classification_input_age_seconds = neuro_now_seconds - neuro_control_command.sample_timestamp_seconds;
+		neuro_control_trace.stream_generation = neuro_control_stream_generation;
+		neuro_control_trace.heartbeat_sample_index = neuro_control_eeg_heartbeat.sample_index;
+		neuro_control_trace.command_sample_index = neuro_control_command.sample_index;
+		neuro_control_trace.enabled = neuro_control_enabled;
+		neuro_control_trace.physical_input_active = physical_move_active;
+		neuro_control_trace.avatar_movement_allowed = avatar_movement_allowed;
+		neuro_control_trace.eeg_heartbeat_available = neuro_control_eeg_heartbeat.available;
+		neuro_control_trace.eeg_heartbeat_valid = neuro_control_eeg_heartbeat.valid &&
+			std::isfinite(neuro_evaluation.eeg_data_age_seconds) && neuro_evaluation.eeg_data_age_seconds >= 0.0 &&
+			neuro_evaluation.eeg_data_age_seconds <= neurocontrol::kNeuroDataHeartbeatTimeoutSeconds;
+		neuro_control_trace.motion_command_armed = neuro_control_motion_command_armed;
+		neuro_control_trace.passed_safety = neuro_evaluation.passed_safety;
+		neuro_control_trace.forward_input_applied = neuro_motion.forward;
+		neuro_control_trace.turn_input_applied = neuro_motion.turn;
+		neuro_control_trace.reason = neuro_evaluation.reason;
+		neuro_control_trace_available = true;
+	}
+#endif
+#endif
 
 	updateXRControllerLocomotion(dt, move_key_pressed, input_out);
 
@@ -11748,6 +11923,10 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 				}
 
 				physics_world->think(substep_dt); // Advance physics simulation
+#if !defined(USE_SDL) && defined(ENABLE_NEUROCONTROL)
+				if(neuro_control_trace_available && neuro_control_command.event_id == neuro_control_trace.event_id && vehicle_controller_inside.isNull())
+					neuro_control_trace.observed_ground_speed_mps = player_physics.getLastXYPlaneVelRelativeToGround().length();
+#endif
 
 				// Process contact events for objects that the player touched.
 				if(!player_physics.contacted_events.empty())
