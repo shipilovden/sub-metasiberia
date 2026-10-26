@@ -339,7 +339,7 @@ private:
 	void sendPrivateChatMessageToSelectedUser();
 	void teleportNearSelectedChatUser();
 	void startMainTimer();
-	void visitSubURL(const std::string& URL); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
+	void visitSubURL(const std::string& URL); // Visit a sub:// or sib:// URL. Checks hostname and only reconnects if it differs from the current one.
 	void doObjectSelectionTraceForMouseEvent(QMouseEvent* e);
 private:
 	void initialiseThemesMenu(bool apply_saved_theme = true);

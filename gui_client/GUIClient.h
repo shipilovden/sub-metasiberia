@@ -345,7 +345,7 @@ public:
 	void createBot(const Vec3d& pos, float heading);
 	void enqueueDirtyWorldObjectUpdates(double global_time);
 	void enqueueResourceUpload(const URLString& resource_URL);
-	std::string uploadLocalFileForBot(const std::string& local_abs_path); // Copy local file to resources dir and return sub:// URL
+	std::string uploadLocalFileForBot(const std::string& local_abs_path); // Copy local file to resources dir and return its resource URL.
 	std::string prepareAndUploadParticleSprite(const std::string& sprite_path); // Convert a local particle sprite path to a shared resource URL and enqueue upload.
 	std::string prepareAndUploadParticleAudio(const std::string& audio_path); // Convert a local particle audio path to a shared resource URL and enqueue upload.
 	std::string prepareAndUploadChatAttachment(const std::string& local_abs_path); // Copy local file to resources dir, enqueue upload, and return resource URL.
@@ -426,7 +426,7 @@ public:
 	void deleteSelectedObject();
 	void deselectObject();
 	void deselectParcel();
-	void visitSubURL(const std::string& URL, bool push_cur_URL_on_nav_stack = true, bool adjust_cur_URL_pos_back = false); // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
+	void visitSubURL(const std::string& URL, bool push_cur_URL_on_nav_stack = true, bool adjust_cur_URL_pos_back = false); // Visit a sub:// or sib:// URL. Checks hostname and only reconnects if it differs from the current one.
 	GLObjectRef makeNameTagGLObject(const std::string& nametag);
 	GLObjectRef makeFloatingChatMessageGLObject(const std::string& message);
 	GLObjectRef makeSpeakerGLObject();

@@ -162,6 +162,10 @@ Section "Core files (required)" SEC_CORE
   CopyFiles /SILENT "`$INSTDIR\\gui_client.exe" "`$INSTDIR\\Metasiberia.exe"
 
   WriteRegStr HKLM "Software\$Name" "Install_Dir" "`$INSTDIR"
+	WriteRegStr HKLM "Software\Classes\sib" "" "URL:Metasiberia Protocol"
+	WriteRegStr HKLM "Software\Classes\sib" "URL Protocol" ""
+	WriteRegStr HKLM "Software\Classes\sib\DefaultIcon" "" "`$INSTDIR\\Metasiberia.exe,0"
+	WriteRegStr HKLM "Software\Classes\sib\shell\open\command" "" '"`$INSTDIR\\Metasiberia.exe" -linku "%1"'
   WriteRegStr HKLM "Software\Classes\sub" "" "URL:Metasiberia Protocol"
   WriteRegStr HKLM "Software\Classes\sub" "URL Protocol" ""
   WriteRegStr HKLM "Software\Classes\sub\DefaultIcon" "" "`$INSTDIR\\Metasiberia.exe,0"
@@ -185,6 +189,7 @@ Section "Uninstall"
 
   RMDir /r "`$INSTDIR"
   DeleteRegKey HKLM "Software\Classes\Applications\Metasiberia.exe"
+	DeleteRegKey HKLM "Software\Classes\sib"
   DeleteRegKey HKLM "Software\Classes\sub"
   DeleteRegKey HKLM "Software\$Name"
 SectionEnd
@@ -217,6 +222,10 @@ set INSTALL_DIR=%ProgramFiles%\$Name
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 xcopy /E /I /Y "%~dp0*.*" "%INSTALL_DIR%\" >nul
 copy /Y "%INSTALL_DIR%\\gui_client.exe" "%INSTALL_DIR%\\Metasiberia.exe" >nul
+reg add "HKCU\\Software\\Classes\\sib" /ve /d "URL:Metasiberia Protocol" /f >nul
+reg add "HKCU\\Software\\Classes\\sib" /v "URL Protocol" /d "" /f >nul
+reg add "HKCU\\Software\\Classes\\sib\\DefaultIcon" /ve /d "\"%INSTALL_DIR%\\Metasiberia.exe\",0" /f >nul
+reg add "HKCU\\Software\\Classes\\sib\\shell\\open\\command" /ve /d "\"%INSTALL_DIR%\\Metasiberia.exe\" -linku \"%%1\"" /f >nul
 reg add "HKCU\\Software\\Classes\\sub" /ve /d "URL:Metasiberia Protocol" /f >nul
 reg add "HKCU\\Software\\Classes\\sub" /v "URL Protocol" /d "" /f >nul
 reg add "HKCU\\Software\\Classes\\sub\\DefaultIcon" /ve /d "\"%INSTALL_DIR%\\Metasiberia.exe\",0" /f >nul

@@ -31,10 +31,10 @@ namespace ScreenshotHandlers
 
 static std::string parseWorldNameFromSubURL(const std::string& sub_url)
 {
-	if(!hasPrefix(sub_url, "sub://"))
+	if(!hasPrefix(sub_url, "sub://") && !hasPrefix(sub_url, "sib://"))
 		return sub_url;
 
-	const size_t host_start = 6; // after "sub://"
+	const size_t host_start = 6; // after either six-character native URL scheme.
 	const size_t slash_pos = sub_url.find('/', host_start);
 	if(slash_pos == std::string::npos)
 		return ""; // URL points to main world.
@@ -49,7 +49,7 @@ static std::string parseWorldNameFromSubURL(const std::string& sub_url)
 static std::string normaliseWorldNameField(const std::string& world_field)
 {
 	const std::string trimmed = stripHeadAndTailWhitespace(world_field);
-	if(hasPrefix(trimmed, "sub://"))
+	if(hasPrefix(trimmed, "sub://") || hasPrefix(trimmed, "sib://"))
 		return parseWorldNameFromSubURL(trimmed);
 	return trimmed;
 }

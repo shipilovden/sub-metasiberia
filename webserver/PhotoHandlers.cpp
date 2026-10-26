@@ -277,12 +277,12 @@ void handlePhotoPageRequest(ServerAllWorldsState& world_state, WebDataStore& dat
 				const std::string pos_and_heading_part = "x=" + doubleToStringMaxNDecimalPlaces(pos.x, 1) + "&y=" + doubleToStringMaxNDecimalPlaces(pos.y, 1) + "&z=" + doubleToStringMaxNDecimalPlaces(pos.z, 2) +
 					"&heading=" + doubleToStringNDecimalPlaces(heading_deg, 1);
 
-				const std::string sub_URL = "sub://" + hostname + "/" + WorldHandlers::URLEscapeWorldName(photo->world_name) + "?" + pos_and_heading_part;
+				const std::string native_URL = "sib://" + hostname + "/" + WorldHandlers::URLEscapeWorldName(photo->world_name) + "?" + pos_and_heading_part;
 
 				const std::string webclient_URL = (request.tls_connection ? std::string("https") : std::string("http")) + "://" + hostname + "/visit?world=" + WorldHandlers::URLEscapeWorldName(photo->world_name) +
 					"&" + pos_and_heading_part;
 
-				const ParsedPhotoCaption parsed_caption = parsePhotoCaption(photo->caption, creator_username, sub_URL, webclient_URL);
+				const ParsedPhotoCaption parsed_caption = parsePhotoCaption(photo->caption, creator_username, native_URL, webclient_URL);
 
 				User* logged_in_user = LoginHandlers::getLoggedInUser(world_state, request);
 				const bool logged_in_user_is_photo_owner = logged_in_user && (photo->creator_id == logged_in_user->id); // If the user is logged in and owns this parcel:
@@ -335,7 +335,7 @@ void handlePhotoPageRequest(ServerAllWorldsState& world_state, WebDataStore& dat
 				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Photo by</div><div class=\"msb-photo-meta-value\"><i>" + web::Escaping::HTMLEscape(parsed_caption.by) + "</i></div></div>";
 				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Taken (UTC)</div><div class=\"msb-photo-meta-value\">" + web::Escaping::HTMLEscape(photo->created_time.dayAndTimeStringUTC()) + "</div></div>";
 				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Location</div><div class=\"msb-photo-meta-value\">" + location_html + "</div></div>";
-				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Location (client)</div><div class=\"msb-photo-meta-value\"><a href=\"" + web::Escaping::HTMLEscape(sub_URL) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + web::Escaping::HTMLEscape(sub_URL) + "</a></div></div>";
+				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Location (client)</div><div class=\"msb-photo-meta-value\"><a href=\"" + web::Escaping::HTMLEscape(native_URL) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + web::Escaping::HTMLEscape(native_URL) + "</a></div></div>";
 				page += "<div class=\"msb-photo-meta-item\"><div class=\"msb-photo-meta-label\">Location (web)</div><div class=\"msb-photo-meta-value\"><a href=\"" + web::Escaping::HTMLEscape(webclient_URL) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + web::Escaping::HTMLEscape(webclient_URL) + "</a></div></div>";
 				page += "</div>";
 				page += "</section>\n";

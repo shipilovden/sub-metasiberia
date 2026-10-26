@@ -192,10 +192,10 @@ static std::string generateReadablePassword()
 
 static std::string parseWorldNameFromSubURL(const std::string& sub_url)
 {
-	if(!hasPrefix(sub_url, "sub://"))
+	if(!hasPrefix(sub_url, "sub://") && !hasPrefix(sub_url, "sib://"))
 		return sub_url;
 
-	const size_t host_start = 6; // after "sub://"
+	const size_t host_start = 6; // after either six-character native URL scheme.
 	const size_t slash_pos = sub_url.find('/', host_start);
 	if(slash_pos == std::string::npos)
 		return ""; // URL points to root world.
@@ -213,7 +213,7 @@ static std::string normaliseWorldNameField(const std::string& world_field)
 	if(trimmed.empty() || trimmed == "/" || trimmed == "root" || trimmed == "main")
 		return "";
 
-	if(hasPrefix(trimmed, "sub://"))
+	if(hasPrefix(trimmed, "sub://") || hasPrefix(trimmed, "sib://"))
 		return parseWorldNameFromSubURL(trimmed);
 
 	if(hasPrefix(trimmed, "http://") || hasPrefix(trimmed, "https://"))
@@ -483,7 +483,7 @@ void renderMainAdminPage(ServerAllWorldsState& world_state, const web::RequestIn
 	page_out += "<label for=\"admin-create-root-editors\">Editors usernames (comma-separated)</label><br/>";
 	page_out += "<input id=\"admin-create-root-editors\" type=\"text\" name=\"writer_usernames\" value=\"\" title=\"Comma-separated usernames with edit rights\"><br/>";
 	page_out += "<label for=\"admin-create-root-world\">World (name or link, empty=root)</label><br/>";
-	page_out += "<input id=\"admin-create-root-world\" type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sub://... link\"><br/>";
+			page_out += "<input id=\"admin-create-root-world\" type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sib://... link (legacy sub:// accepted)\"><br/>";
 	page_out += "<div class=\"msb-inline-fields\">";
 	page_out += "<label for=\"admin-create-origin-x\">Origin X</label>";
 	page_out += "<input id=\"admin-create-origin-x\" type=\"text\" name=\"origin_x\" value=\"0\">";
@@ -1270,7 +1270,7 @@ void renderParcelsPage(ServerAllWorldsState& world_state, const web::RequestInfo
 		page_out += "<form action=\"/admin_create_parcel\" method=\"post\" class=\"msb-create-parcel-form\" data-admin-create-parcel-form=\"1\">";
 		page_out += "<div class=\"field-description\">Configure where and how the parcel should be created.</div>";
 		page_out += "<label for=\"admin-create-world-name\">World (name or link)</label>";
-		page_out += "<input id=\"admin-create-world-name\" type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sub://... link. Leave empty for root world\">";
+			page_out += "<input id=\"admin-create-world-name\" type=\"text\" name=\"world_name\" value=\"\" title=\"World name, /world/... URL, or sib://... link (legacy sub:// accepted). Leave empty for root world\">";
 		page_out += "<label for=\"admin-create-owner-username\">Owner username</label>";
 		page_out += "<input id=\"admin-create-owner-username\" type=\"text\" name=\"owner_username\" value=\"\" title=\"Username that will own the new parcel\">";
 		page_out += "<label for=\"admin-create-writer-usernames\">Editors usernames</label>";

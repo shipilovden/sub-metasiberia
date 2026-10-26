@@ -52,20 +52,29 @@ function(addMocFileRule dir header_name)
 	if(INDIGO_QT_VERSION MATCHES "^6(\\.|$)")
 		set(MOC_QT6_DEFINE 1)
 	endif()
+	set(MOC_OUTPUT_DIR "${CMAKE_BINARY_DIR}/${dir}")
+	set(MOC_OUTPUT_FILE "${MOC_OUTPUT_DIR}/moc_${header_name}.cpp")
 
 	add_custom_command(
-		OUTPUT ${CMAKE_SOURCE_DIR}/${dir}/moc_${header_name}.cpp
-		COMMAND ${INDIGO_QT_DIR}/bin/moc -DSUBSTRATA_QT6=${MOC_QT6_DEFINE} ${CMAKE_SOURCE_DIR}/${dir}/${header_name}.h > ${CMAKE_SOURCE_DIR}/${dir}/moc_${header_name}.cpp
+		OUTPUT "${MOC_OUTPUT_FILE}"
+		COMMAND "${CMAKE_COMMAND}" -E make_directory "${MOC_OUTPUT_DIR}"
+		COMMAND "${INDIGO_QT_DIR}/bin/moc" "-DSUBSTRATA_QT6=${MOC_QT6_DEFINE}" -o "${MOC_OUTPUT_FILE}" "${CMAKE_SOURCE_DIR}/${dir}/${header_name}.h"
 		DEPENDS ${CMAKE_SOURCE_DIR}/${dir}/${header_name}.h
+		VERBATIM
 	)
 endfunction()
 
 
 # Function for adding a rebuild- QT ui header file command/dependency
 function(addUIFileRule dir header_name)
+	set(UI_OUTPUT_DIR "${CMAKE_BINARY_DIR}/${dir}")
+	set(UI_OUTPUT_FILE "${UI_OUTPUT_DIR}/ui_${header_name}.h")
+
 	add_custom_command(
-		OUTPUT ${CMAKE_SOURCE_DIR}/${dir}/ui_${header_name}.h
-		COMMAND ${INDIGO_QT_DIR}/bin/uic ${CMAKE_SOURCE_DIR}/${dir}/${header_name}.ui --output ${CMAKE_SOURCE_DIR}/${dir}/ui_${header_name}.h
+		OUTPUT "${UI_OUTPUT_FILE}"
+		COMMAND "${CMAKE_COMMAND}" -E make_directory "${UI_OUTPUT_DIR}"
+		COMMAND "${INDIGO_QT_DIR}/bin/uic" "${CMAKE_SOURCE_DIR}/${dir}/${header_name}.ui" --output "${UI_OUTPUT_FILE}"
 		DEPENDS ${CMAKE_SOURCE_DIR}/${dir}/${header_name}.ui
+		VERBATIM
 	)
 endfunction()

@@ -169,6 +169,11 @@ MainOptionsDialog::MainOptionsDialog(QSettings* settings_, bool only_load_most_i
 	start_location_url.replace("sub://87.103.196.229", "sub://vr.metasiberia.com");
 	start_location_url.replace("sub://185.182.110.184", "sub://vr.metasiberia.com");
 	start_location_url.replace("sub://89.104.70.23", "sub://vr.metasiberia.com");
+	start_location_url.replace("sib://87.103.196.229", "sib://vr.metasiberia.com");
+	start_location_url.replace("sib://185.182.110.184", "sib://vr.metasiberia.com");
+	start_location_url.replace("sib://89.104.70.23", "sib://vr.metasiberia.com");
+	if(start_location_url.startsWith("sub://"))
+		start_location_url.replace(0, 6, "sib://");
 	this->startLocationURLLineEdit->setText(start_location_url);
 
 	this->xrLaunchModeComboBox->addItem(tr("Automatic: use VR when headset is ready"), "auto");
@@ -226,6 +231,11 @@ void MainOptionsDialog::accepted()
 	start_location_url.replace("sub://87.103.196.229", "sub://vr.metasiberia.com");
 	start_location_url.replace("sub://185.182.110.184", "sub://vr.metasiberia.com");
 	start_location_url.replace("sub://89.104.70.23", "sub://vr.metasiberia.com");
+	start_location_url.replace("sib://87.103.196.229", "sib://vr.metasiberia.com");
+	start_location_url.replace("sib://185.182.110.184", "sib://vr.metasiberia.com");
+	start_location_url.replace("sib://89.104.70.23", "sib://vr.metasiberia.com");
+	if(start_location_url.startsWith("sub://"))
+		start_location_url.replace(0, 6, "sib://");
 	settings->setValue(startLocationURLKey(), start_location_url);
 	settings->setValue(xrLaunchModeKey(), this->xrLaunchModeComboBox->currentData().toString());
 

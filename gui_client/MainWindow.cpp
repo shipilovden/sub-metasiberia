@@ -2017,10 +2017,11 @@ static bool hostIsLocalForWebMode(const std::string& host_port)
 
 static std::string canonicaliseMetasiberiaSubURLHost(const std::string& url)
 {
-	if(!hasPrefix(url, "sub://"))
+	if(!URLParser::hasSupportedSchemePrefix(url))
 		return url;
 
-	const size_t host_start = 6; // After "sub://"
+	const bool has_legacy_scheme = url.compare(0, 6, "sub://") == 0;
+	const size_t host_start = 6; // Both supported native URL schemes have six characters.
 	const size_t host_end = url.find_first_of("/?", host_start);
 	const std::string host_port = (host_end == std::string::npos) ? url.substr(host_start) : url.substr(host_start, host_end - host_start);
 
@@ -2035,17 +2036,17 @@ static std::string canonicaliseMetasiberiaSubURLHost(const std::string& url)
 	}
 
 	const std::string canonical_host = canonicalHostForMetasiberia(host);
-	if(canonical_host == host)
+	if(canonical_host == host && !has_legacy_scheme)
 		return url;
 
 	const std::string tail = (host_end == std::string::npos) ? std::string() : url.substr(host_end);
-	return std::string("sub://") + canonical_host + port_suffix + tail;
+	return "sib://" + canonical_host + port_suffix + tail;
 }
 
 
 static std::string makeMetasiberiaWorldSubURL(const std::string& host, const std::string& world_name)
 {
-	std::string URL = "sub://" + canonicalHostForMetasiberia(host.empty() ? std::string("vr.metasiberia.com") : host) + "/";
+	std::string URL = "sib://" + canonicalHostForMetasiberia(host.empty() ? std::string("vr.metasiberia.com") : host) + "/";
 	if(!world_name.empty())
 		URL += web::Escaping::URLEscape(world_name);
 	return URL;
@@ -2097,7 +2098,7 @@ static bool tryParseMapLatLonInput(const std::string& input, double& lat_out, do
 
 static std::string makeMetasiberiaMapLatLonURL(double lat, double lon, double z, double heading_deg)
 {
-	return "sub://vr.metasiberia.com/map?lat=" + doubleToStringNDecimalPlaces(lat, 7) +
+	return "sib://vr.metasiberia.com/map?lat=" + doubleToStringNDecimalPlaces(lat, 7) +
 		"&lon=" + doubleToStringNDecimalPlaces(lon, 7) +
 		"&z=" + doubleToStringNDecimalPlaces(z, 2) +
 		"&heading=" + doubleToStringNDecimalPlaces(heading_deg, 1);
@@ -2184,7 +2185,7 @@ static bool resolveMetasiberiaMapAddressInput(const std::string& input, const GU
 	const double current_heading_deg = Maths::doubleMod(::radToDegree(gui_client.cam_controller.getAngles().x), 360.0);
 	const double map_spawn_z = PlayerPhysics::getEyeHeight();
 
-	if(!hasPrefix(trimmed_input, "sub://") && gui_client.isMetasiberiaMapWorld())
+	if(!URLParser::hasSupportedSchemePrefix(trimmed_input) && gui_client.isMetasiberiaMapWorld())
 	{
 		double lat = 0;
 		double lon = 0;
@@ -2204,7 +2205,7 @@ static bool resolveMetasiberiaMapAddressInput(const std::string& input, const GU
 		return true;
 	}
 
-	if(!hasPrefix(trimmed_input, "sub://"))
+	if(!URLParser::hasSupportedSchemePrefix(trimmed_input))
 		return false;
 
 	URLParseResults parse_res;
@@ -3032,6 +3033,7 @@ void MainWindow::initialiseUI()
 #if !defined(_WIN32)
 	// On Windows, Windows will execute substrata.exe with the -linku argument, so we don't need this technique.
 	QDesktopServices::setUrlHandler("sub", /*receiver=*/this, /*method=*/"handleURL");
+	QDesktopServices::setUrlHandler("sib", /*receiver=*/this, /*method=*/"handleURL");
 #endif
 
 
@@ -4301,6 +4303,7 @@ MainWindow::~MainWindow()
 
 #if !defined(_WIN32)
 	QDesktopServices::unsetUrlHandler("sub"); // Remove 'this' as an URL handler.
+	QDesktopServices::unsetUrlHandler("sib");
 #endif
 
 	//ui->glWidget->makeCurrent(); // This crashes on Mac
@@ -8577,7 +8580,7 @@ void MainWindow::runScreenshotCode()
 						// Switch to the requested world if needed, then let the normal "loaded_all" logic wait until everything is ready.
 						if(gui_client.server_worldname != world_name)
 						{
-							std::string URL = "sub://" + gui_client.server_hostname + "/";
+							std::string URL = "sib://" + gui_client.server_hostname + "/";
 							URL += web::Escaping::URLEscape(world_name);
 							URL += "?x=" + doubleToStringNDecimalPlaces(pos_x, 1) + "&y=" + doubleToStringNDecimalPlaces(pos_y, 1) + "&z=" + doubleToStringNDecimalPlaces(pos_z, 2) +
 								"&heading=" + doubleToStringNDecimalPlaces(heading_deg, 1);
@@ -11142,19 +11145,19 @@ void MainWindow::on_actionGo_to_CryptoVoxels_World_triggered()
 
 void MainWindow::on_actionGo_to_Substrata_Server_triggered()
 {
-	visitSubURL("sub://substrata.info/");
+	visitSubURL("sib://substrata.info/");
 }
 
 
 void MainWindow::on_actionGo_to_Metasiberia_Server_triggered()
 {
-	visitSubURL("sub://vr.metasiberia.com/");
+	visitSubURL("sib://vr.metasiberia.com/");
 }
 
 
 void MainWindow::on_actionGo_to_Map_World_triggered()
 {
-	visitSubURL("sub://vr.metasiberia.com/map?x=0.0&y=0.0&z=1.67&heading=0.0");
+	visitSubURL("sib://vr.metasiberia.com/map?x=0.0&y=0.0&z=1.67&heading=0.0");
 }
 
 
@@ -11812,7 +11815,8 @@ void MainWindow::capturePhoto(const QVariantMap& values)
 				showInfoNotification("Текст публикации скопирован.");
 			}
 		});
-		QString client_link = url_widget ? QtUtils::toQString(url_widget->getURL()) : QStringLiteral("sub://vr.metasiberia.com/");
+		const std::string native_client_url = url_widget ? canonicaliseMetasiberiaSubURLHost(url_widget->getURL()) : "sib://vr.metasiberia.com/";
+		QString client_link = QtUtils::toQString(native_client_url);
 		QString host = gui_client.server_hostname.empty() ? QStringLiteral("vr.metasiberia.com") : QtUtils::toQString(gui_client.server_hostname);
 		host = QtUtils::toQString(canonicaliseHostPortForMetasiberia(QtUtils::toStdString(host)));
 		const QString scheme = hostIsLocalForWebMode(QtUtils::toStdString(host)) ? QStringLiteral("http://") : QStringLiteral("https://");
@@ -14070,12 +14074,15 @@ void MainWindow::materialSelectedInBrowser(const std::string& path)
 
 void MainWindow::URLChangedSlot()
 {
-	const std::string URL = this->url_widget->getURL();
-	visitSubURL(URL);
+	const std::string entered_URL = this->url_widget->getURL();
+	const std::string canonical_URL = canonicaliseMetasiberiaSubURLHost(entered_URL);
+	if(canonical_URL != entered_URL)
+		this->url_widget->setURL(canonical_URL);
+	visitSubURL(canonical_URL);
 }
 
 
-void MainWindow::visitSubURL(const std::string& URL) // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
+void MainWindow::visitSubURL(const std::string& URL) // Visit a sub:// or sib:// URL. Checks hostname and only reconnects if it differs from the current one.
 {
 	try
 	{
@@ -14833,7 +14840,7 @@ Vec2i MainWindow::getGlWidgetPosInGlobalSpace()
 }
 
 
-// See https://doc.qt.io/qt-5/qdesktopservices.html, this slot should be called when the user clicks on a sub:// link somewhere in the system.
+// See https://doc.qt.io/qt-5/qdesktopservices.html; this slot handles sub:// and sib:// links opened from the system.
 void MainWindow::handleURL(const QUrl &url)
 {
 	try
@@ -15356,12 +15363,12 @@ int main(int argc, char *argv[])
 
 		//std::string server_hostname = "vr.metasiberia.com";
 		//std::string server_userpath = "";
-		std::string server_URL = "sub://vr.metasiberia.com";
+		std::string server_URL = "sib://vr.metasiberia.com";
 		bool server_URL_explicitly_specified = false;
 
 		if(parsed_args.isArgPresent("-h"))
 		{
-			server_URL = "sub://" + parsed_args.getArgStringValue("-h");
+			server_URL = "sib://" + parsed_args.getArgStringValue("-h");
 			server_URL_explicitly_specified = true;
 		}
 			//server_hostname = parsed_args.getArgStringValue("-h");

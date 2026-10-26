@@ -33,6 +33,12 @@ URLParseResults::URLParseResults()
 {}
 
 
+bool URLParser::hasSupportedSchemePrefix(const std::string& URL)
+{
+	return URL.compare(0, 6, "sub://") == 0 || URL.compare(0, 6, "sib://") == 0;
+}
+
+
 URLParseResults URLParser::parseURL(const std::string& URL)
 {
 	URLParseResults res;
@@ -44,7 +50,7 @@ URLParseResults URLParser::parseURL(const std::string& URL)
 	{
 		string_view protocol;
 		parser.parseAlphaToken(protocol);
-		if(protocol != "sub")
+		if(protocol != "sub" && protocol != "sib")
 			throw glare::Exception("Unhandled protocol scheme '" + toString(protocol) + "'.");
 		if(!parser.parseString("://"))
 			throw glare::Exception("Expected '://' after protocol scheme.");
@@ -181,8 +187,41 @@ static void testInvalidURL(const std::string& URL)
 }
 
 
+static void testURLParseResultsEqual(const URLParseResults& a, const URLParseResults& b)
+{
+	testAssert(a.hostname == b.hostname);
+	testAssert(a.worldname == b.worldname);
+	testAssert(a.map_query == b.map_query);
+	testAssert(a.x == b.x);
+	testAssert(a.y == b.y);
+	testAssert(a.z == b.z);
+	testAssert(a.lat == b.lat);
+	testAssert(a.lon == b.lon);
+	testAssert(a.heading == b.heading);
+	testAssert(a.parcel_uid == b.parcel_uid);
+	testAssert(a.sun_vert_angle == b.sun_vert_angle);
+	testAssert(a.sun_azimuth_angle == b.sun_azimuth_angle);
+	testAssert(a.parsed_sun_vert_angle == b.parsed_sun_vert_angle);
+	testAssert(a.parsed_sun_azimuth_angle == b.parsed_sun_azimuth_angle);
+	testAssert(a.parsed_x == b.parsed_x);
+	testAssert(a.parsed_y == b.parsed_y);
+	testAssert(a.parsed_z == b.parsed_z);
+	testAssert(a.parsed_lat == b.parsed_lat);
+	testAssert(a.parsed_lon == b.parsed_lon);
+	testAssert(a.parsed_map_query == b.parsed_map_query);
+	testAssert(a.parsed_heading == b.parsed_heading);
+	testAssert(a.parsed_parcel_uid == b.parsed_parcel_uid);
+}
+
+
 void URLParser::test()
 {
+	testAssert(hasSupportedSchemePrefix("sub://vr.metasiberia.com"));
+	testAssert(hasSupportedSchemePrefix("sib://vr.metasiberia.com"));
+	testAssert(!hasSupportedSchemePrefix("https://vr.metasiberia.com"));
+	testAssert(!hasSupportedSchemePrefix("vr.metasiberia.com"));
+	testAssert(!hasSupportedSchemePrefix("sib:/vr.metasiberia.com"));
+
 	//----------------------------------- Test processQueryKeyValues by itself -----------------------------------
 	{
 		std::map<std::string, std::string> query_keyvalues;
@@ -303,6 +342,31 @@ void URLParser::test()
 		testAssert(!res.parsed_parcel_uid);
 	}
 
+	// The Metasiberia URI scheme and the legacy sub:// scheme must produce
+	// exactly the same parsed server, world, and navigation parameters.
+	{
+		const std::string path_and_query = "/nick/my%3Fworld?x=-1.25&y=2.5&z=3.75&lat=47.5&lon=-122.3&q=central_market&heading=180&parcel=102343&sun_vert_angle=35&sun_azimuth_angle=280";
+		const URLParseResults sub_res = parseURL("sub://metasiberia.example" + path_and_query);
+		const URLParseResults sib_res = parseURL("sib://metasiberia.example" + path_and_query);
+		testURLParseResultsEqual(sub_res, sib_res);
+		testAssert(sib_res.hostname == "metasiberia.example");
+		testAssert(sib_res.worldname == "nick/my?world");
+		testAssert(sib_res.x == -1.25);
+		testAssert(sib_res.y == 2.5);
+		testAssert(sib_res.z == 3.75);
+		testAssert(sib_res.lat == 47.5);
+		testAssert(sib_res.lon == -122.3);
+		testAssert(sib_res.map_query == "central_market");
+		testAssert(sib_res.heading == 180.0);
+		testAssert(sib_res.parcel_uid == 102343);
+		testAssert(sib_res.sun_vert_angle == 35.0);
+		testAssert(sib_res.sun_azimuth_angle == 280.0);
+		testAssert(sib_res.parsed_x && sib_res.parsed_y && sib_res.parsed_z);
+		testAssert(sib_res.parsed_lat && sib_res.parsed_lon && sib_res.parsed_map_query);
+		testAssert(sib_res.parsed_heading && sib_res.parsed_parcel_uid);
+		testAssert(sib_res.parsed_sun_vert_angle && sib_res.parsed_sun_azimuth_angle);
+	}
+
 	{
 		URLParseResults res = parseURL("sub://substrata.info/bleh?x=-1.0&y=-2.0");
 		testAssert(res.hostname == "substrata.info");
@@ -361,6 +425,9 @@ void URLParser::test()
 	}
 
 	testInvalidURL("ub://substrata.info");
+	testInvalidURL("sib:/substrata.info/world");
+	testInvalidURL("sib://substrata.info?x=");
+	testInvalidURL("https://substrata.info/world");
 	//testInvalidURL("sub//substrata.info"); // We handle missing ':' now.
 	//testInvalidURL("sub/substrata.info");
 	//testInvalidURL("subsubstrata.info");

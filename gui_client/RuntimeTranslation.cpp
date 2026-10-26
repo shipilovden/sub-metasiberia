@@ -338,8 +338,8 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("MainWindow", "Portal Editor", "Редактор порталов");
 	add("MainWindow", "Open Current Location In Browser", "Открыть текущую локацию в браузере");
 	add("MainWindow", "Open map settings", "Открыть настройки карты");
-	add("MainWindow", "Map settings are available only in sub://vr.metasiberia.com/map", "Настройки карты доступны только в sub://vr.metasiberia.com/map");
-	add("MainWindow", "Map settings will appear here in the next step.\n\nThis panel is available only in the special map world \"sub://vr.metasiberia.com/map\".\n\nGround rendering in that world now uses a streamed OpenStreetMap ground layer.", "Настройки карты появятся здесь на следующем шаге.\n\nЭта панель доступна только в специальном мире карты \"sub://vr.metasiberia.com/map\".\n\nПоверхность земли в этом мире теперь рисуется потоковым слоем OpenStreetMap.");
+	add("MainWindow", "Map settings are available only in sib://vr.metasiberia.com/map", "Настройки карты доступны только в sib://vr.metasiberia.com/map");
+	add("MainWindow", "Map settings will appear here in the next step.\n\nThis panel is available only in the special map world \"sib://vr.metasiberia.com/map\".\n\nGround rendering in that world now uses a streamed OpenStreetMap ground layer.", "Настройки карты появятся здесь на следующем шаге.\n\nЭта панель доступна только в специальном мире карты \"sib://vr.metasiberia.com/map\".\n\nПоверхность земли в этом мире теперь рисуется потоковым слоем OpenStreetMap.");
 	add("MainWindow", "Use the W/A/S/D keys and arrow keys to move and look around.\n", "Используйте клавиши W/A/S/D и стрелки для передвижения и обзора.\n");
 	add("MainWindow", "Click and drag the mouse on the 3D view to look around.\n", "Нажмите и перетаскивайте мышь в 3D-окне для обзора.\n");
 	add("MainWindow", "Space key: jump\n", "Пробел: прыжок\n");
@@ -423,7 +423,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("ObjectEditor", "Content", "Содержимое");
 	add("ObjectEditor", "Target URL", "Целевой URL");
 	add("ObjectEditor", "Portal Target URL", "Целевой URL портала");
-	add("ObjectEditor", "Walk through the portal to travel to this sub:// destination.", "Пройдите через портал, чтобы перейти по этому адресу sub://.");
+	add("ObjectEditor", "Walk through the portal to travel to this sib:// destination. Legacy sub:// links also work.", "Пройдите через портал, чтобы перейти по этому адресу sib://. Старые ссылки sub:// тоже работают.");
 	add("ObjectEditor", "<a href=\"#boo\">Open URL in web browser</a>", "<a href=\"#boo\">Открыть URL в браузере</a>");
 	add("ObjectEditor", "Materials", "Материалы");
 	add("ObjectEditor", "Current mat:", "Текущий мат.:");
@@ -860,7 +860,7 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("ObjectEditor", "Close", "Закрыть");
 	add("ObjectEditor", "Portal Editor Help", "Справка редактора порталов");
 	add("ObjectEditor", "A portal is both navigation and stage lighting. Players must instantly understand where it goes, whether it is active, and what kind of world waits behind it.", "Портал — это одновременно навигация и сценический свет. Игрок должен сразу понять, куда он ведёт, активен ли он и какой мир ждёт внутри.");
-	add("ObjectEditor", "Set Portal Target URL first. Use sub:// links for in-world travel, for example sub://vr.metasiberia.com/map.", "Сначала задайте Portal Target URL. Для переходов внутри мира используйте sub:// ссылки, например sub://vr.metasiberia.com/map.");
+	add("ObjectEditor", "Set Portal Target URL first. Use sib:// links for new in-world links, for example sib://vr.metasiberia.com/map. Legacy sub:// links still work.", "Сначала задайте Portal Target URL. Для новых переходов используйте ссылки sib://, например sib://vr.metasiberia.com/map. Старые ссылки sub:// тоже работают.");
 	add("ObjectEditor", "Pick a Portal Style or press a style button below. The preset changes all five portal materials at once.", "Выберите стиль портала или нажмите кнопку стиля ниже. Пресет меняет все пять материалов портала сразу.");
 	add("ObjectEditor", "Tune Material 3 (Portal Effect) for the inner colour and glow, then tune rim/frame materials for silhouette readability.", "Настройте Material 3 (Portal Effect) для внутреннего цвета и свечения, затем подстройте обод и раму для читаемого силуэта.");
 	add("ObjectEditor", "Scale the portal so the player can read it from a distance, then rotate it so the front faces the intended approach direction.", "Масштабируйте портал так, чтобы он читался издалека, затем поверните его лицом к ожидаемому направлению подхода.");

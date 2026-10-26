@@ -852,11 +852,11 @@ int main(int argc, char** argv)
 			URLParser::processQueryKeyValues(queries, url_parse_results);
 		}
 #else
-		std::string server_URL = "sub://vr.metasiberia.com/"; // Default URL
+		std::string server_URL = "sib://vr.metasiberia.com/"; // Default URL; sub:// remains accepted for legacy links.
 
 		if(parsed_args.isArgPresent("-h"))
 		{
-			server_URL = "sub://" + parsed_args.getArgStringValue("-h");
+			server_URL = "sib://" + parsed_args.getArgStringValue("-h");
 		}
 		if(parsed_args.isArgPresent("-u"))
 		{

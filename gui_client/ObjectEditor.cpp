@@ -1334,7 +1334,7 @@ void ObjectEditor::retranslateDynamicAudioPlayerUI()
 	this->audioScheduleStartHourSpinBox->setSuffix(tr_audio(" h"));
 	this->audioScheduleEndHourSpinBox->setSuffix(tr_audio(" h"));
 	this->targetURLLabel->setText(tr_audio(is_portal ? "Portal Target URL" : "Target URL"));
-	this->targetURLLineEdit->setToolTip(is_portal ? tr_audio("Walk through the portal to travel to this sub:// destination.") : QString());
+	this->targetURLLineEdit->setToolTip(is_portal ? tr_audio("Walk through the portal to travel to this sib:// destination. Legacy sub:// links also work.") : QString());
 
 	const QString volume_tip = tr_audio("Playback volume for this audio player.");
 	const QString autoplay_tip = tr_audio("Enable automatic playback when this object loads.");
@@ -3401,8 +3401,8 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	this->label_12->setText(tr_object_editor("Content"));
 	this->contentTextEdit->setPlaceholderText(QString());
 	this->targetURLLabel->setText(tr_object_editor(is_portal ? "Portal Target URL" : "Target URL"));
-	this->targetURLLineEdit->setPlaceholderText(is_portal ? QStringLiteral("sub://vr.metasiberia.com/World?x=0&y=0&z=0&heading=0") : QString());
-	this->targetURLLineEdit->setToolTip(is_portal ? tr_object_editor("Walk through the portal to travel to this sub:// destination.") : QString());
+	this->targetURLLineEdit->setPlaceholderText(is_portal ? QStringLiteral("sib://vr.metasiberia.com/World?x=0&y=0&z=0&heading=0") : QString());
+	this->targetURLLineEdit->setToolTip(is_portal ? tr_object_editor("Walk through the portal to travel to this sib:// destination. Legacy sub:// links also work.") : QString());
 	this->newMaterialPushButton->setVisible(!is_portal);
 
 	if(ob.lightmap_baking)
@@ -4243,7 +4243,7 @@ void ObjectEditor::setPortalTargetMainWorld()
 	if(this->editing_object_type != WorldObject::ObjectType_Portal)
 		return;
 
-	this->targetURLLineEdit->setText(QStringLiteral("sub://vr.metasiberia.com/"));
+	this->targetURLLineEdit->setText(QStringLiteral("sib://vr.metasiberia.com/"));
 	targetURLChanged();
 	emit objectChanged();
 }
@@ -4254,7 +4254,7 @@ void ObjectEditor::setPortalTargetMapWorld()
 	if(this->editing_object_type != WorldObject::ObjectType_Portal)
 		return;
 
-	this->targetURLLineEdit->setText(QStringLiteral("sub://vr.metasiberia.com/map"));
+	this->targetURLLineEdit->setText(QStringLiteral("sib://vr.metasiberia.com/map"));
 	targetURLChanged();
 	emit objectChanged();
 }
@@ -4294,7 +4294,7 @@ void ObjectEditor::showPortalHelp()
 		QStringLiteral("<h2>") + tr_portal("Portal Editor Help") + QStringLiteral("</h2>") +
 		QStringLiteral("<p>") + tr_portal("A portal is both navigation and stage lighting. Players must instantly understand where it goes, whether it is active, and what kind of world waits behind it.") + QStringLiteral("</p>") +
 		QStringLiteral("<h3>") + tr_portal("Fast workflow") + QStringLiteral("</h3><ol>") +
-		QStringLiteral("<li>") + tr_portal("Set Portal Target URL first. Use sub:// links for in-world travel, for example sub://vr.metasiberia.com/map.") + QStringLiteral("</li>") +
+		QStringLiteral("<li>") + tr_portal("Set Portal Target URL first. Use sib:// links for new in-world links, for example sib://vr.metasiberia.com/map. Legacy sub:// links still work.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Pick a Portal Style or press a style button below. The preset changes all five portal materials at once.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Tune Material 3 (Portal Effect) for the inner colour and glow, then tune rim/frame materials for silhouette readability.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Scale the portal so the player can read it from a distance, then rotate it so the front faces the intended approach direction.") + QStringLiteral("</li></ol>") +

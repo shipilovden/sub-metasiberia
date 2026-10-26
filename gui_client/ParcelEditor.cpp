@@ -2,6 +2,7 @@
 
 
 #include "PhysicsObject.h"
+#include "URLParser.h"
 #include <opengl/OpenGLEngine.h>
 #include "../qt/SignalBlocker.h"
 #include "../qt/IndigoDoubleSpinBox.h"
@@ -618,10 +619,10 @@ void ParcelEditor::setCurrentServerURL(const std::string& server_url)
 	if(!current_server_url.empty())
 	{
 		// Parse URL to extract hostname
-		// Format: sub://hostname:port/path
-		if(current_server_url.find("sub://") == 0)
+		// Format: sub:// or sib:// hostname:port/path
+		if(URLParser::hasSupportedSchemePrefix(current_server_url))
 		{
-			std::string url_part = current_server_url.substr(6); // Remove "sub://"
+			std::string url_part = current_server_url.substr(6); // Both supported scheme prefixes are six characters.
 			size_t colon_pos = url_part.find(':');
 			size_t slash_pos = url_part.find('/');
 			
@@ -647,10 +648,10 @@ void ParcelEditor::on_showOnWebLabel_linkActivated(const QString&)
 	if(!current_server_url.empty())
 	{
 		// Parse URL to extract hostname
-		// Format: sub://hostname:port/path
-		if(current_server_url.find("sub://") == 0)
+		// Format: sub:// or sib:// hostname:port/path
+		if(URLParser::hasSupportedSchemePrefix(current_server_url))
 		{
-			std::string url_part = current_server_url.substr(6); // Remove "sub://"
+			std::string url_part = current_server_url.substr(6); // Both supported scheme prefixes are six characters.
 			size_t colon_pos = url_part.find(':');
 			size_t slash_pos = url_part.find('/');
 			

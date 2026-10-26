@@ -55,7 +55,7 @@ if(XR_SUPPORT)
 endif()
 
 # Needed for webcam/* headers that are included as "webcam/..." from within gui_client/webcam sources.
-include_directories(${CMAKE_SOURCE_DIR}/gui_client)
+include_directories(${CMAKE_BINARY_DIR}/gui_client ${CMAKE_BINARY_DIR}/qt ${CMAKE_SOURCE_DIR}/gui_client)
 
 if(NOT EMSCRIPTEN)
 	include(../cmake/winter.cmake)
@@ -606,90 +606,90 @@ endif()
 	${CMAKE_SOURCE_DIR}/gui_client/VRoidAuthFlow.cpp
 	${CMAKE_SOURCE_DIR}/gui_client/VRoidAuthFlow.h
 
-	${CMAKE_SOURCE_DIR}/gui_client/moc_MainWindow.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_GuiClientApplication.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_GlWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarSettingsDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarSettingsWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AvatarPreviewWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AddObjectDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AddVideoDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AddObjectPreviewWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_ObjectEditor.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_EnvironmentOptionsWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_MaterialEditor.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_ParcelEditor.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_LoginDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_SignUpDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_UserDetailsWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_URLWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_ResetPasswordDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_ChangePasswordDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_MaterialBrowser.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_IndigoView.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_ShaderEditorDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AboutDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_BotEditorWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_ScientificObjectEditor.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_CulturalObjectEditor.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AnimationEditorPanel.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AnimationPreviewWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_PhotoVideoSettingsPanel.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_DocumentEditorPanel.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_TreeEditorPanel.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_VoxelEditorPanel.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_UpdateManager.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_MainOptionsDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_GoToParcelDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_GoToPositionDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_FindObjectDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_ListObjectsNearbyDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_LogWindow.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_DiagnosticsWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_TerrainSpecSectionWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_WorldSettingsWidget.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_CreateObjectsDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_VRoidAuthFlow.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AIConnectionDialog.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_CodexAppServerClient.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/moc_AIDockWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_MainWindow.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_GuiClientApplication.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_GlWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AvatarSettingsDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AvatarSettingsWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AvatarPreviewWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AddObjectDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AddVideoDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AddObjectPreviewWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_ObjectEditor.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_EnvironmentOptionsWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_MaterialEditor.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_ParcelEditor.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_LoginDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_SignUpDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_UserDetailsWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_URLWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_ResetPasswordDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_ChangePasswordDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_MaterialBrowser.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_IndigoView.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_ShaderEditorDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AboutDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_BotEditorWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_ScientificObjectEditor.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_CulturalObjectEditor.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AnimationEditorPanel.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AnimationPreviewWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_PhotoVideoSettingsPanel.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_DocumentEditorPanel.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_TreeEditorPanel.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_VoxelEditorPanel.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_UpdateDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_UpdateManager.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_MainOptionsDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_GoToParcelDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_GoToPositionDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_FindObjectDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_ListObjectsNearbyDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_LogWindow.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_DiagnosticsWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_TerrainSpecSectionWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_WorldSettingsWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_CreateObjectsDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_VRoidAuthFlow.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AIConnectionDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_CodexAppServerClient.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_AIDockWidget.cpp
 
 	# Webcam Qt UI (Qt Multimedia)
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamControlPanel.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamVideoView.cpp
-	${CMAKE_SOURCE_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
+	${CMAKE_BINARY_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
+	${CMAKE_BINARY_DIR}/gui_client/webcam/moc_WebcamControlPanel.cpp
+	${CMAKE_BINARY_DIR}/gui_client/webcam/moc_WebcamVideoView.cpp
+	${CMAKE_BINARY_DIR}/gui_client/webcam/moc_WebcamSettingsDialog.cpp
 
-	${CMAKE_SOURCE_DIR}/gui_client/ui_AddObjectDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_AddVideoDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_AvatarSettingsDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_AvatarSettingsWidget.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_ObjectEditor.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_EnvironmentOptionsWidget.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_ParcelEditor.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_MaterialEditor.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_LoginDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_SignUpDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_MainWindow.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_UserDetailsWidget.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_URLWidget.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_ResetPasswordDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_ChangePasswordDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_MaterialBrowser.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_ShaderEditorDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_AboutDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_MainOptionsDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_GoToParcelDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_GoToPositionDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_FindObjectDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_ListObjectsNearbyDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_LogWindow.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_DiagnosticsWidget.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_TerrainSpecSectionWidget.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_WorldSettingsWidget.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_CreateObjectsDialog.h
-	${CMAKE_SOURCE_DIR}/gui_client/ui_AIConnectionDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_AddObjectDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_AddVideoDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_AvatarSettingsDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_AvatarSettingsWidget.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_ObjectEditor.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_EnvironmentOptionsWidget.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_ParcelEditor.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_MaterialEditor.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_LoginDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_SignUpDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_MainWindow.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_UserDetailsWidget.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_URLWidget.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_ResetPasswordDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_ChangePasswordDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_MaterialBrowser.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_ShaderEditorDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_AboutDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_MainOptionsDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_GoToParcelDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_GoToPositionDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_FindObjectDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_ListObjectsNearbyDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_LogWindow.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_DiagnosticsWidget.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_TerrainSpecSectionWidget.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_WorldSettingsWidget.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_CreateObjectsDialog.h
+	${CMAKE_BINARY_DIR}/gui_client/ui_AIConnectionDialog.h
 	)
 
 
@@ -702,22 +702,22 @@ endif()
 	../qt/FlowLayout.h
 	../qt/FileSelectWidget.cpp
 	../qt/FileSelectWidget.h
-	../qt/moc_FileSelectWidget.cpp
-	../qt/ui_FileSelectWidget.h
+	${CMAKE_BINARY_DIR}/qt/moc_FileSelectWidget.cpp
+	${CMAKE_BINARY_DIR}/qt/ui_FileSelectWidget.h
 
 	../qt/RealControl.cpp
 	../qt/RealControl.h
-	../qt/moc_RealControl.cpp
-	../qt/ui_RealControl.h
+	${CMAKE_BINARY_DIR}/qt/moc_RealControl.cpp
+	${CMAKE_BINARY_DIR}/qt/ui_RealControl.h
 
 	../qt/IndigoDoubleSpinBox.cpp
 	../qt/IndigoDoubleSpinBox.h
-	../qt/moc_IndigoDoubleSpinBox.cpp
+	${CMAKE_BINARY_DIR}/qt/moc_IndigoDoubleSpinBox.cpp
 
 	#../qt/RgbColourPicker.cpp
 	#../qt/RgbColourPicker.h
-	#../qt/moc_RgbColourPicker.cpp
-	#../qt/ui_RgbColourPicker.h
+	#${CMAKE_BINARY_DIR}/qt/moc_RgbColourPicker.cpp
+	#${CMAKE_BINARY_DIR}/qt/ui_RgbColourPicker.h
 	)
 endif()
 

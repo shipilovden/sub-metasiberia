@@ -166,10 +166,10 @@ void MiscInfoUI::create(Reference<OpenGLEngine>& opengl_engine_, GUIClient* gui_
 			{
 				std::string url_string = transit_input_field_ptr->getText();
 				
-				// If URL doesn't start with "sub://", add it
-				if(url_string.find("sub://") != 0)
+				// Add the legacy scheme only when the input has no supported explicit scheme.
+				if(!URLParser::hasSupportedSchemePrefix(url_string))
 				{
-					url_string = "sub://" + url_string;
+					url_string = "sib://" + url_string;
 				}
 				
 				try
@@ -690,10 +690,10 @@ void MiscInfoUI::eventOccurred(GLUICallbackEvent& event)
 		}
 		else if(event.widget == home_button.ptr())
 		{
-			// Always connect to sub://vr.metasiberia.com/Admin
+			// Always connect to sib://vr.metasiberia.com/Admin
 			try
 			{
-				URLParseResults parse_results = URLParser::parseURL("sub://vr.metasiberia.com/Admin");
+				URLParseResults parse_results = URLParser::parseURL("sib://vr.metasiberia.com/Admin");
 				
 				// Schedule connection for timerEvent() to avoid blocking UI thread
 				gui_client->pending_transit_connection = parse_results;
@@ -725,7 +725,7 @@ void MiscInfoUI::eventOccurred(GLUICallbackEvent& event)
 						// Build URL string with current position
 						std::string url;
 						url.reserve(128);
-						url += "sub://";
+						url += "sib://";
 						url += gui_client->server_hostname;
 						url += "/";
 						url += gui_client->server_worldname;

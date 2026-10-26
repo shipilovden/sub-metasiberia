@@ -623,6 +623,18 @@ static std::string xrGetViveFocus3ControllerModelPath(bool right_hand)
 }
 
 
+static std::string getOptionalEnvVar(const char* name)
+{
+	try
+	{
+		if(PlatformUtils::isEnvironmentVariableDefined(name))
+			return PlatformUtils::getEnvironmentVariable(name);
+	}
+	catch(...) {}
+	return std::string();
+}
+
+
 static std::string xrGetQuest2ControllerModelPath(bool right_hand)
 {
 	const std::string file_name = right_hand ? "oculus_quest2_controller_right.obj" : "oculus_quest2_controller_left.obj";
@@ -6889,7 +6901,7 @@ static bool particleSpritePathLooksLikePackagedPath(const std::string& path)
 
 static bool particleSpritePathLooksLikeRemoteURL(const std::string& path)
 {
-	return hasPrefix(path, "http://") || hasPrefix(path, "https://") || hasPrefix(path, "sub://");
+	return hasPrefix(path, "http://") || hasPrefix(path, "https://") || URLParser::hasSupportedSchemePrefix(path);
 }
 
 
@@ -12013,7 +12025,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 		}
 	}
 
-	if(hasPrefix(touched_portal_target_URL, "sub://"))
+	if(URLParser::hasSupportedSchemePrefix(touched_portal_target_URL))
 		visitSubURL(touched_portal_target_URL, /*push_cur_URL_on_nav_stack=*/true, /*adjust_cur_URL_pos_back=*/true);
 
 
@@ -21045,7 +21057,7 @@ static std::string makeURL(const std::string& server_hostname, const std::string
 	// Use two decimal places for z coordinate so that when spawning, with gravity enabled initially, we have sufficient vertical resolution to be detected as on ground, so flying animation doesn't play.
 	std::string url;
 	url.reserve(128);
-	url += "sub://";
+	url += "sib://";
 	url += server_hostname;
 	url += "/";
 	url += server_worldname;
@@ -21061,7 +21073,7 @@ static std::string makeURL(const std::string& server_hostname, const std::string
 }
 
 
-void GUIClient::visitSubURL(const std::string& URL, bool push_prev_URL_on_nav_stack, bool adjust_cur_URL_pos_back) // Visit a substrata 'sub://' URL.  Checks hostname and only reconnects if the hostname is different from the current one.
+void GUIClient::visitSubURL(const std::string& URL, bool push_prev_URL_on_nav_stack, bool adjust_cur_URL_pos_back) // Visit a sub:// or sib:// URL. Checks hostname and only reconnects if it differs from the current one.
 {
 	if(push_prev_URL_on_nav_stack)
 	{
@@ -26812,7 +26824,7 @@ void GUIClient::useActionTriggered(bool use_mouse_cursor)
 							{
 								ui_interface->openURL(url);
 							}
-							else if(protocol == "sub")
+							else if(URLParser::hasSupportedSchemePrefix(url))
 							{
 								visitSubURL(url);
 							}

@@ -45,6 +45,9 @@ Parse a Substrata URL
 class URLParser
 {
 public:
+	// Returns true when URL begins with one of the explicitly supported URI scheme prefixes.
+	static bool hasSupportedSchemePrefix(const std::string& URL);
+
 	// Throws glare::Exception on parse error.
 	static URLParseResults parseURL(const std::string& URL);
 

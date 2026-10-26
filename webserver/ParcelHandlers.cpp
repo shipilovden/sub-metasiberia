@@ -179,11 +179,11 @@ void renderParcelPage(ServerAllWorldsState& world_state, const web::RequestInfo&
 			const std::string hostname = request.getHostHeader(); // Find the hostname the request was sent to
 
 			const std::string webclient_URL = "/visit/parcel/" + toString(parcel_id);
-			const std::string sub_URL = "sub://" + hostname + "/parcel/" + toString(parcel_id);
+			const std::string native_URL = "sib://" + hostname + "/parcel/" + toString(parcel_id);
 			
 			page += "<p><a href=\"" + webclient_URL + "\">Visit in web browser</a><br/></p>   \n";
-			//page += "<p>For the best experience, enter this URL into the location bar in the Substrata client: " + sub_URL + "</p>";
-			page += "<p>Visit in Metasiberia: <a href=\"" + sub_URL + "\">" + sub_URL + "</a><br/>(Click or enter URL into location bar in Metasiberia client)</p>   \n";
+			//page += "<p>For the best experience, enter this URL into the location bar in the Metasiberia client: " + native_URL + "</p>";
+			page += "<p>Visit in Metasiberia: <a href=\"" + native_URL + "\">" + native_URL + "</a><br/>(Click or enter URL into location bar in Metasiberia client)</p>   \n";
 
 
 			// Look up owner
