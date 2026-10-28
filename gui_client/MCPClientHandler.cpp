@@ -8,6 +8,10 @@ Copyright Glare Technologies Limited 2026 -
 #include "MCPImageGeneration.h"
 #include "MCPAnimationTools.h"
 #include "MCPTextMeshTools.h"
+#include "MCPBlenderBridge.h"
+#include "MCPClientLocalOnlyProtocol.h"
+
+#include "../shared/Version.h"
 
 
 #include "CredentialManager.h"
@@ -313,7 +317,7 @@ std::string spliceNeuroResourcesIntoInitializeResponse(const std::string& respon
 }
 
 
-std::string spliceRenderViewIntoToolsList(const std::string& response, bool animation_available, bool text_mesh_available, bool neuro_control_available)
+std::string spliceRenderViewIntoToolsList(const std::string& response, bool animation_available, bool text_mesh_available, bool neuro_control_available, bool blender_available)
 {
 	// This handler is part of the Qt local bridge. Parse the envelope rather than
 	// matching raw JSON text: the server may pretty-print its tool schema.
@@ -348,6 +352,12 @@ std::string spliceRenderViewIntoToolsList(const std::string& response, bool anim
 			if(tools.at(i).toObject().value(QStringLiteral("name")).toString().startsWith(QStringLiteral("neuro."))) tools.removeAt(i);
 		for(const QJsonValue& schema : neuroControlToolSchemas()) tools.append(schema);
 	}
+	if(blender_available)
+	{
+		for(int i = tools.size() - 1; i >= 0; --i)
+			if(tools.at(i).toObject().value(QStringLiteral("name")).toString().startsWith(QStringLiteral("blender."))) tools.removeAt(i);
+		for(const QJsonValue& schema : MCPBlenderBridge::toolSchemas()) tools.append(schema);
+	}
 	result.insert("tools", tools);
 	root.insert("result", result);
 	document.setObject(root);
@@ -363,13 +373,14 @@ bool isFiniteVec(const Vec3d& v)
 } // anonymous namespace
 
 
-MCPClientRequestHandler::MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback_, const MCPClientStatusCallback& status_callback_, const std::function<bool()>& poly_haven_enabled_, const MCPClientTerrainCallback& terrain_callback_, const MCPClientTerrainCallback& animation_callback_, const MCPClientTerrainCallback& text_mesh_callback_, const MCPClientNeuroControlCallback& neuro_control_callback_)
+MCPClientRequestHandler::MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback_, const MCPClientStatusCallback& status_callback_, const std::function<bool()>& poly_haven_enabled_, const MCPClientTerrainCallback& terrain_callback_, const MCPClientTerrainCallback& animation_callback_, const MCPClientTerrainCallback& text_mesh_callback_, const MCPClientNeuroControlCallback& neuro_control_callback_, const MCPClientBlenderCallback& blender_callback_)
 :	server_hostname(forwarding_target.server_hostname),
 	render_callback(render_callback_),
 	terrain_callback(terrain_callback_),
 	animation_callback(animation_callback_),
 	text_mesh_callback(text_mesh_callback_),
 	neuro_control_callback(neuro_control_callback_),
+	blender_callback(blender_callback_),
 	status_callback(status_callback_),
 	poly_haven_enabled(poly_haven_enabled_),
 	keepalive_configured(false)
@@ -597,6 +608,41 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 		{
 			const JSONNode& params = root.getChildObject(parser, "params");
 			const QString name=QString::fromStdString(params.getChildStringValue(parser,"name"));
+			if(name.startsWith(QStringLiteral("blender.")))
+			{
+				try
+				{
+					if(!blender_callback) throw glare::Exception("Metasiberia Blender tools are unavailable in this client session.");
+					const QJsonObject request = QJsonDocument::fromJson(QByteArray::fromStdString(body)).object();
+					const QJsonValue arg_value = request.value(QStringLiteral("params")).toObject().value(QStringLiteral("arguments"));
+					if(!arg_value.isUndefined() && !arg_value.isObject()) throw glare::Exception("Blender tool arguments must be an object.");
+					QJsonObject tool_result = blender_callback(name, arg_value.toObject());
+					QJsonArray content;
+					const QJsonObject image = tool_result.take(QStringLiteral("_mcp_image")).toObject();
+					if(!image.isEmpty())
+					{
+						const QString mime = image.value(QStringLiteral("mimeType")).toString();
+						const QString data = image.value(QStringLiteral("data")).toString();
+						if(mime != QStringLiteral("image/jpeg") || data.isEmpty() || data.size() > 4 * 1024 * 1024)
+							throw glare::Exception("Blender returned an invalid or oversized MCP image block.");
+						content.append(QJsonObject{{"type", "image"}, {"data", data}, {"mimeType", mime}});
+						tool_result.insert(QStringLiteral("image_included"), true);
+					}
+					const QString text = QString::fromUtf8(QJsonDocument(tool_result).toJson(QJsonDocument::Compact));
+					content.append(QJsonObject{{"type", "text"}, {"text", text}});
+					const QJsonObject envelope{{"isError", false}, {"structuredContent", tool_result}, {"content", content}};
+					writeJSONRPCResult(reply_info, id_json, QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
+				}
+				catch(const std::exception& e)
+				{
+					const QString message = QString::fromUtf8(e.what()).left(2048);
+					const QJsonObject error{{"code", "BLENDER_BRIDGE_FAILED"}, {"message", message}};
+					const QJsonObject envelope{{"isError", true}, {"structuredContent", QJsonObject{{"error", error}}},
+						{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", QStringLiteral("BLENDER_BRIDGE_FAILED: %1").arg(message)}}}}};
+					writeJSONRPCResult(reply_info, id_json, QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
+				}
+				return;
+			}
 			if(name.startsWith(QStringLiteral("neuro.")))
 			{
 				try
@@ -706,6 +752,22 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 	try
 	{
 		reportStatus("Handling MCP '" + method + "' method.");
+		if(!isValidServerHostname(server_hostname))
+		{
+			const QJsonObject request = QJsonDocument::fromJson(QByteArray::fromStdString(body)).object();
+			if(MCPClientLocalOnlyProtocol::handlesMethod(QString::fromStdString(method)))
+			{
+				const QByteArray local_response = MCPClientLocalOnlyProtocol::makeResponse(QString::fromStdString(method),
+					request.value(QStringLiteral("id")), request.value(QStringLiteral("params")).toObject(),
+					blender_callback ? MCPBlenderBridge::toolSchemas() : QJsonArray(),
+					QString::fromStdString(cyberspace_version));
+				web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, local_response.constData(), (size_t)local_response.size(), "application/json");
+				return;
+			}
+			writeJSONRPCError(reply_info, id_json, -32000,
+				"No Metasiberia world is connected. Only local Blender MCP tools are available in this session.");
+			return;
+		}
 		// Keep NeuroControl tool registration on this desktop bridge. Its
 		// tools/list response is composed locally below, and tools/call is
 		// dispatched to the live widget above. Sending the registry upstream
@@ -714,8 +776,8 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 		std::string response = forwardToServer(body);
 		if(method == "initialize" && neuro_control_callback)
 			response = spliceNeuroResourcesIntoInitializeResponse(response);
-		if(method == "tools/list" && (render_callback || terrain_callback || animation_callback || text_mesh_callback || neuro_control_callback))
-			response = spliceRenderViewIntoToolsList(response, (bool)animation_callback, (bool)text_mesh_callback, (bool)neuro_control_callback);
+		if(method == "tools/list" && (render_callback || terrain_callback || animation_callback || text_mesh_callback || neuro_control_callback || blender_callback))
+			response = spliceRenderViewIntoToolsList(response, (bool)animation_callback, (bool)text_mesh_callback, (bool)neuro_control_callback, (bool)blender_callback);
 		if(method == "resources/list" && neuro_control_callback) response = spliceNeuroResourcesIntoList(response);
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, response.data(), response.size(), /*content type=*/"application/json");
 	}
@@ -772,5 +834,5 @@ bool MCPClientSharedRequestHandler::isConfigured() const
 
 Reference<web::RequestHandler> MCPClientSharedRequestHandler::getOrMakeRequestHandler()
 {
-	return new MCPClientRequestHandler(forwarding_target, render_callback, status_callback, poly_haven_enabled, terrain_callback, animation_callback, text_mesh_callback, neuro_control_callback);
+	return new MCPClientRequestHandler(forwarding_target, render_callback, status_callback, poly_haven_enabled, terrain_callback, animation_callback, text_mesh_callback, neuro_control_callback, blender_callback);
 }

@@ -19,6 +19,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "NeuroControlWidget.h"
 #endif
 #include "MCPClientHandler.h"
+#include "MCPBlenderBridge.h"
 #include "MCPTextMeshTools.h"
 #include <QtCore/QSemaphore>
 #include <QtCore/QBuffer>
@@ -1854,6 +1855,7 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	main_timer_id(0),
 	gui_client(base_dir_path_, appdata_path_, args),
 	mcp_client_server_running(false),
+	mcp_server_world_connected(false),
 	mcp_connection_error_reported(false),
 	run_as_screenshot_slave(false),
 	taking_map_screenshot(false),
@@ -8207,10 +8209,17 @@ void MainWindow::timerEvent(QTimerEvent* event)
 
 	if(closing || in_CEF_message_loop)
 		return;
-	if(mcp_client_server_running && (gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
-		mcp_server_hostname != gui_client.server_hostname || mcp_worldname != gui_client.server_worldname))
+	const bool world_connected_for_mcp = gui_client.connection_state == GUIClient::ServerConnectionState_Connected;
+	const bool mcp_world_context_changed = mcp_server_world_connected != world_connected_for_mcp ||
+		(world_connected_for_mcp && (mcp_server_hostname != gui_client.server_hostname || mcp_worldname != gui_client.server_worldname));
+	if(mcp_client_server_running && mcp_world_context_changed)
+	{
 		stopMCPClientServer();
-	else if(!mcp_client_server_running && gui_client.connection_state == GUIClient::ServerConnectionState_Connected)
+		if(settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool())
+			startMCPClientServerIfEnabled();
+	}
+	else if(!mcp_client_server_running && !mcp_connection_error_reported &&
+		settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool())
 		startMCPClientServerIfEnabled();
 
 	// We don't want to do the closeEvent stuff in the CEF message loop.  
@@ -12040,8 +12049,6 @@ void MainWindow::startMCPClientServerIfEnabled()
 {
 	if(mcp_client_server_running || closing || !settings->value(MainOptionsDialog::MCPEnabledKey(), false).toBool())
 		return;
-	if(gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
-		return;
 	mcp_shutdown_requested.store(false);
 	// LoginDialog writes credentials through a temporary manager. Reload the
 	// member before taking the MCP forwarding snapshot so a newly entered
@@ -12052,6 +12059,49 @@ void MainWindow::startMCPClientServerIfEnabled()
 		MainOptionsDialog::minMCPPort(), MainOptionsDialog::maxMCPPort());
 	Reference<MCPClientSharedRequestHandler> shared_handler = new MCPClientSharedRequestHandler();
 	shared_handler->setPolyHavenEnabledCallback([this]() { return mcp_poly_haven_enabled.load(); });
+	const QString blender_context_server = QString::fromStdString(gui_client.server_hostname);
+	const QString blender_context_world = QString::fromStdString(gui_client.server_worldname);
+	const bool blender_context_connected = gui_client.connection_state == GUIClient::ServerConnectionState_Connected;
+	shared_handler->setBlenderCallback([this, blender_context_server, blender_context_world, blender_context_connected](const QString& tool, const QJsonObject& args) -> QJsonObject {
+		if(tool == QStringLiteral("blender.get_metasiberia_context"))
+		{
+			return QJsonObject{{"application", QStringLiteral("Metasiberia")}, {"client_version", QString::fromStdString(cyberspace_version)},
+				{"server_hostname", blender_context_server}, {"world_name", blender_context_world}, {"world_connected", blender_context_connected},
+				{"blender_bridge", QStringLiteral("local IPv4 loopback with one session token")},
+				{"placement", QStringLiteral("Blender transfers use the native GLB loader, current parcel permission checks and normal server-authoritative object creation. Placement defaults to a point in front of the avatar. No Blender scene or Metasiberia world is cleared automatically.")},
+				{"ai_guidance", QStringLiteral("Before editing, inspect the active Blender scene and preserve objects that were not requested for change. Do not switch or clear the active scene. Use the current Blender version's live API/docstrings when an operation is unfamiliar. Full Python has Blender-process rights, so avoid arbitrary filesystem/network actions unless the user asked. GLB transfers preserve only properties supported by Blender's glTF exporter and the Metasiberia loader; inspect the returned export report and do not claim unsupported shader graphs, simulations, rigging or animation survived. Direct placement changes the connected world and is subject to parcel permissions.")}};
+		}
+		if(tool != QStringLiteral("blender.import_exported_model") && tool != QStringLiteral("blender.place_exported_model"))
+			return MCPBlenderBridge::handleTool(tool, args);
+
+		const QJsonObject export_info = MCPBlenderBridge::handleTool(tool, args);
+		const QString path = export_info.value(QStringLiteral("path")).toString();
+		if(!MCPBlenderBridge::isLastExportedModelPath(path))
+			throw glare::Exception("The requested Blender transfer is not the last validated Connect export.");
+		const double distance = export_info.value(QStringLiteral("distance")).toDouble(2.0);
+		struct PendingBlenderTransfer {
+			QSemaphore done;
+			std::atomic<bool> cancelled{false};
+			std::string error;
+		};
+		const auto pending = std::make_shared<PendingBlenderTransfer>();
+		QMetaObject::invokeMethod(this, [this, pending, path, distance]() {
+			if(pending->cancelled.load()) return;
+			try
+			{
+				placeBlenderModelDirect(path, distance);
+			}
+			catch(const std::exception& e) { pending->error = e.what(); }
+			catch(...) { pending->error = "Could not place the Blender model in Metasiberia."; }
+			pending->done.release();
+		}, Qt::QueuedConnection);
+		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 600000))
+			throw glare::Exception(mcp_shutdown_requested.load() ? "Blender model transfer was cancelled because the local MCP session is shutting down." :
+				"Metasiberia did not finish importing the Blender GLB in time. No automatic retry was started; inspect the world before retrying.");
+		if(!pending->error.empty()) throw glare::Exception(pending->error);
+		return QJsonObject{{"placed", true}, {"path", path}, {"distance_m", distance},
+			{"message", "The GLB was submitted to the normal Metasiberia object creation and server permission flow."}};
+	});
 	const std::string render_server = gui_client.server_hostname, render_world = gui_client.server_worldname;
 	const UserID animation_user = gui_client.logged_in_user_id;
 #if defined(ENABLE_NEUROCONTROL)
@@ -12643,14 +12693,16 @@ void MainWindow::startMCPClientServerIfEnabled()
 		if(!pending->error.empty()) throw glare::Exception(pending->error);
 		return pending->result;
 	});
-	if(!shared_handler->configureForwardingTargetFromCredentialManager(gui_client.server_hostname, gui_client.server_worldname, credential_manager))
+	const bool world_connected_for_mcp = gui_client.connection_state == GUIClient::ServerConnectionState_Connected;
+	const bool world_forwarding_ready = world_connected_for_mcp &&
+		shared_handler->configureForwardingTargetFromCredentialManager(gui_client.server_hostname, gui_client.server_worldname, credential_manager);
+	if(world_connected_for_mcp && !world_forwarding_ready)
 	{
 		if(!mcp_connection_error_reported)
 		{
-			showErrorNotification("MCP is enabled, but no saved login is available for the connected server. Enable 'remember me' when logging in.");
+			showErrorNotification("World MCP tools are unavailable because no saved login is available. Local Blender tools remain available.");
 			mcp_connection_error_reported = true;
 		}
-		return;
 	}
 
 	try
@@ -12670,15 +12722,19 @@ void MainWindow::startMCPClientServerIfEnabled()
 		}
 		readiness_socket.disconnectFromHost();
 		mcp_client_server_running = true;
-		mcp_server_hostname = gui_client.server_hostname;
-		mcp_worldname = gui_client.server_worldname;
+		MCPBlenderBridge::writeDiscoveryFile(port);
+		mcp_server_world_connected = world_connected_for_mcp;
+		mcp_server_hostname = world_connected_for_mcp ? gui_client.server_hostname : std::string();
+		mcp_worldname = world_connected_for_mcp ? gui_client.server_worldname : std::string();
 		mcp_connection_error_reported = false;
-		conPrint("Started localhost MCP endpoint on port " + toString(port) + ".");
+		conPrint(std::string("Started localhost MCP endpoint on port ") + toString(port) +
+			(world_forwarding_ready ? " with world forwarding." : " in local-only mode."));
 		if(ai_dock_widget && ai_dock_widget->isVisible())
-			ai_dock_widget->openForEndpoint(QStringLiteral("http://127.0.0.1:%1/mcp").arg(port), true, true, true, QDir::currentPath());
+			ai_dock_widget->openForEndpoint(QStringLiteral("http://127.0.0.1:%1/mcp").arg(port), true, true, world_connected_for_mcp, QDir::currentPath());
 	}
 	catch(glare::Exception& e)
 	{
+		mcp_connection_error_reported = true;
 		showErrorNotification("Failed to start local MCP endpoint: " + std::string(e.what()));
 	}
 }
@@ -12687,12 +12743,61 @@ void MainWindow::startMCPClientServerIfEnabled()
 void MainWindow::stopMCPClientServer()
 {
 	mcp_shutdown_requested.store(true);
+	mcp_connection_error_reported = false;
 	if(ai_dock_widget) ai_dock_widget->stopCodex();
 	if(!mcp_client_server_running)
+	{
+		MCPBlenderBridge::removeDiscoveryFile();
 		return;
+	}
 	mcp_web_thread_manager.killThreadsBlocking();
 	mcp_client_server_running = false;
+	mcp_server_world_connected = false;
+	mcp_server_hostname.clear();
+	mcp_worldname.clear();
+	MCPBlenderBridge::removeDiscoveryFile();
 	mcp_connection_error_reported = false;
+}
+
+void MainWindow::placeBlenderModelDirect(const QString& path, double distance)
+{
+	if(blender_import_dialog_open)
+		throw glare::Exception("Another Blender model transfer is already being processed.");
+	if(closing || !mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
+		throw glare::Exception("Connect to a Metasiberia world before placing a Blender model.");
+	if(!MCPBlenderBridge::isLastExportedModelPath(path))
+		throw glare::Exception("The GLB path is not the last validated Metasiberia Connect export.");
+	const QFileInfo file_info(path);
+	if(!file_info.exists() || !file_info.isFile() || file_info.size() <= 0 || file_info.size() > 128ll * 1024ll * 1024ll ||
+		file_info.suffix().compare(QStringLiteral("glb"), Qt::CaseInsensitive) != 0)
+		throw glare::Exception("The exported GLB is missing or exceeds the 128 MiB transfer limit.");
+	const Vec3d placement = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * distance;
+	bool in_parcel = false;
+	if(!gui_client.haveParcelObjectCreatePermissions(placement, in_parcel))
+		throw glare::Exception(in_parcel ? "You do not have permission to create objects in this parcel." :
+			"The placement position is outside a parcel where object creation is permitted.");
+	if(!ui || !ui->glWidget || ui->glWidget->opengl_engine.isNull())
+		throw glare::Exception("The Metasiberia OpenGL context is not ready to load the Blender model.");
+
+	blender_import_dialog_open = true;
+	struct ResetImportFlag { bool& flag; ~ResetImportFlag() { flag = false; } } reset_flag{blender_import_dialog_open};
+	ModelLoading::MakeGLObjectResults loaded;
+	ui->glWidget->makeCurrent();
+	struct DoneCurrent { GlWidget* widget; ~DoneCurrent() { if(widget) widget->doneCurrent(); } } done_current{ui->glWidget};
+	ModelLoading::makeGLObjectForModelFile(*ui->glWidget->opengl_engine, *ui->glWidget->opengl_engine->vert_buf_allocator,
+		/*allocator=*/nullptr, QtUtils::toIndString(path), /*do_opengl_stuff=*/true, loaded);
+	if(loaded.batched_mesh.isNull())
+		throw glare::Exception("The exported GLB did not contain a mesh supported by the Metasiberia object loader.");
+	if(closing || gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
+		throw glare::Exception("The Metasiberia world connection changed while the GLB was loading. The model was not placed.");
+	const Vec3d final_position = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * distance;
+	if(!gui_client.haveParcelObjectCreatePermissions(final_position, in_parcel))
+		throw glare::Exception(in_parcel ? "You do not have permission to create objects in this parcel." :
+			"The placement position is outside a parcel where object creation is permitted.");
+	glare::AllocatorVector<Voxel, 16> empty_voxels;
+	gui_client.createObject(QtUtils::toIndString(path), loaded.batched_mesh, /*loaded_mesh_is_image_cube=*/false,
+		empty_voxels, final_position, loaded.scale, loaded.axis, loaded.angle, loaded.materials);
+	gui_client.showInfoNotification("The Blender GLB was submitted to the normal Metasiberia object creation and server permission flow.");
 }
 
 

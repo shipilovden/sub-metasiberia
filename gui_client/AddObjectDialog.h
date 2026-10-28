@@ -48,6 +48,7 @@ public:
 	~AddObjectDialog();
 	void setOverlayBounds(const QRect& bounds);
 	void setDockedMode();
+	bool setModelFileForImport(const QString& path);
 	static void tryLoadTexturesForPreviewOb(Reference<GLObject> preview_gl_ob, std::vector<WorldMaterialRef>& world_materials, OpenGLEngine* opengl_engine,
 		TextureServer& texture_server, QWidget* parent_widget);
 

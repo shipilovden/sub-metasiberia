@@ -11,11 +11,12 @@ Right-side Codex chat panel for the Metasiberia client.
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QHash>
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QStringList>
 
 
 class QLabel;
 class QGroupBox;
-class QLineEdit;
+class QPlainTextEdit;
 class QPushButton;
 class QTextBrowser;
 class QTimer;
@@ -59,6 +60,8 @@ private slots:
 
 private:
 	void appendLine(const QString& speaker, const QString& text);
+	int beginMessage(const QString& speaker);
+	void adjustInputHeight();
 	void addImage(const QImage& image, const QString& name);
 	void addImageFile(const QString& path);
 	void addMimeImages(const QMimeData* data);
@@ -92,7 +95,7 @@ private:
 	QGroupBox* help_box;
 	QLabel* help_label;
 	QTextBrowser* conversation_view;
-	QLineEdit* input_edit;
+	QPlainTextEdit* input_edit;
 	QPushButton* send_button;
 	QPushButton* attach_button;
 	QPushButton* remove_reference_button;
@@ -102,6 +105,10 @@ private:
 	QComboBox* effort_combo;
 	QListWidget* references;
 	QTemporaryDir reference_directory;
+	QStringList pending_generated_images;
 	CodexAppServerClient codex;
 	QString assistant_buffer;
+	int assistant_body_start = -1;
+	bool assistant_message_started = false;
+	QString current_task;
 };

@@ -616,6 +616,19 @@ void AddObjectDialog::filenameChanged(QString& filename)
 }
 
 
+bool AddObjectDialog::setModelFileForImport(const QString& path)
+{
+	const QFileInfo info(path);
+	if(!info.exists() || !info.isFile() || info.suffix().compare(QStringLiteral("glb"), Qt::CaseInsensitive) != 0)
+		return false;
+	const QSignalBlocker blocker(avatarSelectWidget);
+	avatarSelectWidget->setFilename(info.absoluteFilePath());
+	result_path = QtUtils::toIndString(info.absoluteFilePath());
+	loadModelIntoPreview(result_path);
+	return loaded_mesh.nonNull() || !loaded_voxels.empty();
+}
+
+
 // Sets preview_gl_ob and loaded_object
 void AddObjectDialog::makeMeshForWidthAndHeight(const std::string& local_image_or_vid_path, int w, int h)
 {

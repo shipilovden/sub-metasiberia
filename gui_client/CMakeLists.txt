@@ -466,6 +466,10 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/DocumentObjectSettings.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/DocumentObjectSettings.h
 		${CMAKE_SOURCE_DIR}/gui_client/MCPClientHandler.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/MCPClientLocalOnlyProtocol.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/MCPClientLocalOnlyProtocol.h
+		${CMAKE_SOURCE_DIR}/gui_client/MCPBlenderBridge.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/MCPBlenderBridge.h
 		${CMAKE_SOURCE_DIR}/gui_client/AIConnectionDialog.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AIConnectionDialog.h
 		${CMAKE_SOURCE_DIR}/gui_client/AIConnectionDialog.ui

@@ -40,6 +40,7 @@ typedef std::function<void (const MCPClientRenderRequest&, MCPClientRenderResult
 typedef std::function<void (const std::string&)> MCPClientStatusCallback;
 typedef std::function<QJsonObject (const QString&, const QJsonObject&)> MCPClientTerrainCallback;
 typedef std::function<QJsonObject (const QString&, const QJsonObject&)> MCPClientNeuroControlCallback;
+typedef std::function<QJsonObject (const QString&, const QJsonObject&)> MCPClientBlenderCallback;
 
 
 struct MCPClientForwardingTarget
@@ -56,10 +57,11 @@ struct MCPClientForwardingTarget
 /*=====================================================================
 MCPClientRequestHandler
 -----------------------
-Serves the local MCP HTTP endpoint.  render_view is dispatched through a
-callback supplied by the Qt integration; all other methods are forwarded to
-the connected server's HTTPS /mcp endpoint using the login already stored by
-CredentialManager.
+Serves the local MCP HTTP endpoint. With a connected world and saved login,
+world tools are forwarded to that server's HTTPS /mcp endpoint. Without a
+forwarding target, it runs in local-only mode and exposes Blender tools while
+returning explicit errors for unavailable world tools. render_view and native
+editor callbacks are dispatched through the Qt integration.
 
 This handler rejects every non-loopback peer.  The listener must ALSO bind to
 127.0.0.1/::1.  Do not start it with the current wildcard-only
@@ -68,7 +70,7 @@ web::WebListenerThread API.
 class MCPClientRequestHandler : public web::RequestHandler
 {
 public:
-	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback, const MCPClientTerrainCallback& animation_callback, const MCPClientTerrainCallback& text_mesh_callback, const MCPClientNeuroControlCallback& neuro_control_callback);
+	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback, const MCPClientTerrainCallback& animation_callback, const MCPClientTerrainCallback& text_mesh_callback, const MCPClientNeuroControlCallback& neuro_control_callback, const MCPClientBlenderCallback& blender_callback);
 
 	virtual void handleRequest(const web::RequestInfo& request_info, web::ReplyInfo& reply_info) override;
 
@@ -83,6 +85,7 @@ private:
 	MCPClientTerrainCallback animation_callback;
 	MCPClientTerrainCallback text_mesh_callback;
 	MCPClientNeuroControlCallback neuro_control_callback;
+	MCPClientBlenderCallback blender_callback;
 	MCPClientStatusCallback status_callback;
 	std::function<bool()> poly_haven_enabled;
 
@@ -120,6 +123,7 @@ public:
 	void setTextMeshCallback(const MCPClientTerrainCallback& callback) { text_mesh_callback = callback; }
 	void setAnimationCallback(const MCPClientTerrainCallback& callback) { animation_callback = callback; }
 	void setNeuroControlCallback(const MCPClientNeuroControlCallback& callback) { neuro_control_callback = callback; }
+	void setBlenderCallback(const MCPClientBlenderCallback& callback) { blender_callback = callback; }
 
 	bool isConfigured() const;
 
@@ -133,5 +137,6 @@ private:
 	MCPClientTerrainCallback animation_callback;
 	MCPClientTerrainCallback text_mesh_callback;
 	MCPClientNeuroControlCallback neuro_control_callback;
+	MCPClientBlenderCallback blender_callback;
 	MCPClientStatusCallback status_callback;
 };

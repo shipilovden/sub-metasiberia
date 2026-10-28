@@ -64,6 +64,7 @@ class WebcamWindow;
 class AvatarSettingsWidget;
 class ScientificObjectEditor;
 class CulturalObjectEditor;
+class AddObjectDialog;
 class SpotlightEditor;
 class AnimationEditorPanel;
 class AnimationEditorController;
@@ -377,6 +378,7 @@ private:
 public:
 	void showErrorNotification(const std::string& msg);
 	void showInfoNotification(const std::string& msg);
+	void placeBlenderModelDirect(const QString& path, double distance);
 
 	//------------------------------------------------- UIInterface -----------------------------------------------------------
 	virtual void appendChatMessage(const std::string& msg) override;
@@ -685,6 +687,8 @@ public:
 	glare::TaskManager* main_task_manager;
 	glare::TaskManager* high_priority_task_manager;
 
+	bool mcp_server_world_connected;
+	bool blender_import_dialog_open = false;
 	Reference<glare::Allocator> main_mem_allocator;
 
 	//struct _SDL_GameController* game_controller;

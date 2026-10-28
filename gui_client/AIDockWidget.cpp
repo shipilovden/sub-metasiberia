@@ -3,6 +3,8 @@ AIDockWidget.cpp
 ----------------
 =====================================================================*/
 #include "AIDockWidget.h"
+#include "AIMessageInput.h"
+#include "MCPBlenderBridge.h"
 #include "LucideIconUtils.h"
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QTabBar>
@@ -15,13 +17,15 @@ AIDockWidget.cpp
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
-#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QPlainTextEdit>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QTextBrowser>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QScrollBar>
 #include <QtGui/QPainter>
+#include <QtGui/QColor>
+#include <QtGui/QFont>
 #include <QtGui/QTextImageFormat>
 #include <QtGui/QScreen>
 #include <QtGui/QWindow>
@@ -31,6 +35,10 @@ AIDockWidget.cpp
 #include <QtCore/QTimer>
 #include <QtGui/QTextCursor>
 #include <QtGui/QTextBlock>
+#include <QtGui/QTextBlockFormat>
+#include <QtGui/QTextCharFormat>
+#include <QtGui/QTextDocumentFragment>
+#include <QtGui/QAbstractTextDocumentLayout>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFileDialog>
@@ -43,9 +51,23 @@ AIDockWidget.cpp
 #include <QtGui/QDropEvent>
 #include <QtGui/QImageReader>
 #include <QtGui/QKeyEvent>
-
+#include <QtCore/QRegularExpression>
 
 namespace {
+QTextDocumentFragment markdownFragment(const QString& source)
+{
+	QString safe = source;
+	// QTextDocument supports Markdown formatting, but keep responses as text:
+	// don't load remote/local images or interpret raw HTML from model output.
+	safe.replace(QRegularExpression(QStringLiteral("!\\[([^\\]]*)\\]\\([^\\n)]*\\)")), QStringLiteral("$1"));
+	safe.replace(QLatin1Char('&'), QStringLiteral("&amp;"));
+	safe.replace(QLatin1Char('<'), QStringLiteral("&lt;"));
+	safe.replace(QLatin1Char('>'), QStringLiteral("&gt;"));
+	QTextDocument document;
+	document.setMarkdown(safe);
+	return QTextDocumentFragment(&document);
+}
+
 // The world media viewer uses GL world objects. References remain private local
 // attachments, so this Qt viewer reproduces its fit/black background/Esc behaviour.
 class AIReferenceViewer final : public QDialog
@@ -89,7 +111,7 @@ AIDockWidget::AIDockWidget(QWidget* parent)
 	help_box(nullptr),
 	help_label(nullptr),
 	conversation_view(new QTextBrowser(this)),
-	input_edit(new QLineEdit(this)),
+	input_edit(new AIMessageInput(this)),
 	send_button(new QPushButton(tr("Send"), this)),
 	attach_button(new QPushButton(this)),
 	remove_reference_button(new QPushButton(this)),
@@ -148,11 +170,11 @@ AIDockWidget::AIDockWidget(QWidget* parent)
 	connection_label->setWordWrap(true);
 	connection_label->setMinimumWidth(0);
 	connection_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-	connection_label->setText(tr("Enable MCP in the AI Settings tab and connect to a world."));
+	connection_label->setText(tr("Enable MCP in AI Settings. A world connection is only needed for world tools."));
 	layout->addWidget(connection_label);
 
 	help_box = new QGroupBox(tr("How it works"), content);
-	help_label = new QLabel(tr("Enter commands here. Codex uses MCP tools for the current Metasiberia world. Codex login comes from the installed Codex CLI or VS Code extension; the game client does not store an OpenAI API key."), help_box);
+	help_label = new QLabel(tr("Codex uses the MCP tools available in this session. Blender can be modeled locally without a connected world; world actions require a world connection. Codex login comes from the installed CLI or VS Code extension."), help_box);
 	help_label->setWordWrap(true);
 	help_label->setMinimumWidth(0);
 	help_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -177,6 +199,16 @@ AIDockWidget::AIDockWidget(QWidget* parent)
 	conversation_view->setReadOnly(true);
     conversation_view->setOpenLinks(false);
     conversation_view->setOpenExternalLinks(false);
+    conversation_view->document()->setDefaultStyleSheet(
+        "body { color: #dedee3; }"
+        "p { margin-top: 2px; margin-bottom: 6px; }"
+        "h1, h2, h3 { color: #d8e5f5; margin-top: 8px; margin-bottom: 4px; }"
+        "ul, ol { margin-top: 2px; margin-bottom: 7px; }"
+        "pre { background-color: #202127; border: 1px solid #454751; padding: 6px; }"
+        "code { color: #f0c987; background-color: #25262d; }"
+        "blockquote { border-left: 3px solid #6e9bd3; margin-left: 5px; padding-left: 8px; color: #bdc8d8; }"
+        "a { color: #8fc4ff; }"
+        "hr { border: 0; height: 1px; background-color: #50515a; }");
     connect(conversation_view, &QTextBrowser::anchorClicked, this, [this](const QUrl& url) {
         const auto it=sent_references.constFind(url.toString());
         if(it!=sent_references.constEnd()) openReference(it.value());
@@ -200,6 +232,7 @@ AIDockWidget::AIDockWidget(QWidget* parent)
     connect(&codex,&CodexAppServerClient::turnActiveChanged,this,&AIDockWidget::setTurnActive);
     connect(&codex,&CodexAppServerClient::activityChanged,this,[this](const QString& phase) {
         activity_phase=phase; updateThinkingIndicator();
+        MCPBlenderBridge::setAIActivity(turn_active, activity_phase, current_task);
     });
 	references->setViewMode(QListView::IconMode);
 	references->viewport()->installEventFilter(this);
@@ -226,8 +259,12 @@ AIDockWidget::AIDockWidget(QWidget* parent)
 	remove_reference_button->hide();
 	input_layout->addWidget(attach_button);
 	input_layout->addWidget(remove_reference_button);
-	input_edit->setPlaceholderText(tr("Enter a command for Codex…"));
+	input_edit->setPlaceholderText(tr("Enter a command for Codex… (Shift+Enter for a new line)"));
 	input_edit->setMinimumWidth(0);
+	input_edit->setMinimumHeight(42);
+	input_edit->setMaximumHeight(132);
+	input_edit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	static_cast<AIMessageInput*>(input_edit)->submit = [this]() { sendCurrentMessage(); };
 	input_edit->installEventFilter(this);
 	input_layout->addWidget(input_edit, 1);
 	input_layout->addWidget(send_button);
@@ -236,12 +273,19 @@ AIDockWidget::AIDockWidget(QWidget* parent)
 	setWidget(content);
 
 	connect(send_button, &QPushButton::clicked, this, &AIDockWidget::sendCurrentMessage);
-	connect(input_edit, &QLineEdit::returnPressed, this, &AIDockWidget::sendCurrentMessage);
+	connect(input_edit, &QPlainTextEdit::textChanged, this, &AIDockWidget::adjustInputHeight);
 	connect(&codex, &CodexAppServerClient::assistantDelta, this, &AIDockWidget::appendAssistantDelta);
-	connect(&codex, &CodexAppServerClient::assistantMessageStarted, this, [this]() { assistant_buffer.clear(); });
+	connect(&codex, &CodexAppServerClient::assistantMessageStarted, this, [this]() {
+		assistant_buffer.clear();
+		assistant_message_started = false;
+		assistant_body_start = -1;
+		pending_generated_images.clear();
+	});
 	connect(&codex, &CodexAppServerClient::assistantMessageFinished, this, &AIDockWidget::finishAssistantMessage);
 	connect(&codex, &CodexAppServerClient::generatedImage, this, [this](const QString& path) {
-		if(QFileInfo::exists(path)) appendReferences(QStringList{path});
+		if(!QFileInfo::exists(path)) return;
+		if(codex.isTurnActive()) pending_generated_images.append(path);
+		else appendReferences(QStringList{path});
 	});
 	connect(&codex, &CodexAppServerClient::statusChanged, this, &AIDockWidget::updateStatus);
 	connect(&codex, &CodexAppServerClient::error, this, &AIDockWidget::showError);
@@ -276,15 +320,15 @@ void AIDockWidget::retranslateUi()
 	setWindowTitle(tr("AI"));
 	send_button->setText(tr("Send"));
 	help_box->setTitle(tr("How it works"));
-	help_label->setText(tr("Enter commands here. Codex uses MCP tools for the current Metasiberia world. Codex login comes from the installed Codex CLI or VS Code extension; the game client does not store an OpenAI API key."));
+	help_label->setText(tr("Codex uses the MCP tools available in this session. Blender can be modeled locally without a connected world; world actions require a world connection. Codex login comes from the installed CLI or VS Code extension."));
 	conversation_view->setPlaceholderText(tr("The Codex conversation will appear here…"));
-	input_edit->setPlaceholderText(tr("Enter a command for Codex…"));
+	input_edit->setPlaceholderText(tr("Enter a command for Codex… (Shift+Enter for a new line)"));
 	tabs->setTabText(0, tr("Chat"));
 	tabs->setTabText(1, QString());
 	tabs->setTabToolTip(1, tr("Settings"));
 	tabs->tabBar()->setAccessibleTabName(1, tr("Settings"));
 	enable_mcp->setText(tr("Enable MCP server"));
-	mcp_description->setText(tr("Allows AI to work in your current world with your account permissions. Only local applications can connect. Changes apply immediately."));
+	mcp_description->setText(tr("Starts the localhost MCP endpoint for Codex and Blender. Blender tools work without a world connection; world tools require a connected account. Only local applications can connect."));
 	port_label->setText(tr("Local port"));
 	enable_poly_haven->setText(tr("Enable Poly Haven textures"));
 	image_generation_description->setText(tr("Generate images using your ChatGPT/Codex sign-in. Ask in chat to create an image, then apply it to a world plane or one object face. No separate API key is used."));
@@ -305,7 +349,7 @@ void AIDockWidget::retranslateUi()
     if(effort_index>=0) effort_combo->setCurrentIndex(effort_index);
     updateThinkingIndicator();
     if(codex.isRunning()) codex.refreshStatus();
-    else connection_label->setText(tr("Enable MCP in the AI Settings tab and connect to a world."));
+	else connection_label->setText(tr("Enable MCP in AI Settings. A world connection is only needed for world tools."));
 	updateIcons();
 	if(model_combo->count() > 0 && model_combo->itemData(0).toJsonObject().isEmpty()) model_combo->setItemText(0, tr("Codex default"));
 }
@@ -335,27 +379,21 @@ void AIDockWidget::openForEndpoint(const QString& endpoint, bool mcp_enabled, bo
 	if(!mcp_enabled)
 	{
 		codex.stop();
-		connection_label->setText(tr("Enable MCP in the AI Settings tab and connect to a world."));
-		send_button->setEnabled(false);
-		return;
-	}
-	if(!world_connected)
-	{
-		codex.stop();
-		connection_label->setText(tr("MCP is enabled, but the client is not connected to a world."));
+		connection_label->setText(tr("Enable MCP in AI Settings. A world connection is only needed for world tools."));
 		send_button->setEnabled(false);
 		return;
 	}
 	if(!mcp_running)
 	{
 		codex.stop();
-		connection_label->setText(tr("The local MCP endpoint is not running. Check the world connection and saved login."));
+		connection_label->setText(tr("The local MCP endpoint is not running. Enable MCP in AI Settings."));
 		send_button->setEnabled(false);
 		return;
 	}
 
 	if(codex.isRunning()) return;
-	connection_label->setText(tr("MCP: %1\nStarting local Codex…").arg(endpoint));
+	connection_label->setText(world_connected ? tr("MCP: %1\nStarting local Codex…").arg(endpoint) :
+		tr("No Metasiberia world is connected. Starting Codex with local Blender tools only…"));
 	send_button->setEnabled(false);
 	codex.start(endpoint, working_directory);
 }
@@ -363,8 +401,8 @@ void AIDockWidget::openForEndpoint(const QString& endpoint, bool mcp_enabled, bo
 
 void AIDockWidget::sendCurrentMessage()
 {
-	const QString message = input_edit->text().trimmed();
-	if((message.isEmpty() && references->count() == 0) || !codex.isReady())
+	const QString message = input_edit->toPlainText();
+	if((message.trimmed().isEmpty() && references->count() == 0) || !codex.isReady())
 		return;
 	const QJsonObject model = model_combo->currentData().toJsonObject();
 	if(references->count() && model.contains("inputModalities") && !model.value("inputModalities").toArray().contains("image"))
@@ -375,6 +413,8 @@ void AIDockWidget::sendCurrentMessage()
 	QStringList paths;
 	for(int i=0; i<references->count(); ++i) paths.append(references->item(i)->data(Qt::UserRole).toString());
 	if(!codex.sendMessage(message, paths, model.value("model").toString(), effort_combo->currentData().toString())) return;
+	current_task = message.left(512);
+	MCPBlenderBridge::setAIActivity(true, QStringLiteral("thinking"), current_task);
 
 	appendLine(tr("You"), message);
 	appendReferences(paths);
@@ -391,40 +431,109 @@ void AIDockWidget::sendCurrentMessage()
 
 void AIDockWidget::appendLine(const QString& speaker, const QString& text)
 {
-	QTextCursor cursor(conversation_view->document()); cursor.movePosition(QTextCursor::End);
-    if(!conversation_view->document()->isEmpty()) cursor.insertBlock();
-    cursor.setCharFormat(QTextCharFormat());
-    cursor.insertText(speaker + QStringLiteral(": ") + text);
+	QTextCursor cursor(conversation_view->document());
+	cursor.setPosition(beginMessage(speaker));
+	cursor.insertFragment(markdownFragment(text));
+	cursor.movePosition(QTextCursor::End);
     conversation_view->setTextCursor(cursor);
 	conversation_view->ensureCursorVisible();
 }
 
 
+int AIDockWidget::beginMessage(const QString& speaker)
+{
+	QTextDocument* document = conversation_view->document();
+	QTextCursor cursor(document);
+	cursor.movePosition(QTextCursor::End);
+	const bool has_content = !document->isEmpty();
+	if(has_content)
+	{
+		cursor.insertBlock();
+		cursor.insertHtml(QStringLiteral("<hr/>"));
+		cursor.insertBlock();
+	}
+
+	QTextBlockFormat heading_format;
+	heading_format.setTopMargin(has_content ? 5.0 : 0.0);
+	heading_format.setBottomMargin(1.0);
+	cursor.setBlockFormat(heading_format);
+	QTextCharFormat speaker_format;
+	speaker_format.setFontWeight(QFont::DemiBold);
+	if(speaker == tr("Codex"))
+		speaker_format.setForeground(QColor(143, 196, 255));
+	else if(speaker == tr("System"))
+		speaker_format.setForeground(QColor(242, 190, 112));
+	else
+		speaker_format.setForeground(palette().color(QPalette::Text));
+	cursor.insertText(speaker + QStringLiteral(":"), speaker_format);
+
+	QTextBlockFormat body_format;
+	body_format.setLeftMargin(8.0);
+	body_format.setTopMargin(1.0);
+	body_format.setBottomMargin(8.0);
+	cursor.insertBlock(body_format);
+	return cursor.position();
+}
+
+
+void AIDockWidget::adjustInputHeight()
+{
+	const QSizeF document_size = input_edit->document()->documentLayout()->documentSize();
+	const int desired_height = qBound(42, static_cast<int>(document_size.height() + 14.0), 132);
+	input_edit->setFixedHeight(desired_height);
+}
+
+
 void AIDockWidget::appendAssistantDelta(const QString& delta)
 {
-    const bool at_bottom=conversation_view->verticalScrollBar()->value() >= conversation_view->verticalScrollBar()->maximum()-8;
-    QTextCursor cursor(conversation_view->document()); cursor.movePosition(QTextCursor::End);
-    if(assistant_buffer.isEmpty()) {
-        if(!conversation_view->document()->isEmpty()) cursor.insertBlock();
-        cursor.setCharFormat(QTextCharFormat());
-        cursor.insertText(tr("Codex") + QStringLiteral(": "));
-    }
+	const bool at_bottom = conversation_view->verticalScrollBar()->value() >= conversation_view->verticalScrollBar()->maximum() - 8;
+	if(!assistant_message_started)
+	{
+		assistant_body_start = beginMessage(tr("Codex"));
+		assistant_message_started = true;
+	}
     assistant_buffer += delta;
-    cursor.insertText(delta);
-    if(at_bottom) { conversation_view->setTextCursor(cursor); conversation_view->ensureCursorVisible(); }
+	QTextCursor cursor(conversation_view->document());
+	cursor.movePosition(QTextCursor::End);
+	cursor.insertText(delta);
+	if(at_bottom)
+	{
+		conversation_view->setTextCursor(cursor);
+		conversation_view->ensureCursorVisible();
+	}
 }
 
 
 void AIDockWidget::finishAssistantMessage()
 {
-	if(!assistant_buffer.isEmpty())
+	const bool at_bottom = conversation_view->verticalScrollBar()->value() >= conversation_view->verticalScrollBar()->maximum() - 8;
+	if(assistant_message_started)
 	{
-		QTextCursor cursor = conversation_view->textCursor();
-		cursor.movePosition(QTextCursor::End);
-		cursor.insertText(QStringLiteral("\n"));
-		conversation_view->setTextCursor(cursor);
+		QTextDocument* document = conversation_view->document();
+		QTextCursor body(document);
+		body.setPosition(assistant_body_start);
+		const int end_position = document->characterCount() - 1;
+		if(end_position > assistant_body_start)
+		{
+			body.setPosition(end_position, QTextCursor::KeepAnchor);
+			body.removeSelectedText();
+		}
+		body.insertFragment(markdownFragment(assistant_buffer));
+		body.movePosition(QTextCursor::End);
+		if(at_bottom)
+		{
+			conversation_view->setTextCursor(body);
+			conversation_view->ensureCursorVisible();
+		}
 	}
 	assistant_buffer.clear();
+	assistant_message_started = false;
+	assistant_body_start = -1;
+	if(!pending_generated_images.isEmpty())
+	{
+		appendReferences(pending_generated_images);
+		pending_generated_images.clear();
+	}
 	send_button->setEnabled(codex.isReady());
 	model_combo->setEnabled(true);
 	effort_combo->setEnabled(true);
@@ -444,7 +553,17 @@ void AIDockWidget::showError(const QString& message)
 	send_button->setEnabled(codex.isReady());
 	model_combo->setEnabled(!codex.isTurnActive());
 	effort_combo->setEnabled(!codex.isTurnActive());
-	assistant_buffer.clear();
+	if(assistant_message_started)
+		finishAssistantMessage();
+	else
+	{
+		assistant_buffer.clear();
+		if(!pending_generated_images.isEmpty())
+		{
+			appendReferences(pending_generated_images);
+			pending_generated_images.clear();
+		}
+	}
 	if(!message.isEmpty())
 		appendLine(tr("System"), message);
 }
@@ -534,7 +653,7 @@ void AIDockWidget::stopCodex()
 	send_button->setEnabled(false);
 	model_combo->setEnabled(true);
 	effort_combo->setEnabled(true);
-	connection_label->setText(tr("Enable MCP in the AI Settings tab and connect to a world."));
+	connection_label->setText(tr("Enable MCP in AI Settings. A world connection is only needed for world tools."));
 }
 
 void AIDockWidget::updateIcons()
@@ -657,6 +776,7 @@ void AIDockWidget::setTurnActive(bool active)
     send_button->setEnabled(codex.isReady());
     model_combo->setEnabled(!active); effort_combo->setEnabled(!active);
     updateThinkingIndicator();
+    MCPBlenderBridge::setAIActivity(active, activity_phase, current_task);
 }
 
 void AIDockWidget::updateThinkingIndicator()
