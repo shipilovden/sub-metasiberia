@@ -75,7 +75,8 @@ int main()
 	neurocontrol::LslRecordingInfo info;
 	if(!reader.open(final, info, error)) return fail(error.c_str());
 	if(!info.complete || info.channel_count != 20 || info.sample_count != 4) return fail("completed recording header mismatch");
-	if(!reader.verify(error) || !reader.info().integrity_verified) return fail(error.c_str());
+	if(!reader.verify(info, error) || !info.integrity_verified || !reader.info().integrity_verified)
+		return fail("verified checksum state was not copied back to the caller's recording info");
 	std::vector<neurocontrol::EegFrame> roundtrip;
 	if(!reader.readRange(0, info.sample_count, roundtrip, error)) return fail(error.c_str());
 	for(std::size_t row = 0; row < roundtrip.size(); ++row)
@@ -91,6 +92,23 @@ int main()
 		roundtrip[0].arrival_monotonic_seconds != roundtrip[1].arrival_monotonic_seconds ||
 		roundtrip[1].arrival_monotonic_seconds == roundtrip[2].arrival_monotonic_seconds)
 		return fail("repeated timestamps were not preserved");
+
+	const auto corrupted = folder / "corrupted.nlsr";
+	std::filesystem::copy_file(final, corrupted);
+	{
+		std::fstream file(corrupted, std::ios::binary | std::ios::in | std::ios::out);
+		file.seekg(48, std::ios::beg); // First payload byte follows the fixed v1 header.
+		char byte = 0;
+		file.read(&byte, 1);
+		byte ^= 0x01;
+		file.seekp(48, std::ios::beg);
+		file.write(&byte, 1);
+		if(!file) return fail("could not create checksum-mismatch fixture");
+	}
+	neurocontrol::LslRecordingReader corrupt_reader;
+	if(!corrupt_reader.open(corrupted, info, error)) return fail(error.c_str());
+	if(corrupt_reader.verify(info, error) || info.integrity_verified || error.find("checksum mismatch") == std::string::npos)
+		return fail("payload corruption was not reported as an integrity failure with a reason");
 
 	{
 		neurocontrol::LslRecordingWriter writer;

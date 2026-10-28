@@ -155,6 +155,8 @@ if(NOT USE_SDL)
 	addMocFileRule(gui_client AIConnectionDialog)
 	addMocFileRule(gui_client CodexAppServerClient)
 	addMocFileRule(gui_client AIDockWidget)
+	addMocFileRule(gui_client PluginsDockWidget)
+	addMocFileRule(gui_client PluginPanelWidget)
 
 	# Webcam Qt UI (Qt Multimedia).  Not built for SDL configurations.
 	addMocFileRule(gui_client/webcam WebcamWindow)
@@ -477,6 +479,17 @@ else()
 		${CMAKE_SOURCE_DIR}/gui_client/CodexAppServerClient.h
 		${CMAKE_SOURCE_DIR}/gui_client/AIDockWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AIDockWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPackage.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPackage.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginRuntime.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginRuntime.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginHostInterface.h
+		${CMAKE_SOURCE_DIR}/gui_client/QtPluginHostAdapter.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/QtPluginHostAdapter.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginsDockWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginsDockWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPanelWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPanelWidget.h
 		${GLARE_CORE_TRUNK_DIR_ENV}/webserver/RequestHandler.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MCPClientHandler.h
 		${CMAKE_SOURCE_DIR}/gui_client/TreeEditorPanel.cpp
@@ -658,6 +671,8 @@ endif()
 	${CMAKE_BINARY_DIR}/gui_client/moc_AIConnectionDialog.cpp
 	${CMAKE_BINARY_DIR}/gui_client/moc_CodexAppServerClient.cpp
 	${CMAKE_BINARY_DIR}/gui_client/moc_AIDockWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_PluginsDockWidget.cpp
+	${CMAKE_BINARY_DIR}/gui_client/moc_PluginPanelWidget.cpp
 
 	# Webcam Qt UI (Qt Multimedia)
 	${CMAKE_BINARY_DIR}/gui_client/webcam/moc_WebcamWindow.cpp
@@ -1408,6 +1423,8 @@ ${settings}
 if(NOT USE_SDL)
 	if(ENABLE_NEUROCONTROL)
 		target_compile_definitions(${CURRENT_TARGET} PRIVATE ENABLE_NEUROCONTROL=1)
+		target_compile_definitions(${CURRENT_TARGET} PRIVATE
+			"NEUROCONTROL_PROJECT_ROOT=\"${CMAKE_SOURCE_DIR}\"")
 	add_library(neurocontrol_brainflow STATIC
 		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/BrainflowSyntheticSource.cpp
 		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/BrainflowSyntheticSource.h)
@@ -1425,6 +1442,12 @@ if(NOT USE_SDL)
 		${CMAKE_SOURCE_DIR}/neurocontrol/acquisition/EegSource.h
 		${CMAKE_SOURCE_DIR}/neurocontrol/processing/NeuroClassifier.cpp
 		${CMAKE_SOURCE_DIR}/neurocontrol/processing/NeuroClassifier.h
+		${CMAKE_SOURCE_DIR}/neurocontrol/processing/StreamingEegResampler.cpp
+		${CMAKE_SOURCE_DIR}/neurocontrol/processing/StreamingEegResampler.h
+	${CMAKE_SOURCE_DIR}/neurocontrol/processing/LslShadowPipeline.cpp
+	${CMAKE_SOURCE_DIR}/neurocontrol/processing/LslShadowPipeline.h
+		${CMAKE_SOURCE_DIR}/neurocontrol/processing/LslAuditReportWriter.cpp
+		${CMAKE_SOURCE_DIR}/neurocontrol/processing/LslAuditReportWriter.h
 		${CMAKE_SOURCE_DIR}/neurocontrol/experiments/NeuroExperimentLogger.cpp
 		${CMAKE_SOURCE_DIR}/neurocontrol/experiments/NeuroExperimentLogger.h
 		${CMAKE_SOURCE_DIR}/neurocontrol/avatar/NeuroCommand.h)
@@ -1465,6 +1488,9 @@ if(MSVC)
 	set_source_files_properties(
 		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/MainWindow.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginsDockWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPanelWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPackage.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/AvatarGearPreviewWidget.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/GearInventoryPanel.cpp
 		${CMAKE_SOURCE_DIR}/gui_client/NeuroControlWidget.cpp
@@ -1797,4 +1823,133 @@ if((BUILD_NEUROCONTROL_TESTS OR BUILD_PLUGIN_PACKAGE_TESTS) AND NOT USE_SDL)
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/avatar_grounding_tests")
 	add_test(NAME avatar_grounding_profile COMMAND $<TARGET_FILE:avatar_grounding_tests>)
 	set_tests_properties(avatar_grounding_profile PROPERTIES TIMEOUT 5)
+endif()
+
+if(BUILD_PLUGIN_PACKAGE_TESTS AND NOT USE_SDL)
+	add_executable(ai_message_input_tests EXCLUDE_FROM_ALL
+		${CMAKE_SOURCE_DIR}/gui_client/tests/AIMessageInputTests.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AIMessageInput.h)
+	target_include_directories(ai_message_input_tests PRIVATE ${CMAKE_SOURCE_DIR}/gui_client)
+	target_link_libraries(ai_message_input_tests PRIVATE
+		optimized Qt5Core
+		optimized Qt5Gui
+		optimized Qt5Widgets
+		debug Qt5Cored
+		debug Qt5Guid
+		debug Qt5Widgetsd)
+	if(MSVC)
+		target_compile_options(ai_message_input_tests PRIVATE /utf-8)
+	endif()
+	set_target_properties(ai_message_input_tests PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/ai_message_input_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/ai_message_input_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/ai_message_input_tests")
+	add_test(NAME ai_message_input_keys COMMAND $<TARGET_FILE:ai_message_input_tests>)
+	set_tests_properties(ai_message_input_keys PROPERTIES
+		ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=${INDIGO_QT_DIR}/plugins/platforms")
+
+	add_executable(plugin_package_tests EXCLUDE_FROM_ALL
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPackage.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPackage.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginRuntime.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginRuntime.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginHostInterface.h
+		${CMAKE_SOURCE_DIR}/gui_client/QtPluginHostAdapter.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/QtPluginHostAdapter.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginsDockWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginsDockWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPanelWidget.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/PluginPanelWidget.h
+		${CMAKE_SOURCE_DIR}/gui_client/LucideIconUtils.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/LucideIconUtils.h
+		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/RuntimeTranslation.h
+		${CMAKE_BINARY_DIR}/gui_client/moc_PluginsDockWidget.cpp
+		${CMAKE_BINARY_DIR}/gui_client/moc_PluginPanelWidget.cpp
+		${CMAKE_SOURCE_DIR}/plugin_system/tests/PluginPackageTests.cpp
+		${luau_vm}
+		${luau_compiler})
+	target_include_directories(plugin_package_tests PRIVATE
+		${CMAKE_SOURCE_DIR}/gui_client
+		${INDIGO_QT_INCLUDE_DIR}
+		${zlibdir})
+	target_link_libraries(plugin_package_tests PRIVATE
+		libs
+		optimized Qt5Core
+		optimized Qt5Gui
+		optimized Qt5Widgets
+		debug Qt5Cored
+		debug Qt5Guid
+		debug Qt5Widgetsd)
+	if(MSVC)
+		target_compile_options(plugin_package_tests PRIVATE /utf-8)
+	endif()
+	target_compile_definitions(plugin_package_tests PRIVATE METASIBERIA_PLUGIN_TEST_ICON_DIR="${CMAKE_SOURCE_DIR}/resources/icons/lucide")
+	target_compile_definitions(plugin_package_tests PRIVATE METASIBERIA_PLUGIN_TESTING=1)
+	target_compile_definitions(plugin_package_tests PRIVATE
+		METASIBERIA_PLUGIN_TEST_HELLO_DIR="${CMAKE_SOURCE_DIR}/plugin_system/examples/hello-metasiberia")
+	set_target_properties(plugin_package_tests PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/plugin_package_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/plugin_package_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/plugin_package_tests")
+	add_test(NAME plugin_package_manager COMMAND $<TARGET_FILE:plugin_package_tests>)
+	set_tests_properties(plugin_package_manager PROPERTIES
+		ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=${INDIGO_QT_DIR}/plugins/platforms")
+	add_test(NAME plugin_runtime_ui_event_loop COMMAND $<TARGET_FILE:plugin_package_tests> --plugin-ui-event-loop-test)
+	set_tests_properties(plugin_runtime_ui_event_loop PROPERTIES
+		TIMEOUT 20
+		ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=${INDIGO_QT_DIR}/plugins/platforms")
+	add_test(NAME plugin_runtime_production_worker COMMAND $<TARGET_FILE:plugin_package_tests>
+		--plugin-production-worker-test $<TARGET_FILE:${CURRENT_TARGET}>)
+	set_tests_properties(plugin_runtime_production_worker PROPERTIES
+		TIMEOUT 20
+		ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=${INDIGO_QT_DIR}/plugins/platforms")
+	add_test(NAME plugin_runtime_scene_info_worker COMMAND $<TARGET_FILE:plugin_package_tests>
+		--plugin-scene-info-worker-test $<TARGET_FILE:${CURRENT_TARGET}>)
+	set_tests_properties(plugin_runtime_scene_info_worker PROPERTIES
+		TIMEOUT 20
+		ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORM_PLUGIN_PATH=${INDIGO_QT_DIR}/plugins/platforms")
+
+	find_program(METASIBERIA_CONNECT_BLENDER_EXECUTABLE
+		NAMES blender.exe blender
+		HINTS
+			"C:/Program Files/Blender Foundation/Blender 5.2"
+			"C:/Program Files/Blender Foundation/Blender 5.1"
+			"C:/Program Files/Blender Foundation/Blender"
+			"/Applications/Blender.app/Contents/MacOS"
+			"/usr/bin")
+	if(METASIBERIA_CONNECT_BLENDER_EXECUTABLE)
+		set(METASIBERIA_CONNECT_ADDON_ROOT "${CMAKE_SOURCE_DIR}/../Metasiberia official/MCP Blender/Metasiberia Connect/metasiberia_connect")
+		set(METASIBERIA_CONNECT_TEST_SERVER "${CMAKE_SOURCE_DIR}/../Metasiberia official/MCP Blender/Metasiberia Connect/tests/blender_headless_bridge_server.py")
+		add_executable(mcp_blender_bridge_integration_tests EXCLUDE_FROM_ALL
+			${CMAKE_SOURCE_DIR}/gui_client/MCPBlenderBridge.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/MCPBlenderBridge.h
+			${CMAKE_SOURCE_DIR}/gui_client/MCPClientLocalOnlyProtocol.cpp
+			${CMAKE_SOURCE_DIR}/gui_client/MCPClientLocalOnlyProtocol.h
+			${CMAKE_SOURCE_DIR}/gui_client/tests/MCPBlenderBridgeIntegrationTests.cpp)
+		target_include_directories(mcp_blender_bridge_integration_tests PRIVATE
+			${CMAKE_SOURCE_DIR}/gui_client
+			${INDIGO_QT_INCLUDE_DIR})
+		target_link_libraries(mcp_blender_bridge_integration_tests PRIVATE
+			optimized Qt5Core
+			optimized Qt5Network
+			debug Qt5Cored
+			debug Qt5Networkd)
+		target_compile_definitions(mcp_blender_bridge_integration_tests PRIVATE METASIBERIA_CONNECT_TESTING=1)
+		if(MSVC)
+			target_compile_options(mcp_blender_bridge_integration_tests PRIVATE /utf-8)
+		endif()
+		set_target_properties(mcp_blender_bridge_integration_tests PROPERTIES
+			RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/mcp_blender_bridge_integration_tests"
+			RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/mcp_blender_bridge_integration_tests"
+			RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/mcp_blender_bridge_integration_tests")
+		add_test(NAME metasiberia_blender_connect_real
+			COMMAND $<TARGET_FILE:mcp_blender_bridge_integration_tests>
+				"${METASIBERIA_CONNECT_BLENDER_EXECUTABLE}"
+				"${METASIBERIA_CONNECT_ADDON_ROOT}"
+				"${METASIBERIA_CONNECT_TEST_SERVER}")
+		set_tests_properties(metasiberia_blender_connect_real PROPERTIES TIMEOUT 180)
+	else()
+		message(STATUS "Blender executable not found; the real Metasiberia Connect Blender integration test is not registered.")
+	endif()
 endif()

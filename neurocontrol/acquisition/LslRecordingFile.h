@@ -56,6 +56,7 @@ public:
 	bool readRange(std::uint64_t first_sample, std::uint64_t count,
 		std::vector<EegFrame>& frames, std::string& error);
 	bool verify(std::string& error);
+	bool verify(LslRecordingInfo& info, std::string& error);
 	const LslRecordingInfo& info() const { return info_; }
 
 private:

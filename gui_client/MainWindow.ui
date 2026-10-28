@@ -56,6 +56,11 @@
     </widget>
     <addaction name="menuLanguage"/>
    </widget>
+   <widget class="QMenu" name="menuPlugins">
+    <property name="title">
+     <string>Plugins</string>
+    </property>
+   </widget>
    <widget class="QMenu" name="menuEdit">
     <property name="title">
      <string>Edit</string>
@@ -191,6 +196,7 @@
    <addaction name="actionAbout_Substrata"/>
    <addaction name="actionUpdate"/>
    <addaction name="actionAI"/>
+   <addaction name="menuPlugins"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QToolBar" name="toolBar">

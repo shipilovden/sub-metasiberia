@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <set>
 
 namespace neurocontrol {
 namespace {
@@ -86,6 +87,38 @@ void parseChannels(LslStreamDescriptor& descriptor)
         descriptor.channel_types.clear();
         descriptor.units.clear();
     }
+}
+
+void parseElectrodeContract(LslStreamDescriptor& descriptor)
+{
+	QXmlStreamReader xml(xmlText(descriptor.raw_xml));
+	int desc_depth = 0;
+	std::set<QString> montages;
+	std::set<QString> references;
+	while(!xml.atEnd())
+	{
+		xml.readNext();
+		if(xml.isStartElement())
+		{
+			if(xml.name() == QLatin1String("desc")) { ++desc_depth; continue; }
+			if(desc_depth <= 0) continue;
+			const QString tag = xml.name().toString().toLower();
+			if(tag == QLatin1String("electrode_montage") || tag == QLatin1String("montage"))
+			{
+				const QString value = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+				if(!value.isEmpty()) montages.insert(value);
+			}
+			else if(tag == QLatin1String("reference_scheme") || tag == QLatin1String("reference"))
+			{
+				const QString value = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+				if(!value.isEmpty()) references.insert(value);
+			}
+		}
+		else if(xml.isEndElement() && xml.name() == QLatin1String("desc"))
+			desc_depth = std::max(0, desc_depth - 1);
+	}
+	if(montages.size() == 1) descriptor.electrode_montage = *montages.begin();
+	if(references.size() == 1) descriptor.reference_scheme = *references.begin();
 }
 
 struct Api {
@@ -184,7 +217,13 @@ struct Api {
         d.nominal_hz = get_nominal_srate(info);
         d.format = formatName(get_channel_format(info));
         char* xml = get_xml(info);
-        if(xml) { d.raw_xml = QByteArray(xml); destroy_string(xml); parseChannels(d); }
+		if(xml)
+		{
+			d.raw_xml = QByteArray(xml);
+			destroy_string(xml);
+			parseChannels(d);
+			parseElectrodeContract(d);
+		}
         return d;
     }
 };

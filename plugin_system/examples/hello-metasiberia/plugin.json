@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "org.metasiberia.example.hello",
+  "name": "Hello Metasiberia",
+  "author": "Metasiberia Example",
+  "version": "1.0.4",
+  "description": "A local SDK example that opens a host-rendered panel with an interactive greeting.",
+  "runtime": "luau",
+  "entry": "main.luau",
+  "icon": "assets/hello.svg",
+  "api": {
+    "major": 1,
+    "minor": 1
+  },
+  "permissions": ["ui.panel", "ui.notification"],
+  "categories": ["example"]
+}

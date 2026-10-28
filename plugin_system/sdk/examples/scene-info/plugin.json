@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "org.metasiberia.examples.scene-info",
+  "name": "Scene Information",
+  "author": "Metasiberia Plugin SDK",
+  "version": "1.0.0",
+  "description": "Shows a read-only summary of the current connection and camera position.",
+  "runtime": "luau",
+  "entry": "main.luau",
+  "icon": "assets/scene-info.svg",
+  "api": { "major": 1, "minor": 2 },
+  "permissions": ["ui.command", "ui.notification", "scene.read.summary"],
+  "categories": ["world", "example"]
+}

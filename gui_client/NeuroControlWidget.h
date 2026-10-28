@@ -36,7 +36,8 @@ struct NeuroControlLslDiscovery;
 struct NeuroControlLslConfiguration;
 struct NeuroControlLslReader;
 struct NeuroControlLslRecordingLoad;
-namespace neurocontrol { class NeuroClassifier; class NeuroExperimentLogger; struct Model; }
+struct NeuroControlLslShadowAudit;
+namespace neurocontrol { class NeuroClassifier; class NeuroExperimentLogger; class LslShadowPipeline; enum class LslShadowResetReason; struct Model; }
 
 // Qt-only research panel. Recorded EDF is converted by neurocontrol/tools to
 // sample-major .f32 plus annotation JSON; the original EDF remains untouched.
@@ -92,6 +93,11 @@ private:
 	void finishLslDiagnostic(const QString& completion_reason);
 	void pollLsl();
 	QJsonObject lslStatusJson() const;
+	void refreshLslShadowCompatibility();
+	void processLslShadowFrames(const std::deque<neurocontrol::EegFrame>& frames);
+	void resetLslShadowPipeline(const QString& reason, bool clear_prediction = true,
+		neurocontrol::LslShadowResetReason reset_reason = static_cast<neurocontrol::LslShadowResetReason>(0));
+	void startLslShadowRecordingAudit(const QString& recording_id, int target_sample_rate_hz = 160);
 
 	GUIClient* client_;
 	QTabWidget* tabs_;
@@ -105,8 +111,11 @@ private:
 	QPushButton* lsl_record_stop_button_;
 	QPushButton* lsl_record_load_button_;
 	QPushButton* lsl_record_play_button_;
+	QCheckBox* lsl_shadow_checkbox_;
+	QCheckBox* lsl_shadow_contract_confirm_checkbox_;
 	QLabel* lsl_details_label_;
 	QLabel* lsl_recording_status_label_;
+	QLabel* lsl_shadow_status_label_;
 	QLabel* recording_label_;
 	QLabel* model_label_;
 	QLabel* state_label_;
@@ -166,6 +175,8 @@ private:
 	QElapsedTimer elapsed_;
 	double playback_epoch_monotonic_seconds_ = 0.0;
 	std::unique_ptr<neurocontrol::NeuroClassifier> classifier_;
+	std::shared_ptr<neurocontrol::Model> lsl_shadow_model_;
+	std::unique_ptr<neurocontrol::LslShadowPipeline> lsl_shadow_pipeline_;
 	std::unique_ptr<neurocontrol::NeuroExperimentLogger> experiment_logger_;
 	std::unique_ptr<NeuroControlSyntheticReader> synthetic_reader_;
 	std::shared_ptr<NeuroControlLslDiscovery> lsl_discovery_;
@@ -183,7 +194,29 @@ private:
 	QString lsl_discovery_message_;
 	QString lsl_connection_state_ = QStringLiteral("disconnected");
 	QString lsl_error_;
+	QString lsl_active_units_override_ = QStringLiteral("auto");
 	neurocontrol::LslStreamDescriptor lsl_active_stream_;
+	std::vector<std::size_t> lsl_shadow_channel_indices_;
+	QString lsl_shadow_compatibility_reason_;
+	QString lsl_shadow_montage_reference_state_;
+	QStringList lsl_shadow_reason_codes_;
+	double lsl_shadow_last_display_timestamp_ = 0.0;
+	int lsl_shadow_input_rate_hz_ = 0;
+	bool lsl_shadow_compatible_ = false;
+	bool lsl_shadow_manual_contract_required_ = false;
+	bool lsl_shadow_stalled_ = false;
+	std::uint64_t lsl_shadow_windows_ = 0;
+	std::uint64_t lsl_shadow_timestamp_gaps_ = 0;
+	std::uint64_t lsl_shadow_stall_events_ = 0;
+	double lsl_shadow_last_processing_ms_ = 0.0;
+	double lsl_shadow_observed_rate_hz_ = 0.0;
+	bool lsl_shadow_rate_stable_ = false;
+	std::deque<double> lsl_shadow_rate_history_;
+	QElapsedTimer lsl_shadow_arrival_clock_;
+	QJsonObject lsl_shadow_prediction_;
+	QString lsl_shadow_audit_state_ = QStringLiteral("idle");
+	QJsonObject lsl_shadow_audit_result_;
+	std::shared_ptr<NeuroControlLslShadowAudit> lsl_shadow_audit_;
 	neurocontrol::LslTimestampDiagnostics lsl_timestamp_diagnostics_;
 	std::deque<std::pair<double, double>> lsl_recent_timestamps_;
 	std::uint64_t lsl_pause_events_ = 0;

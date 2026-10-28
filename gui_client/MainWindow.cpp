@@ -9,12 +9,16 @@ Copyright Glare Technologies Limited 2024 -
 #pragma warning(push, 0) // Disable warnings
 #endif
 #include "MainWindow.h"
-#include "ui_MainWindow.h"
+#include <ui_MainWindow.h>
 #include "AboutDialog.h"
 #include "UpdateDialog.h"
 #include "UpdateManager.h"
 #include "AIConnectionDialog.h"
 #include "AIDockWidget.h"
+#include "PluginsDockWidget.h"
+#include "QtPluginHostAdapter.h"
+#include "PluginRuntime.h"
+#include "PluginPanelWidget.h"
 #if defined(ENABLE_NEUROCONTROL)
 #include "NeuroControlWidget.h"
 #endif
@@ -1915,6 +1919,8 @@ MainWindow::MainWindow(const std::string& base_dir_path_, const std::string& app
 	,document_editor_dock_widget(NULL)
 	,document_editor_panel(NULL)
 	,ai_dock_widget(NULL)
+	,plugins_dock_widget(NULL)
+	,plugin_host_adapter(NULL)
 	,scientific_object_editor(NULL)
 	,cultural_object_editor(NULL)
 	,spotlight_editor(NULL)
@@ -2592,6 +2598,54 @@ void MainWindow::initialiseUI()
 	resizeDocks(QList<QDockWidget*>() << ai_dock_widget, QList<int>() << 440, Qt::Horizontal);
 	ai_dock_widget->hide();
 
+	plugin_host_adapter = new QtPluginHostAdapter([this](const QString& plugin_id, const QString& title, const QString& body) {
+		Q_UNUSED(plugin_id);
+		if(statusBar())
+			statusBar()->showMessage(tr("%1: %2").arg(title, body), 7000);
+	});
+	plugin_host_adapter->setSceneSummaryProvider([this](const QString& plugin_id, const QString& plugin_version,
+		QJsonObject& summary, QString& error) {
+		Q_UNUSED(plugin_version);
+		if(plugin_id.isEmpty())
+		{
+			error = QStringLiteral("The scene summary request has no plugin identity.");
+			return false;
+		}
+		const Vec3d camera = gui_client.cam_controller.getPosition();
+		if(!std::isfinite(camera.x) || !std::isfinite(camera.y) || !std::isfinite(camera.z))
+		{
+			error = QStringLiteral("The current camera position is unavailable.");
+			return false;
+		}
+		QJsonObject server;
+		server.insert(QStringLiteral("host"), QtUtils::toQString(gui_client.server_hostname));
+		server.insert(QStringLiteral("world"), QtUtils::toQString(gui_client.server_worldname));
+		QJsonObject camera_object;
+		camera_object.insert(QStringLiteral("x"), camera.x);
+		camera_object.insert(QStringLiteral("y"), camera.y);
+		camera_object.insert(QStringLiteral("z"), camera.z);
+		summary.insert(QStringLiteral("connected"), gui_client.connection_state == GUIClient::ServerConnectionState_Connected);
+		summary.insert(QStringLiteral("server"), server);
+		summary.insert(QStringLiteral("camera"), camera_object);
+		return true;
+	});
+	plugin_host_adapter->setLifecycleCallbacks([this]() { rebuildPluginsMenu(); },
+		[this](const QString& plugin_id, const QString& plugin_version, const QString& view_id) {
+			closePluginView(plugin_id, plugin_version, view_id);
+		});
+	plugins_dock_widget = new PluginsDockWidget(this, nullptr, QString(), QString(),
+		LucideIconUtils::directoryForBasePath(base_dir_path));
+	plugins_dock_widget->setPluginHost(plugin_host_adapter);
+	plugins_dock_widget->setObjectName(QStringLiteral("pluginsDockWidget"));
+	plugins_dock_widget->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	installEditorDockTitleBar(plugins_dock_widget);
+	addDockWidget(Qt::RightDockWidgetArea, plugins_dock_widget);
+	tabifyDockWidget(ai_dock_widget, plugins_dock_widget);
+	plugins_dock_widget->hide();
+	connect(plugins_dock_widget, &PluginsDockWidget::installedPluginsChanged, this, &MainWindow::rebuildPluginsMenu);
+	connect(ui->menuPlugins, &QMenu::aboutToShow, this, &MainWindow::rebuildPluginsMenu);
+	rebuildPluginsMenu();
+
 #if defined(ENABLE_NEUROCONTROL)
 	neuro_control_dock_widget = new QDockWidget(tr("Нейроуправление"), this);
 	neuro_control_dock_widget->setObjectName(QStringLiteral("neuroControlDockWidget"));
@@ -2618,6 +2672,7 @@ void MainWindow::initialiseUI()
 	ui->menuWindow->addAction(photo_video_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(document_editor_dock_widget->toggleViewAction());
 	ui->menuWindow->addAction(ai_dock_widget->toggleViewAction());
+	ui->menuWindow->addAction(plugins_dock_widget->toggleViewAction());
 #if defined(ENABLE_NEUROCONTROL)
 	ui->menuWindow->addAction(neuro_control_dock_widget->toggleViewAction());
 #endif
@@ -3096,6 +3151,11 @@ void MainWindow::initialiseUI()
 		photo_video_dock_widget->setWindowTitle(tr("Фоторежим"));
 	if(document_editor_dock_widget)
 		document_editor_dock_widget->setWindowTitle(tr("Documents"));
+	if(plugins_dock_widget)
+	{
+		plugins_dock_widget->retranslateUi();
+		rebuildPluginsMenu();
+	}
 	if(ai_dock_widget)
 		ai_dock_widget->retranslateUi();
 	updateMapDockState();
@@ -3612,6 +3672,9 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_top_plain(ui->actionAbout_Substrata, "info", QStringLiteral("i"));
 	set_top_accent(ui->actionUpdate, "circle-arrow-up", "#22C55E", QString::fromUtf8("↑"));
 	set_top_accent(ui->actionAI, "bot", "#A78BFA", QStringLiteral("AI"));
+	set_top_accent(ui->menuPlugins->menuAction(), "plug", "#A78BFA", QStringLiteral("P"));
+	ui->menuPlugins->menuAction()->setToolTip(tr("Plugins"));
+	ui->menuPlugins->menuAction()->setStatusTip(tr("Plugins"));
 	if(animation_editor_dock_widget)
 		set_plain(animation_editor_dock_widget->toggleViewAction(), "activity", QString::fromUtf8("A"));
 	if(photo_video_dock_widget)
@@ -3718,6 +3781,8 @@ void MainWindow::refreshMainMenuActionIcons()
 	set_plain(ui->worldSettingsDockWidget->toggleViewAction(), "globe", QString::fromUtf8("◎"));
 	if(ai_dock_widget)
 		set_accent(ai_dock_widget->toggleViewAction(), "bot", "#A78BFA", QStringLiteral("AI"));
+	if(plugins_dock_widget)
+		set_accent(plugins_dock_widget->toggleViewAction(), "plug", "#A78BFA", QStringLiteral("P"));
 #if defined(ENABLE_NEUROCONTROL)
 	if(neuro_control_dock_widget)
 		set_plain(neuro_control_dock_widget->toggleViewAction(), "brain", QString::fromUtf8("◉"));
@@ -3937,6 +4002,147 @@ void MainWindow::configureMainToolbarButtons()
 }
 
 
+void MainWindow::rebuildPluginsMenu()
+{
+	if(!ui || !ui->menuPlugins || !plugins_dock_widget)
+		return;
+
+	QMenu* const menu = ui->menuPlugins;
+	menu->clear();
+	const QList<PluginListEntry> installed_plugins = plugins_dock_widget->installedPlugins();
+	const QString icon_directory = LucideIconUtils::directoryForBasePath(base_dir_path);
+	const QColor foreground = QApplication::palette().color(QPalette::WindowText);
+	int primary_action_count = 0;
+	const auto findRunningPlugin = [&installed_plugins](const QString& plugin_id, const QString& plugin_version) -> const PluginListEntry* {
+		for(const PluginListEntry& plugin : installed_plugins)
+			if(plugin.id == plugin_id && plugin.version == plugin_version && plugin.enabled && plugin.running)
+				return &plugin;
+		return nullptr;
+	};
+	if(plugin_host_adapter)
+	{
+		for(const PluginPanelRegistration& panel : plugin_host_adapter->registeredPanels())
+		{
+			const PluginListEntry* const plugin = findRunningPlugin(panel.pluginId, panel.pluginVersion);
+			if(!plugin) continue;
+			QAction* const action = menu->addAction(plugin->name);
+			if(!plugin->icon.isNull())
+			{
+				action->setIcon(plugin->icon);
+				action->setIconVisibleInMenu(true);
+			}
+			else LucideIconUtils::setActionIcon(action, icon_directory, QStringLiteral("plug"), foreground, 18);
+			action->setToolTip(tr("Open the %1 view.").arg(plugin->name));
+			const PluginPanelRegistration registration = panel;
+			connect(action, &QAction::triggered, this, [this, registration]() { openPluginView(registration); });
+			++primary_action_count;
+		}
+		const QList<PluginCommandRegistration> commands = plugin_host_adapter->registeredCommands();
+		for(const PluginCommandRegistration& command : commands)
+		{
+			const PluginListEntry* const plugin = findRunningPlugin(command.pluginId, command.pluginVersion);
+			if(!plugin) continue;
+			QAction* const command_action = menu->addAction(plugin->name);
+			if(!plugin->icon.isNull())
+			{
+				command_action->setIcon(plugin->icon);
+				command_action->setIconVisibleInMenu(true);
+			}
+			else LucideIconUtils::setActionIcon(command_action, icon_directory, QStringLiteral("plug"), foreground, 18);
+			command_action->setToolTip(tr("Run the main action provided by %1.").arg(plugin->name));
+			const std::function<void()> callback = command.callback;
+			connect(command_action, &QAction::triggered, this, [callback]() { if(callback) callback(); });
+			++primary_action_count;
+		}
+	}
+	if(primary_action_count == 0)
+	{
+		QAction* empty_action = menu->addAction(tr("No active plugins"));
+		empty_action->setEnabled(false);
+		empty_action->setToolTip(tr("Enable a compatible plugin to add its main action here."));
+	}
+
+	menu->addSeparator();
+	QAction* const add_action = menu->addAction(tr("+ Add"));
+	add_action->setToolTip(tr("Open the Plugin Manager to browse packages or install a local .mspkg file."));
+	const QColor add_colour = LucideIconUtils::themeAwareColour(QColor(QStringLiteral("#60A5FA")),
+		QApplication::palette(), QPalette::WindowText, QPalette::Window);
+	LucideIconUtils::setActionIcon(add_action, icon_directory, QStringLiteral("plus"), add_colour, 18);
+	connect(add_action, &QAction::triggered, this, [this]() { openPluginsPanel(QString(), true); });
+}
+
+
+void MainWindow::openPluginView(const PluginPanelRegistration& registration)
+{
+	if(!plugin_host_adapter || !plugins_dock_widget)
+		return;
+	const QString key = registration.pluginId + QLatin1Char('@') + registration.pluginVersion + QLatin1Char('/') + registration.viewId;
+	if(QDockWidget* const existing = plugin_view_docks.value(key, nullptr))
+	{
+		existing->show();
+		existing->raise();
+		return;
+	}
+	PluginPanelWidget* const content = new PluginPanelWidget(registration.layout);
+	if(!content->isValid())
+	{
+		const QString validation_error = content->validationError();
+		delete content;
+		if(statusBar()) statusBar()->showMessage(tr("Plugin panel rejected: %1").arg(validation_error), 7000);
+		return;
+	}
+	QDockWidget* const dock = new QDockWidget(registration.title, this);
+	dock->setObjectName(QStringLiteral("pluginView_%1").arg(QString::number(qHash(key), 16)));
+	dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+	QIcon plugin_icon;
+	for(const PluginListEntry& plugin : plugins_dock_widget->installedPlugins())
+		if(plugin.id == registration.pluginId && plugin.version == registration.pluginVersion)
+		{
+			plugin_icon = plugin.icon;
+			break;
+		}
+	if(!plugin_icon.isNull()) dock->setWindowIcon(plugin_icon);
+	dock->setWidget(content);
+	installEditorDockTitleBar(dock);
+	addDockWidget(Qt::RightDockWidgetArea, dock);
+	if(ai_dock_widget) tabifyDockWidget(ai_dock_widget, dock);
+	else if(plugins_dock_widget) tabifyDockWidget(plugins_dock_widget, dock);
+	plugin_view_docks.insert(key, dock);
+	connect(content, &PluginPanelWidget::actionTriggered, this,
+		[this, plugin_id = registration.pluginId, version = registration.pluginVersion, view_id = registration.viewId](const QString& action_id) {
+			if(plugin_host_adapter)
+				plugin_host_adapter->dispatchPanelAction(plugin_id, version, view_id, action_id);
+		});
+	dock->show();
+	dock->raise();
+}
+
+
+void MainWindow::closePluginView(const QString& plugin_id, const QString& plugin_version, const QString& view_id)
+{
+	const QString key = plugin_id + QLatin1Char('@') + plugin_version + QLatin1Char('/') + view_id;
+	QDockWidget* const dock = plugin_view_docks.take(key);
+	if(!dock) return;
+	dock->close();
+	dock->deleteLater();
+}
+
+
+void MainWindow::openPluginsPanel(const QString& plugin_id, const bool show_catalog_tab, const QString& plugin_version)
+{
+	if(!plugins_dock_widget)
+		return;
+	if(show_catalog_tab)
+		plugins_dock_widget->showCatalogTab();
+	else if(!plugin_id.isEmpty())
+		plugins_dock_widget->selectPlugin(plugin_id, plugin_version);
+	else
+		plugins_dock_widget->showInstalledTab();
+	plugins_dock_widget->show();
+	plugins_dock_widget->raise();
+}
+
+
 void MainWindow::applyMainChromeThemeStylesheet()
 {
 	if(!ui)
@@ -4017,6 +4223,7 @@ void MainWindow::applyMainChromeThemeStylesheet()
 	applyEditorDockTitleBarTheme(ui->chatDockWidget, palette);
 	applyEditorDockTitleBarTheme(ui->materialBrowserDockWidget, palette);
 	applyEditorDockTitleBarTheme(ai_dock_widget, palette);
+	applyEditorDockTitleBarTheme(plugins_dock_widget, palette);
 #if defined(ENABLE_NEUROCONTROL)
 	applyEditorDockTitleBarTheme(neuro_control_dock_widget, palette);
 #endif
@@ -4269,6 +4476,10 @@ void MainWindow::afterGLInitInitialise()
 MainWindow::~MainWindow()
 {
 	running_destructor = true; // Set this to not append log messages during destruction, causes assert failure in Qt.
+	if(plugins_dock_widget)
+		plugins_dock_widget->shutdownPluginRuntime();
+	delete plugin_host_adapter;
+	plugin_host_adapter = nullptr;
 #if defined(ENABLE_NEUROCONTROL)
 	if(neuro_control_dock_widget)
 	{
@@ -15357,6 +15568,8 @@ int main(int argc, char *argv[])
 	// Note that this is deliberately constructed outside of the try..catch block below, because QErrorMessage crashes when displayed if
 	// GuiClientApplication has been destroyed. (stupid qt).
 	GuiClientApplication app(argc, argv);
+	if(app.arguments().size() >= 2 && app.arguments().at(1) == QStringLiteral("--plugin-runtime-worker"))
+		return PluginRuntime::runWorkerProcess(app.arguments());
 
 	try
 	{

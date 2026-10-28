@@ -36,6 +36,8 @@ project (${PROJECT_NAME})
 # the root so the output-safety checks below see its default before any
 # subdirectory is configured. Pass -DENABLE_NEUROCONTROL=OFF for diagnostics.
 option(ENABLE_NEUROCONTROL "Build NeuroControl EEG/BCI support" ON)
+option(BUILD_NEUROCONTROL_TESTS "Configure NeuroControl tests in the canonical Qt build tree" OFF)
+option(BUILD_PLUGIN_PACKAGE_TESTS "Configure local plugin package manager tests in the canonical Qt build tree" OFF)
 
 # Visual Studio may automatically rerun CMake during a build. Lock that
 # regeneration to the isolated output root chosen at configure time; otherwise
@@ -256,6 +258,21 @@ if(CEF_SUPPORT)
 			message(FATAL_ERROR "CEF_SUPPORT is ON, but required CEF artifact is missing: ${CEF_BINARY_DISTRIB_DIR}/${cef_required_file}")
 		endif()
 	endforeach()
+endif()
+
+if(BUILD_NEUROCONTROL_TESTS)
+	if(NOT ENABLE_NEUROCONTROL OR USE_SDL)
+		message(FATAL_ERROR "NeuroControl tests require the Qt desktop target with ENABLE_NEUROCONTROL=ON.")
+	endif()
+	enable_testing()
+	add_subdirectory(neurocontrol/tests "neurocontrol-tests" EXCLUDE_FROM_ALL)
+endif()
+
+if(BUILD_PLUGIN_PACKAGE_TESTS)
+	if(USE_SDL)
+		message(FATAL_ERROR "Plugin package tests require the Qt desktop configuration.")
+	endif()
+	enable_testing()
 endif()
 
 # The version of Qt we use needs to be accessed by both CMake and ruby build_dist script etc..

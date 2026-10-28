@@ -18,6 +18,8 @@ struct LslStreamDescriptor {
     QString type;
     QString hostname;
     QString format;
+    QString electrode_montage;
+    QString reference_scheme;
     double nominal_hz = 0.0;
     int channel_count = 0;
     QStringList channels;

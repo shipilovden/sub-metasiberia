@@ -25,10 +25,13 @@ schema_region = registry_source.split("QJsonArray neuroControlToolSchemas()", 1)
     "QJsonArray neuroKnowledgeResources()", 1
 )[0]
 schema_names = re.findall(r'a\.append\(neuroToolSchema\("(neuro\.[a-z0-9_.]+)"', schema_region)
-if len(schema_names) != 47:
-    fail(f"expected 47 schema declarations, found {len(schema_names)}")
+if len(schema_names) != 49:
+    fail(f"expected 49 schema declarations, found {len(schema_names)}")
 if len(set(schema_names)) != len(schema_names):
     fail("schema registry contains duplicate names")
+connect_lsl_schema = schema_region.split('neuroToolSchema("neuro.connect_lsl_stream"', 1)[1].split("));", 1)[0]
+if "FIR-ресемплер" not in connect_lsl_schema or "Команды аватару не отправляются" not in connect_lsl_schema:
+    fail("the LSL connect schema must describe supported-rate resampling and avatar isolation")
 
 handler_region = widget_source.split("QJsonObject NeuroControlWidget::handleMCPRequest", 1)[1].split(
     "void NeuroControlWidget::appendDiagnostic", 1
@@ -94,6 +97,9 @@ lsl_status_region = widget_source.split("QJsonObject NeuroControlWidget::lslStat
 for worker_field in ('reader_worker_exists', 'reader_worker_finished', 'reader_stop_requested', 'reader_cleanup_pending'):
     if worker_field not in lsl_status_region:
         fail(f"neuro.get_lsl_status must expose LSL reader lifecycle field {worker_field}")
+for pipeline_field in ('input_rate_hz', 'output_rate_hz', 'input_samples', 'output_samples', 'timestamp_gap_resets', 'queue_overflow_resets', 'reason_codes', 'offline_recording_audit'):
+    if pipeline_field not in lsl_status_region:
+        fail(f"neuro.get_lsl_status must expose shadow pipeline diagnostics: {pipeline_field}")
 for lsl_tool in (
     "neuro.configure_lsl",
     "neuro.discover_lsl_streams",
@@ -106,6 +112,8 @@ for lsl_tool in (
     "neuro.stop_lsl_recording",
     "neuro.get_lsl_recording_status",
     "neuro.list_lsl_recordings",
+    "neuro.audit_lsl_recording",
+    "neuro.save_lsl_audit_report",
     "neuro.load_lsl_recording",
     "neuro.play_lsl_recording",
     "neuro.resume_playback",
@@ -120,10 +128,12 @@ for lsl_tool in (
 visualization_schema = schema_region.split('neuroToolSchema("neuro.configure_lsl_visualization"', 1)[1].split("));", 1)[0]
 if 'numberProperty("Вертикальный масштаб в микровольтах.", 5.0, 1000.0)' not in visualization_schema:
     fail("LSL visualization MCP scale limits must match the 5..1000 µV UI control")
-if "зарегистрированы 47 инструментов" not in widget_source or "26 инструментов" in widget_source:
+if "зарегистрированы 49 инструментов" not in widget_source or "26 инструментов" in widget_source:
     fail("the embedded NeuroControl help must describe the current MCP tool count")
-if "визуализации и диагностики" not in widget_source or "не подключается к классификатору" not in widget_source:
-    fail("the embedded NeuroControl help must state that LSL is isolated from classification and avatar control")
+if ("shadow-classification checkbox" not in registry_source
+        or "causal FIR resampler" not in registry_source
+        or "never send avatar commands" not in registry_source):
+    fail("the embedded NeuroControl help must describe opt-in shadow LSL classification, resampling and avatar isolation")
 
 expected_docs = {
     "NEUROCONTROL_OVERVIEW.md",
@@ -160,8 +170,19 @@ if "neurocontrol/knowledge" not in registry_source or 'QStringLiteral("knowledge
     fail("MCP resources must load from the public knowledge directory")
 if 'QStringLiteral("knowledge/%1")' not in widget_source or 'QStringLiteral("docs/mcp/%1")' in widget_source:
     fail("neuro.get_knowledge must load public knowledge files without falling back to private docs")
-if "47" not in tools_doc or "neuro.configure_lsl" not in tools_doc or "neuro.run_lsl_diagnostic" not in tools_doc or "neuro.start_lsl_recording" not in tools_doc:
-    fail("the MCP tools guide does not document the current 47-tool registry and LSL recording workflow")
+if "49" not in tools_doc or "neuro.configure_lsl" not in tools_doc or "neuro.run_lsl_diagnostic" not in tools_doc or "neuro.start_lsl_recording" not in tools_doc:
+    fail("the MCP tools guide does not document the current 49-tool registry and LSL recording workflow")
+if "neuro.audit_lsl_recording" not in tools_doc or "не запускает архивный классификатор" not in tools_doc:
+    fail("the MCP tools guide must describe the safe offline LSL audit and its classification boundary")
+audit_schema = schema_region.split('neuroToolSchema("neuro.audit_lsl_recording"', 1)[1].split("));", 1)[0]
+if '"recording_id"' not in audit_schema or "команды аватара" not in audit_schema:
+    fail("offline LSL audit must require a safe recording ID and explicitly prohibit avatar commands")
+if '"target_sample_rate"' not in audit_schema or '"default", 160' not in audit_schema or '"recording_id"}, false' not in audit_schema:
+    fail("offline LSL audit must accept an optional target rate defaulting to 160 Hz without breaking old calls")
+if "integrity_status" not in widget_source or "integrity_reason" not in widget_source or "reader.verify(info, recording_error)" not in widget_source:
+    fail("offline LSL audit must report integrity state/reason and copy verified state to the audit result")
+if "neuro.save_lsl_audit_report" not in schema_names or "writeLslAuditReport" not in widget_source:
+    fail("MCP must save bounded aggregate offline LSL audit reports locally")
 
 lsl_source = (root / "neurocontrol" / "acquisition" / "LslEegSource.cpp").read_text(encoding="utf-8")
 if "discoverInstalledLabRecorderLibrary" not in lsl_source or "validateWindowsX64Library" not in lsl_source:

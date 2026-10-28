@@ -7,6 +7,8 @@
 #include "../neurocontrol/acquisition/LslRecordingFile.h"
 #include "../neurocontrol/experiments/NeuroExperimentLogger.h"
 #include "../neurocontrol/processing/NeuroClassifier.h"
+#include "../neurocontrol/processing/LslShadowPipeline.h"
+#include "../neurocontrol/processing/LslAuditReportWriter.h"
 #include "../shared/Version.h"
 #include <utils/Clock.h>
 #include <QtCore/QFile>
@@ -24,6 +26,7 @@
 #include <QtCore/QProcess>
 #include <QtCore/QSaveFile>
 #include <QtCore/QSettings>
+#include <QtCore/QSignalBlocker>
 #include <QtCore/QStorageInfo>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QUuid>
@@ -68,6 +71,7 @@
 #include <cstring>
 #include <deque>
 #include <mutex>
+#include <numeric>
 #include <set>
 #include <stdexcept>
 #include <thread>
@@ -482,6 +486,16 @@ struct NeuroControlLslRecordingLoad
 	bool ready = false;
 };
 
+struct NeuroControlLslShadowAudit
+{
+	std::mutex mutex;
+	QString recording_id;
+	int target_sample_rate_hz = 160;
+	QString state = QStringLiteral("queued");
+	QJsonObject result;
+	bool complete = false;
+};
+
 namespace {
 
 bool writeJsonAtomically(const QString& path, const QJsonObject& value, QString& error)
@@ -759,6 +773,19 @@ NeuroControlWidget::NeuroControlWidget(GUIClient* client, QWidget* parent) : QWi
 	lsl_buttons->addWidget(lsl_connect_button_);
 	lsl_buttons->addWidget(lsl_disconnect_button_);
 	lsl_layout->addLayout(lsl_buttons);
+	lsl_shadow_checkbox_ = new QCheckBox(tr("Теневая классификация · результат не передаётся аватару"), lsl_group);
+	lsl_shadow_checkbox_->setChecked(false);
+	lsl_shadow_checkbox_->setEnabled(false);
+	lsl_shadow_checkbox_->setToolTip(tr("После проверки частоты, каналов, единиц и контракта монтажа поток ресемплируется FIR-фильтром до частоты модели. Результаты остаются диагностическими и не управляют аватаром."));
+	lsl_layout->addWidget(lsl_shadow_checkbox_);
+	lsl_shadow_contract_confirm_checkbox_ = new QCheckBox(tr("Я сверил монтаж и референс потока с обучающими данными модели"), lsl_group);
+	lsl_shadow_contract_confirm_checkbox_->setChecked(false);
+	lsl_shadow_contract_confirm_checkbox_->setEnabled(false);
+	lsl_shadow_contract_confirm_checkbox_->setToolTip(tr("Потребуется, если XML LSL или JSON модели не содержат точных сведений о монтаже/референсе. Несовпадающие заявленные значения всё равно блокируют классификацию."));
+	lsl_layout->addWidget(lsl_shadow_contract_confirm_checkbox_);
+	lsl_shadow_status_label_ = new QLabel(tr("Теневая классификация выключена. Сначала загрузите совместимую модель и подключите поток."), lsl_group);
+	lsl_shadow_status_label_->setWordWrap(true);
+	lsl_layout->addWidget(lsl_shadow_status_label_);
 	lsl_details_label_ = new QLabel(tr("Выберите библиотеку lsl.dll, затем найдите поток."), lsl_group);
 	lsl_details_label_->setWordWrap(true);
 	if(!lsl_library_path_.isEmpty())
@@ -1036,7 +1063,7 @@ NeuroControlWidget::NeuroControlWidget(GUIClient* client, QWidget* parent) : QWi
 		"<h2><a name=\"errors\"></a>Возможные ошибки</h2><ul><li>Нет EDF: загрузите набор или выберите существующий файл.</li><li>Нет отчёта MNE: запустите проверку EDF.</li><li>Python не найден: выберите локальный python.exe на вкладке обучения.</li><li>Нет MNE/NumPy/SciPy/scikit-learn: установите зависимости из requirements-lock.txt в отдельное окружение.</li><li>Несовместима модель: используйте EDF с теми же каналами и частотой, что при обучении.</li><li>Нет спектра: запустите источник и дождитесь минимум одной секунды отсчётов.</li></ul>"
 		"<h2><a name=\"calibration\"></a>Индивидуальная калибровка</h2><p>Текущая модель S001 не калибрована для другого человека. Для индивидуального управления нужны запись собственных сессий, точные синхронные метки упражнений и независимая проверка модели до разрешения движения. Поддержка внешней медицинской системы пока проектируется.</p>"));
 	help_cursor.movePosition(QTextCursor::End);
-	help_cursor.insertHtml(tr("<h2>Работа с ИИ-помощником NeuroControl</h2><p>При включённом MCP во встроенном чате зарегистрированы 47 инструментов <code>neuro.*</code>. ИИ читает актуальное состояние виджета, метаданные EDF/моделей, текущий спектр, предсказания и трассу контроллера. Технические статьи доступны по темам через локальные MCP-ресурсы.</p><p>Примеры: «Покажи состояние нейроуправления»; «Какие EDF найдены и проверены?»; «Загрузи S001R14»; «Проверь совместимость модели, затем оцени S001_feet_vs_rest на S001R14»; «Почему последнее FORWARD не дошло до аватара?»; «Найди поток ЭЭГ Нейрософт и проверь его через LSL без включения управления аватаром»; «Останови нейроуправление».</p><p>Поток LSL доступен для визуализации и диагностики и не подключается к классификатору или управлению аватаром. Оценка модели выполняется в фоне и сохраняется отдельным отчётом; её результат доступен через состояние задачи. Изменение состояния выполняется только по вашей явной команде. Обучение и подготовка EDF работают в фоне; состояние задачи можно уточнить через чат. Синтетический поток не является мозговой активностью; физическая ЭЭГ-гарнитура пока не подключена. Не отправляйте сырые персональные записи во внешний сервис.</p>"));
+	help_cursor.insertHtml(tr("<h2>Работа с ИИ-помощником NeuroControl</h2><p>При включённом MCP во встроенном чате зарегистрированы 49 инструментов <code>neuro.*</code>. ИИ читает актуальное состояние виджета, метаданные EDF/моделей, текущий спектр, предсказания и трассу контроллера. Технические статьи доступны по темам через локальные MCP-ресурсы.</p><p>Примеры: «Покажи состояние нейроуправления»; «Какие EDF найдены и проверены?»; «Загрузи S001R14»; «Проверь совместимость модели, затем оцени S001_feet_vs_rest на S001R14»; «Почему последнее FORWARD не дошло до аватара?»; «Найди поток ЭЭГ Нейрософт и проверь его через LSL без включения управления аватаром»; «Проверь сохранённую LSL-запись через neuro.audit_lsl_recording с target_sample_rate=160 и сохрани отчёт S05»; «Останови нейроуправление».</p><p>Live LSL доступен для графиков, диагностики, записи и отдельно включаемой теневой классификации. Классификация требует точных каналов модели, единиц, устойчивой измеренной частоты, совместимого или отдельно подтверждённого монтажа/референса; смена частоты выполняется потоковым FIR-ресемплером. Источник с непроверенной временной шкалой остаётся помеченным как таковой. Теневая оценка никогда не отправляет команды аватару. MCP показывает счётчики, скорость, ошибки и причины блокировки. Offline-аудит проверяет `.nlsr` тем же ресемплерным трактом, но не запускает классификатор: chunk timestamps не подтверждают фактическую скорость источника. Архивное LSL-воспроизведение остаётся только визуальным. Оценка модели выполняется в фоне и сохраняется отдельным отчётом; её результат доступен через состояние задачи. Изменение состояния выполняется только по вашей явной команде. Обучение и подготовка EDF работают в фоне; состояние задачи можно уточнить через чат. Синтетический поток не является мозговой активностью. Не отправляйте сырые персональные записи во внешний сервис.</p>"));
 	tabs_->addTab(help_page, tr("Инструкция"));
 
 	auto* diagnostics_page = new QWidget(tabs_);
@@ -1347,6 +1374,28 @@ NeuroControlWidget::NeuroControlWidget(GUIClient* client, QWidget* parent) : QWi
 	connect(lsl_scan_button_, &QPushButton::clicked, this, [this] { scanLsl(); });
 	connect(lsl_connect_button_, &QPushButton::clicked, this, [this] { connectLsl(); });
 	connect(lsl_disconnect_button_, &QPushButton::clicked, this, [this] { disconnectLsl(); });
+	connect(lsl_shadow_contract_confirm_checkbox_, &QCheckBox::toggled, this, [this](bool) { refreshLslShadowCompatibility(); });
+	connect(lsl_shadow_checkbox_, &QCheckBox::toggled, this, [this](bool enabled) {
+		if(!enabled)
+		{
+			resetLslShadowPipeline(QString(), true);
+			lsl_shadow_windows_ = 0;
+			lsl_shadow_timestamp_gaps_ = 0;
+			lsl_shadow_stall_events_ = 0;
+			if(lsl_shadow_status_label_)
+				lsl_shadow_status_label_->setText(lsl_shadow_compatible_ ? tr("Совместимость подтверждена; теневая классификация выключена.") : lsl_shadow_compatibility_reason_);
+			return;
+		}
+		if(!lsl_shadow_compatible_ || !lsl_shadow_model_)
+		{
+			lsl_shadow_checkbox_->setChecked(false);
+			return;
+		}
+		resetLslShadowPipeline(QString(), true);
+		if(lsl_shadow_status_label_)
+			lsl_shadow_status_label_->setText(tr("Теневая классификация включена: анализ идёт локально, команды аватару не отправляются."));
+		appendDiagnostic(tr("LSL: теневой классификатор включён; совместимость модели/каналов/частоты подтверждена, команды аватару не отправляются."));
+	});
 	connect(lsl_record_button_, &QPushButton::clicked, this, [this] { startLslRecording(); });
 	connect(lsl_record_stop_button_, &QPushButton::clicked, this, [this] { requestStopLslRecording(); });
 	connect(lsl_record_load_button_, &QPushButton::clicked, this, [this] {
@@ -1545,6 +1594,12 @@ void NeuroControlWidget::connectLsl()
 	if(index < 0 || index >= lsl_discovered_.size()) { appendDiagnostic(tr("Сначала найдите и выберите LSL-поток.")); return; }
 	if(source_->currentIndex() != 3) source_->setCurrentIndex(3);
 	stop();
+	if(lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked()) lsl_shadow_checkbox_->setChecked(false);
+	if(lsl_shadow_contract_confirm_checkbox_ && lsl_shadow_contract_confirm_checkbox_->isChecked())
+	{
+		QSignalBlocker blocker(lsl_shadow_contract_confirm_checkbox_);
+		lsl_shadow_contract_confirm_checkbox_->setChecked(false);
+	}
 	lsl_error_.clear();
 	lsl_timestamp_diagnostics_ = {};
 	lsl_recent_timestamps_.clear();
@@ -1556,6 +1611,14 @@ void NeuroControlWidget::connectLsl()
 	lsl_rate_clock_.start();
 	lsl_connection_state_ = QStringLiteral("connecting");
 	lsl_active_stream_ = lsl_discovered_.at(index);
+	lsl_active_units_override_ = lsl_units_override_->currentData().toString();
+	lsl_units_override_->setEnabled(false);
+	lsl_shadow_rate_history_.clear();
+	lsl_shadow_windows_ = 0;
+	lsl_shadow_timestamp_gaps_ = 0;
+	lsl_shadow_stall_events_ = 0;
+	lsl_shadow_pipeline_.reset();
+	resetLslShadowPipeline(QString(), true);
 	lsl_reader_ = std::make_shared<NeuroControlLslReader>();
 	const auto state = lsl_reader_;
 	const QString library = lsl_library_path_;
@@ -1731,6 +1794,7 @@ void NeuroControlWidget::startLslDiagnostic(int duration_seconds)
 
 void NeuroControlWidget::finishLslDiagnostic(const QString& completion_reason)
 {
+	if(lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked()) lsl_shadow_checkbox_->setChecked(false);
 	if(!lsl_diagnostic_running_) return;
 	const double elapsed_seconds = lsl_diagnostic_elapsed_.isValid() ? lsl_diagnostic_elapsed_.elapsed() / 1000.0 : 0.0;
 	const std::uint64_t received = received_samples_ - lsl_diagnostic_start_received_;
@@ -1751,6 +1815,13 @@ void NeuroControlWidget::finishLslDiagnostic(const QString& completion_reason)
 		{"completed_at_utc", lsl_diagnostic_completed_at_utc_}, {"stream_name", lsl_active_stream_.name},
 		{"stream_uid", lsl_active_stream_.uid}, {"source_id", lsl_active_stream_.source_id},
 		{"nominal_rate_hz", lsl_active_stream_.nominal_hz}, {"measured_average_receive_rate_hz", average_rate},
+		{"electrode_montage", lsl_active_stream_.electrode_montage},
+		{"reference_scheme", lsl_active_stream_.reference_scheme},
+		{"shadow_classification_enabled", lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked()},
+		{"shadow_classification_windows", static_cast<qint64>(lsl_shadow_windows_)},
+		{"shadow_timestamp_gap_resets", static_cast<qint64>(lsl_shadow_timestamp_gaps_)},
+		{"shadow_stall_events", static_cast<qint64>(lsl_shadow_stall_events_)},
+		{"shadow_last_processing_batch_ms", lsl_shadow_last_processing_ms_},
 		{"channel_count", lsl_active_stream_.channel_count}, {"channels", QJsonArray::fromStringList(channel_names)},
 		{"units", QJsonArray::fromStringList(channel_units)}, {"format", lsl_active_stream_.format},
 		{"samples_received", static_cast<qint64>(received)},
@@ -1826,6 +1897,7 @@ void NeuroControlWidget::finishLslDiagnostic(const QString& completion_reason)
 		lsl_connection_state_ = QStringLiteral("disconnecting");
 	}
 	else lsl_connection_state_ = QStringLiteral("disconnected");
+	if(!lsl_reader_ && lsl_units_override_) lsl_units_override_->setEnabled(true);
 	playing_ = false;
 	if(lsl_disconnect_button_) lsl_disconnect_button_->setEnabled(false);
 	if(lsl_connect_button_) lsl_connect_button_->setEnabled(lsl_streams_ && lsl_streams_->count() > 0);
@@ -1835,6 +1907,13 @@ void NeuroControlWidget::finishLslDiagnostic(const QString& completion_reason)
 
 void NeuroControlWidget::disconnectLsl()
 {
+	if(lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked()) lsl_shadow_checkbox_->setChecked(false);
+	if(lsl_shadow_contract_confirm_checkbox_ && lsl_shadow_contract_confirm_checkbox_->isChecked())
+	{
+		QSignalBlocker blocker(lsl_shadow_contract_confirm_checkbox_);
+		lsl_shadow_contract_confirm_checkbox_->setChecked(false);
+	}
+	resetLslShadowPipeline(QString(), true);
 	if(lsl_diagnostic_running_)
 	{
 		finishLslDiagnostic(QStringLiteral("interrupted_by_disconnect"));
@@ -1854,6 +1933,8 @@ void NeuroControlWidget::disconnectLsl()
 		return;
 	}
 	lsl_connection_state_ = QStringLiteral("disconnected");
+	if(lsl_units_override_) lsl_units_override_->setEnabled(true);
+	lsl_shadow_rate_history_.clear();
 	if(lsl_connect_button_) lsl_connect_button_->setEnabled(lsl_streams_ && lsl_streams_->count() > 0);
 	if(lsl_disconnect_button_) lsl_disconnect_button_->setEnabled(false);
 	if(source_ && source_->currentIndex() == 3 && source_status_label_)
@@ -1895,7 +1976,7 @@ void NeuroControlWidget::startLslRecording()
 	const QString metadata_path = QDir(lsl_recordings_directory_).filePath(id + QStringLiteral(".json"));
 	QJsonArray channels;
 	QJsonArray names, channel_types, units, effective_units, factors;
-	const QString unit_override = lsl_units_override_->currentData().toString();
+	const QString unit_override = lsl_active_units_override_;
 	for(int i = 0; i < lsl_active_stream_.channel_count; ++i)
 	{
 		const QString name = lsl_active_stream_.channels.value(i, QStringLiteral("Канал %1").arg(i + 1));
@@ -1929,6 +2010,8 @@ void NeuroControlWidget::startLslRecording()
 		{QStringLiteral("name"), lsl_active_stream_.name}, {QStringLiteral("type"), lsl_active_stream_.type},
 		{QStringLiteral("uid"), lsl_active_stream_.uid}, {QStringLiteral("source_id"), lsl_active_stream_.source_id},
 		{QStringLiteral("hostname"), lsl_active_stream_.hostname}, {QStringLiteral("nominal_rate_hz"), lsl_active_stream_.nominal_hz},
+		{QStringLiteral("electrode_montage"), lsl_active_stream_.electrode_montage},
+		{QStringLiteral("reference_scheme"), lsl_active_stream_.reference_scheme},
 		{QStringLiteral("channel_count"), lsl_active_stream_.channel_count}, {QStringLiteral("sample_format"), QStringLiteral("float32")},
 		{QStringLiteral("native_float32_exact_available"), lsl_active_stream_.native_float32_exact_available},
 		{QStringLiteral("channels"), channels}, {QStringLiteral("channel_names"), names},
@@ -2469,16 +2552,21 @@ void NeuroControlWidget::pollLsl()
 	if(overrun > dropped_samples_) { appendDiagnostic(tr("LSL: локальный буфер графика отбросил %1 отсчётов.").arg(overrun - dropped_samples_)); dropped_samples_ = overrun; }
 	if(source_->currentIndex() != 3)
 	{
+		refreshLslShadowCompatibility();
 		if(finished)
 		{
 			lsl_recording_status_ = lslRecordingStatusJson();
 			lsl_reader_.reset();
 			lsl_connection_state_ = QStringLiteral("disconnected");
+			lsl_units_override_->setEnabled(true);
+			lsl_shadow_rate_history_.clear();
 		}
 		return;
 	}
 	if(connected && lsl_connection_state_ != QLatin1String("connected"))
 	{
+		const bool was_reconnecting = lsl_connection_state_ == QLatin1String("reconnecting");
+		if(was_reconnecting) resetLslShadowPipeline(QString(), true, neurocontrol::LslShadowResetReason::Reconnected);
 		lsl_active_stream_ = descriptor;
 		sample_rate_ = std::isfinite(descriptor.nominal_hz) && descriptor.nominal_hz > 0 ? static_cast<int>(std::round(descriptor.nominal_hz)) : 250;
 		channel_count_ = descriptor.channel_count;
@@ -2500,6 +2588,16 @@ void NeuroControlWidget::pollLsl()
 	}
 	else if(!connected && lsl_connection_state_ == QLatin1String("connected"))
 	{
+		if(lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked()) lsl_shadow_checkbox_->setChecked(false);
+		if(lsl_shadow_contract_confirm_checkbox_ && lsl_shadow_contract_confirm_checkbox_->isChecked())
+		{
+			QSignalBlocker blocker(lsl_shadow_contract_confirm_checkbox_);
+			lsl_shadow_contract_confirm_checkbox_->setChecked(false);
+		}
+		lsl_shadow_rate_history_.clear();
+		lsl_shadow_rate_stable_ = false;
+		lsl_shadow_observed_rate_hz_ = 0.0;
+		resetLslShadowPipeline(QString(), true, neurocontrol::LslShadowResetReason::ConnectionLost);
 		playing_ = false;
 		lsl_connection_state_ = QStringLiteral("reconnecting");
 	}
@@ -2527,6 +2625,12 @@ void NeuroControlWidget::pollLsl()
 		rate_measured_ = true;
 		rate_sample_snapshot_ = received_samples_;
 		lsl_rate_clock_.restart();
+		if(connected && std::isfinite(receive_rate_hz_) && receive_rate_hz_ > 0.0)
+		{
+			lsl_shadow_rate_history_.push_back(receive_rate_hz_);
+			while(lsl_shadow_rate_history_.size() > 5) lsl_shadow_rate_history_.pop_front();
+		}
+		refreshLslShadowCompatibility();
 	}
 	if(connected)
 	{
@@ -2547,6 +2651,8 @@ void NeuroControlWidget::pollLsl()
 	{
 		playing_ = false;
 		lsl_connection_state_ = stop_requested ? QStringLiteral("disconnected") : QStringLiteral("error");
+		lsl_units_override_->setEnabled(true);
+		lsl_shadow_rate_history_.clear();
 		lsl_disconnect_button_->setEnabled(false);
 		lsl_record_button_->setEnabled(false);
 		lsl_connect_button_->setEnabled(lsl_streams_->count() > 0);
@@ -2555,11 +2661,604 @@ void NeuroControlWidget::pollLsl()
 	}
 	else if(lsl_connection_state_ == QLatin1String("reconnecting"))
 		source_status_label_->setText(tr("Источник: LSL · переподключение"));
+	refreshLslShadowCompatibility();
+	if(connected) processLslShadowFrames(frames);
+	if(lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked() && frames.empty() &&
+		lsl_shadow_arrival_clock_.isValid() && lsl_shadow_arrival_clock_.elapsed() > 1000 && !lsl_shadow_stalled_)
+	{
+		resetLslShadowPipeline(QString(), true, neurocontrol::LslShadowResetReason::Stall);
+		lsl_shadow_stalled_ = true;
+		lsl_shadow_rate_history_.clear();
+		lsl_shadow_rate_stable_ = false;
+		lsl_shadow_observed_rate_hz_ = 0.0;
+		++lsl_shadow_stall_events_;
+		if(lsl_shadow_status_label_)
+			lsl_shadow_status_label_->setText(tr("Live LSL не присылал данные больше 1 секунды. Предсказание сброшено; классификатор ждёт новый непрерывный поток."));
+	}
 	if(lsl_diagnostic_running_ && (lsl_connection_state_ == QLatin1String("error") || lsl_connection_state_ == QLatin1String("disconnected")))
 		finishLslDiagnostic(QStringLiteral("connection_lost"));
 	else if(lsl_diagnostic_running_ && lsl_diagnostic_elapsed_.elapsed() >= lsl_diagnostic_duration_seconds_ * 1000)
 		finishLslDiagnostic(QStringLiteral("completed"));
 	refreshDiagnosticsSummary();
+}
+
+void NeuroControlWidget::refreshLslShadowCompatibility()
+{
+	const bool was_compatible = lsl_shadow_compatible_;
+	lsl_shadow_channel_indices_.clear();
+	lsl_shadow_compatible_ = false;
+	lsl_shadow_rate_stable_ = false;
+	lsl_shadow_observed_rate_hz_ = 0.0;
+	lsl_shadow_input_rate_hz_ = 0;
+	lsl_shadow_manual_contract_required_ = false;
+	lsl_shadow_compatibility_reason_.clear();
+	lsl_shadow_montage_reference_state_.clear();
+	lsl_shadow_reason_codes_.clear();
+	if(loaded_model_path_.isEmpty() || !lsl_shadow_model_)
+	{
+		lsl_shadow_reason_codes_.append(QStringLiteral("model_missing"));
+		lsl_shadow_compatibility_reason_ = tr("Загрузите корректную модель перед теневой классификацией.");
+	}
+	else if(!source_ || source_->currentIndex() != 3 || lsl_connection_state_ != QLatin1String("connected"))
+	{
+		lsl_shadow_reason_codes_.append(QStringLiteral("live_lsl_not_connected"));
+		lsl_shadow_compatibility_reason_ = tr("Подключите live LSL-поток для проверки совместимости.");
+	}
+	else
+	{
+		const int model_rate = model_metadata_.value(QStringLiteral("sample_rate_hz")).toInt();
+		const double advertised_rate = lsl_active_stream_.nominal_hz;
+		const int input_rate = std::isfinite(advertised_rate) ? static_cast<int>(std::llround(advertised_rate)) : 0;
+		if(input_rate >= 8 && input_rate <= 4000 && std::abs(advertised_rate - input_rate) <= 0.01)
+			lsl_shadow_input_rate_hz_ = input_rate;
+		if(model_rate <= 0 || input_rate <= 0 || std::abs(advertised_rate - input_rate) > 0.01)
+		{
+			lsl_shadow_reason_codes_.append(QStringLiteral("nominal_rate_not_integer"));
+			lsl_shadow_compatibility_reason_ = tr("Нужна регулярная целочисленная частота LSL и корректная частота модели; поток заявляет %1 Гц, модель — %2 Гц.")
+				.arg(advertised_rate, 0, 'g', 8).arg(model_rate);
+		}
+		else if(model_channels_.empty() || lsl_active_stream_.channel_count != lsl_active_stream_.channels.size())
+		{
+			lsl_shadow_reason_codes_.append(QStringLiteral("channel_metadata_incomplete"));
+			lsl_shadow_compatibility_reason_ = tr("Метаданные каналов потока неполные.");
+		}
+		else
+		{
+			QMap<QString, QVector<int>> source_indices;
+			for(int i = 0; i < lsl_active_stream_.channels.size(); ++i)
+			{
+				const QString name = lsl_active_stream_.channels.at(i).trimmed().toUpper();
+				if(!name.isEmpty()) source_indices[name].push_back(i);
+			}
+			QString missing_or_invalid;
+			std::set<QString> requested_names;
+			for(const std::string& model_channel : model_channels_)
+			{
+				const QString requested = QString::fromStdString(model_channel).trimmed().toUpper();
+				if(requested.isEmpty() || requested_names.count(requested) != 0 || !source_indices.contains(requested) || source_indices.value(requested).size() != 1)
+				{
+					missing_or_invalid = QString::fromStdString(model_channel);
+					break;
+				}
+				const int source_index = source_indices.value(requested).front();
+				const QString channel_type = lsl_active_stream_.channel_types.value(source_index).trimmed();
+				if(lslChannelKind(lsl_active_stream_.channels.at(source_index), channel_type) != QLatin1String("EEG"))
+				{
+					missing_or_invalid = QString::fromStdString(model_channel);
+					break;
+				}
+				const QString unit_override = lsl_active_units_override_ != QLatin1String("auto") ?
+					lsl_active_units_override_ : QString();
+				const QString effective_unit = unit_override.isEmpty() ? lsl_active_stream_.units.value(source_index) : unit_override;
+				if(neurocontrol::LslEegSource::unitScaleToVolts(effective_unit) == 0.0)
+				{
+					missing_or_invalid = QString::fromStdString(model_channel);
+					break;
+				}
+				requested_names.insert(requested);
+				lsl_shadow_channel_indices_.push_back(static_cast<std::size_t>(source_index));
+			}
+			if(!missing_or_invalid.isEmpty())
+			{
+				lsl_shadow_reason_codes_.append(QStringLiteral("channel_mapping_or_unit_invalid"));
+				lsl_shadow_channel_indices_.clear();
+				lsl_shadow_compatibility_reason_ = tr("Канал модели «%1» отсутствует/дублируется, имеет неподходящий тип или неизвестную единицу измерения.").arg(missing_or_invalid);
+			}
+			else
+			{
+				if(lsl_shadow_rate_history_.size() < 5)
+				{
+					lsl_shadow_reason_codes_.append(QStringLiteral("receive_rate_pending"));
+					lsl_shadow_compatibility_reason_ = tr("Ожидание 5 секунд измерений фактического приёма LSL перед проверкой частоты модели.");
+				}
+				else
+				{
+					const double sum = std::accumulate(lsl_shadow_rate_history_.begin(), lsl_shadow_rate_history_.end(), 0.0);
+					lsl_shadow_observed_rate_hz_ = sum / lsl_shadow_rate_history_.size();
+					const auto bounds = std::minmax_element(lsl_shadow_rate_history_.begin(), lsl_shadow_rate_history_.end());
+					const double allowed_mean_error = std::max(2.0, input_rate * 0.03);
+					const double allowed_window_span = std::max(10.0, input_rate * 0.12);
+					lsl_shadow_rate_stable_ = std::abs(lsl_shadow_observed_rate_hz_ - advertised_rate) <= allowed_mean_error &&
+						(*bounds.second - *bounds.first) <= allowed_window_span;
+					if(!lsl_shadow_rate_stable_)
+					{
+						lsl_shadow_reason_codes_.append(QStringLiteral("receive_rate_outside_tolerance"));
+						lsl_shadow_compatibility_reason_ = tr("Номинальная частота потока %1 Гц не подтверждена стабильным приёмом: среднее %2 отсч/с за 5 секунд. Теневая классификация заблокирована.")
+							.arg(advertised_rate, 0, 'g', 8).arg(lsl_shadow_observed_rate_hz_, 0, 'f', 1);
+					}
+					else
+					{
+				const QJsonObject preprocessing = model_metadata_.value(QStringLiteral("preprocessing")).toObject();
+				const QString model_montage = model_metadata_.value(QStringLiteral("electrode_montage")).toString(
+					preprocessing.value(QStringLiteral("electrode_montage")).toString()).trimmed();
+				const QString model_reference = model_metadata_.value(QStringLiteral("reference_scheme")).toString(
+					model_metadata_.value(QStringLiteral("reference")).toString(
+					preprocessing.value(QStringLiteral("reference_scheme")).toString())).trimmed();
+				const QString source_montage = lsl_active_stream_.electrode_montage.trimmed();
+				const QString source_reference = lsl_active_stream_.reference_scheme.trimmed();
+				const auto canonical_contract_value = [](QString value) { return value.trimmed().toLower().simplified(); };
+				const bool montage_missing = model_montage.isEmpty() || source_montage.isEmpty();
+				const bool reference_missing = model_reference.isEmpty() || source_reference.isEmpty();
+				if(!montage_missing && canonical_contract_value(model_montage) != canonical_contract_value(source_montage))
+				{
+					lsl_shadow_reason_codes_.append(QStringLiteral("montage_mismatch"));
+					lsl_shadow_compatibility_reason_ = tr("Монтаж источника и модели различается; классификация заблокирована.");
+					lsl_shadow_montage_reference_state_ = tr("несовпадение подтверждённых метаданных");
+				}
+				else if(!reference_missing && canonical_contract_value(model_reference) != canonical_contract_value(source_reference))
+				{
+					lsl_shadow_reason_codes_.append(QStringLiteral("reference_mismatch"));
+					lsl_shadow_compatibility_reason_ = tr("Референс источника и модели различается; классификация заблокирована.");
+					lsl_shadow_montage_reference_state_ = tr("несовпадение подтверждённых метаданных");
+				}
+				else
+				{
+					lsl_shadow_manual_contract_required_ = montage_missing || reference_missing;
+					if(lsl_shadow_manual_contract_required_ &&
+						(!lsl_shadow_contract_confirm_checkbox_ || !lsl_shadow_contract_confirm_checkbox_->isChecked()))
+					{
+						lsl_shadow_reason_codes_.append(QStringLiteral("electrode_contract_confirmation_required"));
+						lsl_shadow_montage_reference_state_ = tr("неполные метаданные; требуется ручная сверка монтажа и референса");
+						lsl_shadow_compatibility_reason_ = tr("Каналы, единицы и частота подходят, но монтаж/референс не полностью заданы. Сверьте их с обучающей записью и подтвердите отдельно.");
+					}
+					else
+					{
+						lsl_shadow_compatible_ = true;
+						lsl_shadow_reason_codes_.clear();
+						lsl_shadow_montage_reference_state_ = lsl_shadow_manual_contract_required_ ?
+							tr("метаданные неполны; оператор подтвердил соответствие") : tr("монтаж и референс совпали по метаданным");
+						if(!lsl_shadow_pipeline_ || !lsl_shadow_pipeline_->matches(input_rate, model_rate,
+							static_cast<std::size_t>(lsl_active_stream_.channel_count), lsl_shadow_channel_indices_, true))
+						{
+							auto pipeline = std::make_unique<neurocontrol::LslShadowPipeline>();
+							std::string pipeline_error;
+							if(!pipeline->configure(input_rate, model_rate, static_cast<std::size_t>(lsl_active_stream_.channel_count),
+								lsl_shadow_channel_indices_, lsl_shadow_model_.get(), pipeline_error))
+							{
+								lsl_shadow_compatible_ = false;
+								lsl_shadow_manual_contract_required_ = false;
+								lsl_shadow_compatibility_reason_ = QString::fromStdString(pipeline_error);
+							}
+							else lsl_shadow_pipeline_ = std::move(pipeline);
+						}
+					}
+					if(lsl_shadow_compatible_)
+					{
+						lsl_shadow_input_rate_hz_ = input_rate;
+			lsl_shadow_compatibility_reason_ = tr("Технически совместимо: %1→%2 Гц (%3/%4), %5 каналов модели, вход переведён в вольты; %6. FIR задерживает примерно на %7 мс. Точность модели на этом источнике не подтверждена.")
+							.arg(input_rate).arg(model_rate).arg(lsl_shadow_pipeline_->resampleUp()).arg(lsl_shadow_pipeline_->resampleDown())
+							.arg(lsl_shadow_channel_indices_.size()).arg(lsl_shadow_montage_reference_state_)
+							.arg(lsl_shadow_pipeline_->groupDelayMilliseconds(), 0, 'f', 2);
+					}
+				}
+				}
+			}
+		}
+	}
+	}
+	if(lsl_shadow_contract_confirm_checkbox_)
+	{
+		lsl_shadow_contract_confirm_checkbox_->setEnabled(lsl_shadow_manual_contract_required_);
+		if(!lsl_shadow_manual_contract_required_ && lsl_shadow_contract_confirm_checkbox_->isChecked())
+		{
+			QSignalBlocker blocker(lsl_shadow_contract_confirm_checkbox_);
+			lsl_shadow_contract_confirm_checkbox_->setChecked(false);
+		}
+	}
+	if(lsl_shadow_checkbox_)
+	{
+		lsl_shadow_checkbox_->setEnabled(lsl_shadow_compatible_);
+		if(!lsl_shadow_compatible_ && lsl_shadow_checkbox_->isChecked()) lsl_shadow_checkbox_->setChecked(false);
+	}
+	if(!lsl_shadow_compatible_ && (was_compatible || (lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked()) || !lsl_shadow_prediction_.isEmpty()))
+		resetLslShadowPipeline(QString(), true);
+	if(lsl_shadow_status_label_)
+	{
+		if(lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked())
+			lsl_shadow_status_label_->setText(tr("Теневая классификация активна · команды аватару не отправляются."));
+		else lsl_shadow_status_label_->setText(lsl_shadow_compatibility_reason_);
+	}
+}
+
+void NeuroControlWidget::resetLslShadowPipeline(const QString& reason, bool clear_prediction,
+	neurocontrol::LslShadowResetReason reset_reason)
+{
+	if(lsl_shadow_pipeline_) lsl_shadow_pipeline_->reset(reset_reason);
+	lsl_shadow_last_display_timestamp_ = 0.0;
+	lsl_shadow_last_processing_ms_ = 0.0;
+	lsl_shadow_stalled_ = false;
+	lsl_shadow_arrival_clock_.invalidate();
+	if(clear_prediction) lsl_shadow_prediction_ = {};
+	if(!reason.isEmpty() && lsl_shadow_status_label_) lsl_shadow_status_label_->setText(reason);
+}
+
+void NeuroControlWidget::processLslShadowFrames(const std::deque<neurocontrol::EegFrame>& frames)
+{
+	if(!lsl_shadow_checkbox_ || !lsl_shadow_checkbox_->isChecked() || !lsl_shadow_compatible_ ||
+		!lsl_shadow_pipeline_ || !lsl_shadow_pipeline_->hasClassifier() || frames.empty()) return;
+	const int model_rate = lsl_shadow_pipeline_->outputRateHz();
+	if(model_rate <= 0 || lsl_shadow_input_rate_hz_ <= 0) return;
+	if(frames.size() > static_cast<std::size_t>(lsl_shadow_input_rate_hz_ * 4))
+	{
+		resetLslShadowPipeline(QString(), true, neurocontrol::LslShadowResetReason::QueueOverflow);
+		lsl_shadow_status_label_->setText(tr("Буфер теневой классификации сброшен: очередь превысила 4 секунды. График и запись LSL продолжаются отдельно; оценка начнётся с новых отсчётов."));
+		return;
+	}
+	std::vector<neurocontrol::EegFrame> chunk(frames.begin(), frames.end());
+	lsl_shadow_arrival_clock_.restart();
+	lsl_shadow_stalled_ = false;
+	const std::uint64_t invalid_resets_before = lsl_shadow_pipeline_->stats().invalid_frame_resets;
+	neurocontrol::LslShadowPipelineBatch batch;
+	std::string processing_error;
+	const bool valid = lsl_shadow_pipeline_->processChunk(chunk.data(), chunk.size(), batch, processing_error);
+	const auto& stats = lsl_shadow_pipeline_->stats();
+	lsl_shadow_windows_ = stats.classifier_windows;
+	if(stats.timestamp_gap_resets > lsl_shadow_timestamp_gaps_ || stats.invalid_frame_resets > invalid_resets_before)
+		lsl_shadow_prediction_ = {};
+	lsl_shadow_timestamp_gaps_ = stats.timestamp_gap_resets;
+	lsl_shadow_last_processing_ms_ = stats.last_processing_batch_ms;
+	if(!valid && lsl_shadow_status_label_)
+		lsl_shadow_status_label_->setText(tr("Теневая обработка сбросила некорректные кадры; график и запись продолжаются. %1")
+			.arg(QString::fromStdString(processing_error)));
+	for(const neurocontrol::Classification& result : batch.classifications)
+	{
+			const QString candidate = !result.class_confident ? tr("неуверенно") :
+				result.candidate_command == model_positive_command_ ? model_positive_label_ :
+				result.candidate_command == model_negative_command_ ? model_negative_label_ : neuroCommandName(result.candidate_command);
+			lsl_shadow_prediction_ = QJsonObject{
+				{QStringLiteral("available"), true}, {QStringLiteral("candidate_class"), candidate},
+				{QStringLiteral("candidate_command"), neuroCommandName(result.candidate_command)},
+				{QStringLiteral("classification_command"), neuroCommandName(result.command)},
+				{QStringLiteral("positive_probability"), result.forward_probability},
+				{QStringLiteral("signal_good"), result.signal_good},
+				{QStringLiteral("class_confident"), result.class_confident},
+				{QStringLiteral("awaiting_confirmation"), result.awaiting_confirmation},
+				{QStringLiteral("consecutive_candidate_windows"), result.consecutive_candidate_windows},
+				{QStringLiteral("sample_index"), static_cast<qint64>(result.sample_index)},
+				{QStringLiteral("window_count"), static_cast<qint64>(lsl_shadow_windows_)},
+				{QStringLiteral("receiver_display_gap_resets"), static_cast<qint64>(lsl_shadow_timestamp_gaps_)},
+				{QStringLiteral("input_sample_rate_hz"), lsl_shadow_input_rate_hz_},
+				{QStringLiteral("model_sample_rate_hz"), model_rate},
+				{QStringLiteral("resample_up"), lsl_shadow_pipeline_->resampleUp()},
+				{QStringLiteral("resample_down"), lsl_shadow_pipeline_->resampleDown()},
+				{QStringLiteral("resampler_group_delay_ms"), lsl_shadow_pipeline_->groupDelayMilliseconds()},
+				{QStringLiteral("input_samples"), static_cast<qint64>(stats.input_samples)},
+				{QStringLiteral("output_samples"), static_cast<qint64>(stats.output_samples)},
+				{QStringLiteral("pipeline_errors"), static_cast<qint64>(stats.errors)},
+				{QStringLiteral("montage_reference_state"), lsl_shadow_montage_reference_state_},
+				{QStringLiteral("source_timestamp_quality"), lslStatusJson().value(QStringLiteral("timestamp_quality")).toString()},
+				{QStringLiteral("interpretation_status"), QStringLiteral("diagnostic_only_not_validated_for_source")},
+				{QStringLiteral("avatar_command_sent"), false}};
+			if(lsl_shadow_status_label_)
+				lsl_shadow_status_label_->setText(tr("Теневая оценка: %1 · p(%2) = %3 · окно %4 · аватар не управляется")
+					.arg(result.signal_good ? candidate : tr("сигнал ненадёжен"), model_positive_label_)
+					.arg(result.forward_probability, 0, 'f', 3).arg(lsl_shadow_windows_));
+	}
+	if(!lsl_shadow_prediction_.isEmpty())
+		lsl_shadow_prediction_.insert(QStringLiteral("processing_batch_ms"), lsl_shadow_last_processing_ms_);
+}
+
+void NeuroControlWidget::startLslShadowRecordingAudit(const QString& recording_id, int target_sample_rate_hz)
+{
+	if(lsl_shadow_audit_)
+	{
+		std::lock_guard<std::mutex> lock(lsl_shadow_audit_->mutex);
+		if(!lsl_shadow_audit_->complete) return;
+	}
+	auto state = std::make_shared<NeuroControlLslShadowAudit>();
+	state->recording_id = recording_id;
+	state->target_sample_rate_hz = target_sample_rate_hz;
+	lsl_shadow_audit_ = state;
+	lsl_shadow_audit_state_ = QStringLiteral("queued");
+	const QString directory = lsl_recordings_directory_;
+	const QString metadata_path = QDir(directory).filePath(recording_id + QStringLiteral(".json"));
+	const std::shared_ptr<neurocontrol::Model> model = lsl_shadow_model_;
+	const QJsonObject model_metadata = model_metadata_;
+	auto* thread = QThread::create([state, directory, metadata_path, recording_id, target_sample_rate_hz, model, model_metadata] {
+		const auto finish = [state](const QJsonObject& result) {
+			std::lock_guard<std::mutex> lock(state->mutex);
+			state->result = result;
+			state->state = result.value(QStringLiteral("state")).toString(QStringLiteral("error"));
+			state->complete = true;
+		};
+		{
+			std::lock_guard<std::mutex> lock(state->mutex);
+			state->state = QStringLiteral("running");
+		}
+		QString error;
+		QString integrity_status = QStringLiteral("checking");
+		QString integrity_reason = QStringLiteral("sidecar_and_binary_checks_in_progress");
+		const auto setIntegrityFailure = [&](const QString& code, const QString& detail, bool checked = true) {
+			integrity_status = checked ? QStringLiteral("failed") : QStringLiteral("not_checked");
+			integrity_reason = code + (detail.isEmpty() ? QString() : QStringLiteral(": ") + detail);
+			error = detail;
+		};
+		const QFileInfo metadata_info(metadata_path);
+		const QString canonical_metadata_path = metadata_info.canonicalFilePath();
+		if(!metadata_info.isFile() || !pathIsWithin(directory, canonical_metadata_path))
+			setIntegrityFailure(QStringLiteral("sidecar_missing_or_outside_recording_root"), QStringLiteral("The recording metadata is missing or outside the local recording directory."));
+		QFile metadata_file(canonical_metadata_path);
+		QJsonObject metadata;
+		if(error.isEmpty() && metadata_info.size() > 1024 * 1024)
+			setIntegrityFailure(QStringLiteral("sidecar_size_limit_exceeded"), QStringLiteral("The metadata sidecar exceeds the 1 MiB audit limit."), false);
+		if(error.isEmpty() && !metadata_file.open(QIODevice::ReadOnly))
+			setIntegrityFailure(QStringLiteral("sidecar_read_failed"), QStringLiteral("Cannot read the LSL recording metadata sidecar."));
+		if(error.isEmpty())
+		{
+			QJsonParseError parse_error;
+			const QJsonDocument document = QJsonDocument::fromJson(metadata_file.readAll(), &parse_error);
+			if(parse_error.error != QJsonParseError::NoError || !document.isObject())
+				setIntegrityFailure(QStringLiteral("sidecar_json_invalid"), QStringLiteral("The metadata sidecar is not a valid JSON object."));
+			else metadata = document.object();
+		}
+		if(error.isEmpty() && (metadata.value(QStringLiteral("format")).toString() != QLatin1String("metasiberia-neurocontrol-lsl-recording-v1") ||
+			metadata.value(QStringLiteral("recording_id")).toString() != recording_id ||
+			metadata.value(QStringLiteral("status")).toString() != QLatin1String("complete") || !metadata.value(QStringLiteral("complete")).toBool()))
+			setIntegrityFailure(QStringLiteral("sidecar_incomplete_or_unsupported"), QStringLiteral("The LSL recording is incomplete or uses an unsupported sidecar format."));
+		const QString data_name = metadata.value(QStringLiteral("data_file")).toString();
+		QString data_path;
+		if(error.isEmpty() && (QFileInfo(data_name).fileName() != data_name || !data_name.endsWith(QStringLiteral(".nlsr"))))
+			setIntegrityFailure(QStringLiteral("sidecar_binary_filename_invalid"), QStringLiteral("The sidecar contains an unsafe binary filename."));
+		if(error.isEmpty())
+		{
+			const QFileInfo binary_info(QDir(directory).filePath(data_name));
+			data_path = binary_info.canonicalFilePath();
+			if(!binary_info.isFile() || !pathIsWithin(directory, data_path))
+				setIntegrityFailure(QStringLiteral("binary_missing_or_outside_recording_root"), QStringLiteral("The recording binary is missing or outside the local recording directory."));
+			else if(binary_info.size() > 128ll * 1024ll * 1024ll)
+				setIntegrityFailure(QStringLiteral("binary_size_limit_exceeded"), QStringLiteral("Offline audit is bounded to recording files no larger than 128 MiB."), false);
+		}
+		neurocontrol::LslRecordingReader reader;
+		neurocontrol::LslRecordingInfo info;
+		std::string recording_error;
+		if(error.isEmpty() && !reader.open(std::filesystem::path(data_path.toStdWString()), info, recording_error))
+			setIntegrityFailure(QStringLiteral("binary_header_or_layout_invalid"), QString::fromStdString(recording_error));
+		if(error.isEmpty() && !info.complete)
+			setIntegrityFailure(QStringLiteral("binary_incomplete"), QStringLiteral("The .nlsr complete marker or exact record count is invalid."));
+		if(error.isEmpty() && !reader.verify(info, recording_error))
+			setIntegrityFailure(QStringLiteral("binary_payload_checksum_failed"), QString::fromStdString(recording_error));
+		if(error.isEmpty())
+		{
+			bool checksum_ok = false;
+			const qulonglong sidecar_checksum = metadata.value(QStringLiteral("binary_checksum_fnv1a64")).toString().toULongLong(&checksum_ok, 16);
+			if(!checksum_ok || sidecar_checksum != info.checksum)
+				setIntegrityFailure(QStringLiteral("sidecar_checksum_mismatch"), QStringLiteral("The binary header checksum does not match the sidecar checksum."));
+		}
+		const QJsonArray channel_metadata = metadata.value(QStringLiteral("channels")).toArray();
+		const std::uint64_t sidecar_samples = metadata.value(QStringLiteral("sample_count")).toVariant().toULongLong();
+		const double nominal_rate = metadata.value(QStringLiteral("nominal_rate_hz")).toDouble();
+		if(error.isEmpty() && (channel_metadata.size() != static_cast<int>(info.channel_count) || sidecar_samples != info.sample_count ||
+			!std::isfinite(nominal_rate) || nominal_rate < 8.0 || nominal_rate > 4000.0 || std::abs(nominal_rate - std::round(nominal_rate)) > 0.01))
+			setIntegrityFailure(QStringLiteral("sidecar_metadata_mismatch"), QStringLiteral("The sidecar channel/sample counts or nominal sample rate do not match the binary recording."));
+		if(error.isEmpty())
+		{
+			integrity_status = QStringLiteral("verified");
+			integrity_reason = QStringLiteral("header, complete marker, exact record count, payload FNV-1a-64, sidecar checksum and metadata all match");
+		}
+		if(!error.isEmpty())
+		{
+			finish(QJsonObject{{QStringLiteral("state"), QStringLiteral("error")}, {QStringLiteral("recording_id"), recording_id},
+				{QStringLiteral("error"), error}, {QStringLiteral("integrity_status"), integrity_status},
+				{QStringLiteral("integrity_reason"), integrity_reason}, {QStringLiteral("integrity_verified"), integrity_status == QLatin1String("verified")},
+				{QStringLiteral("target_sample_rate_hz"), target_sample_rate_hz},
+				{QStringLiteral("classifier_ran"), false}, {QStringLiteral("avatar_command_sent"), false}});
+			return;
+		}
+
+		const int input_rate = static_cast<int>(std::llround(nominal_rate));
+		const bool model_available = model && model->valid();
+		const int model_rate = model_available ? model->sample_rate_hz : 0;
+		std::vector<std::size_t> eeg_indices;
+		std::vector<double> unit_factors(info.channel_count, 0.0);
+		neurocontrol::LslShadowCompatibilityRequest compatibility_request;
+		compatibility_request.advertised_rate_hz = nominal_rate;
+		compatibility_request.model_rate_hz = model_available ? model_rate : target_sample_rate_hz;
+		compatibility_request.model_channels = model_available ? model->channels : std::vector<std::string>{};
+		compatibility_request.source_montage = metadata.value(QStringLiteral("electrode_montage")).toString().toUtf8().toStdString();
+		compatibility_request.source_reference = metadata.value(QStringLiteral("reference_scheme")).toString().toUtf8().toStdString();
+		const QJsonObject preprocessing = model_metadata.value(QStringLiteral("preprocessing")).toObject();
+		compatibility_request.model_montage = model_metadata.value(QStringLiteral("electrode_montage")).toString(preprocessing.value(QStringLiteral("electrode_montage")).toString()).toUtf8().toStdString();
+		compatibility_request.model_reference = model_metadata.value(QStringLiteral("reference_scheme")).toString(
+			model_metadata.value(QStringLiteral("reference")).toString(preprocessing.value(QStringLiteral("reference_scheme")).toString())).toUtf8().toStdString();
+		for(int i = 0; i < channel_metadata.size(); ++i)
+		{
+			const QJsonObject channel = channel_metadata.at(i).toObject();
+			const QString name = channel.value(QStringLiteral("name")).toString();
+			const QString type = channel.value(QStringLiteral("display_type")).toString(channel.value(QStringLiteral("type")).toString());
+			const QString unit = channel.value(QStringLiteral("effective_unit")).toString(channel.value(QStringLiteral("unit")).toString());
+			unit_factors[static_cast<std::size_t>(i)] = channel.value(QStringLiteral("unit_to_volts")).toDouble(0.0);
+			compatibility_request.source_channels.push_back({name.toUtf8().toStdString(), type.toUtf8().toStdString(), unit.toUtf8().toStdString()});
+			if(lslChannelKind(name, type) == QLatin1String("EEG"))
+			{
+				if(!std::isfinite(unit_factors[static_cast<std::size_t>(i)]) || unit_factors[static_cast<std::size_t>(i)] <= 0.0)
+				{
+					error = QStringLiteral("An EEG channel has an invalid recorded unit conversion.");
+					break;
+				}
+				eeg_indices.push_back(static_cast<std::size_t>(i));
+			}
+		}
+		if(error.isEmpty() && eeg_indices.empty()) error = QStringLiteral("The recording contains no EEG channels for resampler audit.");
+		if(!error.isEmpty())
+		{
+			finish(QJsonObject{{QStringLiteral("state"), QStringLiteral("error")}, {QStringLiteral("recording_id"), recording_id},
+				{QStringLiteral("error"), error}, {QStringLiteral("integrity_status"), integrity_status},
+				{QStringLiteral("integrity_reason"), integrity_reason}, {QStringLiteral("integrity_verified"), integrity_status == QLatin1String("verified")},
+				{QStringLiteral("target_sample_rate_hz"), target_sample_rate_hz},
+				{QStringLiteral("classifier_ran"), false}, {QStringLiteral("avatar_command_sent"), false}});
+			return;
+		}
+		neurocontrol::LslShadowCompatibility compatibility;
+		if(model_available) compatibility = neurocontrol::evaluateLslShadowCompatibility(compatibility_request);
+		else compatibility.reason_codes.emplace_back("model_not_loaded");
+		neurocontrol::LslShadowPipeline pipeline;
+		if(!pipeline.configure(input_rate, target_sample_rate_hz, info.channel_count, eeg_indices, nullptr, recording_error))
+		{
+			finish(QJsonObject{{QStringLiteral("state"), QStringLiteral("error")}, {QStringLiteral("recording_id"), recording_id},
+				{QStringLiteral("error"), QString::fromStdString(recording_error)}, {QStringLiteral("integrity_status"), integrity_status},
+				{QStringLiteral("integrity_reason"), integrity_reason}, {QStringLiteral("integrity_verified"), integrity_status == QLatin1String("verified")},
+				{QStringLiteral("target_sample_rate_hz"), target_sample_rate_hz},
+				{QStringLiteral("classifier_ran"), false}, {QStringLiteral("avatar_command_sent"), false}});
+			return;
+		}
+		std::uint64_t output_count = 0, invalid_input = 0, nonfinite_output = 0;
+		std::uint64_t source_repeated = 0, source_backwards = 0, source_nonfinite = 0;
+		std::uint64_t arrival_repeated = 0, arrival_backwards = 0, arrival_nonfinite = 0;
+		double previous_source = std::numeric_limits<double>::quiet_NaN();
+		double previous_arrival = std::numeric_limits<double>::quiet_NaN();
+		double first_source = std::numeric_limits<double>::quiet_NaN(), last_source = std::numeric_limits<double>::quiet_NaN();
+		double first_arrival = std::numeric_limits<double>::quiet_NaN(), last_arrival = std::numeric_limits<double>::quiet_NaN();
+		double output_power = 0.0;
+		const auto processing_start = std::chrono::steady_clock::now();
+		for(std::uint64_t offset = 0; offset < info.sample_count; offset += 2048)
+		{
+			const std::uint64_t count = std::min<std::uint64_t>(2048, info.sample_count - offset);
+			std::vector<neurocontrol::EegFrame> frames;
+			if(!reader.readRange(offset, count, frames, recording_error))
+			{
+				error = QString::fromStdString(recording_error);
+				break;
+			}
+			for(std::size_t i = 0; i < frames.size(); ++i)
+			{
+				auto& frame = frames[i];
+				if(!frame.raw_source_values_exact || frame.raw_source_values.size() != info.channel_count)
+				{
+					error = QStringLiteral("A binary frame does not contain exact float32 samples.");
+					break;
+				}
+				if(!std::isfinite(frame.source_timestamp_seconds)) ++source_nonfinite;
+				else if(!std::isfinite(first_source)) first_source = frame.source_timestamp_seconds;
+				if(std::isfinite(frame.source_timestamp_seconds)) last_source = frame.source_timestamp_seconds;
+				if(std::isfinite(frame.source_timestamp_seconds) && std::isfinite(previous_source))
+				{
+					if(frame.source_timestamp_seconds == previous_source) ++source_repeated;
+					else if(frame.source_timestamp_seconds < previous_source) ++source_backwards;
+				}
+				if(std::isfinite(frame.source_timestamp_seconds)) previous_source = frame.source_timestamp_seconds;
+				if(!std::isfinite(frame.arrival_monotonic_seconds)) ++arrival_nonfinite;
+				else if(!std::isfinite(first_arrival)) first_arrival = frame.arrival_monotonic_seconds;
+				if(std::isfinite(frame.arrival_monotonic_seconds)) last_arrival = frame.arrival_monotonic_seconds;
+				if(std::isfinite(frame.arrival_monotonic_seconds) && std::isfinite(previous_arrival))
+				{
+					if(frame.arrival_monotonic_seconds == previous_arrival) ++arrival_repeated;
+					else if(frame.arrival_monotonic_seconds < previous_arrival) ++arrival_backwards;
+				}
+				if(std::isfinite(frame.arrival_monotonic_seconds)) previous_arrival = frame.arrival_monotonic_seconds;
+				frame.volts.assign(info.channel_count, 0.0f);
+				frame.signal_good = true;
+				for(std::size_t channel = 0; channel < info.channel_count; ++channel)
+				{
+					const double value = static_cast<double>(frame.raw_source_values[channel]) * unit_factors[channel];
+					if(std::find(eeg_indices.begin(), eeg_indices.end(), channel) != eeg_indices.end())
+					{
+						if(!std::isfinite(value) || std::abs(value) > std::numeric_limits<float>::max())
+						{
+							++invalid_input;
+							frame.signal_good = false;
+						}
+						else frame.volts[channel] = static_cast<float>(value);
+					}
+				}
+				frame.display_timestamp_seconds = static_cast<double>(offset + i) / input_rate;
+			}
+			if(!error.isEmpty()) break;
+			neurocontrol::LslShadowPipelineBatch batch;
+			std::string batch_error;
+			if(!pipeline.processChunk(frames.data(), frames.size(), batch, batch_error))
+			{
+				error = QString::fromStdString(batch_error.empty() ? "The shared LSL processing pipeline rejected a recording chunk." : batch_error);
+				break;
+			}
+			for(const auto& sample : batch.resampled_samples)
+			{
+				++output_count;
+				for(float value : sample)
+				{
+					if(!std::isfinite(value)) ++nonfinite_output;
+					else output_power += static_cast<double>(value) * value;
+				}
+			}
+		}
+		const double processing_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - processing_start).count();
+		const auto& stats = pipeline.stats();
+		const double duration = static_cast<double>(info.sample_count) / input_rate;
+		const double output_rms_volts = output_count > 0 && !eeg_indices.empty() ? std::sqrt(output_power / (output_count * eeg_indices.size())) : 0.0;
+		QJsonArray reason_codes;
+		for(const std::string& code : compatibility.reason_codes) reason_codes.append(QString::fromStdString(code));
+		const bool static_contract_passed = model_available && compatibility.resampling_supported &&
+			compatibility.channel_indices.size() == compatibility_request.model_channels.size() &&
+			std::all_of(compatibility.reason_codes.begin(), compatibility.reason_codes.end(), [](const std::string& code) { return code == "receive_rate_pending"; });
+		QJsonArray model_reason_codes;
+		for(const std::string& code : compatibility.reason_codes) model_reason_codes.append(QString::fromStdString(code));
+		QJsonObject result{
+			{QStringLiteral("state"), error.isEmpty() ? QStringLiteral("completed") : QStringLiteral("error")},
+			{QStringLiteral("recording_id"), recording_id}, {QStringLiteral("error"), error},
+			{QStringLiteral("integrity_status"), integrity_status}, {QStringLiteral("integrity_reason"), integrity_reason},
+			{QStringLiteral("integrity_verified"), integrity_status == QLatin1String("verified")},
+			{QStringLiteral("input_rate_hz_nominal"), input_rate}, {QStringLiteral("target_sample_rate_hz"), target_sample_rate_hz},
+			{QStringLiteral("output_rate_hz"), target_sample_rate_hz},
+			{QStringLiteral("model_sample_rate_hz"), model_available ? QJsonValue(model_rate) : QJsonValue(QJsonValue::Null)},
+			{QStringLiteral("input_samples"), static_cast<qint64>(info.sample_count)},
+			{QStringLiteral("output_samples"), static_cast<qint64>(output_count)},
+			{QStringLiteral("duration_seconds_nominal"), duration},
+			{QStringLiteral("source_timestamp_elapsed_seconds"), std::isfinite(first_source) && std::isfinite(last_source) ? QJsonValue(last_source - first_source) : QJsonValue(QJsonValue::Null)},
+			{QStringLiteral("receiver_arrival_elapsed_seconds"), std::isfinite(first_arrival) && std::isfinite(last_arrival) ? QJsonValue(last_arrival - first_arrival) : QJsonValue(QJsonValue::Null)},
+			{QStringLiteral("effective_output_rate_hz_nominal_timeline"), duration > 0.0 ? output_count / duration : 0.0},
+			{QStringLiteral("channel_count"), static_cast<int>(info.channel_count)},
+			{QStringLiteral("eeg_channel_count"), static_cast<int>(eeg_indices.size())},
+			{QStringLiteral("resample_up"), pipeline.resampleUp()}, {QStringLiteral("resample_down"), pipeline.resampleDown()},
+			{QStringLiteral("resampler_filter_taps"), static_cast<qint64>(pipeline.filterLength())},
+			{QStringLiteral("resampler_configured"), pipeline.isConfigured()},
+			{QStringLiteral("fir_group_delay_ms"), pipeline.groupDelayMilliseconds()},
+			{QStringLiteral("processing_ms"), processing_ms}, {QStringLiteral("output_rms_volts"), output_rms_volts},
+			{QStringLiteral("invalid_input_values"), static_cast<qint64>(invalid_input)},
+			{QStringLiteral("nonfinite_output_values"), static_cast<qint64>(nonfinite_output)},
+			{QStringLiteral("pipeline_errors"), static_cast<qint64>(stats.errors)},
+			{QStringLiteral("pipeline_timestamp_gap_resets"), static_cast<qint64>(stats.timestamp_gap_resets)},
+			{QStringLiteral("pipeline_invalid_frame_resets"), static_cast<qint64>(stats.invalid_frame_resets)},
+			{QStringLiteral("source_timestamp_repeats"), static_cast<qint64>(source_repeated)},
+			{QStringLiteral("source_timestamp_backwards"), static_cast<qint64>(source_backwards)},
+			{QStringLiteral("source_timestamp_nonfinite"), static_cast<qint64>(source_nonfinite)},
+			{QStringLiteral("arrival_timestamp_repeats"), static_cast<qint64>(arrival_repeated)},
+			{QStringLiteral("arrival_timestamp_backwards"), static_cast<qint64>(arrival_backwards)},
+			{QStringLiteral("arrival_timestamp_nonfinite"), static_cast<qint64>(arrival_nonfinite)},
+			{QStringLiteral("timestamp_basis"), QStringLiteral("Processing uses a derived sample_index / nominal_rate timeline; original timestamps remain diagnostic only and do not validate sample production rate.")},
+			{QStringLiteral("receive_rate_measurable_from_archive"), false},
+			{QStringLiteral("compatibility_static_check_passed"), static_contract_passed},
+			{QStringLiteral("compatibility_state"), static_contract_passed ? QStringLiteral("static_contract_passed_live_rate_validation_pending") : QStringLiteral("blocked_or_model_unavailable")},
+			{QStringLiteral("model_compatibility_state"), !model_available ? QStringLiteral("not_loaded") :
+				(static_contract_passed ? QStringLiteral("static_contract_passed_live_rate_pending") : QStringLiteral("blocked"))},
+			{QStringLiteral("model_compatibility_reason_codes"), model_reason_codes},
+			{QStringLiteral("compatibility_montage_reference_state"), QString::fromStdString(compatibility.montage_reference_state)},
+			{QStringLiteral("compatibility_reason_codes"), reason_codes},
+			{QStringLiteral("classification_state"), QStringLiteral("not_run_offline_classifier_disabled")},
+			{QStringLiteral("classifier_ran"), false}, {QStringLiteral("avatar_command_sent"), false},
+			{QStringLiteral("raw_eeg_values_returned"), false}};
+		finish(result);
+	});
+	connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+	thread->start();
 }
 
 QJsonObject NeuroControlWidget::lslStatusJson() const
@@ -2582,6 +3281,7 @@ QJsonObject NeuroControlWidget::lslStatusJson() const
 		discovered.append(QJsonObject{{"uid", stream.uid}, {"source_id", stream.source_id},
 			{"name", stream.name}, {"type", stream.type}, {"hostname", stream.hostname},
 			{"channel_count", stream.channel_count}, {"channels", stream_channels}, {"units", stream_units},
+			{"electrode_montage", stream.electrode_montage}, {"reference_scheme", stream.reference_scheme},
 			{"nominal_rate_hz", stream.nominal_hz}, {"format", stream.format}});
 	}
 	QJsonArray channels;
@@ -2601,6 +3301,48 @@ QJsonObject NeuroControlWidget::lslStatusJson() const
 			{"elapsed_seconds", lsl_diagnostic_elapsed_.isValid() ? lsl_diagnostic_elapsed_.elapsed() / 1000.0 : 0.0},
 			{"received_samples", static_cast<qint64>(received_samples_ - lsl_diagnostic_start_received_)},
 			{"started_at_utc", lsl_diagnostic_started_at_utc_}, {"auto_disconnect", true}};
+	QJsonArray shadow_reason_codes;
+	for(const QString& code : lsl_shadow_reason_codes_) shadow_reason_codes.append(code);
+	const neurocontrol::LslShadowPipelineStats empty_shadow_stats;
+	const neurocontrol::LslShadowPipelineStats& shadow_stats = lsl_shadow_pipeline_ ? lsl_shadow_pipeline_->stats() : empty_shadow_stats;
+	const bool shadow_enabled = lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked();
+	const QString shadow_pipeline_state = lsl_shadow_compatible_ ?
+		(shadow_enabled ? QStringLiteral("active") : QStringLiteral("compatible_not_enabled")) : QStringLiteral("blocked");
+	QJsonObject shadow_pipeline{
+		{"state", shadow_pipeline_state}, {"input_rate_hz", lsl_shadow_input_rate_hz_},
+		{"observed_receive_rate_hz", lsl_shadow_observed_rate_hz_},
+		{"output_rate_hz", lsl_shadow_pipeline_ ? lsl_shadow_pipeline_->outputRateHz() : model_metadata_.value(QStringLiteral("sample_rate_hz")).toInt()},
+		{"resampler_configured", lsl_shadow_pipeline_ && lsl_shadow_pipeline_->isConfigured()},
+		{"resample_up", lsl_shadow_pipeline_ ? lsl_shadow_pipeline_->resampleUp() : 0},
+		{"resample_down", lsl_shadow_pipeline_ ? lsl_shadow_pipeline_->resampleDown() : 0},
+		{"group_delay_ms", lsl_shadow_pipeline_ ? lsl_shadow_pipeline_->groupDelayMilliseconds() : 0.0},
+		{"input_samples", static_cast<qint64>(shadow_stats.input_samples)},
+		{"output_samples", static_cast<qint64>(shadow_stats.output_samples)},
+		{"classification_windows", static_cast<qint64>(shadow_stats.classifier_windows)},
+		{"errors", static_cast<qint64>(shadow_stats.errors)}, {"last_error", QString::fromStdString(shadow_stats.last_error)},
+		{"timestamp_gap_resets", static_cast<qint64>(shadow_stats.timestamp_gap_resets)},
+		{"invalid_frame_resets", static_cast<qint64>(shadow_stats.invalid_frame_resets)},
+		{"queue_overflow_resets", static_cast<qint64>(shadow_stats.queue_overflow_resets)},
+		{"stall_resets", static_cast<qint64>(shadow_stats.stall_resets)},
+		{"connection_loss_resets", static_cast<qint64>(shadow_stats.connection_loss_resets)},
+		{"reconnect_resets", static_cast<qint64>(shadow_stats.reconnect_resets)},
+		{"manual_resets", static_cast<qint64>(shadow_stats.manual_resets)},
+		{"last_processing_batch_ms", shadow_stats.last_processing_batch_ms},
+		{"receive_rate_stable", lsl_shadow_rate_stable_}, {"compatible", lsl_shadow_compatible_},
+		{"compatibility_reason", lsl_shadow_compatibility_reason_}, {"reason_codes", shadow_reason_codes},
+		{"montage_reference_state", lsl_shadow_montage_reference_state_},
+		{"classifier_ready", lsl_shadow_pipeline_ && lsl_shadow_pipeline_->hasClassifier()},
+		{"classifier_active", shadow_enabled && lsl_shadow_pipeline_ && lsl_shadow_pipeline_->hasClassifier()},
+		{"avatar_command_sent", false}};
+	QJsonObject offline_shadow_audit{{"state", lsl_shadow_audit_state_}, {"integrity_status", "not_checked"}};
+	if(lsl_shadow_audit_)
+	{
+		std::lock_guard<std::mutex> lock(lsl_shadow_audit_->mutex);
+		offline_shadow_audit = lsl_shadow_audit_->result;
+		if(offline_shadow_audit.isEmpty()) offline_shadow_audit = QJsonObject{{"state", lsl_shadow_audit_->state},
+			{"recording_id", lsl_shadow_audit_->recording_id}, {"target_sample_rate_hz", lsl_shadow_audit_->target_sample_rate_hz},
+			{"integrity_status", lsl_shadow_audit_->complete ? QStringLiteral("not_checked") : QStringLiteral("checking")}};
+	}
 	return QJsonObject{{"state", lsl_connection_state_}, {"search_in_progress", lsl_discovery_ != nullptr},
 		{"reader_worker_exists", reader_exists}, {"reader_worker_finished", reader_finished},
 		{"reader_stop_requested", reader_stop_requested}, {"reader_cleanup_pending", reader_exists && !reader_finished},
@@ -2613,6 +3355,16 @@ QJsonObject NeuroControlWidget::lslStatusJson() const
 		{"source_id", lsl_active_stream_.source_id}, {"uid", lsl_active_stream_.uid},
 		{"channel_count", lsl_active_stream_.channel_count}, {"channels", channels},
 		{"nominal_rate_hz", lsl_active_stream_.nominal_hz}, {"measured_receive_rate_hz", receive_rate_hz_},
+		{"electrode_montage", lsl_active_stream_.electrode_montage},
+		{"reference_scheme", lsl_active_stream_.reference_scheme},
+		{"effective_units_override", lsl_active_units_override_},
+		{"shadow_observed_receive_rate_hz", lsl_shadow_observed_rate_hz_},
+		{"shadow_receive_rate_sample_count", static_cast<qint64>(lsl_shadow_rate_history_.size())},
+		{"shadow_receive_rate_stable", lsl_shadow_rate_stable_},
+		{"shadow_windows", static_cast<qint64>(lsl_shadow_windows_)},
+		{"shadow_timestamp_gap_resets", static_cast<qint64>(lsl_shadow_timestamp_gaps_)},
+		{"shadow_stall_events", static_cast<qint64>(lsl_shadow_stall_events_)},
+		{"shadow_last_processing_batch_ms", lsl_shadow_last_processing_ms_},
 		{"format", lsl_active_stream_.format}, {"native_float32_exact_available", lsl_active_stream_.native_float32_exact_available},
 		{"received_samples", static_cast<qint64>(received_samples_)},
 		{"local_display_buffer_drops", static_cast<qint64>(dropped_samples_)},
@@ -2626,7 +3378,12 @@ QJsonObject NeuroControlWidget::lslStatusJson() const
 		{"source_timestamp_coarse_intervals", static_cast<qint64>(d.coarse_intervals)},
 		{"clock_correction_available", d.correction_available}, {"clock_compatible", d.clock_compatible},
 		{"diagnostic", diagnostic},
-		{"raw_eeg_contents_sent", false}, {"classifier_connected", false}, {"avatar_control_enabled", false}};
+		{"raw_eeg_contents_sent", false}, {"classifier_connected", false}, {"avatar_control_enabled", false},
+		{"shadow_classification_compatible", lsl_shadow_compatible_},
+		{"shadow_classification_enabled", lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked()},
+		{"shadow_classification_reason", lsl_shadow_compatibility_reason_},
+		{"shadow_reason_codes", shadow_reason_codes}, {"shadow_pipeline", shadow_pipeline},
+		{"offline_recording_audit", offline_shadow_audit}, {"shadow_prediction", lsl_shadow_prediction_}};
 }
 
 
@@ -2807,6 +3564,95 @@ QJsonObject NeuroControlWidget::handleMCPRequest(const QString& tool, const QJso
 	{
 		const QJsonArray recordings = listLslRecordingsJson();
 		return QJsonObject{{"recordings", recordings}, {"recordings_directory", lsl_recordings_directory_}, {"count", recordings.size()}};
+	}
+	if(tool == QStringLiteral("neuro.audit_lsl_recording"))
+	{
+		if(lsl_reader_ || lsl_connection_state_ == QLatin1String("connected") || lsl_recording_load_in_progress_)
+			return neuroMCPError("LSL_AUDIT_REQUIRES_IDLE_SOURCE", QStringLiteral("Для изолированного офлайн-аудита отключите live LSL и дождитесь завершения записи/загрузки."));
+		const QString id = arguments.value(QStringLiteral("recording_id")).toString();
+		if(!validLslRecordingId(id)) return neuroMCPError("LSL_RECORDING_ID_INVALID", QStringLiteral("Укажите безопасный recording_id из neuro.list_lsl_recordings."));
+		int target_sample_rate_hz = 160;
+		if(arguments.contains(QStringLiteral("target_sample_rate")))
+		{
+			const QJsonValue value = arguments.value(QStringLiteral("target_sample_rate"));
+			const double rate = value.toDouble(-1.0);
+			if(!value.isDouble() || !std::isfinite(rate) || std::floor(rate) != rate || rate < 8.0 || rate > 2000.0)
+				return neuroMCPError("LSL_AUDIT_TARGET_RATE_INVALID", QStringLiteral("target_sample_rate должен быть целым числом от 8 до 2000 Гц."));
+			target_sample_rate_hz = static_cast<int>(rate);
+		}
+		if(lsl_shadow_audit_)
+		{
+			std::lock_guard<std::mutex> lock(lsl_shadow_audit_->mutex);
+			if(!lsl_shadow_audit_->complete)
+			{
+				if(lsl_shadow_audit_->recording_id != id || lsl_shadow_audit_->target_sample_rate_hz != target_sample_rate_hz)
+					return neuroMCPError("LSL_AUDIT_BUSY", QStringLiteral("Сначала дождитесь текущего офлайн-аудита; новый запрос не был подменён его результатом."));
+				return QJsonObject{{"accepted", true}, {"state", lsl_shadow_audit_->state}, {"recording_id", lsl_shadow_audit_->recording_id},
+					{"target_sample_rate", lsl_shadow_audit_->target_sample_rate_hz}, {"status_tool", "neuro.get_lsl_status"}};
+			}
+		}
+		startLslShadowRecordingAudit(id, target_sample_rate_hz);
+		return QJsonObject{{"accepted", true}, {"state", "queued"}, {"recording_id", id}, {"status_tool", "neuro.get_lsl_status"},
+			{"target_sample_rate", target_sample_rate_hz}, {"integrity_status", "not_checked"},
+			{"processing", "shared live LSL shadow resampler; no offline classifier or avatar command"}};
+	}
+	if(tool == QStringLiteral("neuro.save_lsl_audit_report"))
+	{
+		const QString experiment_id = arguments.value(QStringLiteral("experiment_id")).toString();
+		static const QRegularExpression experiment_id_pattern(QStringLiteral("^S[0-9]{2}$"));
+		if(!experiment_id_pattern.match(experiment_id).hasMatch())
+			return neuroMCPError("LSL_AUDIT_EXPERIMENT_ID_INVALID", QStringLiteral("Укажите ID вида S04 или S05."));
+		if(!lsl_shadow_audit_) return neuroMCPError("LSL_AUDIT_RESULT_MISSING", QStringLiteral("Сначала завершите neuro.audit_lsl_recording."));
+		QJsonObject result;
+		bool complete = false;
+		{
+			std::lock_guard<std::mutex> lock(lsl_shadow_audit_->mutex);
+			complete = lsl_shadow_audit_->complete;
+			result = lsl_shadow_audit_->result;
+		}
+		if(!complete || result.isEmpty())
+			return neuroMCPError("LSL_AUDIT_NOT_COMPLETE", QStringLiteral("Дождитесь завершения аудита через neuro.get_lsl_status."));
+
+		neurocontrol::LslAuditReportSnapshot report;
+		report.experiment_id = experiment_id.toStdString();
+		report.recording_id = result.value(QStringLiteral("recording_id")).toString().toStdString();
+		report.audit_state = result.value(QStringLiteral("state")).toString().toStdString();
+		report.integrity_status = result.value(QStringLiteral("integrity_status")).toString(QStringLiteral("not_checked")).toStdString();
+		report.integrity_reason = result.value(QStringLiteral("integrity_reason")).toString().toStdString();
+		report.input_rate_hz = result.value(QStringLiteral("input_rate_hz_nominal")).toInt();
+		report.target_rate_hz = result.value(QStringLiteral("target_sample_rate_hz")).toInt(160);
+		report.model_rate_hz = result.value(QStringLiteral("model_sample_rate_hz")).toInt();
+		report.input_samples = result.value(QStringLiteral("input_samples")).toVariant().toULongLong();
+		report.output_samples = result.value(QStringLiteral("output_samples")).toVariant().toULongLong();
+		report.total_channels = static_cast<std::uint32_t>(std::max(0, result.value(QStringLiteral("channel_count")).toInt()));
+		report.eeg_channels = static_cast<std::uint32_t>(std::max(0, result.value(QStringLiteral("eeg_channel_count")).toInt()));
+		report.resample_up = result.value(QStringLiteral("resample_up")).toInt();
+		report.resample_down = result.value(QStringLiteral("resample_down")).toInt();
+		report.filter_taps = result.value(QStringLiteral("resampler_filter_taps")).toInt();
+		report.group_delay_ms = result.value(QStringLiteral("fir_group_delay_ms")).toDouble();
+		report.processing_ms = result.value(QStringLiteral("processing_ms")).toDouble();
+		report.nominal_duration_seconds = result.value(QStringLiteral("duration_seconds_nominal")).toDouble();
+		report.pipeline_errors = result.value(QStringLiteral("pipeline_errors")).toVariant().toULongLong();
+		report.invalid_input_values = result.value(QStringLiteral("invalid_input_values")).toVariant().toULongLong();
+		report.nonfinite_output_values = result.value(QStringLiteral("nonfinite_output_values")).toVariant().toULongLong();
+		report.timestamp_gap_resets = result.value(QStringLiteral("pipeline_timestamp_gap_resets")).toVariant().toULongLong();
+		report.invalid_frame_resets = result.value(QStringLiteral("pipeline_invalid_frame_resets")).toVariant().toULongLong();
+		report.model_compatibility_state = result.value(QStringLiteral("model_compatibility_state")).toString().toStdString();
+		for(const QJsonValue& reason : result.value(QStringLiteral("model_compatibility_reason_codes")).toArray())
+			report.model_compatibility_reasons.push_back(reason.toString().toStdString());
+		report.receive_rate_measurable_from_archive = result.value(QStringLiteral("receive_rate_measurable_from_archive")).toBool(false);
+		report.classifier_ran = result.value(QStringLiteral("classifier_ran")).toBool(false);
+		report.avatar_command_sent = result.value(QStringLiteral("avatar_command_sent")).toBool(false);
+
+		std::filesystem::path saved_path;
+		std::string write_error;
+		if(!neurocontrol::writeLslAuditReport(std::filesystem::u8path(NEUROCONTROL_PROJECT_ROOT), report, saved_path, write_error))
+			return neuroMCPError("LSL_AUDIT_REPORT_SAVE_FAILED", QString::fromStdString(write_error));
+		return QJsonObject{{"saved", true}, {"experiment_id", experiment_id},
+			{"report_path", QString::fromStdWString(saved_path.wstring())},
+			{"recording_id", QString::fromStdString(report.recording_id)},
+			{"integrity_status", QString::fromStdString(report.integrity_status)},
+			{"raw_eeg_values_written", false}, {"public_git_changed", false}};
 	}
 	if(tool == QStringLiteral("neuro.load_lsl_recording"))
 	{
@@ -4092,6 +4938,13 @@ void NeuroControlWidget::loadModelPath(const QString& path)
 		applied_threshold_ = std::max(0.75, model.forward_threshold);
 		model.forward_threshold = applied_threshold_;
 		auto classifier = std::make_unique<neurocontrol::NeuroClassifier>(model);
+		auto lsl_shadow_model = std::make_shared<neurocontrol::Model>(model);
+		if(lsl_shadow_checkbox_ && lsl_shadow_checkbox_->isChecked()) lsl_shadow_checkbox_->setChecked(false);
+		if(lsl_shadow_contract_confirm_checkbox_ && lsl_shadow_contract_confirm_checkbox_->isChecked())
+		{
+			QSignalBlocker blocker(lsl_shadow_contract_confirm_checkbox_);
+			lsl_shadow_contract_confirm_checkbox_->setChecked(false);
+		}
 		model_channels_ = model.channels;
 		model_positive_command_ = model.positive_command;
 		model_negative_command_ = model.negative_command;
@@ -4105,8 +4958,12 @@ void NeuroControlWidget::loadModelPath(const QString& path)
 		if(model_positive_label_.isEmpty()) model_positive_label_ = model.positive_command == neurocontrol::CommandType::Forward ? tr("T2 · обе стопы") : tr("положительный класс");
 		if(model_negative_label_.isEmpty()) model_negative_label_ = model.negative_command == neurocontrol::CommandType::Stop ? tr("T0 · покой") : tr("отрицательный класс");
 		classifier_ = std::move(classifier);
+		lsl_shadow_model_ = std::move(lsl_shadow_model);
+		lsl_shadow_pipeline_.reset();
+		resetLslShadowPipeline(QString(), true);
 		model_metadata_ = document.object();
 		loaded_model_path_ = QFileInfo(path).absoluteFilePath();
+		refreshLslShadowCompatibility();
 		model_label_->setText(QFileInfo(path).fileName());
 		refreshControlAvailability();
 		refreshOverviewStatus();
@@ -4352,7 +5209,7 @@ void NeuroControlWidget::start()
 	if(source_->currentIndex() == 4) { startLslRecordingPlayback(); return; }
 	if(playing_) stop();
 	if(source_->currentIndex() == 2) { appendDiagnostic(tr("Устройство ЭЭГ не подключено. Режим предусмотрен для будущей поддержки оборудования.")); return; }
-	if(source_->currentIndex() == 3) { appendDiagnostic(tr("Для потока LSL используйте кнопку «Подключить»; классификация и управление аватаром отключены.")); return; }
+	if(source_->currentIndex() == 3) { appendDiagnostic(tr("Для потока LSL используйте кнопку «Подключить». Теневая классификация включается отдельно только после проверки совместимости; управление аватаром для LSL отключено.")); return; }
 	if(source_->currentIndex() == 1)
 	{
 		if(synthetic_reader_) { appendDiagnostic(tr("BrainFlow Synthetic Board уже запущен.")); return; }

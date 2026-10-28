@@ -22,6 +22,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QJsonArray>
 #include <QtCore/QMap>
+#include <QtCore/QHash>
 #include <QtCore/QVariantMap>
 #include <QtCore/QStringList>
 #include <QtWidgets/QMainWindow>
@@ -35,6 +36,8 @@ namespace glare { class TaskManager; }
 class QSettings;
 class QSettingsStore;
 class UserDetailsWidget;
+class QtPluginHostAdapter;
+struct PluginPanelRegistration;
 class URLWidget;
 class QLabel;
 class LogWindow;
@@ -59,12 +62,13 @@ class RenderStatsWidget;
 class MiniDmpSender;
 class UpdateManager;
 class AIDockWidget;
+class PluginsDockWidget;
 class NeuroControlWidget;
+class AddObjectDialog;
 class WebcamWindow;
 class AvatarSettingsWidget;
 class ScientificObjectEditor;
 class CulturalObjectEditor;
-class AddObjectDialog;
 class SpotlightEditor;
 class AnimationEditorPanel;
 class AnimationEditorController;
@@ -356,6 +360,11 @@ private:
 	QFrame* world_bottom_bar = nullptr;
 	QToolButton* world_bottom_buttons[7] = {};
 	void configureMainToolbarButtons();
+	void rebuildPluginsMenu();
+	void openPluginsPanel(const QString& plugin_id = QString(), bool show_catalog_tab = false,
+		const QString& plugin_version = QString());
+	void openPluginView(const PluginPanelRegistration& registration);
+	void closePluginView(const QString& plugin_id, const QString& plugin_version, const QString& view_id);
 	void applyMainChromeThemeStylesheet();
 	void updateMenuTooltips();
 	void refreshMapDockText();
@@ -369,6 +378,7 @@ private:
 	void runScreenshotCode();
 	void startMCPClientServerIfEnabled();
 	void stopMCPClientServer();
+	void placeBlenderModelDirect(const QString& path, double distance);
 
 	virtual void dragEnterEvent(QDragEnterEvent* event) override;
 	virtual void dropEvent(QDropEvent* event) override;
@@ -378,7 +388,6 @@ private:
 public:
 	void showErrorNotification(const std::string& msg);
 	void showInfoNotification(const std::string& msg);
-	void placeBlenderModelDirect(const QString& path, double distance);
 
 	//------------------------------------------------- UIInterface -----------------------------------------------------------
 	virtual void appendChatMessage(const std::string& msg) override;
@@ -678,6 +687,8 @@ public:
 	CredentialManager credential_manager;
 	ThreadManager mcp_web_thread_manager;
 	bool mcp_client_server_running;
+	bool mcp_server_world_connected;
+	bool blender_import_dialog_open = false;
 	std::atomic<bool> mcp_shutdown_requested{false};
 	std::atomic<bool> mcp_poly_haven_enabled{false};
 	bool mcp_connection_error_reported;
@@ -687,8 +698,6 @@ public:
 	glare::TaskManager* main_task_manager;
 	glare::TaskManager* high_priority_task_manager;
 
-	bool mcp_server_world_connected;
-	bool blender_import_dialog_open = false;
 	Reference<glare::Allocator> main_mem_allocator;
 
 	//struct _SDL_GameController* game_controller;
@@ -727,6 +736,9 @@ public:
 	QDockWidget* document_editor_dock_widget;
 	DocumentEditorPanel* document_editor_panel;
 	AIDockWidget* ai_dock_widget;
+	PluginsDockWidget* plugins_dock_widget;
+	QtPluginHostAdapter* plugin_host_adapter;
+	QHash<QString, QDockWidget*> plugin_view_docks;
 	ScientificObjectEditor* scientific_object_editor;
 	CulturalObjectEditor* cultural_object_editor;
 	SpotlightEditor* spotlight_editor;

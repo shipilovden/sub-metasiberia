@@ -21,10 +21,30 @@ add_executable(neuro_lsl_recording_roundtrip
     ../acquisition/LslRecordingFile.cpp)
 target_compile_features(neuro_lsl_recording_roundtrip PRIVATE cxx_std_17)
 target_include_directories(neuro_lsl_recording_roundtrip PRIVATE ../acquisition)
+add_executable(neuro_lsl_streaming_resampler
+    StreamingEegResampler.cpp
+    ../acquisition/LslRecordingFile.cpp
+    ../processing/LslShadowPipeline.cpp
+    ../processing/LslAuditReportWriter.cpp
+    ../processing/StreamingEegResampler.cpp
+    ../processing/NeuroClassifier.cpp)
+target_compile_features(neuro_lsl_streaming_resampler PRIVATE cxx_std_17)
+target_include_directories(neuro_lsl_streaming_resampler PRIVATE
+    ../acquisition ../processing ../../third_party/brainflow/third_party/json)
+
+foreach(test_target IN ITEMS neuro_classifier_check neuro_classifier_safety neuro_command_policy
+        neuro_lsl_recording_roundtrip neuro_lsl_streaming_resampler)
+    set_target_properties(${test_target} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_CURRENT_BINARY_DIR}/bin")
+endforeach()
 
 add_test(NAME neuro_classifier_safety COMMAND neuro_classifier_safety)
 add_test(NAME neuro_command_policy COMMAND neuro_command_policy)
 add_test(NAME neuro_lsl_recording_roundtrip COMMAND neuro_lsl_recording_roundtrip)
+add_test(NAME neuro_lsl_streaming_resampler COMMAND neuro_lsl_streaming_resampler)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME neuro_mcp_contracts

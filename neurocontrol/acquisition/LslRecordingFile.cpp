@@ -275,4 +275,11 @@ bool LslRecordingReader::verify(std::string& error)
 	return true;
 }
 
+bool LslRecordingReader::verify(LslRecordingInfo& info, std::string& error)
+{
+	const bool verified = verify(error);
+	info = info_;
+	return verified;
+}
+
 } // namespace neurocontrol

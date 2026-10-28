@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://metasiberia.example/schemas/plugin-worker-protocol-v1.json",
+  "title": "Metasiberia Plugin Worker JSON Lines protocol v1",
+  "type": "object",
+  "required": ["protocolMajor", "protocolMinor", "type"],
+  "properties": {
+    "protocolMajor": { "const": 1 },
+    "protocolMinor": { "type": "integer", "minimum": 0 },
+    "type": {
+      "enum": ["registerCommand", "registerPanel", "registerResult", "invoke", "invokePanelAction", "closeView", "notification", "status", "stop", "sceneSummary", "sceneSummaryResult"]
+    },
+    "requestId": { "type": "string", "maxLength": 64 },
+    "pluginId": { "type": "string", "maxLength": 128 },
+    "pluginVersion": { "type": "string", "maxLength": 64 },
+    "commandId": { "type": "string", "maxLength": 64 },
+    "viewId": { "type": "string", "maxLength": 64 },
+    "actionId": { "type": "string", "maxLength": 64 },
+    "title": { "type": "string", "maxLength": 80 },
+    "body": { "type": "string", "maxLength": 500 },
+    "layout": { "type": "object" },
+    "ok": { "type": "boolean" },
+    "enabled": { "type": "boolean" },
+    "running": { "type": "boolean" },
+    "error": { "type": "string", "maxLength": 500 },
+    "summary": { "$ref": "plugin-api-v1.2.json#/types/SceneSummary" }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "sceneSummary" } }, "required": ["type"] },
+      "then": { "required": ["requestId", "pluginId", "pluginVersion"] }
+    },
+    {
+      "if": { "properties": { "type": { "const": "sceneSummaryResult" } }, "required": ["type"] },
+      "then": { "required": ["requestId", "ok"] }
+    }
+  ]
+}

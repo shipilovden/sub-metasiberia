@@ -1,0 +1,98 @@
+{
+  "$id": "https://metasiberia.example/schemas/plugin-api-v1.2.json",
+  "schemaVersion": 1,
+  "api": { "major": 1, "minor": 2 },
+  "description": "Machine-readable inventory of implemented Metasiberia Plugin API methods. Planned APIs are intentionally omitted.",
+  "runtimes": {
+    "luau": { "status": "implemented", "platforms": ["windows-qt5"] },
+    "javascript": { "status": "not-implemented" },
+    "python": { "status": "not-implemented" },
+    "wasm": { "status": "not-implemented" },
+    "native-cpp": { "status": "not-implemented" },
+    "rust": { "status": "not-implemented" }
+  },
+  "capabilities": {
+    "ui.command": { "status": "implemented", "risk": "ui-registration", "local": true },
+    "ui.panel": { "status": "implemented", "risk": "host-rendered-ui", "local": true },
+    "ui.notification": { "status": "implemented", "risk": "user-visible-output", "local": true },
+    "scene.read.summary": { "status": "implemented", "risk": "read-local-session-state", "local": true }
+  },
+  "methods": {
+    "ui.registerCommand": {
+      "runtime": "luau",
+      "capability": "ui.command",
+      "phase": "startup",
+      "arguments": ["commandId: string[1..64]", "title: string[1..80]", "callback: function"],
+      "returns": "boolean",
+      "limits": { "primaryActionsPerPlugin": 1 }
+    },
+    "ui.registerPanel": {
+      "runtime": "luau",
+      "capability": "ui.panel",
+      "phase": "startup",
+      "arguments": ["viewId: string[1..64]", "title: string[1..80]", "layoutJson: object<=4096 bytes", "onAction: function"],
+      "returns": "boolean",
+      "limits": { "nodes": 64, "depth": 4, "buttonsPerPanel": 64, "textCharacters": 1000 }
+    },
+    "ui.closeView": {
+      "runtime": "luau",
+      "capability": "ui.panel",
+      "phase": "callback",
+      "arguments": [],
+      "returns": "nil"
+    },
+    "ui.showNotification": {
+      "runtime": "luau",
+      "capability": "ui.notification",
+      "phase": "callback",
+      "arguments": ["title: string[1..80]", "body: string[1..500]"],
+      "returns": "nil",
+      "limits": { "perInvocation": 3 }
+    },
+    "scene.getSummary": {
+      "runtime": "luau",
+      "capability": "scene.read.summary",
+      "phase": "startup-or-callback",
+      "arguments": [],
+      "returns": "SceneSummary",
+      "transport": "bounded asynchronous JSON-lines host request with 500ms worker-side deadline",
+      "limits": { "requestsPerPluginRun": 120, "responseBytes": 4096 }
+    }
+  },
+  "types": {
+    "SceneSummary": {
+      "type": "object",
+      "required": ["connected", "server", "camera"],
+      "properties": {
+        "connected": { "type": "boolean" },
+        "server": {
+          "type": "object",
+          "required": ["host", "world"],
+          "properties": {
+            "host": { "type": "string", "maxLength": 253 },
+            "world": { "type": "string", "maxLength": 128 }
+          },
+          "additionalProperties": false
+        },
+        "camera": {
+          "type": "object",
+          "required": ["x", "y", "z"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "z": { "type": "number" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "errors": [
+    { "code": "CAPABILITY_NOT_DECLARED", "meaning": "The package did not request the method's capability." },
+    { "code": "HOST_UNAVAILABLE", "meaning": "The host bridge is not available on the required thread." },
+    { "code": "HOST_TIMEOUT", "meaning": "The host did not answer a bounded request before its deadline." },
+    { "code": "INVALID_HOST_DTO", "meaning": "The host response failed schema or size validation." },
+    { "code": "RUNTIME_STOPPING", "meaning": "The plugin is being disabled." }
+  ]
+}
