@@ -1105,7 +1105,7 @@ private:
 			return;
 
 		const Vec3d player_pos = gui_client->cam_controller.getFirstPersonPosition();
-		const double target_z = player_pos.z > 0.1 ? player_pos.z : PlayerPhysics::getEyeHeight();
+		const double target_z = player_pos.z > 0.1 ? player_pos.z : gui_client->player_physics.getEyeHeightForAvatar();
 		const double heading_deg = Maths::doubleMod(::radToDegree(gui_client->cam_controller.getAngles().x), 360.0);
 		gui_client->visitSubURL(makeMetasiberiaMapLatLonURL(lat, lon, target_z, heading_deg));
 		if(!notification_suffix.empty())
@@ -2183,7 +2183,7 @@ static bool resolveMetasiberiaMapAddressInput(const std::string& input, const GU
 		return false;
 
 	const double current_heading_deg = Maths::doubleMod(::radToDegree(gui_client.cam_controller.getAngles().x), 360.0);
-	const double map_spawn_z = PlayerPhysics::getEyeHeight();
+	const double map_spawn_z = gui_client.player_physics.getEyeHeightForAvatar();
 
 	if(!URLParser::hasSupportedSchemePrefix(trimmed_input) && gui_client.isMetasiberiaMapWorld())
 	{
@@ -9329,7 +9329,7 @@ void MainWindow::on_actionAdd_Camera_triggered()
 	const Vec3d fwd = gui_client.cam_controller.getForwardsVec();
 	const Vec3d right = gui_client.cam_controller.getRightVec();
 	const Vec3d up = gui_client.cam_controller.getUpVec();
-	const Vec3d cam_ob_pos = player_pos + fwd * 2.0f - Vec3d(0,0,PlayerPhysics::getEyeHeight() * 0.4f);
+	const Vec3d cam_ob_pos = player_pos + fwd * 2.0f - Vec3d(0,0,gui_client.player_physics.getEyeHeightForAvatar() * 0.4f);
 	const Vec3d screen_ob_pos = cam_ob_pos + right * 1.2 + up * 0.2;
 
 	// Check permissions for both objects.
@@ -9449,7 +9449,7 @@ void MainWindow::on_actionAdd_Seat_triggered()
 
 	const float seat_w = 0.5f;
 	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + gui_client.cam_controller.getForwardsVec() * 2.0f -
-		Vec3d(0,0,PlayerPhysics::getEyeHeight() * 0.3f);
+		Vec3d(0,0,gui_client.player_physics.getEyeHeightForAvatar() * 0.3f);
 
 	// Check permissions
 	bool ob_pos_in_parcel;
@@ -9500,7 +9500,7 @@ void MainWindow::on_actionAdd_Portal_triggered()
 {
 	const Vec3d ob_pos = gui_client.cam_controller.getFirstPersonPosition() + 
 		removeComponentInDir(gui_client.cam_controller.getForwardsVec(), Vec3d(0,0,1)) * 3.0f - // Forwards from the camera position, parallel to ground plane
-		Vec3d(0,0,PlayerPhysics::getEyeHeight()); // Then drop down to ground level that the player is standing on.
+		Vec3d(0,0,gui_client.player_physics.getEyeHeightForAvatar()); // Then drop down to ground level that the player is standing on.
 
 	// Check permissions
 	bool ob_pos_in_parcel;
@@ -12775,7 +12775,7 @@ void MainWindow::on_actionAddBot_triggered()
 	// Position the bot 3 m in front of the player at ground level.
 	const Vec3d bot_pos = gui_client.cam_controller.getFirstPersonPosition() +
 		removeComponentInDir(gui_client.cam_controller.getForwardsVec(), Vec3d(0, 0, 1)) * 3.0 -
-		Vec3d(0, 0, PlayerPhysics::getEyeHeight());
+		Vec3d(0, 0, gui_client.player_physics.getEyeHeightForAvatar());
 
 	// Heading: face toward the player (opposite of camera forward direction).
 	const Vec3d fwd = gui_client.cam_controller.getForwardsVec();

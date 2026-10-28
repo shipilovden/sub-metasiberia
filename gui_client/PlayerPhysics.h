@@ -45,6 +45,8 @@ public:
 
 	void setStandingShape(PhysicsWorld& physics_world);
 	void setSittingShape(PhysicsWorld& physics_world);
+	void setAvatarEyeHeight(float eye_height);
+	float getEyeHeightForAvatar() const { return avatar_eye_height; }
 
 	Vec3d getCapsuleBottomPosition(); // Get point at the bottom of the player capsule object.
 	void setEyePosition(const Vec3d& new_player_pos, const Vec4f& linear_vel = Vec4f(0,0,0,1)); // Move discontinuously.  Zeroes velocity also.  For teleporting etc.
@@ -107,6 +109,9 @@ public:
 	std::vector<ContactedEvent> contacted_events;
 
 private:
+	void rebuildCharacterShapes();
+	void recreateCharacterForAvatarSize();
+
 	PhysicsWorld* m_physics_world;
 	Vec3f last_xy_plane_vel_rel_ground;
 
@@ -121,6 +126,12 @@ private:
 	bool gravity_enabled;
 
 	bool allow_sliding;
+	bool sitting_shape_active;
+	float avatar_eye_height;
+	float controller_scale;
+	float capsule_radius;
+	float standing_cylinder_height;
+	float sitting_cylinder_height;
 
 	//float time_since_on_ground;
 

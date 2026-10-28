@@ -176,7 +176,7 @@ void AvatarSettingsWidget::onApplyClicked()
 
 	try
 	{
-		gui_client->updateOurAvatarModel(loaded_mesh, result_path, pre_ob_to_world_matrix, loaded_materials);
+		gui_client->updateOurAvatarModel(loaded_mesh, result_path, pre_ob_to_world_matrix, loaded_materials, preview_eye_height_above_ground);
 	}
 	catch(glare::Exception& e)
 	{
@@ -348,6 +348,7 @@ void AvatarSettingsWidget::loadModelIntoPreview(const std::string& local_path, b
 		);
 		foot_bottom_height = grounding.foot_bottom_height;
 		avatar_anchor_height = grounding.anchor_height_from_origin;
+		preview_eye_height_above_ground = grounding.eye_height_above_ground;
 
 		// Populate animation combobox.
 		animationComboBox->clear();

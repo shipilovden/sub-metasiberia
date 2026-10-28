@@ -1781,3 +1781,16 @@ endif()
 if(XR_SUPPORT)
 	target_link_libraries(${CURRENT_TARGET} OpenXR::openxr_loader)
 endif()
+
+if((BUILD_NEUROCONTROL_TESTS OR BUILD_PLUGIN_PACKAGE_TESTS) AND NOT USE_SDL)
+	add_executable(avatar_grounding_tests EXCLUDE_FROM_ALL
+		${CMAKE_SOURCE_DIR}/gui_client/tests/AvatarGroundingTests.cpp
+		${CMAKE_SOURCE_DIR}/gui_client/AvatarGroundingUtils.h)
+	target_include_directories(avatar_grounding_tests PRIVATE ${CMAKE_SOURCE_DIR}/gui_client)
+	set_target_properties(avatar_grounding_tests PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/avatar_grounding_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/avatar_grounding_tests"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/avatar_grounding_tests")
+	add_test(NAME avatar_grounding_profile COMMAND $<TARGET_FILE:avatar_grounding_tests>)
+	set_tests_properties(avatar_grounding_profile PROPERTIES TIMEOUT 5)
+endif()

@@ -625,6 +625,7 @@ public:
 	bool getCurrentXRRawHeadPose(Vec3d& pos_out, Vec3d& angles_out) const;
 	void getCurrentAvatarPoseForNetworking(Vec3d& pos_out, Vec3d& angles_out);
 	void getCurrentListenerPose(Vec3d& pos_out, Vec3d& angles_out) const;
+	void setPlayerAvatarEyeHeight(float eye_height);
 	bool requestXRRecenter();
 	void resetXRTraceCapture();
 	void appendXRTraceSample();
@@ -655,8 +656,8 @@ public:
 		int voxel_subsample_factor, uint64 voxel_hash);
 	void handleUploadedTexture(const OpenGLTextureKey& path, const URLString& URL, const OpenGLTextureRef& opengl_tex, const TextureDataRef& tex_data, const Map2DRef& terrain_map);
 
-	void updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::string& local_model_path, const Matrix4f& pre_ob_to_world_matrix, const std::vector<WorldMaterialRef>& materials);
-	void applyOurAvatarResource(const URLString& mesh_URL, const Matrix4f& pre_ob_to_world_matrix, const std::vector<WorldMaterialRef>& materials);
+	void updateOurAvatarModel(BatchedMeshRef loaded_mesh, const std::string& local_model_path, const Matrix4f& pre_ob_to_world_matrix, const std::vector<WorldMaterialRef>& materials, float eye_height_above_ground = -1.0f);
+	void applyOurAvatarResource(const URLString& mesh_URL, const Matrix4f& pre_ob_to_world_matrix, const std::vector<WorldMaterialRef>& materials, float eye_height_above_ground = -1.0f);
 	bool tryWearVRMObjectAtCursor(bool use_mouse_cursor);
 
 	void setObjectLoadDistance(float new_dist);

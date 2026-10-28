@@ -10,6 +10,7 @@ Copyright Glare Technologies Limited 2022 -
 #include "PhysicsWorld.h"
 #include "PhysicsObject.h"
 #include "JoltUtils.h"
+#include "AvatarGroundingUtils.h"
 #include "../shared/WorldObject.h"
 #include "../shared/LuaScriptEvaluator.h"
 #include <utils/StringUtils.h>
@@ -28,8 +29,6 @@ static const float max_air_speed = 8;
 
 static const float JUMP_PERIOD = 0.1f; // Allow a jump command to be executed even if the player is not quite on the ground yet.
 
-static const float SPHERE_RAD = 0.3f;
-static const float CYLINDER_HEIGHT = 1.3f; // Chosen so the capsule top is about the same height as the head of xbot.glb.  Can test this by jumping into an overhead ledge :)
 static const float EYE_HEIGHT = 1.67f;
 
 
@@ -38,12 +37,18 @@ PlayerPhysics::PlayerPhysics()
 	move_desired_vel(0,0,0),
 	last_jump_time(-1),
 	on_ground(false),
-	fly_mode(false),
 	last_runpressed(false),
-	//time_since_on_ground(0),
-	campos_z_delta(0),
+	fly_mode(false),
 	gravity_enabled(true),
-	allow_sliding(true)
+	allow_sliding(true),
+	sitting_shape_active(false),
+	avatar_eye_height(EYE_HEIGHT),
+	controller_scale(1.0f),
+	capsule_radius(AvatarGrounding::kDefaultPlayerCapsuleRadiusM),
+	standing_cylinder_height(AvatarGrounding::kDefaultPlayerCapsuleCylinderHeightM),
+	sitting_cylinder_height(AvatarGrounding::kDefaultPlayerSittingCylinderHeightM),
+	//time_since_on_ground(0),
+	campos_z_delta(0)
 {
 }
 
@@ -53,35 +58,21 @@ PlayerPhysics::~PlayerPhysics()
 }
 
 
-static const float cCharacterHeightStanding = CYLINDER_HEIGHT;
-static const float cCharacterHeightSitting = 0.3f;
-static const float cCharacterRadiusStanding = SPHERE_RAD;
-
-
 void PlayerPhysics::init(PhysicsWorld& physics_world, const Vec3d& initial_player_pos)
 {
 	m_physics_world = &physics_world;
 	physics_system = physics_world.physics_system;
+	rebuildCharacterShapes();
 
 	// Jolt position is at the bottom of the character controller, substrata position is at eye level.
-	const Vec3d use_player_pos = initial_player_pos - Vec3d(0, 0, EYE_HEIGHT);
+	const Vec3d use_player_pos = initial_player_pos - Vec3d(0, 0, avatar_eye_height);
 
 	// Create virtual character
 	{
-		standing_shape = JPH::RotatedTranslatedShapeSettings(
-			JPH::Vec3(0, 0, 0.5f * cCharacterHeightStanding + cCharacterRadiusStanding), // position
-			JPH::Quat::sRotation(JPH::Vec3(1, 0, 0), Maths::pi_2<float>()), // rotate capsule from extending in the y-axis to the z-axis.
-			new JPH::CapsuleShape(/*inHalfHeightOfCylinder=*/0.5f * cCharacterHeightStanding, /*inRadius=*/cCharacterRadiusStanding)).Create().Get();
-
-		sitting_shape = JPH::RotatedTranslatedShapeSettings(
-			JPH::Vec3(0, 0, 0.5f * cCharacterHeightSitting + cCharacterRadiusStanding), // position
-			JPH::Quat::sRotation(JPH::Vec3(1, 0, 0), Maths::pi_2<float>()), // rotate capsule from extending in the y-axis to the z-axis.
-			new JPH::CapsuleShape(/*inHalfHeightOfCylinder=*/0.5f * cCharacterHeightSitting, /*inRadius=*/cCharacterRadiusStanding)).Create().Get();
-
 		JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
 		settings->mShape = standing_shape;
 		settings->mUp = JPH::Vec3(0, 0, 1); // Set world-space up vector
-		settings->mSupportingVolume = JPH::Plane(JPH::Vec3(0,0,1), -SPHERE_RAD); // Accept contacts that touch the lower sphere of the capsule
+		settings->mSupportingVolume = JPH::Plane(JPH::Vec3(0,0,1), -capsule_radius); // Accept contacts that touch the lower sphere of the capsule
 		settings->mMaxStrength = 1000; // Default pushing force is 100 N, which doesn't seem enough.
 
 		jolt_character = new JPH::CharacterVirtual(settings, toJoltVec3(use_player_pos), JPH::Quat::sIdentity(), physics_world.physics_system);
@@ -98,11 +89,67 @@ void PlayerPhysics::shutdown()
 	jolt_character = NULL;
 	standing_shape = NULL;
 	sitting_shape = NULL;
+	sitting_shape_active = false;
+}
+
+
+void PlayerPhysics::rebuildCharacterShapes()
+{
+	standing_shape = JPH::RotatedTranslatedShapeSettings(
+		JPH::Vec3(0, 0, 0.5f * standing_cylinder_height + capsule_radius),
+		JPH::Quat::sRotation(JPH::Vec3(1, 0, 0), Maths::pi_2<float>()),
+		new JPH::CapsuleShape(/*inHalfHeightOfCylinder=*/0.5f * standing_cylinder_height, /*inRadius=*/capsule_radius)).Create().Get();
+
+	sitting_shape = JPH::RotatedTranslatedShapeSettings(
+		JPH::Vec3(0, 0, 0.5f * sitting_cylinder_height + capsule_radius),
+		JPH::Quat::sRotation(JPH::Vec3(1, 0, 0), Maths::pi_2<float>()),
+		new JPH::CapsuleShape(/*inHalfHeightOfCylinder=*/0.5f * sitting_cylinder_height, /*inRadius=*/capsule_radius)).Create().Get();
+}
+
+
+void PlayerPhysics::recreateCharacterForAvatarSize()
+{
+	if(!jolt_character || !physics_system)
+		return;
+
+	const JPH::RVec3 position = jolt_character->GetPosition();
+	const JPH::Quat rotation = jolt_character->GetRotation();
+	const JPH::Vec3 linear_velocity = jolt_character->GetLinearVelocity();
+
+	JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
+	settings->mShape = sitting_shape_active ? sitting_shape : standing_shape;
+	settings->mUp = JPH::Vec3(0, 0, 1);
+	settings->mSupportingVolume = JPH::Plane(JPH::Vec3(0, 0, 1), -capsule_radius);
+	settings->mMaxStrength = 1000;
+
+	JPH::Ref<JPH::CharacterVirtual> resized_character = new JPH::CharacterVirtual(settings, position, rotation, physics_system);
+	resized_character->SetListener(this);
+	resized_character->SetLinearVelocity(linear_velocity);
+	jolt_character = resized_character;
+}
+
+
+void PlayerPhysics::setAvatarEyeHeight(float eye_height)
+{
+	const float valid_eye_height = AvatarGrounding::sanitiseAvatarEyeHeight(eye_height);
+	const AvatarGrounding::PlayerControllerProfile profile = AvatarGrounding::computePlayerControllerProfile(valid_eye_height);
+	const bool dimensions_changed = std::fabs(profile.scale - controller_scale) > 1.0e-4f;
+	avatar_eye_height = valid_eye_height;
+	if(!dimensions_changed)
+		return;
+
+	controller_scale = profile.scale;
+	capsule_radius = profile.radius;
+	standing_cylinder_height = profile.standing_cylinder_height;
+	sitting_cylinder_height = profile.sitting_cylinder_height;
+	rebuildCharacterShapes();
+	recreateCharacterForAvatarSize();
 }
 
 
 void PlayerPhysics::setStandingShape(PhysicsWorld& physics_world)
 {
+	sitting_shape_active = false;
 	jolt_character->SetShape(standing_shape, FLT_MAX, physics_world.physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING), 
 		physics_world.physics_system->GetDefaultLayerFilter(Layers::MOVING), /*player_physics_body_filter*/{}, {}, *physics_world.temp_allocator);
 }
@@ -110,6 +157,7 @@ void PlayerPhysics::setStandingShape(PhysicsWorld& physics_world)
 
 void PlayerPhysics::setSittingShape(PhysicsWorld& physics_world)
 {
+	sitting_shape_active = true;
 	jolt_character->SetShape(sitting_shape, FLT_MAX, physics_world.physics_system->GetDefaultBroadPhaseLayerFilter(Layers::MOVING), 
 		physics_world.physics_system->GetDefaultLayerFilter(Layers::MOVING), /*player_physics_body_filter*/{}, {}, *physics_world.temp_allocator);
 }
@@ -128,7 +176,7 @@ Vec3d PlayerPhysics::getCapsuleBottomPosition()
 void PlayerPhysics::setEyePosition(const Vec3d& new_player_pos, const Vec4f& linear_vel) // Move discontinuously.  For teleporting etc.
 {
 	// Jolt position is at the bottom of the character controller, substrata position is at eye level.
-	setCapsuleBottomPosition(new_player_pos - Vec3d(0, 0, EYE_HEIGHT), linear_vel);
+	setCapsuleBottomPosition(new_player_pos - Vec3d(0, 0, avatar_eye_height), linear_vel);
 }
 
 void PlayerPhysics::setCapsuleBottomPosition(const Vec3d& new_player_pos, const Vec4f& linear_vel)
@@ -177,12 +225,12 @@ void PlayerPhysics::processStrafeRight(float factor, bool runpressed, CameraCont
 }
 
 
-static float computeSubmergedFraction(const Vec4f foot_pos, PhysicsWorld& physics_world)
+static float computeSubmergedFraction(const Vec4f foot_pos, PhysicsWorld& physics_world, float avatar_eye_height)
 {
 	if(physics_world.getWaterBuoyancyEnabled())
 	{
 		float dist_foot_under_water = physics_world.getWaterZ() - foot_pos[2];
-		const float fraction_submerged = myClamp(dist_foot_under_water / EYE_HEIGHT, 0.f, 1.f);
+		const float fraction_submerged = myClamp(dist_foot_under_water / avatar_eye_height, 0.f, 1.f);
 		return fraction_submerged;
 	}
 	else
@@ -190,9 +238,9 @@ static float computeSubmergedFraction(const Vec4f foot_pos, PhysicsWorld& physic
 }
 
 
-static bool isUnderWater(const Vec4f foot_pos, PhysicsWorld& physics_world)
+static bool isUnderWater(const Vec4f foot_pos, PhysicsWorld& physics_world, float avatar_eye_height)
 {
-	return computeSubmergedFraction(foot_pos, physics_world) > 0.3f;
+	return computeSubmergedFraction(foot_pos, physics_world, avatar_eye_height) > 0.3f;
 }
 
 
@@ -200,7 +248,7 @@ void PlayerPhysics::processMoveUp(float factor, bool runpressed, CameraControlle
 {
 	last_runpressed = runpressed;
 
-	const bool underwater = isUnderWater(/*foot pos=*/toVec4fPos(jolt_character->GetPosition()), *m_physics_world);
+	const bool underwater = isUnderWater(/*foot pos=*/toVec4fPos(jolt_character->GetPosition()), *m_physics_world, avatar_eye_height);
 
 	if(fly_mode || (cam.current_cam_mode == CameraController::CameraMode_FreeCamera) || underwater)
 		move_desired_vel += Vec3f(0,0,1) * factor * move_speed * doRunFactor(runpressed);
@@ -262,7 +310,7 @@ UpdateEvents PlayerPhysics::update(PhysicsWorld& physics_world, const PlayerPhys
 	{
 		Vec3f parallel_vel = move_desired_vel;
 
-		const float fraction_submerged = computeSubmergedFraction(/*foot pos=*/toVec4fPos(jolt_character->GetPosition()), physics_world);
+		const float fraction_submerged = computeSubmergedFraction(/*foot pos=*/toVec4fPos(jolt_character->GetPosition()), physics_world, avatar_eye_height);
 		if(fraction_submerged < 0.3f) // If not underwater (to any significant amount):
 			parallel_vel.z = 0;
 
@@ -458,7 +506,7 @@ UpdateEvents PlayerPhysics::update(PhysicsWorld& physics_world, const PlayerPhys
 
 
 	const JPH::Vec3 char_pos = jolt_character->GetPosition();
-	campos_out = Vec4f(char_pos.GetX(), char_pos.GetY(), char_pos.GetZ() + EYE_HEIGHT - campos_z_delta, 1.f);
+	campos_out = Vec4f(char_pos.GetX(), char_pos.GetY(), char_pos.GetZ() + avatar_eye_height - campos_z_delta, 1.f);
 
 	//if(!/*onground*/(jolt_character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround))
 	//	time_since_on_ground += dtime;
@@ -550,12 +598,12 @@ void PlayerPhysics::debugGetCollisionSpheres(const Vec4f& campos, std::vector<js
 	// Visualise virtual character object.  The character object is a capsule, but visualise as 3 spheres.
 	spheres_out.resize(0);
 	
-	const float cylinder_height = (jolt_character->GetShape() == this->standing_shape) ? cCharacterHeightStanding : cCharacterHeightSitting;
+	const float cylinder_height = sitting_shape_active ? sitting_cylinder_height : standing_cylinder_height;
 
 	if(jolt_character)
 	{
-		spheres_out.push_back(js::BoundingSphere((toVec3f(jolt_character->GetPosition()) + Vec3f(0, 0, SPHERE_RAD)).toVec4fPoint(),								SPHERE_RAD));
-		spheres_out.push_back(js::BoundingSphere((toVec3f(jolt_character->GetPosition()) + Vec3f(0, 0, SPHERE_RAD + cylinder_height / 2)).toVec4fPoint(),		SPHERE_RAD));
-		spheres_out.push_back(js::BoundingSphere((toVec3f(jolt_character->GetPosition()) + Vec3f(0, 0, SPHERE_RAD + cylinder_height)).toVec4fPoint(),			SPHERE_RAD));
+		spheres_out.push_back(js::BoundingSphere((toVec3f(jolt_character->GetPosition()) + Vec3f(0, 0, capsule_radius)).toVec4fPoint(),								capsule_radius));
+		spheres_out.push_back(js::BoundingSphere((toVec3f(jolt_character->GetPosition()) + Vec3f(0, 0, capsule_radius + cylinder_height / 2)).toVec4fPoint(),	capsule_radius));
+		spheres_out.push_back(js::BoundingSphere((toVec3f(jolt_character->GetPosition()) + Vec3f(0, 0, capsule_radius + cylinder_height)).toVec4fPoint(),			capsule_radius));
 	}
 }

@@ -142,6 +142,7 @@ public:
 		const Matrix4f& pre_ob_to_world_matrix, uint32 anim_state, double cur_time, double dt, const PoseConstraint& pose_constraint, AnimEvents& anim_events_out);
 
 	void build(bool our_avatar);
+	float getEyeHeightAboveGround() const { return avatar_eye_height_above_ground; }
 	void updateGearBones();
 	//void create(OpenGLEngine& engine, const std::string& URL);
 

@@ -77,4 +77,5 @@ public:
 	std::vector<WorldMaterialRef> loaded_materials;
 	std::string result_path;
 	Matrix4f pre_ob_to_world_matrix;
+	float preview_eye_height_above_ground = 1.67f;
 };
