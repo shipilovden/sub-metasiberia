@@ -220,7 +220,7 @@ static std::string baseToolsListJSON()
     },
     {
       "name": "validate_mesh",
-      "description": "Read-only structural diagnostics for a native mesh up to 250000 triangles: closed/manifold edges, winding consistency, signed volume, duplicate/degenerate faces, vertex normals, UV triangle area and connected components. Also checks whether the mesh passes the separately bounded Boolean preflight (16384 triangles per operand). Validation does not imply that a large mesh is suitable for Boolean operations.",
+      "description": "Read-only structural diagnostics for a native mesh up to 250000 triangles: closed/manifold edges, winding consistency, signed volume, duplicate/degenerate faces, vertex normals, UV triangle area and connected components. Also checks whether the mesh passes the separately bounded Boolean preflight (100000 triangles per operand). Validation does not imply that a large mesh is suitable for Boolean operations.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -715,8 +715,8 @@ static std::string baseToolsListJSON()
                 "sections": {
                   "type": "array",
                   "minItems": 2,
-                  "maxItems": 32,
-                  "description": "loft only: horizontal cross-sections in local metres, ordered by z with at least 0.001m spacing. Every simple XY profile must have the same 3..64 vertices, same winding and corresponding starting vertex. Concave contours allowed; no duplicate/collinear vertices, holes, collapsed tips or self intersections. Ends have flat caps; sides use smooth shading by default (smooth=false for facets). Add sections/contour vertices for finer silhouette. size/rotation/center apply afterwards. Up to 4092 triangles per loft; final closure and intersections are checked. Rotate the part to loft along another world axis.",
+                  "maxItems": 780,
+                  "description": "loft only: horizontal cross-sections in local metres, ordered by z with at least 0.001m spacing. Every simple XY profile must have the same 3..64 vertices, same winding and corresponding starting vertex. Concave contours allowed; no duplicate/collinear vertices, holes, collapsed tips or self intersections. Ends have flat caps; sides use smooth shading by default (smooth=false for facets). Add sections/contour vertices for finer silhouette. size/rotation/center apply afterwards. Up to 100000 triangles per loft; final closure and intersections are checked within the shared operation work budget. Rotate the part to loft along another world axis.",
                   "items": {
                     "type": "object",
                     "properties": {
@@ -772,7 +772,7 @@ static std::string baseToolsListJSON()
                 },
                 "operation": {
                   "enum": ["add", "union", "subtract", "intersect"],
-                  "description": "Optional ordered Boolean step. add appends this part as a separate shell. union/subtract/intersect applies this closed primitive to the accumulated closed mesh; put one base solid first. Boolean operands are limited to 16384 triangles each."
+                  "description": "Optional ordered Boolean step. add appends this part as a separate shell. union/subtract/intersect applies this closed primitive to the accumulated closed mesh; put one base solid first. Boolean operands are limited to 100000 triangles each."
                 },
                 "path": {
                   "type": "array",
@@ -1665,7 +1665,7 @@ static std::string baseToolsListJSON()
     },
     {
       "name": "boolean_mesh",
-      "description": "Compute a bounded union, subtraction or intersection for any two editable closed native .bmesh objects, even when their world positions, rotations or scales differ; the server transforms the operand into the target's local space automatically. Use union to permanently join overlapping parts, subtraction for a hole/cutout, and intersection for their shared volume. Replaces replace_uid, retains its identity/materials and consumes operand_uid. Inputs are limited to 16384 triangles each; closed manifold solids with a small deliberate overlap work best for joins; open/nonmanifold meshes and other object types are rejected.",
+      "description": "Compute a bounded union, subtraction or intersection for any two editable closed native .bmesh objects, even when their world positions, rotations or scales differ; the server transforms the operand into the target's local space automatically. Use union to permanently join overlapping parts, subtraction for a hole/cutout, and intersection for their shared volume. Replaces replace_uid, retains its identity/materials and consumes operand_uid. Inputs are limited to 100000 triangles each; closed manifold solids with a small deliberate overlap work best for joins; open/nonmanifold meshes and other object types are rejected.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1702,13 +1702,13 @@ static std::string baseToolsListJSON()
     },
     {
       "name": "edit_mesh_topology",
-      "description": "Delete selected triangles (also works on open/high-triangle meshes), extrude or inset one planar region, assign a material to selected triangles, or bevel explicitly selected edges on a convex closed native mesh. Use get_geometry triangle indices from the exact UID; deletion preserves all unselected faces, materials and the UID, and does not require a closed mesh. Other face geometry operations require one connected, coplanar region with a simple boundary; edge bevel is limited to 4096 triangles.",
+      "description": "Edit a native mesh of up to 100000 triangles by deleting up to 100000 selected faces, extruding or insetting one planar region, assigning a material, or beveling selected edges on a convex closed mesh. Use get_geometry triangle indices from the exact UID; deletion preserves all unselected faces, materials and the UID. CPU-heavy operations are bounded by an operation work budget.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "replace_uid": {"type": "integer", "minimum": 0},
           "mode": {"type": "string", "enum": ["delete_faces", "extrude_faces", "inset_faces", "set_face_material", "bevel_edges"]},
-)json" + R"json(          "faces": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 1, "maxItems": 10000, "description": "Global triangle indices from get_geometry: page offset plus each row's zero-based position; required for face modes. delete_faces removes exactly these triangles without requiring closed/manifold topology."},
+ )json" + R"json(          "faces": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 1, "maxItems": 100000, "description": "Global triangle indices from get_geometry: page offset plus each row's zero-based position; required for face modes. delete_faces removes exactly these triangles from a mesh of up to 100000 triangles without requiring closed/manifold topology."},
           "distance": {"type": "number", "minimum": -1000, "maximum": 1000, "description": "extrude_faces: nonzero distance along the region normal (negative moves inward). inset_faces: positive inset width."},
           "edges": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}}, "description": "Pairs of local-space endpoint coordinates matching edges returned by get_geometry; required for bevel_edges."},
           "width": {"type": "number", "minimum": 0.0001, "maximum": 100, "description": "Bevel width measured from the selected convex edge."},

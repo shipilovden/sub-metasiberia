@@ -15,11 +15,17 @@ Copyright Glare Technologies Limited 2022 -
 class OpenGLMeshRenderData;
 class MeshManager;
 
+namespace AvatarModelClassification
+{
+	bool isWearableAvatar(const OpenGLMeshRenderData& mesh_data);
+}
+
 
 struct MeshData
 {
 	MeshData(const URLString& model_URL_, Reference<OpenGLMeshRenderData> gl_meshdata_, MeshManager* mesh_manager_);
 	const bool source_is_vrm; // Retargeting replaces the VRM node map; retain the source identity.
+	const bool is_humanoid_avatar; // Derived from the decoded rig; arbitrary animation alone is not enough.
 
 	//------------------- Custom ReferenceCounted stuff, so we can call meshDataBecameUnused() ---------------------
 	/// Increment reference count

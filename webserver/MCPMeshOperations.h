@@ -39,13 +39,15 @@ struct Vertex { Vec3 position,normal; double u=0,v=0; };
 struct Triangle { std::array<Vertex,3> vertices; unsigned int material=0; };
 using Mesh = std::vector<Triangle>;
 
-// Boolean-specific limits; other editing operations keep their smaller budgets.
-static constexpr size_t MAX_BOOLEAN_INPUT_TRIANGLES=16384;
-static constexpr size_t MAX_BOOLEAN_OUTPUT_TRIANGLES=100000;
+// Shared hard ceiling for a single mesh operation. CPU-heavy algorithms also
+// consume Detail::Budget so the larger ceiling cannot cause unbounded work.
+static constexpr size_t MAX_OPERATION_TRIANGLES=100000;
+static constexpr size_t MAX_BOOLEAN_INPUT_TRIANGLES=MAX_OPERATION_TRIANGLES;
+static constexpr size_t MAX_BOOLEAN_OUTPUT_TRIANGLES=MAX_OPERATION_TRIANGLES;
 
 namespace Detail {
 // These limits bound both memory growth and adversarial BSP/edge-conformance work.
-static constexpr size_t MAX_INPUT_TRIANGLES=4096, MAX_OUTPUT_TRIANGLES=40000;
+static constexpr size_t MAX_INPUT_TRIANGLES=MAX_OPERATION_TRIANGLES, MAX_OUTPUT_TRIANGLES=MAX_OPERATION_TRIANGLES;
 static constexpr size_t MAX_VALIDATION_TRIANGLES=250000;
 struct Budget {
 	size_t work=0,fragments=0;
@@ -457,7 +459,7 @@ inline ValidationReport validateMesh(const Mesh& mesh) {
 // exact-predicate CAD kernel. No world state changes occur before a complete result is returned.
 inline Mesh booleanMesh(const Mesh& a,const Mesh& b,const std::string& operation) {
 	if(operation!="union"&&operation!="subtract"&&operation!="intersect") throw std::runtime_error("Boolean operation must be union, subtract or intersect.");
-	if(a.size()>MAX_BOOLEAN_INPUT_TRIANGLES||b.size()>MAX_BOOLEAN_INPUT_TRIANGLES) throw std::runtime_error("Boolean operands are limited to 16384 triangles each; simplify or split larger operands.");
+	if(a.size()>MAX_BOOLEAN_INPUT_TRIANGLES||b.size()>MAX_BOOLEAN_INPUT_TRIANGLES) throw std::runtime_error("Boolean operands are limited to 100000 triangles each; simplify or split larger operands.");
 	const double eps=std::max(Detail::tolerance(a),Detail::tolerance(b));validateClosed(a,eps);validateClosed(b,eps);
 	Detail::Budget budget;Detail::rejectSelfIntersections(a,eps,budget);Detail::rejectSelfIntersections(b,eps,budget);
 	Detail::validateShellOrientations(a,eps,budget);Detail::validateShellOrientations(b,eps,budget);
@@ -556,13 +558,14 @@ inline Mesh extrudeFaceRegion(const Mesh& input,const std::vector<size_t>& selec
 		Vertex va;va.position=a;va.normal=side;va.u=0;va.v=0;Vertex vb=va;vb.position=b;vb.u=length(b-a);Vertex vbp=vb;vbp.position=bp;vbp.v=std::abs(distance);Vertex vap=va;vap.position=ap;vap.v=std::abs(distance);
 		t0.vertices={{va,vb,vbp}};t1.vertices={{va,vbp,vap}};out.push_back(t0);out.push_back(t1);
 	}
-	if(out.size()>Detail::MAX_OUTPUT_TRIANGLES) throw std::runtime_error("Extrusion exceeds the 40000 triangle operation limit.");
+	if(out.size()>Detail::MAX_OUTPUT_TRIANGLES) throw std::runtime_error("Extrusion exceeds the 100000 triangle operation limit.");
 	Detail::tolerance(out);return out;
 }
 
 inline Mesh insetFaceRegion(const Mesh& input,const std::vector<size_t>& selected,double amount) {
 	if(!std::isfinite(amount)||amount<=0||amount>1000) throw std::runtime_error("Inset distance must be positive and within 1000 metres.");
 	const double eps=Detail::tolerance(input);const FaceRegion region=planarFaceRegion(input,selected,eps);const Vec3 origin=region.welded[region.boundary[0]];
+	Detail::Budget budget;
 	Vec3 u=unit(region.welded[region.boundary[1]]-origin),v=unit(cross(region.normal,u));if(length(u)<.5||length(v)<.5) throw std::runtime_error("Cannot form a local frame for the selected face region.");
 	std::vector<std::array<double,2>> p;for(size_t index:region.boundary) { const Vec3 d=region.welded[index]-origin;p.push_back({dot(d,u),dot(d,v)}); }
 	auto cross2=[](const std::array<double,2>& a,const std::array<double,2>& b,const std::array<double,2>& c){return (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);};
@@ -590,6 +593,7 @@ inline Mesh insetFaceRegion(const Mesh& input,const std::vector<size_t>& selecte
 			std::abs(cross2(inner[(i+inner.size()-1)%inner.size()],inner[i],inner[(i+1)%inner.size()]))<=eps*eps)
 			throw std::runtime_error("Inset distance collapses the inner region.");
 		for(size_t j=i+1;j<inner.size();++j) {
+			budget.tick();
 			if(j==i || j==(i+1)%inner.size() || i==(j+1)%inner.size()) continue;
 			if(intersects(inner[i],inner[(i+1)%inner.size()],inner[j],inner[(j+1)%inner.size()]))
 				throw std::runtime_error("Inset distance makes the inner boundary self-intersect; reduce the inset distance.");
@@ -598,6 +602,7 @@ inline Mesh insetFaceRegion(const Mesh& input,const std::vector<size_t>& selecte
 	auto insideOriginal=[&](const std::array<double,2>& q) {
 		bool inside=false;
 		for(size_t i=0,j=p.size()-1;i<p.size();j=i++) {
+			budget.tick();
 			const auto& a=p[i];const auto& b=p[j];
 			if(((a[1]>q[1])!=(b[1]>q[1])) && q[0]<(b[0]-a[0])*(q[1]-a[1])/(b[1]-a[1])+a[0]) inside=!inside;
 		}
@@ -614,16 +619,16 @@ inline Mesh insetFaceRegion(const Mesh& input,const std::vector<size_t>& selecte
 	}
 	std::vector<size_t> polygon(inner.size());for(size_t i=0;i<polygon.size();++i) polygon[i]=i;
 	while(polygon.size()>2) {
-		bool found=false;for(size_t i=0;i<polygon.size();++i) { const size_t a=polygon[(i+polygon.size()-1)%polygon.size()],b=polygon[i],c=polygon[(i+1)%polygon.size()];if(cross2(inner[a],inner[b],inner[c])<=eps*eps) continue;
-			bool occupied=false;for(size_t k:polygon) if(k!=a&&k!=b&&k!=c&&cross2(inner[a],inner[b],inner[k])>=-eps&&cross2(inner[b],inner[c],inner[k])>=-eps&&cross2(inner[c],inner[a],inner[k])>=-eps) { occupied=true;break; }
+		bool found=false;for(size_t i=0;i<polygon.size();++i) { budget.tick();const size_t a=polygon[(i+polygon.size()-1)%polygon.size()],b=polygon[i],c=polygon[(i+1)%polygon.size()];if(cross2(inner[a],inner[b],inner[c])<=eps*eps) continue;
+			bool occupied=false;for(size_t k:polygon) { budget.tick();if(k!=a&&k!=b&&k!=c&&cross2(inner[a],inner[b],inner[k])>=-eps&&cross2(inner[b],inner[c],inner[k])>=-eps&&cross2(inner[c],inner[a],inner[k])>=-eps) { occupied=true;break; } }
 			if(occupied) continue;Triangle t;t.material=region.material;auto vertex=[&](size_t k){Vertex z;z.position=inner3[k];z.normal=region.normal;z.u=inner[k][0];z.v=inner[k][1];return z;};t.vertices={{vertex(a),vertex(b),vertex(c)}};out.push_back(t);polygon.erase(polygon.begin()+i);found=true;break;
 		}if(!found) throw std::runtime_error("Cannot triangulate inset region.");
 	}
-	if(out.size()>Detail::MAX_OUTPUT_TRIANGLES) throw std::runtime_error("Inset exceeds the 40000 triangle operation limit.");Detail::tolerance(out);return out;
+	if(out.size()>Detail::MAX_OUTPUT_TRIANGLES) throw std::runtime_error("Inset exceeds the 100000 triangle operation limit.");Detail::tolerance(out);return out;
 }
 
 inline Mesh bevelEdges(const Mesh& input,const std::vector<std::array<Vec3,2>>& requested,double width,unsigned int bevel_material) {
-	if(input.empty()||input.size()>Detail::MAX_INPUT_TRIANGLES) throw std::runtime_error("Arbitrary edge bevel is limited to closed meshes with at most 4096 triangles.");
+	if(input.empty()||input.size()>Detail::MAX_INPUT_TRIANGLES) throw std::runtime_error("Arbitrary edge bevel is limited to closed meshes with at most 100000 triangles.");
 	if(requested.empty()||requested.size()>64||!std::isfinite(width)||width<=0||width>100) throw std::runtime_error("Select 1..64 mesh edges and a positive bevel width.");
 	const double eps=Detail::tolerance(input);validateClosed(input,eps);Detail::Welder weld(eps);std::vector<std::array<size_t,3>> ids(input.size());
 	for(size_t i=0;i<input.size();++i) for(int j=0;j<3;++j) ids[i][j]=weld.add(input[i].vertices[j].position);
@@ -640,8 +645,12 @@ inline Mesh bevelEdges(const Mesh& input,const std::vector<std::array<Vec3,2>>& 
 		Detail::Plane plane;plane.normal=bisector;plane.distance=dot(bisector,weld.points[found.a])-width*half_cos;cuts.push_back(plane);
 	}
 	// Keep the bounded convex-shell restriction: it makes each edge plane a local ridge cut.
-	for(const Detail::Polygon& face:polygons) for(const Vec3& point:weld.points) if(dot(face.plane.normal,point)>face.plane.distance+eps*4) throw std::runtime_error("Arbitrary edge bevel currently requires one convex closed mesh.");
+	// Charge the all-pairs convexity check to the same work budget as clipping below.
 	Detail::Budget budget;
+	for(const Detail::Polygon& face:polygons) for(const Vec3& point:weld.points) {
+		budget.tick();
+		if(dot(face.plane.normal,point)>face.plane.distance+eps*4) throw std::runtime_error("Arbitrary edge bevel currently requires one convex closed mesh.");
+	}
 	for(const Detail::Plane& plane:cuts) {
 		std::vector<Detail::Polygon> kept;std::vector<Vertex> cap_points;
 		for(const Detail::Polygon& face:polygons) {
@@ -678,7 +687,7 @@ struct Deformation {
 // Smoothing pins open/nonmanifold boundaries. Large deformations can still self-intersect;
 // Boolean operations subsequently validate them and reject invalid operands.
 inline Mesh deformMesh(const Mesh& input,const Deformation& op) {
-	if(input.empty()||input.size()>40000) throw std::runtime_error("Deformation requires 1..40000 triangles.");
+	if(input.empty()||input.size()>Detail::MAX_INPUT_TRIANGLES) throw std::runtime_error("Deformation requires 1..100000 triangles.");
 	if(!finite(op.center)||!finite(op.direction)||!std::isfinite(op.radius)||!std::isfinite(op.strength)||!std::isfinite(op.min)||!std::isfinite(op.max)||!std::isfinite(op.amount)) throw std::runtime_error("Deformation parameters must be finite.");
 	const bool brush=op.mode=="push"||op.mode=="inflate"||op.mode=="smooth";
 	if(!brush&&op.mode!="twist"&&op.mode!="taper") throw std::runtime_error("Unknown deformation mode.");

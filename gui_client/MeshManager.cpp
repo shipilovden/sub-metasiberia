@@ -8,10 +8,171 @@ Copyright Glare Technologies Limited 2022 -
 
 #include <opengl/OpenGLEngine.h>
 #include <opengl/OpenGLMeshRenderData.h>
+#include <graphics/AnimationData.h>
 #include <utils/PlatformUtils.h>
+#include <algorithm>
+#include <initializer_list>
+
+
+namespace
+{
+	std::string normaliseHumanoidNodeName(const std::string& node_name)
+	{
+		// GLB exporters commonly qualify bone names with an armature or Mixamo prefix.
+		const size_t separator = node_name.find_last_of(":|/");
+		const size_t start = separator == std::string::npos ? 0 : separator + 1;
+		std::string result;
+		for(size_t i = start; i < node_name.size(); ++i)
+		{
+			const char c = node_name[i];
+			if(c >= 'A' && c <= 'Z') result.push_back((char)(c - 'A' + 'a'));
+			else if((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') result.push_back(c);
+		}
+		if(result.compare(0, 10, "mixamorig_") == 0)
+			result.erase(0, 10);
+		return result;
+	}
+
+	bool isJoint(const AnimationData& animation_data, int node_index)
+	{
+		return std::find(animation_data.joint_nodes.begin(), animation_data.joint_nodes.end(), node_index) != animation_data.joint_nodes.end();
+	}
+
+	int findNodeWithAlias(const AnimationData& animation_data, std::initializer_list<const char*> aliases)
+	{
+		for(const char* alias : aliases)
+		{
+			int match = -1;
+			for(size_t i = 0; i < animation_data.nodes.size(); ++i)
+				if(normaliseHumanoidNodeName(animation_data.nodes[i].name) == alias)
+				{
+					if(match != -1) return -1; // Ambiguous duplicate humanoid bone name.
+					match = (int)i;
+				}
+			if(match != -1) return match;
+		}
+		return -1;
+	}
+
+	bool isDescendantOf(const AnimationData& animation_data, int node_index, int ancestor_index)
+	{
+		// Bound traversal so malformed parent cycles cannot stall asset loading.
+		for(size_t steps = 0; steps < animation_data.nodes.size() && node_index >= 0 && node_index < (int)animation_data.nodes.size(); ++steps)
+		{
+			if(node_index == ancestor_index) return true;
+			node_index = animation_data.nodes[node_index].parent_index;
+		}
+		return false;
+	}
+
+	bool isHumanoidJointName(const std::string& name)
+	{
+		const std::string bone = normaliseHumanoidNodeName(name);
+		return bone == "hips" || bone == "pelvis" || bone == "spine" || bone == "spine1" || bone == "spine2" ||
+			bone == "chest" || bone == "upperchest" || bone == "neck" || bone == "head" ||
+			bone == "leftshoulder" || bone == "leftarm" || bone == "leftupperarm" || bone == "leftforearm" || bone == "leftlowerarm" || bone == "lefthand" ||
+			bone == "rightshoulder" || bone == "rightarm" || bone == "rightupperarm" || bone == "rightforearm" || bone == "rightlowerarm" || bone == "righthand" ||
+			bone == "leftupleg" || bone == "leftupperleg" || bone == "leftleg" || bone == "leftlowerleg" || bone == "leftfoot" ||
+			bone == "rightupleg" || bone == "rightupperleg" || bone == "rightleg" || bone == "rightlowerleg" || bone == "rightfoot";
+	}
+
+	bool hasHumanoidSkeleton(const AnimationData& animation_data)
+	{
+		if(animation_data.joint_nodes.empty() || animation_data.nodes.empty()) return false;
+		for(int joint_node : animation_data.joint_nodes)
+			if(joint_node < 0 || joint_node >= (int)animation_data.nodes.size()) return false;
+
+		int hips = -1;
+		std::vector<int> required_nodes;
+		if(animation_data.vrm_data.nonNull())
+		{
+			// VRM's humanBones map is the format-level humanoid declaration. Verify
+			// that its core bones are present in the decoded skin hierarchy.
+			const char* required_vrm_bones[] = {
+				"hips", "spine", "head",
+				"leftUpperArm", "leftLowerArm", "rightUpperArm", "rightLowerArm",
+				"leftUpperLeg", "leftLowerLeg", "leftFoot", "rightUpperLeg", "rightLowerLeg", "rightFoot"
+			};
+			const auto& human_bones = animation_data.vrm_data->human_bones;
+			for(const char* bone_name : required_vrm_bones)
+			{
+				const auto it = human_bones.find(bone_name);
+				if(it == human_bones.end() || it->second.node_index < 0 || it->second.node_index >= (int)animation_data.nodes.size() || !isJoint(animation_data, it->second.node_index))
+					return false;
+				if(std::find(required_nodes.begin(), required_nodes.end(), it->second.node_index) != required_nodes.end())
+					return false; // Distinct humanoid roles cannot resolve to the same joint.
+				if(std::string(bone_name) == "hips") hips = it->second.node_index;
+				required_nodes.push_back(it->second.node_index);
+			}
+		}
+		else
+		{
+			// Ordinary GLB models need a complete conventional humanoid rig. A
+			// generic animated armature (for example, a waving flag) is not enough.
+			hips = findNodeWithAlias(animation_data, {"hips", "pelvis"});
+			const int required[] = {
+				findNodeWithAlias(animation_data, {"spine", "spine1", "chest", "upperchest", "spine2"}),
+				findNodeWithAlias(animation_data, {"head"}),
+				findNodeWithAlias(animation_data, {"leftarm", "leftupperarm"}),
+				findNodeWithAlias(animation_data, {"leftforearm", "leftlowerarm"}),
+				findNodeWithAlias(animation_data, {"rightarm", "rightupperarm"}),
+				findNodeWithAlias(animation_data, {"rightforearm", "rightlowerarm"}),
+				findNodeWithAlias(animation_data, {"leftupleg", "leftupperleg"}),
+				findNodeWithAlias(animation_data, {"leftleg", "leftlowerleg"}),
+				findNodeWithAlias(animation_data, {"leftfoot"}),
+				findNodeWithAlias(animation_data, {"rightupleg", "rightupperleg"}),
+				findNodeWithAlias(animation_data, {"rightleg", "rightlowerleg"}),
+				findNodeWithAlias(animation_data, {"rightfoot"})
+			};
+			if(hips < 0 || !isJoint(animation_data, hips)) return false;
+			required_nodes.push_back(hips);
+			for(int node : required)
+			{
+				if(node < 0 || !isJoint(animation_data, node)) return false;
+				required_nodes.push_back(node);
+			}
+		}
+
+		if(hips < 0) return false;
+		for(int node : required_nodes)
+			if(!isDescendantOf(animation_data, node, hips)) return false;
+		return true;
+	}
+}
+
+
+bool AvatarModelClassification::isWearableAvatar(const OpenGLMeshRenderData& mesh_data)
+{
+	const AnimationData& animation_data = mesh_data.animation_data;
+	if(!hasHumanoidSkeleton(animation_data)) return false;
+
+	// A validated VRM humanoid map is the avatar declaration, even when that
+	// asset relies on the client's standard retargeted locomotion animations.
+	if(animation_data.vrm_data.nonNull()) return true;
+
+	// For ordinary GLB, require embedded animation that targets several
+	// recognized humanoid joints, not merely an animated model or armature.
+	for(const auto& animation : animation_data.animations)
+	{
+		if(animation.isNull()) continue;
+		const size_t count = std::min(animation->raw_per_anim_node_data.size(), animation_data.nodes.size());
+		int animated_humanoid_joints = 0;
+		for(size_t i = 0; i < count; ++i)
+		{
+			const PerAnimationNodeData& node = animation->raw_per_anim_node_data[i];
+			const bool has_channel = node.translation_input_accessor >= 0 || node.rotation_input_accessor >= 0 || node.scale_input_accessor >= 0;
+			if(has_channel && isJoint(animation_data, (int)i) && isHumanoidJointName(animation_data.nodes[i].name))
+				++animated_humanoid_joints;
+		}
+		if(animated_humanoid_joints >= 3) return true;
+	}
+	return false;
+}
 
 MeshData::MeshData(const URLString& model_URL_, Reference<OpenGLMeshRenderData> gl_meshdata_, MeshManager* mesh_manager_)
-:	source_is_vrm(gl_meshdata_->animation_data.vrm_data.nonNull()), model_url(model_URL_), gl_meshdata(gl_meshdata_),
+	: source_is_vrm(gl_meshdata_->animation_data.vrm_data.nonNull()),
+	is_humanoid_avatar(AvatarModelClassification::isWearableAvatar(*gl_meshdata_)),
+	model_url(model_URL_), gl_meshdata(gl_meshdata_),
 	voxel_subsample_factor(1), refcount(0), mesh_manager(mesh_manager_)
 {}
 

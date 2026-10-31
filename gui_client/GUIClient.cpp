@@ -8597,8 +8597,7 @@ void GUIClient::applyOurAvatarResource(const URLString& mesh_URL, const Matrix4f
 static bool isAvatarDisplayObject(const WorldObject& ob)
 {
 	return ob.object_type == WorldObject::ObjectType_Generic && ob.mesh_manager_data.nonNull() &&
-		ob.mesh_manager_data->gl_meshdata.nonNull() &&
-		(ob.mesh_manager_data->source_is_vrm || !ob.mesh_manager_data->gl_meshdata->animation_data.joint_nodes.empty());
+		ob.mesh_manager_data->is_humanoid_avatar;
 }
 
 

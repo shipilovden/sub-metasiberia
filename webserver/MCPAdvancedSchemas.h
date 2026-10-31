@@ -4,7 +4,7 @@ static std::string advancedToolsJSON()
 {
 	return std::string(R"json({
   "name": "convert_mesh",
-  "description": "Convert this editable object's uploaded OBJ/STL/embedded glTF/GLB/VRM resource to native .bmesh. Keeps UID, transform and existing material palette; GLB skeleton/clips are retained. Does not fetch external files or rebuild the shape. External glTF dependencies must be embedded by the importer. Limit 16 MiB input, 250000 triangles.",
+  "description": "Convert this editable object's uploaded OBJ/STL/embedded glTF/GLB/VRM resource to native .bmesh. Keeps UID, transform and existing material palette; GLB skeleton/clips are retained. Does not fetch external files or rebuild the shape. External glTF dependencies must be embedded by the importer. Limit 16 MiB input, 100000 output triangles.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -22,7 +22,7 @@ static std::string advancedToolsJSON()
 })json")
 		+ "," + std::string(R"json({
   "name": "simplify_mesh",
-  "description": "Reduce native geometry with the engine's meshoptimizer within max_error measured in object-local distance units. Keeps material batches and native skin attributes/clips. Result reports actual triangle count and target_reached; target is not guaranteed. Use deliberately before dense Boolean; validate afterward. Does not repair an open mesh.",
+  "description": "Reduce native geometry with the engine's meshoptimizer within max_error measured in object-local distance units. Keeps material batches and native skin attributes/clips. Result reports actual triangle count and target_reached; target is not guaranteed. Accepts sources up to 100000 triangles; target is below the source count. Use deliberately before dense Boolean; validate afterward. Does not repair an open mesh.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -34,7 +34,7 @@ static std::string advancedToolsJSON()
       "target_triangles": {
         "type": "integer",
         "minimum": 4,
-        "maximum": 249999
+        "maximum": 99999
       },
       "max_error": {
         "type": "number",
@@ -51,7 +51,7 @@ static std::string advancedToolsJSON()
 })json")
 		+ "," + std::string(R"json({
   "name": "subdivide_mesh",
-  "description": "Refine an existing static native surface with linear or Loop triangle subdivision. Linear keeps the shape; Loop smooths while pinning authored hard edges/UV/material seams. 1..5 levels, at most40000 output triangles. Rejects nonmanifold geometry and unsupported attributes rather than losing them. Coordinates local. Model before rigging.",
+  "description": "Refine an existing static native surface with linear or Loop triangle subdivision. Linear keeps the shape; Loop smooths while pinning authored hard edges/UV/material seams. 1..5 levels, at most 100000 output triangles. Rejects nonmanifold geometry and unsupported attributes rather than losing them. Coordinates local. Model before rigging.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -84,7 +84,7 @@ static std::string advancedToolsJSON()
 })json")
 		+ "," + std::string(R"json({
   "name": "remesh_mesh",
-  "description": "Remesh a static native surface using conforming long-edge splits, conservative short-edge collapses and optional tangential smoothing. Protects UV/material/hard-edge seams, at most40000 triangles and256 collapses/pass. Bounded iterations may not reach target edge length. This is surface remeshing, not volume reconstruction or self-intersection repair. Local units.",
+  "description": "Remesh a static native surface using conforming long-edge splits, conservative short-edge collapses and optional tangential smoothing. Protects UV/material/hard-edge seams, at most 100000 triangles and256 collapses/pass. Bounded iterations may not reach target edge length. This is surface remeshing, not volume reconstruction or self-intersection repair. Local units.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -121,7 +121,7 @@ static std::string advancedToolsJSON()
 })json")
 		+ "," + std::string(R"json({
   "name": "sculpt_mesh",
-  "description": "Apply a stroke to native static geometry with local-space sample centers and pressure. Brushes draw/inflate/grab use distance strength (iterations*abs(strength)<=radius/2); smooth/flatten/clay/pinch/crease use blend strength0..1. Subdivide first if too coarse. At most40000 triangles,128 samples; rejects flipped/degenerate faces and unsupported skin attributes. No implicit remeshing.",
+  "description": "Apply a stroke to native static geometry with local-space sample centers and pressure. Brushes draw/inflate/grab use distance strength (iterations*abs(strength)<=radius/2); smooth/flatten/clay/pinch/crease use blend strength0..1. Subdivide first if too coarse. At most 100000 triangles,128 samples; rejects flipped/degenerate faces and unsupported skin attributes. No implicit remeshing.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -238,10 +238,10 @@ static std::string advancedToolsJSON()
         "items": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 39999
+          "maximum": 99999
         },
         "minItems": 0,
-        "maxItems": 40000
+        "maxItems": 100000
       },
       "corners": {
         "type": "array",
@@ -251,7 +251,7 @@ static std::string advancedToolsJSON()
             "triangle": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 39999
+              "maximum": 99999
             },
             "corner": {
               "type": "integer",
@@ -277,7 +277,7 @@ static std::string advancedToolsJSON()
           "additionalProperties": false
         },
         "minItems": 1,
-        "maxItems": 120000
+        "maxItems": 300000
       },
       "axis": {
         "type": "integer",

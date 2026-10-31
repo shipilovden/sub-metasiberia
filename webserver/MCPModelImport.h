@@ -74,7 +74,7 @@ static void checkEmbeddedGLTF(const std::string& data,bool binary)
 	}
 	for(uint32 id:accessors) {
 		const auto& a=json.nodes[id]; if(a.hasChild("sparse")) throw glare::Exception("Sparse accessors require conversion through the client importer first.");
-		const size_t count=bounded_uint(a,"count",0,750000), view=bounded_uint(a,"bufferView",views.size(),views.size()), offset=bounded_uint(a,"byteOffset",0,16*1024*1024);
+		const size_t count=bounded_uint(a,"count",0,300000), view=bounded_uint(a,"bufferView",views.size(),views.size()), offset=bounded_uint(a,"byteOffset",0,16*1024*1024);
 		const size_t component=bounded_uint(a,"componentType",0,5126); const std::string type=a.getChildStringValue(json,"type");
 		const size_t components=type=="SCALAR"?1:type=="VEC2"?2:type=="VEC3"?3:type=="VEC4"?4:type=="MAT2"?4:type=="MAT3"?9:type=="MAT4"?16:0;
 		const size_t width=(component==5120 || component==5121)?1:(component==5122 || component==5123)?2:(component==5125 || component==5126)?4:0;
@@ -104,7 +104,7 @@ static void checkEmbeddedGLTF(const std::string& data,bool binary)
 			const size_t index=bounded_uint(primitive,"indices",accessors.size(),accessors.size());
 			if(primitive.hasChild("indices") && index>=accessors.size()) throw glare::Exception("Invalid glTF index accessor.");
 			indices+=index==accessors.size()?accessor_counts[pos]:accessor_counts[index];
-			if(vertices>750000 || indices>750000) throw glare::Exception("glTF mesh exceeds 250000 triangles or 750000 vertices.");
+			if(vertices>300000 || indices>300000) throw glare::Exception("glTF mesh exceeds 100000 triangles or 300000 vertices.");
 		}
 		mesh_counts.emplace_back(vertices,indices);
 	}
@@ -112,7 +112,7 @@ static void checkEmbeddedGLTF(const std::string& data,bool binary)
 	for(size_t i=0;i<nodes.size();++i) {
 		const auto& node=json.nodes[nodes[i]];
 		if(node.hasChild("mesh")) { const size_t mesh=bounded_uint(node,"mesh",meshes.size(),meshes.size()); if(mesh>=meshes.size()) throw glare::Exception("Invalid glTF mesh index."); total_vertices+=mesh_counts[mesh].first;total_indices+=mesh_counts[mesh].second; }
-		if(total_vertices>750000 || total_indices>750000 || total_vertices*80+total_indices*4>64*1024*1024) throw glare::Exception("Instanced glTF geometry exceeds the conversion budget.");
+		if(total_vertices>300000 || total_indices>300000 || total_vertices*80+total_indices*4>64*1024*1024) throw glare::Exception("Instanced glTF geometry exceeds the conversion budget.");
 		if(node.hasChild("children")) for(uint32 child:node.getChildArray(json,"children").child_indices) {
 			const double raw=json.nodes[child].getDoubleValue();
 			if(!std::isfinite(raw) || raw<0 || raw>=nodes.size() || raw!=std::floor(raw) || parents[(size_t)raw]>=0) throw glare::Exception("glTF hierarchy must be a tree with unique children.");
@@ -134,7 +134,7 @@ static void checkSimpleModelBudget(const std::string& data,bool obj)
 {
 	if(data.size()>16*1024*1024) throw glare::Exception("Model conversion source limit is 16 MiB.");
 	if(!obj && !hasPrefix(data,"solid")) {
-		if(data.size()<84 || modelLE32(data,80)>250000 || modelLE32(data,80)>(data.size()-84)/50) throw glare::Exception("Invalid or oversized binary STL triangle count.");
+		if(data.size()<84 || modelLE32(data,80)>100000 || modelLE32(data,80)>(data.size()-84)/50) throw glare::Exception("Invalid or oversized binary STL triangle count.");
 		return;
 	}
 	size_t vertices=0,triangles=0,attributes=0;
@@ -143,13 +143,13 @@ static void checkSimpleModelBudget(const std::string& data,bool obj)
 		size_t cursor=start;while(cursor<end && (data[cursor]==' ' || data[cursor]=='\t' || data[cursor]=='\r')) ++cursor;
 		const size_t token_start=cursor;while(cursor<end && data[cursor]!=' ' && data[cursor]!='\t' && data[cursor]!='\r') ++cursor;
 		const std::string token=data.substr(token_start,cursor-token_start);
-		if(obj && (token=="v" || token=="vn" || token=="vt")) { if(++attributes>2250000) throw glare::Exception("OBJ vertex attributes exceed the conversion budget."); if(token=="v" && ++vertices>750000) throw glare::Exception("OBJ vertices exceed the conversion budget."); }
+		if(obj && (token=="v" || token=="vn" || token=="vt")) { if(++attributes>900000) throw glare::Exception("OBJ vertex attributes exceed the conversion budget."); if(token=="v" && ++vertices>300000) throw glare::Exception("OBJ vertices exceed the conversion budget."); }
 		if(obj && token=="f") {
 			size_t corners=0;
 			while(cursor<end) { while(cursor<end && (data[cursor]==' ' || data[cursor]=='\t' || data[cursor]=='\r')) ++cursor; if(cursor==end || data[cursor]=='#') break; ++corners; while(cursor<end && data[cursor]!=' ' && data[cursor]!='\t' && data[cursor]!='\r') ++cursor; }
 			if(corners<3 || corners>256) throw glare::Exception("OBJ faces must have 3..256 corners.");triangles+=corners-2;
 		} else if(!obj && token=="facet") ++triangles;
-		if(triangles>250000) throw glare::Exception("Conversion exceeds 250000 triangles.");
+		if(triangles>100000) throw glare::Exception("Conversion exceeds 100000 triangles.");
 		start=end==data.size()?end:end+1;
 	}
 }
@@ -163,7 +163,7 @@ static void completeImportedAttributes(BatchedMesh& mesh)
 	for(size_t i=0;i<mesh.numVerts();++i) { const Vec4f pos=mesh.getVertexPosition((uint32)i);for(int k=0;k<3;++k) if(!std::isfinite(pos[k]) || std::abs(pos[k])>1e7f) throw glare::Exception("Imported vertex position exceeds supported range."); }
 	const bool normals=!mesh.findAttribute(BatchedMesh::VertAttribute_Normal),uv=!mesh.findAttribute(BatchedMesh::VertAttribute_UV_0);
 	if(!normals && !uv) return;
-	if(mesh.numVerts()>750000 || mesh.numIndices()>750000) throw glare::Exception("Imported geometry exceeds the conversion budget.");
+	if(mesh.numVerts()>300000 || mesh.numIndices()>300000) throw glare::Exception("Imported geometry exceeds the conversion budget.");
 	const size_t old_stride=mesh.vertexSize(),normal_offset=old_stride,uv_offset=old_stride+(normals?4:0),stride=uv_offset+(uv?8:0);
 	glare::AllocatorVector<uint8,16> vertices;vertices.resize(mesh.numVerts()*stride,0);
 	std::vector<Vec3d> sums(normals?mesh.numVerts():0,Vec3d(0,0,0));
@@ -189,7 +189,7 @@ static void completeImportedAttributes(BatchedMesh& mesh)
 static Reference<BatchedMesh> simplifyNativeModel(const BatchedMesh& source,size_t target,float error)
 {
 	const size_t count=source.numIndices()/3;
-	if(count<5 || count>250000 || source.numVerts()>750000 || source.getTotalMemUsage()>64*1024*1024) throw glare::Exception("Simplification exceeds the geometry budget.");
+	if(count<5 || count>100000 || source.numVerts()>300000 || source.getTotalMemUsage()>64*1024*1024) throw glare::Exception("Simplification exceeds the geometry budget.");
 	if(target<4 || target>=count || !std::isfinite(error) || error<=0 || error>.1f) throw glare::Exception("Invalid simplification target or error.");
 	if(source.getAttribute(BatchedMesh::VertAttribute_Position).component_type!=BatchedMesh::ComponentType_Float) throw glare::Exception("Simplification requires native float vertex positions.");
 	Reference<BatchedMesh> result=MeshSimplification::buildSimplifiedMesh(source,(float)count/(float)target,error,false);
@@ -226,14 +226,14 @@ static std::string convertMesh(ServerAllWorldsState& all,ServerWorldState& w,con
 		Indigo::Mesh mesh;
 		if(obj) { MLTLibMaterials unused;FormatDecoderObj::loadModelFromBuffer((const uint8*)data.data(),data.size(),"",mesh,1.f,false,unused); }
 		else FormatDecoderSTL::loadModelFromBuffer((const uint8*)data.data(),data.size(),mesh,1.f);
-		if(mesh.triangles.size()+mesh.quads.size()*2>250000) throw glare::Exception("Conversion exceeds 250000 triangles.");
+		if(mesh.triangles.size()+mesh.quads.size()*2>100000) throw glare::Exception("Conversion exceeds 100000 triangles.");
 		result=BatchedMesh::buildFromIndigoMesh(mesh);
 	} else {
 		checkEmbeddedGLTF(data,glb);GLTFLoadedData unused;
 		result=glb ? FormatDecoderGLTF::loadGLBFileFromData(data.data(),data.size(),"",false,unused) : FormatDecoderGLTF::loadGLTFFileFromData(data.data(),data.size(),"",false,unused);
 	}
 	completeImportedAttributes(*result);
-	if(result->numIndices()/3>250000 || result->getTotalMemUsage()>64*1024*1024) throw glare::Exception("Converted model exceeds the geometry budget.");
+	if(result->numIndices()/3>100000 || result->getTotalMemUsage()>64*1024*1024) throw glare::Exception("Converted model exceeds the geometry budget.");
 	if(result->numMaterialsReferenced()>ob->materials.size()) throw glare::Exception("The imported model references material slots missing from the object. Import its materials in the client before conversion.");
 	ob->setAABBOS(result->aabb_os);const std::vector<WorldObjectRef> sources{ob};
 	return publish(all,w,ob,p,n,user,username,result,&sources);
@@ -243,7 +243,7 @@ static std::string simplifyMesh(ServerAllWorldsState& all,ServerWorldState& w,co
 {
 	WorldObjectRef ob=meshSnapshot(all,w,p,n,user,"replace_uid");Reference<BatchedMesh> source=readNativeMesh(all,*ob);
 	const size_t count=source->numIndices()/3;
-	if(count<5 || count>250000) throw glare::Exception("Simplification requires 5..250000 triangles.");
+	if(count<5 || count>100000) throw glare::Exception("Simplification requires 5..100000 triangles.");
 	const int target=integer(p,n,"target_triangles",std::max(4,std::min(4096,(int)count/2)),4,(int)count-1);
 	const float error=(float)number(p,n,"max_error",.001,.000001,.1);
 	// Native simplifier retains raw vertex attributes, skin weights and AnimationData.

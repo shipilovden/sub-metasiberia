@@ -6,7 +6,7 @@
 
 namespace MCPMeshOps {
 namespace AdvancedDetail {
-static constexpr size_t MAX_TRIANGLES=40000;
+static constexpr size_t MAX_TRIANGLES=MAX_OPERATION_TRIANGLES;
 using EdgeKey=std::pair<size_t,size_t>;
 struct Edge { std::vector<std::pair<size_t,int>> corners; };
 struct Topology {
@@ -16,7 +16,7 @@ struct Topology {
 	std::map<EdgeKey,Edge> edges;
 	std::vector<bool> boundary, feature;
 	explicit Topology(const Mesh& mesh):weld(Detail::tolerance(mesh)) {
-		if(mesh.empty()||mesh.size()>MAX_TRIANGLES) throw std::runtime_error("Surface editing requires 1..40000 triangles.");
+		if(mesh.empty()||mesh.size()>MAX_TRIANGLES) throw std::runtime_error("Surface editing requires 1..100000 triangles.");
 		for(const Triangle& t:mesh) {
 			std::array<size_t,3> f;for(int c=0;c<3;++c) f[c]=weld.add(t.vertices[c].position);
 			if(f[0]==f[1]||f[1]==f[2]||f[2]==f[0]||length(cross(t.vertices[1].position-t.vertices[0].position,t.vertices[2].position-t.vertices[0].position))<=weld.eps*weld.eps)
@@ -94,7 +94,7 @@ inline Mesh splitEdges(const Mesh& mesh,const Topology& topology,const std::map<
 			if(split[c]) { m[c]=Detail::interpolate(mesh[f].vertices[c],mesh[f].vertices[(c+1)%3],.5);m[c].position=it->second; }
 		}
 		auto add=[&](const Vertex& a,const Vertex& b,const Vertex& c) {
-			if(out.size()>=MAX_TRIANGLES) throw std::runtime_error("Refinement would exceed 40000 triangles.");
+			if(out.size()>=MAX_TRIANGLES) throw std::runtime_error("Refinement would exceed 100000 triangles.");
 			const Vec3 n=cross(b.position-a.position,c.position-a.position);
 			const Vec3 original=cross(mesh[f].vertices[1].position-mesh[f].vertices[0].position,mesh[f].vertices[2].position-mesh[f].vertices[0].position);
 			if(length(n)<=topology.weld.eps*topology.weld.eps||dot(n,original)<=0) throw std::runtime_error("Refinement collapses or flips a child triangle; use linear subdivision or repair the input.");
@@ -117,7 +117,7 @@ struct Subdivision {
 inline Mesh subdivideMesh(const Mesh& input,const Subdivision& op) {
 	if(op.mode!="linear"&&op.mode!="loop") throw std::runtime_error("Subdivision mode must be linear or loop.");
 	if(op.levels<1||op.levels>5) throw std::runtime_error("Subdivision levels must be 1..5.");
-	size_t count=input.size();for(unsigned i=0;i<op.levels;++i) { if(count>AdvancedDetail::MAX_TRIANGLES/4) throw std::runtime_error("Subdivision would exceed 40000 triangles.");count*=4; }
+	size_t count=input.size();for(unsigned i=0;i<op.levels;++i) { if(count>AdvancedDetail::MAX_TRIANGLES/4) throw std::runtime_error("Subdivision would exceed 100000 triangles.");count*=4; }
 	Mesh mesh=input;
 	for(unsigned level=0;level<op.levels;++level) {
 		AdvancedDetail::Topology topology(mesh);std::vector<Vec3> points=topology.weld.points;std::map<AdvancedDetail::EdgeKey,Vec3> mids;
@@ -194,7 +194,7 @@ struct UVEdit {
 	int axis=2; // project along X/Y/Z; U=(axis+1)%3, V=(axis+2)%3
 };
 inline Mesh editUV(const Mesh& input,const UVEdit& op) {
-	if(input.empty()||input.size()>AdvancedDetail::MAX_TRIANGLES) throw std::runtime_error("UV editing requires 1..40000 triangles.");
+	if(input.empty()||input.size()>AdvancedDetail::MAX_TRIANGLES) throw std::runtime_error("UV editing requires 1..100000 triangles.");
 	Detail::tolerance(input);
 	if(op.mode!="set_corners"&&op.mode!="transform"&&op.mode!="project") throw std::runtime_error("UV mode must be set_corners, transform or project.");
 	if(op.axis<0||op.axis>2||!std::isfinite(op.rotation)) throw std::runtime_error("Invalid UV axis or rotation.");

@@ -14,7 +14,7 @@ static void advancedNativeUVLayout(const BatchedMesh& native)
 	if(native.index_type!=BatchedMesh::ComponentType_UInt8&&native.index_type!=BatchedMesh::ComponentType_UInt16&&native.index_type!=BatchedMesh::ComponentType_UInt32) throw glare::Exception("Invalid native index type.");
 	if(native.index_data.size()%BatchedMesh::componentTypeSize(native.index_type)!=0) throw glare::Exception("Invalid native index buffer.");
 	const size_t count=native.numIndices();
-	if(count==0||count%3!=0||count>120000) throw glare::Exception("UV editing requires 1..40000 native triangles.");
+	if(count==0||count%3!=0||count>300000) throw glare::Exception("UV editing requires 1..100000 native triangles.");
 	for(size_t i=0;i<count;++i) if(native.getIndexAsUInt32(i)>=native.numVerts()) throw glare::Exception("Native UV input has an out-of-range vertex index.");
 	std::vector<bool> covered(count/3,false);
 	for(const auto& batch:native.batches) {
@@ -110,8 +110,8 @@ static std::string advancedMeshEdit(ServerAllWorldsState& all,ServerWorldState& 
 		} else if(tool=="edit_mesh_uv") {
 			MCPMeshOps::UVEdit op;op.mode=n.getChildStringValue(p,"mode");op.axis=integer(p,n,"axis",2,0,2);op.rotation=number(p,n,"rotation",0,-1000,1000);
 			for(const char* key:{"offset","scale","pivot"}) if(n.hasChild(key)) { double v[2];n.getChildArray(p,key).parseDoubleArrayValues(p,2,v);for(double x:v) if(!std::isfinite(x)||std::abs(x)>100000) throw glare::Exception("UV transform exceeds finite bounds.");auto& dst=std::string(key)=="offset"?op.offset:std::string(key)=="scale"?op.scale:op.pivot;dst={{v[0],v[1]}}; }
-			if(n.hasChild("triangles")) { const auto& list=n.getChildArray(p,"triangles");if(list.child_indices.size()>40000) throw glare::Exception("UV selection exceeds 40000 faces.");for(uint32 i:list.child_indices) { const double f=p.nodes[i].getDoubleValue();if(!std::isfinite(f)||f<0||f>=input.size()||f!=std::floor(f)) throw glare::Exception("Invalid UV face index.");op.triangles.push_back((size_t)f); } }
-			if(n.hasChild("corners")) { const auto& list=n.getChildArray(p,"corners");if(list.child_indices.size()>120000) throw glare::Exception("Too many UV corners.");for(uint32 i:list.child_indices) { const auto& c=p.nodes[i];MCPMeshOps::UVCorner corner;corner.triangle=integer(p,c,"triangle",-1,0,(int)input.size()-1);corner.corner=integer(p,c,"corner",-1,0,2);double uv[2];c.getChildArray(p,"uv").parseDoubleArrayValues(p,2,uv);corner.u=uv[0];corner.v=uv[1];op.corners.push_back(corner); } }
+			if(n.hasChild("triangles")) { const auto& list=n.getChildArray(p,"triangles");if(list.child_indices.size()>100000) throw glare::Exception("UV selection exceeds 100000 faces.");for(uint32 i:list.child_indices) { const double f=p.nodes[i].getDoubleValue();if(!std::isfinite(f)||f<0||f>=input.size()||f!=std::floor(f)) throw glare::Exception("Invalid UV face index.");op.triangles.push_back((size_t)f); } }
+			if(n.hasChild("corners")) { const auto& list=n.getChildArray(p,"corners");if(list.child_indices.size()>300000) throw glare::Exception("Too many UV corners.");for(uint32 i:list.child_indices) { const auto& c=p.nodes[i];MCPMeshOps::UVCorner corner;corner.triangle=integer(p,c,"triangle",-1,0,(int)input.size()-1);corner.corner=integer(p,c,"corner",-1,0,2);double uv[2];c.getChildArray(p,"uv").parseDoubleArrayValues(p,2,uv);corner.u=uv[0];corner.v=uv[1];op.corners.push_back(corner); } }
 			edited=MCPMeshOps::editUV(input,op);
 		} else throw glare::Exception("Unknown advanced mesh operation.");
 	} catch(const glare::Exception&) { throw; } catch(const std::exception& e) { throw glare::Exception(e.what()); }

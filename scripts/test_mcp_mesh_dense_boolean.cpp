@@ -13,9 +13,9 @@ static void check(const Mesh& mesh,double volume) {
 	for(const Triangle& t:mesh) { assert(t.material==1||t.material==2);for(const Vertex& v:t.vertices) { assert(std::abs(v.u-v.position.x-2*v.position.z)<1e-7);assert(std::abs(v.v-v.position.y-3*v.position.z)<1e-7);assert(std::abs(length(v.normal)-1)<1e-7); } }
 }
 int main() {
-	static_assert(MAX_BOOLEAN_INPUT_TRIANGLES==16384,"Published Boolean input limit");
+	static_assert(MAX_BOOLEAN_INPUT_TRIANGLES==100000,"Published Boolean input limit");
 	static_assert(MAX_BOOLEAN_OUTPUT_TRIANGLES==100000,"Published Boolean output limit");
-	static_assert(Detail::MAX_INPUT_TRIANGLES==4096,"Bevel limit remains bounded independently");
+	static_assert(Detail::MAX_INPUT_TRIANGLES==100000,"Published mesh editing input limit");
 	Subdivision subdivision;subdivision.levels=5;
 	const Mesh dense=subdivideMesh(box(Vec3(0,0,0),Vec3(2,2,2),1),subdivision);assert(dense.size()==12288);
 	const Mesh cutter=box(Vec3(.7,.7,-1),Vec3(1.3,1.3,3),2);
