@@ -534,6 +534,130 @@ MeshBuilding::MeshBuildingResults MeshBuilding::makePortalMeshes(const std::stri
 }
 
 
+MeshBuilding::MeshBuildingResults MeshBuilding::makeRectangularPortalMeshes(VertexBufferAllocator& allocator)
+{
+	ZoneScoped; // Tracy profiler
+	Indigo::MeshRef mesh = makeRectangularPortalIndigoMesh();
+
+	BatchedMeshRef batched_mesh = BatchedMesh::buildFromIndigoMesh(*mesh);
+	batched_mesh->checkValidAndSanitiseMesh();
+	Reference<OpenGLMeshRenderData> portal_opengl_mesh = GLMeshBuilding::buildBatchedMesh(&allocator, batched_mesh, /*skip opengl calls=*/false);
+
+	js::Vector<bool> create_tris_for_mat(WorldObject::PORTAL_MATERIAL_COUNT, true);
+	create_tris_for_mat[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX] = false;
+	PhysicsShape frame_shape = PhysicsWorld::createJoltShapeForBatchedMesh(*batched_mesh, /*build_dynamic_physics_ob=*/false, /*mem allocator=*/nullptr, &create_tris_for_mat);
+
+	JPH::Ref<JPH::StaticCompoundShapeSettings> compound_settings = new JPH::StaticCompoundShapeSettings();
+	compound_settings->AddShape(JPH::Vec3Arg(0,0,0), JPH::QuatArg::sIdentity(), frame_shape.jolt_shape, /*inUserData=*/0);
+	JPH::Ref<JPH::BoxShapeSettings> box_settings = new JPH::BoxShapeSettings(/*inHalfExtent=*/JPH::Vec3Arg(0.5f, 0.06f, 1.f));
+	compound_settings->AddShape(/*position=*/JPH::Vec3Arg(0,0,1.f), JPH::QuatArg::sIdentity(), box_settings, /*inUserData=*/1);
+
+	JPH::Result<JPH::Ref<JPH::Shape>> result = compound_settings->Create();
+	if(result.HasError())
+		throw glare::Exception(std::string("Error building Jolt shape: ") + result.GetError().c_str());
+	JPH::Ref<JPH::Shape> compound_shape = result.Get();
+
+	MeshBuildingResults results;
+	results.opengl_mesh_data = portal_opengl_mesh;
+	results.physics_shape.jolt_shape = compound_shape;
+	results.physics_shape.size_B = PhysicsWorld::computeSizeBForShape(compound_shape);
+	return results;
+}
+
+
+Reference<Indigo::Mesh> MeshBuilding::makeRectangularPortalIndigoMesh()
+{
+
+	Indigo::MeshRef mesh = new Indigo::Mesh();
+	mesh->num_uv_mappings = 1;
+	uint32 next_vertex_index = 0;
+
+	auto add_quad = [&](const Indigo::Vec3f& a, const Indigo::Vec3f& b, const Indigo::Vec3f& c, const Indigo::Vec3f& d, uint32 material_index)
+	{
+		const uint32 base = next_vertex_index;
+		mesh->addVertex(a);
+		mesh->addVertex(b);
+		mesh->addVertex(c);
+		mesh->addVertex(d);
+		mesh->uv_pairs.push_back(Indigo::Vec2f(0.f, 0.f));
+		mesh->uv_pairs.push_back(Indigo::Vec2f(1.f, 0.f));
+		mesh->uv_pairs.push_back(Indigo::Vec2f(1.f, 1.f));
+		mesh->uv_pairs.push_back(Indigo::Vec2f(0.f, 1.f));
+		const unsigned int tri0[] = { base, base + 1, base + 2 };
+		const unsigned int tri1[] = { base, base + 2, base + 3 };
+		mesh->addTriangle(tri0, tri0, material_index);
+		mesh->addTriangle(tri1, tri1, material_index);
+		next_vertex_index += 4;
+	};
+
+	// Match portal.bmesh: X is horizontal width, Y is front/back depth, and Z is
+	// vertical. Build the doorway as one closed ring extrusion so its styled
+	// surfaces share edges without overlapping coplanar faces.
+	const float outer_x = 0.75f;
+	const float trim_x = 0.715f;
+	const float opening_x = 0.57f;
+	const float front_y = -0.12f;
+	const float back_y = 0.12f;
+	const float floor_z = 0.0f;
+	const float threshold_z = 0.14f;
+	const float opening_top_z = 1.79f;
+	const float trim_top_z = 1.965f;
+	const float outer_top_z = 2.0f;
+
+	auto add_ring_face = [&](float y, bool front_face)
+	{
+		auto add_rect = [&](float x0, float x1, float z0, float z1, uint32 material_index)
+		{
+			if(front_face)
+				add_quad(Indigo::Vec3f(x0,y,z0), Indigo::Vec3f(x1,y,z0), Indigo::Vec3f(x1,y,z1), Indigo::Vec3f(x0,y,z1), material_index); // outward -Y
+			else
+				add_quad(Indigo::Vec3f(x0,y,z0), Indigo::Vec3f(x0,y,z1), Indigo::Vec3f(x1,y,z1), Indigo::Vec3f(x1,y,z0), material_index); // outward +Y
+		};
+
+		// Left/right posts, split at the trim boundary; the top beam and sill
+		// occupy the remaining ring without intersecting the posts.
+		add_rect(-outer_x, -trim_x, threshold_z, outer_top_z, WorldObject::PORTAL_FRAME_MATERIAL_INDEX);
+		add_rect(-trim_x, -opening_x, threshold_z, opening_top_z, WorldObject::PORTAL_ARCH_MATERIAL_INDEX);
+		add_rect(opening_x, trim_x, threshold_z, opening_top_z, WorldObject::PORTAL_ARCH_MATERIAL_INDEX);
+		add_rect(trim_x, outer_x, threshold_z, outer_top_z, WorldObject::PORTAL_FRAME_MATERIAL_INDEX);
+		add_rect(-trim_x, trim_x, opening_top_z, trim_top_z, WorldObject::PORTAL_ARCH_MATERIAL_INDEX);
+		add_rect(-trim_x, trim_x, trim_top_z, outer_top_z, WorldObject::PORTAL_FRAME_MATERIAL_INDEX);
+		add_rect(-outer_x, outer_x, floor_z, threshold_z, WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX);
+	};
+	add_ring_face(front_y, /*front_face=*/true);
+	add_ring_face(back_y, /*front_face=*/false);
+
+	// Outside faces run around the perimeter; reveal faces run around the
+	// opening. Each face is emitted once, avoiding z-fighting when a style
+	// assigns different materials to the frame and inner rim.
+	add_quad(Indigo::Vec3f(-outer_x,front_y,threshold_z), Indigo::Vec3f(-outer_x,front_y,outer_top_z),
+		Indigo::Vec3f(-outer_x,back_y,outer_top_z), Indigo::Vec3f(-outer_x,back_y,threshold_z), WorldObject::PORTAL_FRAME_MATERIAL_INDEX); // outer left
+	add_quad(Indigo::Vec3f( outer_x,front_y,threshold_z), Indigo::Vec3f( outer_x,back_y,threshold_z),
+		Indigo::Vec3f( outer_x,back_y,outer_top_z), Indigo::Vec3f( outer_x,front_y,outer_top_z), WorldObject::PORTAL_FRAME_MATERIAL_INDEX); // outer right
+	add_quad(Indigo::Vec3f(-outer_x,front_y,outer_top_z), Indigo::Vec3f( outer_x,front_y,outer_top_z),
+		Indigo::Vec3f( outer_x,back_y,outer_top_z), Indigo::Vec3f(-outer_x,back_y,outer_top_z), WorldObject::PORTAL_FRAME_MATERIAL_INDEX); // outer top
+	add_quad(Indigo::Vec3f(-outer_x,front_y,floor_z), Indigo::Vec3f(-outer_x,back_y,floor_z),
+		Indigo::Vec3f( outer_x,back_y,floor_z), Indigo::Vec3f( outer_x,front_y,floor_z), WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX); // outer bottom
+
+	add_quad(Indigo::Vec3f(-opening_x,front_y,threshold_z), Indigo::Vec3f(-opening_x,back_y,threshold_z),
+		Indigo::Vec3f(-opening_x,back_y,opening_top_z), Indigo::Vec3f(-opening_x,front_y,opening_top_z), WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX); // inner left
+	add_quad(Indigo::Vec3f( opening_x,front_y,threshold_z), Indigo::Vec3f( opening_x,front_y,opening_top_z),
+		Indigo::Vec3f( opening_x,back_y,opening_top_z), Indigo::Vec3f( opening_x,back_y,threshold_z), WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX); // inner right
+	add_quad(Indigo::Vec3f(-opening_x,front_y,opening_top_z), Indigo::Vec3f(-opening_x,back_y,opening_top_z),
+		Indigo::Vec3f( opening_x,back_y,opening_top_z), Indigo::Vec3f( opening_x,front_y,opening_top_z), WorldObject::PORTAL_INNER_RIM_MATERIAL_INDEX); // inner top
+	add_quad(Indigo::Vec3f(-opening_x,front_y,threshold_z), Indigo::Vec3f( opening_x,front_y,threshold_z),
+		Indigo::Vec3f( opening_x,back_y,threshold_z), Indigo::Vec3f(-opening_x,back_y,threshold_z), WorldObject::PORTAL_THRESHOLD_MATERIAL_INDEX); // inner threshold
+
+	// The stock portal effect batch is a single XZ plane at Y ~= 0.06. Keep the
+	// same orientation and depth so the existing portal shader fills the opening
+	// instead of shifting the effect toward a side wall.
+	add_quad(Indigo::Vec3f(-0.57f, 0.0606f, 0.14f), Indigo::Vec3f(-0.57f, 0.0606f, 1.79f),
+		Indigo::Vec3f( 0.57f, 0.0606f, 1.79f), Indigo::Vec3f( 0.57f, 0.0606f, 0.14f), WorldObject::PORTAL_EFFECT_MATERIAL_INDEX);
+	mesh->endOfModel();
+	return mesh;
+}
+
+
 Reference<Indigo::Mesh> MeshBuilding::makeUnitCubeIndigoMesh()
 {
 	Indigo::MeshRef mesh = new Indigo::Mesh();

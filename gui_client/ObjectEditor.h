@@ -240,6 +240,8 @@ private:
 	QPushButton* audioMoveTrackDownPushButton;
 
 	QGroupBox* portalGroupBox;
+	QLabel* portalShapeLabel;
+	QComboBox* portalShapeComboBox;
 	QLabel* portalStyleLabel;
 	QComboBox* portalStyleComboBox;
 	QPushButton* portalApplyStylePushButton;

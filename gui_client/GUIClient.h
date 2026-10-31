@@ -829,6 +829,8 @@ public:
 
 	Reference<OpenGLMeshRenderData> portal_opengl_mesh;
 	PhysicsShape portal_shape;
+	Reference<OpenGLMeshRenderData> rectangular_portal_opengl_mesh;
+	PhysicsShape rectangular_portal_shape;
 
 	PhysicsShape unit_cube_shape;
 

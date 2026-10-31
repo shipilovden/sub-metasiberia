@@ -28,6 +28,7 @@ Copyright Glare Technologies Limited 2016 -
 #include <utils/Exception.h>
 #include <utils/StringUtils.h>
 #include <utils/FileUtils.h>
+#include <utils/PlatformUtils.h>
 #include <utils/ConPrint.h>
 #include <utils/FileChecksum.h>
 #include <utils/Sort.h>
@@ -957,6 +958,12 @@ static void writeWorldObjectPerTypeData(RandomAccessOutStream& stream, const Wor
 			stream.writeData(&ob.type_data.camera_screen_data, sizeof(WorldObject::CameraScreenTypeData));
 			break;
 		}
+		case WorldObject::ObjectType_Portal:
+		{
+			stream.writeUInt32(sizeof(WorldObject::PortalTypeData));
+			stream.writeData(&ob.type_data.portal_data, sizeof(WorldObject::PortalTypeData));
+			break;
+		}
 		default:
 		{
 			// Write length of per-type data
@@ -1007,6 +1014,17 @@ static void readWorldObjectPerTypeData(RandomAccessInStream& stream, WorldObject
 				stream.readData(&ob.type_data.camera_screen_data, sizeof(WorldObject::CameraScreenTypeData));
 			break;
 		}
+		case WorldObject::ObjectType_Portal:
+		{
+			if(len >= sizeof(WorldObject::PortalTypeData))
+			{
+				stream.readData(&ob.type_data.portal_data, sizeof(WorldObject::PortalTypeData));
+				if(ob.type_data.portal_data.shape != WorldObject::PortalShape_Arch &&
+					ob.type_data.portal_data.shape != WorldObject::PortalShape_Rectangular)
+					ob.type_data.portal_data.shape = WorldObject::PortalShape_Arch;
+			}
+			break;
+		}
 		default:
 			break;
 	}
@@ -1047,6 +1065,11 @@ static void setWorldObjectPerTypeDataDefaults(WorldObject& ob)
 		ob.type_data.camera_screen_data.material_index = 0;
 		ob.type_data.camera_screen_data.enabled = 1;
 		ob.type_data.camera_screen_data._padding = 0;
+		break;
+	case WorldObject::ObjectType_Portal:
+		// Keep the serialized flags bit intact until readWorldObjectPerTypeData()
+		// can combine it with the optional per-type payload.
+		ob.type_data.portal_data.shape = WorldObject::PortalShape_Arch;
 		break;
 	default:
 		break;
@@ -1525,6 +1548,8 @@ void WorldObject::copyNetworkStateFrom(const WorldObject& other)
 	chunk_batch1_end = other.chunk_batch1_end;
 
 	type_data = other.type_data;
+	if(object_type == ObjectType_Portal)
+		setPortalShape(other.portalShape());
 
 	physics_owner_id = other.physics_owner_id;
 	last_physics_ownership_change_global_time = other.last_physics_ownership_change_global_time;
@@ -1622,6 +1647,10 @@ std::string WorldObject::serialiseToXML(int tab_depth) const
 		XMLWriteUtils::writeUInt64ToXML(s, "camera_screen_source_camera_uid", type_data.camera_screen_data.source_camera_uid, tab_depth + 1);
 		XMLWriteUtils::writeUInt32ToXML(s, "camera_screen_material_index", type_data.camera_screen_data.material_index, tab_depth + 1);
 		XMLWriteUtils::writeUInt32ToXML(s, "camera_screen_enabled", type_data.camera_screen_data.enabled, tab_depth + 1);
+	}
+	else if(object_type == WorldObject::ObjectType_Portal)
+	{
+		XMLWriteUtils::writeUInt32ToXML(s, "portal_shape", portalShape(), tab_depth + 1);
 	}
 
 	s += std::string(tab_depth, '\t') + "</object>\n";
@@ -1746,6 +1775,11 @@ Reference<WorldObject> WorldObject::loadFromXMLElem(const std::string& object_fi
 		ob->type_data.camera_screen_data.material_index = (uint16)XMLParseUtils::parseUInt64WithDefault(elem, "camera_screen_material_index", ob->type_data.camera_screen_data.material_index);
 		ob->type_data.camera_screen_data.enabled = (uint8)XMLParseUtils::parseUInt64WithDefault(elem, "camera_screen_enabled", ob->type_data.camera_screen_data.enabled);
 	}
+	else if(ob->object_type == WorldObject::ObjectType_Portal)
+	{
+		const uint32 shape = (uint32)XMLParseUtils::parseUInt64WithDefault(elem, "portal_shape", ob->portalShape());
+		ob->setPortalShape(shape == WorldObject::PortalShape_Rectangular ? WorldObject::PortalShape_Rectangular : WorldObject::PortalShape_Arch);
+	}
 
 	return ob;
 }
@@ -1808,6 +1842,8 @@ bool looksLikeFontNameString(const std::string& s)
 void readWorldObjectFromNetworkStreamGivenUIDImpl(RandomAccessInStream& stream, WorldObject& ob, bool legacy_text_font_mid_stream)
 {
 	// NOTE: The data in here needs to match that in copyNetworkStateFrom()
+	const bool was_portal = ob.object_type == WorldObject::ObjectType_Portal;
+	const WorldObject::PortalShape previous_portal_shape = was_portal ? ob.portalShape() : WorldObject::PortalShape_Arch;
 
 	ob.object_type = (WorldObject::ObjectType)stream.readUInt32(); // TODO: handle invalid values?
 	ob.model_url = stream.readStringLengthFirst(WorldObject::MAX_URL_SIZE);
@@ -1956,6 +1992,21 @@ void readWorldObjectFromNetworkStreamGivenUIDImpl(RandomAccessInStream& stream, 
 	}
 	else
 		setWorldObjectPerTypeDataDefaults(ob);
+
+	// PortalShape is also mirrored in flags for compatibility with servers that
+	// preserve the generic object flags but ignore unknown per-type fields.
+	if(ob.object_type == WorldObject::ObjectType_Portal)
+	{
+		if((ob.flags & WorldObject::PORTAL_RECTANGULAR_SHAPE_FLAG) != 0 ||
+			ob.type_data.portal_data.shape == WorldObject::PortalShape_Rectangular)
+			ob.setPortalShape(WorldObject::PortalShape_Rectangular);
+		else
+			ob.setPortalShape(WorldObject::PortalShape_Arch);
+	}
+
+	if(was_portal && ob.object_type == WorldObject::ObjectType_Portal &&
+		previous_portal_shape != ob.portalShape())
+		ob.changed_flags |= WorldObject::PORTAL_SHAPE_CHANGED;
 
 	if(!legacy_text_font_mid_stream && (ob.object_type == WorldObject::ObjectType_Text) && !stream.endOfStream())
 	{
@@ -2613,6 +2664,14 @@ static void testObjectsEqual(WorldObject& ob1, WorldObject& ob2)
 }
 
 
+static std::string getWorldObjectTestFilePath(const std::string& filename)
+{
+	const std::string test_repo_dir = PlatformUtils::isEnvironmentVariableDefined("SUBSTRATA_TRUNK_DIR") ?
+		PlatformUtils::getEnvironmentVariable("SUBSTRATA_TRUNK_DIR") : "."; // Running --test from the repository root is also supported.
+	return FileUtils::join(test_repo_dir, "testfiles/world_objects/" + filename);
+}
+
+
 void WorldObject::test()
 {
 	conPrint("WorldObject::test()");
@@ -2778,7 +2837,7 @@ void WorldObject::test()
 
 		//--------------------------- Test reading a v21 spotlight model ----------------------------
 		{
-			FileInStream file("C:\\code\\substrata\\testfiles\\world_objects\\spotlight_world_object_503_v21.bin");
+			FileInStream file(getWorldObjectTestFilePath("spotlight_world_object_503_v21.bin"));
 			WorldObject ob;
 			readWorldObjectFromStream(file, ob);
 			testAssert(ob.uid == UID(503));
@@ -3080,6 +3139,49 @@ void WorldObject::test()
 			testObjectsEqual(ob, *ob3);
 		}
 
+		//--------------------------- Test portal shape survives older-server roundtrips ----------------------------
+		{
+			WorldObject ob;
+			ob.uid = UID(901);
+			ob.object_type = WorldObject::ObjectType_Portal;
+			ob.setPortalShape(WorldObject::PortalShape_Rectangular);
+			ob.ensurePortalMaterialsPresent();
+
+			BufferOutStream wire;
+			ob.writeToNetworkStream(wire);
+			BufferInStream normal_stream(ArrayRef<uint8>(wire.buf.data(), wire.buf.size()));
+			WorldObject normal_roundtrip;
+			normal_roundtrip.uid = readUIDFromStream(normal_stream);
+			readWorldObjectFromNetworkStreamGivenUID(normal_stream, normal_roundtrip);
+			testAssert(normal_roundtrip.portalShape() == WorldObject::PortalShape_Rectangular);
+
+			// An older server drops the unknown portal per-type payload but echoes
+			// generic object flags. Simulate that response and ensure shape remains.
+			std::vector<uint8> legacy_server_bytes(wire.buf.begin(), wire.buf.end());
+			const size_t audio_tail_bytes = sizeof(float) * 7 + sizeof(uint32) * 2;
+			const size_t type_data_offset = legacy_server_bytes.size() - audio_tail_bytes - sizeof(uint32) - sizeof(WorldObject::PortalTypeData);
+			runtimeCheck(type_data_offset + sizeof(uint32) + sizeof(WorldObject::PortalTypeData) <= legacy_server_bytes.size() - audio_tail_bytes);
+			const uint32 empty_type_data_length = 0;
+			std::memcpy(legacy_server_bytes.data() + type_data_offset, &empty_type_data_length, sizeof(empty_type_data_length));
+			legacy_server_bytes.erase(legacy_server_bytes.begin() + type_data_offset + sizeof(uint32),
+				legacy_server_bytes.begin() + type_data_offset + sizeof(uint32) + sizeof(WorldObject::PortalTypeData));
+
+			BufferInStream legacy_server_stream(ArrayRef<uint8>(legacy_server_bytes.data(), legacy_server_bytes.size()));
+			WorldObject legacy_server_roundtrip;
+			legacy_server_roundtrip.uid = readUIDFromStream(legacy_server_stream);
+			readWorldObjectFromNetworkStreamGivenUID(legacy_server_stream, legacy_server_roundtrip);
+			testAssert(legacy_server_roundtrip.portalShape() == WorldObject::PortalShape_Rectangular);
+
+			std::string xml = ob.serialiseToXML(/*tab depth=*/0);
+			const size_t portal_shape_start = xml.find("\t<portal_shape>");
+			const size_t portal_shape_end = xml.find("\n", portal_shape_start);
+			runtimeCheck(portal_shape_start != std::string::npos && portal_shape_end != std::string::npos);
+			xml.erase(portal_shape_start, portal_shape_end - portal_shape_start + 1); // Legacy XML stores flags but has no portal_shape element.
+			IndigoXMLDoc doc(xml.c_str(), xml.size());
+			WorldObjectRef legacy_xml_roundtrip = WorldObject::loadFromXMLElem(".", /*convert_rel_paths_to_abs_disk_paths=*/false, doc.getRootElement());
+			testAssert(legacy_xml_roundtrip->portalShape() == WorldObject::PortalShape_Rectangular);
+		}
+
 		//--------------------------- Test portal default materials helper ----------------------------
 		{
 			std::vector<WorldMaterialRef> mats;
@@ -3245,7 +3347,7 @@ void WorldObject::test()
 		glare::ArenaAllocator arena_allocator(1024 * 1024);
 
 
-		const std::string xml_path = "C:\\code\\substrata\\testfiles\\world_objects\\sandbox_parcel_objects.xml";
+		const std::string xml_path = getWorldObjectTestFilePath("sandbox_parcel_objects.xml");
 		IndigoXMLDoc doc(xml_path);
 
 		std::vector<WorldObjectRef> obs;

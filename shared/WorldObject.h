@@ -373,6 +373,8 @@ public:
 	static const uint32 AUDIO_LOOP                              = 2048; // For objects that play audio, should the audio loop?
 	static const uint32 AUDIO_SHUFFLE                           = 4096; // For audio players, should playlist playback start in shuffle mode?
 	static const uint32 SPOTLIGHT_DISABLED_FLAG                 = 8192; // For spotlights, should the local light be disabled?
+	// Kept in the long-standing flags field so older authoritative servers preserve portal geometry.
+	static const uint32 PORTAL_RECTANGULAR_SHAPE_FLAG            = 16384;
 	uint32 flags;
 
 	TimeStamp created_time;
@@ -430,15 +432,43 @@ public:
 		uint8 _padding;
 	};
 
+	enum PortalShape : uint32
+	{
+		PortalShape_Arch = 0,
+		PortalShape_Rectangular = 1
+	};
+
+	struct PortalTypeData
+	{
+		uint32 shape;
+	};
+
 	union TypeData
 	{
 		SpotLightTypeData spotlight_data;
 		SeatTypeData seat_data;
 		CameraTypeData camera_data;
 		CameraScreenTypeData camera_screen_data;
+		PortalTypeData portal_data;
 
 		TypeData() noexcept : spotlight_data() {} // Keep union default-constructible on stricter toolchains.
 	} type_data;
+
+	PortalShape portalShape() const
+	{
+		return ((flags & PORTAL_RECTANGULAR_SHAPE_FLAG) != 0 || type_data.portal_data.shape == PortalShape_Rectangular) ?
+			PortalShape_Rectangular : PortalShape_Arch;
+	}
+
+	void setPortalShape(PortalShape shape)
+	{
+		const bool rectangular = shape == PortalShape_Rectangular;
+		type_data.portal_data.shape = rectangular ? PortalShape_Rectangular : PortalShape_Arch;
+		if(rectangular)
+			flags |= PORTAL_RECTANGULAR_SHAPE_FLAG;
+		else
+			flags &= ~PORTAL_RECTANGULAR_SHAPE_FLAG;
+	}
 
 
 	uint32 physics_owner_id;
@@ -497,6 +527,7 @@ public:
 	static const uint32 PHYSICS_VALUE_CHANGED		= 32;
 	static const uint32 PHYSICS_OWNER_CHANGED		= 64;
 	static const uint32 TEXT_FONT_CHANGED			= 128; // Set when text_font is changed
+	static const uint32 PORTAL_SHAPE_CHANGED = 256; // Set when a portal's procedural geometry changes
 	uint32 changed_flags;
 
 	bool using_placeholder_model;

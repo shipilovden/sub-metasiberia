@@ -435,6 +435,9 @@ static void configurePortalOpenGLMaterialsFromWorldObject(const WorldObject& ob,
 
 	OpenGLMaterial& effect_mat = opengl_ob.materials[WorldObject::PORTAL_EFFECT_MATERIAL_INDEX];
 	effect_mat.transparent = true;
+	// The rectangular portal uses the same single XZ effect plane as the stock
+	// arch, so it must render from both sides.
+	effect_mat.simple_double_sided = true;
 	effect_mat.shader_prog = portal_shader_prog;
 	effect_mat.auto_assign_shader = false;
 }
@@ -1892,6 +1895,11 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 		portal_opengl_mesh = results.opengl_mesh_data;
 		portal_shape = results.physics_shape;
 	}
+	{
+		MeshBuilding::MeshBuildingResults results = MeshBuilding::makeRectangularPortalMeshes(*opengl_engine->vert_buf_allocator);
+		rectangular_portal_opengl_mesh = results.opengl_mesh_data;
+		rectangular_portal_shape = results.physics_shape;
+	}
 
 	// Make image cube meshes
 	{
@@ -2701,9 +2709,11 @@ void GUIClient::shutdown()
 	camera_opengl_mesh = NULL;
 	camera_screen_opengl_mesh = NULL;
 	portal_opengl_mesh = NULL;
+	rectangular_portal_opengl_mesh = NULL;
 	camera_shape = PhysicsShape();
 	camera_screen_shape = PhysicsShape();
 	portal_shape = PhysicsShape();
+	rectangular_portal_shape = PhysicsShape();
 	cur_loading_mesh_data = NULL;
 	single_voxel_meshdata = NULL;
 	single_voxel_shapedata = NULL;
@@ -4889,8 +4899,9 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 			{
 				assert(ob->physics_object.isNull());
 
+				const bool rectangular_portal = ob->portalShape() == WorldObject::PortalShape_Rectangular;
 				PhysicsObjectRef physics_ob = new PhysicsObject(/*collidable=*/true);
-				physics_ob->shape = this->portal_shape;
+				physics_ob->shape = rectangular_portal ? this->rectangular_portal_shape : this->portal_shape;
 				physics_ob->is_sensor = ob->isSensor();
 				physics_ob->userdata = ob;
 				physics_ob->userdata_type = 0;
@@ -4900,7 +4911,8 @@ void GUIClient::loadModelForObject(WorldObject* ob, WorldStateLock& world_state_
 				physics_ob->scale = useScaleForWorldOb(ob->scale);
 
 				GLObjectRef opengl_ob = opengl_engine->allocateObject();
-				opengl_ob->mesh_data = this->portal_opengl_mesh;
+				opengl_ob->mesh_data = rectangular_portal ? this->rectangular_portal_opengl_mesh : this->portal_opengl_mesh;
+				ob->setAABBOS(opengl_ob->mesh_data->aabb_os);
 				
 				glare::ArenaFrame frame(arena_allocator);
 				configurePortalOpenGLMaterialsFromWorldObject(*ob, ob_lod_level, use_basis_textures_for_ob, *resource_manager, &arena_allocator, this->portal_shader_prog.ptr(), *opengl_ob);
@@ -12799,6 +12811,14 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 
 						// Make sure lod level is set before calling loadModelForObject(), which will start downloads based on the lod level.
 						ob->current_lod_level = getEffectiveLODLevel(ob, cam_controller.getPosition());
+						if(ob->object_type == WorldObject::ObjectType_Portal &&
+							BitUtils::isBitSet(ob->changed_flags, WorldObject::PORTAL_SHAPE_CHANGED))
+						{
+							removeAndDeleteGLAndPhysicsObjectsForOb(*ob);
+							const bool rectangular_portal = ob->portalShape() == WorldObject::PortalShape_Rectangular;
+							ob->setAABBOS(rectangular_portal ? rectangular_portal_opengl_mesh->aabb_os : portal_opengl_mesh->aabb_os);
+							BitUtils::zeroBit(ob->changed_flags, WorldObject::PORTAL_SHAPE_CHANGED);
+						}
 
 						ob->in_proximity = ob->getCentroidWS().getDist2(campos) < this->load_distance2;
 						const Vec3i chunk_coords(Maths::floorToInt(ob->getCentroidWS()[0] / chunk_w), Maths::floorToInt(ob->getCentroidWS()[1] / chunk_w), 0);
@@ -20143,6 +20163,21 @@ void GUIClient::objectEdited()
 		force_new_undo_edit = false;
 
 		setMaterialFlagsForObject(selected_ob.ptr());
+
+		if(selected_ob->object_type == WorldObject::ObjectType_Portal &&
+			BitUtils::isBitSet(selected_ob->changed_flags, WorldObject::PORTAL_SHAPE_CHANGED))
+		{
+			removeAndDeleteGLAndPhysicsObjectsForOb(*selected_ob);
+			const bool rectangular_portal = selected_ob->portalShape() == WorldObject::PortalShape_Rectangular;
+			selected_ob->setAABBOS(rectangular_portal ? rectangular_portal_opengl_mesh->aabb_os : portal_opengl_mesh->aabb_os);
+			{
+				WorldStateLock lock(this->world_state->mutex);
+				loadModelForObject(selected_ob.ptr(), lock);
+			}
+			if(selected_ob->opengl_engine_ob.nonNull())
+				opengl_engine->selectObject(selected_ob->opengl_engine_ob);
+			BitUtils::zeroBit(selected_ob->changed_flags, WorldObject::PORTAL_SHAPE_CHANGED);
+		}
 
 		if((selected_ob->object_type == WorldObject::ObjectType_VoxelGroup) && 
 			(BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::DYNAMIC_CHANGED) || BitUtils::isBitSet(this->selected_ob->changed_flags, WorldObject::PHYSICS_VALUE_CHANGED)))

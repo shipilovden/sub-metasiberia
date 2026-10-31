@@ -796,6 +796,8 @@ ObjectEditor::ObjectEditor(QWidget *parent)
 	audioMoveTrackUpPushButton(NULL),
 	audioMoveTrackDownPushButton(NULL),
 	portalGroupBox(NULL),
+	portalShapeLabel(NULL),
+	portalShapeComboBox(NULL),
 	portalStyleLabel(NULL),
 	portalStyleComboBox(NULL),
 	portalApplyStylePushButton(NULL),
@@ -1390,7 +1392,14 @@ void ObjectEditor::createPortalEditorUI()
 	portal_grid->setVerticalSpacing(6);
 
 	this->portalStyleLabel = new QLabel(this->portalGroupBox);
-	portal_grid->addWidget(this->portalStyleLabel, 0, 0);
+	this->portalShapeLabel = new QLabel(this->portalGroupBox);
+	this->portalShapeComboBox = new QComboBox(this->portalGroupBox);
+	this->portalShapeComboBox->addItem(QStringLiteral("Classic Arch"), (uint)WorldObject::PortalShape_Arch);
+	this->portalShapeComboBox->addItem(QStringLiteral("Rectangular Doorway"), (uint)WorldObject::PortalShape_Rectangular);
+	configureDockComboBox(this->portalShapeComboBox, 14, 260);
+	portal_grid->addWidget(this->portalShapeLabel, 0, 0);
+	portal_grid->addWidget(this->portalShapeComboBox, 0, 1, 1, 3);
+	portal_grid->addWidget(this->portalStyleLabel, 1, 0);
 
 	this->portalStyleComboBox = new QComboBox(this->portalGroupBox);
 	this->portalStyleComboBox->addItem(QStringLiteral("Classic Marble"), QStringLiteral("classic"));
@@ -1404,22 +1413,22 @@ void ObjectEditor::createPortalEditorUI()
 	this->portalStyleComboBox->addItem(QStringLiteral("Solar Gate"), QStringLiteral("solar"));
 	this->portalStyleComboBox->addItem(QStringLiteral("Ghost Gate"), QStringLiteral("ghost"));
 	configureDockComboBox(this->portalStyleComboBox, 14, 260);
-	portal_grid->addWidget(this->portalStyleComboBox, 0, 1, 1, 3);
+	portal_grid->addWidget(this->portalStyleComboBox, 1, 1, 1, 3);
 
 	this->portalApplyStylePushButton = new QPushButton(this->portalGroupBox);
 	this->portalResetMaterialsPushButton = new QPushButton(this->portalGroupBox);
 	this->portalHelpPushButton = new QPushButton(QStringLiteral("?"), this->portalGroupBox);
 	this->portalHelpPushButton->setMaximumWidth(32);
-	portal_grid->addWidget(this->portalApplyStylePushButton, 1, 1);
-	portal_grid->addWidget(this->portalResetMaterialsPushButton, 1, 2);
-	portal_grid->addWidget(this->portalHelpPushButton, 1, 3);
+	portal_grid->addWidget(this->portalApplyStylePushButton, 2, 1);
+	portal_grid->addWidget(this->portalResetMaterialsPushButton, 2, 2);
+	portal_grid->addWidget(this->portalHelpPushButton, 2, 3);
 
 	this->portalMainWorldPushButton = new QPushButton(this->portalGroupBox);
 	this->portalMapWorldPushButton = new QPushButton(this->portalGroupBox);
 	this->portalClearTargetPushButton = new QPushButton(this->portalGroupBox);
-	portal_grid->addWidget(this->portalMainWorldPushButton, 2, 1);
-	portal_grid->addWidget(this->portalMapWorldPushButton, 2, 2);
-	portal_grid->addWidget(this->portalClearTargetPushButton, 2, 3);
+	portal_grid->addWidget(this->portalMainWorldPushButton, 3, 1);
+	portal_grid->addWidget(this->portalMapWorldPushButton, 3, 2);
+	portal_grid->addWidget(this->portalClearTargetPushButton, 3, 3);
 
 	portal_layout->addLayout(portal_grid);
 
@@ -1437,6 +1446,7 @@ void ObjectEditor::createPortalEditorUI()
 	connect(this->portalMapWorldPushButton, SIGNAL(clicked(bool)), this, SLOT(setPortalTargetMapWorld()));
 	connect(this->portalClearTargetPushButton, SIGNAL(clicked(bool)), this, SLOT(clearPortalTarget()));
 	connect(this->portalHelpPushButton, SIGNAL(clicked(bool)), this, SLOT(showPortalHelp()));
+	connect(this->portalShapeComboBox, SIGNAL(currentIndexChanged(int)), this, SIGNAL(objectChanged()));
 }
 
 
@@ -1452,6 +1462,9 @@ void ObjectEditor::retranslateDynamicPortalUI()
 	};
 
 	this->portalGroupBox->setTitle(tr_portal("Portal Editor"));
+	this->portalShapeLabel->setText(tr_portal("Portal Shape"));
+	this->portalShapeComboBox->setItemText(0, tr_portal("Classic Arch"));
+	this->portalShapeComboBox->setItemText(1, tr_portal("Rectangular Doorway"));
 	this->portalStyleLabel->setText(tr_portal("Portal Style"));
 	this->portalStyleComboBox->setItemText(0, tr_portal("Classic Marble"));
 	this->portalStyleComboBox->setItemText(1, tr_portal("Arcane Rift"));
@@ -1468,9 +1481,11 @@ void ObjectEditor::retranslateDynamicPortalUI()
 	this->portalMainWorldPushButton->setText(tr_portal("Main World"));
 	this->portalMapWorldPushButton->setText(tr_portal("Map World"));
 	this->portalClearTargetPushButton->setText(tr_portal("Clear Target"));
-	this->portalTipLabel->setText(tr_portal("A professional portal is built from three things: a clear destination URL, a readable silhouette, and a strong inner effect. Use a style preset first, then tune Portal Effect material for colour and glow."));
+	this->portalTipLabel->setText(tr_portal("Choose the portal geometry here. Existing portals keep the classic arch unless you change it. A professional portal also needs a clear destination URL, readable materials and a strong inner effect."));
 
-	const QString style_tip = tr_portal("Applies a complete visual style to all five portal materials: inner rim, arch body, outer edge, portal effect and threshold.");
+	const QString style_tip = tr_portal("Applies a complete visual style to all five portal materials: inner rim, frame body, outer edge, portal effect and threshold.");
+	this->portalShapeLabel->setToolTip(tr_portal("Choose between the classic arched portal and a rectangular doorway. The geometry and doorway collision update together."));
+	this->portalShapeComboBox->setToolTip(tr_portal("Choose between the classic arched portal and a rectangular doorway. The geometry and doorway collision update together."));
 	this->portalStyleLabel->setToolTip(style_tip);
 	this->portalStyleComboBox->setToolTip(style_tip);
 	this->portalApplyStylePushButton->setToolTip(style_tip);
@@ -3264,6 +3279,11 @@ void ObjectEditor::setFromObject(const WorldObject& ob, int selected_mat_index_,
 	setParticleEditorLayout(this->editing_particle_emitter);
 	this->gaussianSplatGroupBox->setVisible(this->editing_gaussian_splat);
 	this->portalGroupBox->setVisible(ob.object_type == WorldObject::ObjectType_Portal);
+	if(ob.object_type == WorldObject::ObjectType_Portal)
+	{
+		const int shape_index = this->portalShapeComboBox->findData((uint)ob.portalShape());
+		this->portalShapeComboBox->setCurrentIndex(shape_index >= 0 ? shape_index : 0);
+	}
 
 	if(ob.object_type != WorldObject::ObjectType_Hypercard)
 	{
@@ -3482,6 +3502,13 @@ void ObjectEditor::toObject(WorldObject& ob_out)
 {
 	const bool is_audio_player_webview = ob_out.isAudioPlayerWebView();
 	const bool is_particle_emitter = this->editing_particle_emitter || ((ob_out.object_type == WorldObject::ObjectType_Generic) && ParticleEmitterSettings::isParticleEmitterContent(ob_out.content));
+	if(ob_out.object_type == WorldObject::ObjectType_Portal)
+	{
+		const uint32 new_shape = this->portalShapeComboBox->currentData().toUInt();
+		if(ob_out.portalShape() != new_shape)
+			ob_out.changed_flags |= WorldObject::PORTAL_SHAPE_CHANGED;
+		ob_out.setPortalShape((WorldObject::PortalShape)new_shape);
+	}
 
 	if(is_audio_player_webview)
 		syncContentFromAudioPlaylistWidget();
@@ -3835,6 +3862,7 @@ void ObjectEditor::setControlsEditable(bool editable)
 	this->audioPlaylistListWidget->setEditTriggers(editable ? (QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked) : QAbstractItemView::NoEditTriggers);
 	updateAudioPlaylistButtonsEnabled();
 
+	this->portalShapeComboBox->setEnabled(editable);
 	this->portalStyleComboBox->setEnabled(editable);
 	this->portalApplyStylePushButton->setEnabled(editable);
 	this->portalResetMaterialsPushButton->setEnabled(editable);
@@ -4295,21 +4323,22 @@ void ObjectEditor::showPortalHelp()
 		QStringLiteral("<p>") + tr_portal("A portal is both navigation and stage lighting. Players must instantly understand where it goes, whether it is active, and what kind of world waits behind it.") + QStringLiteral("</p>") +
 		QStringLiteral("<h3>") + tr_portal("Fast workflow") + QStringLiteral("</h3><ol>") +
 		QStringLiteral("<li>") + tr_portal("Set Portal Target URL first. Use sib:// links for new in-world links, for example sib://vr.metasiberia.com/map. Legacy sub:// links still work.") + QStringLiteral("</li>") +
+		QStringLiteral("<li>") + tr_portal("Choose Classic Arch or Rectangular Doorway to set the portal geometry.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Pick a Portal Style or press a style button below. The preset changes all five portal materials at once.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Tune Material 3 (Portal Effect) for the inner colour and glow, then tune rim/frame materials for silhouette readability.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Scale the portal so the player can read it from a distance, then rotate it so the front faces the intended approach direction.") + QStringLiteral("</li></ol>") +
 		QStringLiteral("<h3>") + tr_portal("Material slots") + QStringLiteral("</h3><ul>") +
 		QStringLiteral("<li>") + tr_portal("Material 0 is the inner rim: use it as the brightest readable outline.") + QStringLiteral("</li>") +
-		QStringLiteral("<li>") + tr_portal("Material 1 is the arch body: stone, metal, glass or dark support material.") + QStringLiteral("</li>") +
+		QStringLiteral("<li>") + tr_portal("Material 1 is the portal frame body: stone, metal, glass or dark support material.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Material 2 is the outer edge: use contrast here so the portal silhouette stays visible.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Material 3 is the portal effect: this tints the procedural inner shader.") + QStringLiteral("</li>") +
 		QStringLiteral("<li>") + tr_portal("Material 4 is the threshold: make it match the rim so players see where to step.") + QStringLiteral("</li></ul>") +
 		QStringLiteral("<h3>") + tr_portal("Space portals") + QStringLiteral("</h3><p>") +
 		tr_portal("For space themes use Stargate, Void Singularity, Solar Gate or Ghost Gate. Strong blue/cyan reads as sci-fi travel, violet reads as deep-space anomaly, orange reads as solar/plasma, pale transparent blue reads as cryo or ghost-space. Add a nearby particle emitter with Black Hole, Wormhole, Galaxy Spiral, Starfield or Comet Tail for a professional layered effect.") + QStringLiteral("</p>") +
 		QStringLiteral("<h3>") + tr_portal("Professional composition") + QStringLiteral("</h3><p>") +
-		tr_portal("A strong portal usually has three layers: solid frame, glowing threshold, moving inner effect. Add particles outside the arch only after the target URL and base style are correct. Keep the portal entrance unobstructed and avoid very low opacity on the frame, otherwise players miss the doorway.") + QStringLiteral("</p>") +
+		tr_portal("A strong portal usually has three layers: solid frame, glowing threshold, moving inner effect. Add particles around the portal only after the target URL and base style are correct. Keep the entrance unobstructed and avoid very low opacity on the frame, otherwise players miss the doorway.") + QStringLiteral("</p>") +
 		QStringLiteral("<h3>") + tr_portal("What is still missing") + QStringLiteral("</h3><p>") +
-		tr_portal("Not yet implemented: portal mesh shape variants, inner effect variants, animated shader parameters, destination picker from favorites/parcels/worlds, URL validation, paired two-way portal creation, spawn offset/orientation controls, access rules, cooldown/sound controls, portal preview thumbnails and portal-specific particle attachment.") + QStringLiteral("</p>");
+		tr_portal("Still not implemented: inner effect variants, animated shader parameters, destination picker from favorites/parcels/worlds, URL validation, paired two-way portal creation, spawn offset/orientation controls, access rules, cooldown/sound controls, portal preview thumbnails and portal-specific particle attachment.") + QStringLiteral("</p>");
 	browser->setHtml(html);
 	main_layout->addWidget(browser, 1);
 
