@@ -1499,6 +1499,11 @@ ParticleEmitterSettings ParticleEmitterSettings::fromContent(const std::string& 
 		if(root.type != JSONNode::Type_Object)
 			return settings;
 
+		// A marker payload may intentionally specify only a preset plus a few
+		// overrides. Start from that preset's complete settings so MCP-authored
+		// emitters and hand-authored editor content agree with the preset UI.
+		const std::string preset_name = root.getChildStringValueWithDefaultVal(parser, "preset", settings.preset_name);
+		settings = presetSettings(preset_name);
 		settings.preset_name = root.getChildStringValueWithDefaultVal(parser, "preset", settings.preset_name);
 		settings.enabled = root.getChildBoolValueWithDefaultVal(parser, "enabled", settings.enabled);
 		settings.kind = kindFromString(root.getChildStringValueWithDefaultVal(parser, "kind", kindToString(settings.kind)));

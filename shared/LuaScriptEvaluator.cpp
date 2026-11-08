@@ -20,7 +20,11 @@ Copyright Glare Technologies Limited 2024 -
 #include <utils/StringUtils.h>
 #include <utils/Lock.h>
 #include <lua/LuaUtils.h>
+#include <lua/LuaSerialisation.h>
+#include <BufferViewInStream.h>
 #include <lualib.h>
+#include <cmath>
+#include <set>
 
 
 // Sets script_evaluator->cur_world_state_lock pointer to the world_state_lock address for the lifetime of the object.
@@ -143,6 +147,7 @@ LuaScriptEvaluator::LuaScriptEvaluator(const Reference<SubstrataLuaVM>& substrat
 :	substrata_lua_vm(substrata_lua_vm_),
 	script_output_handler(script_output_handler_),
 	hit_error(false),
+	game_action_input_binding_registered(false),
 	world_object(world_object_),
 #if SERVER
 	world_state(world_state_),
@@ -152,7 +157,13 @@ LuaScriptEvaluator::LuaScriptEvaluator(const Reference<SubstrataLuaVM>& substrat
 	cur_world_state_lock(nullptr)
 {
 	for(int i=0; i<MAX_NUM_TIMERS; ++i)
+	{
 		timers[i].id = -1;
+		timers[i].onTimerEvent_ref = LUA_NOREF;
+		timers[i].last_trigger_time = 0.0;
+		timers[i].fixed_step_s = 0.0;
+		timers[i].fixed_step_accumulator_s = 0.0;
+	}
 
 	LuaScriptOptions options;
 	options.max_num_interrupts = 10000;
@@ -213,6 +224,62 @@ LuaScriptEvaluator::LuaScriptEvaluator(const Reference<SubstrataLuaVM>& substrat
 		}
 	}
 	{
+		const LuaUtils::LuaFuncRefAndPtr func_info = LuaUtils::getRefToFunction(lua_script->thread_state, "onUserGameSessionChanged");
+		if(func_info.ref != LUA_NOREF)
+		{
+			HandlerFunc handler_func({WeakReference<LuaScriptEvaluator>(this), func_info.ref, func_info.func_ptr});
+			world_object->getOrCreateEventHandlers()->onUserGameSessionChanged_handlers.addHandler(handler_func);
+		}
+	}
+	{
+		const LuaUtils::LuaFuncRefAndPtr func_info = LuaUtils::getRefToFunction(lua_script->thread_state, "onUserKeyPressed");
+		if(func_info.ref != LUA_NOREF)
+		{
+			HandlerFunc handler_func({WeakReference<LuaScriptEvaluator>(this), func_info.ref, func_info.func_ptr});
+			world_object->getOrCreateEventHandlers()->onUserKeyPressed_handlers.addHandler(handler_func);
+		}
+	}
+	{
+		const LuaUtils::LuaFuncRefAndPtr func_info = LuaUtils::getRefToFunction(lua_script->thread_state, "onUserKeyReleased");
+		if(func_info.ref != LUA_NOREF)
+		{
+			HandlerFunc handler_func({WeakReference<LuaScriptEvaluator>(this), func_info.ref, func_info.func_ptr});
+			world_object->getOrCreateEventHandlers()->onUserKeyReleased_handlers.addHandler(handler_func);
+		}
+	}
+	{
+		const LuaUtils::LuaFuncRefAndPtr func_info = LuaUtils::getRefToFunction(lua_script->thread_state, "onUserGameAction");
+		if(func_info.ref != LUA_NOREF)
+		{
+			HandlerFunc handler_func({WeakReference<LuaScriptEvaluator>(this), func_info.ref, func_info.func_ptr});
+			world_object->getOrCreateEventHandlers()->onUserGameAction_handlers.addHandler(handler_func);
+		}
+	}
+	{
+		const LuaUtils::LuaFuncRefAndPtr func_info = LuaUtils::getRefToFunction(lua_script->thread_state, "onUserGameMessage");
+		if(func_info.ref != LUA_NOREF)
+		{
+			HandlerFunc handler_func({WeakReference<LuaScriptEvaluator>(this), func_info.ref, func_info.func_ptr});
+			world_object->getOrCreateEventHandlers()->onUserGameMessage_handlers.addHandler(handler_func);
+		}
+	}
+	{
+		const LuaUtils::LuaFuncRefAndPtr func_info = LuaUtils::getRefToFunction(lua_script->thread_state, "onGameStateChanged");
+		if(func_info.ref != LUA_NOREF)
+		{
+			HandlerFunc handler_func({WeakReference<LuaScriptEvaluator>(this), func_info.ref, func_info.func_ptr});
+			world_object->getOrCreateEventHandlers()->onGameStateChanged_handlers.addHandler(handler_func);
+		}
+	}
+	{
+		const LuaUtils::LuaFuncRefAndPtr func_info = LuaUtils::getRefToFunction(lua_script->thread_state, "onGameEvent");
+		if(func_info.ref != LUA_NOREF)
+		{
+			HandlerFunc handler_func({WeakReference<LuaScriptEvaluator>(this), func_info.ref, func_info.func_ptr});
+			world_object->getOrCreateEventHandlers()->onGameEvent_handlers.addHandler(handler_func);
+		}
+	}
+	{
 		const LuaUtils::LuaFuncRefAndPtr func_info = LuaUtils::getRefToFunction(lua_script->thread_state, "onUserMovedNearToObject");
 		if(func_info.ref != LUA_NOREF)
 		{
@@ -257,6 +324,9 @@ LuaScriptEvaluator::LuaScriptEvaluator(const Reference<SubstrataLuaVM>& substrat
 
 LuaScriptEvaluator::~LuaScriptEvaluator()
 {
+	if(game_action_input_binding_registered && game_action_input_event_handlers.nonNull() &&
+		game_action_input_event_handlers->game_action_input_binding_count > 0)
+		game_action_input_event_handlers->game_action_input_binding_count--;
 }
 
 
@@ -331,6 +401,318 @@ void LuaScriptEvaluator::doOnUserUsedObject(int func_ref, UID avatar_uid, UID ob
 		//conPrint("Error while executing onUserUsedObject: " + e.what());
 		if(script_output_handler)
 			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+}
+
+
+void LuaScriptEvaluator::doOnUserGameSessionChanged(int func_ref, UID avatar_uid, UID ob_uid, bool active, WorldStateLock& world_state_lock) noexcept
+{
+	if(hit_error || (func_ref == LUA_NOREF))
+		return;
+
+	try
+	{
+		SetCurWorldStateLockClass setter(this, world_state_lock);
+		lua_script->resetExecutionTimeCounter();
+		lua_getref(lua_script->thread_state, func_ref);
+		pushAvatarTableOntoStack(avatar_uid);
+		pushWorldObjectTableOntoStack(ob_uid);
+		lua_pushboolean(lua_script->thread_state, active ? 1 : 0);
+		lua_call(lua_script->thread_state, /*nargs=*/3, /*nresults=*/0);
+	}
+	catch(std::exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+	catch(glare::Exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
+		hit_error = true;
+	}
+}
+
+
+void LuaScriptEvaluator::doOnUserKeyPressed(int func_ref, UID avatar_uid, UID ob_uid, const std::string& key, WorldStateLock& world_state_lock) noexcept
+{
+	if(hit_error || (func_ref == LUA_NOREF))
+		return;
+
+	try
+	{
+		SetCurWorldStateLockClass setter(this, world_state_lock);
+		lua_script->resetExecutionTimeCounter();
+		lua_getref(lua_script->thread_state, func_ref);
+		pushAvatarTableOntoStack(avatar_uid);
+		pushWorldObjectTableOntoStack(ob_uid);
+		lua_pushlstring(lua_script->thread_state, key.data(), key.size());
+		lua_call(lua_script->thread_state, /*nargs=*/3, /*nresults=*/0);
+	}
+	catch(std::exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+	catch(glare::Exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
+		hit_error = true;
+	}
+}
+
+
+void LuaScriptEvaluator::doOnUserKeyReleased(int func_ref, UID avatar_uid, UID ob_uid, const std::string& key, WorldStateLock& world_state_lock) noexcept
+{
+	if(hit_error || (func_ref == LUA_NOREF))
+		return;
+
+	try
+	{
+		SetCurWorldStateLockClass setter(this, world_state_lock);
+		lua_script->resetExecutionTimeCounter();
+		lua_getref(lua_script->thread_state, func_ref);
+		pushAvatarTableOntoStack(avatar_uid);
+		pushWorldObjectTableOntoStack(ob_uid);
+		lua_pushlstring(lua_script->thread_state, key.data(), key.size());
+		lua_call(lua_script->thread_state, /*nargs=*/3, /*nresults=*/0);
+	}
+	catch(std::exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+	catch(glare::Exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
+		hit_error = true;
+	}
+}
+
+
+void LuaScriptEvaluator::doOnUserGameAction(int func_ref, UID avatar_uid, UID ob_uid, const std::string& action_id, const std::vector<std::pair<std::string, std::string>>& values, WorldStateLock& world_state_lock) noexcept
+{
+	if(hit_error || (func_ref == LUA_NOREF))
+		return;
+
+	try
+	{
+		SetCurWorldStateLockClass setter(this, world_state_lock);
+		lua_script->resetExecutionTimeCounter();
+		lua_getref(lua_script->thread_state, func_ref);
+		pushAvatarTableOntoStack(avatar_uid);
+		pushWorldObjectTableOntoStack(ob_uid);
+		lua_pushlstring(lua_script->thread_state, action_id.data(), action_id.size());
+		if(values.empty()) lua_pushnil(lua_script->thread_state);
+		else
+		{
+			lua_createtable(lua_script->thread_state, 0, (int)values.size());
+			for(const auto& value : values)
+			{
+				lua_pushlstring(lua_script->thread_state, value.second.data(), value.second.size());
+				lua_setfield(lua_script->thread_state, -2, value.first.c_str());
+			}
+		}
+		lua_call(lua_script->thread_state, /*nargs=*/4, /*nresults=*/0);
+	}
+	catch(std::exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+	catch(glare::Exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
+		hit_error = true;
+	}
+}
+
+
+static bool isPlainGamePayloadValue(lua_State* state, int value_index, int depth, std::set<const void*>& active_tables, size_t& node_count)
+{
+	if(++node_count > 256 || depth > 8) return false;
+	const int value_type = lua_type(state, value_index);
+	switch(value_type)
+	{
+	case LUA_TNIL:
+	case LUA_TBOOLEAN:
+		return true;
+	case LUA_TNUMBER:
+		return std::isfinite(lua_tonumber(state, value_index));
+	case LUA_TSTRING:
+		{
+			size_t length=0;
+			lua_tolstring(state, value_index, &length);
+			return length <= 4096;
+		}
+	case LUA_TTABLE:
+		{
+			const int table_index = value_index > 0 ? value_index : lua_gettop(state) + value_index + 1;
+			if(lua_getmetatable(state, table_index))
+			{
+				lua_pop(state, 1);
+				return false;
+			}
+			const void* identity = lua_topointer(state, table_index);
+			if(!identity || active_tables.count(identity) != 0) return false;
+			active_tables.insert(identity);
+			bool valid = true;
+			lua_pushnil(state);
+			while(valid && lua_next(state, table_index) != 0)
+			{
+				const int key_type = lua_type(state, -2);
+				bool valid_key = key_type == LUA_TSTRING || key_type == LUA_TBOOLEAN || key_type == LUA_TNUMBER;
+				if(key_type == LUA_TNUMBER) valid_key = std::isfinite(lua_tonumber(state, -2));
+				if(key_type == LUA_TSTRING)
+				{
+					size_t key_length=0; lua_tolstring(state, -2, &key_length);
+					valid_key = key_length <= 128;
+				}
+				valid = valid_key && isPlainGamePayloadValue(state, -1, depth + 1, active_tables, node_count);
+				lua_pop(state, 1); // value; keep iteration key for lua_next
+			}
+			active_tables.erase(identity);
+			return valid;
+		}
+	default:
+		return false;
+	}
+}
+
+
+void LuaScriptEvaluator::doOnUserGameMessage(int func_ref, UID avatar_uid, UID ob_uid, const std::string& name, const std::vector<uint8>& payload, WorldStateLock& world_state_lock) noexcept
+{
+	if(hit_error || func_ref == LUA_NOREF) return;
+	lua_State* state = lua_script->thread_state;
+	const int initial_stack_top = lua_gettop(state);
+	try
+	{
+	SetCurWorldStateLockClass setter(this, world_state_lock);
+	try
+	{
+		lua_script->resetExecutionTimeCounter();
+		lua_getref(state, func_ref);
+		pushAvatarTableOntoStack(avatar_uid);
+		pushWorldObjectTableOntoStack(ob_uid);
+		lua_pushlstring(state, name.data(), name.size());
+		BufferViewInStream stream(ArrayRef<uint8>(payload.data(), payload.size()));
+		LuaSerialisation::deserialise(state, substrata_lua_vm->metatable_uid_to_ref_map, stream);
+		if(!stream.endOfStream()) throw glare::Exception("Game message payload contains trailing serialized data.");
+		std::set<const void*> active_tables;
+		size_t node_count=0;
+		if(!isPlainGamePayloadValue(state, -1, 0, active_tables, node_count))
+			throw glare::Exception("Game message payload must contain only plain tables, strings, finite numbers and booleans, with no metatables, cycles, or excessive nesting.");
+	}
+	catch(std::exception& e)
+	{
+		lua_settop(state, initial_stack_top);
+		if(script_output_handler) script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		return;
+	}
+	catch(glare::Exception& e)
+	{
+		lua_settop(state, initial_stack_top);
+		if(script_output_handler) script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
+		return;
+	}
+	try
+	{
+		lua_call(state, /*nargs=*/4, /*nresults=*/0);
+	}
+	catch(std::exception& e)
+	{
+		lua_settop(state, initial_stack_top);
+		if(script_output_handler) script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+	catch(glare::Exception& e)
+	{
+		lua_settop(state, initial_stack_top);
+		if(script_output_handler) script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
+		hit_error = true;
+	}
+	}
+	catch(std::exception& e)
+	{
+		lua_settop(state, initial_stack_top);
+		if(script_output_handler) script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+	catch(glare::Exception& e)
+	{
+		lua_settop(state, initial_stack_top);
+		if(script_output_handler) script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
+		hit_error = true;
+	}
+}
+
+
+void LuaScriptEvaluator::doOnGameStateChanged(int func_ref, UID ob_uid, uint32 version, const std::vector<uint8>& serialized_value, WorldStateLock& world_state_lock) noexcept
+{
+	if(hit_error || func_ref == LUA_NOREF)
+		return;
+
+	try
+	{
+		SetCurWorldStateLockClass setter(this, world_state_lock);
+		lua_script->resetExecutionTimeCounter();
+		lua_getref(lua_script->thread_state, func_ref);
+		pushWorldObjectTableOntoStack(ob_uid);
+		lua_pushnumber(lua_script->thread_state, version);
+		BufferViewInStream stream(ArrayRef<uint8>(serialized_value.data(), serialized_value.size()));
+		LuaSerialisation::deserialise(lua_script->thread_state, substrata_lua_vm->metatable_uid_to_ref_map, stream);
+		if(!stream.endOfStream())
+			throw glare::Exception("Game state update contains trailing serialized data.");
+		lua_call(lua_script->thread_state, /*nargs=*/3, /*nresults=*/0);
+	}
+	catch(std::exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+	catch(glare::Exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
+		hit_error = true;
+	}
+}
+
+
+void LuaScriptEvaluator::doOnGameEvent(int func_ref, UID ob_uid, const std::string& name, uint32 sequence, double server_time, WorldStateLock& world_state_lock) noexcept
+{
+	if(hit_error || func_ref == LUA_NOREF || name.empty() || sequence == 0)
+		return;
+	try
+	{
+		SetCurWorldStateLockClass setter(this, world_state_lock);
+		lua_script->resetExecutionTimeCounter();
+		lua_getref(lua_script->thread_state, func_ref);
+		pushWorldObjectTableOntoStack(ob_uid);
+		lua_pushlstring(lua_script->thread_state, name.data(), name.size());
+		lua_pushnumber(lua_script->thread_state, sequence);
+		lua_pushnumber(lua_script->thread_state, server_time);
+		lua_call(lua_script->thread_state, /*nargs=*/4, /*nresults=*/0);
+	}
+	catch(std::exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), std::string(e.what()));
+		hit_error = true;
+	}
+	catch(glare::Exception& e)
+	{
+		if(script_output_handler)
+			script_output_handler->errorOccurredFromLuaScript(lua_script.ptr(), e.what());
 		hit_error = true;
 	}
 }
@@ -594,7 +976,7 @@ void LuaScriptEvaluator::doOnChatMessage(int func_ref, UID avatar_uid, const std
 }
 
 
-void LuaScriptEvaluator::doOnTimerEvent(int onTimerEvent_ref, WorldStateLock& world_state_lock) noexcept
+void LuaScriptEvaluator::doOnTimerEvent(int onTimerEvent_ref, WorldStateLock& world_state_lock, double delta_time_s) noexcept
 {
 	if(hit_error)
 		return;
@@ -608,9 +990,10 @@ void LuaScriptEvaluator::doOnTimerEvent(int onTimerEvent_ref, WorldStateLock& wo
 		lua_getref(lua_script->thread_state, onTimerEvent_ref);  // Push function to be called onto stack
 
 		pushWorldObjectTableOntoStack(this->world_object->uid);
+		lua_pushnumber(lua_script->thread_state, delta_time_s);
 
 		// Call function
-		lua_call(lua_script->thread_state, /*nargs=*/1, /*nresults=*/0);
+		lua_call(lua_script->thread_state, /*nargs=*/2, /*nresults=*/0);
 	}
 	catch(std::exception& e)
 	{
@@ -633,6 +1016,8 @@ void LuaScriptEvaluator::destroyTimer(int timer_index)
 {
 	// Mark slot as free
 	timers[timer_index].id = -1;
+	timers[timer_index].fixed_step_s = 0.0;
+	timers[timer_index].fixed_step_accumulator_s = 0.0;
 
 	// Free reference to Lua onTimerEvent function, if valid
 	if(timers[timer_index].onTimerEvent_ref != LUA_NOREF)

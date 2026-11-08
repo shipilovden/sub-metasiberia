@@ -4,6 +4,7 @@ ScientificObjectSettings.cpp
 Copyright Glare Technologies Limited 2026 -
 =====================================================================*/
 #include "ScientificObjectSettings.h"
+#include "../shared/ScientificObjectTableCodec.h"
 
 
 #include <JSONParser.h>
@@ -104,7 +105,7 @@ bool isKnownScientificObjectField(const std::string& name)
 		"source_data_cache_key", "source_data_cache_path", "image_url", "image_cache_path", "image_checksum", "conformer_status",
 		"search_original_query", "search_normalized_query", "search_translation",
 		"code_language", "code_text", "prompt_text", "generated_code",
-		"data_summary", "atom_table", "bond_table", "point_table", "value_table", "property_table",
+		"data_summary", "atom_table", "bond_table", "point_table", "value_table", "property_table", "scientific_tables_zstd_base64",
 		"visualization_mode", "colour_scheme", "display_colour", "material", "atom_radius", "bond_thickness", "point_size", "line_width", "opacity", "object_scale",
 		"show_labels", "atom_labels_pinned", "show_molecule_title", "molecule_title", "molecule_title_pinned", "show_info_card", "info_card_mode", "info_card_scale", "info_card_distance", "info_card_pinned", "info_card_dark_background", "info_card_stand_type", "info_card_auto_fit_text", "info_card_stand_width", "info_card_stand_height", "info_card_stand_depth", "show_legend", "show_hydrogen", "label_mode", "label_scale", "molecule_title_scale", "label_colour", "label_max_count", "label_max_distance", "label_runtime_status",
 		"lod_level", "glow_enabled", "glow_strength", "outline_enabled", "wireframe_enabled",
@@ -187,11 +188,8 @@ void clampSettings(ScientificObjectSettings& s)
 	if(s.prompt_text.size() > max_text_len) s.prompt_text.resize(max_text_len);
 	if(s.generated_code.size() > max_text_len) s.generated_code.resize(max_text_len);
 	if(s.data_summary.size() > max_text_len) s.data_summary.resize(max_text_len);
-	if(s.atom_table.size() > max_text_len) s.atom_table.resize(max_text_len);
-	if(s.bond_table.size() > max_text_len) s.bond_table.resize(max_text_len);
-	if(s.point_table.size() > max_text_len) s.point_table.resize(max_text_len);
-	if(s.value_table.size() > max_text_len) s.value_table.resize(max_text_len);
-	if(s.property_table.size() > max_text_len) s.property_table.resize(max_text_len);
+	// Decoded tables are bounded together by ScientificObjectTableCodec. Do not
+	// truncate them here: they may be larger than the network content envelope.
 	if(s.visualization_mode.size() > 64) s.visualization_mode.resize(64);
 	if(s.colour_scheme.size() > 64) s.colour_scheme.resize(64);
 	if(s.material.size() > 64) s.material.resize(64);
@@ -547,6 +545,9 @@ ScientificObjectSettings ScientificObjectSettings::fromContent(const std::string
 		settings.point_table = root.getChildStringValueWithDefaultVal(parser, "point_table", settings.point_table);
 		settings.value_table = root.getChildStringValueWithDefaultVal(parser, "value_table", settings.value_table);
 		settings.property_table = root.getChildStringValueWithDefaultVal(parser, "property_table", settings.property_table);
+		const std::string compressed_tables = root.getChildStringValueWithDefaultVal(parser, ScientificObjectTableCodec::FIELD_NAME, "");
+		if(!compressed_tables.empty())
+			ScientificObjectTableCodec::decode(compressed_tables, settings.atom_table, settings.bond_table, settings.point_table, settings.value_table, settings.property_table);
 
 		settings.visualization_mode = root.getChildStringValueWithDefaultVal(parser, "visualization_mode", settings.visualization_mode);
 		settings.colour_scheme = root.getChildStringValueWithDefaultVal(parser, "colour_scheme", settings.colour_scheme);
@@ -657,6 +658,8 @@ std::string ScientificObjectSettings::serialiseToContent(const ScientificObjectS
 {
 	ScientificObjectSettings settings = settings_;
 	clampSettings(settings);
+	const bool compress_tables = settings.atom_table.size() + settings.bond_table.size() + settings.point_table.size() + settings.value_table.size() + settings.property_table.size() > 2048;
+	const std::string compressed_tables = compress_tables ? ScientificObjectTableCodec::encode(settings.atom_table, settings.bond_table, settings.point_table, settings.value_table, settings.property_table) : std::string();
 
 	std::ostringstream s;
 	s << SCIENTIFIC_OBJECT_MARKER << "\n";
@@ -709,11 +712,16 @@ std::string ScientificObjectSettings::serialiseToContent(const ScientificObjectS
 	s << "  \"prompt_text\": \"" << jsonEscape(settings.prompt_text) << "\",\n";
 	s << "  \"generated_code\": \"" << jsonEscape(settings.generated_code) << "\",\n";
 	s << "  \"data_summary\": \"" << jsonEscape(settings.data_summary) << "\",\n";
-	s << "  \"atom_table\": \"" << jsonEscape(settings.atom_table) << "\",\n";
-	s << "  \"bond_table\": \"" << jsonEscape(settings.bond_table) << "\",\n";
-	s << "  \"point_table\": \"" << jsonEscape(settings.point_table) << "\",\n";
-	s << "  \"value_table\": \"" << jsonEscape(settings.value_table) << "\",\n";
-	s << "  \"property_table\": \"" << jsonEscape(settings.property_table) << "\",\n";
+	if(compress_tables)
+		s << "  \"" << ScientificObjectTableCodec::FIELD_NAME << "\": \"" << compressed_tables << "\",\n";
+	else
+	{
+		s << "  \"atom_table\": \"" << jsonEscape(settings.atom_table) << "\",\n";
+		s << "  \"bond_table\": \"" << jsonEscape(settings.bond_table) << "\",\n";
+		s << "  \"point_table\": \"" << jsonEscape(settings.point_table) << "\",\n";
+		s << "  \"value_table\": \"" << jsonEscape(settings.value_table) << "\",\n";
+		s << "  \"property_table\": \"" << jsonEscape(settings.property_table) << "\",\n";
+	}
 	s << "  \"visualization_mode\": \"" << jsonEscape(settings.visualization_mode) << "\",\n";
 	s << "  \"colour_scheme\": \"" << jsonEscape(settings.colour_scheme) << "\",\n";
 	s << "  \"display_colour\": \"" << colourToHex(settings.display_colour) << "\",\n";

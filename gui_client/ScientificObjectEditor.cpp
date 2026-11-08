@@ -7,6 +7,11 @@ Copyright Glare Technologies Limited 2026 -
 #include "MoleculeViewportWidget.h"
 #include "PeriodicTable.h"
 #include "ScientificImageViewer.h"
+#include "../shared/ScientificBondData.h"
+#include "../shared/ScientificAtomicMass.h"
+#include "../shared/ScientificElementPalette.h"
+#include "../shared/ScientificFormula.h"
+#include "../shared/ScientificMoleculeGeometry.h"
 
 
 #include <BitUtils.h>
@@ -20,6 +25,7 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtCore/QDir>
 #include <QtCore/QEventLoop>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
@@ -63,8 +69,10 @@ Copyright Glare Technologies Limited 2026 -
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <functional>
 #include <iomanip>
+#include <map>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -379,6 +387,7 @@ struct MoleculeBond
 	int atom_a;
 	int atom_b;
 	int order;
+	int stereo = 0;
 };
 
 
@@ -654,13 +663,21 @@ PubChemHttpResult pubchemHttpRequest(const QUrl& url, const QByteArray& post_dat
 	result.cache_path = cache_path;
 	if(allow_cache && QFile::exists(cache_path))
 	{
-		QFile cached(cache_path);
-		if(cached.open(QIODevice::ReadOnly))
+		const QFileInfo cache_info(cache_path);
+		const qint64 cache_age_s = cache_info.lastModified().toUTC().secsTo(QDateTime::currentDateTimeUtc());
+		if(cache_info.size() > 0 && cache_age_s >= 0 && cache_age_s <= 24 * 60 * 60)
 		{
-			result.bytes = cached.readAll();
-			result.from_cache = true;
-			result.http_status = 200;
-			return result;
+			QFile cached(cache_path);
+			if(cached.open(QIODevice::ReadOnly))
+			{
+				result.bytes = cached.readAll();
+				if(!result.bytes.isEmpty())
+				{
+					result.from_cache = true;
+					result.http_status = 200;
+					return result;
+				}
+			}
 		}
 	}
 
@@ -682,12 +699,30 @@ PubChemHttpResult pubchemHttpRequest(const QUrl& url, const QByteArray& post_dat
 		if(!result.diagnostics.isEmpty())
 			conPrint(stdstr(QStringLiteral("Scientific PubChem HTTPS: %1 %2").arg(url.toString(QUrl::FullyEncoded), result.diagnostics)));
 
-		if(result.error.isEmpty() && result.http_status >= 200 && result.http_status < 300)
+		if(result.error.isEmpty() && result.http_status == 200 && !result.bytes.isEmpty())
 		{
 			QFile out(cache_path);
 			if(out.open(QIODevice::WriteOnly))
 				out.write(result.bytes);
 			result.error.clear();
+			return result;
+		}
+
+		if(result.error.isEmpty() && result.http_status == 202)
+		{
+			result.error = QStringLiteral("PubChem accepted an asynchronous request (HTTP 202), but this editor does not poll job status; no incomplete response was cached.");
+			return result;
+		}
+
+		if(result.error.isEmpty() && result.http_status == 204)
+		{
+			result.error = QStringLiteral("PubChem returned no content (HTTP 204); no empty response was cached.");
+			return result;
+		}
+
+		if(result.error.isEmpty() && result.http_status == 200 && result.bytes.isEmpty())
+		{
+			result.error = QStringLiteral("PubChem returned an empty HTTP 200 response; no empty response was cached.");
 			return result;
 		}
 
@@ -717,6 +752,15 @@ PubChemHttpResult pubchemHttpRequest(const QUrl& url, const QByteArray& post_dat
 PubChemHttpResult pubchemGet(const QUrl& url, const QString& extension = QStringLiteral(".cache"), bool allow_cache = true)
 {
 	return pubchemHttpRequest(url, QByteArray(), QStringLiteral("GET ") + url.toString(QUrl::FullyEncoded), extension, allow_cache);
+}
+
+
+bool pubchemSdfHasNo3DConformer(const PubChemHttpResult& result)
+{
+	// PUG REST reports the absence of a requested 3D record with these status
+	// codes. Transport failures, throttling and server errors must not be hidden
+	// by silently retrying the same compound as 2D.
+	return result.http_status == 400 || result.http_status == 404 || result.http_status == 204;
 }
 
 
@@ -780,7 +824,9 @@ QList<int> cidsFromPubChemIdentifierJson(const QByteArray& bytes, QString* error
 
 QString pubchemPropertyList()
 {
-	return QStringLiteral("IUPACName,MolecularFormula,MolecularWeight,ExactMass,MonoisotopicMass,Charge,HeavyAtomCount,HBondDonorCount,HBondAcceptorCount,RotatableBondCount,XLogP,TPSA,Complexity,IsomericSMILES,CanonicalSMILES,InChI,InChIKey");
+	// PUG REST returns the documented SMILES and ConnectivitySMILES fields;
+	// parsePubChemPropertyTable maps them to the editor's legacy display names.
+	return QStringLiteral("IUPACName,MolecularFormula,MolecularFormulaNoCharge,MolecularWeight,ExactMass,MonoisotopicMass,Charge,HeavyAtomCount,HBondDonorCount,HBondAcceptorCount,RotatableBondCount,XLogP,TPSA,Complexity,SMILES,ConnectivitySMILES,InChI,InChIKey");
 }
 
 
@@ -911,7 +957,7 @@ QString bondOrderToName(const int order)
 }
 
 
-ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
+ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes, int expected_cid)
 {
 	ParsedSdfMolecule parsed;
 	QString text = QString::fromUtf8(sdf_bytes);
@@ -923,6 +969,227 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 		parsed.error = QStringLiteral("SDF is too short.");
 		return parsed;
 	}
+	bool found_matching_cid = false;
+	for(int i=0; i<lines.size(); ++i)
+	{
+		if(!lines[i].trimmed().contains(QStringLiteral("<PUBCHEM_COMPOUND_CID>"))) continue;
+		if(found_matching_cid || i + 1 >= lines.size())
+		{
+			parsed.error = QStringLiteral("PubChem SDF has a missing or duplicate compound CID field.");
+			return parsed;
+		}
+		bool ok = false;
+		const int record_cid = lines[i + 1].trimmed().toInt(&ok);
+		if(!ok || record_cid != expected_cid)
+		{
+			parsed.error = QStringLiteral("PubChem SDF compound CID does not match the requested CID %1.").arg(expected_cid);
+			return parsed;
+		}
+		found_matching_cid = true;
+	}
+	if(!found_matching_cid)
+	{
+		parsed.error = QStringLiteral("PubChem SDF omitted PUBCHEM_COMPOUND_CID; refusing an unverified structure.");
+		return parsed;
+	}
+	if(lines[3].contains(QStringLiteral("V3000")))
+	{
+		struct V3000Atom
+		{
+			int id = 0;
+			QString element;
+			float x = 0.f, y = 0.f, z = 0.f;
+			int formal_charge = 0, isotope_mass_number = 0;
+		};
+		struct V3000Bond
+		{
+			int id = 0, order = 0, atom_a = 0, atom_b = 0;
+			int stereo = 0;
+		};
+		QVector<V3000Atom> v3000_atoms;
+		QVector<V3000Bond> v3000_bonds;
+		std::map<int, int> atom_index_by_id;
+		QStringList records;
+		QString continued_record;
+		for(int i=4; i<lines.size(); ++i)
+		{
+			const QString line = lines[i];
+			if(!line.startsWith(QStringLiteral("M  V30 "))) continue;
+			QString record = line.mid(7).trimmed();
+			if(!continued_record.isEmpty()) record = continued_record + record;
+			if(record.endsWith(QChar('-')))
+			{
+				record.chop(1);
+				continued_record = record;
+				continue;
+			}
+			continued_record.clear();
+			records.push_back(record);
+		}
+		if(!continued_record.isEmpty())
+		{
+			parsed.error = QStringLiteral("PubChem V3000 SDF ends with an incomplete continuation line.");
+			return parsed;
+		}
+		bool in_atoms = false, in_bonds = false, found_counts = false;
+		int expected_atoms = -1, expected_bonds = -1;
+		for(const QString& record : records)
+		{
+			const QStringList p = record.split(QRegExp(QStringLiteral("\\s+")), QString::SkipEmptyParts);
+			if(p.isEmpty()) continue;
+			if(p[0] == QStringLiteral("COUNTS"))
+			{
+				bool ok_atoms = false, ok_bonds = false;
+				if(found_counts || p.size() < 3)
+				{
+					parsed.error = QStringLiteral("PubChem V3000 SDF has invalid or excessive atom/bond counts.");
+					return parsed;
+				}
+				expected_atoms = p[1].toInt(&ok_atoms);
+				expected_bonds = p[2].toInt(&ok_bonds);
+				if(!ok_atoms || !ok_bonds || expected_atoms < 1 || expected_atoms > 5000 || expected_bonds < 0 || expected_bonds > 5000)
+				{
+					parsed.error = QStringLiteral("PubChem V3000 SDF has invalid or excessive atom/bond counts.");
+					return parsed;
+				}
+				found_counts = true;
+			}
+			else if(p[0] == QStringLiteral("BEGIN") && p.size() > 1)
+			{
+				in_atoms = p[1] == QStringLiteral("ATOM");
+				in_bonds = p[1] == QStringLiteral("BOND");
+			}
+			else if(p[0] == QStringLiteral("END") && p.size() > 1)
+			{
+				if(p[1] == QStringLiteral("ATOM")) in_atoms = false;
+				if(p[1] == QStringLiteral("BOND")) in_bonds = false;
+			}
+			else if(in_atoms)
+			{
+				if(p.size() < 6)
+				{
+					parsed.error = QStringLiteral("PubChem V3000 SDF contains an incomplete atom row.");
+					return parsed;
+				}
+				V3000Atom atom;
+				bool ok_id = false, ok_x = false, ok_y = false, ok_z = false;
+				atom.id = p[0].toInt(&ok_id); atom.element = p[1];
+				atom.x = p[2].toFloat(&ok_x); atom.y = p[3].toFloat(&ok_y); atom.z = p[4].toFloat(&ok_z);
+				if(!ok_id || atom.id < 1 || atom.id > 1000000 || atom.element.isEmpty() || atom.element.size() > 2 ||
+					PeriodicTableModel::elementBySymbol(atom.element) == nullptr ||
+					!ok_x || !ok_y || !ok_z || !std::isfinite(atom.x) || !std::isfinite(atom.y) || !std::isfinite(atom.z) ||
+					atom_index_by_id.count(atom.id) != 0)
+				{
+					parsed.error = QStringLiteral("PubChem V3000 SDF contains an invalid or duplicate atom row.");
+					return parsed;
+				}
+				for(int j=6; j<p.size(); ++j)
+				{
+					if(p[j].startsWith(QStringLiteral("CHG=")))
+					{
+						bool ok = false; atom.formal_charge = p[j].mid(4).toInt(&ok);
+						if(!ok || atom.formal_charge < -8 || atom.formal_charge > 8)
+						{
+							parsed.error = QStringLiteral("PubChem V3000 SDF contains an invalid formal charge.");
+							return parsed;
+						}
+					}
+					else if(p[j].startsWith(QStringLiteral("MASS=")))
+					{
+						bool ok = false; atom.isotope_mass_number = p[j].mid(5).toInt(&ok);
+						if(!ok || atom.isotope_mass_number < 1 || atom.isotope_mass_number > 400)
+						{
+							parsed.error = QStringLiteral("PubChem V3000 SDF contains an invalid isotope mass number.");
+							return parsed;
+						}
+					}
+				}
+				atom_index_by_id[atom.id] = v3000_atoms.size();
+				v3000_atoms.push_back(atom);
+			}
+			else if(in_bonds)
+			{
+				if(p.size() < 4)
+				{
+					parsed.error = QStringLiteral("PubChem V3000 SDF contains an incomplete bond row.");
+					return parsed;
+				}
+				V3000Bond bond;
+				bool ok_id = false, ok_order = false, ok_a = false, ok_b = false;
+				bond.id = p[0].toInt(&ok_id); bond.order = p[1].toInt(&ok_order);
+				bond.atom_a = p[2].toInt(&ok_a); bond.atom_b = p[3].toInt(&ok_b);
+				if(!ok_id || bond.id < 1 || !ok_order || bond.order < 1 || bond.order > 4 || !ok_a || !ok_b || bond.atom_a == bond.atom_b)
+				{
+					parsed.error = QStringLiteral("PubChem V3000 SDF contains an invalid bond row.");
+					return parsed;
+				}
+				for(int j=4; j<p.size(); ++j)
+					if(p[j].startsWith(QStringLiteral("CFG=")))
+					{
+						bool ok = false; bond.stereo = p[j].mid(4).toInt(&ok);
+						if(!ok || bond.stereo < 1 || bond.stereo > 3)
+						{
+							parsed.error = QStringLiteral("PubChem V3000 SDF contains an invalid bond stereo configuration.");
+							return parsed;
+						}
+						if(bond.order == 1) bond.stereo = bond.stereo == 1 ? 1 : bond.stereo == 2 ? 4 : 6;
+						else if(bond.order == 2 && bond.stereo == 2) bond.stereo = 3;
+						else
+						{
+							parsed.error = QStringLiteral("PubChem V3000 SDF has a bond CFG unsupported for its bond order.");
+							return parsed;
+						}
+					}
+				if(!ScientificBondData::isValidSDFStereo(bond.order, bond.stereo))
+				{
+					parsed.error = QStringLiteral("PubChem V3000 SDF has stereochemistry that is invalid for its bond order.");
+					return parsed;
+				}
+				v3000_bonds.push_back(bond);
+			}
+		}
+		if(!found_counts || expected_atoms != v3000_atoms.size() || expected_bonds != v3000_bonds.size())
+		{
+			parsed.error = QStringLiteral("PubChem V3000 SDF counts do not match its atom and bond rows.");
+			return parsed;
+		}
+		float min_x = v3000_atoms[0].x, max_x = min_x, min_y = v3000_atoms[0].y, max_y = min_y, min_z = v3000_atoms[0].z, max_z = min_z;
+		QStringList atom_rows, bond_rows;
+		std::set<std::pair<int, int> > seen_bonds;
+		for(const V3000Atom& atom : v3000_atoms)
+		{
+			min_x = std::min(min_x, atom.x); max_x = std::max(max_x, atom.x);
+			min_y = std::min(min_y, atom.y); max_y = std::max(max_y, atom.y);
+			min_z = std::min(min_z, atom.z); max_z = std::max(max_z, atom.z);
+			atom_rows << QStringLiteral("%1 %2 %3 %4 %5 %6 %7").arg(atom.id).arg(atom.element)
+				.arg(atom.x, 0, 'f', 6).arg(atom.y, 0, 'f', 6).arg(atom.z, 0, 'f', 6)
+				.arg(atom.formal_charge).arg(atom.isotope_mass_number);
+		}
+		for(const V3000Bond& bond : v3000_bonds)
+		{
+			if(atom_index_by_id.count(bond.atom_a) == 0 || atom_index_by_id.count(bond.atom_b) == 0)
+			{
+				parsed.error = QStringLiteral("PubChem V3000 SDF bond references an unknown atom.");
+				return parsed;
+			}
+			const std::pair<int, int> bond_pair = std::minmax(bond.atom_a, bond.atom_b);
+			if(!seen_bonds.insert(bond_pair).second)
+			{
+				parsed.error = QStringLiteral("PubChem V3000 SDF contains a duplicate bond between the same atoms.");
+				return parsed;
+			}
+			QString row = QStringLiteral("%1-%2 %3").arg(bond.atom_a).arg(bond.atom_b).arg(bondOrderToName(bond.order));
+			if(bond.stereo != 0) row += QStringLiteral(" stereo:%1").arg(bond.stereo);
+			bond_rows << row;
+		}
+		parsed.atom_count = v3000_atoms.size();
+		parsed.bond_count = v3000_bonds.size();
+		parsed.atom_table = atom_rows.join(QChar('\n')) + QChar('\n');
+		parsed.bond_table = bond_rows.join(QChar('\n')) + (bond_rows.isEmpty() ? QString() : QString(QChar('\n')));
+		parsed.dimensions = QString::fromUtf8("%1 x %2 x %3 Å")
+			.arg(max_x - min_x, 0, 'f', 3).arg(max_y - min_y, 0, 'f', 3).arg(max_z - min_z, 0, 'f', 3);
+		return parsed;
+	}
 
 	const QString counts = lines[3];
 	int atom_count = 0;
@@ -932,15 +1199,16 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 		atom_count = counts.mid(0, 3).trimmed().toInt();
 		bond_count = counts.mid(3, 3).trimmed().toInt();
 	}
-	if(atom_count <= 0 || bond_count < 0 || lines.size() < 4 + atom_count + bond_count)
+	if(atom_count <= 0 || atom_count > 5000 || bond_count < 0 || bond_count > 5000 || lines.size() < 4 + atom_count + bond_count)
 	{
-		parsed.error = QStringLiteral("SDF counts line is invalid or incomplete.");
+		parsed.error = QStringLiteral("SDF counts line is invalid, incomplete or exceeds the 5,000-atom/bond parser limit.");
 		return parsed;
 	}
 
 	std::ostringstream atoms;
 	std::ostringstream bonds;
 	QVector<int> formal_charges(atom_count, 0);
+	QVector<int> isotope_mass_numbers(atom_count, 0);
 	atoms << std::fixed << std::setprecision(6);
 	float min_x = 0, min_y = 0, min_z = 0, max_x = 0, max_y = 0, max_z = 0;
 	for(int i=0; i<atom_count; ++i)
@@ -952,18 +1220,56 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 			parsed.error = QStringLiteral("SDF atom line %1 is incomplete.").arg(i + 1);
 			return parsed;
 		}
-		const float x = parts[0].toFloat();
-		const float y = parts[1].toFloat();
-		const float z = parts[2].toFloat();
+		bool ok_x = false, ok_y = false, ok_z = false;
+		const float x = parts[0].toFloat(&ok_x);
+		const float y = parts[1].toFloat(&ok_y);
+		const float z = parts[2].toFloat(&ok_z);
 		const QString element = parts[3].trimmed();
-		int formal_charge = 0;
-		if(parts.size() > 5)
+		if(element.isEmpty() || PeriodicTableModel::elementBySymbol(element) == nullptr ||
+			!ok_x || !ok_y || !ok_z || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
 		{
-			const int charge_code = parts[5].toInt();
+			parsed.error = QStringLiteral("SDF atom line %1 has an invalid element or coordinate.").arg(i + 1);
+			return parsed;
+		}
+		int formal_charge = 0;
+		int isotope_mass_number = 0;
+		if(line.size() >= 36)
+		{
+			const QString mass_difference_field = line.mid(34, 2).trimmed();
+			if(!mass_difference_field.isEmpty())
+			{
+				bool ok_mass_difference = false;
+				const int mass_difference = mass_difference_field.toInt(&ok_mass_difference);
+				if(!ok_mass_difference || mass_difference < -3 || mass_difference > 4)
+				{
+					parsed.error = QStringLiteral("SDF atom line %1 has an invalid mass-difference isotope field.").arg(i + 1);
+					return parsed;
+				}
+				if(mass_difference != 0)
+				{
+					double atomic_mass = 0.0;
+					if(!ScientificAtomicMass::averageMass(stdstr(element).c_str(), atomic_mass))
+					{
+						parsed.error = QStringLiteral("SDF atom line %1 has an unsupported mass-difference isotope field.").arg(i + 1);
+						return parsed;
+					}
+					isotope_mass_number = (int)std::floor(atomic_mass + 0.5) + mass_difference;
+					if(isotope_mass_number < 1 || isotope_mass_number > 400)
+					{
+						parsed.error = QStringLiteral("SDF atom line %1 resolves to an unsupported isotope mass number.").arg(i + 1);
+						return parsed;
+					}
+				}
+			}
+		}
+		if(line.size() >= 39)
+		{
+			const int charge_code = line.mid(36, 3).trimmed().toInt();
 			if(charge_code >= 1 && charge_code <= 3) formal_charge = 4 - charge_code;
 			else if(charge_code >= 5 && charge_code <= 7) formal_charge = 4 - charge_code;
 		}
 		formal_charges[i] = formal_charge;
+		isotope_mass_numbers[i] = isotope_mass_number;
 		if(i == 0)
 			min_x = max_x = x, min_y = max_y = y, min_z = max_z = z;
 		else
@@ -973,15 +1279,49 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 		}
 		atoms << (i + 1) << " " << stdstr(element) << " " << x << " " << y << " " << z << " " << formal_charge << "\n";
 	}
+	std::set<int> charge_table_atoms;
+	std::set<int> isotope_table_atoms;
+	bool saw_isotope_table = false;
 	for(int line_i=4+atom_count+bond_count; line_i<lines.size(); ++line_i)
 	{
 		const QStringList p=lines[line_i].split(QRegExp(QStringLiteral("\\s+")),QString::SkipEmptyParts);
-		if(p.size()>=4&&p[0]==QStringLiteral("M")&&p[1]==QStringLiteral("CHG"))
+		if(p.size()>=4&&p[0]==QStringLiteral("M")&&(p[1]==QStringLiteral("CHG")||p[1]==QStringLiteral("ISO")))
 		{
-			const int count=p[2].toInt();for(int j=0;j<count&&3+j*2+1<p.size();++j){const int index=p[3+j*2].toInt()-1;if(index>=0&&index<formal_charges.size())formal_charges[index]=p[4+j*2].toInt();}
+			const bool is_isotope = p[1] == QStringLiteral("ISO");
+			if(is_isotope && !saw_isotope_table)
+			{
+				// CTfile M ISO records supersede the atom-block mass-difference
+				// fields as a whole, including atoms not listed in the table.
+				for(int atom_i=0; atom_i<isotope_mass_numbers.size(); ++atom_i) isotope_mass_numbers[atom_i] = 0;
+				saw_isotope_table = true;
+			}
+			bool ok_count = false;
+			const int count = p[2].toInt(&ok_count);
+			if(!ok_count || count < 0 || count > atom_count || p.size() < 3 + count * 2)
+			{
+				parsed.error = QStringLiteral("SDF M %1 table has an invalid or incomplete entry count.").arg(p[1]);
+				return parsed;
+			}
+			for(int j=0; j<count; ++j)
+			{
+				bool ok_index = false, ok_value = false;
+				const int atom_id = p[3 + j * 2].toInt(&ok_index);
+				const int value = p[4 + j * 2].toInt(&ok_value);
+				std::set<int>& seen_atoms = is_isotope ? isotope_table_atoms : charge_table_atoms;
+				if(!ok_index || !ok_value || atom_id < 1 || atom_id > atom_count || !seen_atoms.insert(atom_id).second ||
+					(is_isotope ? value < 1 || value > 400 : value < -8 || value > 8))
+				{
+					parsed.error = QStringLiteral("SDF M %1 table contains an invalid, out-of-range or duplicate atom entry.").arg(p[1]);
+					return parsed;
+				}
+				const int index = atom_id - 1;
+				if(is_isotope) isotope_mass_numbers[index] = value;
+				else formal_charges[index] = value;
+			}
 		}
 	}
 
+	std::set<std::pair<int, int> > seen_bonds;
 	for(int i=0; i<bond_count; ++i)
 	{
 		const QString line = lines[4 + atom_count + i];
@@ -991,10 +1331,23 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 			parsed.error = QStringLiteral("SDF bond line %1 is incomplete.").arg(i + 1);
 			return parsed;
 		}
-		const int a = parts[0].toInt();
-		const int b = parts[1].toInt();
-		const int order = parts[2].toInt();
-		const int stereo = parts.size() > 3 ? parts[3].toInt() : 0;
+		bool ok_a = false, ok_b = false, ok_order = false, ok_stereo = true;
+		const int a = parts[0].toInt(&ok_a);
+		const int b = parts[1].toInt(&ok_b);
+		const int order = parts[2].toInt(&ok_order);
+		const int stereo = parts.size() > 3 ? parts[3].toInt(&ok_stereo) : 0;
+		if(!ok_a || !ok_b || !ok_order || !ok_stereo || a < 1 || b < 1 || a > atom_count || b > atom_count || a == b || order < 1 || order > 4 ||
+			!ScientificBondData::isValidSDFStereo(order, stereo))
+		{
+			parsed.error = QStringLiteral("SDF bond line %1 has an invalid atom index, order or stereochemistry.").arg(i + 1);
+			return parsed;
+		}
+		const std::pair<int, int> bond_pair = std::minmax(a, b);
+		if(!seen_bonds.insert(bond_pair).second)
+		{
+			parsed.error = QStringLiteral("SDF contains a duplicate bond between the same atoms.");
+			return parsed;
+		}
 		bonds << a << "-" << b << " " << stdstr(bondOrderToName(order));
 		if(stereo != 0) bonds << " stereo:" << stereo;
 		bonds << "\n";
@@ -1003,7 +1356,7 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 	parsed.atom_count = atom_count;
 	parsed.bond_count = bond_count;
 	QStringList atom_output=QString::fromStdString(atoms.str()).split(QChar('\n'),QString::SkipEmptyParts);
-	for(int i=0;i<atom_output.size()&&i<formal_charges.size();++i){QStringList p=atom_output[i].split(QChar(' '),QString::SkipEmptyParts);if(p.size()>=6){p[5]=QString::number(formal_charges[i]);atom_output[i]=p.join(QChar(' '));}}
+	for(int i=0;i<atom_output.size()&&i<formal_charges.size();++i){QStringList p=atom_output[i].split(QChar(' '),QString::SkipEmptyParts);if(p.size()>=6){p[5]=QString::number(formal_charges[i]);if(p.size()<7)p<<QString::number(isotope_mass_numbers[i]);else p[6]=QString::number(isotope_mass_numbers[i]);atom_output[i]=p.join(QChar(' '));}}
 	parsed.atom_table = atom_output.join(QChar('\n')) + QChar('\n');
 	parsed.bond_table = QString::fromStdString(bonds.str());
 	parsed.dimensions = QString::fromUtf8("%1 x %2 x %3 Å")
@@ -1011,6 +1364,51 @@ ParsedSdfMolecule parsePubChemSdf(const QByteArray& sdf_bytes)
 		.arg(max_y - min_y, 0, 'f', 3)
 		.arg(max_z - min_z, 0, 'f', 3);
 	return parsed;
+}
+
+
+bool verifyPubChemSdfProperties(const ParsedSdfMolecule& molecule, const QMap<QString, QString>& properties, QString* error_out)
+{
+	auto fail = [error_out](const QString& error) { if(error_out) *error_out = error; return false; };
+	const QString formula = properties.value(QStringLiteral("MolecularFormula"));
+	if(formula.isEmpty()) return fail(QStringLiteral("PubChem omitted MolecularFormula; refusing to apply an unverified structure."));
+	bool ok_charge = false;
+	const int expected_charge = properties.value(QStringLiteral("Charge")).toInt(&ok_charge);
+	if(!ok_charge || expected_charge < -40000 || expected_charge > 40000)
+		return fail(QStringLiteral("PubChem omitted or returned an invalid Charge property; refusing to apply an unverified structure."));
+	std::map<std::string, int> expected_elements;
+	if(!ScientificFormula::parsePubChemCounts(stdstr(formula),
+		stdstr(properties.value(QStringLiteral("MolecularFormulaNoCharge"))), expected_charge, expected_elements))
+		return fail(QStringLiteral("PubChem returned inconsistent or unsupported molecular formula/charge data."));
+
+	std::map<std::string, int> observed_elements;
+	int observed_charge = 0;
+	int observed_heavy_atoms = 0;
+	const QStringList atom_rows = molecule.atom_table.split(QChar('\n'), QString::SkipEmptyParts);
+	for(const QString& row : atom_rows)
+	{
+		const QStringList fields = row.split(QRegExp(QStringLiteral("\\s+")), QString::SkipEmptyParts);
+		if(fields.size() < 6) return fail(QStringLiteral("Parsed PubChem atom table is incomplete; no structure was applied."));
+		const QString element = fields[1];
+		bool ok_atom_charge = false;
+		const int charge = fields[5].toInt(&ok_atom_charge);
+		if(!ok_atom_charge || charge < -8 || charge > 8) return fail(QStringLiteral("Parsed PubChem atom table contains an invalid formal charge."));
+		observed_elements[stdstr(element)] += 1;
+		observed_charge += charge;
+		if(element != QStringLiteral("H")) ++observed_heavy_atoms;
+	}
+	if(observed_elements != expected_elements)
+		return fail(QStringLiteral("PubChem SDF atom elements disagree with the PubChem molecular formula; no structure was applied."));
+	if(expected_charge != observed_charge)
+		return fail(QStringLiteral("PubChem SDF formal charges disagree with the PubChem Charge property; no structure was applied."));
+	bool ok_heavy_count = false;
+	const int expected_heavy_atoms = properties.value(QStringLiteral("HeavyAtomCount")).toInt(&ok_heavy_count);
+	if(!ok_heavy_count || expected_heavy_atoms < 0)
+		return fail(QStringLiteral("PubChem omitted or returned an invalid HeavyAtomCount property; no structure was applied."));
+	if(expected_heavy_atoms != observed_heavy_atoms)
+		return fail(QStringLiteral("PubChem SDF atom count disagrees with the PubChem HeavyAtomCount property; no structure was applied."));
+	if(error_out) error_out->clear();
+	return true;
 }
 
 
@@ -1055,43 +1453,26 @@ std::string normaliseElementSymbol(const std::string& element)
 std::string materialNameForElement(const std::string& element)
 {
 	const std::string e = normaliseElementSymbol(element);
-	if(e == "H") return "mat_H";
-	if(e == "C") return "mat_C";
-	if(e == "N") return "mat_N";
-	if(e == "O") return "mat_O";
-	if(e == "S") return "mat_S";
-	if(e == "P") return "mat_P";
-	if(e == "Cl") return "mat_Cl";
-	if(e == "F") return "mat_F";
-	return "mat_Default";
+	return "mat_" + e;
 }
 
 
 Colour3f cpkColourForElement(const std::string& element)
 {
 	const std::string e = normaliseElementSymbol(element);
-	if(e == "H") return Colour3f(0.94f, 0.94f, 0.90f);
-	if(e == "C") return Colour3f(0.05f, 0.05f, 0.05f);
-	if(e == "N") return Colour3f(0.12f, 0.24f, 0.88f);
-	if(e == "O") return Colour3f(0.86f, 0.04f, 0.02f);
-	if(e == "S") return Colour3f(0.92f, 0.78f, 0.08f);
-	if(e == "P") return Colour3f(0.95f, 0.48f, 0.08f);
-	if(e == "Cl") return Colour3f(0.12f, 0.70f, 0.12f);
-	if(e == "F") return Colour3f(0.52f, 0.90f, 0.52f);
+	const char* hex = ScientificElementPalette::displayHexColour(e.c_str());
+	if(hex)
+	{
+		const unsigned long rgb = std::strtoul(hex, NULL, 16);
+		return Colour3f((float)((rgb >> 16) & 255) / 255.f, (float)((rgb >> 8) & 255) / 255.f, (float)(rgb & 255) / 255.f);
+	}
 	return Colour3f(0.18f, 0.72f, 0.92f);
 }
 
 
 float cpkRadiusScaleForElement(const std::string& element)
 {
-	const std::string e = normaliseElementSymbol(element);
-	if(e == "H") return 0.58f;
-	if(e == "C") return 1.00f;
-	if(e == "N") return 0.95f;
-	if(e == "O") return 0.92f;
-	if(e == "S") return 1.10f;
-	if(e == "P") return 1.10f;
-	return 0.96f;
+	return (float)ScientificMoleculeGeometry::cpkRadiusScale(normaliseElementSymbol(element));
 }
 
 
@@ -1156,6 +1537,8 @@ int bondOrderFromToken(const std::string& token)
 		return 2;
 	if(t == "3" || t == "triple")
 		return 3;
+	if(t == "4" || t == "aromatic")
+		return 4;
 	return 1;
 }
 
@@ -1174,15 +1557,51 @@ std::vector<MoleculeBond> parseMoleculeBonds(const std::string& bond_table, cons
 		std::stringstream parser(line);
 		int source_a = 0;
 		int source_b = 0;
+		std::string first_token;
 		std::string order_token;
-		if(parser >> source_a >> source_b)
+		if(parser >> first_token)
 		{
+			const size_t dash = first_token.find('-');
+			if(dash != std::string::npos)
+			{
+				std::stringstream pair_parser(first_token);
+				char separator = 0;
+				if(!(pair_parser >> source_a >> separator >> source_b) || separator != '-' || !pair_parser.eof())
+					continue;
+			}
+			else
+			{
+				std::stringstream id_parser(first_token);
+				if(!(id_parser >> source_a) || !id_parser.eof() || !(parser >> source_b))
+					continue;
+			}
 			MoleculeBond bond;
 			bond.atom_a = atomIndexForSourceID(atoms, source_a);
 			bond.atom_b = atomIndexForSourceID(atoms, source_b);
 			bond.order = 1;
 			if(parser >> order_token)
 				bond.order = bondOrderFromToken(order_token);
+			std::string attribute;
+			while(parser >> attribute)
+			{
+				if(attribute == "stereo")
+				{
+					int stereo = 0;
+					if(parser >> stereo && (stereo == 1 || stereo == 3 || stereo == 4 || stereo == 6))
+						bond.stereo = stereo;
+					break;
+				}
+				const std::string stereo_prefix = "stereo:";
+				if(attribute.compare(0, stereo_prefix.size(), stereo_prefix) == 0)
+				{
+					const std::string value = attribute.substr(stereo_prefix.size());
+					char* end = NULL;
+					const long stereo = std::strtol(value.c_str(), &end, 10);
+					if(end != value.c_str() && *end == '\0' && (stereo == 1 || stereo == 3 || stereo == 4 || stereo == 6))
+						bond.stereo = (int)stereo;
+					break;
+				}
+			}
 			if(bond.atom_a >= 0 && bond.atom_b >= 0 && bond.atom_a != bond.atom_b)
 				bonds.push_back(bond);
 		}
@@ -1251,7 +1670,45 @@ void appendSphereMesh(std::ostringstream& obj, const Vec3f& center, float radius
 }
 
 
-void appendCylinderMesh(std::ostringstream& obj, const Vec3f& a, const Vec3f& b, float radius, int& next_vertex_index)
+void appendSingleCylinderMesh(std::ostringstream& obj, const Vec3f& a, const Vec3f& b, float radius, int& next_vertex_index);
+
+
+void appendWedgeMesh(std::ostringstream& obj, const Vec3f& narrow, const Vec3f& wide, float radius, int& next_vertex_index)
+{
+	const Vec3f axis = wide - narrow;
+	if(axis.length() < 1.0e-5f) return;
+	// PubChem's 2D coordinates are mapped to the engine XZ plane, so engine Y
+	// is the plane normal. Build the widening direction inside the molecule.
+	Vec3f plane_normal(0.f, 1.f, 0.f);
+	Vec3f side = crossProduct(axis, plane_normal);
+	if(side.length() < 1.0e-5f)
+	{
+		plane_normal = Vec3f(0.f, 0.f, 1.f);
+		side = crossProduct(axis, plane_normal);
+		if(side.length() < 1.0e-5f) return;
+	}
+	side.normalise();
+	plane_normal.normalise();
+	const float half_width = (float)ScientificMoleculeGeometry::wedgeHalfWidth(radius);
+	const float half_thickness = (float)ScientificMoleculeGeometry::wedgeHalfThickness(radius);
+	const Vec3f left = wide - side * half_width;
+	const Vec3f right = wide + side * half_width;
+	const Vec3f offset = plane_normal * half_thickness;
+	const int tip_front = appendVertex(obj, narrow + offset, next_vertex_index);
+	const int left_front = appendVertex(obj, left + offset, next_vertex_index);
+	const int right_front = appendVertex(obj, right + offset, next_vertex_index);
+	const int tip_back = appendVertex(obj, narrow - offset, next_vertex_index);
+	const int left_back = appendVertex(obj, left - offset, next_vertex_index);
+	const int right_back = appendVertex(obj, right - offset, next_vertex_index);
+	obj << "f " << tip_front << " " << left_front << " " << right_front << "\n";
+	obj << "f " << tip_back << " " << right_back << " " << left_back << "\n";
+	obj << "f " << tip_front << " " << tip_back << " " << left_back << " " << left_front << "\n";
+	obj << "f " << tip_front << " " << right_front << " " << right_back << " " << tip_back << "\n";
+	obj << "f " << left_front << " " << left_back << " " << right_back << " " << right_front << "\n";
+}
+
+
+void appendCylinderMesh(std::ostringstream& obj, const Vec3f& a, const Vec3f& b, float radius, int& next_vertex_index, int bond_order = 1, int stereo = 0)
 {
 	const Vec3f axis = b - a;
 	const float len = axis.length();
@@ -1259,12 +1716,62 @@ void appendCylinderMesh(std::ostringstream& obj, const Vec3f& a, const Vec3f& b,
 		return;
 
 	const Vec3f w = axis * (1.f / len);
+	if(bond_order == 1 && stereo == 1)
+	{
+		appendWedgeMesh(obj, a, b, radius, next_vertex_index);
+		return;
+	}
+	if(bond_order == 1 && (stereo == 4 || stereo == 6))
+	{
+		const int dash_count = 5;
+		for(int i=0; i<dash_count; ++i)
+		{
+			const float start_t = (float)i / (float)dash_count;
+			const float end_t = start_t + 0.62f / (float)dash_count;
+			const float t = (start_t + end_t) * 0.5f;
+			const float dash_radius = (float)ScientificMoleculeGeometry::hashedBondRadius(radius, t);
+			appendSingleCylinderMesh(obj, a + axis * start_t, a + axis * end_t, dash_radius, next_vertex_index);
+		}
+		return;
+	}
 	const Vec3f helper = std::fabs(w.z) < 0.85f ? Vec3f(0.f, 0.f, 1.f) : Vec3f(0.f, 1.f, 0.f);
 	Vec3f u = crossProduct(w, helper);
 	if(u.length() < 1.0e-5f)
 		u = Vec3f(1.f, 0.f, 0.f);
 	else
 		u.normalise();
+	Vec3f v = crossProduct(w, u);
+	v.normalise();
+	const int visual_order = bond_order == 2 || bond_order == 3 ? bond_order : bond_order == 4 ? 2 : 1;
+	// Separate parallel cylinders enough to remain visibly distinct at the
+	// default ball-and-stick bond radius, including aromatic bonds.
+	const float bond_spacing = (float)ScientificMoleculeGeometry::bondParallelSpacing(radius);
+	if(visual_order == 1)
+	{
+		appendSingleCylinderMesh(obj, a, b, radius, next_vertex_index);
+		return;
+	}
+	if(visual_order == 2)
+	{
+		appendSingleCylinderMesh(obj, a - u * (bond_spacing * 0.5f), b - u * (bond_spacing * 0.5f), radius, next_vertex_index);
+		appendSingleCylinderMesh(obj, a + u * (bond_spacing * 0.5f), b + u * (bond_spacing * 0.5f), radius, next_vertex_index);
+		return;
+	}
+	appendSingleCylinderMesh(obj, a - u * bond_spacing, b - u * bond_spacing, radius, next_vertex_index);
+	appendSingleCylinderMesh(obj, a, b, radius, next_vertex_index);
+	appendSingleCylinderMesh(obj, a + u * bond_spacing, b + u * bond_spacing, radius, next_vertex_index);
+}
+
+
+void appendSingleCylinderMesh(std::ostringstream& obj, const Vec3f& a, const Vec3f& b, float radius, int& next_vertex_index)
+{
+	const Vec3f axis = b - a;
+	const float len = axis.length();
+	if(len < 1.0e-5f) return;
+	const Vec3f w = axis * (1.f / len);
+	const Vec3f helper = std::fabs(w.z) < 0.85f ? Vec3f(0.f, 0.f, 1.f) : Vec3f(0.f, 1.f, 0.f);
+	Vec3f u = crossProduct(w, helper);
+	if(u.length() < 1.0e-5f) u = Vec3f(1.f, 0.f, 0.f); else u.normalise();
 	Vec3f v = crossProduct(w, u);
 	v.normalise();
 
@@ -1399,16 +1906,15 @@ std::string writeMoleculeOBJForSettings(const ScientificObjectSettings& s)
 
 	std::ostringstream mtl;
 	mtl << std::fixed << std::setprecision(6);
-	appendMtlMaterial(mtl, "mat_H", cpkColourForElement("H"), s.opacity);
-	appendMtlMaterial(mtl, "mat_C", cpkColourForElement("C"), s.opacity);
-	appendMtlMaterial(mtl, "mat_N", cpkColourForElement("N"), s.opacity);
-	appendMtlMaterial(mtl, "mat_O", cpkColourForElement("O"), s.opacity);
-	appendMtlMaterial(mtl, "mat_S", cpkColourForElement("S"), s.opacity);
-	appendMtlMaterial(mtl, "mat_P", cpkColourForElement("P"), s.opacity);
-	appendMtlMaterial(mtl, "mat_Cl", cpkColourForElement("Cl"), s.opacity);
-	appendMtlMaterial(mtl, "mat_F", cpkColourForElement("F"), s.opacity);
-	appendMtlMaterial(mtl, "mat_Default", cpkColourForElement("X"), s.opacity);
-	appendMtlMaterial(mtl, "mat_Bond", Colour3f(0.62f, 0.62f, 0.58f), s.opacity);
+	if(s.visualization_mode != "space_fill")
+		appendMtlMaterial(mtl, "mat_Bond", Colour3f(0.62f, 0.62f, 0.58f), s.opacity);
+	if(s.visualization_mode != "wireframe" && !s.wireframe_enabled)
+	{
+		std::set<std::string> seen_elements;
+		for(const MoleculeAtom& atom : atoms)
+			if(seen_elements.insert(atom.element).second)
+				appendMtlMaterial(mtl, materialNameForElement(atom.element), cpkColourForElement(atom.element), s.opacity);
+	}
 	FileUtils::writeEntireFileTextMode(mtl_path, mtl.str());
 
 	std::ostringstream obj;
@@ -1418,21 +1924,18 @@ std::string writeMoleculeOBJForSettings(const ScientificObjectSettings& s)
 
 const Vec3f center = moleculeCenter(atoms);
 const float coord_scale = clampFloat(s.object_scale, 0.01f, 1000.f) * 0.75f;
-	const float atom_base_radius = s.visualization_mode == "space_fill" ? 0.42f : 0.22f;
+	const float atom_base_radius = (float)ScientificMoleculeGeometry::atomBaseRadius(s.visualization_mode == "space_fill");
 	const float atom_radius_multiplier = clampFloat(s.atom_radius, 0.01f, 10.f);
-	const float bond_radius = (s.visualization_mode == "wireframe" || s.wireframe_enabled) ? 0.025f : clampFloat(0.08f * (s.bond_thickness / 0.10f), 0.015f, 0.5f);
+	const float bond_radius = (s.visualization_mode == "wireframe" || s.wireframe_enabled) ? 0.025f : (float)ScientificMoleculeGeometry::bondRadius(s.bond_thickness);
 	const bool draw_atoms = s.visualization_mode != "wireframe" && !s.wireframe_enabled;
 	const bool draw_bonds = s.visualization_mode != "space_fill";
 
 	std::vector<Vec3f> model_positions(atoms.size());
 	for(size_t i=0; i<atoms.size(); ++i)
 	{
-		const Vec3f p = (atoms[i].pos - center) * coord_scale;
-		// Store molecule OBJ vertices directly in MetaSiberia engine object-space.
-		// Generic OBJ files are y-up and ModelLoading normally converts them to z-up,
-		// but scientific molecule overlays/picking must share one exact atom coordinate
-		// with the generated mesh for every molecule.
-		model_positions[i] = Vec3f(p.x, -p.z, p.y);
+		const std::array<double, 3> p = ScientificMoleculeGeometry::sdfPositionToObjectSpace(
+			atoms[i].pos.x, atoms[i].pos.y, atoms[i].pos.z, center.x, center.y, center.z, coord_scale);
+		model_positions[i] = Vec3f((float)p[0], (float)p[1], (float)p[2]);
 	}
 
 	int next_vertex_index = 1;
@@ -1444,7 +1947,7 @@ const float coord_scale = clampFloat(s.object_scale, 0.01f, 1000.f) * 0.75f;
 			const MoleculeBond& bond = bonds[i];
 			if(bond.atom_a < 0 || bond.atom_b < 0 || bond.atom_a >= (int)model_positions.size() || bond.atom_b >= (int)model_positions.size())
 				continue;
-			appendCylinderMesh(obj, model_positions[bond.atom_a], model_positions[bond.atom_b], bond_radius, next_vertex_index);
+			appendCylinderMesh(obj, model_positions[bond.atom_a], model_positions[bond.atom_b], bond_radius, next_vertex_index, bond.order, bond.stereo);
 		}
 	}
 
@@ -1923,14 +2426,23 @@ ScientificObjectEditor::ScientificObjectEditor(QWidget* parent)
 	sim_layout->addStretch(1);
 	tab_widget->addTab(sim_tab, QString::fromUtf8("Симуляция"));
 
+	QWidget* image_tab = new QWidget(tab_widget);
+	QVBoxLayout* image_layout = new QVBoxLayout(image_tab);
+	image_layout->setContentsMargins(6, 6, 6, 6);
 	QGridLayout* image_grid = NULL;
-	QGroupBox* image_group = createSection(QString::fromUtf8("Изображение"), object_tab, &image_grid);
+	QGroupBox* image_group = createSection(QString::fromUtf8("Изображение"), image_tab, &image_grid);
 	row = 0;
 	image_viewer = new ScientificImageViewer(image_group);
 	image_grid->addWidget(image_viewer, row++, 0, 1, 2);
-	object_layout->addWidget(image_group);
-	object_layout->addStretch(1);
-	connect(tab_widget, &QTabWidget::currentChanged, this, [this](int) { if(tab_widget->currentWidget()==molecule_card_tab) moleculeCardSectionChanged(molecule_card_sections->currentIndex()); });
+	image_layout->addWidget(image_group);
+	image_layout->addStretch(1);
+	tab_widget->addTab(image_tab, QString::fromUtf8("Изображения"));
+	connect(tab_widget, &QTabWidget::currentChanged, this, [this, image_tab](int) {
+		if(tab_widget->currentWidget() == molecule_card_tab)
+			moleculeCardSectionChanged(molecule_card_sections->currentIndex());
+		else if(tab_widget->currentWidget() == image_tab)
+			loadPubChemImage();
+	});
 
 	QWidget* catalog_tab = new QWidget(tab_widget); QVBoxLayout* catalog_layout = new QVBoxLayout(catalog_tab); catalog_layout->setContentsMargins(6,6,6,6); QGridLayout* catalog_grid=NULL; QGroupBox* catalog_group=createSection(QString::fromUtf8("Классификация и коллекции"),catalog_tab,&catalog_grid); row=0;
 	provider_classification_edit=addPlainTextEdit(catalog_grid,row,QStringLiteral("PubChem provider classifications"),100);
@@ -2237,7 +2749,7 @@ void ScientificObjectEditor::installTooltips()
 	setDetailedTip(prompt_edit, QString::fromUtf8("Запрос словами. Примеры: \"Создай молекулу кофеина\", \"Построй график sin(x)\", \"Создай облако случайных точек\"."));
 
 	setDetailedTip(data_summary_edit, QString::fromUtf8("Сводка загруженных данных: формула, масса, количество атомов/точек, источник и другие ключевые факты."));
-	setDetailedTip(atom_table_edit, QString::fromUtf8("Таблица атомов: номер, элемент, координаты, заряд и дополнительные свойства."));
+	setDetailedTip(atom_table_edit, QString::fromUtf8("Таблица атомов: номер, элемент, координаты, формальный заряд, изотопная массовая численность (необязательно) и дополнительные свойства."));
 	setDetailedTip(bond_table_edit, QString::fromUtf8("Таблица связей: какие атомы соединены и какой тип связи используется."));
 	setDetailedTip(point_table_edit, QString::fromUtf8("Точки XYZ, RGB, нормали или классификация для облаков точек и поверхностей."));
 	setDetailedTip(value_table_edit, QString::fromUtf8("Табличные значения для графиков, временных рядов, полей и измерений."));
@@ -2976,6 +3488,7 @@ void ScientificObjectEditor::setFromObject(const WorldObject& ob, bool)
 	editing_ob_uid = ob.uid;
 	std::string parse_error;
 	setControlsFromSettings(ScientificObjectSettings::fromContent(ob.content, &parse_error));
+	scientific_content_parse_error = parse_error;
 	setTransformFromObject(ob);
 	updateInfoLabel(ob);
 	syncing = false;
@@ -3086,6 +3599,13 @@ void ScientificObjectEditor::applyScientificPhysics(WorldObject& ob_out, const S
 
 void ScientificObjectEditor::toObject(WorldObject& ob_out)
 {
+	if(!scientific_content_parse_error.empty() && ob_out.uid == editing_ob_uid)
+	{
+		if(info_label)
+			info_label->setText(QString::fromUtf8("Cannot save: the existing scientific object content could not be parsed. Load valid PubChem or sample data before replacing it.\n%1")
+				.arg(QString::fromUtf8(scientific_content_parse_error.c_str())));
+		return;
+	}
 	ScientificObjectSettings s = controlsToSettings();
 	const std::string new_content = ScientificObjectSettings::serialiseToContent(s);
 	if(new_content.size() > WorldObject::MAX_CONTENT_SIZE)
@@ -3458,6 +3978,14 @@ int ScientificObjectEditor::runPubChemSmokeCheck(const QString& report_path)
 		sdf_url.setQuery(sdf_query);
 		PubChemHttpResult sdf_result = pubchemGet(sdf_url, QStringLiteral(".sdf"), false);
 		QString conformer = QStringLiteral("3d");
+		if(!sdf_result.error.isEmpty() && !pubchemSdfHasNo3DConformer(sdf_result))
+		{
+			row.insert(QStringLiteral("status"), QStringLiteral("failed"));
+			row.insert(QStringLiteral("error"), QStringLiteral("3D SDF request failed: %1").arg(sdf_result.error));
+			query_reports.append(row);
+			all_ok = false;
+			continue;
+		}
 		if(!sdf_result.error.isEmpty())
 		{
 			conformer = QStringLiteral("2d");
@@ -3478,14 +4006,16 @@ int ScientificObjectEditor::runPubChemSmokeCheck(const QString& report_path)
 			continue;
 		}
 
-		const ParsedSdfMolecule molecule = parsePubChemSdf(sdf_result.bytes);
+		const ParsedSdfMolecule molecule = parsePubChemSdf(sdf_result.bytes, cid.toInt());
 		row.insert(QStringLiteral("atom_count"), molecule.atom_count);
 		row.insert(QStringLiteral("bond_count"), molecule.bond_count);
 		row.insert(QStringLiteral("sdf_sha256"), sha256Hex(sdf_result.bytes));
-		if(!molecule.error.isEmpty() || molecule.atom_count <= 0)
+		QString structure_validation_error;
+		if(molecule.error.isEmpty()) verifyPubChemSdfProperties(molecule, rows[0], &structure_validation_error);
+		if(!molecule.error.isEmpty() || !structure_validation_error.isEmpty() || molecule.atom_count <= 0)
 		{
 			row.insert(QStringLiteral("status"), QStringLiteral("failed"));
-			row.insert(QStringLiteral("error"), QStringLiteral("SDF parser failed: %1").arg(molecule.error));
+			row.insert(QStringLiteral("error"), QStringLiteral("SDF validation failed: %1").arg(molecule.error.isEmpty() ? structure_validation_error : molecule.error));
 			query_reports.append(row);
 			all_ok = false;
 			continue;
@@ -3980,10 +4510,17 @@ bool ScientificObjectEditor::loadPubChemCID(const QString& cid_text)
 	sdf_url.setQuery(sdf_query);
 	PubChemHttpResult sdf_result = pubchemGet(sdf_url, QStringLiteral(".sdf"), true);
 	bool used_3d = true;
+	if(!sdf_result.error.isEmpty() && !pubchemSdfHasNo3DConformer(sdf_result))
+	{
+		source_status_label->setText(QString::fromUtf8("Error: PubChem 3D SDF request failed. %1").arg(sdf_result.error));
+		current_settings.load_status = "error";
+		current_settings.load_status_message = stdstr(QStringLiteral("PubChem 3D SDF request failed. ") + sdf_result.error);
+		return false;
+	}
 	if(!sdf_result.error.isEmpty())
 	{
 		used_3d = false;
-		source_status_label->setText(QString::fromUtf8("No 3D conformer or 3D request failed; loading 2D SDF for CID %1.").arg(cid));
+		source_status_label->setText(QString::fromUtf8("PubChem has no 3D conformer; loading 2D SDF for CID %1.").arg(cid));
 		QUrl sdf_2d_url = pubchemUrl(QStringLiteral("/rest/pug/compound/cid/%1/SDF").arg(cid));
 		QUrlQuery sdf_2d_query;
 		sdf_2d_query.addQueryItem(QStringLiteral("record_type"), QStringLiteral("2d"));
@@ -3999,12 +4536,20 @@ bool ScientificObjectEditor::loadPubChemCID(const QString& cid_text)
 	}
 
 	source_status_label->setText(QString::fromUtf8("Parsing: PubChem SDF for CID %1").arg(cid));
-	const ParsedSdfMolecule molecule = parsePubChemSdf(sdf_result.bytes);
+	const ParsedSdfMolecule molecule = parsePubChemSdf(sdf_result.bytes, cid.toInt());
 	if(!molecule.error.isEmpty())
 	{
 		source_status_label->setText(QString::fromUtf8("Error: SDF parser failed. %1").arg(molecule.error));
 		current_settings.load_status = "error";
 		current_settings.load_status_message = stdstr(QStringLiteral("SDF parser failed. ") + molecule.error);
+		return false;
+	}
+	QString structure_validation_error;
+	if(!verifyPubChemSdfProperties(molecule, props, &structure_validation_error))
+	{
+		source_status_label->setText(QString::fromUtf8("Error: PubChem structure validation failed. %1").arg(structure_validation_error));
+		current_settings.load_status = "error";
+		current_settings.load_status_message = stdstr(QStringLiteral("PubChem structure validation failed. ") + structure_validation_error);
 		return false;
 	}
 
@@ -4019,7 +4564,8 @@ bool ScientificObjectEditor::loadPubChemCID(const QString& cid_text)
 	const PubChemHttpResult synonyms_result = pubchemGet(synonyms_url, QStringLiteral(".json"), true);
 	const QStringList synonyms = synonyms_result.error.isEmpty() ? pubchemSynonymsFromJson(synonyms_result.bytes) : QStringList();
 
-	const QString display_name = !synonyms.isEmpty() ? synonyms[0] : props.value(QStringLiteral("IUPACName"), QString::fromUtf8("PubChem CID %1").arg(cid));
+	QString display_name = props.value(QStringLiteral("IUPACName")).trimmed();
+	if(display_name.isEmpty()) display_name = QString::fromUtf8("PubChem CID %1").arg(cid);
 	const QString source_url = QStringLiteral("https://pubchem.ncbi.nlm.nih.gov/compound/%1").arg(cid);
 	const QString sdf_checksum = sha256Hex(sdf_result.bytes);
 	const QString image_checksum;
@@ -4060,7 +4606,7 @@ bool ScientificObjectEditor::loadPubChemCID(const QString& cid_text)
 	properties += QStringLiteral("cid\t%1\n").arg(cid);
 	properties += QStringLiteral("source_url\t%1\n").arg(source_url);
 	const QStringList property_keys = {
-		QStringLiteral("IUPACName"), QStringLiteral("MolecularFormula"), QStringLiteral("MolecularWeight"), QStringLiteral("ExactMass"), QStringLiteral("MonoisotopicMass"),
+		QStringLiteral("IUPACName"), QStringLiteral("MolecularFormula"), QStringLiteral("MolecularFormulaNoCharge"), QStringLiteral("MolecularWeight"), QStringLiteral("ExactMass"), QStringLiteral("MonoisotopicMass"),
 		QStringLiteral("Charge"), QStringLiteral("HeavyAtomCount"), QStringLiteral("HBondDonorCount"), QStringLiteral("HBondAcceptorCount"), QStringLiteral("RotatableBondCount"),
 		QStringLiteral("XLogP"), QStringLiteral("TPSA"), QStringLiteral("Complexity"), QStringLiteral("IsomericSMILES"), QStringLiteral("CanonicalSMILES"),
 		QStringLiteral("InChI"), QStringLiteral("InChIKey")
@@ -4075,7 +4621,7 @@ bool ScientificObjectEditor::loadPubChemCID(const QString& cid_text)
 	properties += QStringLiteral("image_url\t%1\n").arg(png_url.toString());
 	properties += QStringLiteral("image_checksum_sha256\t%1\n").arg(image_checksum.isEmpty() ? QStringLiteral("Not available") : image_checksum);
 	properties += QStringLiteral("image_cache_path\tNot loaded (lazy Images section)\n");
-	properties += QStringLiteral("license\tPubChem/NCBI public data; keep attribution/source URL\n");
+	properties += QStringLiteral("license_status\tNot asserted; check the PubChem record and contributing source terms\n");
 
 	const QString legend = moleculeLegendFromAtomTable(molecule.atom_table);
 	QString values;
@@ -4113,15 +4659,15 @@ bool ScientificObjectEditor::loadPubChemCID(const QString& cid_text)
 	current_settings.provenance_source = "PubChem";
 	current_settings.provenance_identifier = stdstr(QStringLiteral("CID:%1").arg(cid));
 	current_settings.provenance_url = stdstr(source_url);
-	current_settings.provenance_author = "PubChem / NCBI";
+	current_settings.provenance_author = "PubChem record; contributor attribution may vary";
 	current_settings.provenance_loaded_at = stdstr(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
 	current_settings.provenance_format = used_3d ? "SDF 3D" : "SDF 2D";
 	current_settings.provenance_version = "PubChem PUG REST";
-	current_settings.provenance_license = "PubChem/NCBI public data; preserve attribution";
+	current_settings.provenance_license = "License not asserted; consult PubChem and the contributing source terms.";
 	current_settings.provenance_checksum = stdstr(sdf_checksum);
 	current_settings.molecule_model_version = "molecule_model_v1";
 	current_settings.provider_adapter_version = "PubChemProvider_v1";
-	current_settings.parser_version = "SDFParser_v1";
+	current_settings.parser_version = "SDFParser_v2";
 	current_settings.cache_version = "pubchem_cache_v1";
 	current_settings.visualization_settings_version = "visualization_settings_v1";
 	current_settings.source_data_cache_key = stdstr(QStringLiteral("pubchem:%1:sdf:%2").arg(cid, used_3d ? QStringLiteral("3d") : QStringLiteral("2d")));
@@ -4139,6 +4685,7 @@ bool ScientificObjectEditor::loadPubChemCID(const QString& cid_text)
 	current_settings.provider_classifications.clear();
 	computed_classification_edit->setPlainText(qstr(current_settings.computed_classifications));
 	provider_classification_edit->clear();
+	scientific_content_parse_error.clear();
 	if(settings)
 	{
 		QStringList recent=settings->value(QStringLiteral("scientificObjectEditor/recentCids")).toStringList();recent.removeAll(cid);recent.prepend(cid);while(recent.size()>50)recent.removeLast();settings->setValue(QStringLiteral("scientificObjectEditor/recentCids"),recent);
@@ -4315,6 +4862,7 @@ void ScientificObjectEditor::setScientificSourceResult(const QString& database, 
 		return;
 	}
 
+	scientific_content_parse_error.clear();
 	name_edit->setText(QString::fromLatin1(selected_sample->name));
 	source_edit->setText(QStringLiteral("Built-in sample catalog"));
 	setComboData(source_mode_combo, QStringLiteral("online"));
@@ -4444,7 +4992,7 @@ bool ScientificObjectEditor::loadPubChemImage()
 	const PubChemHttpResult result=pubchemGet(url,QStringLiteral(".png"),true);if(!result.error.isEmpty()){image_viewer->clearImage(QString::fromUtf8("Нет данных: %1").arg(result.error));if(molecule_image_label){molecule_image_preview_pixmap=QPixmap();molecule_image_label->setPixmap(QPixmap());molecule_image_label->setText(QString::fromUtf8("2D-превью недоступно"));}return false;}
 	QPixmap pixmap;pixmap.loadFromData(result.bytes);if(pixmap.isNull()){image_viewer->clearImage(QString::fromUtf8("Нет данных: ошибка декодирования изображения"));if(molecule_image_label){molecule_image_preview_pixmap=QPixmap();molecule_image_label->setPixmap(QPixmap());molecule_image_label->setText(QString::fromUtf8("2D-превью недоступно"));}return false;}
 	current_settings.image_url=stdstr(url.toString());current_settings.image_cache_path=stdstr(result.cache_path);current_settings.image_checksum=stdstr(sha256Hex(result.bytes));
-	image_viewer->setImage(result.cache_path,url.toString(),QStringLiteral("PubChem/NCBI public data; preserve attribution"));if(molecule_image_label){molecule_image_preview_pixmap=pixmap;molecule_image_preview_zoom=1.0;updateMoleculeImagePreview();}
+	image_viewer->setImage(result.cache_path,url.toString(),QStringLiteral("License not asserted; consult PubChem and the contributing source terms."));if(molecule_image_label){molecule_image_preview_pixmap=pixmap;molecule_image_preview_zoom=1.0;updateMoleculeImagePreview();}
 	if(!syncing)emit objectChanged();return true;
 }
 
@@ -4468,7 +5016,16 @@ void ScientificObjectEditor::handleMoleculeAction(const QString& action, int)
 	if(action==QStringLiteral("toggle_info_card")){show_info_card_check->setChecked(!show_info_card_check->isChecked());if(show_info_card_check->isChecked())setComboData(info_card_mode_combo,QStringLiteral("selection"));updateMoleculeInteractiveView();return;}
 	if(action==QStringLiteral("card")){tab_widget->setCurrentWidget(molecule_card_tab);molecule_card_sections->setCurrentIndex(0);return;}
 	if(action==QStringLiteral("properties")||action==QStringLiteral("classification")){tab_widget->setCurrentWidget(molecule_card_tab);molecule_card_sections->setCurrentIndex(action==QStringLiteral("properties")?2:3);return;}
-	if(action==QStringLiteral("images")){for(int i=0;i<tab_widget->count();++i)if(tab_widget->tabText(i)==QString::fromUtf8("Изображения")){tab_widget->setCurrentIndex(i);break;}return;}
+	if(action==QStringLiteral("images"))
+	{
+		for(int i = 0; i < tab_widget->count(); ++i)
+			if(tab_widget->tabText(i) == QString::fromUtf8("Изображения"))
+			{
+				tab_widget->setCurrentIndex(i);
+				break;
+			}
+		return;
+	}
 	const QString cid=propertyValue(QStringLiteral("cid"));
 	if(action==QStringLiteral("pubchem")){if(!cid.isEmpty())QDesktopServices::openUrl(QUrl(QStringLiteral("https://pubchem.ncbi.nlm.nih.gov/compound/%1").arg(cid)));return;}
 	if(action==QStringLiteral("favorite")){favorite_check->setChecked(!favorite_check->isChecked());emitObjectChanged();return;}
@@ -4501,7 +5058,8 @@ void ScientificObjectEditor::updateColourButton()
 
 void ScientificObjectEditor::updateInfoLabel(const WorldObject& ob)
 {
-	const ScientificObjectSettings s = ScientificObjectSettings::fromContent(ob.content);
+	std::string parse_error;
+	const ScientificObjectSettings s = ScientificObjectSettings::fromContent(ob.content, &parse_error);
 	QString text = QString::fromUtf8("ScientificObject (UID: %1)\n%2 | %3")
 		.arg(QString::fromUtf8(ob.uid.toString().c_str()))
 		.arg(qstr(s.name))
@@ -4510,5 +5068,7 @@ void ScientificObjectEditor::updateInfoLabel(const WorldObject& ob)
 		text += QString::fromUtf8(" | %1").arg(qstr(s.source));
 	if(!s.load_status.empty())
 		text += QString::fromUtf8("\nStatus: %1").arg(qstr(s.load_status));
+	if(!parse_error.empty())
+		text += QString::fromUtf8("\nScientific data parse error; saving is disabled until valid data is loaded: %1").arg(qstr(parse_error));
 	info_label->setText(text);
 }

@@ -5,6 +5,8 @@ Copyright Glare Technologies Limited 2026 -
 =====================================================================*/
 #include "MoleculeViewportWidget.h"
 #include "PeriodicTable.h"
+#include "../shared/ScientificElementPalette.h"
+#include "../shared/ScientificMoleculeGeometry.h"
 
 
 #include <QtCore/QJsonArray>
@@ -17,12 +19,14 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtGui/QDesktopServices>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
+#include <QtGui/QPolygonF>
 #include <QtGui/QWheelEvent>
 #include <QtGui/QVector3D>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMenu>
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 
 namespace
@@ -30,18 +34,21 @@ namespace
 const double PI = 3.14159265358979323846;
 
 
+QString normalisedElementSymbol(QString symbol)
+{
+	symbol = symbol.trimmed();
+	if(symbol.isEmpty()) return symbol;
+	symbol[0] = symbol[0].toUpper();
+	for(int i = 1; i < symbol.size(); ++i) symbol[i] = symbol[i].toLower();
+	return symbol;
+}
+
+
 QColor cpkColour(const QString& symbol)
 {
-	const QString s = symbol.trimmed();
-	if(s == QStringLiteral("H")) return QColor(240, 240, 232);
-	if(s == QStringLiteral("C")) return QColor(40, 40, 42);
-	if(s == QStringLiteral("N")) return QColor(45, 80, 220);
-	if(s == QStringLiteral("O")) return QColor(220, 40, 30);
-	if(s == QStringLiteral("F") || s == QStringLiteral("Cl")) return QColor(45, 190, 65);
-	if(s == QStringLiteral("P")) return QColor(245, 130, 35);
-	if(s == QStringLiteral("S")) return QColor(235, 205, 35);
-	if(s == QStringLiteral("Br")) return QColor(145, 45, 30);
-	if(s == QStringLiteral("I")) return QColor(110, 55, 160);
+	const QString s = normalisedElementSymbol(symbol);
+	const char* hex = ScientificElementPalette::displayHexColour(s.toLatin1().constData());
+	if(hex) return QColor(QStringLiteral("#") + QString::fromLatin1(hex));
 	return QColor(55, 180, 225);
 }
 
@@ -86,6 +93,8 @@ struct MoleculeViewportWidget::Atom
 	QString element;
 	QVector3D pos;
 	int formal_charge = 0;
+	int isotope_mass_number = 0;
+	QString atom_stereo_data;
 	QString custom_attribute;
 };
 
@@ -96,6 +105,7 @@ struct MoleculeViewportWidget::Bond
 	int atom_b = -1;
 	int order = 1;
 	bool aromatic = false;
+	int sdf_stereo = 0;
 	QString stereo;
 };
 
@@ -141,10 +151,21 @@ void MoleculeViewportWidget::setMolecule(const QString& atom_table, const QStrin
 		const QStringList p = raw.trimmed().split(QRegExp(QStringLiteral("\\s+")), QString::SkipEmptyParts);
 		if(p.size() < 5) continue;
 		bool ok_id = false, ok_x = false, ok_y = false, ok_z = false;
-		Atom a; a.source_id = p[0].toInt(&ok_id); a.element = p[1]; a.pos = QVector3D(p[2].toFloat(&ok_x), p[3].toFloat(&ok_y), p[4].toFloat(&ok_z));
+		Atom a; a.source_id = p[0].toInt(&ok_id); a.element = normalisedElementSymbol(p[1]); a.pos = QVector3D(p[2].toFloat(&ok_x), p[3].toFloat(&ok_y), p[4].toFloat(&ok_z));
 		if(!ok_id || !ok_x || !ok_y || !ok_z) continue;
 		if(p.size() > 5) { bool ok_charge = false; a.formal_charge = p[5].toInt(&ok_charge); if(!ok_charge) a.custom_attribute = p.mid(5).join(QStringLiteral(" ")); }
-		if(p.size() > 6) a.custom_attribute = p.mid(6).join(QStringLiteral(" "));
+		if(p.size() > 6) { bool ok_isotope = false; a.isotope_mass_number = p[6].toInt(&ok_isotope); if(!ok_isotope) a.custom_attribute = p.mid(6).join(QStringLiteral(" ")); }
+		if(p.size() > 7)
+		{
+			QStringList custom_attributes;
+			for(int token_i=7; token_i<p.size(); ++token_i)
+			{
+				const QString token = p[token_i];
+				if(token.startsWith(QStringLiteral("sdf_atom_stereo="))) a.atom_stereo_data = token.mid(QStringLiteral("sdf_atom_stereo=").size());
+				else custom_attributes << token;
+			}
+			if(!custom_attributes.isEmpty()) a.custom_attribute = custom_attributes.join(QStringLiteral(" "));
+		}
 		atoms.push_back(a);
 	}
 	const QStringList bond_lines = bond_table.split(QChar('\n'));
@@ -156,7 +177,13 @@ void MoleculeViewportWidget::setMolecule(const QString& atom_table, const QStrin
 		for(int i=0; i<atoms.size(); ++i) { if(atoms[i].source_id == source_a) b.atom_a = i; if(atoms[i].source_id == source_b) b.atom_b = i; }
 		if(b.atom_a < 0 || b.atom_b < 0 || b.atom_a == b.atom_b) continue;
 		if(p.size() > 2) { const QString order = p[2].toLower(); b.order = (order == QStringLiteral("double") || order == QStringLiteral("2")) ? 2 : ((order == QStringLiteral("triple") || order == QStringLiteral("3")) ? 3 : 1); b.aromatic = order == QStringLiteral("aromatic"); }
-		if(p.size() > 3) b.stereo = p.mid(3).join(QStringLiteral(" "));
+		if(p.size() > 3)
+		{
+			b.stereo = p.mid(3).join(QStringLiteral(" "));
+			bool ok_stereo = false;
+			const int stereo_value = p.last().toInt(&ok_stereo);
+			if(ok_stereo && (stereo_value == 1 || stereo_value == 4 || stereo_value == 6)) b.sdf_stereo = stereo_value;
+		}
 		bonds.push_back(b);
 	}
 	resetView(); notifyChanged();
@@ -205,7 +232,13 @@ QVector<MoleculeViewportWidget::ProjectedAtom> MoleculeViewportWidget::projectAt
 	{
 		QVector3D v = atoms[i].pos - center; const float x1 = cy * v.x() + sy * v.z(), z1 = -sy * v.x() + cy * v.z(); const float y2 = cp * v.y() - sp * z1, z2 = sp * v.y() + cp * z1;
 		projected[i].point = QPointF(width() * 0.5 + pan.x() + x1 * scale, height() * 0.5 + pan.y() - y2 * scale);
-		projected[i].depth = z2; projected[i].radius = std::max(6.f, std::min(24.f, 10.f * options.atom_radius * std::sqrt(zoom)));
+		const std::string element = atoms[i].element.toStdString();
+		const double space_fill_scale = options.visualization_mode == "space_fill" ?
+			ScientificMoleculeGeometry::atomBaseRadius(true) / ScientificMoleculeGeometry::atomBaseRadius(false) : 1.0;
+		const double element_scale = ScientificMoleculeGeometry::cpkRadiusScale(element);
+		projected[i].depth = z2;
+		projected[i].radius = (float)std::max(3.0, std::min(24.0,
+			10.0 * options.atom_radius * std::sqrt((double)zoom) * space_fill_scale * element_scale));
 	}
 	return projected;
 }
@@ -252,9 +285,33 @@ bool MoleculeViewportWidget::handleSceneRay(const Vec4f& origin4, const Vec4f& d
 {
 	if(atoms.isEmpty()) return false;
 	QVector3D origin(origin4[0],origin4[1],origin4[2]),dir(dir4[0],dir4[1],dir4[2]);if(dir.lengthSquared()<1.0e-12f)return false;dir.normalize();
-	QVector3D center;for(const Atom&a:atoms)center+=a.pos;center/=(float)atoms.size();const float coord_scale=std::max(0.01f,options.object_scale)*0.75f;
-	auto atomObjectPosition=[&](const Atom& atom){const QVector3D p=(atom.pos-center)*coord_scale;return QVector3D(p.x(),-p.z(),p.y());};
-	int atom_hit=-1;float atom_t=1.0e30f;for(int i=0;i<atoms.size();++i){if(!options.show_hydrogen&&atoms[i].element==QStringLiteral("H"))continue;const QVector3D c=atomObjectPosition(atoms[i]);float radius=(QString::fromStdString(options.visualization_mode)==QStringLiteral("space_fill")?0.42f:0.22f)*options.atom_radius;if(atoms[i].element==QStringLiteral("H"))radius*=0.58f;radius=std::max(radius,0.16f);const QVector3D oc=origin-c;const float b=QVector3D::dotProduct(oc,dir),disc=b*b-QVector3D::dotProduct(oc,oc)+radius*radius;if(disc>=0){const float t=-b-std::sqrt(disc);if(t>=0&&t<atom_t){atom_t=t;atom_hit=i;}}}
+	QVector3D center;for(const Atom&a:atoms)center+=a.pos;center/=(float)atoms.size();const float object_scale=std::max(0.01f,options.object_scale);const float coord_scale=object_scale*0.75f;
+	auto atomObjectPosition=[&](const Atom& atom)
+	{
+		const std::array<double, 3> p = ScientificMoleculeGeometry::sdfPositionToObjectSpace(
+			atom.pos.x(), atom.pos.y(), atom.pos.z(), center.x(), center.y(), center.z(), coord_scale);
+		return QVector3D((float)p[0], (float)p[1], (float)p[2]);
+	};
+	int atom_hit = -1;
+	float atom_t = 1.0e30f;
+	const bool space_fill = options.visualization_mode == "space_fill";
+	for(int i = 0; i < atoms.size(); ++i)
+	{
+		if(!options.show_hydrogen && atoms[i].element == QStringLiteral("H")) continue;
+		const QVector3D c = atomObjectPosition(atoms[i]);
+		const float radius = object_scale * (float)std::max(0.16, ScientificMoleculeGeometry::atomBaseRadius(space_fill) *
+			ScientificMoleculeGeometry::cpkRadiusScale(atoms[i].element.toStdString()) * options.atom_radius);
+		const QVector3D oc = origin - c;
+		const float b = QVector3D::dotProduct(oc, dir);
+		const float disc = b * b - QVector3D::dotProduct(oc, oc) + radius * radius;
+		if(disc < 0.0f) continue;
+		const float t = -b - std::sqrt(disc);
+		if(t >= 0.0f && t < atom_t)
+		{
+			atom_t = t;
+			atom_hit = i;
+		}
+	}
 	int bond_hit=-1;float bond_t=1.0e30f;if(selection_mode==QStringLiteral("bond")||show_context_menu){for(int i=0;i<bonds.size();++i){const Bond&b=bonds[i];const QVector3D a=atomObjectPosition(atoms[b.atom_a]),c=atomObjectPosition(atoms[b.atom_b]),v=c-a,w0=origin-a;const float aa=1.f,bb=QVector3D::dotProduct(dir,v),cc=QVector3D::dotProduct(v,v),dd=QVector3D::dotProduct(dir,w0),ee=QVector3D::dotProduct(v,w0),den=aa*cc-bb*bb;if(den<1.0e-8f)continue;float t=(bb*ee-cc*dd)/den,u=(aa*ee-bb*dd)/den;u=std::max(0.f,std::min(1.f,u));t=std::max(0.f,t);const float distance=(origin+dir*t-(a+v*u)).length();const float radius=std::max(0.05f,options.bond_thickness*0.9f);if(distance<=radius&&t<bond_t){bond_t=t;bond_hit=i;}}}
 	if(selection_mode==QStringLiteral("bond")&&bond_hit>=0&&bond_t<=atom_t){selectBond(bond_hit);atom_hit=-1;}else if(atom_hit>=0)selectAtom(atom_hit,additive);else if(bond_hit>=0)selectBond(bond_hit);else return false;
 	if(!show_context_menu)return true;
@@ -320,7 +377,7 @@ QString MoleculeViewportWidget::atomLabel(const Atom& a) const
 	if(mode==QStringLiteral("atom_number")) return QString::number(a.source_id);
 	if(mode==QStringLiteral("element_number")) return a.element+QString::number(a.source_id);
 	if(mode==QStringLiteral("atomic_number")) return e?QString::number(e->atomic_number):QStringLiteral("?");
-	if(mode==QStringLiteral("atomic_mass")) return e?e->atomic_mass:QStringLiteral("Not available");
+	if(mode==QStringLiteral("atomic_mass")) return a.isotope_mass_number>0?QString::number(a.isotope_mass_number):(e?e->atomic_mass:QStringLiteral("Not available"));
 	if(mode==QStringLiteral("formal_charge")) return a.formal_charge==0?QStringLiteral("0"):QString::number(a.formal_charge);
 	if(mode==QStringLiteral("custom_attribute")) return a.custom_attribute.isEmpty()?QStringLiteral("Not available"):a.custom_attribute;
 	return a.element;
@@ -330,8 +387,8 @@ QString MoleculeViewportWidget::atomLabel(const Atom& a) const
 QString MoleculeViewportWidget::atomDetails(int i) const
 {
 	if(i<0||i>=atoms.size()) return QString(); const Atom&a=atoms[i]; const PeriodicElementRecord*e=PeriodicTableModel::elementBySymbol(a.element); QStringList connected; for(const Bond&b:bonds) { if(b.atom_a==i) connected<<QString::number(atoms[b.atom_b].source_id); if(b.atom_b==i) connected<<QString::number(atoms[b.atom_a].source_id); }
-	return QString::fromUtf8("%1 — %2\nAtom index: %3\nAtomic number: %4\nAtomic mass: %5\nFormal charge: %6\nCoordinates: %7, %8, %9 Å\nConnected atoms: %10")
-		.arg(a.element,e?e->name:QStringLiteral("Unknown element")).arg(a.source_id).arg(e?QString::number(e->atomic_number):QStringLiteral("Not available")).arg(e?e->atomic_mass:QStringLiteral("Not available")).arg(a.formal_charge).arg(a.pos.x(),0,'f',4).arg(a.pos.y(),0,'f',4).arg(a.pos.z(),0,'f',4).arg(connected.isEmpty()?QStringLiteral("None"):connected.join(QStringLiteral(", ")));
+	return QString::fromUtf8("%1 — %2\nAtom index: %3\nAtomic number: %4\nAtomic mass: %5\nFormal charge: %6\nSDF atom stereo: %7\nCoordinates: %8, %9, %10 Å\nConnected atoms: %11")
+		.arg(a.element,e?e->name:QStringLiteral("Unknown element")).arg(a.source_id).arg(e?QString::number(e->atomic_number):QStringLiteral("Not available")).arg(a.isotope_mass_number>0?QString::number(a.isotope_mass_number):(e?e->atomic_mass:QStringLiteral("Not available"))).arg(a.formal_charge).arg(a.atom_stereo_data.isEmpty()?QStringLiteral("Not specified"):a.atom_stereo_data).arg(a.pos.x(),0,'f',4).arg(a.pos.y(),0,'f',4).arg(a.pos.z(),0,'f',4).arg(connected.isEmpty()?QStringLiteral("None"):connected.join(QStringLiteral(", ")));
 }
 
 
@@ -356,7 +413,50 @@ void MoleculeViewportWidget::paintEvent(QPaintEvent*)
 {
 	QPainter p(this);p.setRenderHint(QPainter::Antialiasing,true);p.fillRect(rect(),QColor(24,29,36)); const QVector<ProjectedAtom> pr=projectAtoms();
 	if(atoms.isEmpty()){p.setPen(Qt::lightGray);p.drawText(rect(),Qt::AlignCenter,QStringLiteral("No molecule structure loaded"));return;}
-	for(int i=0;i<bonds.size();++i){const Bond&b=bonds[i];if(!options.show_hydrogen&&(atoms[b.atom_a].element==QStringLiteral("H")||atoms[b.atom_b].element==QStringLiteral("H")))continue;QPen pen(i==selected_bond?QColor(255,205,55):QColor(155,160,168),i==selected_bond?7.0:std::max(2.0,(double)options.bond_thickness*25.0),Qt::SolidLine,Qt::RoundCap);p.setPen(pen);p.drawLine(pr[b.atom_a].point,pr[b.atom_b].point);if(b.order>1){QPointF d=pr[b.atom_b].point-pr[b.atom_a].point;double len=std::hypot(d.x(),d.y());if(len>1){QPointF n(-d.y()/len*4,d.x()/len*4);p.drawLine(pr[b.atom_a].point+n,pr[b.atom_b].point+n);}}
+	for(int i=0;i<bonds.size();++i)
+	{
+		const Bond& b=bonds[i];
+		if(!options.show_hydrogen&&(atoms[b.atom_a].element==QStringLiteral("H")||atoms[b.atom_b].element==QStringLiteral("H"))) continue;
+		const QPointF a=pr[b.atom_a].point, c=pr[b.atom_b].point, d=c-a;
+		const double len=std::hypot(d.x(),d.y());
+		if(len<1.0) continue;
+		const QPointF normal(-d.y()/len,d.x()/len);
+		const double offset_step=4.5;
+		const QColor colour=i==selected_bond?QColor(255,205,55):QColor(155,160,168);
+		if(b.order == 1 && b.sdf_stereo == 1)
+		{
+			// CTfile stereo wedges point at the first atom and widen toward the second.
+			QPolygonF wedge;
+			wedge << a << c+normal*5.0 << c-normal*5.0;
+			p.setPen(Qt::NoPen);
+			p.setBrush(colour);
+			p.drawPolygon(wedge);
+		}
+		else if(b.order == 1 && (b.sdf_stereo == 4 || b.sdf_stereo == 6))
+		{
+			// Either/down stereo is drawn as progressively wider hash marks.
+			p.setPen(QPen(colour,i==selected_bond?2.5:std::max(1.0,(double)options.bond_thickness*10.0),Qt::SolidLine,Qt::FlatCap));
+			for(int hash=1; hash<=6; ++hash)
+			{
+				const double fraction = hash / 6.0;
+				const QPointF centre = a + d*fraction;
+				const double half_width = 4.5 * fraction;
+				p.drawLine(centre+normal*half_width,centre-normal*half_width);
+			}
+		}
+		else
+		{
+			const int line_count=b.aromatic||b.order==2 ? 2 : (b.order>=3 ? 3 : 1);
+			for(int line=0;line<line_count;++line)
+			{
+				const double offset=(line-(line_count-1)*0.5)*offset_step;
+				const Qt::PenStyle style=b.aromatic&&line==1?Qt::DashLine:Qt::SolidLine;
+				QPen pen(colour,i==selected_bond?7.0:std::max(2.0,(double)options.bond_thickness*25.0),style,Qt::RoundCap);
+				p.setPen(pen);
+				p.setBrush(Qt::NoBrush);
+				p.drawLine(a+normal*offset,c+normal*offset);
+			}
+		}
 	}
 	QVector<int> order;for(int i=0;i<atoms.size();++i)order<<i;std::sort(order.begin(),order.end(),[&](int a,int b){return pr[a].depth<pr[b].depth;});
 	int labels=0;const bool labels_visible=options.show_labels&&options.label_max_count>0&&(options.label_max_distance<=0.f||10.f/zoom<=options.label_max_distance);

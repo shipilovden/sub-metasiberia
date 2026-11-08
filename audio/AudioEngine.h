@@ -253,6 +253,8 @@ public:
 #endif
 
 	void seekToStartAndUnpauseAudio(AudioSource& source);
+	void pauseAudio(AudioSource& source);
+	void resumeAudio(AudioSource& source);
 	
 	void setMasterVolume(float volume);
 

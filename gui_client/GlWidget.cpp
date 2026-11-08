@@ -518,6 +518,19 @@ void GlWidget::initGamepadsSlot()
 #if 1 // If use Qt for gamepad input:
 	// See if we have any attached gamepads
 	QGamepadManager* manager = QGamepadManager::instance();
+	if(!gamepad_manager_connection_added)
+	{
+		connect(manager, SIGNAL(connectedGamepadsChanged()), this, SLOT(initGamepadsSlot()));
+		gamepad_manager_connection_added = true;
+	}
+	if(gamepad && gamepad->isConnected())
+		return;
+	if(gamepad)
+	{
+		emit gamepadConnectedChangedSignal(false);
+		gamepad->deleteLater();
+		gamepad = NULL;
+	}
 
 	const QList<int> list = manager->connectedGamepads();
 
@@ -525,7 +538,7 @@ void GlWidget::initGamepadsSlot()
 
 	if(!list.isEmpty())
 	{
-		gamepad = new QGamepad(list.at(0));
+		gamepad = new QGamepad(list.at(0), this);
 		
 		const std::string name = QtUtils::toStdString(gamepad->name());
 		if(print_output) print_output->print("Using gamepad '" + name + "'...");
@@ -535,7 +548,20 @@ void GlWidget::initGamepadsSlot()
 
 		connect(gamepad, SIGNAL(buttonXChanged(bool)), this, SLOT(buttonXChangedSlot(bool)));
 		connect(gamepad, SIGNAL(buttonXChanged(bool)), this, SIGNAL(gamepadButtonXChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonBChanged(bool)), this, SIGNAL(gamepadButtonBChangedSignal(bool)));
 		connect(gamepad, SIGNAL(buttonAChanged(bool)), this, SIGNAL(gamepadButtonAChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonYChanged(bool)), this, SIGNAL(gamepadButtonYChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonL1Changed(bool)), this, SIGNAL(gamepadButtonL1ChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonR1Changed(bool)), this, SIGNAL(gamepadButtonR1ChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonL3Changed(bool)), this, SIGNAL(gamepadButtonL3ChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonR3Changed(bool)), this, SIGNAL(gamepadButtonR3ChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonStartChanged(bool)), this, SIGNAL(gamepadButtonStartChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonSelectChanged(bool)), this, SIGNAL(gamepadButtonSelectChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonUpChanged(bool)), this, SIGNAL(gamepadButtonUpChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonDownChanged(bool)), this, SIGNAL(gamepadButtonDownChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonLeftChanged(bool)), this, SIGNAL(gamepadButtonLeftChangedSignal(bool)));
+		connect(gamepad, SIGNAL(buttonRightChanged(bool)), this, SIGNAL(gamepadButtonRightChangedSignal(bool)));
+		connect(gamepad, SIGNAL(connectedChanged(bool)), this, SIGNAL(gamepadConnectedChangedSignal(bool)));
 	}
 #endif
 }

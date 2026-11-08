@@ -10,6 +10,7 @@ Copyright Glare Technologies Limited 2024 -
 
 #include <utils/ConPrint.h>
 #include <utils/StringUtils.h>
+#include <QtGui/QColor>
 
 
 ISLSyntaxHighlighter::ISLSyntaxHighlighter(QTextDocument *parent)
@@ -18,10 +19,11 @@ ISLSyntaxHighlighter::ISLSyntaxHighlighter(QTextDocument *parent)
 {
 	HighlightingRule rule;
 
-	QBrush function_expr_brush(Qt::blue);
-	QBrush keyword_brush(Qt::darkBlue);
-	QBrush string_literal_brush(Qt::darkRed);
-	QBrush comment_brush(Qt::darkGreen);
+	// Dark, high-contrast syntax colours for the light source-editor background.
+	QBrush function_expr_brush(QColor("#0057b8"));
+	QBrush keyword_brush(QColor("#5b21b6"));
+	QBrush string_literal_brush(QColor("#a12712"));
+	QBrush comment_brush(QColor("#166534"));
 
 	/*if(StyleSheetUtils::getCurrentTheme() == "dark")
 	{

@@ -13,6 +13,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <string>
 #include <vector>
 #include <queue>
+#include <limits>
 
 
 class LuaScript;
@@ -71,7 +72,8 @@ public:
 	inf
 	*/
 
-	void update(double cur_time, std::vector<ScriptTimerQueueTimer>& triggered_timers_out);
+	void update(double cur_time, std::vector<ScriptTimerQueueTimer>& triggered_timers_out,
+		size_t max_due_timers = std::numeric_limits<size_t>::max());
 
 	void clear(); // Just used for testing
 

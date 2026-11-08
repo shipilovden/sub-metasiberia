@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2021 -
 
 
 #include "AnimationManager.h"
+#include "../shared/Avatar.h"
 #include "MeshManager.h"
 #include "AvatarGroundingUtils.h"
 #include "PhysicsWorld.h"
@@ -193,7 +194,7 @@ static const float AVATAR_CAPSULE_CYLINDER_HEIGHT = 1.3f;
 
 void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& physics_world, const Vec3d& pos, const Vec3f& cam_rotation, 
 	bool use_xyplane_speed_rel_ground_override, float xyplane_speed_rel_ground_override, 
-	const Matrix4f& pre_ob_to_world_matrix, uint32 anim_state, double cur_time, double dt, const PoseConstraint& pose_constraint, AnimEvents& anim_events_out)
+	const Matrix4f& pre_ob_to_world_matrix, uint32 anim_state, double cur_time, double dt, bool script_animation_paused, const PoseConstraint& pose_constraint, AnimEvents& anim_events_out)
 {
 	if(dt == 0.0) // May happen in web client, avoid dividing by zero below.
 		return;
@@ -1042,6 +1043,14 @@ void AvatarGraphics::setOverallTransform(OpenGLEngine& engine, PhysicsWorld& phy
 			}
 		}
 
+		// A one-clip chatbot has no separate Idle animation to transition to.
+		// Freeze its current pose while stationary, then let the same clip
+		// continue from that pose when the bot moves again. Configured gestures
+		// still take precedence and play normally.
+		if(!script_animation_paused && avatar->isChatBotAvatar() && anim_data.animations.size() == 1 &&
+			on_ground && xyplane_speed < 0.1 && cur_time >= gesture_anim.play_end_time)
+			skinned_gl_ob->use_time_offset -= dt;
+
 		last_vel = vel;
 
 
@@ -1419,8 +1428,9 @@ static int findAnimation(GLObject& ob, const std::string& name)
 	const int anim_i = ob.mesh_data->animation_data.getAnimationIndex(name);
 	if(anim_i < 0)
 	{
-		conPrint("Failed to find animation '" + name + "'");
-		assert(0);
+		// Imported NPC meshes may expose one generic clip instead of the
+		// standard locomotion set. Keep those avatars usable; stationary bots
+		// freeze this fallback clip below instead of asserting here.
 		return 0;
 	}
 	else

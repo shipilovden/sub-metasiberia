@@ -93,6 +93,7 @@
     <addaction name="actionCopy_Object"/>
     <addaction name="actionPaste_Object"/>
     <addaction name="actionCloneObject"/>
+    <addaction name="actionMergeSelectedObjects"/>
     <addaction name="actionDeleteObject"/>
     <addaction name="separator"/>
     <addaction name="actionFind_Object"/>
@@ -598,6 +599,17 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+D</string>
+   </property>
+  </action>
+  <action name="actionMergeSelectedObjects">
+   <property name="text">
+    <string>Merge Selected Objects</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+M</string>
+   </property>
+   <property name="toolTip">
+    <string>Merge selected static meshes or voxel objects into one object</string>
    </property>
   </action>
   <action name="actionLogIn">

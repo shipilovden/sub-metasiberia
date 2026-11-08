@@ -107,7 +107,20 @@ signals:;
 	void pasteShortcutActivated();
 	void focusOutSignal();
 	void gamepadButtonXChangedSignal(bool pressed);
+	void gamepadButtonBChangedSignal(bool pressed);
 	void gamepadButtonAChangedSignal(bool pressed);
+	void gamepadButtonYChangedSignal(bool pressed);
+	void gamepadButtonL1ChangedSignal(bool pressed);
+	void gamepadButtonR1ChangedSignal(bool pressed);
+	void gamepadButtonL3ChangedSignal(bool pressed);
+	void gamepadButtonR3ChangedSignal(bool pressed);
+	void gamepadButtonStartChangedSignal(bool pressed);
+	void gamepadButtonSelectChangedSignal(bool pressed);
+	void gamepadButtonUpChangedSignal(bool pressed);
+	void gamepadButtonDownChangedSignal(bool pressed);
+	void gamepadButtonLeftChangedSignal(bool pressed);
+	void gamepadButtonRightChangedSignal(bool pressed);
+	void gamepadConnectedChangedSignal(bool connected);
 	void photoRenderError(QString message);
 	void photoHistogramReady(QImage histogram);
 
@@ -143,6 +156,7 @@ private:
 	std::string initialisation_error_msg;
 public:
 	QGamepad* gamepad;
+	bool gamepad_manager_connection_added = false;
 	Reference<OpenGLEngine> opengl_engine;
 	float near_draw_dist;
 	float photo_shift_x = 0, photo_shift_y = 0;

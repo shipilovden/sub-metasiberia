@@ -134,8 +134,284 @@ If an avatar continues to touch an object, for example the avatar is standing on
 <div class="code-arg"><span class="code-arg-code">object : Object</span><span class="code-arg-descrip"> The object that was used.</span></div>
 
 <div class="code-func-description">
-Called when a user uses an object.  Currently users use objects by moving the mouse cursor over an object and pressing the E key.
+Called when a user uses an object. By default users press E; a server script can assign a different supported keyboard key, left mouse click, or both with <code>game.setInteractionPrompt</code>. The assigned key/click triggers this same handler, so the script controls the action.
 </div>
+
+<h3>Configurable object interaction</h3>
+<p>On the server, <code>game.setInteractionPrompt(uid, text, input, visible?)</code> sets the prompt and input for any scripted object. Supported keyboard inputs are letters, digits, <code>f1</code> through <code>f12</code>, <code>space</code>, <code>enter</code>, <code>escape</code>, <code>backspace</code>, <code>delete</code>, <code>pageup</code>, <code>pagedown</code>, <code>home</code>, <code>end</code>, <code>minus</code>, <code>equals</code>, <code>plus</code>, <code>left_bracket</code>, <code>right_bracket</code> and the arrow keys. Use <code>mouse_left</code> for click-only, <code>both</code> for E plus left-click, or a key such as <code>f</code>; append <code>+mouse_left</code> to a key to enable both. The text is custom action text, for example <code>"Open door"</code>. Visibility affects only the label, not whether the input works. Call it again when object state changes to update the text.</p>
+<pre class="code-block">
+--lua
+if IS_SERVER then
+  game.setInteractionPrompt(12345, "Open door", "f+mouse_left", true)
+end
+
+function onUserUsedObject(avatar, object)
+  if IS_SERVER then
+    -- Put the object's action here; key and click reach this same handler.
+  end
+end
+</pre>
+
+
+<h2>Game scripts and focused input</h2>
+
+<p>
+An object can act as a small multiplayer game when its Luau script handles input and keeps shared rules on the server. A player looks at the nearby scripted object and presses E to focus it; Escape leaves the game session. Define <code>onUserKeyPressed(avatar, object, input)</code>, <code>onUserKeyReleased(avatar, object, input)</code>, <code>onUserGameAction(avatar, object, action_id, values)</code>, <code>onUserGameMessage(avatar, object, name, payload)</code>, or <code>onUserGameSessionChanged(avatar, object, active)</code> to opt into the focused game session. For a normal button, <code>values</code> is nil; for a form, it is a table keyed by field ID. The server runs these callbacks authoritatively and checks that input belongs to an active, nearby participant.
+</p>
+
+<p>
+The game APIs in this guide require the matching Metasiberia Linux server release; client presentation and negotiated input/state features also require the updated Qt client. Source code alone does not add tools to an older running server or client. Check <code>get_luau_reference</code> topic <code>game</code> and the connected MCP tool list for the active release before promising that a feature is available in a live world.
+</p>
+
+<p>
+Each Luau VM is limited to 128 MiB of allocated Lua memory. The server also limits the combined allocation of all owner VMs across all worlds to 1 GiB. When a VM is registered, the remaining server budget is shared across active VMs without lowering any VM's limit below its current allocation. If the total is exhausted, the server refuses to register another VM. A client shares one 128 MiB VM across its loaded object scripts.
+</p>
+
+<p>
+On the authoritative server, <code>game.getPlayersNear(object, radius)</code> returns active participants whose latest server-stored avatar position is within the radius in metres of the object's world-space bounds centre. The object must be the game host or a live object spawned by this game; radius is 0..1000 metres. The result is capped at 256 participants, and this query shares the game's 60 spatial queries per second budget with object overlap queries. Avatar positions are reported by clients, so this helps implement proximity zones and interactions but is not a physics collision event or an anti-cheat movement check.
+
+For occupancy triggers, <code>game.getPlayersOverlapping(object)</code> returns active game participants whose conservative 0.6-by-0.6-by-1.9 metre avatar AABB intersects the object's world AABB. The object must be the live game host or an object spawned by the same game. This server query helps implement capture zones, finish lines and entry triggers; it uses client-reported avatar positions and is not an exact physics contact or anti-cheat check. It shares the 60-per-second-per-game and 600-per-second-per-world spatial-query budget.
+</p>
+
+<p>
+For server-side mouse or gamepad targeting, call <code>game.getAimTarget(avatar, max_distance)</code> from an input callback or game loop. It returns <code>{object, object_uid, position, normal, distance}</code> for the nearest live object spawned by this game, or nil when there is no hit. Pass <code>true</code> as the optional third argument to also return the nearest collidable, non-sensor world object, such as an interactive switch; omit it or pass <code>false</code> to keep the result limited to this game's spawned objects. Collidable world-object AABBs block the ray in either mode. Maximum distance is 100 metres. The server chooses the returned object UID, but this does not grant write permission: object property changes still require the script owner to own that object, and transforms recheck parcel placement permission. The view direction is client-reported, so this is not an anti-cheat camera check. The ray uses a server-side 64-metre spatial grid and caps each query at 8,192 object candidates; denser regions return nil and an error. This query is limited to 10 calls per second per game and 200 per second per world, in addition to the spatial-query limits of 60 per second per game and 600 per second per world. Updated clients send the current camera origin and direction in the negotiated game-input snapshot (through the cursor when it is in the viewport, otherwise through screen centre). The server rejects camera origins more than 30 metres from the latest avatar position or outside +/-10,000,000 metres; the view direction remains client-reported and is not an anti-cheat camera check. Older clients fall back to their latest avatar view angles. For player-vs-player targeting, <code>game.getAimPlayerTarget(avatar, max_distance)</code> returns the nearest other live participant in this same game session as <code>{avatar, avatar_uid, position, normal, distance}</code>; collidable world and game objects block the ray. Player hitboxes are conservative 0.6 by 0.6 by 1.9 metre AABBs based on server-stored avatar positions, not exact animated-mesh or physics contacts, and the query shares the 10 aim queries/sec budget. The client-only <code>game.raycast(max_distance)</code> uses the current pointer ray when the pointer is inside the viewport and the screen-centre ray otherwise, matching the ray sent to the server for <code>game.getAimTarget</code>. It returns <code>{object, object_uid, position, normal, distance}</code> for a local physics hit and skips the game host object; use it for presentation only because it does not authorize shared game actions. <code>game.setObjectTransform(object, transform)</code> moves, rotates, or scales a live object spawned by the same game; position is required, and the transform table may include <code>axis</code> plus <code>angle</code>, and <code>scale</code>. The server rechecks parcel placement permission, broadcasts accepted transforms, and allows up to 600 transform updates per second per game and 12,000 per second per world. These are kinematic updates; they do not apply forces or generate physics contacts.
+</p>
+
+<p>
+For fast scripted movement, <code>game.sweepAABB(object, displacement)</code> checks the object's current world-space AABB along a displacement up to 100 metres. It returns the nearest blocking object, UID, fraction, distance, contact-origin position and axis normal, or nil when the path is clear. A server-side 64-metre spatial grid narrows candidates to collidable world objects and collidable live objects spawned by the same game; sensor and non-collidable objects are ignored. A single query accepts at most 8,192 candidates and returns an error in denser swept regions. The sweep uses conservative AABB bounds, so it can report a hit before the underlying mesh would touch; it does not simulate forces, report a contact manifold, or include avatars. It allows 30 collision queries per second per game and shares a 200-per-second query cap with <code>game.getAimTarget</code>, and also consumes the spatial-query budget of 60 per second per game and 600 per second per world.
+</p>
+
+<p>
+For ordinary kinematic game-piece movement with wall sliding, <code>game.moveObjectWithSlide(object, displacement)</code> performs up to three conservative AABB sweeps and applies the accepted transform on the server. It returns <code>true, result</code>, where result has <code>position</code>, <code>moved</code>, <code>blocked</code>, and a <code>contacts</code> array containing the contacted object, UID, normal, and leg fraction. It accepts displacements up to 100 metres, uses the same 8,192-candidate cap and collision-query and transform-update budgets as the lower-level APIs. It does not simulate forces or collide with avatars.
+</p>
+
+<pre class="code-block">
+--lua
+local function moveWithSweep(object, displacement)
+  local hit, reason = game.sweepAABB(object, displacement)
+  if reason then return false, reason end
+  local fraction = hit and math.max(0, hit.fraction - 0.001) or 1
+  local position = object.pos + displacement * fraction
+  return game.setObjectTransform(object, {position=position})
+end
+</pre>
+
+<pre class="code-block">
+--lua
+function onUserKeyPressed(avatar, object, input)
+  if input ~= "mouse_left" and input ~= "gamepad_a" then return end
+  local hit = game.getAimTarget(avatar, 30)
+  if hit then
+    -- Only this game's live spawned objects can be returned or destroyed.
+    game.destroyObject(hit.object)
+    game.setHUDText("Target removed", avatar)
+  end
+end
+</pre>
+
+<p>
+Focused input includes supported keyboard and mouse buttons (<code>mouse_left</code>, <code>mouse_middle</code>, <code>mouse_right</code>) and Qt gamepad buttons: <code>gamepad_a</code>, <code>gamepad_b</code>, <code>gamepad_x</code>, <code>gamepad_y</code>, <code>gamepad_l1</code>, <code>gamepad_r1</code>, <code>gamepad_l3</code>, <code>gamepad_r3</code>, <code>gamepad_start</code>, <code>gamepad_select</code>, and the D-pad names <code>gamepad_up</code>, <code>gamepad_down</code>, <code>gamepad_left</code>, <code>gamepad_right</code>. <code>onUserKeyReleased(avatar, object, input)</code> reports release, and <code>game.isKeyDown(avatar, input)</code> reads held digital input from the server game loop. <code>game.getInput(avatar)</code> returns the latest focused pointer position as normalized <code>pointer.x</code>/<code>pointer.y</code> values from 0 to 1, plus the connected gamepad's <code>left_x</code>, <code>left_y</code>, <code>right_x</code>, <code>right_y</code>, <code>left_trigger</code> and <code>right_trigger</code> values, and a <code>wheel={x,y}</code> table of scroll steps. Stick and trigger values range from -1 to 1 for sticks and 0 to 1 for triggers. Wheel steps accumulate on the server up to 100 per axis and are consumed once per <code>game.getInput</code> call. The Qt client sends snapshots at up to 30 Hz; the server accepts at most 60 updates per second per participant and 3,600 per second per world, and <code>get_object_script_log</code> reports rejected excess updates. For clients sending capability-gated snapshots, if updates stop for 500 ms, analog/pointer/wheel state becomes neutral, aim rays expire, and held keys read as released. Wheel support requires the negotiated client/server capability.
+</p>
+
+<p>
+For controls that should work the same across keyboard, mouse and gamepad, register a named action with <code>game.bindAction(name, controls)</code>, such as <code>game.bindAction("jump", {"space", "gamepad_a"})</code>. In the server game loop, <code>game.isActionDown(avatar, "jump")</code> reads whether an active participant is holding any bound control; in the focused client loop, <code>game.isLocalActionDown("jump")</code> is presentation-only. Bindings declared in the script apply to every player. Changing a mapping for one player at runtime requires sending and validating that choice through the game state or RPC, then updating the server mapping as well. See <code>get_luau_reference</code> topic <code>game_bindings</code> for the supported control names and limits.
+</p>
+
+<pre class="code-block">
+--lua
+local score = 0
+
+function onUserKeyPressed(avatar, object, input)
+  if input == "mouse_left" or input == "gamepad_a" or input == "space" then
+    score += 1
+    game.setHUDText("Score: " .. score, avatar)
+  end
+end
+</pre>
+
+<p>Position a text HUD explicitly with <code>game.setHUDText(text, avatar, {x=0, y=0.9})</code>. x is its normalized horizontal center and y its normalized top edge, each in -1..1 screen coordinates. Omit the layout to keep the centered upper-screen default. Explicit placement requires a client and server advertising the text-HUD layout capability.</p>
+
+<pre class="code-block">
+--lua
+function showChoices(avatar)
+  game.setHUDMenu(avatar, "Door control",
+    { {id="open", label="Open"}, {id="close", label="Close"} },
+    "Choose what the door should do.", {x=-0.58, y=0.82, width=0.42})
+end
+</pre>
+
+<p>For scoreboards or status panels, pass an optional eighth <code>text_widgets</code> argument to <code>game.setHUDMenu</code>. It is a dense array of up to eight labels. Each label has a unique <code>id</code>, <code>text</code>, normalized horizontal center <code>x</code>, normalized top edge <code>y</code>, and normalized <code>width</code>. Values stay within the screen bounds. Optional <code>text_color</code> and <code>background_color</code> tables use RGB components from 0 to 1; <code>background_alpha</code> controls the card opacity. Example: <code>{id='score', text='Score: 12', x=0, y=0.4, width=0.2, text_color={r=1,g=0.9,b=0.2}, background_color={r=0.04,g=0.05,b=0.08}, background_alpha=0.85}</code>. Text widgets are available when both the Qt client and Linux server advertise <code>SCRIPTED_GAME_HUD_TEXT_WIDGETS</code>; custom colors additionally require <code>SCRIPTED_GAME_HUD_TEXT_STYLE</code>.</p>
+
+<pre class="code-block">
+--lua
+function showScoreboard(avatar, score, lives)
+  game.setHUDMenu(avatar, "Round status", {}, nil, nil, nil, nil, {
+    {id="score", text="Score: " .. score, x=-0.72, y=0.88, width=0.24},
+    {id="lives", text="Lives: " .. lives, x=0.72, y=0.88, width=0.24}
+  })
+end
+</pre>
+
+<pre class="code-block">
+--lua
+function askPlayerName(avatar)
+  game.setHUDMenu(avatar, "Join game",
+    {{id="submit", label="Continue"}}, "Enter a name.",
+    nil, {{id="name", label="Player name", required=true}})
+end
+
+function onUserGameAction(avatar, object, action_id, values)
+  if action_id == "submit" then
+    game.setHUDText("Welcome, " .. values.name, avatar)
+  end
+end
+</pre>
+
+<pre class="code-block">
+--lua
+function showDifficulty(avatar)
+  game.setHUDMenu(avatar, "New game", {{id="start", label="Start"}},
+    "Choose a difficulty.", nil,
+    {{id="difficulty", label="Difficulty", type="select", options={"Easy", "Normal", "Hard"}, required=true}})
+end
+
+function onUserGameAction(avatar, object, action_id, values)
+  if action_id == "start" then
+    -- values.difficulty is one of the declared options; the server checks it.
+    game.setHUDText("Starting on " .. values.difficulty, avatar)
+  end
+end
+</pre>
+
+<pre class="code-block">
+--lua
+-- Keep reusable layouts in this game's script. These entries reference
+-- existing objects owned by the game creator; they are not a global library.
+local prefabs = {
+  gate = {
+    {template=wall, offset={x=0, y=0, z=0}},
+    {template=wall, offset={x=4, y=0, z=0}, axis={x=0,y=0,z=1}, angle=math.pi/2},
+    {template=lamp, offset={x=2, y=0, z=2}, scale={x=0.8,y=0.8,z=0.8}}
+  }
+}
+local spawned, error_message = game.spawnGroup(prefabs.gate, Vec3d(100, 200, 0))
+-- Returns all created objects, or nil and an error if the complete group
+-- cannot be placed. A call accepts at most 64 entries; each game can create 128 copies per second and keep 1,024 alive.
+</pre>
+
+<p>
+Games can also create bounded voxel geometry directly from Luau without a pre-placed template. This is useful for boards, block maps and simple game pieces; the object is temporary and follows the game's parcel and object-count limits.
+</p>
+<pre class="code-block">
+--lua
+local cells = {
+  {x=0,y=0,z=0,material=1}, {x=1,y=0,z=0,material=2},
+  {x=0,y=1,z=0,material=2}, {x=1,y=1,z=0,material=1}
+}
+local piece, error_message = game.createVoxelObject({
+  cells=cells,
+  position={x=100,y=200,z=1},
+  scale={x=0.25,y=0.25,z=0.25},
+  collidable=false, -- set true for blocking level geometry
+  materials={{r=0.1,g=0.5,b=0.9}, {r=0.9,g=0.35,b=0.1}}
+})
+if not piece then print("Could not create game piece: " .. tostring(error_message)) end
+</pre>
+<p>
+Each voxel object accepts 1–256 unique cells with integer coordinates from -64 to 64. Use either one shared <code>color={r,g,b}</code> or a <code>materials</code> palette of 1–16 RGB colors; each cell's optional one-based <code>material</code> index selects its palette color and defaults to 1. Scale components range from 0.001 to 10 metres and color channels from 0 to 1. Collision is enabled by default; set <code>collidable=false</code> for decorative voxel objects. The operation runs on the authoritative server, checks the game's owner and parcel permissions, and returns the created object or <code>nil, error</code>. Voxel objects are temporary and are removed when the owning game object is removed. Voxel templates copied by <code>game.spawnObject</code> and <code>game.spawnGroup</code> count against the same per-game and per-world cell budgets.
+</p>
+
+<p>
+Each <code>spawnGroup</code> entry may include <code>offset={x,y,z}</code> from the group origin, an optional axis-angle rotation using <code>axis={x,y,z}, angle=radians</code> (both must be supplied together; angle is limited to ±2π), and an optional absolute instance <code>scale={x,y,z}</code> with positive components from 0.01 to 100. Omitting these fields preserves the template transform. One call accepts at most 64 entries and places the complete group only if every template, permission and resource limit check succeeds.
+</p>
+
+<p>
+On the authoritative server, <code>game.getOverlaps(object)</code> returns up to 256 other live objects spawned by the same game whose world-space axis-aligned bounds intersect the supplied game object; if more than 256 objects overlap, it returns an error instead of a partial list. Call it from the server game loop to implement broad-phase hit detection for game pieces. It scans only the bounded spawned-object set owned by this game and is limited to 60 queries per second per game and 600 per second across the world. This is an AABB overlap query, not a physics contact event: it does not report contact normals, exact mesh intersections, avatars, or objects from other games. <code>game.getOverlapChanges(object)</code> returns <code>{entered, exited}</code> arrays of live game objects whose AABB overlap began or ended since the previous query for that object. Its snapshots are limited to 16,384 overlap pairs per game and it shares the 60-query-per-second game limit and the 600-per-second world limit; a query that exceeds the snapshot limit returns <code>nil, error</code> without changing the prior snapshot.
+</p>
+
+<p>
+Focused client scripts may call <code>game.setCamera(position, look_at, horizontal_fov_degrees?, transition_seconds?)</code>. The optional horizontal field of view is 30–120 degrees; omitting it keeps the current value. The optional transition duration is 0–10 seconds; zero or omission moves immediately, while a positive duration smoothly interpolates position, shortest-path heading, pitch and field of view. A new camera command replaces an in-progress transition from the current camera pose. The game temporarily owns the local camera while focused, and the original camera settings are restored on release or when the game session ends. Camera control is local presentation and does not authorize server-side actions.
+</p>
+
+<p>
+This requires the updated Qt client and server support for focused game sessions. While its object owns local E-focus and the standard avatar camera is active, a client script can call <code>game.setPlayerControl(move_x, move_y, jump?, run?)</code> from <code>game.createClientLoop</code>. The two movement axes are finite values from -1 to 1, where positive y means forward and positive x means right; diagonal input is normalized. <code>game.getLocalInput()</code> returns the focused player's keyboard/gamepad movement as <code>{available, move_x, move_y, jump, run, w, a, s, d}</code> and a sparse <code>keys</code> table containing currently held supported keys (for example <code>input.keys.space</code>, <code>input.keys.escape</code>, <code>input.keys.left</code>, or <code>input.keys.e</code>). It also returns <code>pointer={x,y}</code> normalized to 0..1 from the top-left when the cursor is in the viewport (otherwise nil), <code>mouse={left,middle,right}</code> held-button booleans, and <code>gamepad={connected,left_x,left_y,right_x,right_y,left_trigger,right_trigger,a,b,x,y,l1,r1,l3,r3,start,select,up,down,left,right}</code>. Stick axes range from -1 to 1 and triggers from 0 to 1. The local snapshot is unavailable if the game does not own focus or the viewport has lost keyboard focus. The setter returns <code>true, ""</code> when accepted, or <code>false, error</code> when the game is not focused, the player is in a vehicle, or the camera is in another mode. Refresh the command each loop tick: the client expires it after 0.35 seconds, on focus loss, or when the loop stops. Accepted control feeds the local collision-aware avatar controller and takes precedence over physical movement for that frame. It does not make avatar movement server-authoritative, so do not use it to decide competitive outcomes or trusted shared state; send intent to a server callback and validate game rules there.
+</p>
+<pre class="code-block">
+--lua
+-- Declare this server callback so a nearby player can press E and focus the game.
+function onUserKeyPressed(avatar, object, key)
+  if IS_SERVER then
+    -- Handle shared actions here, or leave this handler empty.
+  end
+end
+
+-- Client-only local movement controller. Server game rules belong in createLoop.
+if IS_CLIENT then
+  game.createClientLoop(function(object, dt)
+    local input = game.getLocalInput()
+    if input and input.available then
+      local ok, err = game.setPlayerControl(input.move_x, input.move_y, input.jump, input.run)
+    end
+  end, 20)
+end
+</pre>
+
+<p>
+<code>game.createClientLoop</code> runs at 1–30 Hz while the game owns E-focus. The Qt client handles at most 16 due game-loop events per rendered frame, with up to four catch-up steps for each event (64 callbacks maximum per frame). Remaining due events stay queued. Each Luau callback is also limited to 10,000 VM interrupts. These are count limits; callbacks still run on the Qt event thread while holding world state, so keep them short and avoid blocking operations.
+</p>
+
+<p>
+The game API also provides server loops, player lists, a text HUD and up to four independent named interactive menus per player and game. Each menu has a title, optional description, up to eight action buttons, and normalized screen placement. Pass <code>{id="inventory", x=-0.7, y=0.8, width=0.3}</code> as the fifth argument to <code>game.setHUDMenu</code>; omit <code>id</code> for the default <code>main</code> panel. An optional sixth argument defines up to four fields: text input such as <code>{id="name", label="Name", required=true}</code>, a bounded selector such as <code>{id="difficulty", label="Difficulty", type="select", options={"Easy", "Normal", "Hard"}}</code>, or a numeric input such as <code>{id="damage", label="Damage", type="number", min=0, max=100}</code>, or a checkbox such as <code>{id="confirm", label="Confirm", type="checkbox", checked=false}</code>. Numeric and checkbox fields require a new server release; older capable clients show text inputs while the server validates submissions. Checkbox values are the strings <code>"true"</code> and <code>"false"</code>; a required checkbox must be checked. Select fields need 2–8 unique options, each 1–64 bytes. Each button may optionally include its own screen bounds, for example <code>{id="start", label="Start", layout={x=0, y=0.2, width=0.3, height=0.08}}</code>. The button layout's x is its normalized horizontal center, y is its normalized top edge, width is relative to the full screen width, and height is relative to the vertical UI extent; x/y use -1..1, width 0.05..1 and height 0.025..0.5, with the button kept inside the screen. Buttons without layout use the automatic grid. This requires a client and server that advertise the action-layout capability. Clicking a button submits values to <code>onUserGameAction(avatar, object, action_id, values)</code>; each value is limited to 256 bytes, required fields are checked by the server, and select values must match a declared option. Action IDs must be unique across open panels. <code>game.clearHUDMenu(avatar, id)</code> clears one panel; omitting the ID clears <code>main</code>. The API also provides transient state snapshots, versioned persistent game/player data, authorized object spawning, and bounded client-to-server messages. Server scripts can read and write the shared snapshot with <code>game.getState()</code> and <code>game.setState(table)</code>; each snapshot is limited to 16 KiB and all active game snapshots in one world share an 8 MiB budget; updates are limited to 10 per second per game and 600 per second per world. Focused clients receive that snapshot on join and may read the latest one with <code>game.getState()</code>; the callback <code>onGameStateChanged(object, version, state)</code> always receives a reconstructed full state. When client and server advertise the state-delta capability, updates whose byte representation benefits use a bounded versioned prefix/suffix delta on the wire. The server sends periodic full checkpoints, while late joiners and older clients always get full snapshots. A focused client script may call <code>game.sendToServer(name, plain_table)</code>; it returns true when queued and false when unsupported, unfocused, over the rate/size limit, or not serializable. Names are 1–32 ASCII identifier characters, payloads are at most 4 KiB, and the server independently enforces 20 messages per second per participant/game and 1,200 per second per world. It invokes <code>onUserGameMessage(avatar, object, name, payload)</code> only for an active nearby game participant; <code>get_object_script_log</code> reports cumulative <code>rejected_game_rpc_messages</code>, <code>rejected_game_input_updates</code>, and <code>rejected_game_events</code> counts for server rate-limit rejections. The server rechecks the session and plain payload shape; a client message does not authorize a world mutation. The API is still experimental: it does not expose arbitrary custom HUD widgets, a built-in global prefab editor or spawned-object pooling, or server-authoritative avatar movement and collision events. Scripts can make per-game persistent template catalogs with the storage and atomic spawn APIs described below. Keep competitive rules and state changes on the server; local raycasts, camera control, and player control do not authorize shared actions.
+</p>
+
+<p>
+Use the seventh argument to <code>game.setHUDMenu</code> for up to four progress bars, for example <code>{{id="health", label="Health", value=75, max=100}}</code>. Values must be finite and satisfy <code>0 &lt;= value &lt;= max &lt;= 1,000,000,000</code>. The optional eighth argument adds up to eight individually positioned text widgets, for example <code>{{id="score", text="Score: 12", x=0, y=0.4, width=0.2}}</code>. Each widget uses normalized screen-center x and top y coordinates in -1..1, a width in 0.05..0.8, and 1–256 bytes of text; its horizontal bounds must stay on screen. A menu can contain text widgets, progress bars, form fields and actions together. Progress bars and text widgets require the updated Linux server and Qt client; older clients retain any menu actions they support and omit unsupported elements.
+</p>
+
+<p>
+Scripts can build a persistent, per-game prefab catalog from template object UIDs using <code>game.getData</code>, <code>game.setData</code>, <code>findObjectForUID</code>, and <code>game.spawnGroup</code>. Save the source UID and local offset, rotation, and scale for each part; resolve UIDs again when spawning and handle deleted templates. The catalog survives script reloads and server restarts as long as its template objects remain in the world. It is script-managed game data, not a global editor library or a pool of already spawned objects. Storage is limited to 16 KiB per record, 256 KiB and 64 records per game, and 10 writes per second; an atomic group spawn accepts 1–64 entries. A game can own up to 1,024 spawned objects, the world up to 32,768 total; creation is limited to 128 objects per second per game and 1,024 per second per world. See <code>get_luau_reference</code> topic <code>prefabs</code> for a complete example.
+</p>
+
+<p>
+To show the standard blue materialisation effect on an existing avatar without moving it, call <code>game.playAvatarSpawnEffect(avatar)</code> from an authoritative server script. Pass a live avatar table from an event handler or <code>game.getPlayers()</code>. The server broadcasts the request to capable clients; each client runs the same two-second effect used when an avatar appears. This requires a rebuilt server and capable Qt clients.
+
+For a one-shot cue, call <code>game.emitEvent(name)</code> on the authoritative server. Capable participants focused when the event is emitted receive it in order through <code>onGameEvent(object, name, sequence, server_time)</code>; unlike game-state snapshots, accepted events are not coalesced. When both peers negotiate timestamp support, <code>server_time</code> is the synchronized world clock at emission; older compatible peers receive 0. Delivery is limited to 20 events per game per second and 256 focused participants per event; a world may emit at most 1,200 events and 12,000 total recipient deliveries per second. Events use the reliable TCP connection while it remains active. Late joiners and reconnecting players do not receive old events; older clients without the negotiated capability skip them. The call returns false when any per-game, world event-rate or recipient-delivery limit is reached. This needs an updated server and clients that advertise the game-event capability. Audio and animation playback still runs locally, and the referenced sound or exact animation clip must already be loaded by each client. To align a looping clip's phase across clients, compute <code>math.max(0, getCurrentTime() - server_time)</code> and pass it as the second Lua argument after the clip name to <code>object:startPlayingAnimation(name, elapsed_seconds)</code>. This aligns the local clip clock; it does not synchronize audio or guarantee identical render frames.
+</p>
+
+<pre class="code-block">
+--lua
+local last_cue_sequence = nil
+
+function onUserGameSessionChanged(avatar, object, active)
+  if not IS_SERVER then return end
+  if active then
+    game.setHUDMenu(avatar, "Cues", {{id="fire", label="Play cue"}})
+  else
+    game.clearHUDMenu(avatar)
+  end
+end
+
+function onUserGameAction(avatar, object, action_id)
+  if not IS_SERVER or action_id ~= "fire" then return end
+  game.emitEvent("fire")
+end
+
+function onGameEvent(object, name, sequence, server_time)
+  if not IS_CLIENT or name ~= "fire" then return end
+  if last_cue_sequence ~= nil and sequence <= last_cue_sequence then return end
+  last_cue_sequence = sequence
+  object:playAudio()
+  local clip = object:getAnimationIndex("Shoot")
+  if clip >= 0 then
+    if server_time > 0 then
+      local elapsed = math.min(3600, math.max(0, getCurrentTime() - server_time))
+      object:startPlayingAnimation(clip, elapsed)
+    else
+      object:startPlayingAnimation(clip)
+    end
+  end
+end
+</pre>
 
 
 <div class="code-func-definition">onUserMovedNearToObject(avatar : Avatar, object : Object)</div>
@@ -144,7 +420,7 @@ Called when a user uses an object.  Currently users use objects by moving the mo
 <div class="code-arg"><span class="code-arg-code">object : Object</span><span class="code-arg-descrip"> The object that the player moved near to.</span></div>
 
 <div class="code-func-description">
-Called when a user avatar moves near (within a certain distance) to an object.  The distance is currently 20 metres.
+Called when a user avatar moves within 20 metres of an object. The server checks the transition against its latest stored avatar position and runs the callback once per entry. Avatar movement is still reported by the client, so this does not provide authoritative movement validation.
 </div>
 
 
@@ -155,7 +431,7 @@ Called when a user avatar moves near (within a certain distance) to an object.  
 <div class="code-arg"><span class="code-arg-code">object : Object</span><span class="code-arg-descrip"> The object that the player moved away from.</span></div>
 
 <div class="code-func-description">
-Called when a user avatar moves away from (further than a certain distance) an object.  The distance is currently 20 metres.
+Called when a user avatar moves 20 metres or farther from an object after a previously accepted near transition. The server checks and deduplicates the exit. Avatar movement is still reported by the client, so this does not provide authoritative movement validation.
 </div>
 
 
@@ -241,6 +517,9 @@ onTimerEvent(object : Object)
 </p>
 <p>
 Throws an exception if more than 4 timer events are created without being destroyed.
+</p>
+<p>
+The interval must be finite and no greater than 86400 seconds; values below 0.1 seconds are clamped to 0.1. Server timers run on the authoritative server, which dispatches at most 64 due timer events per roughly 100 ms poll; events over that limit remain queued. Fixed-step server loops retain up to 5 seconds of pending simulation time, process at most four steps per dispatch, then catch up on later polls. Client timers run locally without requiring E-game focus, with a shared limit of 64 callbacks and 256 due-event removals per rendered frame; use them for presentation such as NPC animation selection, and keep shared game rules on the server.
 </p>
 <p>
 Returns a timer handle that can be passed to destroyTimer.
@@ -596,6 +875,14 @@ Substrata URL of the audio source for this object.   Can be a mp3 or wav URL</sp
 Volume factor for audio source.  Default is 1.</span></div>
 
 <p>
+Client-side object methods include <code>playAudio()</code>, which restarts the loaded source from the beginning, <code>pauseAudio()</code>, which pauses playback at its current position, <code>resumeAudio()</code>, which continues paused playback, and <code>isPlayingAudio()</code>. For animated models, <code>getAnimationIndex(name)</code> returns a clip index or -1, <code>startPlayingAnimation(index_or_name, elapsed_seconds?)</code> cross-fades to a clip by exact name or valid integer index; the optional finite phase offset is limited to 0..3600 seconds. <code>stopPlayingAnimation()</code>/<code>resumePlayingAnimation()</code> pause and resume the current clip at its current pose. These methods return true when the loaded model supports the requested operation. Playback remains local; timestamped game events can align looping clip phase across clients, but do not replicate audio, clip availability or rendered frames.
+</p>
+
+<p>
+For any loaded GLB/BMesh with a preserved hierarchy, client scripts can inspect and pose nodes on the original model object without splitting it into separate world objects. <code>getNodeCount()</code>, <code>getNodeIndex(name)</code> and <code>getNodeInfo(index_or_name)</code> expose zero-based node indices, parent links, bind-pose translation/quaternion/scale and whether a node is a bone. <code>getBoneCount()</code>/<code>getBoneInfo(bone_index)</code> enumerate the skin joints. <code>setNodeTransform(index_or_name, {translation=Vec3f(...), rotation={x=...,y=...,z=...,w=...}, scale=Vec3f(...)})</code> applies a local post-transform after the authored pose or active clip; omitted values use zero translation, identity rotation and unit scale. <code>clearNodeTransform(index_or_name)</code> removes that override. <code>getAnimationCount()</code> and <code>getAnimationName(index)</code> enumerate loaded clips; existing start/stop/resume methods control playback. This is client-side presentation, not a server-replicated bone state or a moving collision shape. For multiplayer, send validated game state/events and apply the same local pose on capable clients. Static GLB scene transforms are preserved for models with at most 256 rigid mesh nodes; models beyond the renderer's joint limit retain the static import path.
+</p>
+
+<p>
 Methods:
 </p>
 
@@ -604,6 +891,56 @@ Returns the number of materials of the object.</span></div>
 
 <div class="code-attr"><span class="code-attr-code">getMaterial(mat_index : number) : Material</span><span class="code-attr-descrip">
 Returns the material of the object with the given index.</span></div>
+
+<div class="code-attr"><span class="code-attr-code">playAudio()</span><span class="code-attr-descrip">
+Restarts the object's loaded audio source from the beginning. Client-side presentation only.</span></div>
+
+<div class="code-attr"><span class="code-attr-code">pauseAudio()</span><span class="code-attr-descrip">
+Pauses local playback at the current position. Use <code>resumeAudio()</code> to continue.</span></div>
+
+<div class="code-attr"><span class="code-attr-code">resumeAudio()</span><span class="code-attr-descrip">
+Continues local playback from the paused position.</span></div>
+
+<div class="code-attr"><span class="code-attr-code">isPlayingAudio() : boolean</span><span class="code-attr-descrip">
+Returns whether the object's audio source is currently playing.</span></div>
+
+<div class="code-attr"><span class="code-attr-code">getAnimationIndex(name : string) : number</span><span class="code-attr-descrip">
+Returns the model animation clip index, or -1 when it is missing. Client-side presentation only.</span></div>
+
+<div class="code-attr"><span class="code-attr-code">startPlayingAnimation(index_or_name : number | string, elapsed_seconds? : number) : boolean</span><span class="code-attr-descrip">
+Cross-fades the local model to the exact clip name or a valid integer index. Optional elapsed_seconds sets the initial loop phase in 0..3600 seconds, useful with the server_time argument of onGameEvent. Returns false if the model or clip is unavailable.</span></div>
+
+<div class="code-attr"><span class="code-attr-code">stopPlayingAnimation() : boolean</span><span class="code-attr-descrip">
+Pauses the current local animation in its current pose. Returns false if the model has no loaded animation.</span></div>
+
+<div class="code-attr"><span class="code-attr-code">resumePlayingAnimation() : boolean</span><span class="code-attr-descrip">
+Resumes the current local animation from its paused pose. Returns false if the model has no loaded animation.</span></div>
+
+<pre class="code-block">
+--lua
+-- Client presentation for an animated WorldObject that has no separate idle clip.
+if IS_CLIENT then
+  local previous_position = this_object.pos
+  local paused = false
+  createTimer(function(object)
+    local position = object.pos
+    local dx = position.x - previous_position.x
+    local dy = position.y - previous_position.y
+    local dz = position.z - previous_position.z
+    local moving = dx * dx + dy * dy + dz * dz > 0.01
+    if moving and paused then
+      object:resumePlayingAnimation()
+      paused = false
+    elseif not moving and not paused then
+      object:stopPlayingAnimation()
+      paused = true
+    end
+    previous_position = position
+  end, 0.2, true)
+end
+</pre>
+
+<p>Use this for an animated world object. NPC avatars use the bot's animation slots and avatar animation controller; a script attached to an unrelated object does not control an avatar's skeleton.</p>
 
 
 

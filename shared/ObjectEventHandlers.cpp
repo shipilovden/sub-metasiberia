@@ -65,6 +65,118 @@ void ObjectEventHandlers::executeOnUserUsedObjectHandlers(UID avatar_uid, UID ob
 }
 
 
+void ObjectEventHandlers::executeOnUserGameSessionChangedHandlers(UID avatar_uid, UID ob_uid, bool active, WorldStateLock& world_state_lock)
+{
+	for(size_t z=0; z<onUserGameSessionChanged_handlers.handler_funcs.size(); )
+	{
+		HandlerFunc& handler_func = onUserGameSessionChanged_handlers.handler_funcs[z];
+		if(LuaScriptEvaluator* eval = handler_func.script.getPtrIfAlive())
+		{
+			eval->doOnUserGameSessionChanged(handler_func.handler_func_ref, avatar_uid, ob_uid, active, world_state_lock);
+			z++;
+		}
+		else
+			onUserGameSessionChanged_handlers.removeHandlerAtIndex(z);
+	}
+}
+
+
+void ObjectEventHandlers::executeOnUserKeyPressedHandlers(UID avatar_uid, UID ob_uid, const std::string& key, WorldStateLock& world_state_lock)
+{
+	for(size_t z=0; z<onUserKeyPressed_handlers.handler_funcs.size(); )
+	{
+		HandlerFunc& handler_func = onUserKeyPressed_handlers.handler_funcs[z];
+		if(LuaScriptEvaluator* eval = handler_func.script.getPtrIfAlive())
+		{
+			eval->doOnUserKeyPressed(handler_func.handler_func_ref, avatar_uid, ob_uid, key, world_state_lock);
+			z++;
+		}
+		else
+			onUserKeyPressed_handlers.removeHandlerAtIndex(z);
+	}
+}
+
+
+void ObjectEventHandlers::executeOnUserKeyReleasedHandlers(UID avatar_uid, UID ob_uid, const std::string& key, WorldStateLock& world_state_lock)
+{
+	for(size_t z=0; z<onUserKeyReleased_handlers.handler_funcs.size(); )
+	{
+		HandlerFunc& handler_func = onUserKeyReleased_handlers.handler_funcs[z];
+		if(LuaScriptEvaluator* eval = handler_func.script.getPtrIfAlive())
+		{
+			eval->doOnUserKeyReleased(handler_func.handler_func_ref, avatar_uid, ob_uid, key, world_state_lock);
+			z++;
+		}
+		else
+			onUserKeyReleased_handlers.removeHandlerAtIndex(z);
+	}
+}
+
+
+void ObjectEventHandlers::executeOnUserGameActionHandlers(UID avatar_uid, UID ob_uid, const std::string& action_id, const std::vector<std::pair<std::string, std::string>>& values, WorldStateLock& world_state_lock)
+{
+	for(size_t z=0; z<onUserGameAction_handlers.handler_funcs.size(); )
+	{
+		HandlerFunc& handler_func = onUserGameAction_handlers.handler_funcs[z];
+		if(LuaScriptEvaluator* eval = handler_func.script.getPtrIfAlive())
+		{
+			eval->doOnUserGameAction(handler_func.handler_func_ref, avatar_uid, ob_uid, action_id, values, world_state_lock);
+			z++;
+		}
+		else
+			onUserGameAction_handlers.removeHandlerAtIndex(z);
+	}
+}
+
+
+void ObjectEventHandlers::executeOnUserGameMessageHandlers(UID avatar_uid, UID ob_uid, const std::string& name, const std::vector<uint8>& payload, WorldStateLock& world_state_lock)
+{
+	for(size_t z=0; z<onUserGameMessage_handlers.handler_funcs.size(); )
+	{
+		HandlerFunc& handler_func = onUserGameMessage_handlers.handler_funcs[z];
+		if(LuaScriptEvaluator* eval = handler_func.script.getPtrIfAlive())
+		{
+			eval->doOnUserGameMessage(handler_func.handler_func_ref, avatar_uid, ob_uid, name, payload, world_state_lock);
+			z++;
+		}
+		else
+			onUserGameMessage_handlers.removeHandlerAtIndex(z);
+	}
+}
+
+
+void ObjectEventHandlers::executeOnGameStateChangedHandlers(UID ob_uid, uint32 version, const std::vector<uint8>& serialized_value, WorldStateLock& world_state_lock)
+{
+	for(size_t z = 0; z < onGameStateChanged_handlers.handler_funcs.size(); )
+	{
+		HandlerFunc& handler_func = onGameStateChanged_handlers.handler_funcs[z];
+		if(LuaScriptEvaluator* eval = handler_func.script.getPtrIfAlive())
+		{
+			eval->doOnGameStateChanged(handler_func.handler_func_ref, ob_uid, version, serialized_value, world_state_lock);
+			z++;
+		}
+		else
+			onGameStateChanged_handlers.removeHandlerAtIndex(z);
+	}
+}
+
+
+void ObjectEventHandlers::executeOnGameEventHandlers(UID ob_uid, const std::string& name, uint32 sequence, double server_time, WorldStateLock& world_state_lock)
+{
+	for(size_t z = 0; z < onGameEvent_handlers.handler_funcs.size(); )
+	{
+		HandlerFunc& handler_func = onGameEvent_handlers.handler_funcs[z];
+		if(LuaScriptEvaluator* eval = handler_func.script.getPtrIfAlive())
+		{
+			eval->doOnGameEvent(handler_func.handler_func_ref, ob_uid, name, sequence, server_time, world_state_lock);
+			z++;
+		}
+		else
+			onGameEvent_handlers.removeHandlerAtIndex(z);
+	}
+}
+
+
 void ObjectEventHandlers::executeOnUserTouchedObjectHandlers(UID avatar_uid, UID ob_uid, WorldStateLock& world_state_lock)
 {
 	// Execute doOnUserTouchedObject event handler in any other scripts that are listening for onUserTouchedObject for this object

@@ -55,6 +55,7 @@ Copyright Glare Technologies Limited 2018 -
 #include <RuntimeCheck.h>
 #include <Timer.h>
 #include <zstd.h>
+#include <chrono>
 
 
 static const bool VERBOSE = false;
@@ -70,6 +71,90 @@ static bool isValidDefaultScreenshotRequest(const Screenshot& screenshot)
 		screenshot.cam_pos.y >= -1.0e6 && screenshot.cam_pos.y <= 1.0e6 &&
 		screenshot.cam_pos.z >= -1.0e6 && screenshot.cam_pos.z <= 1.0e6 &&
 		screenshot.width_px > 0 && screenshot.width_px <= 8192;
+}
+
+static bool segmentIntersectsAABB(const Vec3d& start, const Vec3d& end, const js::AABBox& box, double& hit_t)
+{
+	double lo = 0.0, hi = 1.0;
+	for(int axis = 0; axis < 3; ++axis)
+	{
+		const double a = start[axis], d = end[axis] - a;
+		const double mn = box.min_[axis], mx = box.max_[axis];
+		if(std::fabs(d) < 1.0e-9) { if(a < mn || a > mx) return false; continue; }
+		double t0 = (mn - a) / d, t1 = (mx - a) / d;
+		if(t0 > t1) std::swap(t0, t1);
+		lo = std::max(lo, t0); hi = std::min(hi, t1);
+		if(lo > hi) return false;
+	}
+	hit_t = lo;
+	return hi >= 0.0 && lo <= 1.0;
+}
+
+
+static bool isValidScriptKeyCode(uint32 key_code)
+{
+	if((key_code >= Protocol::ScriptKey_CharacterBase + 'a' && key_code <= Protocol::ScriptKey_CharacterBase + 'z') ||
+		(key_code >= Protocol::ScriptKey_CharacterBase + '0' && key_code <= Protocol::ScriptKey_CharacterBase + '9') ||
+		(key_code > Protocol::ScriptKey_FunctionBase && key_code <= Protocol::ScriptKey_FunctionBase + 12))
+		return true;
+
+	switch(key_code)
+	{
+	case Protocol::ScriptKey_Left:
+	case Protocol::ScriptKey_Right:
+	case Protocol::ScriptKey_Up:
+	case Protocol::ScriptKey_Down:
+	case Protocol::ScriptKey_Space:
+	case Protocol::ScriptKey_Enter:
+	case Protocol::ScriptKey_Escape:
+	case Protocol::ScriptKey_Backspace:
+	case Protocol::ScriptKey_Delete:
+	case Protocol::ScriptKey_PageUp:
+	case Protocol::ScriptKey_PageDown:
+	case Protocol::ScriptKey_Home:
+	case Protocol::ScriptKey_End:
+	case Protocol::ScriptKey_Minus:
+	case Protocol::ScriptKey_Equals:
+	case Protocol::ScriptKey_Plus:
+	case Protocol::ScriptKey_LeftBracket:
+	case Protocol::ScriptKey_RightBracket:
+	case Protocol::ScriptKey_W:
+	case Protocol::ScriptKey_A:
+	case Protocol::ScriptKey_S:
+	case Protocol::ScriptKey_D:
+	case Protocol::ScriptKey_GamepadA:
+	case Protocol::ScriptKey_GamepadB:
+	case Protocol::ScriptKey_GamepadX:
+	case Protocol::ScriptKey_GamepadY:
+	case Protocol::ScriptKey_GamepadL1:
+	case Protocol::ScriptKey_GamepadR1:
+	case Protocol::ScriptKey_GamepadL3:
+	case Protocol::ScriptKey_GamepadR3:
+	case Protocol::ScriptKey_GamepadStart:
+	case Protocol::ScriptKey_GamepadSelect:
+	case Protocol::ScriptKey_GamepadUp:
+	case Protocol::ScriptKey_GamepadDown:
+	case Protocol::ScriptKey_GamepadLeft:
+	case Protocol::ScriptKey_GamepadRight:
+	case Protocol::ScriptKey_MouseLeft:
+	case Protocol::ScriptKey_MouseMiddle:
+	case Protocol::ScriptKey_MouseRight:
+		return true;
+	default:
+		return false;
+	}
+}
+
+
+static bool isValidScriptGameActionID(const std::string& id)
+{
+	if(id.empty() || id.size() > 32)
+		return false;
+	for(const unsigned char c : id)
+		if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+			return false;
+	return true;
 }
 
 
@@ -165,6 +250,181 @@ UID WorkerThread::getRoutingAvatarUID() const
 {
 	Lock lock(routing_client_info_mutex);
 	return routing_client_avatar_uid;
+}
+
+
+bool WorkerThread::supportsScriptedGameHUD() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDLayout() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_LAYOUT_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDPanels() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_PANELS_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDForms() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_FORM_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDChoices() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_CHOICES_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDNumeric() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_NUMERIC_CLIENT_SUPPORT) &&
+		BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_FORM_CLIENT_SUPPORT) &&
+		BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_CHOICES_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDCheckbox() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_CHECKBOX_CLIENT_SUPPORT) &&
+		BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_FORM_CLIENT_SUPPORT) &&
+		BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_CHOICES_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDActionLayout() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_ACTION_LAYOUT_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDProgress() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_PROGRESS_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDTextWidgets() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_TEXT_WIDGETS_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDTextStyle() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_TEXT_STYLE_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameHUDTextLayout() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_HUD_TEXT_LAYOUT_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameTriggerInput() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_TRIGGER_INPUT_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameWheelInput() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_WHEEL_INPUT_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameStateDelta() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_STATE_DELTA_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameEvents() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_EVENT_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameEventTime() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_EVENT_TIME_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedGameAimRay() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_GAME_AIM_RAY_CLIENT_SUPPORT);
+}
+
+bool WorkerThread::supportsScriptedInteractionPrompts() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_INTERACTION_PROMPT_CLIENT_SUPPORT);
+}
+
+
+bool WorkerThread::supportsScriptedInteractionKeys() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_INTERACTION_KEY_CLIENT_SUPPORT);
+}
+
+bool WorkerThread::supportsScriptedObjectClicks() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_OBJECT_CLICK_CLIENT_SUPPORT);
+}
+
+bool WorkerThread::supportsScriptedObjectClickRay() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_OBJECT_CLICK_RAY_CLIENT_SUPPORT);
+}
+
+bool WorkerThread::supportsAvatarMaterialiseEffect() const
+{
+	Lock lock(routing_client_info_mutex);
+	return BitUtils::isBitSet(client_capabilities, Protocol::SCRIPTED_AVATAR_MATERIALISE_EFFECT_CLIENT_SUPPORT);
+}
+
+
+UID WorkerThread::getActiveScriptKeyboardObjectUID() const
+{
+	Lock lock(routing_client_info_mutex);
+	return active_script_keyboard_object_uid;
+}
+
+
+void WorkerThread::setActiveScriptKeyboardObjectUID(const UID& object_uid)
+{
+	Lock lock(routing_client_info_mutex);
+	active_script_keyboard_object_uid = object_uid;
 }
 
 
@@ -436,19 +696,10 @@ void WorkerThread::handleResourceUploadConnection()
 			server->world_state->addResourceAsDBDirty(resource);
 		}
 
-		// Send NewResourceOnServer message to connected clients
-		{
-			MessageUtils::initPacket(scratch_packet, Protocol::NewResourceOnServer);
-			scratch_packet.writeStringLengthFirst(URL);
-			MessageUtils::updatePacketLengthField(scratch_packet);
-
-			enqueuePacketToBroadcast(scratch_packet);
-		}
-
-
 		// See if this is a resource that is used by an object.  If so, send a message to the MeshLodGenThread to generate LOD levels and KTX versions of it if applicable.
 		{
 			std::vector<UID> ob_uids; // UIDs of objects which use this resource
+			std::vector<ServerWorldState*> affected_worlds;
 			{
 				WorldStateLock lock(server->world_state->mutex);
 				for(auto world_it = server->world_state->world_states.begin(); world_it != server->world_state->world_states.end(); ++world_it)
@@ -469,9 +720,24 @@ void WorkerThread::handleResourceUploadConnection()
 						if(URLs.count(DependencyURL(URL)) > 0) // If the object uses the resource with this URL:
 						{
 							ob_uids.push_back(ob->uid);
+							if(std::find(affected_worlds.begin(), affected_worlds.end(), world) == affected_worlds.end())
+								affected_worlds.push_back(world);
 						}
 					}
 				}
+			}
+
+			// Upload-resource connections are separate from the client's world
+			// connection, so this WorkerThread has no cur_world_state. Broadcast
+			// the availability notification to worlds that actually reference the
+			// uploaded URL instead of using enqueuePacketToBroadcast() here.
+			if(!affected_worlds.empty())
+			{
+				MessageUtils::initPacket(scratch_packet, Protocol::NewResourceOnServer);
+				scratch_packet.writeStringLengthFirst(URL);
+				MessageUtils::updatePacketLengthField(scratch_packet);
+				for(size_t world_i = 0; world_i < affected_worlds.size(); ++world_i)
+					server->enqueuePacketToBroadcastForWorld(scratch_packet, affected_worlds[world_i]);
 			}
 
 			for(size_t i=0; i<ob_uids.size(); ++i)
@@ -1173,7 +1439,7 @@ static bool clientCanControlVehicleObject(const WorldObject& ob, const UID& clie
 
 // Does the user have permission to create the given object with its current transformation?
 // NOTE: world state mutex should be locked before calling this method.
-static bool userHasObjectCreationPermissions(const WorldObject& ob, const UserID& user_id, ServerWorldState& world_state, WorldStateLock& lock)
+bool userHasObjectCreationPermissions(const WorldObject& ob, const UserID& user_id, ServerWorldState& world_state, WorldStateLock& lock)
 {
 	if(user_id.valid())
 	{
@@ -1393,7 +1659,7 @@ static float maxAudioVolumeForObject(const WorldObject& ob, const UserID& user_i
 static const float chunk_w = 128;
 
 
-static void markLODChunkAsNeedsRebuildForChangedObject(ServerWorldState* world_state, const WorldObject* ob, WorldStateLock& lock)
+void markLODChunkAsNeedsRebuildForChangedObject(ServerWorldState* world_state, const WorldObject* ob, WorldStateLock& lock)
 {
 	if(!BitUtils::isBitSet(ob->flags, WorldObject::EXCLUDE_FROM_LOD_CHUNK_MESH))
 	{
@@ -1594,6 +1860,28 @@ void WorkerThread::sendPerWorldInitialDataToClient(ServerAllWorldsState* world_s
 		socket->writeData(packet.buf.data(), packet.buf.size()); // Send the data
 		socket->flush();
 	}
+	if(supportsScriptedInteractionPrompts())
+	{
+		std::map<UID, ScriptInteractionPrompt> prompts;
+		{
+			WorldStateLock lock(world_state->mutex);
+			prompts = cur_world_state->getScriptInteractionPrompts(lock);
+		}
+		for(const auto& entry : prompts)
+		{
+			if(entry.second.key_code != 0 && entry.second.key_code != Protocol::ScriptKey_CharacterBase + 'e' && !supportsScriptedInteractionKeys())
+				continue;
+			SocketBufferOutStream packet(SocketBufferOutStream::DontUseNetworkByteOrder);
+			MessageUtils::initPacket(packet, Protocol::ScriptInteractionPromptUpdateID);
+			writeToStream(entry.first, packet);
+			packet.writeUInt32(entry.second.visible ? 1u : 0u);
+			packet.writeUInt32(entry.second.input_mode);
+			packet.writeStringLengthFirst(entry.second.text);
+			packet.writeUInt32(entry.second.key_code);
+			MessageUtils::updatePacketLengthField(packet);
+			socket->writeData(packet.buf.data(), packet.buf.size());
+		}
+	}
 }
 
 
@@ -1666,6 +1954,38 @@ static bool isGearTransformValid(const GearItem& item)
 		item.scale.x >= MIN_GEAR_SCALE_COMPONENT && item.scale.x <= MAX_GEAR_SCALE_COMPONENT &&
 		item.scale.y >= MIN_GEAR_SCALE_COMPONENT && item.scale.y <= MAX_GEAR_SCALE_COMPONENT &&
 		item.scale.z >= MIN_GEAR_SCALE_COMPONENT && item.scale.z <= MAX_GEAR_SCALE_COMPONENT;
+}
+
+
+void WorkerThread::releaseScriptKeyboardFocus(UID client_avatar_uid)
+{
+	UID focused_object_uid;
+	{
+		Lock lock(routing_client_info_mutex);
+		focused_object_uid = active_script_keyboard_object_uid;
+		active_script_keyboard_object_uid = UID::invalidUID();
+	}
+	if(focused_object_uid.valid() && cur_world_state.nonNull())
+	{
+		for(const uint32 key_code : active_script_keyboard_keys)
+		{
+			Reference<UserReleasedObjectKeyThreadMessage> msg = new UserReleasedObjectKeyThreadMessage();
+			msg->world = cur_world_state;
+			msg->avatar_uid = client_avatar_uid;
+			msg->object_uid = focused_object_uid;
+			msg->key_code = key_code;
+			server->enqueueMsg(msg);
+		}
+
+		Reference<UserGameSessionThreadMessage> session_msg = new UserGameSessionThreadMessage();
+		session_msg->world = cur_world_state;
+		session_msg->avatar_uid = client_avatar_uid;
+		session_msg->user_id = getRoutingUserID();
+		session_msg->object_uid = focused_object_uid;
+		session_msg->active = false;
+		server->enqueueMsg(session_msg);
+	}
+	active_script_keyboard_keys.clear();
 }
 
 
@@ -1766,12 +2086,40 @@ void WorkerThread::doRun()
 				Protocol::TERRAIN_DETAIL_MAPS_BASISU_SUPPORT |
 				Protocol::OPTIMISED_MESH_SUPPORT |
 				Protocol::GEAR_INVENTORY_SUPPORT |
-				Protocol::OBJECT_COPY_SUPPORT;
+				Protocol::OBJECT_COPY_SUPPORT |
+				Protocol::SCRIPTED_OBJECT_KEYBOARD_SUPPORT |
+				Protocol::SCRIPTED_GAME_ANALOG_INPUT_SUPPORT |
+				Protocol::SCRIPTED_GAME_RPC_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_LAYOUT_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_PANELS_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_FORM_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_CHOICES_SUPPORT |
+				Protocol::SCRIPTED_GAME_TRIGGER_INPUT_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_NUMERIC_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_CHECKBOX_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_ACTION_LAYOUT_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_PROGRESS_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_TEXT_WIDGETS_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_TEXT_LAYOUT_SUPPORT |
+				Protocol::SCRIPTED_GAME_EVENT_SUPPORT |
+				Protocol::SCRIPTED_GAME_EVENT_TIME_SUPPORT |
+				Protocol::SCRIPTED_GAME_AIM_RAY_SUPPORT |
+				Protocol::SCRIPTED_GAME_HUD_TEXT_STYLE_SUPPORT |
+				Protocol::SCRIPTED_GAME_WHEEL_INPUT_SUPPORT |
+				Protocol::SCRIPTED_GAME_STATE_DELTA_SUPPORT;
+			server_capabilities |= Protocol::SCRIPTED_OBJECT_CLICK_SUPPORT | Protocol::SCRIPTED_OBJECT_CLICK_RAY_SUPPORT |
+				Protocol::SCRIPTED_INTERACTION_PROMPT_SUPPORT | Protocol::SCRIPTED_AVATAR_MATERIALISE_EFFECT_SUPPORT |
+				Protocol::SCRIPTED_INTERACTION_KEY_SUPPORT;
 			// Released 0.0.24 (protocol 62) never downloads the avatar source when
 			// an optimised derivative is absent. Keep real source URLs for these
 			// peers; new clients have a bounded original-model fallback.
 			if(client_protocol_version <= 62)
 				server_capabilities &= ~Protocol::OPTIMISED_MESH_SUPPORT;
+			// These bits describe server support and must be sent before the
+			// client-capability mask arrives later in the handshake. Optional
+			// event-time and aim-ray fields are still appended only when the
+			// connected client advertises the matching *_CLIENT_SUPPORT bit.
 			socket->writeUInt32(server_capabilities);
 		}
 
@@ -1926,6 +2274,7 @@ void WorkerThread::doRun()
 			{
 				Lock lock(routing_client_info_mutex);
 				supports_admin_world_entries = BitUtils::isBitSet(client_capabilities, Protocol::ADMIN_WORLD_ENTRY_SUPPORT);
+				this->client_capabilities = client_capabilities;
 			}
 
 
@@ -2000,6 +2349,7 @@ void WorkerThread::doRun()
 					case Protocol::CyberspaceGoodbye:
 						{
 							conPrintIfNotFuzzing("WorkerThread: received CyberspaceGoodbye, starting graceful shutdown..");
+				releaseScriptKeyboardFocus(client_avatar_uid);
 							socket->startGracefulShutdown(); // Tell sockets lib to send a FIN packet to the client.
 							socket->waitForGracefulDisconnect(); // Wait for a FIN packet from the client. (indicated by recv() returning 0).  We can then close the socket without going into a wait state.
 							conPrintIfNotFuzzing("WorkerThread: waitForGracefulDisconnect done.");
@@ -2009,6 +2359,7 @@ void WorkerThread::doRun()
 					case Protocol::ChangeToDifferentWorld:
 						{
 							conPrintIfNotFuzzing("WorkerThread: received ChangeToDifferentWorld");
+							releaseScriptKeyboardFocus(client_avatar_uid);
 							const std::string new_world_name = msg_buffer.readStringLengthFirst(1000);
 
 							conPrintIfNotFuzzing("Client connecting to world '" + new_world_name + "'...");
@@ -2099,7 +2450,12 @@ void WorkerThread::doRun()
 							{
 								WorldStateLock lock(world_state->mutex);
 								const ServerWorldState::AvatarMapType& avatars = cur_world_state->getAvatars(lock);
-								auto res = avatars.find(avatar_uid);
+								// A client may update only the avatar assigned to this connection.
+								// Also reject non-finite or implausibly unbounded transforms before
+								// they enter shared world state and influence server-side queries.
+								const bool valid_transform = avatar_uid == client_avatar_uid && pos.isFinite() && rotation.isFinite() &&
+									std::abs(pos.x) <= 1.0e7 && std::abs(pos.y) <= 1.0e7 && std::abs(pos.z) <= 1.0e7;
+								auto res = valid_transform ? avatars.find(avatar_uid) : avatars.end();
 								if(res != avatars.end())
 								{
 									Avatar* avatar = res->second.getPointer();
@@ -2545,6 +2901,7 @@ void WorkerThread::doRun()
 											ob->axis = axis;
 											ob->angle = angle;
 											ob->scale = scale;
+											cur_world_state->refreshGameRaySpatialIndexObject(*ob, lock);
 											ob->last_transform_update_avatar_uid = (uint32)client_avatar_uid.value();
 											ob->last_modified_time = TimeStamp::currentTime();
 
@@ -2605,6 +2962,7 @@ void WorkerThread::doRun()
 												ob->pos   = summon_msg.pos;
 												ob->axis  = summon_msg.axis;
 												ob->angle = summon_msg.angle;
+												cur_world_state->refreshGameRaySpatialIndexObject(*ob, lock);
 												ob->last_transform_update_avatar_uid = (uint32)client_avatar_uid.value();
 												ob->last_modified_time = TimeStamp::currentTime();
 
@@ -2694,6 +3052,7 @@ void WorkerThread::doRun()
 											{
 												ob->pos = pos;
 												ob->axis = Vec3f(axis);
+												cur_world_state->refreshGameRaySpatialIndexObject(*ob, lock);
 												ob->angle = angle;
 
 												ob->linear_vel = linear_vel;
@@ -2847,7 +3206,7 @@ void WorkerThread::doRun()
 														Timer timer;
 														lua_vm = new SubstrataLuaVM(SubstrataLuaVM::SubstrataLuaVMArgs(server));
 														conPrint("\tCreating SubstrataLuaVM took " + timer.elapsedStringMSWIthNSigFigs(4));
-														world_state->lua_vms[ob->creator_id] = lua_vm;
+														world_state->registerLuaVMForUser(ob->creator_id, lua_vm);
 													}
 													else
 														lua_vm = lua_vm_res->second.ptr();
@@ -2957,6 +3316,7 @@ void WorkerThread::doRun()
 									if(!world_state->isInReadOnlyMode())
 									{
 										ob->flags = flags; // Copy flags
+										cur_world_state->refreshGameRaySpatialIndexObject(*ob, lock);
 										ob->last_modified_time = TimeStamp::currentTime();
 
 										ob->from_remote_flags_dirty = true;
@@ -3058,6 +3418,7 @@ void WorkerThread::doRun()
 												cur_world_state->addWorldObjectAsDBDirty(new_ob, lock);
 												cur_world_state->getDirtyFromRemoteObjects(lock).insert(new_ob);
 												cur_world_state->getObjects(lock).insert(std::make_pair(new_ob->uid, new_ob));
+												cur_world_state->refreshGameRaySpatialIndexObject(*new_ob, lock);
 												markLODChunkAsNeedsRebuildForChangedObject(cur_world_state.ptr(), new_ob.ptr(), lock);
 												world_state->markAsChanged();
 												created_uid = new_ob->uid;
@@ -3143,6 +3504,7 @@ void WorkerThread::doRun()
 										cur_world_state->addWorldObjectAsDBDirty(new_ob, lock);
 										cur_world_state->getDirtyFromRemoteObjects(lock).insert(new_ob);
 										cur_world_state->getObjects(lock).insert(std::make_pair(new_ob->uid, new_ob));
+										cur_world_state->refreshGameRaySpatialIndexObject(*new_ob, lock);
 
 										markLODChunkAsNeedsRebuildForChangedObject(cur_world_state.ptr(), new_ob.ptr(), lock);
 
@@ -3894,12 +4256,349 @@ void WorkerThread::doRun()
 
 							conPrintIfNotFuzzing("object_uid: " + object_uid.toString());
 
-							Reference<UserUsedObjectThreadMessage> msg = new UserUsedObjectThreadMessage();
-							msg->world = cur_world_state;
-							msg->avatar_uid = client_avatar_uid;
-							msg->object_uid = object_uid;
-							server->enqueueMsg(msg);
+							// E can focus keyboard input only on a nearby object that actually has a
+							// server-side key handler. This is per connection and is replaced on every use.
+							releaseScriptKeyboardFocus(client_avatar_uid);
+							bool game_session_started = false;
+							bool allowed_use = false;
+							if(cur_world_state.nonNull())
+							{
+								WorldStateLock lock(world_state->mutex);
+								const auto avatar_it = cur_world_state->getAvatars(lock).find(client_avatar_uid);
+								const auto object_it = cur_world_state->getObjects(lock).find(object_uid);
+								ScriptInteractionPrompt prompt;
+								const bool has_prompt = cur_world_state->getScriptInteractionPrompt(object_uid, prompt, lock);
+								allowed_use = avatar_it != cur_world_state->getAvatars(lock).end() &&
+									object_it != cur_world_state->getObjects(lock).end() &&
+									avatar_it->second->state != Avatar::State_Dead && object_it->second->state != WorldObject::State_Dead &&
+									avatar_it->second->pos.getDist2(object_it->second->pos) <= Maths::square(8.0) &&
+									object_it->second->event_handlers && object_it->second->event_handlers->onUserUsedObject_handlers.nonEmpty() &&
+									(!has_prompt || ((prompt.input_mode == 0 || prompt.input_mode == 2) &&
+										prompt.key_code == Protocol::ScriptKey_CharacterBase + 'e'));
+								if(avatar_it != cur_world_state->getAvatars(lock).end() &&
+									object_it != cur_world_state->getObjects(lock).end() &&
+									avatar_it->second->state != Avatar::State_Dead &&
+									avatar_it->second->pos.getDist2(object_it->second->pos) <= Maths::square(12.0) &&
+									object_it->second->event_handlers &&
+									(object_it->second->event_handlers->onUserKeyPressed_handlers.nonEmpty() ||
+									 object_it->second->event_handlers->onUserKeyReleased_handlers.nonEmpty() ||
+									 object_it->second->event_handlers->onUserGameSessionChanged_handlers.nonEmpty() ||
+									 object_it->second->event_handlers->onUserGameAction_handlers.nonEmpty() ||
+									 object_it->second->event_handlers->onUserGameMessage_handlers.nonEmpty() ||
+									 object_it->second->event_handlers->game_action_input_binding_count > 0))
+								{
+									setActiveScriptKeyboardObjectUID(object_uid);
+									game_session_started = true;
+								}
+							}
 
+							if(allowed_use)
+							{
+								Reference<UserUsedObjectThreadMessage> msg = new UserUsedObjectThreadMessage();
+								msg->world = cur_world_state;
+								msg->avatar_uid = client_avatar_uid;
+								msg->object_uid = object_uid;
+								server->enqueueMsg(msg);
+							}
+
+							if(game_session_started)
+							{
+								Reference<UserGameSessionThreadMessage> session_msg = new UserGameSessionThreadMessage();
+								session_msg->world = cur_world_state;
+								session_msg->avatar_uid = client_avatar_uid;
+								session_msg->user_id = getRoutingUserID();
+								session_msg->object_uid = object_uid;
+								session_msg->active = true;
+								server->enqueueMsg(session_msg);
+							}
+
+							break;
+						}
+					case Protocol::UserUsedObjectWithKeyMessage:
+						{
+							const UID object_uid = readUIDFromStream(msg_buffer);
+							const uint32 key_code = msg_buffer.readUInt32();
+							Vec3d camera_origin;
+							camera_origin.x = msg_buffer.readFloat(); camera_origin.y = msg_buffer.readFloat(); camera_origin.z = msg_buffer.readFloat();
+							Vec3d hit;
+							hit.x = msg_buffer.readFloat(); hit.y = msg_buffer.readFloat(); hit.z = msg_buffer.readFloat();
+							if(!supportsScriptedInteractionKeys() || !isValidScriptKeyCode(key_code) || !camera_origin.isFinite() || !hit.isFinite() ||
+								std::fabs(camera_origin.x) > 1.0e7 || std::fabs(camera_origin.y) > 1.0e7 || std::fabs(camera_origin.z) > 1.0e7 ||
+								std::fabs(hit.x) > 1.0e7 || std::fabs(hit.y) > 1.0e7 || std::fabs(hit.z) > 1.0e7) break;
+							const auto now = std::chrono::steady_clock::now();
+							if(last_scripted_object_click.time_since_epoch().count() != 0 && now - last_scripted_object_click < std::chrono::milliseconds(100)) break;
+							auto last_it = scripted_object_click_times.find(object_uid);
+							if(last_it != scripted_object_click_times.end() && now - last_it->second < std::chrono::milliseconds(250)) break;
+							bool accepted = false;
+							if(cur_world_state.nonNull())
+							{
+								WorldStateLock lock(world_state->mutex);
+								const auto av_it = cur_world_state->getAvatars(lock).find(client_avatar_uid);
+								const auto ob_it = cur_world_state->getObjects(lock).find(object_uid);
+								ScriptInteractionPrompt prompt;
+								const bool has_prompt = cur_world_state->getScriptInteractionPrompt(object_uid, prompt, lock);
+								const bool close_and_configured = has_prompt && prompt.input_mode != 1 && prompt.key_code == key_code &&
+									av_it != cur_world_state->getAvatars(lock).end() && ob_it != cur_world_state->getObjects(lock).end() &&
+									av_it->second->state != Avatar::State_Dead && ob_it->second->state != WorldObject::State_Dead &&
+									av_it->second->pos.getDist2(ob_it->second->pos) <= Maths::square(8.0) &&
+									ob_it->second->event_handlers && ob_it->second->event_handlers->onUserUsedObject_handlers.nonEmpty();
+								if(close_and_configured)
+								{
+									const js::AABBox target_box = ob_it->second->getAABBWS();
+									const bool hit_target = hit.x >= target_box.min_[0] - 0.2 && hit.x <= target_box.max_[0] + 0.2 &&
+										hit.y >= target_box.min_[1] - 0.2 && hit.y <= target_box.max_[1] + 0.2 &&
+										hit.z >= target_box.min_[2] - 0.2 && hit.z <= target_box.max_[2] + 0.2;
+									const bool plausible_camera_origin = camera_origin.getDist2(av_it->second->pos) <= Maths::square(32.0);
+									const Vec3d sight_delta = hit - camera_origin;
+									const double sight_length = sight_delta.length();
+									std::vector<UID> candidates;
+									if(plausible_camera_origin && sight_length > 1.0e-5 && sight_length <= 64.0)
+										cur_world_state->getGameRaySpatialCandidates(camera_origin, sight_delta / sight_length, sight_length, candidates, lock);
+									bool blocked = !hit_target || !plausible_camera_origin || sight_length > 64.0;
+									for(size_t ci = 0; !blocked && ci < candidates.size() && ci < 8192; ++ci)
+									{
+										if(candidates[ci] == object_uid) continue;
+										auto blocker = cur_world_state->getObjects(lock).find(candidates[ci]);
+										double t = 0;
+										if(blocker != cur_world_state->getObjects(lock).end() && segmentIntersectsAABB(camera_origin, hit, blocker->second->getAABBWS(), t) && t < 0.995)
+											blocked = true;
+									}
+									accepted = !blocked;
+								}
+							}
+							if(accepted)
+							{
+								last_scripted_object_click = now;
+								scripted_object_click_times[object_uid] = now;
+								if(scripted_object_click_times.size() > 128) scripted_object_click_times.erase(scripted_object_click_times.begin());
+								Reference<UserUsedObjectThreadMessage> use_msg = new UserUsedObjectThreadMessage();
+								use_msg->world = cur_world_state;
+								use_msg->avatar_uid = client_avatar_uid;
+								use_msg->object_uid = object_uid;
+								server->enqueueMsg(use_msg);
+							}
+						break;
+					}
+					case Protocol::UserPressedObjectKeyMessage:
+						{
+							const UID object_uid = readUIDFromStream(msg_buffer);
+							const uint32 key_code = msg_buffer.readUInt32();
+
+							if(object_uid == getActiveScriptKeyboardObjectUID() && isValidScriptKeyCode(key_code))
+							{
+								const auto now = std::chrono::steady_clock::now();
+								if(object_key_event_window_start == std::chrono::steady_clock::time_point{} ||
+									now - object_key_event_window_start >= std::chrono::seconds(1))
+								{
+									object_key_event_window_start = now;
+									object_key_events_in_window = 0;
+								}
+
+								// Bound script execution caused by key-repeat or a malformed client.
+								if(object_key_events_in_window < 40 && active_script_keyboard_keys.insert(key_code).second)
+								{
+									object_key_events_in_window++;
+									Reference<UserPressedObjectKeyThreadMessage> msg = new UserPressedObjectKeyThreadMessage();
+									msg->world = cur_world_state;
+									msg->avatar_uid = client_avatar_uid;
+									msg->object_uid = object_uid;
+									msg->key_code = key_code;
+									server->enqueueMsg(msg);
+								}
+							}
+							break;
+						}
+					case Protocol::UserReleasedObjectKeyMessage:
+						{
+							const UID object_uid = readUIDFromStream(msg_buffer);
+							const uint32 key_code = msg_buffer.readUInt32();
+							if(object_uid == getActiveScriptKeyboardObjectUID() && isValidScriptKeyCode(key_code) &&
+								active_script_keyboard_keys.erase(key_code) > 0)
+							{
+								Reference<UserReleasedObjectKeyThreadMessage> msg = new UserReleasedObjectKeyThreadMessage();
+								msg->world = cur_world_state;
+								msg->avatar_uid = client_avatar_uid;
+								msg->object_uid = object_uid;
+								msg->key_code = key_code;
+								server->enqueueMsg(msg);
+							}
+							break;
+						}
+					case Protocol::UserGameActionMessage:
+						{
+							const UID object_uid = readUIDFromStream(msg_buffer);
+						const std::string action_id = msg_buffer.readStringLengthFirst(32);
+						if(object_uid == getActiveScriptKeyboardObjectUID() && supportsScriptedGameHUD() &&
+							isValidScriptGameActionID(action_id))
+						{
+							const auto now = std::chrono::steady_clock::now();
+							if(game_action_event_window_start == std::chrono::steady_clock::time_point{} ||
+								now - game_action_event_window_start >= std::chrono::seconds(1))
+							{
+								game_action_event_window_start = now;
+								game_action_events_in_window = 0;
+							}
+							if(game_action_events_in_window < 20)
+							{
+								game_action_events_in_window++;
+								Reference<UserGameActionThreadMessage> msg = new UserGameActionThreadMessage();
+								msg->world = cur_world_state;
+								msg->avatar_uid = client_avatar_uid;
+								msg->object_uid = object_uid;
+								msg->action_id = action_id;
+								server->enqueueMsg(msg);
+							}
+						}
+						break;
+						}
+					case Protocol::UserGameFormSubmitMessage:
+						{
+							const UID object_uid = readUIDFromStream(msg_buffer);
+							const std::string action_id = msg_buffer.readStringLengthFirst(32);
+							const uint32 field_count = msg_buffer.readUInt32();
+							if(field_count == 0 || field_count > 4) throw glare::Exception("Invalid game HUD form field count.");
+							std::vector<GameHUDFormValue> values;
+							std::set<std::string> field_ids;
+							for(uint32 i = 0; i < field_count; ++i)
+							{
+								GameHUDFormValue value;
+								value.id = msg_buffer.readStringLengthFirst(32);
+								value.value = msg_buffer.readStringLengthFirst(256);
+								if(!isValidScriptGameActionID(value.id) || !field_ids.insert(value.id).second)
+									throw glare::Exception("Invalid or duplicate game HUD form field ID.");
+								values.push_back(value);
+							}
+							if(object_uid == getActiveScriptKeyboardObjectUID() && supportsScriptedGameHUD() &&
+								supportsScriptedGameHUDForms() && isValidScriptGameActionID(action_id))
+							{
+								const auto now = std::chrono::steady_clock::now();
+								if(game_action_event_window_start == std::chrono::steady_clock::time_point{} || now - game_action_event_window_start >= std::chrono::seconds(1))
+								{
+									game_action_event_window_start = now;
+									game_action_events_in_window = 0;
+								}
+								if(game_action_events_in_window < 20)
+								{
+									game_action_events_in_window++;
+									Reference<UserGameActionThreadMessage> msg = new UserGameActionThreadMessage();
+									msg->world = cur_world_state;
+									msg->avatar_uid = client_avatar_uid;
+									msg->object_uid = object_uid;
+									msg->action_id = action_id;
+									msg->values = values;
+									server->enqueueMsg(msg);
+								}
+							}
+							break;
+						}
+					case Protocol::UserGameInputStateMessage:
+						{
+							const UID object_uid = readUIDFromStream(msg_buffer);
+							const uint32 flags = msg_buffer.readUInt32();
+							GameInputState input;
+							input.gamepad_connected = (flags & 1u) != 0;
+							input.pointer_available = (flags & 2u) != 0;
+							input.left_x = msg_buffer.readFloat();
+							input.left_y = msg_buffer.readFloat();
+							input.right_x = msg_buffer.readFloat();
+							input.right_y = msg_buffer.readFloat();
+							input.pointer_x = msg_buffer.readFloat();
+							input.pointer_y = msg_buffer.readFloat();
+							if(supportsScriptedGameTriggerInput())
+							{
+								input.left_trigger = msg_buffer.readFloat();
+								input.right_trigger = msg_buffer.readFloat();
+							}
+							if(supportsScriptedGameWheelInput())
+							{
+								input.wheel_x = msg_buffer.readFloat();
+								input.wheel_y = msg_buffer.readFloat();
+							}
+							if(supportsScriptedGameAimRay())
+							{
+								input.aim_origin = Vec3d(msg_buffer.readFloat(), msg_buffer.readFloat(), msg_buffer.readFloat());
+								input.aim_direction = Vec3d(msg_buffer.readFloat(), msg_buffer.readFloat(), msg_buffer.readFloat());
+								input.aim_ray_available = true;
+							}
+							const bool valid_values = std::isfinite(input.left_x) && std::isfinite(input.left_y) &&
+								std::isfinite(input.right_x) && std::isfinite(input.right_y) &&
+								std::isfinite(input.left_trigger) && std::isfinite(input.right_trigger) &&
+								std::isfinite(input.wheel_x) && std::isfinite(input.wheel_y) &&
+								std::isfinite(input.pointer_x) && std::isfinite(input.pointer_y) &&
+								std::abs(input.left_x) <= 1.f && std::abs(input.left_y) <= 1.f &&
+								std::abs(input.right_x) <= 1.f && std::abs(input.right_y) <= 1.f &&
+								input.pointer_x >= 0.f && input.pointer_x <= 1.f && input.pointer_y >= 0.f && input.pointer_y <= 1.f &&
+								input.left_trigger >= 0.f && input.left_trigger <= 1.f && input.right_trigger >= 0.f && input.right_trigger <= 1.f &&
+								std::abs(input.wheel_x) <= 20.f && std::abs(input.wheel_y) <= 20.f;
+							bool valid_aim_ray = true;
+							if(input.aim_ray_available)
+							{
+								const double aim_direction_length = input.aim_direction.length();
+								valid_aim_ray = input.aim_origin.isFinite() && input.aim_direction.isFinite() &&
+									std::isfinite(aim_direction_length) && aim_direction_length >= 0.95 && aim_direction_length <= 1.05;
+							}
+							if(object_uid == getActiveScriptKeyboardObjectUID() && (flags & ~3u) == 0 && valid_values && valid_aim_ray)
+							{
+							const auto now = std::chrono::steady_clock::now();
+							if(game_input_state_window_start == std::chrono::steady_clock::time_point{} ||
+								now - game_input_state_window_start >= std::chrono::seconds(1))
+							{
+								game_input_state_window_start = now;
+								game_input_state_events_in_window = 0;
+							}
+							if(game_input_state_events_in_window < 30)
+							{
+								game_input_state_events_in_window++;
+								Reference<UserGameInputStateThreadMessage> input_msg = new UserGameInputStateThreadMessage();
+								input_msg->world = cur_world_state;
+								input_msg->avatar_uid = client_avatar_uid;
+								input_msg->object_uid = object_uid;
+								input_msg->input = input;
+								server->enqueueMsg(input_msg);
+							}
+						}
+						break;
+						}
+					case Protocol::UserGameRPCMessage:
+						{
+							const UID object_uid = readUIDFromStream(msg_buffer);
+							const std::string name = msg_buffer.readStringLengthFirst(32);
+							const uint32 payload_size = msg_buffer.readUInt32();
+							if(payload_size > 4096)
+								break;
+							std::vector<uint8> payload(payload_size);
+							if(payload_size > 0) msg_buffer.readData(payload.data(), payload_size);
+							if(!msg_buffer.endOfStream()) break;
+						bool valid_name = !name.empty() && name.size() <= 32;
+						for(unsigned char c : name)
+							valid_name = valid_name && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+								(c >= '0' && c <= '9') || c == '_');
+						if(object_uid == getActiveScriptKeyboardObjectUID() && supportsScriptedGameHUD() && valid_name)
+						{
+							const auto now = std::chrono::steady_clock::now();
+							if(game_rpc_events_window_start == std::chrono::steady_clock::time_point{} ||
+								now - game_rpc_events_window_start >= std::chrono::seconds(1))
+							{
+								game_rpc_events_window_start = now;
+								game_rpc_events_in_window = 0;
+							}
+							if(game_rpc_events_in_window < 20)
+							{
+								game_rpc_events_in_window++;
+								Reference<UserGameRPCThreadMessage> rpc_msg = new UserGameRPCThreadMessage();
+								rpc_msg->world = cur_world_state;
+								rpc_msg->avatar_uid = client_avatar_uid;
+								rpc_msg->object_uid = object_uid;
+								rpc_msg->name = name;
+								rpc_msg->serialized_payload = std::move(payload);
+								server->enqueueMsg(rpc_msg);
+							}
+						}
+						break;
+						}
+					case Protocol::UserReleasedObjectKeyboardMessage:
+						{
+							releaseScriptKeyboardFocus(client_avatar_uid);
 							break;
 						}
 					case Protocol::UserUsedBotMessage:
@@ -3914,6 +4613,113 @@ void WorkerThread::doRun()
 							msg->bot_avatar_uid  = bot_avatar_uid;
 							server->enqueueMsg(msg);
 
+							break;
+						}
+					case Protocol::ChatBotDialogChoice:
+						{
+							const UID bot_avatar_uid = readUIDFromStream(msg_buffer);
+							const uint32 node_id = msg_buffer.readUInt32();
+							const uint32 choice_index = msg_buffer.readUInt32();
+							if(choice_index >= BotDialogChoice::MAX_CHOICES)
+								break;
+							WorldStateLock lock(world_state->mutex);
+							auto sender_it = cur_world_state->getAvatars(lock).find(client_avatar_uid);
+							if(sender_it == cur_world_state->getAvatars(lock).end())
+								break;
+							const AvatarRef sender_avatar = sender_it->second;
+							for(auto& entry : cur_world_state->getChatBots(lock))
+							{
+								ChatBotRef bot = entry.second;
+								if(bot->avatar_uid == bot_avatar_uid)
+								{
+									bot->processDialogChoice(sender_avatar, node_id, choice_index, server, lock);
+									break;
+								}
+							}
+							break;
+						}
+					case Protocol::UserClickedScriptedObjectMessage:
+						{
+							const UID object_uid = readUIDFromStream(msg_buffer);
+							const bool has_camera_ray = supportsScriptedObjectClickRay();
+							Vec3d camera_ray_origin;
+							if(has_camera_ray)
+							{
+								camera_ray_origin.x = msg_buffer.readFloat();
+								camera_ray_origin.y = msg_buffer.readFloat();
+								camera_ray_origin.z = msg_buffer.readFloat();
+							}
+							const double hit_x = msg_buffer.readFloat();
+							const double hit_y = msg_buffer.readFloat();
+							const double hit_z = msg_buffer.readFloat();
+							const Vec3d hit(hit_x, hit_y, hit_z);
+							if(!supportsScriptedObjectClicks() || !hit.isFinite() || (has_camera_ray && !camera_ray_origin.isFinite()) || std::fabs(hit.x) > 1.0e7 ||
+								std::fabs(hit.y) > 1.0e7 || std::fabs(hit.z) > 1.0e7)
+								break;
+
+							const auto now = std::chrono::steady_clock::now();
+							if(last_scripted_object_click.time_since_epoch().count() != 0 &&
+								now - last_scripted_object_click < std::chrono::milliseconds(100))
+								break;
+
+							auto last_it = scripted_object_click_times.find(object_uid);
+							if(last_it != scripted_object_click_times.end() && now - last_it->second < std::chrono::milliseconds(250))
+								break;
+
+							bool accepted = false;
+							if(cur_world_state.nonNull())
+							{
+								WorldStateLock lock(world_state->mutex);
+								const auto av_it = cur_world_state->getAvatars(lock).find(client_avatar_uid);
+								const auto ob_it = cur_world_state->getObjects(lock).find(object_uid);
+								ScriptInteractionPrompt prompt;
+								const bool has_prompt = cur_world_state->getScriptInteractionPrompt(object_uid, prompt, lock);
+								const bool prompt_allows_click = !has_prompt || prompt.input_mode == 1 || prompt.input_mode == 2;
+								if(av_it != cur_world_state->getAvatars(lock).end() && ob_it != cur_world_state->getObjects(lock).end() &&
+									av_it->second->state != Avatar::State_Dead && ob_it->second->state != WorldObject::State_Dead &&
+									av_it->second->pos.getDist2(ob_it->second->pos) <= Maths::square(8.0) &&
+									ob_it->second->event_handlers && ob_it->second->event_handlers->onUserUsedObject_handlers.nonEmpty() &&
+									prompt_allows_click)
+								{
+									const js::AABBox target_box = ob_it->second->getAABBWS();
+									const bool hit_target = hit.x >= target_box.min_[0] - 0.2 && hit.x <= target_box.max_[0] + 0.2 &&
+										hit.y >= target_box.min_[1] - 0.2 && hit.y <= target_box.max_[1] + 0.2 &&
+										hit.z >= target_box.min_[2] - 0.2 && hit.z <= target_box.max_[2] + 0.2;
+									if(hit_target)
+									{
+										const Vec3d start = has_camera_ray ? camera_ray_origin : av_it->second->pos + Vec3d(0, 0, 1.5);
+										const bool plausible_camera_origin = !has_camera_ray || start.getDist2(av_it->second->pos) <= Maths::square(32.0);
+										std::vector<UID> candidates;
+										const Vec3d sight_delta = hit - start;
+										const double sight_length = sight_delta.length();
+										if(plausible_camera_origin && sight_length > 1.0e-5 && sight_length <= 64.0)
+											cur_world_state->getGameRaySpatialCandidates(start, sight_delta / sight_length, sight_length, candidates, lock);
+										bool blocked = !plausible_camera_origin || sight_length > 64.0;
+										for(size_t ci = 0; ci < candidates.size() && ci < 8192; ++ci)
+										{
+											if(candidates[ci] == object_uid) continue;
+											auto blocker = cur_world_state->getObjects(lock).find(candidates[ci]);
+											double t = 0;
+											if(blocker != cur_world_state->getObjects(lock).end() && segmentIntersectsAABB(start, hit, blocker->second->getAABBWS(), t) && t < 0.995)
+											{ blocked = true; break; }
+										}
+										accepted = !blocked;
+									}
+								}
+							}
+
+							if(accepted)
+							{
+								last_scripted_object_click = now;
+								scripted_object_click_times[object_uid] = now;
+								if(scripted_object_click_times.size() > 128)
+									scripted_object_click_times.erase(scripted_object_click_times.begin());
+								Reference<UserUsedObjectThreadMessage> use_msg = new UserUsedObjectThreadMessage();
+								use_msg->world = cur_world_state;
+								use_msg->avatar_uid = client_avatar_uid;
+								use_msg->object_uid = object_uid;
+								server->enqueueMsg(use_msg);
+							}
 							break;
 						}
 					case Protocol::UserTouchedObjectMessage:
@@ -5469,6 +6275,8 @@ void WorkerThread::doRun()
 	}
 
 
+	releaseScriptKeyboardFocus(client_avatar_uid);
+
 	if(write_trace)
 		socket.downcastToPtr<RecordingSocket>()->writeRecordBufToDisk("traces/worker_thread_trace_" + ::toString(Clock::getTimeSinceInit()) + ".bin");
 
@@ -5484,6 +6292,7 @@ void WorkerThread::doRun()
 			avatars[client_avatar_uid]->state = Avatar::State_Dead;
 			avatars[client_avatar_uid]->other_dirty = true;
 		}
+		cur_world_state->clearAvatarScriptProximity(client_avatar_uid, lock);
 	}
 
 	// Remove thread-local OpenSSL error state, to avoid leaking it.

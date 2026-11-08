@@ -577,6 +577,7 @@ private:
 	Reference<WorldState> world_state;
 
 	UID client_avatar_uid;
+	uint32 server_capabilities = 0;
 
 	Reference<WorldObject> allocWorldObject();
 

@@ -27,6 +27,8 @@ Copyright Glare Technologies Limited 2024 -
 #include <utils/Timer.h>
 #include <utils/BufferViewInStream.h>
 #include <zstd.h>
+#include <cmath>
+#include <set>
 #if EMSCRIPTEN
 #include <networking/EmscriptenWebSocket.h>
 #endif
@@ -1603,6 +1605,27 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			out_msg_queue->enqueue(new ChatMessage(name, msg, sender_avatar_uid));
 			break;
 		}
+	case Protocol::ChatBotDialogChoices:
+		{
+			Reference<ChatBotDialogChoicesMessage> message = new ChatBotDialogChoicesMessage();
+			message->bot_avatar_uid = readUIDFromStream(msg_buffer);
+			message->bot_name = msg_buffer.readStringLengthFirst(200);
+			message->node_id = msg_buffer.readUInt32();
+			const uint32 option_count = msg_buffer.readUInt32();
+			if(option_count > 8)
+				throw glare::Exception("Too many chatbot dialog choices.");
+			for(uint32 i = 0; i < option_count; ++i)
+			{
+				ChatBotDialogOptionUI option;
+				option.choice_index = msg_buffer.readUInt32();
+				option.label = msg_buffer.readStringLengthFirst(200);
+				if(option.choice_index >= 8 || option.label.empty())
+					throw glare::Exception("Invalid chatbot dialog choice.");
+				message->options.push_back(option);
+			}
+			out_msg_queue->enqueue(message);
+			break;
+		}
 	case Protocol::PrivateChatMessageID:
 		{
 			const std::string sender_name = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
@@ -1667,6 +1690,304 @@ void ClientThread::readAndHandleMessage(const uint32 peer_protocol_version)
 			//conPrint("Received InfoMessage msg.");
 			const std::string msg = msg_buffer.readStringLengthFirst(MAX_STRING_LEN);
 			out_msg_queue->enqueue(new InfoMessage(msg));
+			break;
+		}
+	case Protocol::GameHUDUpdateID:
+		{
+			const UID game_object_uid = readUIDFromStream(msg_buffer);
+			const uint32 visible_value = msg_buffer.readUInt32();
+			if(visible_value > 1)
+				throw glare::Exception("Invalid GameHUDUpdate visibility flag.");
+			const std::string text = msg_buffer.readStringLengthFirst(2048);
+			if(visible_value != 0 && text.empty())
+				throw glare::Exception("Visible GameHUDUpdate must contain text.");
+			bool has_layout = false;
+			float center_x = 0.f, top_y = 0.55f;
+			if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_TEXT_LAYOUT_SUPPORT))
+			{
+				const uint32 layout_flag = msg_buffer.readUInt32();
+				if(layout_flag > 1) throw glare::Exception("Invalid GameHUDUpdate layout flag.");
+				has_layout = layout_flag != 0;
+				if(has_layout)
+				{
+					center_x = msg_buffer.readFloat();
+					top_y = msg_buffer.readFloat();
+					if(!std::isfinite(center_x) || center_x < -1.f || center_x > 1.f ||
+						!std::isfinite(top_y) || top_y < -1.f || top_y > 1.f)
+						throw glare::Exception("Invalid GameHUDUpdate layout bounds.");
+				}
+			}
+			out_msg_queue->enqueue(new GameHUDUpdateMessage(game_object_uid, visible_value != 0, text, has_layout, center_x, top_y));
+			break;
+		}
+	case Protocol::ScriptInteractionPromptUpdateID:
+		{
+			if(!BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_INTERACTION_PROMPT_SUPPORT))
+				throw glare::Exception("Unexpected interaction prompt update without negotiated support.");
+			Reference<ScriptInteractionPromptMessage> message = new ScriptInteractionPromptMessage();
+			message->object_uid = readUIDFromStream(msg_buffer);
+			const uint32 visible = msg_buffer.readUInt32();
+			message->input_mode = msg_buffer.readUInt32();
+			message->text = msg_buffer.readStringLengthFirst(128);
+			message->key_code = BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_INTERACTION_KEY_SUPPORT) ?
+				msg_buffer.readUInt32() : Protocol::ScriptKey_CharacterBase + 'e';
+			if(!message->object_uid.valid() || visible > 1 || message->input_mode > 2 || (visible != 0 && message->text.empty()))
+				throw glare::Exception("Invalid interaction prompt update.");
+			message->visible = visible != 0;
+			out_msg_queue->enqueue(message);
+			break;
+		}
+	case Protocol::AvatarMaterialiseEffectID:
+		{
+			if(!BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_AVATAR_MATERIALISE_EFFECT_SUPPORT))
+				throw glare::Exception("Received avatar materialisation effect without negotiated server capability.");
+			Reference<AvatarMaterialiseEffectMessage> message = new AvatarMaterialiseEffectMessage();
+			message->avatar_uid = readUIDFromStream(msg_buffer);
+			if(!message->avatar_uid.valid())
+				throw glare::Exception("Invalid avatar materialisation effect target.");
+			out_msg_queue->enqueue(message);
+			break;
+		}
+	case Protocol::GameHUDMenuUpdateID:
+		{
+			const UID game_object_uid = readUIDFromStream(msg_buffer);
+			const std::string panel_id = BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_PANELS_SUPPORT) ?
+				msg_buffer.readStringLengthFirst(24) : std::string("main");
+			if(panel_id.empty()) throw glare::Exception("GameHUDMenu panel ID must not be empty.");
+			for(const unsigned char c : panel_id)
+				if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+					(c >= '0' && c <= '9') || c == '_' || c == '-'))
+					throw glare::Exception("Invalid GameHUDMenu panel ID.");
+			const uint32 visible_value = msg_buffer.readUInt32();
+			if(visible_value > 1)
+				throw glare::Exception("Invalid GameHUDMenu visibility flag.");
+			const std::string title = msg_buffer.readStringLengthFirst(128);
+			const std::string body = msg_buffer.readStringLengthFirst(2048);
+			float center_x = 0.f, top_y = 0.48f, width = 0.8f;
+			if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_LAYOUT_SUPPORT))
+			{
+				center_x = msg_buffer.readFloat();
+				top_y = msg_buffer.readFloat();
+				width = msg_buffer.readFloat();
+			}
+			const uint32 action_count = msg_buffer.readUInt32();
+			if(action_count > 8 || (visible_value != 0 && title.empty()) ||
+				(visible_value == 0 && (action_count != 0 || !title.empty() || !body.empty())) ||
+				!std::isfinite(center_x) || center_x < -1.f || center_x > 1.f ||
+				!std::isfinite(top_y) || top_y < -1.f || top_y > 1.f ||
+				!std::isfinite(width) || width < 0.2f || width > 1.f)
+				throw glare::Exception("Invalid GameHUDMenu payload.");
+			std::vector<GameHUDAction> actions;
+			for(uint32 i = 0; i < action_count; ++i)
+			{
+				GameHUDAction action;
+				action.id = msg_buffer.readStringLengthFirst(32);
+				action.label = msg_buffer.readStringLengthFirst(64);
+				if(action.id.empty() || action.label.empty())
+					throw glare::Exception("GameHUDMenu action id and label must not be empty.");
+				if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_ACTION_LAYOUT_SUPPORT))
+				{
+					const uint32 has_layout = msg_buffer.readUInt32();
+					if(has_layout > 1) throw glare::Exception("Invalid GameHUDMenu action layout flag.");
+					if(has_layout != 0)
+					{
+						action.has_layout = true;
+						action.center_x = msg_buffer.readFloat();
+						action.top_y = msg_buffer.readFloat();
+						action.width = msg_buffer.readFloat();
+						action.height = msg_buffer.readFloat();
+						if(!std::isfinite(action.center_x) || action.center_x < -1.f || action.center_x > 1.f ||
+							!std::isfinite(action.top_y) || action.top_y < -1.f || action.top_y > 1.f ||
+							!std::isfinite(action.width) || action.width < 0.05f || action.width > 1.f ||
+							!std::isfinite(action.height) || action.height < 0.025f || action.height > 0.5f ||
+							action.center_x - action.width * 0.5f < -1.f || action.center_x + action.width * 0.5f > 1.f ||
+							action.top_y - action.height < -1.f)
+							throw glare::Exception("Invalid GameHUDMenu action layout bounds.");
+					}
+				}
+				for(const unsigned char c : action.id)
+					if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+						(c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+						throw glare::Exception("Invalid GameHUDMenu action id.");
+				for(const GameHUDAction& existing : actions)
+					if(existing.id == action.id)
+						throw glare::Exception("Duplicate GameHUDMenu action id.");
+				actions.push_back(action);
+			}
+			std::vector<GameHUDFormField> fields;
+			if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_FORM_SUPPORT))
+			{
+				const uint32 field_count = msg_buffer.readUInt32();
+				if(field_count > 4 || (visible_value == 0 && field_count != 0)) throw glare::Exception("Invalid GameHUDMenu form field count.");
+				for(uint32 i = 0; i < field_count; ++i)
+				{
+					GameHUDFormField field;
+					field.id = msg_buffer.readStringLengthFirst(32);
+					field.label = msg_buffer.readStringLengthFirst(64);
+					const uint32 required = msg_buffer.readUInt32();
+					if(field.id.empty() || field.label.empty() || required > 1) throw glare::Exception("Invalid GameHUDMenu form field.");
+					for(const unsigned char c : field.id)
+						if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+							throw glare::Exception("Invalid GameHUDMenu form field ID.");
+					field.required = required != 0;
+					uint32 field_type = 0;
+					if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_CHOICES_SUPPORT))
+					{
+						field_type = msg_buffer.readUInt32();
+						const uint32 option_count = msg_buffer.readUInt32();
+						if(field_type > 3 || option_count > 8 || (field_type == 0 && option_count != 0) ||
+							(field_type == 1 && option_count < 2) || ((field_type == 2 || field_type == 3) && option_count != 0) ||
+							(field_type == 2 && !BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_NUMERIC_SUPPORT)) ||
+							(field_type == 3 && !BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_CHECKBOX_SUPPORT)))
+							throw glare::Exception("Invalid GameHUDMenu select field type or option count.");
+						if(field_type == 1) field.type = GameHUDFormField::Select;
+						if(field_type == 2) field.type = GameHUDFormField::Number;
+						if(field_type == 3)
+						{
+							field.type = GameHUDFormField::Checkbox;
+							const uint32 checked = msg_buffer.readUInt32();
+							if(checked > 1) throw glare::Exception("Invalid GameHUDMenu checkbox value.");
+							field.checked = checked != 0;
+						}
+						std::set<std::string> unique_options;
+						for(uint32 option_i = 0; option_i < option_count; ++option_i)
+						{
+							const std::string option = msg_buffer.readStringLengthFirst(64);
+						if(option.empty() || !unique_options.insert(option).second)
+							throw glare::Exception("Invalid or duplicate GameHUDMenu select option.");
+							field.options.push_back(option);
+						}
+					}
+					if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_NUMERIC_SUPPORT))
+					{
+						field.minimum = msg_buffer.readDouble();
+						field.maximum = msg_buffer.readDouble();
+						if(!std::isfinite(field.minimum) || !std::isfinite(field.maximum) ||
+							(field_type == 2 && (field.minimum < -1.0e9 || field.maximum > 1.0e9 || field.minimum >= field.maximum)))
+							throw glare::Exception("Invalid GameHUDMenu numeric field bounds.");
+					}
+					for(const GameHUDFormField& existing : fields) if(existing.id == field.id) throw glare::Exception("Duplicate GameHUDMenu form field ID.");
+					fields.push_back(field);
+				}
+			}
+			if(!fields.empty() && actions.empty()) throw glare::Exception("GameHUDMenu form requires a submit action.");
+			std::vector<GameHUDProgressBar> progress_bars;
+			if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_PROGRESS_SUPPORT))
+			{
+				const uint32 progress_count = msg_buffer.readUInt32();
+				if(progress_count > 4 || (visible_value == 0 && progress_count != 0)) throw glare::Exception("Invalid GameHUDMenu progress-bar count.");
+				std::set<std::string> progress_ids;
+				for(uint32 i = 0; i < progress_count; ++i)
+				{
+					GameHUDProgressBar bar;
+					bar.id = msg_buffer.readStringLengthFirst(32);
+					bar.label = msg_buffer.readStringLengthFirst(64);
+					bar.value = msg_buffer.readFloat();
+					bar.maximum = msg_buffer.readFloat();
+					if(bar.id.empty() || bar.label.empty() || !std::isfinite(bar.value) || !std::isfinite(bar.maximum) ||
+						bar.value < 0.f || bar.maximum <= 0.f || bar.maximum > 1.0e9f || bar.value > bar.maximum || !progress_ids.insert(bar.id).second)
+						throw glare::Exception("Invalid or duplicate GameHUDMenu progress bar.");
+					for(const unsigned char c : bar.id)
+						if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+							throw glare::Exception("Invalid GameHUDMenu progress-bar ID.");
+					progress_bars.push_back(bar);
+				}
+			}
+			std::vector<GameHUDTextWidget> text_widgets;
+			if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_TEXT_WIDGETS_SUPPORT))
+			{
+				const uint32 widget_count = msg_buffer.readUInt32();
+				if(widget_count > 8 || (visible_value == 0 && widget_count != 0)) throw glare::Exception("Invalid GameHUDMenu text-widget count.");
+				std::set<std::string> widget_ids;
+				for(uint32 i = 0; i < widget_count; ++i)
+				{
+					GameHUDTextWidget widget;
+					widget.id = msg_buffer.readStringLengthFirst(32);
+					widget.text = msg_buffer.readStringLengthFirst(256);
+					widget.center_x = msg_buffer.readFloat();
+					widget.top_y = msg_buffer.readFloat();
+					widget.width = msg_buffer.readFloat();
+					if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_TEXT_STYLE_SUPPORT))
+					{
+						widget.text_r = msg_buffer.readFloat();
+						widget.text_g = msg_buffer.readFloat();
+						widget.text_b = msg_buffer.readFloat();
+						widget.background_r = msg_buffer.readFloat();
+						widget.background_g = msg_buffer.readFloat();
+						widget.background_b = msg_buffer.readFloat();
+						widget.background_alpha = msg_buffer.readFloat();
+					}
+					if(widget.id.empty() || widget.text.empty() || !widget_ids.insert(widget.id).second ||
+						!std::isfinite(widget.center_x) || widget.center_x < -1.f || widget.center_x > 1.f ||
+						!std::isfinite(widget.top_y) || widget.top_y < -1.f || widget.top_y > 1.f ||
+						!std::isfinite(widget.width) || widget.width < 0.05f || widget.width > 0.8f ||
+						!std::isfinite(widget.text_r) || widget.text_r < 0.f || widget.text_r > 1.f ||
+						!std::isfinite(widget.text_g) || widget.text_g < 0.f || widget.text_g > 1.f ||
+						!std::isfinite(widget.text_b) || widget.text_b < 0.f || widget.text_b > 1.f ||
+						!std::isfinite(widget.background_r) || widget.background_r < 0.f || widget.background_r > 1.f ||
+						!std::isfinite(widget.background_g) || widget.background_g < 0.f || widget.background_g > 1.f ||
+						!std::isfinite(widget.background_b) || widget.background_b < 0.f || widget.background_b > 1.f ||
+						!std::isfinite(widget.background_alpha) || widget.background_alpha < 0.f || widget.background_alpha > 1.f ||
+						widget.center_x - widget.width * 0.5f < -1.f || widget.center_x + widget.width * 0.5f > 1.f)
+						throw glare::Exception("Invalid or duplicate GameHUDMenu text widget.");
+					for(const unsigned char c : widget.id)
+						if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+							throw glare::Exception("Invalid GameHUDMenu text-widget ID.");
+					text_widgets.push_back(widget);
+				}
+			}
+			if(visible_value != 0 && actions.empty() && progress_bars.empty() && text_widgets.empty()) throw glare::Exception("Visible GameHUDMenu needs an action, progress bar, or text widget.");
+			out_msg_queue->enqueue(new GameHUDMenuUpdateMessage(game_object_uid, panel_id, visible_value != 0, title, body, actions, fields, progress_bars, text_widgets, center_x, top_y, width));
+			break;
+		}
+	case Protocol::GameStateUpdateID:
+		{
+			Reference<GameStateUpdateMessage> message = new GameStateUpdateMessage();
+			message->game_object_uid = readUIDFromStream(msg_buffer);
+			message->version = msg_buffer.readUInt32();
+			if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_STATE_DELTA_SUPPORT))
+			{
+				const uint32 mode = msg_buffer.readUInt32();
+				if(mode > 1) throw glare::Exception("Invalid scripted-game state update mode.");
+				message->is_delta = mode == 1;
+				if(message->is_delta)
+				{
+					message->base_version = msg_buffer.readUInt32();
+					message->result_size = msg_buffer.readUInt32();
+					message->prefix_size = msg_buffer.readUInt32();
+					message->suffix_size = msg_buffer.readUInt32();
+					if(message->base_version == 0 || message->base_version + 1 != message->version ||
+						message->result_size == 0 || message->result_size > 16 * 1024 ||
+						message->prefix_size > 16 * 1024 || message->suffix_size > 16 * 1024 ||
+						message->prefix_size + message->suffix_size > message->result_size)
+						throw glare::Exception("Invalid scripted-game state delta bounds.");
+				}
+			}
+			const std::string serialized_value = msg_buffer.readStringLengthFirst(16 * 1024);
+			if(!message->game_object_uid.valid() || message->version == 0 || (!message->is_delta && serialized_value.empty()))
+				throw glare::Exception("Invalid game state update packet.");
+			message->serialized_value.assign(serialized_value.begin(), serialized_value.end());
+			out_msg_queue->enqueue(message);
+			break;
+		}
+	case Protocol::GameEventID:
+		{
+			if(!BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_EVENT_SUPPORT))
+				throw glare::Exception("Received scripted-game event without the negotiated server capability.");
+			Reference<GameEventMessage> message = new GameEventMessage();
+			message->game_object_uid = readUIDFromStream(msg_buffer);
+			message->sequence = msg_buffer.readUInt32();
+			message->name = msg_buffer.readStringLengthFirst(32);
+			if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_EVENT_TIME_SUPPORT))
+				message->server_time = msg_buffer.readDouble();
+			if(!message->game_object_uid.valid() || message->sequence == 0 || message->name.empty())
+				throw glare::Exception("Invalid scripted-game event packet.");
+			if(!std::isfinite(message->server_time) || message->server_time < 0)
+				throw glare::Exception("Invalid scripted-game event world timestamp.");
+			for(unsigned char c : message->name)
+				if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+					throw glare::Exception("Invalid scripted-game event name.");
+			out_msg_queue->enqueue(message);
 			break;
 		}
 	case Protocol::ErrorMessageID:
@@ -2110,6 +2431,7 @@ void ClientThread::runConnection()
 		uint32 server_capabilities = 0;
 		if(peer_protocol_version >= 41)
 			server_capabilities = socket->readUInt32();
+		this->server_capabilities = server_capabilities;
 
 		// Read server_mesh_optimisation_version
 		int server_mesh_optimisation_version = 1;
@@ -2122,7 +2444,7 @@ void ClientThread::runConnection()
 		if(peer_protocol_version >= 42)
 		{
 			// Send client capabilities
-			const uint32 client_capabilities = Protocol::STREAMING_COMPRESSED_OBJECT_SUPPORT | Protocol::SENDS_USER_MOVED_CHATBOT_MSGS | Protocol::AUTHORISED_OBJECT_COPY_SUPPORT
+			const uint32 client_capabilities = Protocol::STREAMING_COMPRESSED_OBJECT_SUPPORT | Protocol::SENDS_USER_MOVED_CHATBOT_MSGS | Protocol::AUTHORISED_OBJECT_COPY_SUPPORT | Protocol::SCRIPTED_OBJECT_CLICK_CLIENT_SUPPORT | Protocol::SCRIPTED_OBJECT_CLICK_RAY_CLIENT_SUPPORT | Protocol::SCRIPTED_AVATAR_MATERIALISE_EFFECT_CLIENT_SUPPORT | Protocol::SCRIPTED_INTERACTION_PROMPT_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_LAYOUT_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_PANELS_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_FORM_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_CHOICES_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_TRIGGER_INPUT_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_STATE_DELTA_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_NUMERIC_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_CHECKBOX_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_ACTION_LAYOUT_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_PROGRESS_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_TEXT_LAYOUT_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_EVENT_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_EVENT_TIME_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_WHEEL_INPUT_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_TEXT_WIDGETS_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_AIM_RAY_CLIENT_SUPPORT | Protocol::SCRIPTED_GAME_HUD_TEXT_STYLE_CLIENT_SUPPORT | Protocol::SCRIPTED_INTERACTION_KEY_CLIENT_SUPPORT
 #if !defined(USE_SDL)
 				| Protocol::ADMIN_WORLD_ENTRY_SUPPORT
 #endif

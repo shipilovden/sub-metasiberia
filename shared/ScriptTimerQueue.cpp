@@ -68,12 +68,12 @@ void ScriptTimerQueue::addTimer(double cur_time, const ScriptTimerQueueTimer& ti
 }
 
 
-void ScriptTimerQueue::update(double cur_time, std::vector<ScriptTimerQueueTimer>& triggered_timers_out)
+void ScriptTimerQueue::update(double cur_time, std::vector<ScriptTimerQueueTimer>& triggered_timers_out, size_t max_due_timers)
 {
 	triggered_timers_out.resize(0);
 
 #if 1
-	while(!queue.empty() && queue.top().tigger_time <= cur_time)
+	while(!queue.empty() && queue.top().tigger_time <= cur_time && triggered_timers_out.size() < max_due_timers)
 	{
 		triggered_timers_out.push_back(queue.top());
 		queue.pop();

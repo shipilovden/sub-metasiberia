@@ -79,6 +79,7 @@ end
 
 local near_user = nil
 function onTimerEvent(ob : WorldObject)
+	if not IS_SERVER then return end
 
 	if(near_user) then
 		local dx = near_user.pos.x - ob.pos.x
@@ -98,17 +99,62 @@ function onTimerEvent(ob : WorldObject)
 	end
 end
 
-createTimer(onTimerEvent, 0.1, true)
+if IS_SERVER then
+	createTimer(onTimerEvent, 0.1, true)
+end
 
 
 function onUserMovedNearToObject(user : User, ob : WorldObject)
 	print("onUserMovedNearToObject!!!")
-	near_user = user
+	if IS_SERVER then near_user = user end
 end
 
 function onUserMovedAwayFromObject(user : User, ob : WorldObject)
 	print("onUserMovedAwayFromObject!!!")
-	near_user = nil
+	if IS_SERVER then near_user = nil end
+end
+</pre>
+
+
+<h2>NPC walk and idle animation</h2>
+<p>Run this script on an animated NPC object. Replace <code>Walk</code> and <code>Idle</code> with exact clip names from its model. Position checks and animation playback are local presentation; the server remains responsible for the NPC's movement. If the model has no idle clip, the script pauses its current animation while stationary and resumes it when movement starts. That freezes the current pose; a natural standing animation still requires an idle clip in the model.</p>
+<pre class="code-block">
+--lua
+
+if IS_CLIENT then
+	local walk_clip = -1
+	local idle_clip = -1
+	local requested_clip = -1
+	local paused_without_idle = false
+	local last_pos = this_object.pos
+
+	createTimer(function(ob)
+		local pos = ob.pos
+		if walk_clip &lt; 0 then walk_clip = ob:getAnimationIndex("Walk") end
+		if idle_clip &lt; 0 then idle_clip = ob:getAnimationIndex("Idle") end
+
+		local dx = pos.x - last_pos.x
+		local dy = pos.y - last_pos.y
+		local dz = pos.z - last_pos.z
+		local moving = dx * dx + dy * dy + dz * dz &gt; 0.0016
+		local target_clip = moving and walk_clip or idle_clip
+		if target_clip &gt;= 0 then
+			if target_clip ~= requested_clip and ob:startPlayingAnimation(target_clip) then
+				requested_clip = target_clip
+				paused_without_idle = false
+			end
+		elseif moving then
+			if paused_without_idle then
+				if ob:resumePlayingAnimation() then
+					paused_without_idle = false
+					requested_clip = -1
+				end
+			end
+		elseif not paused_without_idle and ob:stopPlayingAnimation() then
+			paused_without_idle = true
+		end
+		last_pos = pos
+	end, 0.1, true)
 end
 </pre>
 

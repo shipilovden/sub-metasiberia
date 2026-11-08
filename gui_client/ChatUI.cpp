@@ -79,7 +79,9 @@ void ChatUI::destroy() {
 	messages.clear();
 	for(auto& b:emoji_picker_buttons) checkRemoveAndDeleteWidget(gl_ui,b);
 	for(auto& b:emoji_category_buttons) checkRemoveAndDeleteWidget(gl_ui,b);
-	emoji_picker_buttons.clear(); emoji_category_buttons.clear();
+	for(auto& b:bot_dialog_buttons) checkRemoveAndDeleteWidget(gl_ui,b);
+	emoji_picker_buttons.clear(); emoji_category_buttons.clear(); bot_dialog_buttons.clear();
+	bot_dialog_avatar_uid=UID::invalidUID();
 	checkRemoveAndDeleteWidget(gl_ui,chat_background); checkRemoveAndDeleteWidget(gl_ui,chat_line_edit);
 	checkRemoveAndDeleteWidget(gl_ui,emoji_search); checkRemoveAndDeleteWidget(gl_ui,emoji_hint);
 	checkRemoveAndDeleteWidget(gl_ui,emoji_search_label);
@@ -133,11 +135,52 @@ void ChatUI::appendMessage(const std::string& name,const Colour3f& colour,const 
 	if(messages.size()>100) {removeMessageWidgets(messages.front());messages.pop_front();}
 	updateWidgetTransforms();
 }
+void ChatUI::clearBotDialogOptions() {
+	for(auto& b:bot_dialog_buttons) checkRemoveAndDeleteWidget(gl_ui,b);
+	bot_dialog_buttons.clear(); bot_dialog_avatar_uid=UID::invalidUID(); bot_dialog_node_id=0; bot_dialog_name.clear();
+	bot_dialog_anchor_valid=false;
+}
+void ChatUI::setBotDialogOptions(const UID& bot_avatar_uid,const std::string& bot_name,uint32 node_id,const std::vector<ChatBotDialogOptionUI>& options) {
+	if(!ready()) return;
+	clearBotDialogOptions();
+	if(options.empty()) { updateWidgetTransforms(); return; }
+	bot_dialog_avatar_uid=bot_avatar_uid; bot_dialog_name=bot_name; bot_dialog_node_id=node_id;
+	bot_dialog_expiry=std::chrono::steady_clock::now()+std::chrono::seconds(45);
+	for(const auto& option:options) {
+		auto b=button(excerpt(option.label,42),11,option.label);
+		b->client_data=std::to_string(option.choice_index);
+		bot_dialog_buttons.push_back(b);
+	}
+	updateWidgetTransforms();
+}
+void ChatUI::setBotDialogAnchor(const Vec2f& ui_position,bool visible) {
+	if(bot_dialog_buttons.empty()) return;
+	bot_dialog_anchor=ui_position; bot_dialog_anchor_valid=visible;
+	updateWidgetTransforms();
+}
+void ChatUI::clearBotDialogOptionsForAvatar(const UID& avatar_uid) {
+	if(bot_dialog_avatar_uid==avatar_uid) { clearBotDialogOptions(); updateWidgetTransforms(); }
+}
 void ChatUI::updateWidgetTransforms() {
 	if(!ready()) return;
 	const float width=messageWidth();
 	const float left=-1+px(18),bottom=myMax(-gl_ui->getViewportMinMaxY()+px(12),draw_area_bottom_left_y+px(12));
-	const float input_y=bottom+(reply_text.empty()?0:px(44));
+	const int dialog_rows=(int(bot_dialog_buttons.size())+1)/2;
+	const float dialog_width=bot_dialog_anchor_valid?myMin(width,px(320)):width;
+	const float reply_height=reply_text.empty()?0:px(44);
+	const float input_y=bottom+reply_height+dialog_rows*px(34);
+	float dialog_left=left,dialog_bottom=bottom+reply_height;
+	if(bot_dialog_anchor_valid) {
+		dialog_left=myClamp(bot_dialog_anchor.x-dialog_width*.5f,-1+px(8),1-px(8)-dialog_width);
+		dialog_bottom=bot_dialog_anchor.y-px(56)-dialog_rows*px(34);
+		dialog_bottom=myClamp(dialog_bottom,-gl_ui->getViewportMinMaxY()+px(8),gl_ui->getViewportMinMaxY()-dialog_rows*px(34)-px(8));
+	}
+	for(size_t i=0;i<bot_dialog_buttons.size();++i) {
+		const int row=(int)i/2,col=(int)i%2;
+		const float gap=px(6),button_w=(dialog_width-gap)/2;
+		bot_dialog_buttons[i]->setPosAndDims(Vec2f(dialog_left+col*(button_w+gap),dialog_bottom+row*px(32)),Vec2f(button_w,px(28)));
+		bot_dialog_buttons[i]->setClipRegion(Rect2f(Vec2f(dialog_left,dialog_bottom),Vec2f(dialog_left+dialog_width,dialog_bottom+dialog_rows*px(34))));
+	}
 	chat_line_edit->setPos(Vec2f(left,input_y)); chat_line_edit->setWidth(myMax(px(80),width-px(94)));
 	emoji_button->setPosAndDims(Vec2f(left+width-px(86),input_y),Vec2f(px(38)));
 	send_button->setPosAndDims(Vec2f(left+width-px(42),input_y),Vec2f(px(38)));
@@ -210,6 +253,7 @@ void ChatUI::updateVisibility() {
 		m.body->setVisible(show && in_view);
 		if(m.author.nonNull()) {m.author->setVisible(show && in_view);m.reply->setVisible(show && in_view);}
 	}
+	for(auto& b:bot_dialog_buttons) b->setVisible(visible && bot_dialog_anchor_valid);
 	emoji_window->setVisible(picker); emoji_search->setVisible(picker); emoji_hint->setVisible(picker);
 	emoji_search_label->setVisible(picker && emoji_search->getText().empty());
 	for(auto& b:emoji_category_buttons) b->setVisible(picker);
@@ -245,6 +289,9 @@ void ChatUI::viewportResized(int,int) {
 }
 void ChatUI::think() {
 	if(!ready()) return;
+	if(!bot_dialog_buttons.empty() && std::chrono::steady_clock::now()>=bot_dialog_expiry) {
+		clearBotDialogOptions(); updateWidgetTransforms();
+	}
 	if(focus_composer) {focus_composer=false;if(visible && expanded) gl_ui->setKeyboardFocusWidget(chat_line_edit);}
 	if(emoji_picker_open && emoji_search->getText()!=last_search) {
 		last_search=emoji_search->getText(); emoji_scroll=0; rebuildEmojiPickerContents();updateWidgetTransforms();
@@ -305,6 +352,11 @@ void ChatUI::eventOccurred(GLUICallbackEvent& event) {
 			current_emoji_category=i;last_search.clear();emoji_search->clear();emoji_scroll=0;rebuildEmojiPickerContents();updateWidgetTransforms();return;
 		}
 		for(auto& b:emoji_picker_buttons) if(event.widget==b.ptr()) {insertEmoji(b->client_data);return;}
+		for(auto& b:bot_dialog_buttons) if(event.widget==b.ptr()) {
+			bool ok=false; const uint32 choice_index=(uint32)QString::fromStdString(b->client_data).toUInt(&ok);
+			if(ok && bot_dialog_avatar_uid.valid()) gui_client->sendChatBotDialogChoice(bot_dialog_avatar_uid,bot_dialog_node_id,choice_index);
+			clearBotDialogOptions(); updateWidgetTransforms(); return;
+		}
 		for(auto& m:messages) if(event.widget==m.reply.ptr()) {
 			reply_author=excerpt(m.name,90);reply_text=excerpt(m.text,240);
 			reply_hint->setText(*gl_ui,"Ответ "+excerpt(reply_author,40)+": "+excerpt(reply_text,55));focus_composer=true;updateWidgetTransforms();return;

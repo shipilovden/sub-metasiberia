@@ -37,9 +37,17 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonArray>
+#include <QtCore/QSet>
+#include <QtCore/QFileInfo>
+#include <QtCore/QStringList>
 #include <array>
+#include <algorithm>
+#include <functional>
+#include <cmath>
+#include <limits>
 #include <set>
 #include <queue>
+#include <stdexcept>
 
 
 static QDoubleSpinBox* makeSpin(double val, double lo, double hi, double step=0.1, int dec=2)
@@ -2463,12 +2471,8 @@ void BotEditorWidget::onValidateDialogTree()
 }
 
 
-void BotEditorWidget::onExportJson()
+QJsonObject BotEditorWidget::exportConfigurationForMCP()
 {
-	const QString path = QFileDialog::getSaveFileName(this,
-		"Сохранить конфигурацию бота", {}, "JSON (*.json)");
-	if(path.isEmpty()) return;
-
 	QJsonObject o;
 	// Identity
 	o["name"]               = name_edit ? name_edit->text() : "";
@@ -2476,6 +2480,10 @@ void BotEditorWidget::onExportJson()
 	o["scale_x"]            = scale_x_spin ? scale_x_spin->value() : 1.0;
 	o["scale_y"]            = scale_y_spin ? scale_y_spin->value() : 1.0;
 	o["scale_z"]            = scale_z_spin ? scale_z_spin->value() : 1.0;
+	o["pos_x"]              = pos_x_spin ? pos_x_spin->value() : 0.0;
+	o["pos_y"]              = pos_y_spin ? pos_y_spin->value() : 0.0;
+	o["pos_z"]              = pos_z_spin ? pos_z_spin->value() : 0.0;
+	o["heading_deg"]        = heading_spin ? heading_spin->value() : 0.0;
 	// AI / Prompt
 	o["prompt"]             = prompt_edit ? prompt_edit->toPlainText() : "";
 	o["ai_model_id"]        = ai_model_edit ? ai_model_edit->text() : "";
@@ -2492,6 +2500,51 @@ void BotEditorWidget::onExportJson()
 	o["movement_type"]      = movement_type_combo ? movement_type_combo->currentIndex() : 0;
 	o["walk_speed"]         = walk_speed_spin ? walk_speed_spin->value() : 1.4;
 	o["wander_radius"]      = wander_radius_spin ? wander_radius_spin->value() : 5.0;
+	o["disabled"]           = disabled_cb && disabled_cb->isChecked();
+	o["always_face"]        = always_face_cb && always_face_cb->isChecked();
+	o["stationary"]         = stationary_cb && stationary_cb->isChecked();
+	o["audio_loop"]         = audio_loop_cb && audio_loop_cb->isChecked();
+	o["audio_spatial"]      = audio_spatial_cb && audio_spatial_cb->isChecked();
+	o["audio_autoplay"]     = audio_autoplay_cb && audio_autoplay_cb->isChecked();
+	o["listens_global_chat"] = listens_global_chat_cb && listens_global_chat_cb->isChecked();
+	o["react_to_mention"]   = react_to_mention_cb && react_to_mention_cb->isChecked();
+	o["react_to_bots"]      = react_to_bots_cb && react_to_bots_cb->isChecked();
+	o["use_dialog"]         = use_dialog_cb && use_dialog_cb->isChecked();
+	o["stream_llm"]         = stream_llm_cb && stream_llm_cb->isChecked();
+	o["active_hours_enabled"] = active_hours_cb && active_hours_cb->isChecked();
+	o["trigger_proximity"]  = trigger_proximity_cb && trigger_proximity_cb->isChecked();
+	o["trigger_chat"]       = trigger_chat_cb && trigger_chat_cb->isChecked();
+	o["trigger_keywords_enabled"] = trigger_keywords_cb && trigger_keywords_cb->isChecked();
+	o["trigger_gesture"]    = trigger_gesture_cb && trigger_gesture_cb->isChecked();
+	o["trigger_use"]        = trigger_use_cb && trigger_use_cb->isChecked();
+	o["trigger_keywords"]   = trigger_keywords_edit ? trigger_keywords_edit->text() : "";
+	o["trigger_cooldown"]   = trigger_cooldown_spin ? trigger_cooldown_spin->value() : 3.0;
+	// Movement routes and interaction actions.
+	{
+		QJsonArray arr;
+		for(int r = 0; r < waypoints_table->rowCount(); ++r)
+		{
+			QJsonObject waypoint;
+			const char* keys[] = {"x", "y", "z", "heading_override", "dwell_time_s"};
+			for(int c = 0; c < 5; ++c)
+				waypoint[keys[c]] = waypoints_table->item(r, c) ? waypoints_table->item(r, c)->text().toDouble() : 0.0;
+			arr.append(waypoint);
+		}
+		o["waypoints"] = arr;
+	}
+	{
+		QJsonArray arr;
+		for(int r = 0; r < use_actions_table->rowCount(); ++r)
+		{
+			const auto* type = qobject_cast<QComboBox*>(use_actions_table->cellWidget(r, 0));
+			const auto* label = qobject_cast<QLineEdit*>(use_actions_table->cellWidget(r, 1));
+			const auto* param = qobject_cast<QLineEdit*>(use_actions_table->cellWidget(r, 2));
+			const auto* required = qobject_cast<QLineEdit*>(use_actions_table->cellWidget(r, 3));
+			arr.append(QJsonObject{{"type", type ? type->currentIndex() : 0}, {"label", label ? label->text() : QString()},
+				{"param", param ? param->text() : QString()}, {"required_avatar_uid", required ? required->text() : QString()}});
+		}
+		o["use_actions"] = arr;
+	}
 	// Animations (9 slots)
 	{
 		QJsonArray anim_arr;
@@ -2504,6 +2557,7 @@ void BotEditorWidget::onExportJson()
 			sl["url"]   = anim_slots[s].url_edit  ? anim_slots[s].url_edit->text()  : "";
 			sl["cd"]    = (anim_slots[s].cd_spin && SLOT_HAS_CD[s]) ? anim_slots[s].cd_spin->value() : 0.0;
 			sl["loop"]  = anim_slots[s].loop_cb ? anim_slots[s].loop_cb->isChecked() : false;
+			sl["animate_head"] = anim_slots[s].head_cb ? anim_slots[s].head_cb->isChecked() : false;
 			anim_arr.append(sl);
 		}
 		o["anim_slots"] = anim_arr;
@@ -2512,6 +2566,8 @@ void BotEditorWidget::onExportJson()
 	o["audio_url"]              = audio_url_edit ? audio_url_edit->text() : "";
 	o["audio_volume"]           = audio_vol_spin ? audio_vol_spin->value() : 1.0;
 	o["audio_radius"]           = audio_radius_spin ? audio_radius_spin->value() : 10.0;
+	o["audio_activation_distance"] = audio_activation_spin ? audio_activation_spin->value() : 12.0;
+	o["audio_cooldown"]         = audio_cooldown_spin ? audio_cooldown_spin->value() : 0.0;
 	o["audio_min_distance"]     = audio_min_dist_spin ? audio_min_dist_spin->value() : 1.0;
 	o["audio_start_delay"]      = audio_start_delay_spin ? audio_start_delay_spin->value() : 0.0;
 	o["greeting_audio_url"]     = greeting_audio_url_edit ? greeting_audio_url_edit->text() : "";
@@ -2625,6 +2681,17 @@ void BotEditorWidget::onExportJson()
 	o["fallback_endpoint"]  = fallback_ep_edit ? fallback_ep_edit->text() : "";
 	o["llm_retries"]        = retries_spin ? retries_spin->value() : 0;
 
+	return o;
+}
+
+
+void BotEditorWidget::onExportJson()
+{
+	const QString path = QFileDialog::getSaveFileName(this,
+		"Сохранить конфигурацию бота", {}, "JSON (*.json)");
+	if(path.isEmpty()) return;
+
+	QJsonObject o = exportConfigurationForMCP();
 	QFile f(path);
 	if(f.open(QIODevice::WriteOnly))
 	{
@@ -2650,7 +2717,13 @@ void BotEditorWidget::onImportJson()
 		return;
 	}
 	const QJsonObject o = doc.object();
+	applyConfiguration(o);
+	QMessageBox::information(this, "Импорт", "Конфигурация загружена. Нажмите «Сохранить» для применения.");
+}
 
+
+void BotEditorWidget::applyConfiguration(const QJsonObject& o)
+{
 	auto setStr  = [&](QLineEdit* w, const char* k)      { if(w && o.contains(k)) w->setText(o[k].toString()); };
 	auto setTxt  = [&](QPlainTextEdit* w, const char* k) { if(w && o.contains(k)) w->setPlainText(o[k].toString()); };
 	auto setDbl  = [&](QDoubleSpinBox* w, const char* k) { if(w && o.contains(k)) w->setValue(o[k].toDouble()); };
@@ -2673,6 +2746,10 @@ void BotEditorWidget::onImportJson()
 	setTxt(ai_knowledge_edit,  "ai_knowledge");
 	setStr(fallback_msg_edit,  "fallback_message");
 	setStr(api_endpoint_edit,  "api_endpoint");
+	setDbl(pos_x_spin,         "pos_x");
+	setDbl(pos_y_spin,         "pos_y");
+	setDbl(pos_z_spin,         "pos_z");
+	setDbl(heading_spin,       "heading_deg");
 	// Behaviour
 	setDbl(greet_dist_spin,    "greeting_distance");
 	setDbl(farewell_dist_spin, "farewell_distance");
@@ -2680,6 +2757,48 @@ void BotEditorWidget::onImportJson()
 	setCmb(movement_type_combo,"movement_type");
 	setDbl(walk_speed_spin,    "walk_speed");
 	setDbl(wander_radius_spin, "wander_radius");
+	setBool(disabled_cb, "disabled");
+	setBool(always_face_cb, "always_face");
+	setBool(stationary_cb, "stationary");
+	setBool(audio_loop_cb, "audio_loop");
+	setBool(audio_spatial_cb, "audio_spatial");
+	setBool(audio_autoplay_cb, "audio_autoplay");
+	setBool(listens_global_chat_cb, "listens_global_chat");
+	setBool(react_to_mention_cb, "react_to_mention");
+	setBool(react_to_bots_cb, "react_to_bots");
+	setBool(use_dialog_cb, "use_dialog");
+	setBool(stream_llm_cb, "stream_llm");
+	setBool(active_hours_cb, "active_hours_enabled");
+	setBool(trigger_proximity_cb, "trigger_proximity");
+	setBool(trigger_chat_cb, "trigger_chat");
+	setBool(trigger_keywords_cb, "trigger_keywords_enabled");
+	setBool(trigger_gesture_cb, "trigger_gesture");
+	setBool(trigger_use_cb, "trigger_use");
+	setStr(trigger_keywords_edit, "trigger_keywords");
+	setDbl(trigger_cooldown_spin, "trigger_cooldown");
+	if(o.contains("waypoints") && o["waypoints"].isArray())
+	{
+		waypoints_table->setRowCount(0);
+		for(const auto& value : o["waypoints"].toArray())
+		{
+			const QJsonObject waypoint = value.toObject();
+			const int row = waypoints_table->rowCount();
+			waypoints_table->insertRow(row);
+			const char* keys[] = {"x", "y", "z", "heading_override", "dwell_time_s"};
+			for(int c = 0; c < 5; ++c)
+				waypoints_table->setItem(row, c, new QTableWidgetItem(QString::number(waypoint.value(keys[c]).toDouble(), 'f', 3)));
+		}
+	}
+	if(o.contains("use_actions") && o["use_actions"].isArray())
+	{
+		use_actions_table->setRowCount(0);
+		for(const auto& value : o["use_actions"].toArray())
+		{
+			const QJsonObject action = value.toObject();
+			addUseActionRow((uint32)action.value("type").toInt(), action.value("label").toString(),
+				action.value("param").toString(), action.value("required_avatar_uid").toString());
+		}
+	}
 	// Animations
 	if(o.contains("anim_slots") && o["anim_slots"].isArray())
 	{
@@ -2697,6 +2816,7 @@ void BotEditorWidget::onImportJson()
 					if(anim_slots[s].url_edit)  anim_slots[s].url_edit->setText(sl["url"].toString());
 					if(anim_slots[s].cd_spin && SLOT_HAS_CD[s]) anim_slots[s].cd_spin->setValue(sl["cd"].toDouble());
 					if(anim_slots[s].loop_cb) anim_slots[s].loop_cb->setChecked(sl["loop"].toBool());
+					if(anim_slots[s].head_cb) anim_slots[s].head_cb->setChecked(sl["animate_head"].toBool());
 					break;
 				}
 			}
@@ -2706,6 +2826,8 @@ void BotEditorWidget::onImportJson()
 	setStr(audio_url_edit,           "audio_url");
 	setDbl(audio_vol_spin,           "audio_volume");
 	setDbl(audio_radius_spin,        "audio_radius");
+	setDbl(audio_activation_spin,    "audio_activation_distance");
+	setDbl(audio_cooldown_spin,      "audio_cooldown");
 	setDbl(audio_min_dist_spin,      "audio_min_distance");
 	setDbl(audio_start_delay_spin,   "audio_start_delay");
 	setStr(greeting_audio_url_edit,  "greeting_audio_url");
@@ -2822,7 +2944,218 @@ void BotEditorWidget::onImportJson()
 	setStr(fallback_ep_edit,    "fallback_endpoint");
 	setInt(retries_spin,        "llm_retries");
 
-	QMessageBox::information(this, "Импорт", "Конфигурация загружена. Нажмите «Сохранить» для применения.");
+}
+
+
+void BotEditorWidget::applyMCPConfiguration(const QJsonObject& configuration)
+{
+	if(!gui_client || bot_id == 0)
+		throw std::runtime_error("Select an existing owned bot before configuring it.");
+	if(configuration.isEmpty())
+		throw std::runtime_error("settings must contain at least one bot setting.");
+
+	static const QStringList supported_keys = {
+		"name", "avatar_url", "scale_x", "scale_y", "scale_z", "prompt", "ai_model_id", "ai_personality",
+		"ai_temperature", "ai_max_tokens", "ai_knowledge", "fallback_message", "api_endpoint", "greeting_distance",
+		"farewell_distance", "chat_radius", "movement_type", "walk_speed", "wander_radius", "anim_slots", "audio_url",
+		"audio_volume", "audio_radius", "audio_activation_distance", "audio_cooldown", "audio_min_distance", "audio_start_delay", "greeting_audio_url", "farewell_audio_url",
+		"interaction_audio_url", "conv_timeout_s", "max_llm_calls_hour", "webhook_url", "active_hours_start", "active_hours_end",
+		"scripted_responses", "player_whitelist", "player_blacklist", "tool_functions", "ai_provider", "top_p", "top_k",
+		"freq_penalty", "pres_penalty", "max_ctx_msgs", "dialog_start_node", "dialog_nodes", "enable_memory", "memory_tokens",
+		"jailbreak_guard", "content_filter", "player_rate_limit", "cache_enabled", "cache_ttl_s", "fallback_model",
+		"fallback_endpoint", "llm_retries", "pos_x", "pos_y", "pos_z", "heading_deg", "disabled", "always_face", "stationary",
+		"audio_loop", "audio_spatial", "audio_autoplay", "listens_global_chat", "react_to_mention", "react_to_bots", "use_dialog",
+		"stream_llm", "active_hours_enabled", "trigger_proximity", "trigger_chat", "trigger_keywords_enabled", "trigger_gesture",
+		"trigger_use", "trigger_keywords", "trigger_cooldown", "waypoints", "use_actions"
+	};
+	for(auto it = configuration.begin(); it != configuration.end(); ++it)
+		if(!supported_keys.contains(it.key()))
+			throw std::runtime_error(("Unsupported or sensitive bot setting: " + it.key()).toStdString());
+	auto checkType = [&](const QStringList& keys, auto predicate, const char* type_name) {
+		for(const QString& key : keys)
+			if(configuration.contains(key) && !predicate(configuration.value(key)))
+				throw std::runtime_error((key + " must be " + type_name + ".").toStdString());
+	};
+	checkType({"name","avatar_url","prompt","ai_model_id","ai_personality","ai_knowledge","fallback_message","api_endpoint",
+		"trigger_keywords","audio_url","greeting_audio_url","farewell_audio_url","interaction_audio_url","webhook_url",
+		"content_filter","fallback_model","fallback_endpoint"},
+		[](const QJsonValue& value){ return value.isString(); }, "a string");
+	checkType({"disabled","always_face","stationary","audio_loop","audio_spatial","audio_autoplay","listens_global_chat",
+		"react_to_mention","react_to_bots","use_dialog","stream_llm","active_hours_enabled","trigger_proximity","trigger_chat",
+		"trigger_keywords_enabled","trigger_gesture","trigger_use","enable_memory","jailbreak_guard","cache_enabled"},
+		[](const QJsonValue& value){ return value.isBool(); }, "a boolean");
+	checkType({"ai_max_tokens","movement_type","max_llm_calls_hour","active_hours_start","active_hours_end","ai_provider","top_k",
+		"max_ctx_msgs","dialog_start_node","memory_tokens","player_rate_limit","cache_ttl_s","llm_retries"},
+		[](const QJsonValue& value){ return value.isDouble() && std::isfinite(value.toDouble()) && std::floor(value.toDouble()) == value.toDouble(); }, "an integer");
+	checkType({"scale_x","scale_y","scale_z","pos_x","pos_y","pos_z","heading_deg","ai_temperature","greeting_distance",
+		"farewell_distance","chat_radius","walk_speed","wander_radius","trigger_cooldown","audio_volume","audio_radius",
+		"audio_activation_distance","audio_cooldown","audio_min_distance","audio_start_delay","conv_timeout_s","top_p","freq_penalty","pres_penalty"},
+		[](const QJsonValue& value){ return value.isDouble() && std::isfinite(value.toDouble()); }, "a finite number");
+	auto checkStringLength = [&](const QString& key, size_t max_bytes) {
+		if(configuration.contains(key) && (size_t)configuration.value(key).toString().toUtf8().size() > max_bytes)
+			throw std::runtime_error((key + " is longer than the server's " + QString::number((qulonglong)max_bytes) + " byte limit.").toStdString());
+	};
+	checkStringLength("name",200); checkStringLength("avatar_url",10000); checkStringLength("prompt",10000);
+	checkStringLength("ai_model_id",200); checkStringLength("ai_personality",200); checkStringLength("ai_knowledge",10000);
+	checkStringLength("fallback_message",500); checkStringLength("api_endpoint",300); checkStringLength("trigger_keywords",4000);
+	checkStringLength("audio_url",10000); checkStringLength("greeting_audio_url",10000); checkStringLength("farewell_audio_url",10000);
+	checkStringLength("interaction_audio_url",10000); checkStringLength("webhook_url",500); checkStringLength("content_filter",2000);
+	checkStringLength("fallback_model",200); checkStringLength("fallback_endpoint",300);
+	auto requireRange = [&](const QString& key, double minimum, double maximum) {
+		if(configuration.contains(key)) {
+			const double value = configuration.value(key).toDouble();
+			if(value < minimum || value > maximum)
+				throw std::runtime_error((key + " must be between " + QString::number(minimum) + " and " + QString::number(maximum) + ".").toStdString());
+		}
+	};
+	auto requireIntRange = [&](const QString& key, int minimum, int maximum) { requireRange(key, minimum, maximum); };
+	requireRange("scale_x",0.01,10); requireRange("scale_y",0.01,10); requireRange("scale_z",0.01,10);
+	requireRange("pos_x",-100000,100000); requireRange("pos_y",-100000,100000); requireRange("pos_z",-1000,10000); requireRange("heading_deg",-180,180);
+	requireRange("ai_temperature",0,2); requireRange("greeting_distance",0.5,100); requireRange("farewell_distance",0.5,100); requireRange("chat_radius",0.5,100);
+	requireRange("walk_speed",0.1,20); requireRange("wander_radius",0.5,200); requireRange("trigger_cooldown",0,3600);
+	requireRange("audio_volume",0,1); requireRange("audio_radius",0.5,200); requireRange("audio_activation_distance",0.5,500); requireRange("audio_cooldown",0,3600);
+	requireRange("audio_min_distance",0,200); requireRange("audio_start_delay",0,3600); requireRange("conv_timeout_s",0,3600);
+	requireRange("top_p",0,1); requireRange("freq_penalty",-2,2); requireRange("pres_penalty",-2,2);
+	requireIntRange("movement_type",0,2); requireIntRange("ai_max_tokens",0,32000); requireIntRange("max_llm_calls_hour",0,10000);
+	requireIntRange("active_hours_start",0,23); requireIntRange("active_hours_end",0,23); requireIntRange("ai_provider",0,6);
+	requireIntRange("top_k",0,500); requireIntRange("max_ctx_msgs",0,200); requireIntRange("dialog_start_node",0,BotDialogNode::MAX_NODES-1);
+	requireIntRange("memory_tokens",50,2000); requireIntRange("player_rate_limit",0,10000); requireIntRange("cache_ttl_s",30,86400); requireIntRange("llm_retries",0,3);
+	const auto checkArray = [&](const QString& key, int maximum, const std::function<void(const QJsonArray&)>& validate) {
+		if(!configuration.contains(key)) return;
+		const QJsonValue value = configuration.value(key);
+		if(!value.isArray() || value.toArray().size() > maximum)
+			throw std::runtime_error((key + " must be an array with no more than " + QString::number(maximum) + " entries.").toStdString());
+		validate(value.toArray());
+	};
+	const auto requireStringField = [](const QJsonObject& object, const QString& key, bool required=true, size_t max_bytes=10000) {
+		if(!object.contains(key) && !required) return;
+		if(!object.value(key).isString()) throw std::runtime_error((key + " must be a string.").toStdString());
+		if((size_t)object.value(key).toString().toUtf8().size() > max_bytes)
+			throw std::runtime_error((key + " exceeds its server byte limit.").toStdString());
+	};
+	const auto requireNumberField = [](const QJsonObject& object, const QString& key, bool required=true) {
+		if(!object.contains(key) && !required) return;
+		const QJsonValue value = object.value(key);
+		if(!value.isDouble() || !std::isfinite(value.toDouble())) throw std::runtime_error((key + " must be a finite number.").toStdString());
+	};
+	const auto requireIntegerField = [](const QJsonObject& object, const QString& key, bool required=true) {
+		if(!object.contains(key) && !required) return;
+		const QJsonValue value = object.value(key);
+		if(!value.isDouble() || !std::isfinite(value.toDouble()) || std::floor(value.toDouble()) != value.toDouble() ||
+			value.toDouble() < (double)std::numeric_limits<int>::min() || value.toDouble() > (double)std::numeric_limits<int>::max())
+			throw std::runtime_error((key + " must be an integer.").toStdString());
+	};
+	const auto requireOnlyKeys = [](const QJsonObject& object, const QStringList& allowed, const char* item_name) {
+		for(auto it = object.begin(); it != object.end(); ++it)
+			if(!allowed.contains(it.key())) throw std::runtime_error((QString("Unsupported field in ") + item_name + ": " + it.key()).toStdString());
+	};
+	checkArray("waypoints", 64, [&](const QJsonArray& rows) {
+		for(const QJsonValue& value : rows) {
+			if(!value.isObject()) throw std::runtime_error("Each waypoint must be an object.");
+			const QJsonObject row = value.toObject();
+			requireOnlyKeys(row,{"x","y","z","heading_override","dwell_time_s"},"waypoint");
+			requireNumberField(row,"x"); requireNumberField(row,"y"); requireNumberField(row,"z");
+			requireNumberField(row,"heading_override"); requireNumberField(row,"dwell_time_s");
+		}
+	});
+	checkArray("use_actions", 16, [&](const QJsonArray& rows) {
+		for(const QJsonValue& value : rows) {
+			if(!value.isObject()) throw std::runtime_error("Each use_action must be an object.");
+			const QJsonObject row = value.toObject(); requireOnlyKeys(row,{"type","label","param","required_avatar_uid"},"use_action"); requireIntegerField(row,"type");
+			requireStringField(row,"label",true,BotUseAction::MAX_LABEL_SIZE); requireStringField(row,"param",true,BotUseAction::MAX_PARAM_SIZE); requireStringField(row,"required_avatar_uid",true,BotUseAction::MAX_REQUIRED_UID_SIZE);
+			if(row.value("type").toInt() < 0 || row.value("type").toInt() > (int)ChatBot::USE_ACTION_REP_DOWN)
+				throw std::runtime_error("use_action type must be a supported action from 0 to 8.");
+		}
+	});
+	checkArray("anim_slots", NUM_ANIM_SLOTS, [&](const QJsonArray& rows) {
+		static const QStringList valid_slot_names = {"greeting","idle","reactive","surprise","acknowledge","farewell","walk","talk","interaction"};
+		QSet<QString> seen;
+		for(const QJsonValue& value : rows) {
+			if(!value.isObject()) throw std::runtime_error("Each anim_slot must be an object.");
+			const QJsonObject row = value.toObject(); requireOnlyKeys(row,{"slot","name","url","cd","loop","animate_head"},"anim_slot"); requireStringField(row,"slot");
+			const QString slot = row.value("slot").toString();
+			if(!valid_slot_names.contains(slot) || seen.contains(slot)) throw std::runtime_error("anim_slots contains an unknown or duplicate slot name.");
+			seen.insert(slot); requireStringField(row,"name",true,ChatBot::MAX_GESTURE_NAME_SIZE); requireStringField(row,"url",true,ChatBot::MAX_GESTURE_URL_SIZE);
+			requireNumberField(row,"cd");
+			if(row.contains("cd") && (row.value("cd").toDouble() < 0 || row.value("cd").toDouble() > 3600))
+				throw std::runtime_error("Animation slot cd must be between 0 and 3600 seconds.");
+			for(const QString& key : {QStringLiteral("loop"),QStringLiteral("animate_head")})
+				if(!row.value(key).isBool()) throw std::runtime_error((key + " must be a boolean.").toStdString());
+		}
+	});
+	checkArray("scripted_responses", 32, [&](const QJsonArray& rows) {
+		for(const QJsonValue& value : rows) {
+			if(!value.isObject()) throw std::runtime_error("Each scripted_response must be an object.");
+			const QJsonObject row = value.toObject(); requireOnlyKeys(row,{"keywords","response"},"scripted_response"); requireStringField(row,"keywords",true,500); requireStringField(row,"response",true,2000);
+		}
+	});
+	for(const QString& key : {QStringLiteral("player_whitelist"),QStringLiteral("player_blacklist")})
+		checkArray(key, 64, [&](const QJsonArray& rows) {
+			for(const QJsonValue& value : rows) {
+				if(!value.isString() || value.toString().toUtf8().size() > ChatBot::MAX_PLAYER_LIST_ENTRY_SIZE)
+					throw std::runtime_error((key + " entries must be strings of at most 64 bytes.").toStdString());
+			}
+		});
+	checkArray("tool_functions", 64, [&](const QJsonArray& rows) {
+		for(const QJsonValue& value : rows) {
+			if(!value.isObject()) throw std::runtime_error("Each tool_function must be an object.");
+			const QJsonObject row = value.toObject(); requireOnlyKeys(row,{"name","description","result"},"tool_function"); requireStringField(row,"name",true,ChatBotToolFunction::MAX_FUNCTION_NAME_SIZE); requireStringField(row,"description",true,ChatBotToolFunction::MAX_DESCRIPTION_NAME_SIZE); requireStringField(row,"result",true,ChatBotToolFunction::MAX_RESULT_CONTENT_SIZE);
+		}
+	});
+	checkArray("dialog_nodes", 64, [&](const QJsonArray& rows) {
+		std::set<int> node_ids;
+		for(const QJsonValue& value : rows) {
+			if(!value.isObject()) throw std::runtime_error("Each dialog_node must be an object.");
+			const QJsonObject row = value.toObject(); requireOnlyKeys(row,{"node_id","bot_text","action_type","action_param","choices"},"dialog_node"); requireIntegerField(row,"node_id"); requireStringField(row,"bot_text",true,BotDialogNode::MAX_BOT_TEXT_SIZE);
+			requireIntegerField(row,"action_type"); requireStringField(row,"action_param");
+			if(row.contains("action_type") && (row.value("action_type").toDouble() < BotDialogNode::ACTION_NONE || row.value("action_type").toDouble() > BotDialogNode::ACTION_TELEPORT))
+				throw std::runtime_error("dialog node action_type must be 0 (none), 1 (gesture), 2 (open URL) or 3 (teleport).");
+			if(row.contains("action_param") && row.value("action_param").toString().toUtf8().size() > BotDialogNode::MAX_ACTION_PARAM)
+				throw std::runtime_error("dialog node action_param exceeds the server byte limit.");
+			const int node_id = row.value("node_id").toInt(-1);
+			if(node_id < 0 || node_id >= BotDialogNode::MAX_NODES || !node_ids.insert(node_id).second)
+				throw std::runtime_error("dialog_nodes must have unique node_id values from 0 to 63.");
+			const QJsonValue choices_value = row.value("choices");
+			if(!choices_value.isArray() || choices_value.toArray().size() > BotDialogChoice::MAX_CHOICES)
+				throw std::runtime_error("Each dialog_node needs a choices array with no more than 8 entries.");
+			for(const QJsonValue& choice_value : choices_value.toArray()) {
+				if(!choice_value.isObject()) throw std::runtime_error("Each dialog choice must be an object.");
+				const QJsonObject choice = choice_value.toObject(); requireOnlyKeys(choice,{"keywords","label","next_node_id"},"dialog choice"); requireStringField(choice,"keywords",true,BotDialogChoice::MAX_KEYWORDS_SIZE); requireStringField(choice,"label",true,BotDialogChoice::MAX_LABEL_SIZE); requireIntegerField(choice,"next_node_id");
+				const int next_id = choice.value("next_node_id").toInt(-2);
+				if(next_id < -1 || next_id >= BotDialogNode::MAX_NODES) throw std::runtime_error("dialog choice next_node_id must be -1 or a node ID from 0 to 63.");
+			}
+		}
+		for(const QJsonValue& value : rows) {
+			const QJsonObject row = value.toObject();
+			if(row.contains("choices")) for(const QJsonValue& choice_value : row.value("choices").toArray()) {
+				const int next_id = choice_value.toObject().value("next_node_id").toInt(-1);
+				if(next_id >= 0 && node_ids.count(next_id) == 0) throw std::runtime_error("dialog choice points to a node_id that is not present in dialog_nodes.");
+			}
+		}
+		if(configuration.contains("dialog_start_node") && !node_ids.count(configuration.value("dialog_start_node").toInt()))
+			throw std::runtime_error("dialog_start_node must reference one of the supplied dialog_nodes.");
+	});
+	if(configuration.contains("dialog_start_node") && !configuration.contains("dialog_nodes"))
+	{
+		const int start_node = configuration.value("dialog_start_node").toInt();
+		const bool found = std::find_if(m_dialog_nodes.begin(), m_dialog_nodes.end(), [start_node](const BotDialogNode& node){ return node.node_id == (uint32)start_node; }) != m_dialog_nodes.end();
+		if(!found) throw std::runtime_error("dialog_start_node must reference an existing dialog node. Include dialog_nodes in the same patch to replace the dialog tree.");
+	}
+	for(const QString& key : {QStringLiteral("avatar_url"), QStringLiteral("audio_url"), QStringLiteral("greeting_audio_url"),
+		QStringLiteral("farewell_audio_url"), QStringLiteral("interaction_audio_url")})
+	{
+		const QJsonValue value = configuration.value(key);
+		if(value.isString() && QFileInfo(value.toString()).exists())
+			throw std::runtime_error(("MCP bot settings cannot read local files for " + key + ". Upload the asset through the normal resource workflow and pass its resource URL.").toStdString());
+	}
+	if(configuration.contains("anim_slots"))
+		for(const QJsonValue& slot_value : configuration.value("anim_slots").toArray())
+			if(slot_value.toObject().value("url").isString() && QFileInfo(slot_value.toObject().value("url").toString()).exists())
+				throw std::runtime_error("MCP bot settings cannot read local animation files. Upload the animation through the normal resource workflow and pass its resource URL.");
+
+	applyConfiguration(configuration);
+	sendMoveBot();
+	sendUpdateBot();
 }
 
 

@@ -226,8 +226,13 @@ ChatBot::EventHandlerResults ChatBot::userMovedAwayFromBotAvatar(AvatarRef other
 	auto other_res = other_avatar_info.find(other_avatar);
 	if(other_res != other_avatar_info.end())
 	{
+		if(other_avatar)
+		{
+			player_dialog_node_map.erase(other_avatar->uid);
+			sendDialogOptions(other_avatar, nullptr, server);
+		}
 		OtherAvatarInfo& info = other_res->second;
-		if(info.conversing) // If we were chatting with the avatar that moved away:
+		if(info.conversing && !BitUtils::isBitSet(flags, USE_DIALOG_FLAG)) // LLM farewell only for LLM conversations.
 		{
 			const bool farewelled_other_av_recently = info.time_since_farewelled_other_av.isRunning() && (info.time_since_farewelled_other_av.elapsed() < FAREWELL_COOLDOWN_PERIOD);
 			conPrint("    farewelled_other_av_recently: " + boolToString(farewelled_other_av_recently));
@@ -264,9 +269,6 @@ ChatBot::EventHandlerResults ChatBot::userMovedAwayFromBotAvatar(AvatarRef other
 		info.conversing = false; // Consider us not conversing with the avatar that moved away.
 		info.attention_timer.pause();
 
-		// Reset dialog state for this player when they leave
-		if(other_avatar)
-			player_dialog_node_map.erase(other_avatar->uid);
 	}
 
 	// Play farewell gesture if configured and cooldown allows
@@ -654,6 +656,79 @@ const BotDialogNode* ChatBot::findDialogNode(uint32 node_id) const
 }
 
 
+void ChatBot::sendDialogOptions(AvatarRef recipient_avatar, const BotDialogNode* node, Server* server)
+{
+	if(!recipient_avatar || !server || !world)
+		return;
+	std::vector<BotDialogOption> options;
+	if(node)
+	{
+		for(size_t i = 0; i < node->choices.size() && options.size() < 8; ++i)
+		{
+			const BotDialogChoice& choice = node->choices[i];
+			if(!choice.label.empty())
+			{
+				BotDialogOption option;
+				option.choice_index = (uint32)i;
+				option.label = choice.label;
+				options.push_back(option);
+			}
+		}
+	}
+	server->enqueueBotDialogOptionsForAvatar(recipient_avatar->uid, avatar_uid, name,
+		node ? node->node_id : BotDialogChoice::END_DIALOG, options, world);
+}
+
+
+void ChatBot::advanceDialogToChoice(AvatarRef sender_avatar, uint32 choice_index, Server* server, WorldStateLock& lock)
+{
+	if(!sender_avatar || choice_index >= BotDialogChoice::MAX_CHOICES)
+		return;
+	const UID uid = sender_avatar->uid;
+	auto it = player_dialog_node_map.find(uid);
+	const uint32 current_node_id = it != player_dialog_node_map.end() ? it->second : dialog_start_node_id;
+	const BotDialogNode* current_node = findDialogNode(current_node_id);
+	if(!current_node || choice_index >= current_node->choices.size())
+		return;
+
+	const uint32 next_node_id = current_node->choices[choice_index].next_node_id;
+	if(next_node_id == BotDialogChoice::END_DIALOG)
+	{
+		player_dialog_node_map.erase(uid);
+		for(const BotDialogNode& end_node : dialog_nodes)
+			if(end_node.node_id == BotDialogChoice::END_DIALOG)
+			{
+				if(!end_node.bot_text.empty())
+					sendChatMessage(end_node.bot_text, server, lock);
+				break;
+			}
+		sendDialogOptions(sender_avatar, nullptr, server);
+		return;
+	}
+
+	const BotDialogNode* next_node = findDialogNode(next_node_id);
+	if(!next_node)
+		return;
+	player_dialog_node_map[uid] = next_node_id;
+	if(!next_node->bot_text.empty())
+		sendChatMessage(next_node->bot_text, server, lock);
+	sendDialogOptions(sender_avatar, next_node, server);
+}
+
+
+void ChatBot::processDialogChoice(AvatarRef sender_avatar, uint32 node_id, uint32 choice_index, Server* server, WorldStateLock& lock)
+{
+	if(isDisabled() || !isActiveNow() || !isPlayerAllowed(sender_avatar) ||
+		!BitUtils::isBitSet(flags, USE_DIALOG_FLAG) || dialog_nodes.empty() || !sender_avatar ||
+		sender_avatar->pos.getDist2(pos) > Maths::square((double)chat_radius))
+		return;
+	const auto current = player_dialog_node_map.find(sender_avatar->uid);
+	if(current == player_dialog_node_map.end() || current->second != node_id)
+		return; // Ignore stale or forged choices from a previously displayed dialog node.
+	advanceDialogToChoice(sender_avatar, choice_index, server, lock);
+}
+
+
 bool ChatBot::botMessageMatchesMention(const std::string& msg) const
 {
 	if(name.empty()) return false;
@@ -687,47 +762,28 @@ ChatBot::EventHandlerResults ChatBot::processDialogMessage(const std::string& ms
 	if(!cur_node) return res; // Orphaned node id, ignore
 
 	// Try to match message against choices (first match wins; empty keywords = fallback)
-	const BotDialogChoice* matched = nullptr;
-	const BotDialogChoice* fallback = nullptr;
-	for(const auto& c : cur_node->choices)
+	int matched_index = -1;
+	int fallback_index = -1;
+	for(size_t i = 0; i < cur_node->choices.size(); ++i)
 	{
+		const BotDialogChoice& c = cur_node->choices[i];
 		if(c.keywords.empty())
-			fallback = &c;
+			fallback_index = (int)i;
 		else if(chatMessageMatchesKeywords(msg, c.keywords))
 		{
-			matched = &c;
+			matched_index = (int)i;
 			break;
 		}
 	}
-	if(!matched) matched = fallback;
+	if(matched_index < 0) matched_index = fallback_index;
 
-	if(!matched)
+	if(matched_index < 0)
 	{
 		// No match and no fallback — resend current node text as reminder if it hasn't been sent yet
 		return res;
 	}
 
-	const uint32 next_id = matched->next_node_id;
-
-	if(next_id == BotDialogChoice::END_DIALOG)
-	{
-		player_dialog_node_map.erase(uid);
-		// Send end-node text if the target node has one
-		const BotDialogNode* end_node = nullptr;
-		for(const auto& n : dialog_nodes)
-			if(n.node_id == BotDialogChoice::END_DIALOG) { end_node = &n; break; }
-		(void)end_node;
-	}
-	else
-	{
-		const BotDialogNode* next_node = findDialogNode(next_id);
-		if(next_node)
-		{
-			player_dialog_node_map[uid] = next_id;
-			if(!next_node->bot_text.empty())
-				sendChatMessage(next_node->bot_text, server, lock);
-		}
-	}
+	advanceDialogToChoice(sender_avatar, (uint32)matched_index, server, lock);
 	return res;
 }
 
@@ -950,6 +1006,15 @@ void ChatBot::playGestureNow(const std::string& gesture_name, const URLString& g
 	scratch_packet.writeDouble(start_global_time);
 	MessageUtils::updatePacketLengthField(scratch_packet);
 
+	server->enqueuePacketToBroadcastForWorld(scratch_packet, world);
+}
+
+
+void ChatBot::stopGestureNow(Server* server)
+{
+	MessageUtils::initPacket(scratch_packet, Protocol::AvatarStopGesture);
+	::writeToStream(avatar_uid, scratch_packet);
+	MessageUtils::updatePacketLengthField(scratch_packet);
 	server->enqueuePacketToBroadcastForWorld(scratch_packet, world);
 }
 
@@ -1401,10 +1466,12 @@ ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 					if(BitUtils::isBitSet(flags, USE_DIALOG_FLAG) && !dialog_nodes.empty())
 					{
 						const BotDialogNode* start = findDialogNode(dialog_start_node_id);
-						if(start && !start->bot_text.empty())
+						if(start)
 						{
-							sendChatMessage(start->bot_text, server, world_lock);
+							if(!start->bot_text.empty())
+								sendChatMessage(start->bot_text, server, world_lock);
 							player_dialog_node_map[other_avatar->uid] = dialog_start_node_id;
+							sendDialogOptions(it->first, start, server);
 						}
 					}
 					else
@@ -1527,6 +1594,8 @@ ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 				waypoint_walking = false;
 				if(!idle_gesture_name.empty())
 					playGestureNow(idle_gesture_name, idle_gesture_URL, idle_gesture_flags | 2, server);
+				else if(!walk_gesture_name.empty() || !walk_gesture_URL.empty())
+					stopGestureNow(server);
 			}
 		}
 		else
@@ -1594,6 +1663,8 @@ ChatBot::ThinkResults ChatBot::think(Server* server, WorldStateLock& world_lock)
 				// Stop walk gesture: play idle instead
 				if(!idle_gesture_name.empty())
 					playGestureNow(idle_gesture_name, idle_gesture_URL, idle_gesture_flags | 2 /*loop*/, server);
+				else if(!walk_gesture_name.empty() || !walk_gesture_URL.empty())
+					stopGestureNow(server);
 			}
 		}
 		else

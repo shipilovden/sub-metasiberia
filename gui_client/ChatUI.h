@@ -9,6 +9,7 @@
 #include <opengl/ui/GLUIGridContainer.h>
 #include <list>
 #include <vector>
+#include <chrono>
 
 class GUIClient;
 class ChatOverlayButton;
@@ -26,6 +27,10 @@ public:
 	bool isExpanded() const { return expanded; }
 	float occupiedHeightPixels() const; // Allows native notices to sit above the chat overlay.
 	void appendMessage(const std::string& name, const Colour3f& colour, const std::string& msg, bool user_message=false);
+	void setBotDialogOptions(const UID& bot_avatar_uid, const std::string& bot_name, uint32 node_id, const std::vector<ChatBotDialogOptionUI>& options);
+	UID botDialogTargetAvatarUID() const { return bot_dialog_avatar_uid; }
+	void setBotDialogAnchor(const Vec2f& ui_position, bool visible);
+	void clearBotDialogOptionsForAvatar(const UID& avatar_uid);
 	void viewportResized(int w,int h);
 	void setDrawAreaBottomLeftY(float y);
 	void think();
@@ -51,6 +56,7 @@ private:
 	void rebuildEmojiPickerContents();
 	void recreateMessage(ChatMessage& msg);
 	void removeMessageWidgets(ChatMessage& msg);
+	void clearBotDialogOptions();
 	void setEmojiPickerOpen(bool open);
 	void submit();
 	void insertEmoji(const std::string& emoji);
@@ -67,6 +73,13 @@ private:
 	GLUIButtonRef expand_button;
 	ChatReadState read_state;
 	std::vector<ChatOverlayButtonRef> emoji_category_buttons,emoji_picker_buttons;
+	std::vector<ChatOverlayButtonRef> bot_dialog_buttons;
+	UID bot_dialog_avatar_uid;
+	uint32 bot_dialog_node_id=0;
+	std::string bot_dialog_name;
+	Vec2f bot_dialog_anchor;
+	bool bot_dialog_anchor_valid=false;
+	std::chrono::steady_clock::time_point bot_dialog_expiry;
 	std::string last_search,reply_author,reply_text;
 	size_t current_emoji_category=0;
 	float draw_area_bottom_left_y=-1;

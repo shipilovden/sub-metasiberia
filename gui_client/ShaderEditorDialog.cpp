@@ -14,6 +14,9 @@ Copyright Glare Technologies Limited 2019 -
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QColorDialog>
+#include <QtGui/QColor>
+#include <QtGui/QFont>
+#include <QtGui/QPalette>
 #include <QtGui/QCloseEvent>
 #include <QtWidgets/QMessageBox>
 #include <QtCore/QSettings>
@@ -41,6 +44,17 @@ ShaderEditorDialog::ShaderEditorDialog(QWidget* parent, std::string base_dir_pat
 	text_has_changed(false)
 {
 	setupUi(this);
+
+	// Keep source code readable even when the main application uses a dark theme.
+	QPalette code_palette = shaderEdit->palette();
+	code_palette.setColor(QPalette::Base, QColor("#ffffff"));
+	code_palette.setColor(QPalette::Text, QColor("#202124"));
+	code_palette.setColor(QPalette::Highlight, QColor("#b8d5ff"));
+	code_palette.setColor(QPalette::HighlightedText, QColor("#111827"));
+	shaderEdit->setPalette(code_palette);
+	QFont code_font = shaderEdit->font();
+	code_font.setPointSize(11);
+	shaderEdit->setFont(code_font);
 
 	this->buildOutputTextEdit    ->shader_editor_dialog = this;
 	this->executionOutputTextEdit->shader_editor_dialog = this;

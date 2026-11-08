@@ -7,6 +7,7 @@ Copyright Glare Technologies Limited 2026 -
 #include "MCPTextureTools.h"
 #include "MCPImageGeneration.h"
 #include "MCPAnimationTools.h"
+#include "MCPBotEditorTools.h"
 #include "MCPTextMeshTools.h"
 #include "MCPBlenderBridge.h"
 #include "MCPClientLocalOnlyProtocol.h"
@@ -74,6 +75,9 @@ const char* INSPECT_WORLD_ENVIRONMENT_TOOL_JSON =
 	"{\"name\":\"inspect_world_environment\",\"description\":\"Read the active world's environment settings: water enabled/level, sun angles, both fog layers, volumetric clouds and lighting, water reflections, waves, shore foam and underwater caustics. Angles are returned in degrees.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}";
 const char* CONFIGURE_WORLD_ENVIRONMENT_TOOL_JSON =
 	"{\"name\":\"configure_world_environment\",\"description\":\"Change sky, fog and water settings in the active world. All properties are optional; provide at least one. Sun and wind/wave directions use degrees. cloud_bottom_z_m must remain below cloud_top_z_m. Water is controlled separately from underwater caustics. Requires owner/god write access.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"water_enabled\":{\"type\":\"boolean\"},\"water_level_m\":{\"type\":\"number\"},\"sun_angle_from_vertical_deg\":{\"type\":\"number\",\"minimum\":0,\"maximum\":120},\"sun_azimuth_deg\":{\"type\":\"number\",\"minimum\":0,\"maximum\":720},\"fog_layer_0_density\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"fog_layer_0_height_m\":{\"type\":\"number\",\"minimum\":0.1,\"maximum\":10000},\"fog_layer_1_density\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"fog_layer_1_height_m\":{\"type\":\"number\",\"minimum\":0.1,\"maximum\":10000},\"clouds_enabled\":{\"type\":\"boolean\"},\"cloud_bottom_z_m\":{\"type\":\"number\",\"minimum\":0,\"maximum\":100000},\"cloud_top_z_m\":{\"type\":\"number\",\"minimum\":0,\"maximum\":100000},\"cloud_coverage\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"cloud_density\":{\"type\":\"number\",\"minimum\":0,\"maximum\":0.02},\"cloud_wind_speed_mps\":{\"type\":\"number\",\"minimum\":0,\"maximum\":200},\"cloud_underside_darkness\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"cloud_edge_softness\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"cloud_horizon_fade\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"cloud_shape_scale_m\":{\"type\":\"number\",\"minimum\":100,\"maximum\":100000},\"cloud_detail_scale_m\":{\"type\":\"number\",\"minimum\":50,\"maximum\":10000},\"cloud_draw_distance_m\":{\"type\":\"number\",\"minimum\":100,\"maximum\":100000},\"cloud_wind_direction_deg\":{\"type\":\"number\",\"minimum\":0,\"maximum\":360},\"cloud_scattering\":{\"type\":\"number\",\"minimum\":0,\"maximum\":2},\"cloud_direct_sun\":{\"type\":\"number\",\"minimum\":0,\"maximum\":4},\"cloud_sky_light\":{\"type\":\"number\",\"minimum\":0,\"maximum\":4},\"cloud_sunset_response\":{\"type\":\"number\",\"minimum\":0,\"maximum\":4},\"cloud_ground_contribution\":{\"type\":\"number\",\"minimum\":0,\"maximum\":2},\"cloud_forward_scattering\":{\"type\":\"number\",\"minimum\":-0.85,\"maximum\":0.85},\"cloud_phase_blend\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"cloud_multiple_scattering\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"clouds_reflect_in_water\":{\"type\":\"boolean\"},\"water_reflection_strength\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"water_reflection_quality\":{\"type\":\"number\",\"minimum\":8,\"maximum\":48},\"water_reflection_horizon_fade\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"wave_height_m\":{\"type\":\"number\",\"minimum\":0,\"maximum\":10},\"wave_length_m\":{\"type\":\"number\",\"minimum\":0.5,\"maximum\":500},\"wave_steepness\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"wave_speed\":{\"type\":\"number\",\"minimum\":0,\"maximum\":8},\"wave_direction_deg\":{\"type\":\"number\",\"minimum\":0,\"maximum\":360},\"wave_direction_spread_deg\":{\"type\":\"number\",\"minimum\":0,\"maximum\":180},\"secondary_wave_scale\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"shore_surf_enabled\":{\"type\":\"boolean\"},\"underwater_caustics_enabled\":{\"type\":\"boolean\"},\"shore_surf_strength\":{\"type\":\"number\",\"minimum\":0,\"maximum\":2},\"shoreline_foam_width_m\":{\"type\":\"number\",\"minimum\":0.1,\"maximum\":100},\"foam_scale\":{\"type\":\"number\",\"minimum\":0.05,\"maximum\":10},\"foam_speed\":{\"type\":\"number\",\"minimum\":0,\"maximum\":8},\"foam_fade\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}},\"additionalProperties\":false}}";
+
+const char* GET_OBJECT_CLIENT_SCRIPT_LOG_TOOL_JSON =
+	"{\"name\":\"get_object_client_script_log\",\"description\":\"Read recent print and error messages from this Qt client's Luau execution for one object created by the currently logged-in account in the active world. This complements get_object_script_log, which reads server execution. The client retains a bounded in-memory window and may return no entries when the script has not run locally or logs have expired.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"uid\":{\"type\":\"string\",\"pattern\":\"^[0-9]+$\",\"minLength\":1,\"maxLength\":20},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}},\"required\":[\"uid\"],\"additionalProperties\":false}}";
 bool isLoopbackAddress(const IPAddress& addr)
 {
 	const std::string s = addr.toString();
@@ -322,7 +326,7 @@ std::string spliceNeuroResourcesIntoInitializeResponse(const std::string& respon
 }
 
 
-std::string spliceRenderViewIntoToolsList(const std::string& response, bool animation_available, bool text_mesh_available, bool neuro_control_available, bool blender_available)
+std::string spliceRenderViewIntoToolsList(const std::string& response, bool animation_available, bool text_mesh_available, bool bot_editor_available, bool neuro_control_available, bool blender_available, bool script_log_available)
 {
 	// This handler is part of the Qt local bridge. Parse the envelope rather than
 	// matching raw JSON text: the server may pretty-print its tool schema.
@@ -344,10 +348,12 @@ std::string spliceRenderViewIntoToolsList(const std::string& response, bool anim
 	tools.prepend(QJsonDocument::fromJson(QByteArray(CONFIGURE_TERRAIN_TOOL_JSON)).object());
 	tools.prepend(QJsonDocument::fromJson(QByteArray(INSPECT_WORLD_ENVIRONMENT_TOOL_JSON)).object());
 	tools.prepend(QJsonDocument::fromJson(QByteArray(CONFIGURE_WORLD_ENVIRONMENT_TOOL_JSON)).object());
+	if(script_log_available) tools.prepend(QJsonDocument::fromJson(QByteArray(GET_OBJECT_CLIENT_SCRIPT_LOG_TOOL_JSON)).object());
 	for(const QJsonValue& tool : MCPTextures::schemas()) tools.append(tool);
 	for(const QJsonValue& tool : MCPImages::schemas()) tools.append(tool);
 	if(animation_available) for(const QJsonValue& tool : MCPAnimationTools::schemas()) tools.append(tool);
 	if(text_mesh_available) for(const QJsonValue& tool : MCPTextMeshTools::schemas()) tools.append(tool);
+	if(bot_editor_available) for(const QJsonValue& tool : MCPBotEditorTools::schemas()) tools.append(tool);
 	if(neuro_control_available)
 	{
 		// The connected desktop client owns this registry. Replace any server
@@ -378,14 +384,16 @@ bool isFiniteVec(const Vec3d& v)
 } // anonymous namespace
 
 
-MCPClientRequestHandler::MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback_, const MCPClientStatusCallback& status_callback_, const std::function<bool()>& poly_haven_enabled_, const MCPClientTerrainCallback& terrain_callback_, const MCPClientTerrainCallback& animation_callback_, const MCPClientTerrainCallback& text_mesh_callback_, const MCPClientNeuroControlCallback& neuro_control_callback_, const MCPClientBlenderCallback& blender_callback_)
+MCPClientRequestHandler::MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback_, const MCPClientStatusCallback& status_callback_, const std::function<bool()>& poly_haven_enabled_, const MCPClientTerrainCallback& terrain_callback_, const MCPClientTerrainCallback& animation_callback_, const MCPClientTerrainCallback& text_mesh_callback_, const MCPClientTerrainCallback& bot_editor_callback_, const MCPClientNeuroControlCallback& neuro_control_callback_, const MCPClientBlenderCallback& blender_callback_, const MCPClientTerrainCallback& script_log_callback_)
 :	server_hostname(forwarding_target.server_hostname),
 	render_callback(render_callback_),
 	terrain_callback(terrain_callback_),
 	animation_callback(animation_callback_),
 	text_mesh_callback(text_mesh_callback_),
+	bot_editor_callback(bot_editor_callback_),
 	neuro_control_callback(neuro_control_callback_),
 	blender_callback(blender_callback_),
+	script_log_callback(script_log_callback_),
 	status_callback(status_callback_),
 	poly_haven_enabled(poly_haven_enabled_),
 	keepalive_configured(false)
@@ -613,6 +621,28 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 		{
 			const JSONNode& params = root.getChildObject(parser, "params");
 			const QString name=QString::fromStdString(params.getChildStringValue(parser,"name"));
+			if(name == QStringLiteral("get_object_client_script_log"))
+			{
+				try
+				{
+					if(!script_log_callback) throw glare::Exception("Client Luau log inspection is unavailable in this session.");
+					const QJsonObject request = QJsonDocument::fromJson(QByteArray::fromStdString(body)).object();
+					const QJsonValue arg_value = request.value(QStringLiteral("params")).toObject().value(QStringLiteral("arguments"));
+					if(!arg_value.isObject()) throw glare::Exception("Client Luau log arguments must be an object.");
+					const QJsonObject result = script_log_callback(name, arg_value.toObject());
+					const QString result_text = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+					const QJsonObject envelope{{"isError", false}, {"structuredContent", result}, {"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", result_text}}}}};
+					writeJSONRPCResult(reply_info, id_json, QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
+				}
+				catch(const std::exception& e)
+				{
+					const QString message = QString::fromUtf8(e.what());
+					const QJsonObject error{{"code", "CLIENT_LUA_LOG_FAILED"}, {"message", message}};
+					const QJsonObject envelope{{"isError", true}, {"structuredContent", QJsonObject{{"error", error}}}, {"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", message}}}}};
+					writeJSONRPCResult(reply_info, id_json, QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
+				}
+				return;
+			}
 			if(name.startsWith(QStringLiteral("blender.")))
 			{
 				try
@@ -684,13 +714,14 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 				}
 				return;
 			}
-			if(MCPAnimationTools::handles(name) || MCPTextMeshTools::handles(name))
+			if(MCPBotEditorTools::handles(name) || MCPAnimationTools::handles(name) || MCPTextMeshTools::handles(name))
 			{
 				try {
-					const auto& callback = MCPTextMeshTools::handles(name) ? text_mesh_callback : animation_callback;
+					const auto& callback = MCPBotEditorTools::handles(name) ? bot_editor_callback :
+						(MCPTextMeshTools::handles(name) ? text_mesh_callback : animation_callback);
 					if(!callback) throw glare::Exception("The requested native editor bridge is unavailable in this client.");
 					const QJsonValue arguments = QJsonDocument::fromJson(QByteArray::fromStdString(body)).object().value("params").toObject().value("arguments");
-					if(!arguments.isUndefined() && !arguments.isObject()) throw glare::Exception("Animation tool arguments must be an object.");
+					if(!arguments.isUndefined() && !arguments.isObject()) throw glare::Exception("Native editor tool arguments must be an object.");
 					const QJsonObject result = callback(name, arguments.toObject());
 					const QJsonObject envelope{{"isError",false},{"structuredContent",result},{"content",QJsonArray{QJsonObject{{"type","text"},{"text",QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))}}}}};
 					writeJSONRPCResult(reply_info,id_json,QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString());
@@ -781,8 +812,8 @@ void MCPClientRequestHandler::handleRequest(const web::RequestInfo& request_info
 		std::string response = forwardToServer(body);
 		if(method == "initialize" && neuro_control_callback)
 			response = spliceNeuroResourcesIntoInitializeResponse(response);
-		if(method == "tools/list" && (render_callback || terrain_callback || animation_callback || text_mesh_callback || neuro_control_callback || blender_callback))
-			response = spliceRenderViewIntoToolsList(response, (bool)animation_callback, (bool)text_mesh_callback, (bool)neuro_control_callback, (bool)blender_callback);
+		if(method == "tools/list" && (render_callback || terrain_callback || animation_callback || text_mesh_callback || bot_editor_callback || neuro_control_callback || blender_callback || script_log_callback))
+			response = spliceRenderViewIntoToolsList(response, (bool)animation_callback, (bool)text_mesh_callback, (bool)bot_editor_callback, (bool)neuro_control_callback, (bool)blender_callback, (bool)script_log_callback);
 		if(method == "resources/list" && neuro_control_callback) response = spliceNeuroResourcesIntoList(response);
 		web::ResponseUtils::writeHTTPOKHeaderAndData(reply_info, response.data(), response.size(), /*content type=*/"application/json");
 	}
@@ -839,5 +870,5 @@ bool MCPClientSharedRequestHandler::isConfigured() const
 
 Reference<web::RequestHandler> MCPClientSharedRequestHandler::getOrMakeRequestHandler()
 {
-	return new MCPClientRequestHandler(forwarding_target, render_callback, status_callback, poly_haven_enabled, terrain_callback, animation_callback, text_mesh_callback, neuro_control_callback, blender_callback);
+	return new MCPClientRequestHandler(forwarding_target, render_callback, status_callback, poly_haven_enabled, terrain_callback, animation_callback, text_mesh_callback, bot_editor_callback, neuro_control_callback, blender_callback, script_log_callback);
 }

@@ -210,6 +210,7 @@ public:
 	// A user/avatar sent a chat message, which this bot is in range of.
 	// Threadsafe, will be called from WorkerThreads but only when the world lock is held.
 	[[nodiscard]] EventHandlerResults processHeardChatMessage(const std::string& msg, AvatarRef sender_avatar, const std::string& avatar_name, Server* server, uint32 client_capabilities, WorldStateLock& lock);
+	void processDialogChoice(AvatarRef sender_avatar, uint32 node_id, uint32 choice_index, Server* server, WorldStateLock& lock);
 
 	// Handle some (partial, streaming) chat data coming back from an LLM cloud server.
 	// Called from the main thread only, in server.cpp.
@@ -518,6 +519,8 @@ private:
 	// Dialog tree helpers
 	const BotDialogNode* findDialogNode(uint32 node_id) const;
 	[[nodiscard]] EventHandlerResults processDialogMessage(const std::string& msg, AvatarRef sender_avatar, Server* server, WorldStateLock& lock);
+	void advanceDialogToChoice(AvatarRef sender_avatar, uint32 choice_index, Server* server, WorldStateLock& lock);
+	void sendDialogOptions(AvatarRef recipient_avatar, const BotDialogNode* node, Server* server);
 	bool botMessageMatchesMention(const std::string& msg) const;
 
 	// Prompt variables, memory, content safety
@@ -590,6 +593,7 @@ private:
 	uint32 wander_rng_state;           // LCG state for wander target selection
 
 	void playGestureNow(const std::string& gesture_name, const URLString& gesture_URL, uint32 gesture_flags, Server* server);
+	void stopGestureNow(Server* server);
 	bool canTriggerTimer(const Timer& timer, float min_interval_s) const;
 
 	SocketBufferOutStream scratch_packet;

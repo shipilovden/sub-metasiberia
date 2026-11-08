@@ -128,6 +128,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <QtCore/QUrlQuery>
 #include <QtCore/QVariant>
 #include <QtCore/QVector>
+#include <tuple>
 #include <QtGui/QContextMenuEvent>
 #include <QtGui/QCursor>
 #include <QtGui/QIcon>
@@ -2943,7 +2944,20 @@ void MainWindow::initialiseUI()
 	connect(ui->glWidget, SIGNAL(focusOutSignal()), this, SLOT(glWidgetFocusOut()));
 	connect(ui->glWidget, SIGNAL(mouseWheelSignal(QWheelEvent*)), this, SLOT(glWidgetMouseWheelEvent(QWheelEvent*)));
 	connect(ui->glWidget, SIGNAL(gamepadButtonXChangedSignal(bool)), this, SLOT(gamepadButtonXChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonBChangedSignal(bool)), this, SLOT(gamepadButtonBChanged(bool)));
 	connect(ui->glWidget, SIGNAL(gamepadButtonAChangedSignal(bool)), this, SLOT(gamepadButtonAChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonYChangedSignal(bool)), this, SLOT(gamepadButtonYChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonL1ChangedSignal(bool)), this, SLOT(gamepadButtonL1Changed(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonR1ChangedSignal(bool)), this, SLOT(gamepadButtonR1Changed(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonL3ChangedSignal(bool)), this, SLOT(gamepadButtonL3Changed(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonR3ChangedSignal(bool)), this, SLOT(gamepadButtonR3Changed(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonStartChangedSignal(bool)), this, SLOT(gamepadButtonStartChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonSelectChangedSignal(bool)), this, SLOT(gamepadButtonSelectChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonUpChangedSignal(bool)), this, SLOT(gamepadButtonUpChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonDownChangedSignal(bool)), this, SLOT(gamepadButtonDownChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonLeftChangedSignal(bool)), this, SLOT(gamepadButtonLeftChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadButtonRightChangedSignal(bool)), this, SLOT(gamepadButtonRightChanged(bool)));
+	connect(ui->glWidget, SIGNAL(gamepadConnectedChangedSignal(bool)), this, SLOT(gamepadConnectedChanged(bool)));
 	connect(ui->glWidget, SIGNAL(viewportResizedSignal(int, int)), this, SLOT(glWidgetViewportResized(int, int)));
 	connect(ui->glWidget, SIGNAL(cutShortcutActivated()), this, SLOT(glWidgetCutShortcutTriggered()));
 	connect(ui->glWidget, SIGNAL(copyShortcutActivated()), this, SLOT(glWidgetCopyShortcutTriggered()));
@@ -4675,14 +4689,39 @@ void MainWindow::logMessage(const std::string& msg) // Append to LogWindow log d
 }
 
 
+void MainWindow::recordLocalLuaLog(UID object_uid, const std::string& message, bool is_error)
+{
+	if(!object_uid.valid() || !gui_client.logged_in_user_id.valid())
+		return;
+	LocalLuaLogEntry entry;
+	entry.object_uid = object_uid.toString();
+	entry.owner_id = gui_client.logged_in_user_id.toString();
+	entry.server_hostname = gui_client.server_hostname;
+	entry.world_name = gui_client.server_worldname;
+	entry.timestamp_utc = QtUtils::toIndString(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+	entry.message = message.substr(0, 4096);
+	entry.is_error = is_error;
+	local_lua_log_bytes += entry.object_uid.size() + entry.owner_id.size() + entry.server_hostname.size() + entry.world_name.size() + entry.timestamp_utc.size() + entry.message.size();
+	local_lua_log_entries.push_back(entry);
+	while(local_lua_log_entries.size() > 512 || local_lua_log_bytes > 512 * 1024)
+	{
+		const LocalLuaLogEntry& oldest = local_lua_log_entries.front();
+		local_lua_log_bytes -= oldest.object_uid.size() + oldest.owner_id.size() + oldest.server_hostname.size() + oldest.world_name.size() + oldest.timestamp_utc.size() + oldest.message.size();
+		local_lua_log_entries.pop_front();
+	}
+}
+
+
 void MainWindow::printFromLuaScript(const std::string& msg, UID object_uid)
 {
+	recordLocalLuaLog(object_uid, msg, false);
 	ui->objectEditor->printFromLuaScript(msg, object_uid);
 }
 
 
 void MainWindow::luaErrorOccurred(const std::string& msg, UID object_uid)
 {
+	recordLocalLuaLog(object_uid, msg, true);
 	ui->objectEditor->luaErrorOccurred(msg, object_uid);
 }
 
@@ -11155,6 +11194,275 @@ void MainWindow::on_actionCloneObject_triggered()
 }
 
 
+void MainWindow::on_actionMergeSelectedObjects_triggered()
+{
+	try
+	{
+		if(gui_client.world_state.isNull() || gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
+			throw glare::Exception("Connect to a world before merging objects.");
+		if(gui_client.selected_ob.isNull())
+			throw glare::Exception("Select at least two objects with Ctrl+left-click.");
+
+		std::vector<WorldObjectRef> selected;
+		selected.push_back(gui_client.selected_ob);
+		for(size_t i = 0; i < gui_client.additional_selected_obs.size(); ++i)
+			if(gui_client.additional_selected_obs[i].nonNull())
+				selected.push_back(gui_client.additional_selected_obs[i]);
+		if(selected.size() < 2)
+			throw glare::Exception("Select at least two objects with Ctrl+left-click.");
+		if(selected.size() > 32)
+			throw glare::Exception("Merge is limited to 32 objects at a time.");
+
+		const WorldObject::ObjectType type = selected[0]->object_type;
+		if(type != WorldObject::ObjectType_Generic && type != WorldObject::ObjectType_VoxelGroup)
+			throw glare::Exception("Only static .bmesh objects or voxel objects can be merged.");
+
+		std::vector<UID> source_uids;
+		std::vector<WorldObjectRef> snapshots;
+		source_uids.reserve(selected.size());
+		snapshots.reserve(selected.size());
+		for(size_t i = 0; i < selected.size(); ++i)
+		{
+			if(selected[i]->object_type != type)
+				throw glare::Exception("Merge static meshes and voxels in separate operations.");
+			if(!gui_client.objectModificationAllowedWithMsg(*selected[i], "merge"))
+				return;
+			source_uids.push_back(selected[i]->uid);
+		}
+
+		{
+			Lock lock(gui_client.world_state->mutex);
+			for(size_t i = 0; i < selected.size(); ++i)
+			{
+				auto live_it = gui_client.world_state->objects.find(selected[i]->uid);
+				if(live_it == gui_client.world_state->objects.end() || live_it.getValue().ptr() != selected[i].ptr())
+					throw glare::Exception("One of the selected objects is no longer in this world.");
+				snapshots.push_back(new WorldObject());
+				snapshots.back()->copyNetworkStateFrom(*selected[i]);
+				if(type == WorldObject::ObjectType_VoxelGroup)
+				{
+					selected[i]->decompressVoxels();
+					snapshots.back()->getDecompressedVoxels() = selected[i]->getDecompressedVoxels();
+				}
+			}
+		}
+
+		const std::string merge_token = "metasiberia-merge:" + QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+		std::vector<WorldMaterialRef> merged_materials;
+		Vec3d position = snapshots[0]->pos;
+		Vec3f scale = snapshots[0]->scale;
+		Vec3f axis = snapshots[0]->axis;
+		float angle = snapshots[0]->angle;
+
+		if(type == WorldObject::ObjectType_Generic)
+		{
+			Indigo::Mesh merged_indigo_mesh;
+			size_t material_offset = 0;
+			size_t vertex_offset = 0;
+			size_t uv_offset = 0;
+			bool first_mesh = true;
+
+			for(size_t object_i = 0; object_i < snapshots.size(); ++object_i)
+			{
+				const WorldObject& object = *snapshots[object_i];
+				if(object.object_type != WorldObject::ObjectType_Generic || !hasExtension(object.model_url, "bmesh") ||
+					!object.script.empty() || !object.content.empty() || !object.target_url.empty() || !object.audio_source_url.empty() ||
+					object.isAudioPlayerWebView())
+					throw glare::Exception("Static merge accepts plain, non-scripted native .bmesh objects only.");
+
+				const std::string source_path = gui_client.resource_manager->pathForURL(object.model_url);
+				if(!FileUtils::fileExists(source_path))
+					throw glare::Exception("A selected .bmesh file is not available in the local resource cache.");
+				BatchedMeshRef source_bmesh = BatchedMesh::readFromFile(source_path, nullptr);
+				if(!source_bmesh->animation_data.animations.empty() || !source_bmesh->animation_data.nodes.empty())
+					throw glare::Exception("Animated or skeleton-bound meshes cannot be joined as static geometry.");
+				for(size_t attr_i = 0; attr_i < source_bmesh->vert_attributes.size(); ++attr_i)
+				{
+					const BatchedMesh::VertAttributeType attr = source_bmesh->vert_attributes[attr_i].type;
+					if(attr != BatchedMesh::VertAttribute_Position && attr != BatchedMesh::VertAttribute_Normal &&
+						attr != BatchedMesh::VertAttribute_UV_0 && attr != BatchedMesh::VertAttribute_UV_1)
+						throw glare::Exception("A selected mesh uses vertex attributes this first merge mode cannot preserve.");
+				}
+				for(size_t mat_i = 0; mat_i < object.materials.size(); ++mat_i)
+					merged_materials.push_back(object.materials[mat_i]);
+
+				Reference<Indigo::Mesh> part = source_bmesh->buildIndigoMesh();
+				if(part->uv_layout != Indigo::MESH_UV_LAYOUT_VERTEX_LAYER && part->uv_layout != Indigo::MESH_UV_LAYOUT_LAYER_VERTEX)
+					throw glare::Exception("A selected mesh uses an unsupported UV layout.");
+				if(first_mesh)
+				{
+					merged_indigo_mesh.num_uv_mappings = part->num_uv_mappings;
+					// Normalise every source to vertex-major UV storage so pieces
+					// with either supported Indigo layout can be joined safely.
+					merged_indigo_mesh.uv_layout = Indigo::MESH_UV_LAYOUT_VERTEX_LAYER;
+					first_mesh = false;
+				}
+				else if(part->num_uv_mappings != merged_indigo_mesh.num_uv_mappings ||
+					part->vert_normals.empty() != merged_indigo_mesh.vert_normals.empty())
+					throw glare::Exception("Selected meshes must use compatible normals and UV layouts.");
+				if(part->num_uv_mappings == 0 && !part->uv_pairs.empty())
+					throw glare::Exception("A selected mesh has UV coordinates but declares no UV mappings.");
+				if(part->num_uv_mappings > 0 && part->uv_pairs.size() % part->num_uv_mappings != 0)
+					throw glare::Exception("A selected mesh has malformed UV mapping storage.");
+
+				Matrix4f source_to_target = worldToObMatrix(*snapshots[0]) * obToWorldMatrix(object);
+				Matrix4f normal_transform;
+				if(!source_to_target.getUpperLeftInverseTranspose(normal_transform))
+					throw glare::Exception("A selected object has a singular transform and cannot be merged.");
+				const bool reverse_winding = source_to_target.upperLeftDeterminant() < 0.f;
+				for(size_t v = 0; v < part->vert_positions.size(); ++v)
+				{
+					const Indigo::Vec3f p = part->vert_positions[v];
+					const Vec4f local = source_to_target * Vec4f(p.x, p.y, p.z, 1.f);
+					merged_indigo_mesh.vert_positions.push_back(Indigo::Vec3f(local[0], local[1], local[2]));
+					if(!part->vert_normals.empty())
+					{
+						const Indigo::Vec3f n = part->vert_normals[v];
+						const Vec4f transformed = normal_transform * Vec4f(n.x, n.y, n.z, 0.f);
+						const Vec3f normal = normalise(Vec3f(transformed[0], transformed[1], transformed[2]));
+						merged_indigo_mesh.vert_normals.push_back(Indigo::Vec3f(normal.x, normal.y, normal.z));
+					}
+				}
+				const size_t part_uv_group_count = part->num_uv_mappings == 0 ? 0 : part->uv_pairs.size() / part->num_uv_mappings;
+				if(part->uv_layout == Indigo::MESH_UV_LAYOUT_VERTEX_LAYER)
+					for(size_t uv_i = 0; uv_i < part->uv_pairs.size(); ++uv_i)
+						merged_indigo_mesh.uv_pairs.push_back(part->uv_pairs[uv_i]);
+				else
+					for(size_t uv_i = 0; uv_i < part_uv_group_count; ++uv_i)
+						for(size_t layer_i = 0; layer_i < part->num_uv_mappings; ++layer_i)
+							merged_indigo_mesh.uv_pairs.push_back(part->uv_pairs[layer_i * part_uv_group_count + uv_i]);
+				for(size_t tri_i = 0; tri_i < part->triangles.size(); ++tri_i)
+				{
+					Indigo::Triangle tri = part->triangles[tri_i];
+					for(size_t corner = 0; corner < 3; ++corner)
+					{
+						tri.vertex_indices[corner] += (uint32)vertex_offset;
+						tri.uv_indices[corner] += (uint32)uv_offset;
+					}
+					if(reverse_winding)
+						std::swap(tri.vertex_indices[1], tri.vertex_indices[2]);
+					if(tri.tri_mat_index >= object.materials.size())
+						throw glare::Exception("A mesh references a material slot missing from its object.");
+					tri.tri_mat_index += (uint32)material_offset;
+					merged_indigo_mesh.triangles.push_back(tri);
+				}
+				for(size_t quad_i = 0; quad_i < part->quads.size(); ++quad_i)
+				{
+					Indigo::Quad quad = part->quads[quad_i];
+					for(size_t corner = 0; corner < 4; ++corner)
+					{
+						quad.vertex_indices[corner] += (uint32)vertex_offset;
+						quad.uv_indices[corner] += (uint32)uv_offset;
+					}
+					if(reverse_winding)
+						{
+						std::swap(quad.vertex_indices[1], quad.vertex_indices[3]);
+						std::swap(quad.uv_indices[1], quad.uv_indices[3]);
+					}
+					if(quad.mat_index >= object.materials.size())
+						throw glare::Exception("A mesh references a material slot missing from its object.");
+					quad.mat_index += (uint32)material_offset;
+					merged_indigo_mesh.quads.push_back(quad);
+				}
+				vertex_offset += part->vert_positions.size();
+				uv_offset += part_uv_group_count;
+				material_offset += object.materials.size();
+			}
+
+			if(merged_materials.empty())
+				throw glare::Exception("Selected meshes have no material slots.");
+			merged_indigo_mesh.endOfModel();
+			BatchedMeshRef merged_bmesh = BatchedMesh::buildFromIndigoMesh(merged_indigo_mesh);
+			merged_bmesh->checkValidAndSanitiseMesh();
+			const std::string bmesh_path = PlatformUtils::getTempDirPath() + "/metasiberia_merge_" + QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString() + ".bmesh";
+			BatchedMesh::WriteOptions write_options;
+			write_options.compression_level = 9;
+			merged_bmesh->writeToFile(bmesh_path, write_options);
+			gui_client.createObject(bmesh_path, merged_bmesh, false, glare::AllocatorVector<Voxel, 16>(), position, scale, axis, angle, merged_materials, source_uids, merge_token);
+		}
+		else
+		{
+			VoxelEditorState merged_editor_state = VoxelEditorData::fromObject(*snapshots[0]);
+			if(snapshots[0]->scale.x <= 0.f || snapshots[0]->scale.y <= 0.f || snapshots[0]->scale.z <= 0.f)
+				throw glare::Exception("Voxel objects with non-positive scale cannot be merged.");
+			std::map<std::tuple<int,int,int>, Voxel> merged_cells;
+			size_t material_offset = 0;
+			for(size_t object_i = 0; object_i < snapshots.size(); ++object_i)
+			{
+				WorldObject& object = *snapshots[object_i];
+				if(object.object_type != WorldObject::ObjectType_VoxelGroup || object.getDecompressedVoxels().empty())
+					throw glare::Exception("Each selected voxel object must contain at least one cell.");
+				if(object.materials.size() + material_offset > (size_t)VoxelEditorData::MAX_MATERIAL_INDEX + 1)
+					throw glare::Exception("Merged voxel palette would exceed the supported 255 materials.");
+				VoxelEditorState editor_state = VoxelEditorData::fromObject(object);
+				if(editor_state.render_mode != merged_editor_state.render_mode || editor_state.smooth_normals != merged_editor_state.smooth_normals ||
+					editor_state.legacy_content != merged_editor_state.legacy_content)
+					throw glare::Exception("Voxel objects with different render modes or legacy content cannot be merged in this version.");
+				if(object_i > 0 && merged_editor_state.layers.size() + editor_state.layers.size() > VoxelEditorData::MAX_LAYERS)
+					throw glare::Exception("Combined voxel layer count exceeds the editor limit.");
+				const Matrix4f source_to_target = worldToObMatrix(*snapshots[0]) * obToWorldMatrix(object);
+				const Vec4f origin_cell = source_to_target * Vec4f(0,0,0,1);
+				const Vec4f x_cell = source_to_target * Vec4f(1,0,0,1);
+				const Vec4f y_cell = source_to_target * Vec4f(0,1,0,1);
+				const Vec4f z_cell = source_to_target * Vec4f(0,0,1,1);
+				const auto approximatelyEqual = [](float a, float b) { return std::fabs(a - b) <= 1.0e-4f; };
+				if(!approximatelyEqual(x_cell[0]-origin_cell[0],1.f) || !approximatelyEqual(x_cell[1]-origin_cell[1],0.f) || !approximatelyEqual(x_cell[2]-origin_cell[2],0.f) ||
+					!approximatelyEqual(y_cell[0]-origin_cell[0],0.f) || !approximatelyEqual(y_cell[1]-origin_cell[1],1.f) || !approximatelyEqual(y_cell[2]-origin_cell[2],0.f) ||
+					!approximatelyEqual(z_cell[0]-origin_cell[0],0.f) || !approximatelyEqual(z_cell[1]-origin_cell[1],0.f) || !approximatelyEqual(z_cell[2]-origin_cell[2],1.f))
+					throw glare::Exception("Voxel objects must have the same orientation and cell size to merge.");
+				const int offset_x = (int)std::round(origin_cell[0]), offset_y = (int)std::round(origin_cell[1]), offset_z = (int)std::round(origin_cell[2]);
+				if(!approximatelyEqual(origin_cell[0],(float)offset_x) || !approximatelyEqual(origin_cell[1],(float)offset_y) || !approximatelyEqual(origin_cell[2],(float)offset_z))
+					throw glare::Exception("Voxel origins must align to the same cell grid.");
+				for(size_t v = 0; v < object.getDecompressedVoxels().size(); ++v)
+				{
+					Voxel cell = object.getDecompressedVoxels()[v];
+					if(cell.mat_index < 0 || (size_t)cell.mat_index >= object.materials.size())
+						throw glare::Exception("A voxel references a material slot missing from its object.");
+					cell.pos += Vec3<int>(offset_x, offset_y, offset_z);
+					cell.mat_index += (int)material_offset;
+					merged_cells.emplace(std::make_tuple(cell.pos.x,cell.pos.y,cell.pos.z), cell); // The first selected object wins cell overlaps.
+				}
+				for(size_t m = 0; m < object.materials.size(); ++m)
+					merged_materials.push_back(object.materials[m]);
+				if(object_i > 0)
+					for(size_t layer_i = 0; layer_i < editor_state.layers.size(); ++layer_i)
+					{
+						VoxelLayer layer = editor_state.layers[layer_i];
+						for(size_t m = 0; m < layer.material_indices.size(); ++m)
+							layer.material_indices[m] += (int)material_offset;
+						merged_editor_state.layers.push_back(layer);
+					}
+				for(size_t colour_i = 0; colour_i < editor_state.palette.colours.size(); ++colour_i)
+					if(std::find(merged_editor_state.palette.colours.begin(), merged_editor_state.palette.colours.end(), editor_state.palette.colours[colour_i]) == merged_editor_state.palette.colours.end())
+						merged_editor_state.palette.colours.push_back(editor_state.palette.colours[colour_i]);
+				if(merged_editor_state.palette.colours.size() > VoxelEditorData::MAX_PALETTE_COLOURS)
+					throw glare::Exception("Combined voxel editor palette exceeds the 64-colour limit.");
+				material_offset += object.materials.size();
+			}
+			merged_editor_state.active_layer = 0;
+			merged_editor_state.current_material_index = 0;
+			merged_editor_state.palette.recent_colours.clear();
+			if(merged_materials.empty())
+				throw glare::Exception("Selected voxel objects have no material slots.");
+			glare::AllocatorVector<Voxel, 16> merged_voxels;
+			merged_voxels.reserve(merged_cells.size());
+			for(auto it = merged_cells.begin(); it != merged_cells.end(); ++it)
+				merged_voxels.push_back(it->second);
+			WorldObject editor_metadata;
+			editor_metadata.object_type = WorldObject::ObjectType_VoxelGroup;
+			editor_metadata.materials = merged_materials;
+			VoxelEditorData::storeOnObject(editor_metadata, merged_editor_state);
+			gui_client.createObject("", nullptr, false, merged_voxels, position, scale, axis, angle, merged_materials, source_uids, merge_token, editor_metadata.content);
+		}
+		showInfoNotification("Объединение запущено. После подтверждения сервера детали станут одним выбранным объектом; исходные удалятся только после успешной загрузки меша.");
+	}
+	catch(const std::exception& e)
+	{
+		showErrorNotification(std::string("Could not merge selected objects: ") + e.what());
+	}
+}
+
+
 void MainWindow::on_actionDeleteObject_triggered()
 {
 	if(gui_client.selected_ob.nonNull())
@@ -12271,6 +12579,54 @@ void MainWindow::startMCPClientServerIfEnabled()
 		MainOptionsDialog::minMCPPort(), MainOptionsDialog::maxMCPPort());
 	Reference<MCPClientSharedRequestHandler> shared_handler = new MCPClientSharedRequestHandler();
 	shared_handler->setPolyHavenEnabledCallback([this]() { return mcp_poly_haven_enabled.load(); });
+	shared_handler->setScriptLogCallback([this](const QString& tool, const QJsonObject& args) -> QJsonObject {
+		struct PendingClientLogRequest {
+			QSemaphore done;
+			std::atomic<bool> cancelled{false};
+			QJsonObject result;
+			std::string error;
+		};
+		const auto pending = std::make_shared<PendingClientLogRequest>();
+		QMetaObject::invokeMethod(this, [this, pending, tool, args]() {
+			if(pending->cancelled.load()) return;
+			try {
+				if(tool != QStringLiteral("get_object_client_script_log")) throw std::runtime_error("Unknown client Luau log tool.");
+				if(closing || !mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected || !gui_client.logged_in_user_id.valid())
+					throw std::runtime_error("Connect to the active world and log in before reading client Luau logs.");
+				for(auto it = args.constBegin(); it != args.constEnd(); ++it)
+					if(it.key() != QStringLiteral("uid") && it.key() != QStringLiteral("limit")) throw std::runtime_error("Only uid and limit are accepted.");
+				bool uid_ok = false;
+				const qulonglong raw_uid = args.value(QStringLiteral("uid")).toString().toULongLong(&uid_ok);
+				if(!uid_ok || raw_uid == std::numeric_limits<qulonglong>::max()) throw std::runtime_error("uid must be a valid decimal object UID.");
+				int limit = 100;
+				if(args.contains(QStringLiteral("limit"))) {
+					const QJsonValue value = args.value(QStringLiteral("limit"));
+					if(!value.isDouble() || std::floor(value.toDouble()) != value.toDouble() || value.toDouble() < 1 || value.toDouble() > 100)
+						throw std::runtime_error("limit must be an integer from 1 to 100.");
+					limit = (int)value.toDouble();
+				}
+				const std::string uid = UID((uint64)raw_uid).toString();
+				const std::string owner = gui_client.logged_in_user_id.toString();
+				const std::string server = gui_client.server_hostname;
+				const std::string world = gui_client.server_worldname;
+				QJsonArray entries;
+				for(auto it = local_lua_log_entries.rbegin(); it != local_lua_log_entries.rend() && entries.size() < limit; ++it)
+					if(it->object_uid == uid && it->owner_id == owner && it->server_hostname == server && it->world_name == world)
+						entries.prepend(QJsonObject{{"timestamp_utc", QString::fromStdString(it->timestamp_utc)},
+							{"level", it->is_error ? QStringLiteral("error") : QStringLiteral("print")},
+							{"message", QString::fromStdString(it->message)}});
+				pending->result = QJsonObject{{"uid", QString::fromStdString(uid)}, {"execution_side", QStringLiteral("Qt client")},
+					{"entries", entries}, {"count", entries.size()}, {"limit", limit},
+					{"retention", QStringLiteral("bounded in-memory log; entries are scoped to the current account and world")}};
+			} catch(const std::exception& e) { pending->error = e.what(); }
+			catch(...) { pending->error = "Client Luau log inspection failed."; }
+			pending->done.release();
+		}, Qt::QueuedConnection);
+		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 10000))
+			throw glare::Exception(mcp_shutdown_requested.load() ? "Client Luau log request cancelled because MCP is shutting down." : "Client Luau log request timed out.");
+		if(!pending->error.empty()) throw glare::Exception(pending->error);
+		return pending->result;
+	});
 	const QString blender_context_server = QString::fromStdString(gui_client.server_hostname);
 	const QString blender_context_world = QString::fromStdString(gui_client.server_worldname);
 	const bool blender_context_connected = gui_client.connection_state == GUIClient::ServerConnectionState_Connected;
@@ -12377,6 +12733,124 @@ void MainWindow::startMCPClientServerIfEnabled()
 		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 10000))
 			throw glare::Exception(mcp_shutdown_requested.load() ? "Animation editor request cancelled because MCP is shutting down." :
 				"Animation editor request timed out. Inspect animation_editor_list before retrying a mutation.");
+		if(!pending->error.empty()) throw glare::Exception(pending->error);
+		return pending->result;
+	});
+	shared_handler->setBotEditorCallback([this, render_server, render_world, animation_user](const QString& tool, const QJsonObject& args) -> QJsonObject {
+		struct PendingBotEditorRequest {
+			QSemaphore done;
+			std::atomic<bool> cancelled{false};
+			QJsonObject result;
+			std::string error;
+		};
+		const auto pending = std::make_shared<PendingBotEditorRequest>();
+		QMetaObject::invokeMethod(this, [this, pending, tool, args, render_server, render_world, animation_user]() {
+			if(pending->cancelled.load()) return;
+			try {
+				if(closing || !mcp_client_server_running || gui_client.connection_state != GUIClient::ServerConnectionState_Connected ||
+					gui_client.server_hostname != render_server || gui_client.server_worldname != render_world || gui_client.logged_in_user_id != animation_user)
+					throw std::runtime_error("Active account or world changed. Reconnect MCP before editing bots.");
+				if(!gui_client.logged_in_user_id.valid())
+					throw std::runtime_error("Log in before listing or changing bots.");
+
+				if(tool == QStringLiteral("bot_editor_create"))
+				{
+					const QJsonValue position_value = args.value(QStringLiteral("position"));
+					if(!position_value.isObject()) throw std::runtime_error("position must be an object with finite x, y and z metres.");
+					const QJsonObject position = position_value.toObject();
+					const double x = position.value(QStringLiteral("x")).toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double y = position.value(QStringLiteral("y")).toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double z = position.value(QStringLiteral("z")).toDouble(std::numeric_limits<double>::quiet_NaN());
+					const double heading_degrees = args.value(QStringLiteral("heading_degrees")).toDouble(0.0);
+					if(!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(heading_degrees) ||
+						std::abs(x) > 1.0e7 || std::abs(y) > 1.0e7 || std::abs(z) > 1.0e7)
+						throw std::runtime_error("position and heading_degrees must be finite; world coordinates are limited to 10,000,000 metres.");
+					gui_client.createBot(Vec3d(x, y, z), (float)(heading_degrees * Maths::pi<double>() / 180.0));
+					pending->result = QJsonObject{{"submitted", true},
+						{"message", QStringLiteral("Create request sent. The server checks parcel permissions asynchronously; call bot_editor_list after the created bot appears.")}};
+				}
+				else if(tool == QStringLiteral("bot_editor_list"))
+				{
+					if(!args.isEmpty()) throw std::runtime_error("bot_editor_list takes no arguments.");
+					if(gui_client.bot_infos.empty())
+					{
+						gui_client.queryUserBots();
+						pending->result = QJsonObject{{"bots", QJsonArray()}, {"refresh_requested", true},
+							{"message", QStringLiteral("Bot list requested. Call bot_editor_list again after it refreshes.")}};
+					}
+					else
+					{
+						QJsonArray bots;
+						for(const auto& entry : gui_client.bot_infos)
+						{
+							const GUIClient::BotClientInfo& bot = entry.second;
+						bots.append(QJsonObject{{"bot_id", QString::number((qulonglong)bot.bot_id)},
+							{"avatar_uid", QString::fromStdString(bot.avatar_uid.toString())}, {"name", QString::fromStdString(bot.name)},
+							{"position", QJsonObject{{"x", bot.pos.x}, {"y", bot.pos.y}, {"z", bot.pos.z}}},
+							{"movement_type", (int)bot.movement_type}, {"dialog_node_count", (int)bot.dialog_nodes.size()},
+							{"animation_slots", QJsonArray{
+								QJsonObject{{"slot", "greeting"}, {"name", QString::fromStdString(bot.greeting_name)}, {"url", QString::fromStdString(bot.greeting_url)}},
+								QJsonObject{{"slot", "idle"}, {"name", QString::fromStdString(bot.idle_name)}, {"url", QString::fromStdString(bot.idle_url)}},
+								QJsonObject{{"slot", "reactive"}, {"name", QString::fromStdString(bot.reactive_name)}, {"url", QString::fromStdString(bot.reactive_url)}},
+								QJsonObject{{"slot", "surprise"}, {"name", QString::fromStdString(bot.surprise_name)}, {"url", QString::fromStdString(bot.surprise_url)}},
+								QJsonObject{{"slot", "acknowledge"}, {"name", QString::fromStdString(bot.acknowledge_name)}, {"url", QString::fromStdString(bot.acknowledge_url)}},
+								QJsonObject{{"slot", "farewell"}, {"name", QString::fromStdString(bot.farewell_gesture_name)}, {"url", QString::fromStdString(bot.farewell_gesture_url)}},
+								QJsonObject{{"slot", "walk"}, {"name", QString::fromStdString(bot.walk_gesture_name)}, {"url", QString::fromStdString(bot.walk_gesture_url)}},
+								QJsonObject{{"slot", "talk"}, {"name", QString::fromStdString(bot.talk_gesture_name)}, {"url", QString::fromStdString(bot.talk_gesture_url)}},
+								QJsonObject{{"slot", "interaction"}, {"name", QString::fromStdString(bot.interaction_gesture_name)}, {"url", QString::fromStdString(bot.interaction_gesture_url)}}}}});
+						}
+						pending->result = QJsonObject{{"bots", bots}, {"count", bots.size()},
+							{"scope", QStringLiteral("Bots returned by the connected server for the current account. Secret fields are not exposed.")}};
+					}
+				}
+				else if(tool == QStringLiteral("bot_editor_get"))
+				{
+					const QString id_text = args.value(QStringLiteral("bot_id")).toString();
+					bool id_ok = false;
+					const qulonglong bot_id = id_text.toULongLong(&id_ok);
+					if(!id_ok || bot_id == 0) throw std::runtime_error("bot_id must be a decimal string returned by bot_editor_list.");
+				auto bot_it = gui_client.bot_infos.find((uint64)bot_id);
+					if(bot_it == gui_client.bot_infos.end())
+						throw std::runtime_error("Bot not found in the current account's bot list. Call bot_editor_list first.");
+					gui_client.selectBotAvatar(bot_it->second.avatar_uid);
+					if(!ui->botEditorWidget || ui->botEditorWidget->currentBotId() != bot_id)
+						throw std::runtime_error("The native Bot Editor could not select this bot.");
+					pending->result = QJsonObject{{"bot_id", id_text}, {"settings", ui->botEditorWidget->exportConfigurationForMCP()},
+						{"scope", QStringLiteral("Current bot settings, excluding API keys and secret values.")}};
+				}
+				else if(tool == QStringLiteral("bot_editor_configure"))
+				{
+					const QString id_text = args.value(QStringLiteral("bot_id")).toString();
+					bool id_ok = false;
+					const qulonglong bot_id = id_text.toULongLong(&id_ok);
+					const QJsonValue settings_value = args.value(QStringLiteral("settings"));
+					if(!id_ok || bot_id == 0 || !settings_value.isObject())
+						throw std::runtime_error("bot_id must be a decimal string and settings must be an object.");
+				auto bot_it = gui_client.bot_infos.find((uint64)bot_id);
+					if(bot_it == gui_client.bot_infos.end())
+						throw std::runtime_error("Bot not found in the current account's bot list. Call bot_editor_list and use one of its bot_id values.");
+					gui_client.selectBotAvatar(bot_it->second.avatar_uid);
+					if(!ui->botEditorWidget || ui->botEditorWidget->currentBotId() != bot_id)
+						throw std::runtime_error("The native Bot Editor could not select this bot.");
+					const QJsonObject applied_settings = settings_value.toObject();
+					ui->botEditorWidget->applyMCPConfiguration(applied_settings);
+					QJsonArray applied_fields;
+					for(auto it = applied_settings.begin(); it != applied_settings.end(); ++it)
+						applied_fields.append(it.key());
+					pending->result = QJsonObject{{"bot_id", id_text}, {"submitted", true}, {"applied_fields", applied_fields},
+						{"message", QStringLiteral("Settings were sent through the existing Bot Editor and server authorization flow. Read bot_editor_list again to confirm the server's updated summary.")}};
+				}
+				else
+					throw std::runtime_error("Unknown bot editor tool.");
+			}
+			catch(const glare::Exception& e) { pending->error = e.what(); }
+			catch(const std::exception& e) { pending->error = e.what(); }
+			catch(...) { pending->error = "Bot editor operation failed."; }
+			pending->done.release();
+		}, Qt::QueuedConnection);
+		if(!waitForMCPReply(pending->done, mcp_shutdown_requested, pending->cancelled, 15000))
+			throw glare::Exception(mcp_shutdown_requested.load() ? "Bot editor request cancelled because MCP is shutting down." :
+				"Bot editor request timed out. Inspect the bot list before retrying a mutation.");
 		if(!pending->error.empty()) throw glare::Exception(pending->error);
 		return pending->result;
 	});
@@ -15126,10 +15600,35 @@ void MainWindow::gamepadButtonXChanged(bool pressed)
 }
 
 
+void MainWindow::gamepadButtonBChanged(bool pressed)
+{
+	gui_client.gamepadButtonBChanged(pressed);
+}
+
+
 void MainWindow::gamepadButtonAChanged(bool pressed)
 {
 	gui_client.gamepadButtonAChanged(pressed);
 }
+
+
+void MainWindow::gamepadButtonYChanged(bool pressed)
+{
+	gui_client.gamepadButtonYChanged(pressed);
+}
+
+
+void MainWindow::gamepadButtonL1Changed(bool pressed) { gui_client.gamepadButtonL1Changed(pressed); }
+void MainWindow::gamepadButtonR1Changed(bool pressed) { gui_client.gamepadButtonR1Changed(pressed); }
+void MainWindow::gamepadButtonL3Changed(bool pressed) { gui_client.gamepadButtonL3Changed(pressed); }
+void MainWindow::gamepadButtonR3Changed(bool pressed) { gui_client.gamepadButtonR3Changed(pressed); }
+void MainWindow::gamepadButtonStartChanged(bool pressed) { gui_client.gamepadButtonStartChanged(pressed); }
+void MainWindow::gamepadButtonSelectChanged(bool pressed) { gui_client.gamepadButtonSelectChanged(pressed); }
+void MainWindow::gamepadButtonUpChanged(bool pressed) { gui_client.gamepadButtonUpChanged(pressed); }
+void MainWindow::gamepadButtonDownChanged(bool pressed) { gui_client.gamepadButtonDownChanged(pressed); }
+void MainWindow::gamepadButtonLeftChanged(bool pressed) { gui_client.gamepadButtonLeftChanged(pressed); }
+void MainWindow::gamepadButtonRightChanged(bool pressed) { gui_client.gamepadButtonRightChanged(pressed); }
+void MainWindow::gamepadConnectedChanged(bool connected) { gui_client.gamepadConnectedChanged(connected); }
 
 
 void MainWindow::glWidgetViewportResized(int w, int h)
@@ -15250,37 +15749,37 @@ float MainWindow::gamepadAxisRightY()
 
 bool MainWindow::gamepadAttached()
 {
-	return ui->glWidget->gamepad != nullptr;
+	return ui->glWidget->gamepad != nullptr && ui->glWidget->gamepad->isConnected();
 }
 
 float MainWindow::gamepadButtonL2()
 {
-	return ui->glWidget->gamepad ? (float)ui->glWidget->gamepad->buttonL2() : 0.0f;
+	return ui->glWidget->gamepad && ui->glWidget->gamepad->isConnected() ? (float)ui->glWidget->gamepad->buttonL2() : 0.0f;
 }
 
 float MainWindow::gamepadButtonR2()
 {
-	return ui->glWidget->gamepad ? (float)ui->glWidget->gamepad->buttonR2() : 0.0f;
+	return ui->glWidget->gamepad && ui->glWidget->gamepad->isConnected() ? (float)ui->glWidget->gamepad->buttonR2() : 0.0f;
 }
 
 float MainWindow::gamepadAxisLeftX()
 {
-	return ui->glWidget->gamepad ? (float)ui->glWidget->gamepad->axisLeftX() : 0.0f;
+	return ui->glWidget->gamepad && ui->glWidget->gamepad->isConnected() ? (float)ui->glWidget->gamepad->axisLeftX() : 0.0f;
 }
 
 float MainWindow::gamepadAxisLeftY()
 {
-	return ui->glWidget->gamepad ? (float)ui->glWidget->gamepad->axisLeftY() : 0.0f;
+	return ui->glWidget->gamepad && ui->glWidget->gamepad->isConnected() ? (float)ui->glWidget->gamepad->axisLeftY() : 0.0f;
 }
 
 float MainWindow::gamepadAxisRightX()
 {
-	return ui->glWidget->gamepad ? (float)ui->glWidget->gamepad->axisRightX() : 0.0f;
+	return ui->glWidget->gamepad && ui->glWidget->gamepad->isConnected() ? (float)ui->glWidget->gamepad->axisRightX() : 0.0f;
 }
 
 float MainWindow::gamepadAxisRightY()
 {
-	return ui->glWidget->gamepad ? (float)ui->glWidget->gamepad->axisRightY() : 0.0f;
+	return ui->glWidget->gamepad && ui->glWidget->gamepad->isConnected() ? (float)ui->glWidget->gamepad->axisRightY() : 0.0f;
 }
 #endif
 

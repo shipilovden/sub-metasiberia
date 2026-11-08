@@ -380,6 +380,9 @@ public:
 	TimeStamp created_time;
 	TimeStamp last_modified_time;
 	UserID creator_id;
+	// Server-only owner for transient objects spawned through a Lua game API.
+	// It is deliberately not serialized or sent over the network.
+	UID game_spawn_owner_uid = UID::invalidUID();
 
 	std::string creator_name; // This is 'denormalised' data that is not saved on disk, but set on load from disk or creation.  It is transferred across the network though.
 

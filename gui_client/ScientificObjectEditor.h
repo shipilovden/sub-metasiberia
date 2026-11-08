@@ -12,6 +12,8 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtGui/QPixmap>
 #include <QtCore/QVector>
 #include <QtWidgets/QWidget>
+#include <string>
+#include <string>
 
 
 class QCheckBox;
@@ -123,6 +125,7 @@ private:
 	UID editing_ob_uid;
 	bool controls_editable;
 	bool syncing;
+	std::string scientific_content_parse_error;
 	ScientificObjectSettings current_settings;
 
 	QLabel* info_label;

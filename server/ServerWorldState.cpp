@@ -7,6 +7,7 @@ Generated at 2016-01-12 12:22:34 +1300
 #include "ServerWorldState.h"
 
 
+#include <lua/LuaVM.h>
 #include <FileInStream.h>
 #include <FileOutStream.h>
 #include <Exception.h>
@@ -128,6 +129,71 @@ ServerAllWorldsState::~ServerAllWorldsState()
 	world_states.clear();
 
 	lua_vms.clear();
+}
+
+
+void ServerAllWorldsState::registerLuaVMForUser(const UserID& user_id, const Reference<SubstrataLuaVM>& vm)
+{
+	if(!user_id.valid() || vm.isNull() || lua_vms.find(user_id) != lua_vms.end())
+		throw glare::Exception("Cannot register a missing, invalid, or duplicate server Luau VM.");
+
+	static const int64 MAX_MEMORY_PER_VM = 128LL * 1024 * 1024;
+	static const int64 MAX_MEMORY_ALL_VMS = 1024LL * 1024 * 1024;
+	auto rebalance_limits = [this]()
+	{
+		std::vector<LuaVM*> vms;
+		std::vector<int64> allocated;
+		int64 total_allocated = 0;
+		for(auto it = lua_vms.begin(); it != lua_vms.end(); ++it)
+		{
+			if(it->second.isNull() || it->second->lua_vm.ptr() == nullptr)
+				throw glare::Exception("The server Luau VM registry contains an uninitialized VM.");
+			LuaVM* lua = it->second->lua_vm.ptr();
+			const int64 used = lua->total_allocated;
+			if(used < 0 || used > MAX_MEMORY_ALL_VMS - total_allocated)
+				throw glare::Exception("The server-wide Luau memory budget is already exhausted; no additional script VM can be created.");
+			vms.push_back(lua);
+			allocated.push_back(used);
+			total_allocated += used;
+		}
+
+		int64 remaining = MAX_MEMORY_ALL_VMS - total_allocated;
+		std::vector<size_t> eligible;
+		for(size_t i = 0; i < vms.size(); ++i)
+		{
+			vms[i]->max_total_mem_allowed = allocated[i];
+			if(allocated[i] < MAX_MEMORY_PER_VM) eligible.push_back(i);
+		}
+		while(remaining > 0 && !eligible.empty())
+		{
+			const int64 even_share = std::max<int64>(1, remaining / (int64)eligible.size());
+			std::vector<size_t> next_eligible;
+			next_eligible.reserve(eligible.size());
+			for(size_t eligible_i = 0; eligible_i < eligible.size() && remaining > 0; ++eligible_i)
+			{
+				const size_t vm_i = eligible[eligible_i];
+				const int64 room = MAX_MEMORY_PER_VM - vms[vm_i]->max_total_mem_allowed;
+				const int64 grant = std::min(remaining, std::min(room, even_share));
+				vms[vm_i]->max_total_mem_allowed += grant;
+				remaining -= grant;
+				if(vms[vm_i]->max_total_mem_allowed < MAX_MEMORY_PER_VM)
+					next_eligible.push_back(vm_i);
+			}
+			eligible.swap(next_eligible);
+		}
+	};
+
+	lua_vms[user_id] = vm;
+	try
+	{
+		rebalance_limits();
+	}
+	catch(...)
+	{
+		lua_vms.erase(user_id);
+		try { rebalance_limits(); } catch(...) {}
+		throw;
+	}
 }
 
 
@@ -869,6 +935,10 @@ void ServerAllWorldsState::readFromDisk(const std::string& path)
 	ensureMetasiberiaServiceWorlds(lock);
 
 	denormaliseData();
+	// Build the broad-phase index during world loading so the first live Luau
+	// query does not pay the cost of scanning every loaded world object.
+	for(auto it_world = world_states.begin(); it_world != world_states.end(); ++it_world)
+		it_world->second->ensureGameRaySpatialIndex(lock);
 
 	// Compress voxel data if needed.
 	// for(auto world_it = world_states.begin(); world_it != world_states.end(); ++world_it)

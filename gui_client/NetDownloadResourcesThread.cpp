@@ -19,6 +19,8 @@ Generated at 2016-01-16 22:59:23 +1300
 #include <KillThreadMessage.h>
 #include <PlatformUtils.h>
 #include <unordered_map>
+#include <chrono>
+#include <thread>
 
 
 namespace
@@ -139,6 +141,16 @@ struct NumResourcesDownloadingDecrementor
 static const bool VERBOSE = false;
 
 
+static bool isValidGLBHeader(const std::vector<uint8>& data)
+{
+	if(data.size() < 12 || data[0] != 'g' || data[1] != 'l' || data[2] != 'T' || data[3] != 'F')
+		return false;
+	const uint32 version = (uint32)data[4] | ((uint32)data[5] << 8) | ((uint32)data[6] << 16) | ((uint32)data[7] << 24);
+	const uint32 declared_length = (uint32)data[8] | ((uint32)data[9] << 8) | ((uint32)data[10] << 16) | ((uint32)data[11] << 24);
+	return version == 2 && declared_length == data.size();
+}
+
+
 void NetDownloadResourcesThread::doRun()
 {
 #if !defined(EMSCRIPTEN)
@@ -202,15 +214,45 @@ void NetDownloadResourcesThread::doRun()
 						const URL url_components = URL::parseURL(toStdString(url));
 						if(url_components.scheme == "http" || url_components.scheme == "https")
 						{
+							const bool polyfork_cdn = url_components.scheme == "https" && url_components.host == "polyfork.dev";
+							// Polyfork assets are fetched directly from their official CDN. Verify
+							// its TLS certificate and identify the product as required by its
+							// catalogue terms. Other resource hosts keep their legacy settings.
+							client->verify_server_certificate = polyfork_cdn;
+							client->user_agent = polyfork_cdn ? "Metasiberia/1.0 (Polyfork model downloader)" : "";
+			client->ca_file = polyfork_cdn ? FileUtils::getDirectory(PlatformUtils::getFullPathToCurrentExecutable()) + "/cert.pem" : "";
+
 							if(url_components.host == "gateway.ipfs.io")
 								throw glare::Exception("Skipping " + toStdString(url));
 
 							// Download with HTTP client
 							client->max_data_size			= 128 * 1024 * 1024; // 128 MB
 							client->max_socket_buffer_size	= 128 * 1024 * 1024; // 128 MB
-							HTTPClient::ResponseInfo response_info = client->downloadFile(toStdString(url), data);
+							HTTPClient::ResponseInfo response_info;
+							for(int attempt = 0; ; ++attempt)
+							{
+								data.clear();
+								try
+								{
+									response_info = client->downloadFile(toStdString(url), data);
+								}
+								catch(glare::Exception&)
+								{
+									if(!polyfork_cdn || attempt >= 2) throw;
+									std::this_thread::sleep_for(std::chrono::seconds(1u << attempt));
+									continue;
+								}
+								const bool retryable_polyfork_response = response_info.response_code == 429 ||
+									(response_info.response_code >= 500 && response_info.response_code <= 599);
+								if(!polyfork_cdn || !retryable_polyfork_response || attempt >= 2) break;
+								// Polyfork asks clients to back off on 429. Also retry transient CDN
+								// server errors and transport failures, with a bounded delay.
+								std::this_thread::sleep_for(std::chrono::seconds(1u << attempt));
+							}
 							if(response_info.response_code != 200)
 								throw glare::Exception("HTTP Download failed: (code: " + toString(response_info.response_code) + "): " + response_info.response_message);
+							if(polyfork_cdn && hasExtension(url, "glb") && !isValidGLBHeader(data))
+								throw glare::Exception("Polyfork returned an invalid GLB payload (bad magic, version, or declared file length).");
 
 							std::string extension;
 							if(response_info.mime_type == "image/bmp")
@@ -223,6 +265,10 @@ void NetDownloadResourcesThread::doRun()
 								extension = "gif";
 							else if(response_info.mime_type == "image/tiff")
 								extension = "tif";
+							else if(response_info.mime_type == "model/gltf-binary")
+								extension = "glb";
+							else if(response_info.mime_type == "model/gltf+json")
+								extension = "gltf";
 
 							// Add an extension based on the mime type.
 							if(!extension.empty())
@@ -256,7 +302,14 @@ void NetDownloadResourcesThread::doRun()
 							{
 								resource->setState(Resource::State_NotPresent);
 								resource_manager->markAsChanged();
-								if(VERBOSE) conPrint("NetDownloadResourcesThread: Error while writing file to disk: " + e.what());
+								if(polyfork_cdn)
+								{
+									const std::string error = "Failed to save Polyfork model: " + std::string(e.what());
+									conPrint("NetDownloadResourcesThread: " + error);
+									resource_manager->addToDownloadFailedURLs(url);
+									out_msg_queue->enqueue(new ResourceDownloadFailedMessage(url, error));
+								}
+								else if(VERBOSE) conPrint("NetDownloadResourcesThread: Error while writing file to disk: " + e.what());
 							}
 						}
 						else
@@ -266,7 +319,15 @@ void NetDownloadResourcesThread::doRun()
 					{
 						resource->setState(Resource::State_NotPresent);
 						resource_manager->markAsChanged();
-						if(VERBOSE) conPrint("NetDownloadResourcesThread: Error while downloading file: " + e.what());
+						const URL url_components = URL::parseURL(toStdString(url));
+						if(url_components.scheme == "https" && url_components.host == "polyfork.dev")
+						{
+							const std::string error = "Polyfork download failed: " + std::string(e.what());
+							conPrint("NetDownloadResourcesThread: " + error);
+							resource_manager->addToDownloadFailedURLs(url);
+							out_msg_queue->enqueue(new ResourceDownloadFailedMessage(url, error));
+						}
+						else if(VERBOSE) conPrint("NetDownloadResourcesThread: Error while downloading file: " + e.what());
 					}
 				}
 			}

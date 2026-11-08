@@ -6,6 +6,7 @@ Copyright Glare Technologies Limited 2026 -
 #pragma once
 
 #include <QtWidgets/QWidget>
+#include <QtCore/QJsonObject>
 #include "../shared/UID.h"
 #include "../shared/Avatar.h"
 #include "../server/ChatBot.h"
@@ -114,6 +115,8 @@ public:
 		std::string name;
 	};
 	void setBotList(const std::vector<BotListEntry>& bots);
+	QJsonObject exportConfigurationForMCP();
+	void applyMCPConfiguration(const QJsonObject& configuration);
 
 	void clear();
 	void updatePosition(double x, double y, double z);
@@ -171,6 +174,7 @@ private slots:
 	void onBlacklistRemove();
 
 private:
+	void applyConfiguration(const QJsonObject& configuration);
 	void buildUI();
 	void callUpdateBot(const AvatarSettings& av, const std::string& audio_url,
 		uint32 flags, uint32 trigger_flags, const Vec3f& model_scale);

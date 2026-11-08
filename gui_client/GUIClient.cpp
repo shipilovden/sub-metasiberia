@@ -6,6 +6,7 @@ Copyright Glare Technologies Limited 2024 -
 
 
 #include "GUIClient.h"
+#include "../shared/GameStateDelta.h"
 #include "FontCoverage.h"
 #include "MCPTextMeshTools.h"
 #include <QtCore/QDir>
@@ -51,6 +52,7 @@ Copyright Glare Technologies Limited 2024 -
 #include "AnimatedTextureManager.h"
 #include "ParticleManager.h"
 #include "ScientificObjectSettings.h"
+#include "../shared/ScientificMoleculeGeometry.h"
 #if !defined(USE_SDL)
 #include "CulturalObjectSettings.h"
 #include "CulturalApiClient.h"
@@ -196,6 +198,7 @@ static std::string fullscreenViewerPrompt(GUIClient* gui_client, bool is_video, 
 #include <utility>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <set>
 #include <sstream>
 #include <unordered_set>
@@ -1030,6 +1033,130 @@ static void appendXREyeViewTraceCSV(std::ostream& stream, const XREyeViewState& 
 		<< formatXRTraceScalar(eye_state.angle_right_deg) << ','
 		<< formatXRTraceScalar(eye_state.angle_up_deg) << ','
 		<< formatXRTraceScalar(eye_state.angle_down_deg);
+}
+
+
+static bool getScriptKeyCodeForKey(Key key, uint32& key_code_out)
+{
+	if(key >= Key::Key_F1 && key <= Key::Key_F12)
+	{
+		key_code_out = Protocol::ScriptKey_FunctionBase + (uint32)((int)key - (int)Key::Key_F1 + 1);
+		return true;
+	}
+	switch(key)
+	{
+	case Key::Key_Left:   key_code_out = Protocol::ScriptKey_Left; return true;
+	case Key::Key_Right:  key_code_out = Protocol::ScriptKey_Right; return true;
+	case Key::Key_Up:     key_code_out = Protocol::ScriptKey_Up; return true;
+	case Key::Key_Down:   key_code_out = Protocol::ScriptKey_Down; return true;
+	case Key::Key_Space:  key_code_out = Protocol::ScriptKey_Space; return true;
+	case Key::Key_Return:
+	case Key::Key_Enter:  key_code_out = Protocol::ScriptKey_Enter; return true;
+	case Key::Key_Escape: key_code_out = Protocol::ScriptKey_Escape; return true;
+	case Key::Key_Backspace: key_code_out = Protocol::ScriptKey_Backspace; return true;
+	case Key::Key_Delete: key_code_out = Protocol::ScriptKey_Delete; return true;
+	case Key::Key_PageUp: key_code_out = Protocol::ScriptKey_PageUp; return true;
+	case Key::Key_PageDown: key_code_out = Protocol::ScriptKey_PageDown; return true;
+	case Key::Key_Home: key_code_out = Protocol::ScriptKey_Home; return true;
+	case Key::Key_End: key_code_out = Protocol::ScriptKey_End; return true;
+	case Key::Key_Minus: key_code_out = Protocol::ScriptKey_Minus; return true;
+	case Key::Key_Equals: key_code_out = Protocol::ScriptKey_Equals; return true;
+	case Key::Key_Plus: key_code_out = Protocol::ScriptKey_Plus; return true;
+	case Key::Key_LeftBracket: key_code_out = Protocol::ScriptKey_LeftBracket; return true;
+	case Key::Key_RightBracket: key_code_out = Protocol::ScriptKey_RightBracket; return true;
+	case Key::Key_W:      key_code_out = Protocol::ScriptKey_W; return true;
+	case Key::Key_A:      key_code_out = Protocol::ScriptKey_A; return true;
+	case Key::Key_S:      key_code_out = Protocol::ScriptKey_S; return true;
+	case Key::Key_D:      key_code_out = Protocol::ScriptKey_D; return true;
+	case Key::Key_B:      key_code_out = Protocol::ScriptKey_CharacterBase + 'b'; return true;
+	case Key::Key_C:      key_code_out = Protocol::ScriptKey_CharacterBase + 'c'; return true;
+	case Key::Key_E:      key_code_out = Protocol::ScriptKey_CharacterBase + 'e'; return true;
+	case Key::Key_F:      key_code_out = Protocol::ScriptKey_CharacterBase + 'f'; return true;
+	case Key::Key_G:      key_code_out = Protocol::ScriptKey_CharacterBase + 'g'; return true;
+	case Key::Key_H:      key_code_out = Protocol::ScriptKey_CharacterBase + 'h'; return true;
+	case Key::Key_I:      key_code_out = Protocol::ScriptKey_CharacterBase + 'i'; return true;
+	case Key::Key_J:      key_code_out = Protocol::ScriptKey_CharacterBase + 'j'; return true;
+	case Key::Key_K:      key_code_out = Protocol::ScriptKey_CharacterBase + 'k'; return true;
+	case Key::Key_L:      key_code_out = Protocol::ScriptKey_CharacterBase + 'l'; return true;
+	case Key::Key_M:      key_code_out = Protocol::ScriptKey_CharacterBase + 'm'; return true;
+	case Key::Key_N:      key_code_out = Protocol::ScriptKey_CharacterBase + 'n'; return true;
+	case Key::Key_O:      key_code_out = Protocol::ScriptKey_CharacterBase + 'o'; return true;
+	case Key::Key_P:      key_code_out = Protocol::ScriptKey_CharacterBase + 'p'; return true;
+	case Key::Key_Q:      key_code_out = Protocol::ScriptKey_CharacterBase + 'q'; return true;
+	case Key::Key_R:      key_code_out = Protocol::ScriptKey_CharacterBase + 'r'; return true;
+	case Key::Key_T:      key_code_out = Protocol::ScriptKey_CharacterBase + 't'; return true;
+	case Key::Key_U:      key_code_out = Protocol::ScriptKey_CharacterBase + 'u'; return true;
+	case Key::Key_V:      key_code_out = Protocol::ScriptKey_CharacterBase + 'v'; return true;
+	case Key::Key_X:      key_code_out = Protocol::ScriptKey_CharacterBase + 'x'; return true;
+	case Key::Key_Y:      key_code_out = Protocol::ScriptKey_CharacterBase + 'y'; return true;
+	case Key::Key_Z:      key_code_out = Protocol::ScriptKey_CharacterBase + 'z'; return true;
+	case Key::Key_0:      key_code_out = Protocol::ScriptKey_CharacterBase + '0'; return true;
+	case Key::Key_1:      key_code_out = Protocol::ScriptKey_CharacterBase + '1'; return true;
+	case Key::Key_2:      key_code_out = Protocol::ScriptKey_CharacterBase + '2'; return true;
+	case Key::Key_3:      key_code_out = Protocol::ScriptKey_CharacterBase + '3'; return true;
+	case Key::Key_4:      key_code_out = Protocol::ScriptKey_CharacterBase + '4'; return true;
+	case Key::Key_5:      key_code_out = Protocol::ScriptKey_CharacterBase + '5'; return true;
+	case Key::Key_6:      key_code_out = Protocol::ScriptKey_CharacterBase + '6'; return true;
+	case Key::Key_7:      key_code_out = Protocol::ScriptKey_CharacterBase + '7'; return true;
+	case Key::Key_8:      key_code_out = Protocol::ScriptKey_CharacterBase + '8'; return true;
+	case Key::Key_9:      key_code_out = Protocol::ScriptKey_CharacterBase + '9'; return true;
+	default: return false;
+	}
+}
+
+
+static bool getScriptMouseCodeForButton(MouseButton button, uint32& code_out)
+{
+	switch(button)
+	{
+	case MouseButton::Left: code_out = Protocol::ScriptKey_MouseLeft; return true;
+	case MouseButton::Middle: code_out = Protocol::ScriptKey_MouseMiddle; return true;
+	case MouseButton::Right: code_out = Protocol::ScriptKey_MouseRight; return true;
+	default: return false;
+	}
+}
+
+
+static bool scriptKeyboardInputSupportedByServer(uint32 server_capabilities)
+{
+	return BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_OBJECT_KEYBOARD_SUPPORT);
+}
+
+
+static std::string scriptInteractionKeyLabel(uint32 key_code)
+{
+	if(key_code >= Protocol::ScriptKey_CharacterBase + 'a' && key_code <= Protocol::ScriptKey_CharacterBase + 'z')
+		return std::string(1, (char)std::toupper((unsigned char)(key_code - Protocol::ScriptKey_CharacterBase)));
+	if(key_code >= Protocol::ScriptKey_CharacterBase + '0' && key_code <= Protocol::ScriptKey_CharacterBase + '9')
+		return std::string(1, (char)(key_code - Protocol::ScriptKey_CharacterBase));
+	if(key_code > Protocol::ScriptKey_FunctionBase && key_code <= Protocol::ScriptKey_FunctionBase + 12)
+		return "F" + toString(key_code - Protocol::ScriptKey_FunctionBase);
+	switch(key_code)
+	{
+	case Protocol::ScriptKey_Left: return "←";
+	case Protocol::ScriptKey_Right: return "→";
+	case Protocol::ScriptKey_Up: return "↑";
+	case Protocol::ScriptKey_Down: return "↓";
+	case Protocol::ScriptKey_Space: return "Space";
+	case Protocol::ScriptKey_Enter: return "Enter";
+	case Protocol::ScriptKey_Escape: return "Esc";
+	case Protocol::ScriptKey_Backspace: return "Backspace";
+	case Protocol::ScriptKey_Delete: return "Delete";
+	case Protocol::ScriptKey_PageUp: return "Page Up";
+	case Protocol::ScriptKey_PageDown: return "Page Down";
+	case Protocol::ScriptKey_Home: return "Home";
+	case Protocol::ScriptKey_End: return "End";
+	case Protocol::ScriptKey_Minus: return "-";
+	case Protocol::ScriptKey_Equals: return "=";
+	case Protocol::ScriptKey_Plus: return "+";
+	case Protocol::ScriptKey_LeftBracket: return "[";
+	case Protocol::ScriptKey_RightBracket: return "]";
+	case Protocol::ScriptKey_W: return "W";
+	case Protocol::ScriptKey_A: return "A";
+	case Protocol::ScriptKey_S: return "S";
+	case Protocol::ScriptKey_D: return "D";
+	default: return "";
+	}
 }
 
 
@@ -2096,7 +2223,7 @@ void GUIClient::afterGLInitInitialise(double device_pixel_ratio, Reference<OpenG
 			test_avatar->graphics.skinned_gl_ob = ModelLoading::makeGLObjectForMeshDataAndMaterials(*opengl_engine, mesh_data, /*ob_lod_level=*/0, 
 				test_avatar->avatar_settings.materials, /*lightmap_url=*/URLString(), /*use_basis=*/true, *resource_manager, &arena_allocator, ob_to_world_matrix);
 
-				
+
 			// Load animation data
 			{
 				
@@ -2694,6 +2821,7 @@ void GUIClient::shutdown()
 
 	if(gl_ui.nonNull())
 	{
+		clearGameHUD();
 		gl_ui->destroy();
 		gl_ui = NULL;
 	}
@@ -3088,6 +3216,19 @@ void GUIClient::sendChatMessage(const std::string& message)
 }
 
 
+void GUIClient::sendChatBotDialogChoice(const UID& bot_avatar_uid, uint32 node_id, uint32 choice_index)
+{
+	if(connection_state != ServerConnectionState_Connected || client_thread.isNull() || !bot_avatar_uid.valid() || choice_index >= 8)
+		return;
+	MessageUtils::initPacket(scratch_packet, Protocol::ChatBotDialogChoice);
+	::writeToStream(bot_avatar_uid, scratch_packet);
+	scratch_packet.writeUInt32(node_id);
+	scratch_packet.writeUInt32(choice_index);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
 void GUIClient::sendPrivateChatMessage(const std::string& recipient_name, const UID& recipient_avatar_uid, const std::string& message)
 {
 	if(this->connection_state == ServerConnectionState_NotConnected)
@@ -3183,6 +3324,14 @@ void GUIClient::spawnFloatingChatMessageForAvatar(const UID& avatar_uid, const s
 	if(preview.empty())
 		return;
 
+	bool is_chatbot = false;
+	if(world_state.nonNull())
+	{
+		Lock lock(world_state->mutex);
+		auto avatar_it = world_state->avatars.find(avatar_uid);
+		is_chatbot = avatar_it != world_state->avatars.end() && avatar_it->second->isChatBotAvatar();
+	}
+
 	removeFloatingChatMessageForAvatar(avatar_uid);
 
 	FloatingChatMessageState state;
@@ -3191,6 +3340,13 @@ void GUIClient::spawnFloatingChatMessageForAvatar(const UID& avatar_uid, const s
 	state.duration_seconds = getFloatingChatMessageDuration(preview);
 	state.world_height = getFloatingChatMessageWorldHeight(preview);
 	state.rise_distance = getFloatingChatMessageRiseDistance(preview);
+	if(is_chatbot)
+	{
+		// Bot dialogue is meant to be read in place above the NPC. Keep its
+		// anchor fixed instead of reusing the short-lived rising chat emote.
+		state.duration_seconds = 15.0;
+		state.rise_distance = 0.f;
+	}
 	state.gl_ob = makeFloatingChatMessageGLObject(preview);
 	if(state.gl_ob.nonNull())
 	{
@@ -4678,6 +4834,9 @@ void GUIClient::errorOccurredFromLuaScript(LuaScript* script, const std::string&
 	// If this is our script, print message to console and log
 
 	LuaScriptEvaluator* script_evaluator = (LuaScriptEvaluator*)script->userdata;
+	if(script_evaluator && script_evaluator->world_object && game_camera_lease_active &&
+		game_camera_owner_object_uid == script_evaluator->world_object->uid)
+		releaseGameCamera(game_camera_owner_object_uid);
 	if(script_evaluator->world_object->creator_id == this->logged_in_user_id)
 	{
 		const std::string full_msg = "Lua error (ob " + script_evaluator->world_object->uid.toString() + "): " + msg + "\nScript will be disabled.";
@@ -6336,6 +6495,8 @@ void GUIClient::removeInstancesOfObject(WorldObject* prototype_ob)
 
 void GUIClient::removeObScriptingInfo(WorldObject* ob)
 {
+	if(ob && game_camera_lease_active && game_camera_owner_object_uid == ob->uid)
+		releaseGameCamera(ob->uid);
 	removeInstancesOfObject(ob);
 	if(ob->script_evaluator)
 	{
@@ -7257,6 +7418,11 @@ void GUIClient::updateSelectedParticleEmitterGizmo()
 // Also updates preview AABB for decal objects.
 void GUIClient::updateSelectedObjectPlacementBeamAndGizmos()
 {
+	// E-focused scripted gameplay owns the scene input. Hide handles once when
+	// focus begins and do not recreate them in this per-frame update.
+	if(active_script_keyboard_object_uid.valid())
+		return;
+
 	if(selected_ob && this->selected_ob->opengl_engine_ob)
 	{
 		//-------------------- Update object placement beam - a beam that goes from the object to what's below it. -----------------------
@@ -9414,6 +9580,8 @@ void GUIClient::setNeuroControlCommand(const neurocontrol::Command& command)
 void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboard_focus, PlayerPhysicsInput& input_out)
 {
 	bool move_key_pressed = false;
+	const bool scripted_game_owns_keyboard = active_script_keyboard_object_uid.valid() &&
+		world_render_has_keyboard_focus && ui_interface->hasFocus();
 
 	input_out.SHIFT_down =	false;
 	input_out.CTRL_down =	false;
@@ -9473,38 +9641,43 @@ void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboa
 			B_down = false;
 		}
 
-		const float selfie_move_factor = cam_controller.selfieModeEnabled() ? -1.f : 1.f;
-
-		if(W_down || up_down)
-		{	player_physics.processMoveForwards(1.f * selfie_move_factor, SHIFT_down, this->cam_controller); move_key_pressed = true; }
-		if(S_down || down_down)
-		{	player_physics.processMoveForwards(-1.f * selfie_move_factor, SHIFT_down, this->cam_controller); move_key_pressed = true; }
-		if(A_down)
-		{	player_physics.processStrafeRight(-1.f * selfie_move_factor, SHIFT_down, this->cam_controller); move_key_pressed = true; }
-		if(D_down)
-		{	player_physics.processStrafeRight(1.f * selfie_move_factor, SHIFT_down, this->cam_controller); move_key_pressed = true; }
-
-		// Move vertically up or down in flymode.
-		if(space_down)
-		{	player_physics.processMoveUp(1.f, SHIFT_down, this->cam_controller); move_key_pressed = true; }
-		if(C_down && !CTRL_down) // Check CTRL_down to prevent CTRL+C shortcut moving camera up.
-		{	player_physics.processMoveUp(-1.f, SHIFT_down, this->cam_controller); move_key_pressed = true; }
-
-		// Turn left or right
-		const float base_rotate_speed = 200;
-		if(left_down)
-		{	this->cam_controller.updateRotation(/*pitch_delta=*/0, /*heading_delta=*/dt * -base_rotate_speed * (SHIFT_down ? 3.0 : 1.0)); }
-		if(right_down)
-		{	this->cam_controller.updateRotation(/*pitch_delta=*/0, /*heading_delta=*/dt *  base_rotate_speed * (SHIFT_down ? 3.0 : 1.0)); }
-
-		if(misc_info_ui.movement_button && misc_info_ui.movement_button->pressed)
+		// Keep sampling key states for the scripted game's input snapshot below, but
+		// don't also feed those keys into the normal avatar and camera controls.
+		if(!scripted_game_owns_keyboard)
 		{
-			const Vec2f frac_coords = div((gl_ui->getLastMouseUICoords() - misc_info_ui.movement_button->rect.getMin()), misc_info_ui.movement_button->rect.getWidths());
+			const float selfie_move_factor = cam_controller.selfieModeEnabled() ? -1.f : 1.f;
 
-			player_physics.processStrafeRight (selfie_move_factor * 4 * (frac_coords.x - 0.5f), SHIFT_down, this->cam_controller);
-			player_physics.processMoveForwards(selfie_move_factor * 4 * (frac_coords.y - 0.5f), SHIFT_down, this->cam_controller);
-			
-			move_key_pressed = true;
+			if(W_down || up_down)
+			{	player_physics.processMoveForwards(1.f * selfie_move_factor, SHIFT_down, this->cam_controller); move_key_pressed = true; }
+			if(S_down || down_down)
+			{	player_physics.processMoveForwards(-1.f * selfie_move_factor, SHIFT_down, this->cam_controller); move_key_pressed = true; }
+			if(A_down)
+			{	player_physics.processStrafeRight(-1.f * selfie_move_factor, SHIFT_down, this->cam_controller); move_key_pressed = true; }
+			if(D_down)
+			{	player_physics.processStrafeRight(1.f * selfie_move_factor, SHIFT_down, this->cam_controller); move_key_pressed = true; }
+
+			// Move vertically up or down in flymode.
+			if(space_down)
+			{	player_physics.processMoveUp(1.f, SHIFT_down, this->cam_controller); move_key_pressed = true; }
+			if(C_down && !CTRL_down) // Check CTRL_down to prevent CTRL+C shortcut moving camera up.
+			{	player_physics.processMoveUp(-1.f, SHIFT_down, this->cam_controller); move_key_pressed = true; }
+
+			// Turn left or right
+			const float base_rotate_speed = 200;
+			if(left_down)
+			{	this->cam_controller.updateRotation(/*pitch_delta=*/0, /*heading_delta=*/dt * -base_rotate_speed * (SHIFT_down ? 3.0 : 1.0)); }
+			if(right_down)
+			{	this->cam_controller.updateRotation(/*pitch_delta=*/0, /*heading_delta=*/dt *  base_rotate_speed * (SHIFT_down ? 3.0 : 1.0)); }
+
+			if(misc_info_ui.movement_button && misc_info_ui.movement_button->pressed)
+			{
+				const Vec2f frac_coords = div((gl_ui->getLastMouseUICoords() - misc_info_ui.movement_button->rect.getMin()), misc_info_ui.movement_button->rect.getWidths());
+
+				player_physics.processStrafeRight (selfie_move_factor * 4 * (frac_coords.x - 0.5f), SHIFT_down, this->cam_controller);
+				player_physics.processMoveForwards(selfie_move_factor * 4 * (frac_coords.y - 0.5f), SHIFT_down, this->cam_controller);
+
+				move_key_pressed = true;
+			}
 		}
 
 
@@ -9587,7 +9760,8 @@ void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboa
 	const bool physical_move_active = move_key_pressed || S_down || left_down || right_down ||
 		std::abs(ui_interface->gamepadAxisLeftX()) > 0.1f || std::abs(ui_interface->gamepadAxisLeftY()) > 0.1f ||
 		std::abs(ui_interface->gamepadAxisRightX()) > 0.1f;
-	const bool avatar_movement_allowed = cam_controller.current_cam_mode == CameraController::CameraMode_Standard && vehicle_controller_inside.isNull();
+	const bool avatar_movement_allowed = !scripted_game_owns_keyboard &&
+		cam_controller.current_cam_mode == CameraController::CameraMode_Standard && vehicle_controller_inside.isNull();
 	const double neuro_now_seconds = Clock::getTimeSinceInit();
 	const neurocontrol::MotionEvaluation neuro_evaluation = neuro_control_command.source == neurocontrol::CommandSource::RecordedEeg ?
 		neurocontrol::evaluateRecordedEEGMotion(neuro_control_command, neuro_control_eeg_heartbeat,
@@ -9645,6 +9819,53 @@ void GUIClient::processPlayerPhysicsInput(float dt, bool world_render_has_keyboa
 #endif
 
 	updateXRControllerLocomotion(dt, move_key_pressed, input_out);
+	game_local_input_snapshot = input_out;
+	game_local_input_available = active_script_keyboard_object_uid.valid() &&
+		world_render_has_keyboard_focus && ui_interface->hasFocus();
+
+	// An E-focused game may provide local avatar movement from its client loop.
+	// Treat the command as a short lease so a stalled script or lost focus cannot
+	// leave the avatar moving indefinitely. Shared game outcomes still belong to
+	// the server; this only feeds the existing local character controller.
+	const double game_control_now = total_timer.elapsed();
+	const bool game_control_fresh = game_player_control_owner_uid.valid() &&
+		game_player_control_owner_uid == active_script_keyboard_object_uid &&
+		game_control_now >= game_player_control_last_update_time &&
+		game_control_now - game_player_control_last_update_time <= 0.35;
+	if(game_control_fresh && world_render_has_keyboard_focus && ui_interface->hasFocus() &&
+		cam_controller.current_cam_mode == CameraController::CameraMode_Standard && vehicle_controller_inside.isNull())
+	{
+		// The game controller owns movement while its lease is fresh; keep normal
+		// camera turning and other input state intact.
+		player_physics.zeroMoveDesiredVel();
+		const float selfie_factor = cam_controller.selfieModeEnabled() ? -1.f : 1.f;
+		if(game_player_control_move_y != 0.f)
+			player_physics.processMoveForwards(game_player_control_move_y * selfie_factor, game_player_control_run, cam_controller);
+		if(game_player_control_move_x != 0.f)
+			player_physics.processStrafeRight(game_player_control_move_x * selfie_factor, game_player_control_run, cam_controller);
+
+		input_out.W_down = game_player_control_move_y > 0.f;
+		input_out.S_down = game_player_control_move_y < 0.f;
+		input_out.A_down = game_player_control_move_x < 0.f;
+		input_out.D_down = game_player_control_move_x > 0.f;
+		input_out.SHIFT_down = game_player_control_run;
+		input_out.axis_left_x = game_player_control_move_x;
+		input_out.axis_left_y = -game_player_control_move_y;
+		input_out.space_down = game_player_control_jump;
+		const bool moving = game_player_control_move_x != 0.f || game_player_control_move_y != 0.f;
+		move_key_pressed = move_key_pressed || moving;
+		if(game_player_control_jump && !game_player_control_jump_was_down)
+			player_physics.processJump(this->cam_controller, /*cur time=*/Clock::getTimeSinceInit());
+		game_player_control_jump_was_down = game_player_control_jump;
+	}
+	else if(!game_control_fresh || game_player_control_owner_uid != active_script_keyboard_object_uid ||
+		!world_render_has_keyboard_focus || !ui_interface->hasFocus())
+	{
+		game_player_control_owner_uid = UID::invalidUID();
+		game_player_control_jump_was_down = false;
+	}
+	else
+		game_player_control_jump_was_down = false;
 
 	if(cam_controller.current_cam_mode == CameraController::CameraMode_FreeCamera)
 	{
@@ -11503,6 +11724,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 {
 	ZoneScoped; // Tracy profiler
 	Timer timer_event_timer;
+	sendScriptGameInputState(mouse_cursor_state);
 
 	if((connection_state == ServerConnectionState_NotConnected) && (retry_connection_timer.elapsed() > 10.0))
 	{
@@ -11519,40 +11741,127 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 		scripted_ob_proximity_checker.think(cam_controller.getPosition().toVec4fPoint(), lock);
 	}
 
-	// Do Lua timer callbacks
-	if(false) // TEMP 
+	// Run the focused client game loop separately from ordinary object timers;
+	// shared game rules remain authoritative on the server.
+	{
+		const double cur_time = total_timer.elapsed();
+		// Bound both the due-event batch and total game-loop callbacks per frame.
+		// Each event can catch up at most four fixed steps below, so this caps
+		// focused client game callbacks at 64 per frame; later due events stay in
+		// the priority queue and are processed on subsequent frames.
+		static const size_t MAX_DUE_CLIENT_GAME_LOOP_EVENTS_PER_FRAME = 16;
+		client_game_loop_timer_queue.update(cur_time, temp_triggered_client_game_loop_timers,
+			MAX_DUE_CLIENT_GAME_LOOP_EVENTS_PER_FRAME);
+		for(size_t i = 0; i < temp_triggered_client_game_loop_timers.size(); ++i)
+		{
+			ScriptTimerQueueTimer& timer = temp_triggered_client_game_loop_timers[i];
+			LuaScriptEvaluator* script_evaluator = timer.lua_script_evaluator.getPtrIfAlive();
+			if(!script_evaluator || timer.timer_index < 0 || timer.timer_index >= LuaScriptEvaluator::MAX_NUM_TIMERS)
+				continue;
+
+			LuaScriptEvaluator::LuaTimerInfo& timer_info = script_evaluator->timers[timer.timer_index];
+			if(timer.timer_id != timer_info.id)
+				continue; // Cancelled/stale queue entry.
+
+			if(!world_state || !script_evaluator->world_object ||
+				!isGameInputFocused(script_evaluator->world_object->uid) || timer_info.fixed_step_s <= 0.0)
+			{
+				script_evaluator->destroyTimer(timer.timer_index);
+				continue;
+			}
+
+			const double fixed_step_s = timer_info.fixed_step_s;
+			const double delta_time_s = myMax(0.0, cur_time - timer_info.last_trigger_time);
+			timer_info.last_trigger_time = cur_time;
+			const int max_catch_up_steps = 4;
+			timer_info.fixed_step_accumulator_s = myMin(
+				timer_info.fixed_step_accumulator_s + delta_time_s,
+				fixed_step_s * max_catch_up_steps);
+
+			int steps = 0;
+			while(timer_info.fixed_step_accumulator_s + 1.0e-9 >= fixed_step_s &&
+				steps < max_catch_up_steps && !script_evaluator->hit_error && timer.timer_id == timer_info.id &&
+				isGameInputFocused(script_evaluator->world_object->uid))
+			{
+				WorldStateLock lock(world_state->mutex);
+				script_evaluator->doOnTimerEvent(timer.onTimerEvent_ref, lock, fixed_step_s);
+				if(timer.timer_id != timer_info.id)
+					break; // The callback cancelled its own loop.
+				timer_info.fixed_step_accumulator_s -= fixed_step_s;
+				++steps;
+			}
+
+			if(timer.timer_id == timer_info.id && !script_evaluator->hit_error &&
+				isGameInputFocused(script_evaluator->world_object->uid))
+			{
+				timer.tigger_time = cur_time + timer.period;
+				client_game_loop_timer_queue.addTimer(cur_time, timer);
+			}
+			else if(timer.timer_id == timer_info.id)
+				script_evaluator->destroyTimer(timer.timer_index);
+		}
+	}
+
+	// Run local object timers for presentation behavior such as NPC animation
+	// selection. Shared rules and mutations still belong in server scripts.
+	if(world_state)
 	{
 		WorldStateLock lock(this->world_state->mutex);
 
 		const double cur_time = total_timer.elapsed();
-		timer_queue.update(cur_time, /*triggered_timers_out=*/temp_triggered_timers);
+		// Bound both callback work and the temporary due-event batch. In a busy
+		// world, later timers remain in the priority queue for a subsequent frame
+		// instead of allocating a vector proportional to every overdue script.
+		static const size_t MAX_DUE_SCRIPT_TIMER_EVENTS_PER_FRAME = 256;
+		timer_queue.update(cur_time, /*triggered_timers_out=*/temp_triggered_timers,
+			MAX_DUE_SCRIPT_TIMER_EVENTS_PER_FRAME);
+		size_t callbacks_run = 0;
+		const size_t max_callbacks_per_frame = 64;
+		const size_t triggered_count = temp_triggered_timers.size();
+		const size_t first_due = triggered_count == 0 ? 0 : client_lua_timer_callback_cursor % triggered_count;
 
-		for(size_t i=0; i<temp_triggered_timers.size(); ++i)
+		for(size_t offset=0; offset<triggered_count; ++offset)
 		{
+			const size_t i = (first_due + offset) % triggered_count;
 			ScriptTimerQueueTimer& timer = temp_triggered_timers[i];
 			
 			LuaScriptEvaluator* script_evaluator = timer.lua_script_evaluator.getPtrIfAlive();
 			if(script_evaluator)
 			{
 				// Check timer is still valid (has not been destroyed by destroyTimer), by checking the timer id with the same index is still equal to our timer id.
-				assert(timer.timer_index >= 0 && timer.timer_index <= LuaScriptEvaluator::MAX_NUM_TIMERS);
-				if(timer.timer_id == script_evaluator->timers[timer.timer_index].id)
+				if(timer.timer_index < 0 || timer.timer_index >= LuaScriptEvaluator::MAX_NUM_TIMERS)
+					continue;
+				LuaScriptEvaluator::LuaTimerInfo& timer_info = script_evaluator->timers[timer.timer_index];
+				if(timer.timer_id == timer_info.id)
 				{
-					script_evaluator->doOnTimerEvent(timer.onTimerEvent_ref, lock); // Execute the Lua timer event callback function
+					if(callbacks_run >= max_callbacks_per_frame)
+					{
+						// Preserve due callbacks while bounding client work per frame.
+						timer.tigger_time = cur_time + 0.1;
+						timer_queue.addTimer(cur_time, timer);
+						continue;
+					}
 
-					if(timer.repeating)
+					const double delta_time_s = myMax(0.0, cur_time - timer_info.last_trigger_time);
+					timer_info.last_trigger_time = cur_time;
+					script_evaluator->doOnTimerEvent(timer.onTimerEvent_ref, lock, delta_time_s); // Execute the Lua timer event callback function
+					callbacks_run++;
+
+					if(timer.repeating && !script_evaluator->hit_error && timer.timer_id == timer_info.id)
 					{
 						// Re-insert timer with updated trigger time
 						timer.tigger_time = cur_time + timer.period;
 						timer_queue.addTimer(cur_time, timer);
 					}
-					else // Else if timer was a one-shot timer, 'destroy' it.
+					else if(timer.timer_id == timer_info.id) // One-shot, failed, or explicitly cancelled in callback.
 					{
 						script_evaluator->destroyTimer(timer.timer_index);
 					}
 				}
 			}
 		}
+		if(triggered_count > 0)
+			client_lua_timer_callback_cursor = (first_due + callbacks_run) % triggered_count;
 	}
 
 
@@ -11810,6 +12119,23 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	const double dt = time_since_last_timer_ev.elapsed();
 	time_since_last_timer_ev.reset();
 	const double global_time = world_state.nonNull() ? this->world_state->getCurrentGlobalTime() : 0.0; // Used as input into script functions
+	if(world_state.nonNull() && !script_paused_animation_uids.empty())
+	{
+		WorldStateLock lock(world_state->mutex);
+		for(auto it = script_paused_animation_uids.begin(); it != script_paused_animation_uids.end(); )
+		{
+			auto ob_it = world_state->objects.find(*it);
+			if(ob_it == world_state->objects.end())
+			{
+				it = script_paused_animation_uids.erase(it);
+				continue;
+			}
+			WorldObject* ob = ob_it.getValue().ptr();
+			if(ob->opengl_engine_ob.nonNull())
+				ob->opengl_engine_ob->use_time_offset -= dt;
+			++it;
+		}
+	}
 
 	// Set current animation frame for objects with animated textures
 	//double animated_tex_time = 0;
@@ -11921,6 +12247,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	}
 
 	handleMessages(global_time, cur_time);
+	finishPendingObjectMerges();
 
 	// Once the new world's settings have arrived, allow the character controller
 	// to settle onto the streamed surface even if the user has not pressed a
@@ -12649,6 +12976,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 	// Set third-person camera position.  NOTE: this goes after updateAvatarGraphics since it depends on where the player's avatar is,
 	// which can depend on interpolated vehicle physics etc.
 	setThirdPersonCameraPosition(dt);
+	updateGameCameraTransition(total_timer.elapsed());
 
 
 
@@ -12712,7 +13040,7 @@ void GUIClient::timerEvent(const MouseCursorState& mouse_cursor_state)
 		float xyplane_speed_rel_ground = 0;
 		test_avatar->graphics.setOverallTransform(*opengl_engine, *physics_world, pos, 
 			Vec3f(0, /*pitch=*/Maths::pi_2<float>(), (float)phase + Maths::pi_2<float>()), 
-			/*use_xyplane_speed_rel_ground_override=*/false, xyplane_speed_rel_ground, test_avatar->avatar_settings.pre_ob_to_world_matrix, anim_state, cur_time, dt, pose_constraint, anim_events);
+			/*use_xyplane_speed_rel_ground_override=*/false, xyplane_speed_rel_ground, test_avatar->avatar_settings.pre_ob_to_world_matrix, anim_state, cur_time, dt, false, pose_constraint, anim_events);
 		if(anim_events.footstrike)
 		{
 			//conPrint("footstrike");
@@ -13853,6 +14181,7 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 				if(avatar->state == Avatar::State_Dead)
 				{
 					print("Removing avatar.");
+					chat_ui.clearBotDialogOptionsForAvatar(avatar->uid);
 
 					ui_interface->appendChatMessage("<i><span style=\"color:rgb(" + 
 						toString(avatar->name_colour.r * 255) + ", " + toString(avatar->name_colour.g * 255) + ", " + toString(avatar->name_colour.b * 255) + ")\">" + 
@@ -14182,7 +14511,8 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 						 
 						AnimEvents anim_events;
 						avatar->graphics.setOverallTransform(*opengl_engine, *physics_world, pos, rotation, use_xyplane_speed_rel_ground_override, xyplane_speed_rel_ground_override,
-							avatar->avatar_settings.pre_ob_to_world_matrix, avatar->anim_state, cur_time, dt, pose_constraint, anim_events);
+			avatar->avatar_settings.pre_ob_to_world_matrix, avatar->anim_state, cur_time, dt,
+			isScriptAnimationPaused(avatar->uid), pose_constraint, anim_events);
 						
 						if(!BitUtils::isBitSet(avatar->anim_state, AvatarGraphics::ANIM_STATE_IN_AIR) && anim_events.footstrike && !pose_constraint.sitting) // If avatar is on ground, and the anim played a footstrike
 						{
@@ -14229,6 +14559,25 @@ void GUIClient::updateAvatarGraphics(double cur_time, double dt, const Vec3d& ou
 					const float flying_z_offset = ((avatar->anim_state & AvatarGraphics::ANIM_STATE_IN_AIR) != 0) ? 0.3f : 0.f;
 					const float blend_speed = 0.1f;
 					avatar->nametag_z_offset = avatar->nametag_z_offset * (1 - blend_speed) + flying_z_offset * blend_speed;
+
+					// Keep interactive NPC dialog choices anchored below the NPC's head bubble.
+					if(chat_ui.botDialogTargetAvatarUID() == avatar->uid)
+					{
+						Matrix4f world_to_camera;
+						cam_controller.getWorldToCameraMatrix(world_to_camera);
+						const Vec4f head_pos_cs = world_to_camera * (use_nametag_pos + Vec4f(0, 0, 1.02f + avatar->nametag_z_offset, 0));
+						if(head_pos_cs[1] > 0.001f && opengl_engine->getViewPortAspectRatio() > 0.f)
+						{
+							const float sensor_width = 0.035f;
+							const float lens_sensor_dist = (float)cam_controller.lens_sensor_dist;
+							const Vec2f ui_pos(
+								2.f * lens_sensor_dist * head_pos_cs[0] / (head_pos_cs[1] * sensor_width),
+								2.f * lens_sensor_dist * head_pos_cs[2] / (head_pos_cs[1] * sensor_width));
+							chat_ui.setBotDialogAnchor(ui_pos, isFinite(ui_pos.x) && isFinite(ui_pos.y));
+						}
+						else
+							chat_ui.setBotDialogAnchor(Vec2f(0), false);
+					}
 
 					// Update nametag transform also
 					if(avatar->nametag_gl_ob.nonNull())
@@ -15339,6 +15688,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			}
 			logMessage("Client disconnected from server " + (m->closed_gracefully ? std::string("gracefully") : std::string("ungracefully")) + ": " + m->error_message);
 			this->connection_state = ServerConnectionState_NotConnected;
+			endScriptKeyboardInput(/*notify_user=*/false);
 
 			this->logged_in_user_id = UserID::invalidUserID();
 			this->logged_in_user_name = "";
@@ -15353,6 +15703,7 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			}
 			this->server_protocol_version = 0;
 			this->server_capabilities = 0;
+			this->scripted_interaction_prompts.clear();
 			this->server_has_basis_textures = false;
 			this->server_has_basisu_terrain_detail_maps = false;
 			this->server_has_optimised_meshes = false;
@@ -15600,6 +15951,110 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			showInfoNotification(m->msg);
 		}
 		break;
+		case Msg_GameHUDUpdateMessage:
+		{
+			const GameHUDUpdateMessage* m = checkedDowncastPtr<const GameHUDUpdateMessage>(msg);
+			if(m->visible)
+				setGameHUDText(m->game_object_uid, m->text, m->has_layout, m->center_x, m->top_y);
+			else
+				clearGameHUDText(m->game_object_uid);
+		}
+		break;
+		case Msg_ScriptInteractionPromptMessage:
+		{
+			const ScriptInteractionPromptMessage* m = checkedDowncastPtr<const ScriptInteractionPromptMessage>(msg);
+			ClientInteractionPrompt prompt;
+			prompt.input_mode = m->input_mode;
+			prompt.key_code = m->key_code;
+			prompt.visible = m->visible;
+			prompt.text = m->text;
+			scripted_interaction_prompts[m->object_uid] = prompt;
+		}
+		break;
+		case Msg_AvatarMaterialiseEffectMessage:
+		{
+			const AvatarMaterialiseEffectMessage* m = checkedDowncastPtr<const AvatarMaterialiseEffectMessage>(msg);
+			if(world_state.nonNull())
+			{
+				WorldStateLock lock(world_state->mutex);
+				auto avatar_it = world_state->avatars.find(m->avatar_uid);
+				if(avatar_it != world_state->avatars.end() && avatar_it->second->state != Avatar::State_Dead)
+					enableMaterialisationEffectOnAvatar(*avatar_it->second);
+			}
+		}
+		break;
+		case Msg_GameHUDMenuUpdateMessage:
+		{
+			const GameHUDMenuUpdateMessage* m = checkedDowncastPtr<const GameHUDMenuUpdateMessage>(msg);
+			if(m->visible)
+				setGameHUDMenu(m->game_object_uid, m->panel_id, m->title, m->body, m->actions, m->fields, m->progress_bars, m->text_widgets, m->center_x, m->top_y, m->width);
+			else
+				clearGameHUDMenu(m->game_object_uid, m->panel_id);
+		}
+		break;
+		case Msg_GameStateUpdateMessage:
+		{
+			const GameStateUpdateMessage* m = checkedDowncastPtr<const GameStateUpdateMessage>(msg);
+			if(m->game_object_uid == active_script_keyboard_object_uid && world_state.nonNull())
+			{
+				auto version_it = received_game_state_versions.find(m->game_object_uid);
+				if(version_it == received_game_state_versions.end() || m->version > version_it->second)
+				{
+					std::vector<uint8> complete_value;
+					if(m->is_delta)
+					{
+						const auto value_it = received_game_state_values.find(m->game_object_uid);
+						if(version_it == received_game_state_versions.end() || value_it == received_game_state_values.end() ||
+							version_it->second != m->base_version)
+							break; // A delta is meaningful only after its exact base snapshot.
+						GameStateDelta::Delta delta;
+						delta.base_version = m->base_version;
+						delta.result_size = m->result_size;
+						delta.prefix_size = m->prefix_size;
+						delta.suffix_size = m->suffix_size;
+						delta.replacement.assign(m->serialized_value.begin(), m->serialized_value.end());
+						if(!GameStateDelta::apply(value_it->second, version_it->second, delta, complete_value))
+							break;
+					}
+					else
+						complete_value = m->serialized_value;
+					received_game_state_versions[m->game_object_uid] = m->version;
+					received_game_state_values[m->game_object_uid] = complete_value;
+					WorldStateLock lock(world_state->mutex);
+					auto object_it = world_state->objects.find(m->game_object_uid);
+					if(object_it != world_state->objects.end())
+					{
+						WorldObject* const object = object_it.getValue().ptr();
+						if(object && object->state != WorldObject::State_Dead && object->event_handlers)
+							object->event_handlers->executeOnGameStateChangedHandlers(
+							m->game_object_uid, m->version, complete_value, lock);
+					}
+				}
+			}
+		}
+		break;
+		case Msg_GameEventMessage:
+		{
+			const GameEventMessage* m = checkedDowncastPtr<const GameEventMessage>(msg);
+			if(m->game_object_uid == active_script_keyboard_object_uid && world_state.nonNull())
+			{
+				WorldStateLock lock(world_state->mutex);
+				auto object_it = world_state->objects.find(m->game_object_uid);
+				if(object_it != world_state->objects.end())
+				{
+					WorldObject* const object = object_it.getValue().ptr();
+					if(object && object->state != WorldObject::State_Dead && object->event_handlers)
+						object->event_handlers->executeOnGameEventHandlers(m->game_object_uid, m->name, m->sequence, m->server_time, lock);
+				}
+			}
+		}
+		break;
+		case Msg_ChatBotDialogChoicesMessage:
+		{
+			const ChatBotDialogChoicesMessage* m = checkedDowncastPtr<const ChatBotDialogChoicesMessage>(msg);
+			chat_ui.setBotDialogOptions(m->bot_avatar_uid, m->bot_name, m->node_id, m->options);
+			break;
+		}
 		case Msg_ErrorMessage:
 		{
 			const ErrorMessage* m = checkedDowncastPtr<const ErrorMessage>(msg);
@@ -16240,6 +16695,9 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 			// When the server has a file uploaded to it, it will send a NewResourceOnServer message to clients, so they can download it.
 
 			const NewResourceOnServerMessage* m = checkedDowncastPtr<const NewResourceOnServerMessage>(msg);
+			for(auto merge_it = pending_object_merges.begin(); merge_it != pending_object_merges.end(); ++merge_it)
+				if(merge_it->second.asset_url == m->URL)
+					merge_it->second.asset_ready = true;
 
 			if(world_state.nonNull())
 			{
@@ -16370,7 +16828,10 @@ void GUIClient::handleMessages(double global_time, double cur_time)
 		break;
 		case Msg_ResourceDownloadFailedMessage:
 		{
-			const URLString& url = checkedDowncastPtr<const ResourceDownloadFailedMessage>(msg)->URL;
+			const ResourceDownloadFailedMessage* failed_message = checkedDowncastPtr<const ResourceDownloadFailedMessage>(msg);
+			const URLString& url = failed_message->URL;
+			if(!failed_message->error.empty())
+				logMessage(failed_message->error + " URL: " + toStdString(url));
 			if(world_state.nonNull())
 			{
 				WorldStateLock lock(world_state->mutex);
@@ -18448,9 +18909,11 @@ void GUIClient::setMaterialFlagsForObject(WorldObject* ob)
 // Send CreateObject message to server
 // Throws glare::Exception on failure.
 void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded_mesh, bool loaded_mesh_is_image_cube,
-	const glare::AllocatorVector<Voxel, 16>& decompressed_voxels, const Vec3d& ob_pos, const Vec3f& scale, const Vec3f& axis, float angle, const std::vector<WorldMaterialRef>& materials)
+	const glare::AllocatorVector<Voxel, 16>& decompressed_voxels, const Vec3d& ob_pos, const Vec3f& scale, const Vec3f& axis, float angle, const std::vector<WorldMaterialRef>& materials,
+	const std::vector<UID>& merge_source_uids, const std::string& merge_token, const std::string& merge_content)
 {
 	WorldObjectRef new_world_object = new WorldObject();
+	URLString merge_asset_url;
 
 	js::AABBox aabb_os;
 	if(GaussianSplatAsset::hasSupportedExtension(mesh_path))
@@ -18502,6 +18965,7 @@ void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded
 			this->resource_manager->copyLocalFileToResourceDir(bmesh_disk_path, mesh_URL);
 
 		new_world_object->model_url = mesh_URL;
+		merge_asset_url = mesh_URL;
 
 		aabb_os = loaded_mesh->aabb_os;
 
@@ -18524,6 +18988,8 @@ void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded
 	new_world_object->axis = axis;
 	new_world_object->angle = angle;
 	new_world_object->scale = scale;
+	new_world_object->target_url = merge_token;
+	new_world_object->content = merge_content;
 	new_world_object->setAABBOS(aabb_os);
 
 	normaliseObjectMaterialTexturePathsForUploadToPNG(base_dir_path, *new_world_object);
@@ -18563,11 +19029,89 @@ void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded
 
 	// Send CreateObject message to server
 	{
+		if(!merge_token.empty() && !merge_source_uids.empty())
+		{
+			PendingObjectMerge pending;
+			pending.token = merge_token;
+			pending.asset_url = merge_asset_url;
+			pending.source_uids = merge_source_uids;
+			pending.asset_ready = merge_asset_url.empty(); // Voxel payload is included in CreateObject; static meshes wait for server resource confirmation.
+			pending.queued_time = Clock::getTimeSinceInit();
+			pending_object_merges[merge_token] = pending;
+		}
 		MessageUtils::initPacket(scratch_packet, Protocol::CreateObject);
 		new_world_object->writeToNetworkStream(scratch_packet);
 
 		enqueueMessageToSend(*this->client_thread, scratch_packet);
 	}
+}
+
+
+void GUIClient::finishPendingObjectMerges()
+{
+	if(pending_object_merges.empty() || world_state.isNull() || client_thread.isNull())
+		return;
+
+	std::vector<std::string> completed_tokens;
+	std::vector<WorldObjectRef> completed_objects;
+	std::vector<std::string> timed_out_tokens;
+	{
+		WorldStateLock lock(world_state->mutex);
+		for(auto it = pending_object_merges.begin(); it != pending_object_merges.end(); ++it)
+		{
+			WorldObjectRef merged_object;
+			for(auto ob_it = world_state->objects.valuesBegin(); ob_it != world_state->objects.valuesEnd(); ++ob_it)
+			{
+				const WorldObjectRef& candidate = ob_it.getValue();
+				if(candidate->target_url == it->second.token && candidate->creator_id == logged_in_user_id)
+				{
+					merged_object = candidate;
+					break;
+				}
+			}
+			if(it->second.asset_ready && merged_object.nonNull())
+			{
+				// Clear the short-lived correlation token, then delete the old pieces.
+				merged_object->target_url.clear();
+				MessageUtils::initPacket(scratch_packet, Protocol::ObjectFullUpdate);
+				merged_object->writeToNetworkStream(scratch_packet, server_protocol_version);
+				enqueueMessageToSend(*client_thread, scratch_packet);
+
+				for(size_t source_i = 0; source_i < it->second.source_uids.size(); ++source_i)
+				{
+					MessageUtils::initPacket(scratch_packet, Protocol::DestroyObject);
+					writeToStream(it->second.source_uids[source_i], scratch_packet);
+					enqueueMessageToSend(*client_thread, scratch_packet);
+				}
+				completed_objects.push_back(merged_object);
+				completed_tokens.push_back(it->first);
+				continue;
+			}
+
+			// Never leave a merge waiting forever when the connected server does
+			// not confirm its uploaded mesh. Keep every original object intact.
+			if(Clock::getTimeSinceInit() - it->second.queued_time > 120.0)
+			{
+				if(merged_object.nonNull())
+				{
+					merged_object->target_url.clear();
+					MessageUtils::initPacket(scratch_packet, Protocol::ObjectFullUpdate);
+					merged_object->writeToNetworkStream(scratch_packet, server_protocol_version);
+					enqueueMessageToSend(*client_thread, scratch_packet);
+				}
+				timed_out_tokens.push_back(it->first);
+			}
+		}
+	}
+	for(size_t i = 0; i < completed_tokens.size(); ++i)
+		pending_object_merges.erase(completed_tokens[i]);
+	for(size_t i = 0; i < timed_out_tokens.size(); ++i)
+	{
+		pending_object_merges.erase(timed_out_tokens[i]);
+		showErrorNotification("Объединение не завершено: сервер не подтвердил загрузку меша. Исходные объекты сохранены; проверьте подключение к обновлённому серверу и повторите команду.");
+	}
+	for(size_t i = 0; i < completed_objects.size(); ++i)
+		selectObject(completed_objects[i], /*selected_mat_index=*/0);
 }
 
 
@@ -21044,8 +21588,33 @@ Reference<VehiclePhysics> GUIClient::createVehicleControllerForScript(WorldObjec
 }
 
 
+void GUIClient::hideEditorGizmosForGameInput()
+{
+	transform_gizmo = NULL;
+	clearSelectedParticleEmitterGizmo();
+	if(opengl_engine.isNull())
+		return;
+
+	for(int i = 0; i < NUM_AXIS_ARROWS; ++i)
+		if(axis_arrow_objects[i].nonNull() && opengl_engine->isObjectAdded(axis_arrow_objects[i]))
+			opengl_engine->removeObject(axis_arrow_objects[i]);
+	for(int i = 0; i < 3; ++i)
+	{
+		if(rot_handle_arc_objects[i].nonNull() && opengl_engine->isObjectAdded(rot_handle_arc_objects[i]))
+			opengl_engine->removeObject(rot_handle_arc_objects[i]);
+		rot_handle_lines[i].clear();
+	}
+}
+
+
 void GUIClient::posAndRot3DControlsToggled(bool enabled)
 {
+	if(active_script_keyboard_object_uid.valid())
+	{
+		hideEditorGizmosForGameInput();
+		return;
+	}
+
 	if(enabled)
 	{
 		if(selected_ob.nonNull())
@@ -21353,6 +21922,7 @@ Vec3d GUIClient::getSafeSeatExitEyePosition(const WorldObject& seat_ob) const
 
 void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObjectRefs held by GUIClient.
 {
+	clearGameHUD();
 	// Queue pending object edits before clearAllObjects() drops the dirty set.
 	enqueueDirtyWorldObjectUpdates(world_state.nonNull() ? world_state->getCurrentGlobalTime() : 0.0);
 
@@ -21433,6 +22003,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 	this->client_avatar_uid = UID::invalidUID();
 	this->server_protocol_version = 0;
 	this->server_capabilities = 0;
+	this->scripted_interaction_prompts.clear();
 	this->server_has_basis_textures = false;
 	this->server_has_basisu_terrain_detail_maps = false;
 	this->server_has_optimised_meshes = false;
@@ -21474,6 +22045,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 
 	clearAllObjects();
 	removeAllFloatingChatMessages();
+	script_paused_animation_uids.clear();
 	world_state = nullptr;
 
 	if(particle_manager)
@@ -21508,6 +22080,7 @@ void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObje
 // Remove all particles, decals, deselect all objects etc.
 void GUIClient::clearAllObjects()
 {
+	endScriptKeyboardInput(/*notify_user=*/false);
 	voxel_undo_stack.clearAll();
 	voxel_undo_expected_revisions.clear();
 	cancelVoxelShapeTool();
@@ -21699,6 +22272,7 @@ void GUIClient::connectToServer(const URLParseResults& parse_res)
 	}
 
 	world_state = new WorldState();
+	script_paused_animation_uids.clear();
 
 	TracyMessageL("Creating ClientThread");
 
@@ -21993,7 +22567,6 @@ bool GUIClient::usesEmbeddedMapDock() const
 
 
 static float sensorWidth() { return 0.035f; }
-static float lensSensorDist() { return 0.025f; }
 
 
 Vec4f GUIClient::getDirForPixelTrace(int pixel_pos_x, int pixel_pos_y) const
@@ -22004,7 +22577,7 @@ Vec4f GUIClient::getDirForPixelTrace(int pixel_pos_x, int pixel_pos_y) const
 
 	const float sensor_width = ::sensorWidth();
 	const float sensor_height = sensor_width / opengl_engine->getViewPortAspectRatio();//ui->glWidget->viewport_aspect_ratio;
-	const float lens_sensor_dist = ::lensSensorDist();
+	const float lens_sensor_dist = (float)cam_controller.lens_sensor_dist;
 
 	const float gl_w = (float)opengl_engine->getMainViewPortWidth();
 	const float gl_h = (float)opengl_engine->getMainViewPortHeight();
@@ -22104,7 +22677,7 @@ Vec4f GUIClient::pointOnLineWorldSpace(const Vec4f& p_a_ws, const Vec4f& p_b_ws,
 
 	const float sensor_width  = ::sensorWidth();
 	const float sensor_height = sensor_width / opengl_engine->getViewPortAspectRatio();//ui->glWidget->viewport_aspect_ratio;
-	const float lens_sensor_dist = ::lensSensorDist();
+	const float lens_sensor_dist = (float)cam_controller.lens_sensor_dist;
 
 	const float gl_w = (float)opengl_engine->getMainViewPortWidth(); // ui->glWidget->geometry().width();
 	const float gl_h = (float)opengl_engine->getMainViewPortHeight(); // ui->glWidget->geometry().height();
@@ -22169,7 +22742,7 @@ bool GUIClient::getPixelForPoint(const Vec4f& point_ws, Vec2f& pixel_coords_out)
 
 	const float sensor_width  = ::sensorWidth();
 	const float sensor_height = sensor_width / opengl_engine->getViewPortAspectRatio();//ui->glWidget->viewport_aspect_ratio;
-	const float lens_sensor_dist = ::lensSensorDist();
+	const float lens_sensor_dist = (float)cam_controller.lens_sensor_dist;
 
 	const float gl_w = (float)opengl_engine->getMainViewPortWidth(); // ui->glWidget->geometry().width();
 	const float gl_h = (float)opengl_engine->getMainViewPortHeight(); // ui->glWidget->geometry().height();
@@ -22208,7 +22781,7 @@ bool GUIClient::getGLUICoordsForPoint(const Vec4f& point_ws, Vec2f& coords_out) 
 	const Vec4f up = cam_controller.getUpVec().toVec4fVector();
 
 	const float sensor_width  = ::sensorWidth();
-	const float lens_sensor_dist = ::lensSensorDist();
+	const float lens_sensor_dist = (float)cam_controller.lens_sensor_dist;
 
 	const Vec4f cam_to_point = point_ws - this->cam_controller.getPosition().toVec4fPoint();
 	if(dot(cam_to_point, forwards) < 0.001)
@@ -22435,6 +23008,49 @@ void GUIClient::mousePressed(MouseEvent& e)
 		}
 	}
 
+	// During a focused game, unhandled scene clicks belong to the camera or are
+	// suppressed. UI/HUD and scripted mouse handlers above retain their input.
+	if(active_script_keyboard_object_uid.valid())
+	{
+		ui_interface->setCamRotationOnMouseDragEnabled(e.button == MouseButton::Left);
+		ui_interface->setCamRotationOnRightMouseDragEnabled(false);
+		e.accepted = true;
+		return;
+	}
+
+	// Ctrl+left-click adds/removes editor objects from the current selection.
+	// Preserve Ctrl-click as the voxel paint tool when the click targets the
+	// currently active voxel object.
+	if(!terrain_sculpt_mode_enabled && e.button == MouseButton::Left &&
+		BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Ctrl) && physics_world.nonNull())
+	{
+		const Vec4f origin = cam_controller.getPosition().toVec4fPoint();
+		const Vec4f dir = getDirForPixelTrace(e.cursor_pos.x, e.cursor_pos.y);
+		RayTraceResult selection_result;
+		physics_world->traceRay(origin, dir, /*max_t=*/1.0e5f, /*ignore body id=*/JPH::BodyID(), selection_result);
+		if(selection_result.hit_object && selection_result.hit_object->userdata && selection_result.hit_object->userdata_type == 0)
+		{
+			WorldObject* hit_ob = static_cast<WorldObject*>(selection_result.hit_object->userdata);
+			const bool is_active_voxel_hit = selectedObjectIsVoxelOb() && selected_ob->uid == hit_ob->uid;
+			if(!is_active_voxel_hit)
+			{
+				toggleAdditionalObjectSelection(hit_ob);
+				e.accepted = true;
+				ui_interface->setCamRotationOnMouseDragEnabled(false);
+				ui_interface->setCamRotationOnRightMouseDragEnabled(false);
+				return;
+			}
+		}
+	}
+
+	if(dispatchScriptMouseButton(e.button, /*pressed=*/true))
+	{
+		e.accepted = true;
+		ui_interface->setCamRotationOnMouseDragEnabled(e.button == MouseButton::Left);
+		ui_interface->setCamRotationOnRightMouseDragEnabled(false);
+		return;
+	}
+
 	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Right)
 	{
 		// In sculpt mode the right button is reserved for orbiting the free camera.
@@ -22471,6 +23087,40 @@ void GUIClient::mousePressed(MouseEvent& e)
 		if(results.hit_object && results.hit_object->userdata && results.hit_object->userdata_type == 0)
 		{
 			WorldObject* ob = static_cast<WorldObject*>(results.hit_object->userdata);
+			const auto prompt_it = scripted_interaction_prompts.find(ob->uid);
+			// Prompt visibility controls only the label; it must not disable the configured input.
+			const bool click_prompt_allows_input = prompt_it == scripted_interaction_prompts.end() ||
+				(prompt_it->second.input_mode == 1 || prompt_it->second.input_mode == 2);
+			if(e.button == MouseButton::Left && click_prompt_allows_input &&
+				ob->event_handlers && ob->event_handlers->onUserUsedObject_handlers.nonEmpty() &&
+				connection_state == ServerConnectionState_Connected && client_thread.nonNull() &&
+				BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_OBJECT_CLICK_SUPPORT) && world_state.nonNull())
+			{
+				const Vec4f hit_ws = origin + dir * results.hit_t;
+				bool close_enough = false;
+				{
+					WorldStateLock lock(world_state->mutex);
+					const auto avatar_it = world_state->avatars.find(client_avatar_uid);
+					close_enough = avatar_it != world_state->avatars.end() && avatar_it->second->pos.getDist2(ob->pos) <= Maths::square(8.0);
+					if(close_enough) ob->event_handlers->executeOnUserUsedObjectHandlers(client_avatar_uid, ob->uid, lock);
+				}
+				if(close_enough)
+				{
+					MessageUtils::initPacket(scratch_packet, Protocol::UserClickedScriptedObjectMessage);
+					writeToStream(ob->uid, scratch_packet);
+					if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_OBJECT_CLICK_RAY_SUPPORT))
+					{
+						scratch_packet.writeFloat(origin[0]); scratch_packet.writeFloat(origin[1]); scratch_packet.writeFloat(origin[2]);
+					}
+					scratch_packet.writeFloat(hit_ws[0]); scratch_packet.writeFloat(hit_ws[1]); scratch_packet.writeFloat(hit_ws[2]);
+					MessageUtils::updatePacketLengthField(scratch_packet);
+					enqueueMessageToSend(*client_thread, scratch_packet);
+					e.accepted = true;
+					ui_interface->setCamRotationOnMouseDragEnabled(false);
+					ui_interface->setCamRotationOnRightMouseDragEnabled(false);
+					return;
+				}
+			}
 
 			const Vec4f hitpos_ws = origin + dir * results.hit_t;
 			const Vec4f hitpos_os = results.hit_object->getWorldToObMatrix() * hitpos_ws;
@@ -22844,6 +23494,12 @@ void GUIClient::mousePressed(MouseEvent& e)
 
 void GUIClient::mouseReleased(MouseEvent& e)
 {
+	if(dispatchScriptMouseButton(e.button, /*pressed=*/false))
+	{
+		e.accepted = true;
+		return;
+	}
+
 	if(image_viewer_image.nonNull())
 	{
 
@@ -22876,6 +23532,12 @@ void GUIClient::mouseReleased(MouseEvent& e)
 				ui_interface->setCamRotationOnRightMouseDragEnabled(true);
 			return;
 		}
+	}
+
+	if(active_script_keyboard_object_uid.valid())
+	{
+		e.accepted = true;
+		return;
 	}
 
 	if(terrain_sculpt_mode_enabled && e.button == MouseButton::Right)
@@ -23020,6 +23682,12 @@ void GUIClient::mouseDoubleClicked(MouseEvent& mouse_event)
 		gl_ui->handleMouseDoubleClick(mouse_event);
 		if(mouse_event.accepted)
 			return;
+	}
+
+	if(active_script_keyboard_object_uid.valid())
+	{
+		mouse_event.accepted = true;
+		return;
 	}
 
 	doObjectSelectionTraceForMouseEvent(mouse_event);
@@ -23669,6 +24337,12 @@ void GUIClient::dropSelectedObject()
 
 void GUIClient::doObjectSelectionTraceForMouseEvent(MouseEvent& e)
 {
+	if(active_script_keyboard_object_uid.valid())
+	{
+		e.accepted = true;
+		return;
+	}
+
 	// Trace ray through scene, select object (if any) that is clicked on.
 	const Vec4f origin = this->cam_controller.getPosition().toVec4fPoint();
 	const Vec4f dir = getDirForPixelTrace(e.cursor_pos.x, e.cursor_pos.y);
@@ -23678,6 +24352,14 @@ void GUIClient::doObjectSelectionTraceForMouseEvent(MouseEvent& e)
 
 	if(results.hit_object)
 	{
+		if(e.button == MouseButton::Left && BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Ctrl) &&
+			results.hit_object->userdata && results.hit_object->userdata_type == 0)
+		{
+			toggleAdditionalObjectSelection(static_cast<WorldObject*>(results.hit_object->userdata));
+			e.accepted = true;
+			return;
+		}
+
 		// Debugging: Add an object at the hit point
 		//this->glWidget->addObject(glWidget->opengl_engine->makeAABBObject(this->selection_point_ws - Vec4f(0.03f, 0.03f, 0.03f, 0.f), this->selection_point_ws + Vec4f(0.03f, 0.03f, 0.03f, 0.f), Colour4f(0.6f, 0.6f, 0.2f, 1.f)));
 
@@ -23818,6 +24500,17 @@ inline static bool clipLineToPlaneBackHalfSpace(const Planef& plane, Vec4f& a, V
 // If cursor_is_mouse_cursor is false, the cursor is the crosshair.
 void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2f& cursor_gl_coords, MouseEvent* mouse_event, bool cursor_is_mouse_cursor)
 {
+	auto isGlObjectSelected = [this](const Reference<GLObject>& gl_object) {
+		if(gl_object.isNull())
+			return false;
+		if(selected_ob.nonNull() && selected_ob->opengl_engine_ob == gl_object)
+			return true;
+		for(size_t i = 0; i < additional_selected_obs.size(); ++i)
+			if(additional_selected_obs[i].nonNull() && additional_selected_obs[i]->opengl_engine_ob == gl_object)
+				return true;
+		return false;
+	};
+
 	// New for object mouseover hyperlink showing, and webview mouse-move events:
 	if(this->physics_world.nonNull())
 	{
@@ -23829,6 +24522,7 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 		this->physics_world->traceRay(origin, dir, /*max_t=*/1.0e5f, /*ignore body id=*/JPH::BodyID(), results);
 
 		bool show_mouseover_info_ui = false;
+		bool show_mouseover_outline_without_info = false;
 		if(results.hit_object)
 		{
 			const string_view use_action_button = cursor_is_mouse_cursor ? "[E]" : "[A] on gamepad";
@@ -23935,8 +24629,33 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 
 					if(ob->event_handlers && ob->event_handlers->onUserUsedObject_handlers.nonEmpty())
 					{
-						ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to use", cursor_gl_coords);
+						const auto prompt_it = scripted_interaction_prompts.find(ob->uid);
+						if(prompt_it == scripted_interaction_prompts.end())
+						{
+							ob_info_ui.showMessage("Press " + std::string(use_action_button) + " to use", cursor_gl_coords);
+							show_mouseover_info_ui = true;
+						}
+						else if(prompt_it->second.visible)
+						{
+							const std::string action = prompt_it->second.text;
+						const bool russian = useRussianClientUI(this);
+						std::string label;
+						const std::string key_label = scriptInteractionKeyLabel(prompt_it->second.key_code);
+						if(prompt_it->second.input_mode == 1)
+							label = russian ? "Щёлкните ЛКМ — " : "Click left mouse — ";
+						else if(prompt_it->second.input_mode == 2)
+							label = (key_label.empty() ? std::string("E") : key_label) + (russian ? " / ЛКМ — " : " / left click — ");
+						else
+							label = (russian ? "Нажмите " : "Press ") + (key_label.empty() ? std::string("E") : key_label) + " — ";
+						ob_info_ui.showMessage(label + action, cursor_gl_coords);
 						show_mouseover_info_ui = true;
+						}
+						else
+						{
+							// Prompt visibility controls only the text. Keep the scripted object's
+							// normal hover outline and interaction hit target available.
+							show_mouseover_outline_without_info = true;
+						}
 					}
 
 					if(isAvatarDisplayObject(*ob))
@@ -23948,12 +24667,12 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 								("Press " + std::string(use_action_button) + " to wear avatar"), cursor_gl_coords);
 					}
 
-					if(show_mouseover_info_ui)
+					if(show_mouseover_info_ui || show_mouseover_outline_without_info)
 					{
 						// Remove outline around any previously mouse-overed object (unless it is the main selected ob)
 						if(this->mouseover_selected_gl_ob.nonNull())
 						{
-							if(ob != this->selected_ob.ptr()) 
+							if(!isGlObjectSelected(this->mouseover_selected_gl_ob))
 								opengl_engine->deselectObject(this->mouseover_selected_gl_ob);
 							this->mouseover_selected_gl_ob = NULL;
 						}
@@ -23984,16 +24703,18 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 		}
 
 		if(!show_mouseover_info_ui)
+			ob_info_ui.hideMessage();
+
+		if(!show_mouseover_info_ui && !show_mouseover_outline_without_info)
 		{
 			// Remove outline around any previously mouse-overed object (unless it is the main selected ob)
 			if(this->mouseover_selected_gl_ob.nonNull())
 			{
-				const bool mouseover_is_selected_ob = this->selected_ob.nonNull() && this->selected_ob->opengl_engine_ob.nonNull() && (this->selected_ob->opengl_engine_ob == this->mouseover_selected_gl_ob);
+				const bool mouseover_is_selected_ob = isGlObjectSelected(this->mouseover_selected_gl_ob);
 				if(!mouseover_is_selected_ob)
 					opengl_engine->deselectObject(this->mouseover_selected_gl_ob);
 				this->mouseover_selected_gl_ob = NULL;
 			}
-			ob_info_ui.hideMessage();
 		}
 	}
 }
@@ -24044,6 +24765,14 @@ void GUIClient::mouseMoved(MouseEvent& mouse_event)
 			mouse_event.accepted = true;
 			return;
 		}
+	}
+
+	// Mouse position is still sent to the game input snapshot, but must not
+	// hover or drag Qt editor handles while gameplay owns the scene.
+	if(active_script_keyboard_object_uid.valid())
+	{
+		mouse_event.accepted = true;
+		return;
 	}
 
 	if(terrain_sculpt_mode_enabled &&
@@ -24616,6 +25345,7 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 		std::string element;
 		Vec3f pos;
 		int formal_charge;
+		int isotope_mass_number;
 		std::string custom_attribute;
 	};
 
@@ -24636,9 +25366,11 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 			std::stringstream ss(line);
 			ScientificOverlayAtom atom;
 			atom.formal_charge = 0;
+			atom.isotope_mass_number = 0;
 			if(!(ss >> atom.source_id >> atom.element >> atom.pos.x >> atom.pos.y >> atom.pos.z))
 				continue;
 			ss >> atom.formal_charge;
+			ss >> atom.isotope_mass_number;
 			std::getline(ss, atom.custom_attribute);
 			while(!atom.custom_attribute.empty() && std::isspace((unsigned char)atom.custom_attribute.front()))
 				atom.custom_attribute.erase(atom.custom_attribute.begin());
@@ -24732,15 +25464,11 @@ void GUIClient::createPathControlledPathVisObjects(const WorldObject& ob)
 				const float atom_highlight_radius = myClamp((scientific_settings.visualization_mode == "space_fill" ? 0.48f : 0.30f) * scientific_settings.atom_radius, 0.05f, 3.0f) * myMax(0.1f, ob.scale.x);
 				const std::unordered_set<int> selected_ids = parse_selected_atom_ids(scientific_settings.selected_atom_indices);
 
-				auto molecule_atom_os_for_world_overlay = [&center, coord_scale](const Vec3f& sdf_pos)
+					auto molecule_atom_os_for_world_overlay = [&center, coord_scale](const Vec3f& sdf_pos)
 				{
-					// Scientific molecule meshes are first written as OBJ and then loaded through
-					// ModelLoading::makeGLObjectForModelFile(), which converts OBJ y-up coordinates
-					// to the engine z-up space as (x, -z, y).  Keep every runtime overlay on the exact
-					// same atom->object-space mapping as the visible mesh: selection, bonds, labels,
-					// measurements and molecule title must never use separate coordinate guesses.
-					const Vec3f obj_pos = (sdf_pos - center) * coord_scale;
-					return Vec3f(obj_pos.x, -obj_pos.z, obj_pos.y);
+					const std::array<double, 3> obj_pos = ScientificMoleculeGeometry::sdfPositionToObjectSpace(
+						sdf_pos.x, sdf_pos.y, sdf_pos.z, center.x, center.y, center.z, coord_scale);
+					return Vec3f((float)obj_pos[0], (float)obj_pos[1], (float)obj_pos[2]);
 				};
 				auto atom_world_pos = [&ob_to_world, &molecule_atom_os_for_world_overlay](const ScientificOverlayAtom& atom)
 				{
@@ -25175,6 +25903,8 @@ static bool isObjectDecal(const WorldObjectRef& ob)
 void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 {
 	assert(ob.nonNull());
+	if(active_script_keyboard_object_uid.valid())
+		return;
 
 	// Deselect any existing object
 	deselectObject();
@@ -25273,6 +26003,9 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 			text += "Ctrl + left-click: Add voxel.\n"
 			"Alt + left-click: Delete voxel.\n"
 			"\n";
+		text += "Ctrl + left-click another object: Add/remove it from selection.\n"
+			"Ctrl + Shift + M: Merge selected static meshes or voxel objects.\n"
+			"\n";
 	
 		text += "'P' key: Pick up/drop object.\n"
 			"Click and drag the mouse to move the object around when picked up.\n"
@@ -25288,6 +26021,7 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 
 void GUIClient::deselectObject()
 {
+	clearAdditionalObjectSelection();
 	cancelVoxelShapeTool();
 	// TransformGizmo owns render objects independently of selected_ob.  Clear it
 	// synchronously so it cannot remain attached to a deselected object.
@@ -25363,6 +26097,93 @@ void GUIClient::deselectObject()
 }
 
 
+void GUIClient::clearAdditionalObjectSelection()
+{
+	for(size_t i = 0; i < additional_selected_obs.size(); ++i)
+	{
+		WorldObjectRef& ob = additional_selected_obs[i];
+		if(ob.isNull())
+			continue;
+		ob->is_selected = false;
+		if(ob->opengl_engine_ob.nonNull())
+		{
+			opengl_engine->deselectObject(ob->opengl_engine_ob);
+			if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
+			{
+				for(size_t mat_i = 0; mat_i < ob->opengl_engine_ob->materials.size(); ++mat_i)
+					ob->opengl_engine_ob->materials[mat_i].draw_planar_uv_grid = false;
+				opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
+			}
+		}
+	}
+	additional_selected_obs.clear();
+}
+
+
+void GUIClient::toggleAdditionalObjectSelection(const WorldObjectRef& ob)
+{
+	if(ob.isNull())
+		return;
+
+	if(selected_ob.isNull())
+	{
+		selectObject(ob, /*selected_mat_index=*/0);
+		return;
+	}
+
+	if(selected_ob->uid == ob->uid)
+	{
+		if(additional_selected_obs.empty())
+		{
+			deselectObject();
+			return;
+		}
+
+		const WorldObjectRef next_active = additional_selected_obs.front();
+		std::vector<WorldObjectRef> remaining(additional_selected_obs.begin() + 1, additional_selected_obs.end());
+		deselectObject();
+		selectObject(next_active, /*selected_mat_index=*/0);
+		for(size_t i = 0; i < remaining.size(); ++i)
+			toggleAdditionalObjectSelection(remaining[i]);
+		return;
+	}
+
+	auto it = std::find_if(additional_selected_obs.begin(), additional_selected_obs.end(), [&ob](const WorldObjectRef& selected) {
+		return selected.nonNull() && selected->uid == ob->uid;
+	});
+	if(it != additional_selected_obs.end())
+	{
+		ob->is_selected = false;
+		if(ob->opengl_engine_ob.nonNull())
+		{
+			opengl_engine->deselectObject(ob->opengl_engine_ob);
+			if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
+			{
+				for(size_t mat_i = 0; mat_i < ob->opengl_engine_ob->materials.size(); ++mat_i)
+					ob->opengl_engine_ob->materials[mat_i].draw_planar_uv_grid = false;
+				opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
+			}
+		}
+		additional_selected_obs.erase(it);
+		return;
+	}
+
+	ob->is_selected = true;
+	if(ob->opengl_engine_ob.nonNull())
+	{
+		opengl_engine->selectObject(ob->opengl_engine_ob);
+		opengl_engine->setSelectionOutlineColour(DEFAULT_OUTLINE_COLOUR);
+		if(ob->object_type == WorldObject::ObjectType_VoxelGroup)
+		{
+			for(size_t mat_i = 0; mat_i < ob->opengl_engine_ob->materials.size(); ++mat_i)
+				ob->opengl_engine_ob->materials[mat_i].draw_planar_uv_grid = true;
+			opengl_engine->objectMaterialsUpdated(*ob->opengl_engine_ob);
+		}
+	}
+	additional_selected_obs.push_back(ob);
+}
+
+
 void GUIClient::deselectParcel()
 {
 	if(this->selected_parcel.nonNull())
@@ -25409,6 +26230,24 @@ void GUIClient::onMouseWheelEvent(MouseWheelEvent& e)
 				if(ob->web_view_data) ob->web_view_data->wheelEvent(&e, uv);
 				else if(ob->browser_vid_player) ob->browser_vid_player->wheelEvent(&e, uv);
 			}
+		}
+		e.accepted = true;
+		return;
+	}
+
+	// A focused game gives the wheel to camera zoom. Scripted games do not also
+	// receive the same wheel event, and editor selection cannot intercept it.
+	if(active_script_keyboard_object_uid.valid())
+	{
+		if(!cam_controller.thirdPersonEnabled() && e.angle_delta.y < 0)
+		{
+			ui_interface->enableThirdPersonCamera();
+		}
+		else if(cam_controller.thirdPersonEnabled())
+		{
+			const bool scrolled_all_way_in = cam_controller.handleScrollWheelEvent((float)e.angle_delta.y);
+			if(scrolled_all_way_in && !photo_mode_ui.isPhotoModeEnabled())
+				ui_interface->enableFirstPersonCamera();
 		}
 		e.accepted = true;
 		return;
@@ -25485,15 +26324,51 @@ void GUIClient::onMouseWheelEvent(MouseWheelEvent& e)
 
 void GUIClient::gamepadButtonXChanged(bool pressed)
 {
-	//if(pressed)
-	//	useActionTriggered(/*use_mouse_cursor=*/false);
+	dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadX, pressed);
+}
+
+
+void GUIClient::gamepadButtonBChanged(bool pressed)
+{
+	dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadB, pressed);
 }
 
 
 void GUIClient::gamepadButtonAChanged(bool pressed)
 {
+	if(dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadA, pressed)) return;
 	if(pressed)
 		useActionTriggered(/*use_mouse_cursor=*/false);
+}
+
+
+void GUIClient::gamepadButtonYChanged(bool pressed)
+{
+	dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadY, pressed);
+}
+
+
+void GUIClient::gamepadButtonL1Changed(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadL1, pressed); }
+void GUIClient::gamepadButtonR1Changed(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadR1, pressed); }
+void GUIClient::gamepadButtonL3Changed(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadL3, pressed); }
+void GUIClient::gamepadButtonR3Changed(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadR3, pressed); }
+void GUIClient::gamepadButtonStartChanged(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadStart, pressed); }
+void GUIClient::gamepadButtonSelectChanged(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadSelect, pressed); }
+void GUIClient::gamepadButtonUpChanged(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadUp, pressed); }
+void GUIClient::gamepadButtonDownChanged(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadDown, pressed); }
+void GUIClient::gamepadButtonLeftChanged(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadLeft, pressed); }
+void GUIClient::gamepadButtonRightChanged(bool pressed) { dispatchScriptGamepadButton(Protocol::ScriptKey_GamepadRight, pressed); }
+
+
+void GUIClient::gamepadConnectedChanged(bool connected)
+{
+	if(connected)
+		return;
+	// A disconnected device may not emit individual release signals. Clear all
+	// held game keys explicitly so the server never leaves a movement/action stuck.
+	const std::vector<uint32> held_buttons(script_gamepad_buttons_down.begin(), script_gamepad_buttons_down.end());
+	for(const uint32 code : held_buttons)
+		dispatchScriptGamepadButton(code, false);
 }
 
 
@@ -26693,6 +27568,9 @@ void GUIClient::closeFullscreenViewer()
 // if use_mouse_cursor is false, use crosshair as cursor instead.
 void GUIClient::useActionTriggered(bool use_mouse_cursor)
 {
+	// A new E/use action releases any previous game target before selecting another object.
+	endScriptKeyboardInput(/*notify_user=*/false);
+
 	// If we are sitting on a seat, get up from it
 	if(seat_sitting_on)
 	{
@@ -26941,16 +27819,58 @@ void GUIClient::useActionTriggered(bool use_mouse_cursor)
 					}
 				}
 
-				// If the object has scripts that have an onUserUsedObject event handler for the object, send a UserUsedObjectMessage to the server
-				// So the script event handler can be run
-				if(ob->event_handlers && ob->event_handlers->onUserUsedObject_handlers.nonEmpty())
+				const bool has_use_handler = ob->event_handlers && ob->event_handlers->onUserUsedObject_handlers.nonEmpty();
+			const auto use_prompt_it = scripted_interaction_prompts.find(ob->uid);
+			const bool prompt_allows_e = use_prompt_it == scripted_interaction_prompts.end() ||
+				((use_prompt_it->second.input_mode == 0 || use_prompt_it->second.input_mode == 2) &&
+				 use_prompt_it->second.key_code == Protocol::ScriptKey_CharacterBase + 'e');
+				const bool has_key_handler = ob->event_handlers && ob->event_handlers->onUserKeyPressed_handlers.nonEmpty();
+				const bool has_key_released_handler = ob->event_handlers && ob->event_handlers->onUserKeyReleased_handlers.nonEmpty();
+				const bool has_game_session_handler = ob->event_handlers && ob->event_handlers->onUserGameSessionChanged_handlers.nonEmpty();
+				const bool has_game_action_handler = ob->event_handlers && ob->event_handlers->onUserGameAction_handlers.nonEmpty();
+				const bool has_game_message_handler = ob->event_handlers && ob->event_handlers->onUserGameMessage_handlers.nonEmpty();
+
+				// E explicitly focuses keyboard input on this nearby scripted object. Only game-control
+				// keys from the allowlist are captured; system shortcuts and unrelated keys remain untouched.
+				const bool has_action_bindings = ob->event_handlers && ob->event_handlers->game_action_input_binding_count > 0;
+				if(has_key_handler || has_key_released_handler || has_game_session_handler || has_game_action_handler || has_game_message_handler || has_action_bindings)
+				{
+					const auto avatar_it = world_state->avatars.find(client_avatar_uid);
+					const bool close_enough = avatar_it != world_state->avatars.end() &&
+						avatar_it->second->pos.getDist2(ob->pos) <= Maths::square(12.0);
+					if(connection_state == ServerConnectionState_Connected && client_thread.nonNull() &&
+						BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_OBJECT_KEYBOARD_SUPPORT) && close_enough)
+					{
+						endScriptKeyboardInput(false);
+						clearGameHUD();
+						active_script_keyboard_object_uid = ob->uid;
+						hideEditorGizmosForGameInput();
+						W_down = A_down = S_down = D_down = false;
+						left_down = right_down = up_down = down_down = space_down = false;
+						showInfoNotification("Game controls captured by this object. Press Escape to release them.");
+					}
+					else
+					{
+						if(connection_state == ServerConnectionState_Connected &&
+							BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_OBJECT_KEYBOARD_SUPPORT))
+							showInfoNotification("Move closer to the game object to use its controls.");
+						else
+							showInfoNotification("This server does not support keyboard-controlled objects yet.");
+					}
+				}
+
+				// Preserve the existing E/use event independently of keyboard capture.
+				if(has_use_handler && prompt_allows_e)
 				{
 					// Execute any event handlers
 					ob->event_handlers->executeOnUserUsedObjectHandlers(/*avatar_uid=*/this->client_avatar_uid, ob->uid, lock);
-
+				}
+				if(((has_use_handler && prompt_allows_e) || has_key_handler || has_key_released_handler || has_game_session_handler || has_game_action_handler || has_game_message_handler || has_action_bindings) && client_thread.nonNull())
+				{
 					// Make message packet and enqueue to send to execute event handler on server as well
 					MessageUtils::initPacket(scratch_packet, Protocol::UserUsedObjectMessage);
 					writeToStream(ob->uid, scratch_packet);
+					MessageUtils::updatePacketLengthField(scratch_packet);
 					enqueueMessageToSend(*client_thread, scratch_packet);
 				}
 			}
@@ -27460,7 +28380,7 @@ void GUIClient::updateBotListUI()
 
 void GUIClient::selectBotAvatar(const UID& avatar_uid)
 {
-	if(!avatar_uid.valid())
+	if(!avatar_uid.valid() || active_script_keyboard_object_uid.valid())
 		return;
 
 	if(this->selected_ob.nonNull())
@@ -28559,7 +29479,7 @@ public:
 	{
 		const float sensor_width = ::sensorWidth();
 		const float sensor_height = sensor_width / gui_client->opengl_engine->getViewPortAspectRatio();//ui->glWidget->viewport_aspect_ratio;
-		const float lens_sensor_dist = ::lensSensorDist();
+		const float lens_sensor_dist = (float)gui_client->cam_controller.lens_sensor_dist;
 
 		const Vec4f forwards = gui_client->cam_controller.getForwardsVec().toVec4fVector();
 		const Vec4f right = gui_client->cam_controller.getRightVec().toVec4fVector();
@@ -28586,7 +29506,7 @@ public:
 	{
 		const float sensor_width = ::sensorWidth();
 		const float sensor_height = sensor_width / gui_client->opengl_engine->getViewPortAspectRatio();//ui->glWidget->viewport_aspect_ratio;
-		const float lens_sensor_dist = ::lensSensorDist();
+		const float lens_sensor_dist = (float)gui_client->cam_controller.lens_sensor_dist;
 
 		const Vec4f forwards = gui_client->cam_controller.getForwardsVec().toVec4fVector();
 		const Vec4f right = gui_client->cam_controller.getRightVec().toVec4fVector();
@@ -28608,6 +29528,291 @@ public:
 	}
 	GUIClient* gui_client;
 };
+
+
+bool GUIClient::dispatchScriptKeyboardKey(Key key)
+{
+	if(!active_script_keyboard_object_uid.valid())
+		return false;
+
+	uint32 script_key_code = 0;
+	if(!getScriptKeyCodeForKey(key, script_key_code))
+		return false;
+
+	if(connection_state == ServerConnectionState_Connected && client_thread.nonNull() &&
+		scriptKeyboardInputSupportedByServer(server_capabilities) && world_state.nonNull())
+	{
+		bool object_still_exists = false;
+		bool has_game_input_handler = false;
+		WorldStateLock lock(world_state->mutex);
+		auto object_it = world_state->objects.find(active_script_keyboard_object_uid);
+		if(object_it != world_state->objects.end() && object_it.getValue().ptr()->state != WorldObject::State_Dead)
+		{
+			object_still_exists = true;
+			has_game_input_handler = object_it.getValue().ptr()->event_handlers &&
+				(object_it.getValue().ptr()->event_handlers->onUserKeyPressed_handlers.nonEmpty() ||
+				 object_it.getValue().ptr()->event_handlers->game_action_input_binding_count > 0);
+			if(has_game_input_handler)
+			{
+				// Gameplay callbacks mutate shared game state, so execute them only on the
+				// authoritative server. The client captures input and forwards the event.
+				MessageUtils::initPacket(scratch_packet, Protocol::UserPressedObjectKeyMessage);
+				writeToStream(active_script_keyboard_object_uid, scratch_packet);
+				scratch_packet.writeUInt32(script_key_code);
+				MessageUtils::updatePacketLengthField(scratch_packet);
+				enqueueMessageToSend(*client_thread, scratch_packet);
+				script_keyboard_keys_down.insert(script_key_code);
+				if(key == Key::Key_Escape)
+					endScriptKeyboardInput(/*notify_user=*/true);
+				return true;
+			}
+		}
+		if(object_still_exists && !has_game_input_handler)
+		{
+			// A game may use mouse-driven HUD actions without requesting keyboard input.
+			// Keep its session focused, except Escape which always releases it.
+			if(key == Key::Key_Escape)
+			{
+				endScriptKeyboardInput(/*notify_user=*/true);
+				return true;
+			}
+			return false;
+		}
+	}
+
+	// The object or handler disappeared, or server support was lost. Never leave a stale capture.
+	endScriptKeyboardInput(/*notify_user=*/true);
+	return false;
+}
+
+
+bool GUIClient::dispatchScriptGameInput(uint32 input_code, bool pressed)
+{
+	if(!active_script_keyboard_object_uid.valid() || connection_state != ServerConnectionState_Connected ||
+		!client_thread.nonNull() || !scriptKeyboardInputSupportedByServer(server_capabilities) || !world_state.nonNull())
+		return false;
+
+	bool object_still_exists = false;
+	bool has_game_input_handler = false;
+	{
+		WorldStateLock lock(world_state->mutex);
+		auto object_it = world_state->objects.find(active_script_keyboard_object_uid);
+		if(object_it != world_state->objects.end() && object_it.getValue().ptr()->state != WorldObject::State_Dead)
+		{
+			object_still_exists = true;
+			has_game_input_handler = object_it.getValue().ptr()->event_handlers &&
+				(object_it.getValue().ptr()->event_handlers->onUserKeyPressed_handlers.nonEmpty() ||
+				 object_it.getValue().ptr()->event_handlers->game_action_input_binding_count > 0);
+			if(has_game_input_handler || !pressed)
+			{
+				MessageUtils::initPacket(scratch_packet, pressed ? Protocol::UserPressedObjectKeyMessage : Protocol::UserReleasedObjectKeyMessage);
+				writeToStream(active_script_keyboard_object_uid, scratch_packet);
+				scratch_packet.writeUInt32(input_code);
+				MessageUtils::updatePacketLengthField(scratch_packet);
+				enqueueMessageToSend(*client_thread, scratch_packet);
+				return true;
+			}
+		}
+	}
+
+	// A HUD-only session can remain focused without keyboard handlers. If its
+	// object disappeared, release the lease so client input cannot stay captured.
+	if(object_still_exists && !has_game_input_handler)
+		return false;
+	endScriptKeyboardInput(/*notify_user=*/true);
+	return false;
+}
+
+
+bool GUIClient::dispatchScriptMouseButton(MouseButton button, bool pressed)
+{
+	uint32 code = 0;
+	if(!getScriptMouseCodeForButton(button, code)) return false;
+	if(pressed)
+	{
+		if(!dispatchScriptGameInput(code, true)) return false;
+		script_mouse_buttons_down.insert(code);
+		return true;
+	}
+	if(script_mouse_buttons_down.erase(code) == 0) return false;
+	dispatchScriptGameInput(code, false);
+	return true;
+}
+
+
+void GUIClient::sendScriptGameInputState(const MouseCursorState& mouse_cursor_state)
+{
+	if(!active_script_keyboard_object_uid.valid() || connection_state != ServerConnectionState_Connected ||
+		!client_thread.nonNull() || !world_state.nonNull() ||
+		!BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_ANALOG_INPUT_SUPPORT) ||
+		script_game_input_state_send_timer.elapsed() < 1.0 / 30.0)
+		return;
+	script_game_input_state_send_timer.reset();
+
+	bool object_still_exists = false;
+	{
+		WorldStateLock lock(world_state->mutex);
+		auto object_it = world_state->objects.find(active_script_keyboard_object_uid);
+		object_still_exists = object_it != world_state->objects.end() &&
+			object_it.getValue().ptr()->state != WorldObject::State_Dead;
+	}
+	if(!object_still_exists)
+	{
+		endScriptKeyboardInput(/*notify_user=*/true);
+		return;
+	}
+
+	const bool gamepad_connected = ui_interface && ui_interface->gamepadAttached();
+	float left_x = 0.f, left_y = 0.f, right_x = 0.f, right_y = 0.f;
+	if(gamepad_connected)
+	{
+		left_x = myClamp(ui_interface->gamepadAxisLeftX(), -1.f, 1.f);
+		left_y = myClamp(ui_interface->gamepadAxisLeftY(), -1.f, 1.f);
+		right_x = myClamp(ui_interface->gamepadAxisRightX(), -1.f, 1.f);
+		right_y = myClamp(ui_interface->gamepadAxisRightY(), -1.f, 1.f);
+	}
+	const float left_trigger = gamepad_connected ? myClamp(ui_interface->gamepadButtonL2(), 0.f, 1.f) : 0.f;
+	const float right_trigger = gamepad_connected ? myClamp(ui_interface->gamepadButtonR2(), 0.f, 1.f) : 0.f;
+	const int viewport_w = opengl_engine.nonNull() ? opengl_engine->getMainViewPortWidth() : 0;
+	const int viewport_h = opengl_engine.nonNull() ? opengl_engine->getMainViewPortHeight() : 0;
+	const bool pointer_available = viewport_w > 0 && viewport_h > 0 && mouse_cursor_state.cursor_pos.x >= 0 &&
+		mouse_cursor_state.cursor_pos.y >= 0 && mouse_cursor_state.cursor_pos.x < viewport_w &&
+		mouse_cursor_state.cursor_pos.y < viewport_h;
+	script_game_pointer_available = pointer_available;
+	script_game_pointer_x = mouse_cursor_state.cursor_pos.x;
+	script_game_pointer_y = mouse_cursor_state.cursor_pos.y;
+	const float pointer_x = pointer_available ? (float)mouse_cursor_state.cursor_pos.x / (float)viewport_w : 0.f;
+	const float pointer_y = pointer_available ? (float)mouse_cursor_state.cursor_pos.y / (float)viewport_h : 0.f;
+	const uint32 flags = (gamepad_connected ? 1u : 0u) | (pointer_available ? 2u : 0u);
+	MessageUtils::initPacket(scratch_packet, Protocol::UserGameInputStateMessage);
+	writeToStream(active_script_keyboard_object_uid, scratch_packet);
+	scratch_packet.writeUInt32(flags);
+	scratch_packet.writeFloat(left_x);
+	scratch_packet.writeFloat(left_y);
+	scratch_packet.writeFloat(right_x);
+	scratch_packet.writeFloat(right_y);
+	scratch_packet.writeFloat(pointer_x);
+	scratch_packet.writeFloat(pointer_y);
+	if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_TRIGGER_INPUT_SUPPORT))
+	{
+		scratch_packet.writeFloat(left_trigger);
+		scratch_packet.writeFloat(right_trigger);
+	}
+	if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_WHEEL_INPUT_SUPPORT))
+	{
+		scratch_packet.writeFloat(script_game_wheel_delta_x);
+		scratch_packet.writeFloat(script_game_wheel_delta_y);
+		script_game_wheel_delta_x = 0.f;
+		script_game_wheel_delta_y = 0.f;
+	}
+	if(BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_AIM_RAY_SUPPORT))
+	{
+		Vec3d aim_origin, aim_direction;
+		getGameAimRay(aim_origin, aim_direction);
+		scratch_packet.writeFloat((float)aim_origin.x);
+		scratch_packet.writeFloat((float)aim_origin.y);
+		scratch_packet.writeFloat((float)aim_origin.z);
+		scratch_packet.writeFloat((float)aim_direction.x);
+		scratch_packet.writeFloat((float)aim_direction.y);
+		scratch_packet.writeFloat((float)aim_direction.z);
+	}
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+bool GUIClient::sendScriptGameRPC(const UID& object_uid, const std::string& name, const std::vector<uint8>& payload)
+{
+	if(!object_uid.valid() || !isGameInputFocused(object_uid) || connection_state != ServerConnectionState_Connected ||
+		!client_thread.nonNull() || !BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_RPC_SUPPORT) ||
+		name.empty() || name.size() > 32 || payload.empty() || payload.size() > 4096 || script_game_rpc_send_timer.elapsed() < 0.05)
+		return false;
+	for(unsigned char c : name)
+		if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+			return false;
+	script_game_rpc_send_timer.reset();
+	MessageUtils::initPacket(scratch_packet, Protocol::UserGameRPCMessage);
+	writeToStream(object_uid, scratch_packet);
+	scratch_packet.writeStringLengthFirst(name);
+	scratch_packet.writeUInt32((uint32)payload.size());
+	scratch_packet.writeData(payload.data(), payload.size());
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+	return true;
+}
+
+
+bool GUIClient::getReceivedScriptGameState(const UID& object_uid, uint32& version_out, std::vector<uint8>& serialized_value_out) const
+{
+	const auto version_it = received_game_state_versions.find(object_uid);
+	const auto value_it = received_game_state_values.find(object_uid);
+	if(version_it == received_game_state_versions.end() || value_it == received_game_state_values.end())
+		return false;
+	version_out = version_it->second;
+	serialized_value_out = value_it->second;
+	return true;
+}
+
+
+bool GUIClient::dispatchScriptGamepadButton(uint32 input_code, bool pressed)
+{
+	if(pressed)
+	{
+		if(!dispatchScriptGameInput(input_code, true)) return false;
+		script_gamepad_buttons_down.insert(input_code);
+		return true;
+	}
+	if(script_gamepad_buttons_down.erase(input_code) == 0) return false;
+	dispatchScriptGameInput(input_code, false);
+	return true;
+}
+
+
+bool GUIClient::tryUseConfiguredInteractionKey(Key key)
+{
+	if(!BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_INTERACTION_KEY_SUPPORT) ||
+		connection_state != ServerConnectionState_Connected || client_thread.isNull() || !world_state.nonNull() || !physics_world.nonNull())
+		return false;
+	uint32 key_code = 0;
+	if(!getScriptKeyCodeForKey(key, key_code) || key_code == Protocol::ScriptKey_CharacterBase + 'e')
+		return false; // E keeps its established interaction/focus behavior.
+
+	const Vec2i cursor_pos = ui_interface->getMouseCursorWidgetPos();
+	const Vec4f ray_origin = cam_controller.getPosition().toVec4fPoint();
+	const Vec4f ray_dir = getDirForPixelTrace(cursor_pos.x, cursor_pos.y);
+	RayTraceResult results;
+	physics_world->traceRay(ray_origin, ray_dir, /*max_t=*/1.0e5f, /*ignore body id=*/JPH::BodyID(), results);
+	if(!results.hit_object || !results.hit_object->userdata || results.hit_object->userdata_type != 0)
+		return false;
+
+	WorldObject* ob = static_cast<WorldObject*>(results.hit_object->userdata);
+	bool allowed = false;
+	{
+		WorldStateLock lock(world_state->mutex);
+		auto avatar_it = world_state->avatars.find(client_avatar_uid);
+		auto object_it = world_state->objects.find(ob->uid);
+		const auto prompt_it = scripted_interaction_prompts.find(ob->uid);
+		allowed = avatar_it != world_state->avatars.end() && object_it != world_state->objects.end() &&
+			avatar_it->second->state != Avatar::State_Dead && object_it.getValue().ptr()->state != WorldObject::State_Dead &&
+			avatar_it->second->pos.getDist2(object_it.getValue().ptr()->pos) <= Maths::square(8.0) &&
+			prompt_it != scripted_interaction_prompts.end() && prompt_it->second.input_mode != 1 && prompt_it->second.key_code == key_code &&
+			object_it.getValue().ptr()->event_handlers && object_it.getValue().ptr()->event_handlers->onUserUsedObject_handlers.nonEmpty();
+		if(allowed)
+			object_it.getValue().ptr()->event_handlers->executeOnUserUsedObjectHandlers(client_avatar_uid, ob->uid, lock);
+	}
+	if(!allowed)
+		return false;
+
+	MessageUtils::initPacket(scratch_packet, Protocol::UserUsedObjectWithKeyMessage);
+	writeToStream(ob->uid, scratch_packet);
+	scratch_packet.writeUInt32(key_code);
+	const Vec4f hit_ws = ray_origin + ray_dir * results.hit_t;
+	scratch_packet.writeFloat(ray_origin[0]); scratch_packet.writeFloat(ray_origin[1]); scratch_packet.writeFloat(ray_origin[2]);
+	scratch_packet.writeFloat(hit_ws[0]); scratch_packet.writeFloat(hit_ws[1]); scratch_packet.writeFloat(hit_ws[2]);
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+	return true;
+}
 
 
 void GUIClient::keyPressed(KeyEvent& e)
@@ -28651,6 +29856,12 @@ void GUIClient::keyPressed(KeyEvent& e)
 		return;
 	}
 
+	// Escape always reaches the focused game before it can dismiss unrelated UI popups.
+	if(e.key == Key::Key_Escape && dispatchScriptKeyboardKey(e.key))
+	{
+		e.accepted = true;
+		return;
+	}
 	if(e.key == Key::Key_Escape && chat_ui.dismissPopup()) { e.accepted=true; return; }
 	if(gl_ui)
 		gl_ui->handleKeyPressedEvent(e);
@@ -28664,6 +29875,20 @@ void GUIClient::keyPressed(KeyEvent& e)
 			return;
 	}
 
+	// Route allowlisted game-control keys only while the user has
+	// explicitly focused a nearby Lua object by pressing E on it.
+	if(dispatchScriptKeyboardKey(e.key))
+	{
+		e.accepted = true;
+		return;
+	}
+	if(!BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Ctrl) && !BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Alt) &&
+		tryUseConfiguredInteractionKey(e.key))
+	{
+		e.accepted = true;
+		return;
+	}
+
 	// Update our key-state variables, jump if space was pressed.
 	{
 		SHIFT_down = BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Shift);// (e->modifiers() & ShiftModifier);
@@ -28672,7 +29897,7 @@ void GUIClient::keyPressed(KeyEvent& e)
 		if(e.key == Key::Key_Space)
 		{
 			//if(cam_move_on_key_input_enabled)
-			if(ui_interface->isKeyboardCameraMoveEnabled() && !(cam_controller.current_cam_mode == CameraController::CameraMode_FreeCamera))
+			if(!active_script_keyboard_object_uid.valid() && ui_interface->isKeyboardCameraMoveEnabled() && !(cam_controller.current_cam_mode == CameraController::CameraMode_FreeCamera))
 				player_physics.processJump(this->cam_controller, /*cur time=*/Clock::getTimeSinceInit());
 			space_down = true;
 		}
@@ -29010,6 +30235,26 @@ void GUIClient::keyReleased(KeyEvent& e)
 		return;
 	}
 
+	if(active_script_keyboard_object_uid.valid())
+	{
+		uint32 script_key_code = 0;
+		if(getScriptKeyCodeForKey(e.key, script_key_code))
+		{
+			script_keyboard_keys_down.erase(script_key_code);
+			if(connection_state == ServerConnectionState_Connected && client_thread.nonNull() &&
+				BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_OBJECT_KEYBOARD_SUPPORT))
+			{
+				MessageUtils::initPacket(scratch_packet, Protocol::UserReleasedObjectKeyMessage);
+				writeToStream(active_script_keyboard_object_uid, scratch_packet);
+				scratch_packet.writeUInt32(script_key_code);
+				MessageUtils::updatePacketLengthField(scratch_packet);
+				enqueueMessageToSend(*client_thread, scratch_packet);
+			}
+			e.accepted = true;
+			return;
+		}
+	}
+
 	SHIFT_down = BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Shift);// (e->modifiers() & ShiftModifier);
 	CTRL_down  = BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Ctrl);// (e->modifiers() & ControlModifier);
 
@@ -29060,6 +30305,37 @@ void GUIClient::keyReleased(KeyEvent& e)
 }
 
 
+void GUIClient::endScriptKeyboardInput(bool notify_user)
+{
+	if(game_camera_lease_active)
+		releaseGameCamera(game_camera_owner_object_uid);
+	if(active_script_keyboard_object_uid.valid())
+	{
+		received_game_state_versions.erase(active_script_keyboard_object_uid);
+		received_game_state_values.erase(active_script_keyboard_object_uid);
+		clearGameHUD(active_script_keyboard_object_uid);
+		if(connection_state == ServerConnectionState_Connected && client_thread.nonNull() &&
+			BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_OBJECT_KEYBOARD_SUPPORT))
+		{
+			MessageUtils::initPacket(scratch_packet, Protocol::UserReleasedObjectKeyboardMessage);
+			MessageUtils::updatePacketLengthField(scratch_packet);
+			enqueueMessageToSend(*client_thread, scratch_packet);
+		}
+		active_script_keyboard_object_uid = UID::invalidUID();
+		script_keyboard_keys_down.clear();
+		script_mouse_buttons_down.clear();
+		script_gamepad_buttons_down.clear();
+		script_game_wheel_delta_x = 0.f;
+		script_game_wheel_delta_y = 0.f;
+		script_game_pointer_x = 0;
+		script_game_pointer_y = 0;
+		script_game_pointer_available = false;
+		if(notify_user)
+			showInfoNotification("Keyboard control released.");
+	}
+}
+
+
 void GUIClient::handleTextInputEvent(TextInputEvent& text_input_event)
 {
 	if(image_viewer_image.nonNull())
@@ -29091,6 +30367,7 @@ void GUIClient::handleTextInputEvent(TextInputEvent& text_input_event)
 
 void GUIClient::focusOut()
 {
+	endScriptKeyboardInput(/*notify_user=*/false);
 	SHIFT_down = false;
 	CTRL_down = false;
 	A_down = false;
@@ -29298,4 +30575,788 @@ void GUIClient::showScriptMessage(const std::string& message)
 		gl_ui->removeWidget(notification.text_view);
 		script_messages.pop_front(); // remove from list
 	}
+}
+
+
+void GUIClient::setGameHUDText(const UID& game_object_uid, const std::string& text, bool has_layout, float center_x, float top_y)
+{
+	if(!game_object_uid.valid() || game_object_uid != active_script_keyboard_object_uid || text.empty() || text.size() > 2048 || gl_ui.isNull() ||
+		(has_layout && (!isFinite(center_x) || center_x < -1.f || center_x > 1.f || !isFinite(top_y) || top_y < -1.f || top_y > 1.f)))
+		return;
+	if(game_hud_owner_object_uid != game_object_uid)
+		clearGameHUD();
+
+	const std::string safe_text = UTF8Utils::sanitiseUTF8String(text);
+	if(game_hud_text_view.nonNull())
+	{
+		game_hud_text_view->setText(*gl_ui, safe_text);
+		game_hud_text_view->setTextAlpha(1.f);
+		game_hud_text_view->setBackgroundAlpha(0.9f);
+	}
+	else
+	{
+		GLUITextView::CreateArgs args;
+		args.background_colour = toLinearSRGB(Colour3f(0.08f, 0.09f, 0.12f));
+		args.text_colour = Colour3f(1.f, 1.f, 1.f);
+		args.padding_px = 12;
+		game_hud_text_view = new GLUITextView(*gl_ui, opengl_engine, safe_text, Vec2f(0, 0), args);
+		game_hud_text_view->setBackgroundAlpha(0.9f);
+		gl_ui->addWidget(game_hud_text_view);
+	}
+	game_hud_owner_object_uid = game_object_uid;
+	if(has_layout)
+	{
+		const Vec2f text_dims = game_hud_text_view->getRect().getWidths();
+		const float viewport_max_y = gl_ui->getViewportMinMaxY();
+		const float max_x = myMax(-1.f, 1.f - text_dims.x);
+		const float min_y = -viewport_max_y + myMin(text_dims.y, viewport_max_y * 2.f);
+		game_hud_text_view->setPos(Vec2f(
+			myClamp(center_x - text_dims.x * 0.5f, -1.f, max_x),
+			myClamp(top_y * viewport_max_y, min_y, viewport_max_y)));
+	}
+	else
+		game_hud_text_view->setPos(Vec2f(
+			myMax(-1.f, -game_hud_text_view->getRect().getWidths().x * 0.5f),
+			gl_ui->getViewportMinMaxY() * 0.55f));
+}
+
+
+void GUIClient::setScriptAnimationPaused(const UID& object_uid, bool paused)
+{
+	if(!object_uid.valid()) return;
+	if(paused) script_paused_animation_uids.insert(object_uid);
+	else script_paused_animation_uids.erase(object_uid);
+}
+
+
+bool GUIClient::isScriptAnimationPaused(const UID& object_uid) const
+{
+	return script_paused_animation_uids.find(object_uid) != script_paused_animation_uids.end();
+}
+
+
+void GUIClient::setGameHUDMenu(const UID& game_object_uid, const std::string& panel_id, const std::string& title, const std::string& body, const std::vector<GameHUDAction>& actions, const std::vector<GameHUDFormField>& fields, const std::vector<GameHUDProgressBar>& progress_bars, const std::vector<GameHUDTextWidget>& text_widgets, float center_x, float top_y, float width)
+{
+	if(!game_object_uid.valid() || game_object_uid != active_script_keyboard_object_uid || panel_id.empty() || panel_id.size() > 24 || title.empty() ||
+	title.size() > 128 || body.size() > 2048 || (actions.empty() && progress_bars.empty() && text_widgets.empty()) || (actions.empty() && !fields.empty()) || actions.size() > 8 || progress_bars.size() > 4 || text_widgets.size() > 8 || gl_ui.isNull() ||
+	!isFinite(center_x) || center_x < -1.f || center_x > 1.f || !isFinite(top_y) || top_y < -1.f || top_y > 1.f ||
+	!isFinite(width) || width < 0.2f || width > 1.f)
+		return;
+	for(const GameHUDTextWidget& widget : text_widgets)
+		if(widget.id.empty() || widget.id.size() > 32 || widget.text.empty() || widget.text.size() > 256 ||
+			!isFinite(widget.center_x) || widget.center_x < -1.f || widget.center_x > 1.f ||
+			!isFinite(widget.top_y) || widget.top_y < -1.f || widget.top_y > 1.f ||
+			!isFinite(widget.width) || widget.width < 0.05f || widget.width > 0.8f ||
+			!isFinite(widget.text_r) || widget.text_r < 0.f || widget.text_r > 1.f ||
+			!isFinite(widget.text_g) || widget.text_g < 0.f || widget.text_g > 1.f ||
+			!isFinite(widget.text_b) || widget.text_b < 0.f || widget.text_b > 1.f ||
+			!isFinite(widget.background_r) || widget.background_r < 0.f || widget.background_r > 1.f ||
+			!isFinite(widget.background_g) || widget.background_g < 0.f || widget.background_g > 1.f ||
+			!isFinite(widget.background_b) || widget.background_b < 0.f || widget.background_b > 1.f ||
+			!isFinite(widget.background_alpha) || widget.background_alpha < 0.f || widget.background_alpha > 1.f ||
+			widget.center_x - widget.width * 0.5f < -1.f || widget.center_x + widget.width * 0.5f > 1.f)
+			return;
+	if(game_hud_owner_object_uid.valid() && game_hud_owner_object_uid != game_object_uid)
+		clearGameHUD();
+	if(game_hud_panels.count(panel_id) == 0 && game_hud_panels.size() >= 4)
+		return;
+	game_hud_owner_object_uid = game_object_uid;
+	GameHUDPanelWidgets& panel = game_hud_panels[panel_id];
+	if(std::fabs(panel.width - width) > 1.0e-4f)
+	{
+		if(gl_ui.nonNull())
+		{
+			if(panel.title_view.nonNull()) gl_ui->removeWidget(panel.title_view);
+			if(panel.body_view.nonNull()) gl_ui->removeWidget(panel.body_view);
+			for(auto& field : panel.fields) { if(field.label.nonNull()) gl_ui->removeWidget(field.label); if(field.input.nonNull()) gl_ui->removeWidget(field.input); if(field.choice.nonNull()) gl_ui->removeWidget(field.choice); }
+			for(auto& bar : panel.progress_bars) { if(bar.label.nonNull()) gl_ui->removeWidget(bar.label); if(bar.background.nonNull()) gl_ui->removeWidget(bar.background); if(bar.fill.nonNull()) gl_ui->removeWidget(bar.fill); }
+			for(GLUITextViewRef& text_widget : panel.text_widgets) if(text_widget.nonNull()) gl_ui->removeWidget(text_widget);
+		}
+		panel.title_view = nullptr;
+		panel.body_view = nullptr;
+		panel.fields.clear();
+		panel.progress_bars.clear();
+		panel.text_widgets.clear();
+		panel.width = width;
+	}
+
+	const std::string safe_title = UTF8Utils::sanitiseUTF8String(title);
+	if(panel.title_view.nonNull())
+		panel.title_view->setText(*gl_ui, safe_title);
+	else
+	{
+		GLUITextView::CreateArgs title_args;
+		title_args.background_colour = toLinearSRGB(Colour3f(0.08f, 0.09f, 0.12f));
+		title_args.text_colour = Colour3f(1.f, 1.f, 1.f);
+		title_args.padding_px = 10;
+		title_args.max_width = width;
+		panel.title_view = new GLUITextView(*gl_ui, opengl_engine, safe_title, Vec2f(0, 0), title_args);
+		panel.title_view->setBackgroundAlpha(0.92f);
+		gl_ui->addWidget(panel.title_view);
+	}
+	panel.title_view->setTextAlpha(1.f);
+	panel.title_view->setBackgroundAlpha(0.92f);
+	const float viewport_max_y = gl_ui->getViewportMinMaxY();
+	const float menu_center_x = myClamp(center_x, -1.f + width * 0.5f, 1.f - width * 0.5f);
+	const float menu_top_y = myClamp(top_y * viewport_max_y, -viewport_max_y + 0.05f, viewport_max_y - 0.05f);
+	const float title_width = panel.title_view->getRect().getWidths().x;
+	panel.title_view->setPos(Vec2f(myClamp(menu_center_x - title_width * 0.5f, -1.f, 1.f - title_width), menu_top_y));
+	float buttons_top_y = menu_top_y - panel.title_view->getRect().getWidths().y - gl_ui->getUIWidthForDevIndepPixelWidth(12.f);
+
+	const std::string safe_body = UTF8Utils::sanitiseUTF8String(body);
+	if(!safe_body.empty())
+	{
+		if(panel.body_view.nonNull())
+			panel.body_view->setText(*gl_ui, safe_body);
+		else
+		{
+			GLUITextView::CreateArgs body_args;
+			body_args.background_colour = toLinearSRGB(Colour3f(0.08f, 0.09f, 0.12f));
+			body_args.text_colour = Colour3f(0.92f, 0.92f, 0.95f);
+			body_args.padding_px = 10;
+			body_args.max_width = width;
+			panel.body_view = new GLUITextView(*gl_ui, opengl_engine, safe_body, Vec2f(0, 0), body_args);
+			panel.body_view->setBackgroundAlpha(0.92f);
+			gl_ui->addWidget(panel.body_view);
+		}
+		panel.body_view->setTextAlpha(1.f);
+		panel.body_view->setBackgroundAlpha(0.92f);
+		const float title_bottom_y = menu_top_y - panel.title_view->getRect().getWidths().y;
+		const float body_top_y = title_bottom_y - gl_ui->getUIWidthForDevIndepPixelWidth(6.f);
+		panel.body_view->setPos(Vec2f(
+			myClamp(menu_center_x - panel.body_view->getRect().getWidths().x * 0.5f, -1.f, 1.f - panel.body_view->getRect().getWidths().x),
+			body_top_y));
+		buttons_top_y = body_top_y - panel.body_view->getRect().getWidths().y - gl_ui->getUIWidthForDevIndepPixelWidth(8.f);
+	}
+	else if(panel.body_view.nonNull())
+	{
+		gl_ui->removeWidget(panel.body_view);
+		panel.body_view = nullptr;
+	}
+	for(GLUITextViewRef& text_widget : panel.text_widgets)
+		if(text_widget.nonNull()) gl_ui->removeWidget(text_widget);
+	panel.text_widgets.clear();
+	for(const GameHUDTextWidget& spec : text_widgets)
+	{
+		GLUITextView::CreateArgs widget_args;
+		widget_args.text_colour = Colour3f(spec.text_r, spec.text_g, spec.text_b);
+		widget_args.background_colour = toLinearSRGB(Colour3f(spec.background_r, spec.background_g, spec.background_b));
+		widget_args.padding_px = 2;
+		widget_args.max_width = spec.width;
+		GLUITextViewRef text_widget = new GLUITextView(*gl_ui, opengl_engine,
+			UTF8Utils::sanitiseUTF8String(spec.text), Vec2f(0, 0), widget_args);
+		text_widget->setBackgroundAlpha(spec.background_alpha);
+		const float widget_width = std::min(spec.width, text_widget->getRect().getWidths().x);
+		const float widget_height = text_widget->getRect().getWidths().y;
+		const float widget_top = myClamp(spec.top_y * viewport_max_y, -viewport_max_y + widget_height, viewport_max_y);
+		text_widget->setPos(Vec2f(spec.center_x - widget_width * 0.5f, widget_top));
+		gl_ui->addWidget(text_widget);
+		panel.text_widgets.push_back(text_widget);
+	}
+		for(auto& field : panel.fields)
+	{
+		if(field.label.nonNull()) gl_ui->removeWidget(field.label);
+		if(field.input.nonNull()) gl_ui->removeWidget(field.input);
+		if(field.choice.nonNull()) gl_ui->removeWidget(field.choice);
+	}
+	panel.fields.clear();
+	for(auto& bar : panel.progress_bars)
+	{
+		if(bar.label.nonNull()) gl_ui->removeWidget(bar.label);
+		if(bar.background.nonNull()) gl_ui->removeWidget(bar.background);
+		if(bar.fill.nonNull()) gl_ui->removeWidget(bar.fill);
+	}
+	panel.progress_bars.clear();
+	for(const GameHUDFormField& form_field : fields)
+	{
+		GameHUDPanelWidgets::FieldWidget widget;
+		widget.id = form_field.id;
+		widget.required = form_field.required;
+		widget.numeric = form_field.type == GameHUDFormField::Number;
+		widget.checkbox = form_field.type == GameHUDFormField::Checkbox;
+		widget.checked = form_field.checked;
+		widget.minimum = form_field.minimum;
+		widget.maximum = form_field.maximum;
+		widget.options = form_field.options;
+		GLUITextView::CreateArgs label_args;
+		label_args.text_colour = Colour3f(0.92f, 0.92f, 0.95f);
+		label_args.padding_px = 4;
+		label_args.max_width = width;
+		widget.label = new GLUITextView(*gl_ui, opengl_engine,
+			UTF8Utils::sanitiseUTF8String(form_field.label + (form_field.required ? " *" : "")), Vec2f(0, 0), label_args);
+		GLUILineEdit::CreateArgs input_args;
+		input_args.tooltip = form_field.label;
+		input_args.width = width * 0.78f;
+		input_args.padding_px = 7;
+		gl_ui->addWidget(widget.label);
+		const float label_h = widget.label->getRect().getWidths().y;
+		const float input_h = gl_ui->getUIWidthForDevIndepPixelWidth(36.f);
+		const float label_top = buttons_top_y;
+		widget.label->setPos(Vec2f(menu_center_x - width * 0.42f, label_top));
+		const float input_top = label_top - label_h - gl_ui->getUIWidthForDevIndepPixelWidth(2.f);
+		if((form_field.type == GameHUDFormField::Select && !widget.options.empty()) || widget.checkbox)
+		{
+			widget.choice_pos = Vec2f(menu_center_x - width * 0.39f, input_top - input_h);
+			widget.choice_dims = Vec2f(input_args.width, input_h);
+			GLUITextButton::CreateArgs choice_args;
+			choice_args.tooltip = widget.checkbox ? "Click to toggle this option" : "Click to cycle available options";
+			widget.choice = new GLUITextButton(*gl_ui, opengl_engine,
+				widget.checkbox ? (widget.checked ? "Да" : "Нет") : UTF8Utils::sanitiseUTF8String(widget.options[0]), Vec2f(0, 0), choice_args);
+			widget.choice->handler = this;
+			widget.choice->setPosAndDims(widget.choice_pos, widget.choice_dims);
+			gl_ui->addWidget(widget.choice);
+		}
+		else
+		{
+			widget.input = new GLUILineEdit(*gl_ui, opengl_engine, Vec2f(0, 0), input_args);
+			widget.input->setPosAndDims(Vec2f(menu_center_x - width * 0.39f, input_top - input_h), Vec2f(input_args.width, input_h));
+			gl_ui->addWidget(widget.input);
+		}
+		buttons_top_y = input_top - input_h - gl_ui->getUIWidthForDevIndepPixelWidth(7.f);
+		panel.fields.push_back(widget);
+	}
+	auto format_hud_number = [](float value) {
+		std::string formatted = std::to_string(value);
+		while(!formatted.empty() && formatted.back() == '0') formatted.pop_back();
+		if(!formatted.empty() && formatted.back() == '.') formatted.pop_back();
+		return formatted;
+	};
+	for(const GameHUDProgressBar& progress : progress_bars)
+	{
+		GameHUDPanelWidgets::ProgressWidget widget;
+		widget.id = progress.id;
+		GLUITextView::CreateArgs label_args;
+		label_args.text_colour = Colour3f(0.92f, 0.92f, 0.95f);
+		label_args.padding_px = 2;
+		label_args.max_width = width;
+		const std::string label_text = progress.label + "  " + format_hud_number(progress.value) + " / " + format_hud_number(progress.maximum);
+		widget.label = new GLUITextView(*gl_ui, opengl_engine, UTF8Utils::sanitiseUTF8String(label_text), Vec2f(0, 0), label_args);
+		gl_ui->addWidget(widget.label);
+		const float label_top = buttons_top_y;
+		widget.label->setPos(Vec2f(menu_center_x - width * 0.39f, label_top));
+		const float bar_height = gl_ui->getUIWidthForDevIndepPixelWidth(8.f);
+		const float bar_width = width * 0.78f;
+		const float bar_left = menu_center_x - bar_width * 0.5f;
+		const float bar_top = label_top - widget.label->getRect().getWidths().y - gl_ui->getUIWidthForDevIndepPixelWidth(2.f);
+		GLUIInertWidget::CreateArgs background_args;
+		background_args.background_colour = toLinearSRGB(Colour3f(0.12f, 0.13f, 0.16f));
+		background_args.background_alpha = 1.f;
+		widget.background = new GLUIInertWidget(*gl_ui, opengl_engine, background_args);
+		widget.background->setPosAndDims(Vec2f(bar_left, bar_top - bar_height), Vec2f(bar_width, bar_height));
+		gl_ui->addWidget(widget.background);
+		GLUIInertWidget::CreateArgs fill_args;
+		fill_args.background_colour = toLinearSRGB(Colour3f(0.15f, 0.72f, 0.32f));
+		fill_args.background_alpha = 1.f;
+		widget.fill = new GLUIInertWidget(*gl_ui, opengl_engine, fill_args);
+		const float fraction = myClamp(progress.value / progress.maximum, 0.f, 1.f);
+		widget.fill->setPosAndDims(Vec2f(bar_left, bar_top - bar_height), Vec2f(std::max(0.001f, bar_width * fraction), bar_height));
+		gl_ui->addWidget(widget.fill);
+		buttons_top_y = bar_top - bar_height - gl_ui->getUIWidthForDevIndepPixelWidth(7.f);
+		panel.progress_bars.push_back(widget);
+	}
+
+	for(GLUITextButtonRef& button : panel.buttons)
+		gl_ui->removeWidget(button);
+	panel.buttons.clear();
+
+	const size_t columns = actions.size() > 1 ? 2 : 1;
+	const size_t rows = (actions.size() + columns - 1) / columns;
+	const float button_width = columns == 1 ? myMin(0.38f, width * 0.48f) : myMin(0.34f, (width - gl_ui->getUIWidthForDevIndepPixelWidth(10.f)) * 0.5f);
+	const float button_height = gl_ui->getUIWidthForDevIndepPixelWidth(40.f);
+	const float column_gap = gl_ui->getUIWidthForDevIndepPixelWidth(10.f);
+	const float row_gap = gl_ui->getUIWidthForDevIndepPixelWidth(8.f);
+	const float total_width = columns * button_width + (columns - 1) * column_gap;
+	const float left_x = myClamp(menu_center_x - total_width * 0.5f, -1.f, 1.f - total_width);
+	const float action_buttons_top_y = buttons_top_y;
+	for(size_t i = 0; i < actions.size(); ++i)
+	{
+		GLUITextButton::CreateArgs button_args;
+		button_args.tooltip = actions[i].label;
+		GLUITextButtonRef button = new GLUITextButton(*gl_ui, opengl_engine,
+			UTF8Utils::sanitiseUTF8String(actions[i].label), Vec2f(0, 0), button_args);
+		button->handler = this;
+		button->client_data = actions[i].id;
+		if(actions[i].has_layout)
+		{
+			const float action_width = actions[i].width;
+			const float action_height = actions[i].height * viewport_max_y;
+			const float action_top = actions[i].top_y * viewport_max_y;
+			button->setPosAndDims(
+				Vec2f(actions[i].center_x - action_width * 0.5f, action_top - action_height),
+				Vec2f(action_width, action_height));
+		}
+		else
+		{
+			const size_t col = i % columns;
+			const size_t row = i / columns;
+			button->setPosAndDims(
+				Vec2f(left_x + col * (button_width + column_gap), action_buttons_top_y - row * (button_height + row_gap)),
+				Vec2f(button_width, button_height));
+		}
+		gl_ui->addWidget(button);
+		panel.buttons.push_back(button);
+	}
+	(void)rows;
+}
+
+
+bool GUIClient::setGamePlayerControl(const UID& game_object_uid, float move_x, float move_y, bool jump, bool run, std::string& error_out)
+{
+	if(!isGameInputFocused(game_object_uid))
+	{
+		error_out = "Player control is available only while this game owns local input focus.";
+		return false;
+	}
+	if(cam_controller.current_cam_mode != CameraController::CameraMode_Standard || vehicle_controller_inside.nonNull())
+	{
+		error_out = "Player control requires standard avatar camera mode and no active vehicle.";
+		return false;
+	}
+	if(!std::isfinite(move_x) || !std::isfinite(move_y) || move_x < -1.f || move_x > 1.f || move_y < -1.f || move_y > 1.f)
+	{
+		error_out = "Movement axes must be finite values from -1 to 1.";
+		return false;
+	}
+	const float magnitude = std::sqrt(move_x * move_x + move_y * move_y);
+	if(magnitude > 1.f)
+	{
+		move_x /= magnitude;
+		move_y /= magnitude;
+	}
+	if(game_player_control_owner_uid != game_object_uid)
+		game_player_control_jump_was_down = false;
+	game_player_control_owner_uid = game_object_uid;
+	game_player_control_move_x = move_x;
+	game_player_control_move_y = move_y;
+	game_player_control_jump = jump;
+	game_player_control_run = run;
+	game_player_control_last_update_time = total_timer.elapsed();
+	error_out.clear();
+	return true;
+}
+
+
+bool GUIClient::setGameCamera(const UID& game_object_uid, const Vec3d& camera_position, const Vec3d& look_at_position, double horizontal_fov_degrees, double transition_seconds, std::string& error_out)
+{
+	if(!isGameInputFocused(game_object_uid))
+	{
+		error_out = "Camera control requires this object to own the active local game session.";
+		return false;
+	}
+	if(!camera_position.isFinite() || !look_at_position.isFinite() ||
+		std::abs(camera_position.x) > 1.0e7 || std::abs(camera_position.y) > 1.0e7 || std::abs(camera_position.z) > 1.0e7 ||
+		std::abs(look_at_position.x) > 1.0e7 || std::abs(look_at_position.y) > 1.0e7 || std::abs(look_at_position.z) > 1.0e7)
+	{
+		error_out = "Camera positions must be finite world coordinates within 10,000,000 metres.";
+		return false;
+	}
+
+	const Vec3d direction = look_at_position - camera_position;
+	const double distance = direction.length();
+	if(!isFinite(distance) || distance < 0.1 || distance > 2000.0)
+	{
+		error_out = "The camera target must be between 0.1 and 2,000 metres from the camera.";
+		return false;
+	}
+	if(horizontal_fov_degrees != 0.0 && (!isFinite(horizontal_fov_degrees) || horizontal_fov_degrees < 30.0 || horizontal_fov_degrees > 120.0))
+	{
+		error_out = "Horizontal field of view must be 30..120 degrees, or omitted to keep the current field of view.";
+		return false;
+	}
+	if(!isFinite(transition_seconds) || transition_seconds < 0.0 || transition_seconds > 10.0)
+	{
+		error_out = "Camera transition duration must be between 0 and 10 seconds.";
+		return false;
+	}
+	game_camera_follow_active = false;
+	game_camera_follow_target_uid = UID::invalidUID();
+
+	if(!game_camera_lease_active || game_camera_owner_object_uid != game_object_uid)
+	{
+		// Keep one exact snapshot for the whole session. Repeated game updates must
+		// not replace it with an already game-controlled camera state.
+		if(game_camera_lease_active)
+			releaseGameCamera(game_camera_owner_object_uid);
+		game_camera_saved_state = cam_controller;
+		game_camera_owner_object_uid = game_object_uid;
+		game_camera_lease_active = true;
+	}
+
+	const double heading = std::atan2(direction.y, direction.x);
+	const double pitch = std::acos(myClamp(direction.z / distance, -1.0, 1.0));
+	cam_controller.freeCameraModeSelected();
+	const double target_lens = horizontal_fov_degrees != 0.0 ?
+		::sensorWidth() / (2.0 * std::tan(horizontal_fov_degrees * (std::acos(-1.0) / 180.0) * 0.5)) : cam_controller.lens_sensor_dist;
+	game_camera_transition_active = transition_seconds > 0.0;
+	if(game_camera_transition_active)
+	{
+		game_camera_transition_start_time = total_timer.elapsed();
+		game_camera_transition_duration = transition_seconds;
+		game_camera_transition_start_position = cam_controller.getPosition();
+		game_camera_transition_target_position = camera_position;
+		game_camera_transition_start_angles = cam_controller.getAngles();
+		game_camera_transition_target_angles = Vec3d(heading, pitch, 0.0);
+		game_camera_transition_start_lens = cam_controller.lens_sensor_dist;
+		game_camera_transition_target_lens = target_lens;
+		cam_controller.setFreeCamMovementDesiredVel(Vec3f(0,0,0));
+	}
+	else
+	{
+		cam_controller.setThirdPersonCamPosition(camera_position);
+		cam_controller.setAngles(Vec3d(heading, pitch, 0.0));
+		cam_controller.lens_sensor_dist = target_lens;
+	}
+	error_out.clear();
+	return true;
+}
+
+
+bool GUIClient::followGameCamera(const UID& game_object_uid, const UID& target_object_uid, const Vec3d& camera_offset,
+	const Vec3d& look_at_offset, double horizontal_fov_degrees, double transition_seconds, WorldStateLock& world_state_lock, std::string& error_out)
+{
+	if(!isGameInputFocused(game_object_uid))
+	{
+		error_out = "Camera follow requires this object to own the active local game session.";
+		return false;
+	}
+	if(!target_object_uid.valid() || !camera_offset.isFinite() || !look_at_offset.isFinite() ||
+		std::abs(camera_offset.x) > 2000 || std::abs(camera_offset.y) > 2000 || std::abs(camera_offset.z) > 2000 ||
+		std::abs(look_at_offset.x) > 2000 || std::abs(look_at_offset.y) > 2000 || std::abs(look_at_offset.z) > 2000)
+	{
+		error_out = "Camera follow needs a live object and finite world-space offsets within 2,000 metres.";
+		return false;
+	}
+	if(world_state.isNull())
+	{
+		error_out = "Camera follow is unavailable without a loaded world.";
+		return false;
+	}
+	Vec3d target_position;
+	(void)world_state_lock; // The callback already holds this client's WorldState::mutex while Lua runs.
+	auto object_it = world_state->objects.find(target_object_uid);
+	if(object_it == world_state->objects.end() || object_it.getValue().ptr()->state == WorldObject::State_Dead)
+	{
+		error_out = "Camera follow target is not a live object in the current world.";
+		return false;
+	}
+	target_position = object_it.getValue().ptr()->pos;
+	if(!setGameCamera(game_object_uid, target_position + camera_offset, target_position + look_at_offset,
+		horizontal_fov_degrees, transition_seconds, error_out))
+		return false;
+	game_camera_follow_target_uid = target_object_uid;
+	game_camera_follow_offset = camera_offset;
+	game_camera_follow_look_at_offset = look_at_offset;
+	game_camera_follow_active = true;
+	error_out.clear();
+	return true;
+}
+
+
+void GUIClient::updateGameCameraTransition(double cur_time)
+{
+	if(game_camera_transition_active && game_camera_lease_active)
+	{
+		const double raw_t = (cur_time - game_camera_transition_start_time) / game_camera_transition_duration;
+		const double t = myClamp(raw_t, 0.0, 1.0);
+		const double eased_t = t * t * (3.0 - 2.0 * t);
+		const double heading_delta = std::atan2(
+			std::sin(game_camera_transition_target_angles.x - game_camera_transition_start_angles.x),
+			std::cos(game_camera_transition_target_angles.x - game_camera_transition_start_angles.x));
+		const Vec3d position = game_camera_transition_start_position +
+			(game_camera_transition_target_position - game_camera_transition_start_position) * eased_t;
+		const Vec3d angles(
+			game_camera_transition_start_angles.x + heading_delta * eased_t,
+			game_camera_transition_start_angles.y + (game_camera_transition_target_angles.y - game_camera_transition_start_angles.y) * eased_t,
+			game_camera_transition_start_angles.z + (game_camera_transition_target_angles.z - game_camera_transition_start_angles.z) * eased_t);
+		cam_controller.setThirdPersonCamPosition(position);
+		cam_controller.setAngles(angles);
+		cam_controller.lens_sensor_dist = game_camera_transition_start_lens +
+			(game_camera_transition_target_lens - game_camera_transition_start_lens) * eased_t;
+		cam_controller.setFreeCamMovementDesiredVel(Vec3f(0,0,0));
+		if(raw_t >= 1.0)
+		{
+			game_camera_transition_active = false;
+			cam_controller.setThirdPersonCamPosition(game_camera_transition_target_position);
+			cam_controller.setAngles(game_camera_transition_target_angles);
+			cam_controller.lens_sensor_dist = game_camera_transition_target_lens;
+		}
+	}
+	if(!game_camera_follow_active || !game_camera_lease_active || game_camera_transition_active || world_state.isNull()) return;
+
+	Vec3d target_position;
+	{
+		WorldStateLock lock(world_state->mutex);
+		auto object_it = world_state->objects.find(game_camera_follow_target_uid);
+		if(object_it == world_state->objects.end() || object_it.getValue().ptr()->state == WorldObject::State_Dead)
+		{
+			game_camera_follow_active = false;
+			game_camera_follow_target_uid = UID::invalidUID();
+			return;
+		}
+		target_position = object_it.getValue().ptr()->pos;
+	}
+	const Vec3d camera_position = target_position + game_camera_follow_offset;
+	const Vec3d look_at_position = target_position + game_camera_follow_look_at_offset;
+	const Vec3d direction = look_at_position - camera_position;
+	const double distance = direction.length();
+	if(!camera_position.isFinite() || !look_at_position.isFinite() || !isFinite(distance) || distance < 0.1 || distance > 2000.0)
+	{
+		game_camera_follow_active = false;
+		game_camera_follow_target_uid = UID::invalidUID();
+		return;
+	}
+	cam_controller.freeCameraModeSelected();
+	cam_controller.setThirdPersonCamPosition(camera_position);
+	cam_controller.setAngles(Vec3d(std::atan2(direction.y, direction.x), std::acos(myClamp(direction.z / distance, -1.0, 1.0)), 0.0));
+	cam_controller.setFreeCamMovementDesiredVel(Vec3f(0,0,0));
+}
+
+
+bool GUIClient::releaseGameCamera(const UID& game_object_uid)
+{
+	if(!game_camera_lease_active)
+		return true;
+	if(!game_object_uid.valid() || game_camera_owner_object_uid != game_object_uid)
+		return false;
+
+	game_camera_transition_active = false;
+	game_camera_follow_active = false;
+	game_camera_follow_target_uid = UID::invalidUID();
+	cam_controller = game_camera_saved_state;
+	game_camera_owner_object_uid = UID::invalidUID();
+	game_camera_lease_active = false;
+	return true;
+}
+
+
+void GUIClient::getGameAimRay(Vec3d& origin_out, Vec3d& direction_out) const
+{
+	origin_out = cam_controller.getPosition();
+	const int viewport_w = opengl_engine.nonNull() ? opengl_engine->getMainViewPortWidth() : 0;
+	const int viewport_h = opengl_engine.nonNull() ? opengl_engine->getMainViewPortHeight() : 0;
+	const bool pointer_available = script_game_pointer_available && viewport_w > 0 && viewport_h > 0 &&
+		script_game_pointer_x >= 0 && script_game_pointer_y >= 0 &&
+		script_game_pointer_x < viewport_w && script_game_pointer_y < viewport_h;
+	if(pointer_available)
+	{
+		const Vec4f pixel_direction = getDirForPixelTrace(script_game_pointer_x, script_game_pointer_y);
+		direction_out = normalise(Vec3d(pixel_direction.x[0], pixel_direction.x[1], pixel_direction.x[2]));
+	}
+	else
+		direction_out = normalise(cam_controller.getForwardsVec());
+}
+
+
+bool GUIClient::gameRaycast(const UID& game_object_uid, float max_distance, UID& hit_object_uid_out, Vec3d& hit_position_out, Vec3d& hit_normal_out, float& hit_distance_out) const
+{
+	if(!isGameInputFocused(game_object_uid) || !physics_world || !isFinite(max_distance) || max_distance <= 0.f || max_distance > 100.f)
+		return false;
+
+	Vec3d ray_origin, ray_direction;
+	getGameAimRay(ray_origin, ray_direction);
+	const Vec4f origin = ray_origin.toVec4fPoint();
+	const Vec4f direction = normalise(ray_direction.toVec4fVector());
+	RayTraceResult results;
+	physics_world->traceRay(origin, direction, max_distance, JPH::BodyID(), results);
+	// The server excludes the game host from selectable targets. Match that
+	// behaviour locally so a nearby game terminal cannot mask objects behind it.
+	if(results.hit_object && results.hit_object->ob_uid == game_object_uid)
+		physics_world->traceRay(origin, direction, max_distance, results.hit_object->jolt_body_id, results);
+	if(!results.hit_object || !results.hit_object->ob_uid.valid() || !isFinite(results.hit_t) || results.hit_t < 0.f || results.hit_t > max_distance)
+		return false;
+
+	hit_object_uid_out = results.hit_object->ob_uid;
+	hit_distance_out = results.hit_t;
+	hit_position_out = toVec3d(origin + direction * results.hit_t);
+	hit_normal_out = toVec3d(results.hit_normal_ws);
+	return true;
+}
+
+
+bool GUIClient::getGameLocalInput(const UID& game_object_uid, GameLocalInput& input_out) const
+{
+	input_out = GameLocalInput();
+	if(!isGameInputFocused(game_object_uid) || !game_local_input_available)
+		return false;
+
+	input_out.movement = game_local_input_snapshot;
+	input_out.movement.space_down = input_out.movement.space_down || script_gamepad_buttons_down.count(Protocol::ScriptKey_GamepadA) != 0;
+	input_out.movement.SHIFT_down = input_out.movement.SHIFT_down || script_gamepad_buttons_down.count(Protocol::ScriptKey_GamepadL1) != 0 ||
+		script_gamepad_buttons_down.count(Protocol::ScriptKey_GamepadR1) != 0;
+	input_out.movement.W_down = input_out.movement.W_down || script_gamepad_buttons_down.count(Protocol::ScriptKey_GamepadUp) != 0;
+	input_out.movement.S_down = input_out.movement.S_down || script_gamepad_buttons_down.count(Protocol::ScriptKey_GamepadDown) != 0;
+	input_out.movement.A_down = input_out.movement.A_down || script_gamepad_buttons_down.count(Protocol::ScriptKey_GamepadLeft) != 0;
+	input_out.movement.D_down = input_out.movement.D_down || script_gamepad_buttons_down.count(Protocol::ScriptKey_GamepadRight) != 0;
+	input_out.left_x = isFinite(input_out.movement.axis_left_x) ? myClamp(input_out.movement.axis_left_x, -1.f, 1.f) : 0.f;
+	input_out.left_y = isFinite(input_out.movement.axis_left_y) ? myClamp(input_out.movement.axis_left_y, -1.f, 1.f) : 0.f;
+	input_out.movement.axis_left_x = input_out.left_x;
+	input_out.movement.axis_left_y = input_out.left_y;
+	input_out.left_trigger = isFinite(input_out.movement.left_trigger) ? myClamp(input_out.movement.left_trigger, 0.f, 1.f) : 0.f;
+	input_out.right_trigger = isFinite(input_out.movement.right_trigger) ? myClamp(input_out.movement.right_trigger, 0.f, 1.f) : 0.f;
+	input_out.gamepad_connected = ui_interface && ui_interface->gamepadAttached();
+	if(input_out.gamepad_connected)
+	{
+		const float right_x = ui_interface->gamepadAxisRightX();
+		const float right_y = ui_interface->gamepadAxisRightY();
+		input_out.right_x = isFinite(right_x) ? myClamp(right_x, -1.f, 1.f) : 0.f;
+		input_out.right_y = isFinite(right_y) ? myClamp(right_y, -1.f, 1.f) : 0.f;
+	}
+	const int viewport_w = opengl_engine.nonNull() ? opengl_engine->getMainViewPortWidth() : 0;
+	const int viewport_h = opengl_engine.nonNull() ? opengl_engine->getMainViewPortHeight() : 0;
+	input_out.pointer_available = script_game_pointer_available && viewport_w > 0 && viewport_h > 0 &&
+		script_game_pointer_x >= 0 && script_game_pointer_y >= 0 &&
+		script_game_pointer_x < viewport_w && script_game_pointer_y < viewport_h;
+	if(input_out.pointer_available)
+	{
+		input_out.pointer_x = (float)script_game_pointer_x / (float)viewport_w;
+		input_out.pointer_y = (float)script_game_pointer_y / (float)viewport_h;
+	}
+	input_out.buttons_down = script_mouse_buttons_down;
+	input_out.buttons_down.insert(script_gamepad_buttons_down.begin(), script_gamepad_buttons_down.end());
+	input_out.keys_down = script_keyboard_keys_down;
+	return true;
+}
+
+
+void GUIClient::sendGameHUDAction(const std::string& action_id, const std::vector<std::pair<std::string, std::string>>& values)
+{
+	if(!active_script_keyboard_object_uid.valid() || !client_thread.nonNull() ||
+		connection_state != ServerConnectionState_Connected ||
+		!BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_OBJECT_KEYBOARD_SUPPORT) ||
+		!BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_SUPPORT) ||
+		action_id.empty() || action_id.size() > 32)
+		return;
+	for(const unsigned char c : action_id)
+		if(!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.'))
+			return;
+
+	if(values.empty())
+	{
+		MessageUtils::initPacket(scratch_packet, Protocol::UserGameActionMessage);
+		writeToStream(active_script_keyboard_object_uid, scratch_packet);
+		scratch_packet.writeStringLengthFirst(action_id);
+	}
+	else
+	{
+		if(!BitUtils::isBitSet(server_capabilities, Protocol::SCRIPTED_GAME_HUD_FORM_SUPPORT) || values.size() > 4) return;
+		MessageUtils::initPacket(scratch_packet, Protocol::UserGameFormSubmitMessage);
+		writeToStream(active_script_keyboard_object_uid, scratch_packet);
+		scratch_packet.writeStringLengthFirst(action_id);
+		scratch_packet.writeUInt32((uint32)values.size());
+		for(const auto& value : values)
+		{
+			if(value.first.empty() || value.first.size() > 32 || value.second.size() > 256) return;
+			scratch_packet.writeStringLengthFirst(value.first);
+			scratch_packet.writeStringLengthFirst(value.second);
+		}
+	}
+	MessageUtils::updatePacketLengthField(scratch_packet);
+	enqueueMessageToSend(*client_thread, scratch_packet);
+}
+
+
+void GUIClient::eventOccurred(GLUICallbackEvent& event)
+{
+	for(auto& panel : game_hud_panels)
+		for(auto& field : panel.second.fields)
+			if(field.choice.nonNull() && field.choice.ptr() == event.widget && (!field.options.empty() || field.checkbox))
+			{
+				event.accepted = true;
+				if(field.checkbox) field.checked = !field.checked;
+				else field.choice_index = (field.choice_index + 1) % field.options.size();
+				if(gl_ui.nonNull()) gl_ui->removeWidget(field.choice);
+				GLUITextButton::CreateArgs choice_args;
+				choice_args.tooltip = field.checkbox ? "Click to toggle this option" : "Click to cycle available options";
+				field.choice = new GLUITextButton(*gl_ui, opengl_engine,
+					field.checkbox ? (field.checked ? "Да" : "Нет") : UTF8Utils::sanitiseUTF8String(field.options[field.choice_index]), Vec2f(0, 0), choice_args);
+				field.choice->handler = this;
+				field.choice->setPosAndDims(field.choice_pos, field.choice_dims);
+				gl_ui->addWidget(field.choice);
+				return;
+			}
+
+	for(const auto& panel : game_hud_panels)
+		for(const GLUITextButtonRef& button : panel.second.buttons)
+			if(button.ptr() == event.widget)
+			{
+				event.accepted = true;
+				std::vector<std::pair<std::string, std::string>> values;
+				const GameHUDPanelWidgets& widgets = panel.second;
+				for(const auto& field : widgets.fields)
+				{
+					const std::string value = field.checkbox ? (field.checked ? "true" : "false") :
+						field.choice.nonNull() && !field.options.empty() ? field.options[field.choice_index] :
+						field.input.nonNull() ? field.input->getText() : std::string();
+					if(field.required && value.empty()) { showInfoNotification("Заполните обязательные поля формы."); return; }
+					if(field.checkbox && field.required && !field.checked) { showInfoNotification("Подтвердите обязательный пункт."); return; }
+					if(value.size() > 256) { showInfoNotification("Значение поля не должно превышать 256 байт."); return; }
+					if(field.numeric && !value.empty())
+					{
+						char* end = NULL;
+						const double number = std::strtod(value.c_str(), &end);
+						if(end == value.c_str() || end != value.c_str() + value.size() || !std::isfinite(number) ||
+							number < field.minimum || number > field.maximum)
+						{
+							showInfoNotification("Введите число в допустимом диапазоне.");
+							return;
+						}
+					}
+					values.push_back(std::make_pair(field.id, value));
+				}
+				sendGameHUDAction(button->client_data, values);
+				return;
+			}
+}
+
+
+void GUIClient::clearGameHUDText(const UID& game_object_uid)
+{
+	if(game_object_uid.valid() && game_hud_owner_object_uid.valid() && game_hud_owner_object_uid != game_object_uid)
+		return;
+	if(game_hud_text_view.nonNull() && gl_ui.nonNull())
+		gl_ui->removeWidget(game_hud_text_view);
+	game_hud_text_view = nullptr;
+	if(game_hud_panels.empty())
+		game_hud_owner_object_uid = UID::invalidUID();
+}
+
+
+void GUIClient::clearGameHUDMenu(const UID& game_object_uid, const std::string& panel_id)
+{
+	if(game_object_uid.valid() && game_hud_owner_object_uid.valid() && game_hud_owner_object_uid != game_object_uid)
+		return;
+	auto remove_panel = [this](GameHUDPanelWidgets& panel) {
+		if(gl_ui.nonNull())	{
+			if(panel.title_view.nonNull()) gl_ui->removeWidget(panel.title_view);
+			if(panel.body_view.nonNull()) gl_ui->removeWidget(panel.body_view);
+			for(GLUITextButtonRef& button : panel.buttons) gl_ui->removeWidget(button);
+			for(auto& field : panel.fields) { if(field.label.nonNull()) gl_ui->removeWidget(field.label); if(field.input.nonNull()) gl_ui->removeWidget(field.input); if(field.choice.nonNull()) gl_ui->removeWidget(field.choice); }
+			for(auto& bar : panel.progress_bars) { if(bar.label.nonNull()) gl_ui->removeWidget(bar.label); if(bar.background.nonNull()) gl_ui->removeWidget(bar.background); if(bar.fill.nonNull()) gl_ui->removeWidget(bar.fill); }
+			for(GLUITextViewRef& text_widget : panel.text_widgets) if(text_widget.nonNull()) gl_ui->removeWidget(text_widget);
+		}
+	};
+	if(panel_id.empty())
+	{
+		for(auto& panel : game_hud_panels) remove_panel(panel.second);
+		game_hud_panels.clear();
+	}
+	else
+	{
+		const auto it = game_hud_panels.find(panel_id);
+		if(it != game_hud_panels.end()) { remove_panel(it->second); game_hud_panels.erase(it); }
+	}
+	if(game_hud_text_view.isNull() && game_hud_panels.empty())
+		game_hud_owner_object_uid = UID::invalidUID();
+}
+
+
+void GUIClient::clearGameHUD(const UID& game_object_uid)
+{
+	if(game_object_uid.valid() && game_hud_owner_object_uid.valid() && game_hud_owner_object_uid != game_object_uid)
+		return;
+	clearGameHUDText(game_object_uid);
+	clearGameHUDMenu(game_object_uid);
+	game_hud_text_view = nullptr;
+	game_hud_owner_object_uid = UID::invalidUID();
 }

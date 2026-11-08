@@ -828,6 +828,30 @@ void AudioEngine::seekToStartAndUnpauseAudio(AudioSource& source)
 }
 
 
+void AudioEngine::pauseAudio(AudioSource& source)
+{
+	if(!initialised)
+		return;
+
+	Lock lock(mutex);
+	source.paused = true;
+	active_audio_sources.erase(AudioSourceRef(&source));
+}
+
+
+void AudioEngine::resumeAudio(AudioSource& source)
+{
+	if(!initialised)
+		return;
+
+	Lock lock(mutex);
+	source.paused = false;
+	if(source.resonance_handle == INVALID_RESONANCE_HANDLE)
+		createResonanceObAndResamplerForSource(source);
+	active_audio_sources.insert(AudioSourceRef(&source));
+}
+
+
 void AudioEngine::setMasterVolume(float volume)
 {
 	if(!initialised)

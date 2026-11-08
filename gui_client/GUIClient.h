@@ -44,6 +44,12 @@ Copyright Glare Technologies Limited 2024 -
 #include "../opengl/AsyncGeometryUploader.h"
 #include <opengl/TransformGizmo.h>
 #include <opengl/ui/GLUIImage.h>
+#include <opengl/ui/GLUITextButton.h>
+#include <opengl/ui/GLUITextView.h>
+#include <opengl/ui/GLUILineEdit.h>
+#include <opengl/ui/GLUIInertWidget.h>
+#include <opengl/ui/GLUICallbackHandler.h>
+#include <set>
 #include "VideoPlayerUI.h"
 #include "../shared/WorldObject.h"
 #include "../shared/GearItem.h"
@@ -92,6 +98,20 @@ class SubstrataVideoReaderCallback;
 struct CreateVidReaderTask;
 class BiomeManager;
 class ScriptLoadedThreadMessage;
+struct GameHUDAction;
+struct GameHUDProgressBar;
+struct GameHUDTextWidget;
+struct GameLocalInput
+{
+	PlayerPhysicsInput movement;
+	bool pointer_available = false;
+	bool gamepad_connected = false;
+	float pointer_x = 0.f, pointer_y = 0.f;
+	float left_x = 0.f, left_y = 0.f, right_x = 0.f, right_y = 0.f;
+	float left_trigger = 0.f, right_trigger = 0.f;
+	std::set<uint32> keys_down;
+	std::set<uint32> buttons_down;
+};
 class ObjectPathController;
 namespace glare { class FastPoolAllocator; }
 class VehiclePhysics;
@@ -161,7 +181,7 @@ GUIClient
 GUI client code that is used by both the Native GUI client that uses Qt,
 and the web client that uses SDL.
 =====================================================================*/
-class GUIClient : public ObLoadingCallbacks, public PrintOutput, public PhysicsWorldEventListener, public LuaScriptOutputHandler, public ReloadShadersCallback
+class GUIClient : public ObLoadingCallbacks, public PrintOutput, public PhysicsWorldEventListener, public LuaScriptOutputHandler, public ReloadShadersCallback, public GLUICallbackHandler
 {
 public:
 	GUIClient(const std::string& base_dir_path, const std::string& appdata_path, const ArgumentParser& args);
@@ -200,6 +220,9 @@ public:
 
 
 	void timerEvent(const MouseCursorState& mouse_cursor_state);
+	void sendScriptGameInputState(const MouseCursorState& mouse_cursor_state);
+	bool sendScriptGameRPC(const UID& object_uid, const std::string& name, const std::vector<uint8>& payload);
+	bool getReceivedScriptGameState(const UID& object_uid, uint32& version_out, std::vector<uint8>& serialized_value_out) const;
 	void renderXRFrame(float near_draw_dist, float max_draw_dist);
 	const XRMirrorView& getXRMirrorView() const { return xr_mirror_view; }
 
@@ -310,11 +333,25 @@ public:
 	bool saveTerrainSculptingChanges(const WorldSettings* base_world_settings = NULL, bool apply_saved_settings = true);
 	void onMouseWheelEvent(MouseWheelEvent& e);
 	void gamepadButtonXChanged(bool pressed);
+	void gamepadButtonBChanged(bool pressed);
 	void gamepadButtonAChanged(bool pressed);
+	void gamepadButtonYChanged(bool pressed);
+	void gamepadButtonL1Changed(bool pressed);
+	void gamepadButtonR1Changed(bool pressed);
+	void gamepadButtonL3Changed(bool pressed);
+	void gamepadButtonR3Changed(bool pressed);
+	void gamepadButtonStartChanged(bool pressed);
+	void gamepadButtonSelectChanged(bool pressed);
+	void gamepadButtonUpChanged(bool pressed);
+	void gamepadButtonDownChanged(bool pressed);
+	void gamepadButtonLeftChanged(bool pressed);
+	void gamepadButtonRightChanged(bool pressed);
+	void gamepadConnectedChanged(bool connected);
 	void viewportResized(int w, int h);
 	void updateGroundPlane();
 	void sendLightmapNeededFlagsSlot();
 	void useActionTriggered(bool use_mouse_cursor); // if use_mouse_cursor is false, use crosshair as cursor instead.
+	bool tryUseConfiguredInteractionKey(Key key);
 	bool isImageObjectForFullscreen(const WorldObject& ob) const;
 	bool isVideoObjectForFullscreen(const WorldObject& ob) const;
 	bool isWebViewObjectForFullscreen(const WorldObject& ob) const;
@@ -425,6 +462,8 @@ public:
 	void selectObject(const WorldObjectRef& ob, int selected_mat_index);
 	void deleteSelectedObject();
 	void deselectObject();
+	void clearAdditionalObjectSelection();
+	void toggleAdditionalObjectSelection(const WorldObjectRef& ob);
 	void deselectParcel();
 	void visitSubURL(const std::string& URL, bool push_cur_URL_on_nav_stack = true, bool adjust_cur_URL_pos_back = false); // Visit a sub:// or sib:// URL. Checks hostname and only reconnects if it differs from the current one.
 	GLObjectRef makeNameTagGLObject(const std::string& nametag);
@@ -456,6 +495,23 @@ public:
 	void showErrorNotification(const std::string& message);
 	void showInfoNotification(const std::string& message);
 	void showScriptMessage(const std::string& message);
+	void setGameHUDText(const UID& game_object_uid, const std::string& text, bool has_layout = false, float center_x = 0.f, float top_y = 0.55f);
+	void setScriptAnimationPaused(const UID& object_uid, bool paused);
+	bool isScriptAnimationPaused(const UID& object_uid) const;
+	void setGameHUDMenu(const UID& game_object_uid, const std::string& panel_id, const std::string& title, const std::string& body, const std::vector<GameHUDAction>& actions, const std::vector<GameHUDFormField>& fields, const std::vector<GameHUDProgressBar>& progress_bars, const std::vector<GameHUDTextWidget>& text_widgets, float center_x, float top_y, float width);
+	bool setGameCamera(const UID& game_object_uid, const Vec3d& camera_position, const Vec3d& look_at_position, double horizontal_fov_degrees, double transition_seconds, std::string& error_out);
+	bool followGameCamera(const UID& game_object_uid, const UID& target_object_uid, const Vec3d& camera_offset, const Vec3d& look_at_offset, double horizontal_fov_degrees, double transition_seconds, WorldStateLock& world_state_lock, std::string& error_out);
+	bool setGamePlayerControl(const UID& game_object_uid, float move_x, float move_y, bool jump, bool run, std::string& error_out);
+	void updateGameCameraTransition(double cur_time);
+	bool releaseGameCamera(const UID& game_object_uid);
+	bool gameRaycast(const UID& game_object_uid, float max_distance, UID& hit_object_uid_out, Vec3d& hit_position_out, Vec3d& hit_normal_out, float& hit_distance_out) const;
+	bool getGameLocalInput(const UID& game_object_uid, GameLocalInput& input_out) const;
+	void getGameAimRay(Vec3d& origin_out, Vec3d& direction_out) const;
+	void sendGameHUDAction(const std::string& action_id, const std::vector<std::pair<std::string, std::string>>& values = {});
+	virtual void eventOccurred(GLUICallbackEvent& event) override;
+	void clearGameHUDText(const UID& game_object_uid = UID::invalidUID());
+	void clearGameHUDMenu(const UID& game_object_uid = UID::invalidUID(), const std::string& panel_id = std::string());
+	void clearGameHUD(const UID& game_object_uid = UID::invalidUID());
 	void updateNotifications(double cur_time);
 	void setNotificationsVisible(bool visible);
 	void hideUI();
@@ -475,6 +531,7 @@ public:
 	void removeParcelObjects();
 	void recolourParcelsForLoggedInState();
 	void updateSelectedObjectPlacementBeamAndGizmos();
+	void hideEditorGizmosForGameInput();
 	//void updateInstancedCopiesOfObject(WorldObject* ob);
 	void removeInstancesOfObject(WorldObject* ob);
 	void removeObScriptingInfo(WorldObject* ob);
@@ -510,6 +567,7 @@ public:
 	bool mouseOverParticleEmitterHandle(const Vec2f& pixel_coords, const GLObjectRef& handle_ob, const Vec4f& handle_pos_ws, Vec4f& closest_handle_pos_ws_out);
 	bool mouseOverParticleEmitterRadiusHandle(const Vec2f& pixel_coords, Vec4f& closest_handle_pos_ws_out);
 	void sendChatMessage(const std::string& message);
+	void sendChatBotDialogChoice(const UID& bot_avatar_uid, uint32 node_id, uint32 choice_index);
 	void sendPrivateChatMessage(const std::string& recipient_name, const UID& recipient_avatar_uid, const std::string& message);
 	void sendEmojiChatMessage(const std::string& emoji);
 
@@ -556,7 +614,8 @@ public:
 	void updateObjectModelForChangedDecompressedVoxels(WorldObjectRef& ob);
 
 	void createObject(const std::string& mesh_path, BatchedMeshRef loaded_mesh, bool loaded_mesh_is_image_cube,
-		const glare::AllocatorVector<Voxel, 16>& decompressed_voxels, const Vec3d& ob_pos, const Vec3f& scale, const Vec3f& axis, float angle, const std::vector<WorldMaterialRef>& materials);
+		const glare::AllocatorVector<Voxel, 16>& decompressed_voxels, const Vec3d& ob_pos, const Vec3f& scale, const Vec3f& axis, float angle, const std::vector<WorldMaterialRef>& materials,
+		const std::vector<UID>& merge_source_uids = {}, const std::string& merge_token = "", const std::string& merge_content = "");
 	void createObjectLoadedFromXML(WorldObjectRef ob, PrintOutput& use_print_output);
 	void createImageObject(const std::string& local_image_path);
 	// Returns true only when the object was created synchronously. Unsupported
@@ -566,6 +625,11 @@ public:
 
 	void keyPressed(KeyEvent& e);
 	void keyReleased(KeyEvent& e);
+	bool dispatchScriptKeyboardKey(Key key);
+	bool dispatchScriptGameInput(uint32 input_code, bool pressed);
+	bool dispatchScriptMouseButton(MouseButton button, bool pressed);
+	bool dispatchScriptGamepadButton(uint32 input_code, bool pressed);
+	void endScriptKeyboardInput(bool notify_user);
 	void handleTextInputEvent(TextInputEvent& text_input_event);
 	void focusOut();
 
@@ -673,6 +737,16 @@ public:
 	void updateShoreSurfEffects();
 	double last_surf_effect_time = -1.0;
 	std::map<UID, double> surf_impact_times;
+	struct PendingObjectMerge
+	{
+		std::string token;
+		URLString asset_url;
+		std::vector<UID> source_uids;
+		bool asset_ready = false;
+		double queued_time = 0.0;
+	};
+	std::map<std::string, PendingObjectMerge> pending_object_merges;
+	void finishPendingObjectMerges();
 	void updateSelectedParticleEmitterGizmo();
 	void clearSelectedParticleEmitterGizmo();
 	void triggerSelectedParticleEmitterBurst();
@@ -757,6 +831,7 @@ public:
 	ThreadSafeQueue<Reference<ThreadMessage> > msg_queue; // for messages from ClientThread etc.. to this object.
 
 	WorldObjectRef selected_ob;
+	std::vector<WorldObjectRef> additional_selected_obs; // Ctrl+left-click selections; selected_ob remains the active editor object.
 	Vec4f selection_vec_cs; // Vector from camera to selected point on object, in camera space
 	Vec4f selection_point_os; // Point on selected object where selection ray hit, in object space.
 	bool selected_ob_picked_up; // Is selected object 'picked up' e.g. being moved?
@@ -1163,6 +1238,43 @@ public:
 	std::vector<Reference<ObjectPathController>> path_controllers;
 
 	UID client_avatar_uid; // When we connect to a server, the server assigns a UID to the client/avatar.
+	UID active_script_keyboard_object_uid = UID::invalidUID(); // Set only after explicitly using a nearby object with an onUserKeyPressed handler.
+	UID game_player_control_owner_uid = UID::invalidUID();
+	float game_player_control_move_x = 0.f, game_player_control_move_y = 0.f;
+	bool game_player_control_jump = false, game_player_control_run = false, game_player_control_jump_was_down = false;
+	double game_player_control_last_update_time = 0.0;
+	PlayerPhysicsInput game_local_input_snapshot;
+	bool game_local_input_available = false;
+	std::set<uint32> script_keyboard_keys_down;
+	std::set<uint32> script_mouse_buttons_down;
+	std::set<uint32> script_gamepad_buttons_down;
+	float script_game_wheel_delta_x = 0.f, script_game_wheel_delta_y = 0.f;
+	int script_game_pointer_x = 0, script_game_pointer_y = 0;
+	bool script_game_pointer_available = false;
+	Timer script_game_rpc_send_timer;
+	Timer script_game_input_state_send_timer;
+	std::map<UID, uint32> received_game_state_versions;
+	struct ClientInteractionPrompt { uint32 input_mode = 0; uint32 key_code = 0; bool visible = false; std::string text; };
+	std::map<UID, ClientInteractionPrompt> scripted_interaction_prompts;
+	std::map<UID, std::vector<uint8> > received_game_state_values;
+	// A game may temporarily take over the local camera while it owns E-focused input.
+	// Save the complete controller state so ending the session restores the exact prior view.
+	CameraController game_camera_saved_state;
+	UID game_camera_owner_object_uid = UID::invalidUID();
+	bool game_camera_lease_active = false;
+	bool game_camera_follow_active = false;
+	UID game_camera_follow_target_uid = UID::invalidUID();
+	Vec3d game_camera_follow_offset;
+	Vec3d game_camera_follow_look_at_offset;
+	bool game_camera_transition_active = false;
+	double game_camera_transition_start_time = 0.0;
+	double game_camera_transition_duration = 0.0;
+	Vec3d game_camera_transition_start_position;
+	Vec3d game_camera_transition_target_position;
+	Vec3d game_camera_transition_start_angles;
+	Vec3d game_camera_transition_target_angles;
+	double game_camera_transition_start_lens = 0.025;
+	double game_camera_transition_target_lens = 0.025;
 	uint32 server_protocol_version;
 	uint32 server_capabilities;
 
@@ -1226,6 +1338,7 @@ public:
 		ServerConnectionState_Connected
 	};
 	ServerConnectionState connection_state;
+	bool isGameInputFocused(const UID& object_uid) const { return object_uid.valid() && active_script_keyboard_object_uid == object_uid; }
 
 	bool received_world_settings_since_connect_or_world_change; // Have we received a WorldSettingsInitialSendMessage since connecting to the server?
 	bool world_settings_locally_dirty;
@@ -1430,11 +1543,53 @@ public:
 	std::list<Notification> notifications;
 
 	std::list<Notification> script_messages;
+	GLUITextViewRef game_hud_text_view;
+	struct GameHUDPanelWidgets
+	{
+		struct FieldWidget
+		{
+			std::string id;
+			bool required = false;
+			bool numeric = false;
+			bool checkbox = false;
+			bool checked = false;
+			double minimum = 0.0;
+			double maximum = 0.0;
+			std::vector<std::string> options;
+			size_t choice_index = 0;
+			GLUITextViewRef label;
+			GLUILineEditRef input;
+			GLUITextButtonRef choice;
+			Vec2f choice_pos;
+			Vec2f choice_dims;
+		};
+		struct ProgressWidget
+		{
+			std::string id;
+			GLUITextViewRef label;
+			GLUIInertWidgetRef background;
+			GLUIInertWidgetRef fill;
+		};
+		GLUITextViewRef title_view;
+		GLUITextViewRef body_view;
+		std::vector<GLUITextButtonRef> buttons;
+		std::vector<FieldWidget> fields;
+		std::vector<ProgressWidget> progress_bars;
+		std::vector<GLUITextViewRef> text_widgets;
+		float width = 0.8f;
+	};
+	std::map<std::string, GameHUDPanelWidgets> game_hud_panels;
+	UID game_hud_owner_object_uid = UID::invalidUID();
+	std::set<UID> script_paused_animation_uids;
 
 	Reference<SubstrataLuaVM> lua_vm;
 
 	ScriptTimerQueue timer_queue;
 	std::vector<ScriptTimerQueueTimer> temp_triggered_timers;
+	size_t client_lua_timer_callback_cursor = 0;
+	// Dedicated queue for explicitly requested, focused client game presentation loops.
+	ScriptTimerQueue client_game_loop_timer_queue;
+	std::vector<ScriptTimerQueueTimer> temp_triggered_client_game_loop_timers;
 
 	struct ContactAddedEvent
 	{

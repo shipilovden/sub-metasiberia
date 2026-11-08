@@ -30,6 +30,7 @@ Copyright Glare Technologies Limited 2024 -
 #include <string>
 #include <memory>
 #include <atomic>
+#include <deque>
 class PhotoVideoRecorder;
 namespace Ui { class MainWindow; }
 namespace glare { class TaskManager; }
@@ -125,6 +126,7 @@ private slots:;
 	void on_actionCopy_Object_triggered();
 	void on_actionPaste_Object_triggered();
 	void on_actionCloneObject_triggered();
+	void on_actionMergeSelectedObjects_triggered();
 	void on_actionDeleteObject_triggered();
 	void on_actionReset_Layout_triggered();
 	void on_actionLogIn_triggered();
@@ -253,7 +255,20 @@ private slots:
 	void glWidgetFocusOut();
 	void glWidgetMouseWheelEvent(QWheelEvent* e);
 	void gamepadButtonXChanged(bool pressed);
+	void gamepadButtonBChanged(bool pressed);
 	void gamepadButtonAChanged(bool pressed);
+	void gamepadButtonYChanged(bool pressed);
+	void gamepadButtonL1Changed(bool pressed);
+	void gamepadButtonR1Changed(bool pressed);
+	void gamepadButtonL3Changed(bool pressed);
+	void gamepadButtonR3Changed(bool pressed);
+	void gamepadButtonStartChanged(bool pressed);
+	void gamepadButtonSelectChanged(bool pressed);
+	void gamepadButtonUpChanged(bool pressed);
+	void gamepadButtonDownChanged(bool pressed);
+	void gamepadButtonLeftChanged(bool pressed);
+	void gamepadButtonRightChanged(bool pressed);
+	void gamepadConnectedChanged(bool connected);
 	void glWidgetViewportResized(int w, int h);
 	void onIndigoViewDockWidgetVisibilityChanged(bool v);
 	void glWidgetCutShortcutTriggered();
@@ -660,6 +675,20 @@ public:
 	bool default_qt_style_name_set;
 	std::string default_qt_style_name;
 private:
+	struct LocalLuaLogEntry
+	{
+		std::string object_uid;
+		std::string owner_id;
+		std::string server_hostname;
+		std::string world_name;
+		std::string timestamp_utc;
+		std::string message;
+		bool is_error;
+	};
+	void recordLocalLuaLog(UID object_uid, const std::string& message, bool is_error);
+	std::deque<LocalLuaLogEntry> local_lua_log_entries;
+	size_t local_lua_log_bytes = 0;
+
 	bool need_help_info_dock_widget_position; // We may need to position the Help info dock widget to the bottom right of the GL view.
 	// But we need to wait until the gl view has been resized before we do this, so set this flag to do in a timer event.
 	

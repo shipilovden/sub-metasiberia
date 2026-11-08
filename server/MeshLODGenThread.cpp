@@ -172,6 +172,7 @@ static void checkObjectSpaceAABB(ServerAllWorldsState* world_state, ServerWorldS
 				conPrint("New AABB_os: "+ aabb_os.toString());
 
 				ob->setAABBOS(aabb_os);
+				world->refreshGameRaySpatialIndexObject(*ob, lock);
 				world->addWorldObjectAsDBDirty(ob, lock);
 			}
 		}

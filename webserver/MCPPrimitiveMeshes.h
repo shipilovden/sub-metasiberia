@@ -5255,6 +5255,15 @@ b.setLastTriangleUV(a[0],a[1],c[0],c[1],d[0],d[1]);
 }
 }
 return true; }
+if(name=="tapered_wedge") { // Narrow at local -Z, broad at local +Z; used for chemical stereo bonds.
+const Vec3d va(0,-.5,-.5),vb(0,.5,-.5),vc(-.5,-.5,.5),vd(.5,-.5,.5),ve(-.5,.5,.5),vf(.5,.5,.5);
+// Close the prism with the narrow end as an edge, two sloped sides, and the broad end.
+b.triangle(va,vd,vc);             // -Y face
+b.triangle(vb,ve,vf);             // +Y face
+b.triangle(va,vc,ve); b.triangle(va,ve,vb); // -X sloped side
+b.triangle(va,vb,vf); b.triangle(va,vf,vd); // +X sloped side
+b.triangle(vc,vd,vf); b.triangle(vc,vf,ve); // broad +Z face
+return true; }
 if(name=="triangular_prism") { // Triangular_Prism.obj
 static const double vertices[][3]={
 {-0.5,0.5,-0.5},

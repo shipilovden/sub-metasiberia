@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "org.metasiberia.examples.weather-fixture",
+  "name": "Weather Fixture Example",
+  "author": "Metasiberia Plugin SDK",
+  "version": "1.0.0",
+  "description": "Offline OpenWeather response parser example. It never performs a network request.",
+  "runtime": "luau",
+  "entry": "main.luau",
+  "icon": "assets/weather.svg",
+  "api": { "major": 1, "minor": 0 },
+  "permissions": ["ui.command", "ui.notification"],
+  "categories": ["example", "weather"]
+}

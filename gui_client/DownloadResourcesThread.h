@@ -32,8 +32,9 @@ class DownloadingResourceQueue;
 class ResourceDownloadFailedMessage : public ThreadMessage
 {
 public:
-	ResourceDownloadFailedMessage(const URLString& URL_) : ThreadMessage(Msg_ResourceDownloadFailedMessage), URL(URL_) {}
+	ResourceDownloadFailedMessage(const URLString& URL_, const std::string& error_ = std::string()) : ThreadMessage(Msg_ResourceDownloadFailedMessage), URL(URL_), error(error_) {}
 	URLString URL;
+	std::string error;
 };
 
 

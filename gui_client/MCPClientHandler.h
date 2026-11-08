@@ -70,7 +70,7 @@ web::WebListenerThread API.
 class MCPClientRequestHandler : public web::RequestHandler
 {
 public:
-	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback, const MCPClientTerrainCallback& animation_callback, const MCPClientTerrainCallback& text_mesh_callback, const MCPClientNeuroControlCallback& neuro_control_callback, const MCPClientBlenderCallback& blender_callback);
+	MCPClientRequestHandler(const MCPClientForwardingTarget& forwarding_target, const MCPClientRenderCallback& render_callback, const MCPClientStatusCallback& status_callback, const std::function<bool()>& poly_haven_enabled, const MCPClientTerrainCallback& terrain_callback, const MCPClientTerrainCallback& animation_callback, const MCPClientTerrainCallback& text_mesh_callback, const MCPClientTerrainCallback& bot_editor_callback, const MCPClientNeuroControlCallback& neuro_control_callback, const MCPClientBlenderCallback& blender_callback, const MCPClientTerrainCallback& script_log_callback);
 
 	virtual void handleRequest(const web::RequestInfo& request_info, web::ReplyInfo& reply_info) override;
 
@@ -84,8 +84,10 @@ private:
 	MCPClientTerrainCallback terrain_callback;
 	MCPClientTerrainCallback animation_callback;
 	MCPClientTerrainCallback text_mesh_callback;
+	MCPClientTerrainCallback bot_editor_callback;
 	MCPClientNeuroControlCallback neuro_control_callback;
 	MCPClientBlenderCallback blender_callback;
+	MCPClientTerrainCallback script_log_callback;
 	MCPClientStatusCallback status_callback;
 	std::function<bool()> poly_haven_enabled;
 
@@ -122,8 +124,10 @@ public:
 	void setTerrainCallback(const MCPClientTerrainCallback& callback) { terrain_callback = callback; }
 	void setTextMeshCallback(const MCPClientTerrainCallback& callback) { text_mesh_callback = callback; }
 	void setAnimationCallback(const MCPClientTerrainCallback& callback) { animation_callback = callback; }
+	void setBotEditorCallback(const MCPClientTerrainCallback& callback) { bot_editor_callback = callback; }
 	void setNeuroControlCallback(const MCPClientNeuroControlCallback& callback) { neuro_control_callback = callback; }
 	void setBlenderCallback(const MCPClientBlenderCallback& callback) { blender_callback = callback; }
+	void setScriptLogCallback(const MCPClientTerrainCallback& callback) { script_log_callback = callback; }
 
 	bool isConfigured() const;
 
@@ -136,7 +140,9 @@ private:
 	MCPClientTerrainCallback terrain_callback;
 	MCPClientTerrainCallback animation_callback;
 	MCPClientTerrainCallback text_mesh_callback;
+	MCPClientTerrainCallback bot_editor_callback;
 	MCPClientNeuroControlCallback neuro_control_callback;
 	MCPClientBlenderCallback blender_callback;
+	MCPClientTerrainCallback script_log_callback;
 	MCPClientStatusCallback status_callback;
 };
