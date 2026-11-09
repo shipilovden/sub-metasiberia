@@ -742,10 +742,13 @@ public:
 		std::string token;
 		URLString asset_url;
 		std::vector<UID> source_uids;
+		std::vector<std::string> source_states;
+		std::string output_state;
 		bool asset_ready = false;
 		double queued_time = 0.0;
 	};
 	std::map<std::string, PendingObjectMerge> pending_object_merges;
+	double last_pending_merge_poll = 0.0;
 	void finishPendingObjectMerges();
 	void updateSelectedParticleEmitterGizmo();
 	void clearSelectedParticleEmitterGizmo();
@@ -832,6 +835,12 @@ public:
 
 	WorldObjectRef selected_ob;
 	std::vector<WorldObjectRef> additional_selected_obs; // Ctrl+left-click selections; selected_ob remains the active editor object.
+	std::vector<WorldObjectRef> transform_gizmo_drag_objects;
+	std::vector<WorldObjectRef> transform_gizmo_drag_start_objects;
+	std::vector<Vec3d> transform_gizmo_drag_start_positions;
+	bool transform_gizmo_drag_blocked = false;
+	bool scene_selection_click_pending = false;
+	Vec2i scene_selection_press_pixel;
 	Vec4f selection_vec_cs; // Vector from camera to selected point on object, in camera space
 	Vec4f selection_point_os; // Point on selected object where selection ray hit, in object space.
 	bool selected_ob_picked_up; // Is selected object 'picked up' e.g. being moved?

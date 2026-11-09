@@ -11200,6 +11200,8 @@ void MainWindow::on_actionMergeSelectedObjects_triggered()
 	{
 		if(gui_client.world_state.isNull() || gui_client.connection_state != GUIClient::ServerConnectionState_Connected)
 			throw glare::Exception("Connect to a world before merging objects.");
+		if(!gui_client.pending_object_merges.empty())
+			throw glare::Exception("Предыдущее объединение ещё ожидает подтверждения сервера.");
 		if(gui_client.selected_ob.isNull())
 			throw glare::Exception("Select at least two objects with Ctrl+left-click.");
 
@@ -11340,7 +11342,10 @@ void MainWindow::on_actionMergeSelectedObjects_triggered()
 						tri.uv_indices[corner] += (uint32)uv_offset;
 					}
 					if(reverse_winding)
+					{
 						std::swap(tri.vertex_indices[1], tri.vertex_indices[2]);
+						std::swap(tri.uv_indices[1], tri.uv_indices[2]);
+					}
 					if(tri.tri_mat_index >= object.materials.size())
 						throw glare::Exception("A mesh references a material slot missing from its object.");
 					tri.tri_mat_index += (uint32)material_offset;

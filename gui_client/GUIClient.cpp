@@ -7756,7 +7756,9 @@ void GUIClient::tryToMoveObject(WorldObjectRef ob, /*const Matrix4f& tentative_n
 {
 	Lock lock(world_state->mutex);
 
-	GLObjectRef opengl_ob = this->selected_ob->opengl_engine_ob;
+	if(ob.isNull())
+		return;
+	GLObjectRef opengl_ob = ob->opengl_engine_ob;
 	if(opengl_ob.isNull())
 	{
 		// conPrint("GUIClient::tryToMoveObject: opengl_ob is NULL");
@@ -7770,7 +7772,7 @@ void GUIClient::tryToMoveObject(WorldObjectRef ob, /*const Matrix4f& tentative_n
 
 	// Check parcel permissions for this object
 	bool ob_pos_in_parcel;
-	const bool have_creation_perms = haveObjectWritePermissions(*this->selected_ob, tentative_new_aabb_ws, ob_pos_in_parcel);
+	const bool have_creation_perms = haveObjectWritePermissions(*ob, tentative_new_aabb_ws, ob_pos_in_parcel);
 	if(!have_creation_perms)
 	{
 		if(ob_pos_in_parcel)
@@ -7782,8 +7784,8 @@ void GUIClient::tryToMoveObject(WorldObjectRef ob, /*const Matrix4f& tentative_n
 	// Constrain the new position of the selected object so it stays inside the parcel it is currently in.
 	js::Vector<EdgeMarker, 16> edge_markers;
 	Vec3d new_ob_pos;
-	const bool new_transform_valid = clampObjectPositionToParcelForNewTransform(*this->selected_ob, opengl_ob, 
-		this->selected_ob->pos, // old ob pos
+	const bool new_transform_valid = clampObjectPositionToParcelForNewTransform(*ob, opengl_ob,
+		ob->pos, // old ob pos
 		tentative_new_to_world, // tentative new transfrom
 		edge_markers, // edge markers out.
 		new_ob_pos // new_ob_pos_out
@@ -7839,8 +7841,12 @@ void GUIClient::tryToMoveObject(WorldObjectRef ob, /*const Matrix4f& tentative_n
 
 void GUIClient::transformGizmoGrabStarted()
 {
+	transform_gizmo_drag_blocked = false;
 	if(selected_ob.isNull() || !objectModificationAllowed(*selected_ob))
+	{
+		transform_gizmo_drag_blocked = !additional_selected_obs.empty();
 		return;
+	}
 
 	// Keep the same rollback/undo transaction semantics as the legacy arrows.
 	// The gizmo only supplies a desired transform; GUIClient remains authoritative
@@ -7851,15 +7857,56 @@ void GUIClient::transformGizmoGrabStarted()
 	selected_ob_transform_rollback_axis = selected_ob->axis;
 	selected_ob_transform_rollback_angle = selected_ob->angle;
 	selected_ob_transform_rollback_scale = selected_ob->scale;
+	transform_gizmo_drag_objects.clear();
+	transform_gizmo_drag_start_positions.clear();
+	transform_gizmo_drag_objects.push_back(selected_ob);
+	transform_gizmo_drag_start_positions.push_back(selected_ob->pos);
+	for(size_t i = 0; i < additional_selected_obs.size(); ++i)
+	{
+		const WorldObjectRef& ob = additional_selected_obs[i];
+		if(ob.isNull() || !objectModificationAllowed(*ob))
+		{
+			transform_gizmo_drag_objects.clear();
+			transform_gizmo_drag_start_positions.clear();
+			transform_gizmo_drag_blocked = true;
+			have_selected_ob_transform_rollback = false;
+			selected_ob_transform_rollback_uid = UID::invalidUID();
+			return;
+		}
+		transform_gizmo_drag_objects.push_back(ob);
+		transform_gizmo_drag_start_positions.push_back(ob->pos);
+	}
 	ui_interface->setCamRotationOnMouseDragEnabled(false);
-	undo_buffer.startWorldObjectEdit(*selected_ob);
+	transform_gizmo_drag_start_objects.clear();
+	for(size_t i = 0; i < transform_gizmo_drag_objects.size(); ++i)
+	{
+		WorldObjectRef snapshot = new WorldObject();
+		snapshot->copyNetworkStateFrom(*transform_gizmo_drag_objects[i]);
+		snapshot->uid = transform_gizmo_drag_objects[i]->uid;
+		transform_gizmo_drag_start_objects.push_back(snapshot);
+	}
 }
 
 
 void GUIClient::transformGizmoGrabFinished()
 {
-	if(selected_ob.nonNull() && have_selected_ob_transform_rollback && selected_ob->uid == selected_ob_transform_rollback_uid)
-		undo_buffer.finishWorldObjectEdit(*selected_ob);
+	if(transform_gizmo_drag_objects.empty())
+	{
+		if(selected_ob.nonNull() && have_selected_ob_transform_rollback && selected_ob->uid == selected_ob_transform_rollback_uid)
+			undo_buffer.finishWorldObjectEdit(*selected_ob);
+	}
+	else
+		for(size_t i = 0; i < transform_gizmo_drag_objects.size(); ++i)
+			if(transform_gizmo_drag_objects[i].nonNull() && i < transform_gizmo_drag_start_objects.size())
+			{
+				// UndoBuffer has one current edit: record each start/end pair together.
+				undo_buffer.startWorldObjectEdit(*transform_gizmo_drag_start_objects[i]);
+				undo_buffer.finishWorldObjectEdit(*transform_gizmo_drag_objects[i]);
+			}
+	transform_gizmo_drag_objects.clear();
+	transform_gizmo_drag_start_objects.clear();
+	transform_gizmo_drag_start_positions.clear();
+	transform_gizmo_drag_blocked = false;
 
 	have_selected_ob_transform_rollback = false;
 	selected_ob_transform_rollback_uid = UID::invalidUID();
@@ -7869,8 +7916,44 @@ void GUIClient::transformGizmoGrabFinished()
 
 void GUIClient::transformGizmoMove(const Vec4f& desired_new_ob_pos)
 {
-	if(selected_ob.nonNull())
+	if(transform_gizmo_drag_blocked)
+		return;
+	if(selected_ob.isNull())
+		return;
+	if(transform_gizmo_drag_objects.size() < 2 || transform_gizmo_drag_start_positions.size() != transform_gizmo_drag_objects.size())
+	{
 		tryToMoveObject(selected_ob, desired_new_ob_pos);
+		return;
+	}
+
+	const Vec3d delta = Vec3d(desired_new_ob_pos) - transform_gizmo_drag_start_positions[0];
+	std::vector<Vec3d> target_positions;
+	target_positions.reserve(transform_gizmo_drag_objects.size());
+	for(size_t i = 0; i < transform_gizmo_drag_objects.size(); ++i)
+	{
+		const WorldObjectRef& ob = transform_gizmo_drag_objects[i];
+		if(ob.isNull() || !objectModificationAllowed(*ob) || ob->opengl_engine_ob.isNull())
+			return;
+
+		const Vec3d target_pos = transform_gizmo_drag_start_positions[i] + delta;
+		Matrix4f target_transform = ob->opengl_engine_ob->ob_to_world_matrix;
+		target_transform.setColumn(3, target_pos.toVec4fPoint());
+		const js::AABBox target_aabb = opengl_engine->getAABBWSForObjectWithTransform(*ob->opengl_engine_ob, target_transform);
+		bool target_in_parcel = false;
+		if(!haveObjectWritePermissions(*ob, target_aabb, target_in_parcel) || !target_in_parcel)
+			return;
+
+		js::Vector<EdgeMarker, 16> edge_markers;
+		Vec3d clamped_pos;
+		if(!clampObjectPositionToParcelForNewTransform(*ob, ob->opengl_engine_ob, ob->pos, target_transform, edge_markers, clamped_pos) ||
+			std::fabs(clamped_pos.x - target_pos.x) > 1.0e-5 ||
+			std::fabs(clamped_pos.y - target_pos.y) > 1.0e-5 ||
+			std::fabs(clamped_pos.z - target_pos.z) > 1.0e-5)
+			return; // Keep the selection rigid: never clamp its members by different amounts.
+		target_positions.push_back(target_pos);
+	}
+	for(size_t i = 0; i < transform_gizmo_drag_objects.size(); ++i)
+		tryToMoveObject(transform_gizmo_drag_objects[i], target_positions[i].toVec4fPoint());
 }
 
 
@@ -18902,6 +18985,26 @@ void GUIClient::setMaterialFlagsForObject(WorldObject* ob)
 }
 
 
+// Compare editable state independently of server-assigned identity and derived LOD bookkeeping.
+static std::string mergeObjectState(const WorldObject& object)
+{
+	WorldObjectRef copy = new WorldObject();
+	copy->copyNetworkStateFrom(object);
+	copy->uid = UID(0);
+	copy->creator_id = UserID(0);
+	copy->creator_name.clear();
+	copy->created_time = TimeStamp(0);
+	copy->last_modified_time = TimeStamp(0);
+	copy->max_model_lod_level = 0;
+	copy->physics_owner_id = 0;
+	copy->last_physics_ownership_change_global_time = 0;
+	copy->chunk_batch0_start = copy->chunk_batch0_end = copy->chunk_batch1_start = copy->chunk_batch1_end = 0;
+	BufferOutStream stream;
+	copy->writeToNetworkStream(stream);
+	return std::string(reinterpret_cast<const char*>(stream.buf.data()), stream.buf.size());
+}
+
+
 // Create a voxel or generic (mesh) object on server.
 // Convert mesh to bmesh if needed, Generate mesh LODs if needed.
 // Copy files to resource dir if not there already.
@@ -19031,10 +19134,23 @@ void GUIClient::createObject(const std::string& mesh_path, BatchedMeshRef loaded
 	{
 		if(!merge_token.empty() && !merge_source_uids.empty())
 		{
+			if(!pending_object_merges.empty())
+				throw glare::Exception("Предыдущее объединение ещё не завершено.");
 			PendingObjectMerge pending;
 			pending.token = merge_token;
 			pending.asset_url = merge_asset_url;
 			pending.source_uids = merge_source_uids;
+			pending.output_state = mergeObjectState(*new_world_object);
+			{
+				WorldStateLock lock(world_state->mutex);
+				for(const UID& uid : merge_source_uids)
+				{
+					auto source = world_state->objects.find(uid);
+					if(source == world_state->objects.end())
+						throw glare::Exception("Исходный объект больше не существует.");
+					pending.source_states.push_back(mergeObjectState(*source.getValue()));
+				}
+			}
 			pending.asset_ready = merge_asset_url.empty(); // Voxel payload is included in CreateObject; static meshes wait for server resource confirmation.
 			pending.queued_time = Clock::getTimeSinceInit();
 			pending_object_merges[merge_token] = pending;
@@ -19051,10 +19167,15 @@ void GUIClient::finishPendingObjectMerges()
 {
 	if(pending_object_merges.empty() || world_state.isNull() || client_thread.isNull())
 		return;
+	const double now = Clock::getTimeSinceInit();
+	if(now - last_pending_merge_poll < 0.25)
+		return;
+	last_pending_merge_poll = now;
 
 	std::vector<std::string> completed_tokens;
 	std::vector<WorldObjectRef> completed_objects;
 	std::vector<std::string> timed_out_tokens;
+	bool preserved_changed_output = false;
 	{
 		WorldStateLock lock(world_state->mutex);
 		for(auto it = pending_object_merges.begin(); it != pending_object_merges.end(); ++it)
@@ -19069,7 +19190,17 @@ void GUIClient::finishPendingObjectMerges()
 					break;
 				}
 			}
-			if(it->second.asset_ready && merged_object.nonNull())
+			bool sources_present = true;
+			bool sources_unchanged = it->second.source_states.size() == it->second.source_uids.size();
+			for(size_t i = 0; i < it->second.source_uids.size(); ++i)
+			{
+				auto source = world_state->objects.find(it->second.source_uids[i]);
+				if(source == world_state->objects.end())
+					sources_present = sources_unchanged = false;
+				else if(i >= it->second.source_states.size() || mergeObjectState(*source.getValue()) != it->second.source_states[i])
+					sources_unchanged = false;
+			}
+			if(it->second.asset_ready && merged_object.nonNull() && sources_unchanged)
 			{
 				// Clear the short-lived correlation token, then delete the old pieces.
 				merged_object->target_url.clear();
@@ -19090,14 +19221,25 @@ void GUIClient::finishPendingObjectMerges()
 
 			// Never leave a merge waiting forever when the connected server does
 			// not confirm its uploaded mesh. Keep every original object intact.
-			if(Clock::getTimeSinceInit() - it->second.queued_time > 120.0)
+			if(now - it->second.queued_time > 120.0 || !sources_unchanged)
 			{
 				if(merged_object.nonNull())
 				{
-					merged_object->target_url.clear();
-					MessageUtils::initPacket(scratch_packet, Protocol::ObjectFullUpdate);
-					merged_object->writeToNetworkStream(scratch_packet, server_protocol_version);
-					enqueueMessageToSend(*client_thread, scratch_packet);
+					if(sources_present && mergeObjectState(*merged_object) == it->second.output_state)
+					{
+						// Remove only our untouched provisional output, never the originals.
+						MessageUtils::initPacket(scratch_packet, Protocol::DestroyObject);
+						writeToStream(merged_object->uid, scratch_packet);
+						enqueueMessageToSend(*client_thread, scratch_packet);
+					}
+					else
+					{
+						preserved_changed_output = true;
+						merged_object->target_url.clear();
+						MessageUtils::initPacket(scratch_packet, Protocol::ObjectFullUpdate);
+						merged_object->writeToNetworkStream(scratch_packet, server_protocol_version);
+						enqueueMessageToSend(*client_thread, scratch_packet);
+					}
 				}
 				timed_out_tokens.push_back(it->first);
 			}
@@ -19108,7 +19250,9 @@ void GUIClient::finishPendingObjectMerges()
 	for(size_t i = 0; i < timed_out_tokens.size(); ++i)
 	{
 		pending_object_merges.erase(timed_out_tokens[i]);
-		showErrorNotification("Объединение не завершено: сервер не подтвердил загрузку меша. Исходные объекты сохранены; проверьте подключение к обновлённому серверу и повторите команду.");
+		showErrorNotification(preserved_changed_output ?
+			"Объединение отменено. Исходники сохранены; изменённый результат также оставлен для проверки." :
+			"Объединение отменено: нет подтверждения сервера или исходники изменились. Исходники не удалены; временный результат удаляется.");
 	}
 	for(size_t i = 0; i < completed_objects.size(); ++i)
 		selectObject(completed_objects[i], /*selected_mat_index=*/0);
@@ -21922,6 +22066,8 @@ Vec3d GUIClient::getSafeSeatExitEyePosition(const WorldObject& seat_ob) const
 
 void GUIClient::disconnectFromServerAndClearAllObjects() // Remove any WorldObjectRefs held by GUIClient.
 {
+	// Never apply a pending operation's UIDs to a different connection/world.
+	pending_object_merges.clear();
 	clearGameHUD();
 	// Queue pending object edits before clearAllObjects() drops the dirty set.
 	enqueueDirtyWorldObjectUpdates(world_state.nonNull() ? world_state->getCurrentGlobalTime() : 0.0);
@@ -22971,6 +23117,7 @@ bool GUIClient::mouseOverParticleEmitterRadiusHandle(const Vec2f& pixel_coords, 
 
 void GUIClient::mousePressed(MouseEvent& e)
 {
+	scene_selection_click_pending = false;
 	// conPrint("GUIClient::mousePressed");
 	if(image_viewer_image.nonNull())
 	{
@@ -23484,6 +23631,15 @@ void GUIClient::mousePressed(MouseEvent& e)
 		}
 	}
 
+	// Select on release only for an unhandled, stationary plain scene click.
+	// UI, scripts, voxel tools and gizmos have already handled their gestures.
+	if(!e.accepted && grabbed_axis < 0 && e.button == MouseButton::Left && e.modifiers == 0 &&
+		!terrain_sculpt_mode_enabled && !selectedObjectIsVoxelOb())
+	{
+		scene_selection_click_pending = true;
+		scene_selection_press_pixel = e.cursor_pos;
+	}
+
 	// If we didn't grab any control, we will be in camera-rotate mode, so hide the mouse cursor.
 	if(grabbed_axis < 0)
 	{
@@ -23494,6 +23650,8 @@ void GUIClient::mousePressed(MouseEvent& e)
 
 void GUIClient::mouseReleased(MouseEvent& e)
 {
+	const bool select_scene = scene_selection_click_pending && e.button == MouseButton::Left && e.modifiers == 0;
+	scene_selection_click_pending = false;
 	if(dispatchScriptMouseButton(e.button, /*pressed=*/false))
 	{
 		e.accepted = true;
@@ -23649,6 +23807,8 @@ void GUIClient::mouseReleased(MouseEvent& e)
 			{
 				ob->browser_vid_player->mouseReleased(&e, uvs);
 			}
+			else if(select_scene && !e.accepted)
+				doObjectSelectionTraceForMouseEvent(e);
 		}
 	}
 }
@@ -24355,7 +24515,13 @@ void GUIClient::doObjectSelectionTraceForMouseEvent(MouseEvent& e)
 		if(e.button == MouseButton::Left && BitUtils::isBitSet(e.modifiers, (uint32)Modifiers::Ctrl) &&
 			results.hit_object->userdata && results.hit_object->userdata_type == 0)
 		{
-			toggleAdditionalObjectSelection(static_cast<WorldObject*>(results.hit_object->userdata));
+			// Qt delivers the second rapid press as a double-click. Ensure the
+			// object is selected instead of toggling off the first press's result.
+			WorldObject* hit_ob = static_cast<WorldObject*>(results.hit_object->userdata);
+			const bool already_selected = (selected_ob.nonNull() && selected_ob->uid == hit_ob->uid) ||
+				std::any_of(additional_selected_obs.begin(), additional_selected_obs.end(), [hit_ob](const WorldObjectRef& ob) { return ob->uid == hit_ob->uid; });
+			if(!already_selected)
+				toggleAdditionalObjectSelection(hit_ob);
 			e.accepted = true;
 			return;
 		}
@@ -24564,7 +24730,7 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 				}
 				else 
 				{
-					if(!ob->target_url.empty() && (ob->web_view_data.isNull() && ob->browser_vid_player.isNull())) // If the object has a target URL (and is not a web-view and not a video object):
+					if(!ob->target_url.empty() && !hasPrefix(ob->target_url, "metasiberia-merge:") && (ob->web_view_data.isNull() && ob->browser_vid_player.isNull())) // If the object has a target URL (and is not a web-view and not a video object):
 					{
 						// If the mouse-overed ob is currently selected, and is editable, don't show the hyperlink, because 'E' is the key to pick up the object.
 						const bool selected_editable_ob = (selected_ob.ptr() == ob) && objectModificationAllowed(*ob);
@@ -24722,6 +24888,10 @@ void GUIClient::updateInfoUIForMousePosition(const Vec2i& cursor_pos, const Vec2
 
 void GUIClient::mouseMoved(MouseEvent& mouse_event)
 {
+	if(scene_selection_click_pending &&
+		(std::abs(mouse_event.cursor_pos.x - scene_selection_press_pixel.x) > 4 ||
+		 std::abs(mouse_event.cursor_pos.y - scene_selection_press_pixel.y) > 4))
+		scene_selection_click_pending = false;
 	if(image_viewer_image.nonNull())
 	{
 
@@ -26021,8 +26191,12 @@ void GUIClient::selectObject(const WorldObjectRef& ob, int selected_mat_index)
 
 void GUIClient::deselectObject()
 {
+	transform_gizmo_drag_start_objects.clear();
 	clearAdditionalObjectSelection();
 	cancelVoxelShapeTool();
+	transform_gizmo_drag_objects.clear();
+	transform_gizmo_drag_start_positions.clear();
+	transform_gizmo_drag_blocked = false;
 	// TransformGizmo owns render objects independently of selected_ob.  Clear it
 	// synchronously so it cannot remain attached to a deselected object.
 	transform_gizmo = NULL;
@@ -27784,7 +27958,7 @@ void GUIClient::useActionTriggered(bool use_mouse_cursor)
 					}
 				}
 
-				if(!ob->target_url.empty() && !ob->isPortal()) // And the object has a target URL: (and is not a portal; portals should be walked through, not E-pressed)
+				if(!ob->target_url.empty() && !hasPrefix(ob->target_url, "metasiberia-merge:") && !ob->isPortal()) // And the object has a target URL: (and is not a portal; portals should be walked through, not E-pressed)
 				{
 					// If the mouse-overed ob is currently selected, and is editable, don't show the hyperlink, because 'E' is the key to pick up the object.
 					const bool selected_editable_ob = (selected_ob.ptr() == ob) && objectModificationAllowed(*ob);
