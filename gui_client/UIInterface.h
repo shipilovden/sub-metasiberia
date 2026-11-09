@@ -19,6 +19,7 @@ class Parcel;
 class MapTilesResultReceivedMessage;
 enum class VoxelToolType;
 struct VoxelToolSettings;
+struct VoxelEditorViewSettings;
 
 
 /*=====================================================================
@@ -109,6 +110,8 @@ public:
 		(void)settings_out;
 		return false;
 	}
+	virtual bool getVoxelEditorViewSettings(VoxelEditorViewSettings& settings) const { return false; }
+	virtual void voxelEditorSelectionChanged(bool selected, size_t count, const Vec3<int>& extent, bool clipboard) {}
 	virtual void voxelEditorMaterialPicked(int material_index) { (void)material_index; }
 	virtual void voxelEditorObjectDataChanged(const WorldObject& ob) { (void)ob; }
 	virtual void gearInventoryUpdated() {}

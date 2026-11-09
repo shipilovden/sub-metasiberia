@@ -8,6 +8,7 @@ Copyright Glare Technologies Limited 2026 -
 #include "LucideIconUtils.h"
 #include "VoxelProceduralGenerator.h"
 #include "VoxelUndoStack.h"
+#include "UndoBuffer.h"
 
 
 #include "../shared/WorldObject.h"
@@ -20,6 +21,8 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtGui/QKeyEvent>
 #include <QtGui/QStandardItemModel>
 #include <QtWidgets/QAbstractButton>
+#include <QtWidgets/QApplication>
+#include <QtGui/QPixmap>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QColorDialog>
@@ -35,6 +38,8 @@ Copyright Glare Technologies Limited 2026 -
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QScrollArea>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -222,7 +227,7 @@ void VoxelEditorPanel::createUi()
 	title->setFont(title_font);
 	root->addWidget(title);
 
-	info_label = new QLabel(tr("Choose a tool, then click a face of the selected voxel object. Changes are committed as one undo command per operation."), this);
+	info_label = new QLabel(tr("Click a face to use the active tool. Ctrl+click adds one voxel; Alt+click removes one voxel. Each operation can be undone."), this);
 	info_label->setWordWrap(true);
 	root->addWidget(info_label);
 	voxel_count_label = new QLabel(this);
@@ -232,6 +237,7 @@ void VoxelEditorPanel::createUi()
 	QVBoxLayout* tools_layout = new QVBoxLayout(tools_box);
 	scene_tools_checkbox = new QCheckBox(tr("Edit voxels in the world"), tools_box);
 	scene_tools_checkbox->setChecked(true);
+	scene_tools_checkbox->setText(tr("Voxel editing (off: move the object)"));
 	scene_tools_checkbox->setToolTip(tr("When enabled, clicks on the selected voxel object use the active voxel tool."));
 	tools_layout->addWidget(scene_tools_checkbox);
 
@@ -316,7 +322,7 @@ void VoxelEditorPanel::createUi()
 	QVBoxLayout* layers_layout = new QVBoxLayout(layers_box);
 	layer_list = new QListWidget(layers_box);
 	layer_list->setMinimumHeight(82);
-	layer_list->setToolTip(tr("Stage 1 layers own disjoint material indices and remain compatible with legacy voxel data."));
+	layer_list->setToolTip(tr("Each cell belongs to one layer. Layer order does not change geometry."));
 	layers_layout->addWidget(layer_list);
 	QHBoxLayout* layer_buttons = new QHBoxLayout();
 	add_layer_button = new QPushButton(QStringLiteral("+"), layers_box);
@@ -359,6 +365,9 @@ void VoxelEditorPanel::createUi()
 	QLabel* selection_help = new QLabel(tr("Choose Select, then click two corners in the world."), selection_box);
 	selection_help->setWordWrap(true);
 	selection_layout->addWidget(selection_help);
+	paste_preview_checkbox = new QCheckBox(tr("Preview paste bounds"), selection_box);
+	paste_preview_checkbox->setChecked(true);
+	selection_layout->addWidget(paste_preview_checkbox);
 	QGridLayout* selection_buttons = new QGridLayout();
 	selection_copy_button = new QPushButton(tr("Copy"), selection_box);
 	selection_paste_button = new QPushButton(tr("Paste"), selection_box);
@@ -374,6 +383,11 @@ void VoxelEditorPanel::createUi()
 	selection_buttons->addWidget(selection_clear_button, 2, 1);
 	selection_layout->addLayout(selection_buttons);
 	QFormLayout* selection_form = new QFormLayout();
+	QComboBox* paste_mode = new QComboBox(selection_box);
+	paste_mode->setModel(brush_mode_combo->model());
+	selection_form->addRow(tr("Paste mode"), paste_mode);
+	connect(paste_mode, QOverload<int>::of(&QComboBox::currentIndexChanged), brush_mode_combo, &QComboBox::setCurrentIndex);
+	connect(brush_mode_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), paste_mode, &QComboBox::setCurrentIndex);
 	QWidget* offset_widget = new QWidget(selection_box);
 	QHBoxLayout* offset_layout = new QHBoxLayout(offset_widget);
 	offset_layout->setContentsMargins(0, 0, 0, 0);
@@ -420,11 +434,26 @@ void VoxelEditorPanel::createUi()
 	rendering_form->addRow(tr("Surface threshold (TODO)"), surface_threshold_spin);
 	rebuild_mesh_button = new QPushButton(tr("Rebuild mesh"), rendering_box);
 	rendering_form->addRow(QString(), rebuild_mesh_button);
+	show_preview_checkbox = new QCheckBox(tr("Tool bounds preview"), rendering_box);
+	show_preview_checkbox->setChecked(true);
+	show_grid_checkbox = new QCheckBox(tr("Region grid (up to 32 cells per axis)"), rendering_box);
+	show_axes_checkbox = new QCheckBox(tr("Local axes: X red, Y green, Z blue"), rendering_box);
+	rendering_form->addRow(show_preview_checkbox);
+	rendering_form->addRow(show_grid_checkbox);
+	rendering_form->addRow(show_axes_checkbox);
 	root->addWidget(rendering_box);
 
 	QGroupBox* procedural_box = new QGroupBox(tr("Procedural"), this);
 	QVBoxLayout* procedural_root = new QVBoxLayout(procedural_box);
 	QFormLayout* procedural_form = new QFormLayout();
+	generator_combo = new QComboBox(procedural_box);
+	for(const char* name : { "Box", "Ellipsoid", "Rock", "Terrain patch", "Noise volume", "Crystal", "Wall / ruins" }) generator_combo->addItem(tr(name));
+	procedural_form->addRow(tr("Generator"), generator_combo);
+	QComboBox* generation_mode = new QComboBox(procedural_box);
+	generation_mode->setModel(brush_mode_combo->model());
+	procedural_form->addRow(tr("Write mode"), generation_mode);
+	connect(generation_mode, QOverload<int>::of(&QComboBox::currentIndexChanged), brush_mode_combo, &QComboBox::setCurrentIndex);
+	connect(brush_mode_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), generation_mode, &QComboBox::setCurrentIndex);
 	QWidget* seed_widget = new QWidget(procedural_box);
 	QHBoxLayout* seed_layout = new QHBoxLayout(seed_widget);
 	seed_layout->setContentsMargins(0, 0, 0, 0);
@@ -522,21 +551,76 @@ void VoxelEditorPanel::createUi()
 	for(int i=0; i<7; ++i)
 		procedural_layout->addWidget(generator_buttons[i], i / 2, i % 2);
 	procedural_root->addLayout(procedural_layout);
+	for(QPushButton* button : generator_buttons) button->hide();
+	generate_button = new QPushButton(tr("Generate"), procedural_box);
+	procedural_root->addWidget(generate_button);
+	connect(generate_button, &QPushButton::clicked, this, [this]() { emit proceduralGenerationRequested(generator_combo->currentIndex()); });
+	const auto refresh_generator = [this, procedural_form, seed_widget]() {
+		const int type = generator_combo->currentIndex();
+		const auto row = [procedural_form](QWidget* field, bool visible) {
+			field->setVisible(visible);
+			if(QWidget* label = procedural_form->labelForField(field)) label->setVisible(visible);
+		};
+		row(seed_widget, type >= 2);
+		row(procedural_noise_scale_spin, type >= 2 && type <= 4);
+		row(procedural_octaves_spin, type >= 2 && type <= 4);
+		row(procedural_threshold_spin, type >= 2 && type <= 4);
+		row(procedural_density_spin, (type >= 2 && type <= 4) || type == 6);
+		row(procedural_detail_spin, type == 2 || type == 5 || type == 6);
+		row(procedural_wall_thickness_spin, procedural_hollow_checkbox->isChecked());
+	};
+	connect(generator_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, refresh_generator);
+	connect(procedural_hollow_checkbox, &QCheckBox::toggled, this, refresh_generator);
+	refresh_generator();
 	root->addWidget(procedural_box);
 
-	QGroupBox* exchange_box = new QGroupBox(tr("Import / Export"), this);
-	QGridLayout* exchange_layout = new QGridLayout(exchange_box);
-	const char* exchange_items[] = { QT_TR_NOOP("Import VOX (TODO)"), QT_TR_NOOP("Export VOX (TODO)"), QT_TR_NOOP("Export OBJ (TODO)"), QT_TR_NOOP("Save asset (TODO)") };
-	for(int i=0; i<4; ++i)
-	{
-		QPushButton* button = new QPushButton(tr(exchange_items[i]), exchange_box);
-		button->setEnabled(false);
-		button->setToolTip(tr("Not implemented in the first integration stage."));
-		exchange_layout->addWidget(button, i / 2, i % 2);
-		exchange_buttons.push_back(button);
-	}
-	root->addWidget(exchange_box);
-	root->addStretch(1);
+	// Each page owns its scrolling; the mode, status and history remain visible.
+	tabs = new QTabWidget(this);
+	tabs->setObjectName(QStringLiteral("voxelEditorTabs"));
+	tabs->setUsesScrollButtons(true);
+	const auto page = [this](const QString& title, QWidget* contents) {
+		QScrollArea* scroll = new QScrollArea(tabs);
+		scroll->setWidgetResizable(true);
+		scroll->setFrameShape(QFrame::NoFrame);
+		QWidget* body = new QWidget(scroll);
+		QVBoxLayout* layout = new QVBoxLayout(body);
+		layout->setContentsMargins(4, 6, 4, 6);
+		if(contents) layout->addWidget(contents);
+		layout->addStretch(1);
+		scroll->setWidget(body);
+		tabs->addTab(scroll, title);
+		return layout;
+	};
+	page(tr("Brushes"), tools_box);
+	page(tr("Selection"), selection_box);
+	colour_tab_layout = page(tr("Colour"), colour_box);
+	page(tr("Layers"), layers_box);
+	page(tr("Generator"), procedural_box);
+	page(tr("View"), rendering_box);
+	object_tab_layout = page(tr("Object"), nullptr);
+	tools_layout->removeWidget(scene_tools_checkbox);
+	root->addWidget(scene_tools_checkbox);
+	QHBoxLayout* history = new QHBoxLayout();
+	QPushButton* undo = new QPushButton(tr("Undo (Ctrl+Z)"), this);
+	QPushButton* redo = new QPushButton(tr("Redo (Ctrl+Y)"), this);
+	history->addWidget(undo);
+	history->addWidget(redo);
+	root->addLayout(history);
+	connect(undo, &QPushButton::clicked, this, &VoxelEditorPanel::undoRequested);
+	connect(redo, &QPushButton::clicked, this, &VoxelEditorPanel::redoRequested);
+	root->addWidget(tabs, 1);
+	tabs->setMinimumHeight(420);
+	// Unsupported surface algorithms are not offered as non-working controls.
+	render_mode_combo->removeItem(2);
+	smooth_normals_checkbox->hide();
+	surface_threshold_spin->hide();
+	if(QWidget* label = rendering_form->labelForField(surface_threshold_spin)) label->hide();
+	QLabel* layer_help = new QLabel(tr("Layers group cells in one grid. Moving a layer changes the list order only. Hide changes material visibility."), layers_box);
+	layer_help->setWordWrap(true);
+	layers_layout->addWidget(layer_help);
+	selection_status_label = new QLabel(tr("No voxel selection"), selection_box);
+	selection_status_label->setWordWrap(true);
+	selection_layout->insertWidget(1, selection_status_label);
 
 	connect(tool_button_group, SIGNAL(buttonClicked(int)), this, SLOT(toolButtonClicked(int)));
 	connect(scene_tools_checkbox, SIGNAL(toggled(bool)), this, SLOT(toolControlChanged()));
@@ -588,6 +672,7 @@ void VoxelEditorPanel::createUi()
 void VoxelEditorPanel::setFromObject(const WorldObject& object)
 {
 	updating = true;
+	selected_uid = QString::fromStdString(object.uid.toString());
 	loaded_editor_metadata = VoxelEditorData::isVoxelEditorContent(object.content);
 	editor_metadata_dirty = false;
 	std::string parse_error;
@@ -636,6 +721,18 @@ void VoxelEditorPanel::setFromObject(const WorldObject& object)
 
 bool VoxelEditorPanel::applyToObject(WorldObject& object, std::string& error_out)
 {
+	if(!removed_material_indices.empty() && !object.getDecompressedVoxels().empty())
+	{
+		bool any_remaining = false;
+		for(const Voxel& voxel : object.getDecompressedVoxels())
+			if(!containsInt(removed_material_indices, voxel.mat_index)) any_remaining = true;
+		if(!any_remaining)
+		{
+			error_out = "The last voxel cannot be removed. Delete the complete object instead.";
+			return false;
+		}
+	}
+
 	error_out.clear();
 	if(object.object_type != WorldObject::ObjectType_VoxelGroup)
 	{
@@ -757,8 +854,6 @@ bool VoxelEditorPanel::applyToObject(WorldObject& object, std::string& error_out
 	if(!removed_material_indices.empty())
 	{
 		auto& voxels = object.getDecompressedVoxels();
-		const bool had_voxels = !voxels.empty();
-		const Vec3<int> fallback_position = had_voxels ? voxels[0].pos : Vec3<int>(0, 0, 0);
 		size_t write_i = 0;
 		for(size_t read_i=0; read_i<voxels.size(); ++read_i)
 			if(containsInt(removed_material_indices, voxels[read_i].mat_index))
@@ -770,11 +865,7 @@ bool VoxelEditorPanel::applyToObject(WorldObject& object, std::string& error_out
 				++write_i;
 			}
 		voxels.resize(write_i);
-		// The legacy voxel renderer cannot load an empty group.  If deleting a
-		// layer removed the complete payload, keep one seed voxel in the active
-		// layer; deleting the WorldObject itself remains a separate action.
-		if(had_voxels && voxels.empty())
-			voxels.push_back(Voxel(fallback_position, material_index));
+
 	}
 	if(voxel_payload_changed)
 		object.compressVoxels();
@@ -944,16 +1035,38 @@ void VoxelEditorPanel::selectMaterialIndex(const int material_index)
 }
 
 
+bool VoxelEditorPanel::deleteTargetsVoxelSelection() const
+{
+	// A locked or empty region still owns Delete: never fall through to deleting the object.
+	return isVisible() && scene_tools_checkbox->isChecked() && have_selection;
+}
+
+
 bool VoxelEditorPanel::handleShortcut(QKeyEvent* event)
 {
 	if(!event || !editable || !scene_tools_checkbox->isChecked())
 		return false;
 	const Qt::KeyboardModifiers modifiers = event->modifiers();
+	if(modifiers == Qt::ControlModifier)
+	{
+		switch(event->key())
+		{
+		case Qt::Key_C: selection_copy_button->click(); return true;
+		case Qt::Key_V: selection_paste_button->click(); return true;
+		case Qt::Key_D: selection_duplicate_button->click(); return true;
+		default: break;
+		}
+	}
 	if(modifiers != Qt::NoModifier && modifiers != Qt::ShiftModifier)
 		return false;
 
 	switch(event->key())
 	{
+	case Qt::Key_Delete:
+		if(!deleteTargetsVoxelSelection()) return false;
+		selection_delete_button->click();
+		return true;
+	case Qt::Key_Escape: return false; // Let scene Escape deselect the object and its voxel region.
 	case Qt::Key_B: selectTool(VoxelToolType::Brush, true); return true;
 	case Qt::Key_E: selectTool(VoxelToolType::Eraser, true); return true;
 	case Qt::Key_P: selectTool(VoxelToolType::Paint, true); return true;
@@ -973,7 +1086,7 @@ bool VoxelEditorPanel::handleShortcut(QKeyEvent* event)
 }
 
 
-bool VoxelEditorPanel::runSmokeCheck(std::string& report_out)
+bool VoxelEditorPanel::runSmokeCheck(std::string& report_out, const QString& capture_prefix)
 {
 	std::string data_details;
 	std::string tool_details;
@@ -1103,10 +1216,163 @@ bool VoxelEditorPanel::runSmokeCheck(std::string& report_out)
 		mesher_ok = false;
 	}
 
-	const bool ok = data_ok && tools_ok && undo_ok && procedural_ok && panel_roundtrip_ok && layer_delete_persisted && legacy_content_preserved &&
+	// A differently coloured destination with the same material index must not
+	// silently recolour pasted cells. Repeating the paste must reuse materials.
+	WorldObject destination;
+	destination.uid = UID(77);
+	destination.object_type = WorldObject::ObjectType_VoxelGroup;
+	destination.materials.push_back(new WorldMaterial());
+	destination.materials[0]->colour_rgb = Colour3f(0,0,1);
+	destination.getDecompressedVoxels().push_back(Voxel(Vec3<int>(0,0,0),0));
+	destination.compressVoxels();
+	VoxelClipboard clipboard;
+	clipboard.extent = Vec3<int>(1,1,1);
+	clipboard.voxels.push_back(VoxelClipboardVoxel());
+	clipboard.voxels[0].material_index = 0;
+	clipboard.materials[0] = new WorldMaterial();
+	clipboard.materials[0]->colour_rgb = Colour3f(1,0,0);
+	clipboard.materials[0]->colour_texture_url = "test-texture.png";
+	clipboard.materials[0]->roughness.val = 0.7f;
+	VoxelClipboard mapped;
+	std::string paste_error;
+	bool material_copy_ok = VoxelTools::prepareClipboardMaterials(clipboard, destination, 0, mapped, paste_error);
+	material_copy_ok = material_copy_ok && mapped.voxels[0].material_index == 1 && destination.materials.size() == 2 &&
+		*destination.materials[1] == *clipboard.materials[0] && destination.materials[0]->colour_rgb == Colour3f(0,0,1);
+	material_copy_ok = VoxelTools::prepareClipboardMaterials(clipboard, destination, 0, mapped, paste_error) && material_copy_ok && destination.materials.size() == 2;
+	VoxelEditorState locked_state = VoxelEditorData::fromObject(destination);
+	locked_state.layers[0].locked = true;
+	VoxelEditorData::storeOnObject(destination, locked_state);
+	material_copy_ok = !VoxelTools::prepareClipboardMaterials(clipboard, destination, 0, mapped, paste_error) && material_copy_ok;
+
+	// Geometry, layer metadata and transforms must unwind in chronological order.
+	UndoBuffer chronological;
+	chronological.startWorldObjectEdit(destination);
+	destination.getDecompressedVoxels().push_back(Voxel(Vec3<int>(1,0,0),1));
+	destination.compressVoxels();
+	chronological.finishWorldObjectEdit(destination);
+	chronological.startWorldObjectEdit(destination);
+	locked_state.layers[0].name = "Renamed";
+	VoxelEditorData::storeOnObject(destination, locked_state);
+	chronological.finishWorldObjectEdit(destination);
+	chronological.startWorldObjectEdit(destination);
+	destination.pos = Vec3d(1,2,3);
+	chronological.finishWorldObjectEdit(destination);
+	WorldObjectRef expected;
+	WorldObjectRef restored = chronological.getUndoWorldObject(&expected);
+	bool chronology_ok = restored.nonNull() && expected.nonNull() && expected->pos == Vec3d(1,2,3) && restored->pos != expected->pos;
+	restored = chronological.getUndoWorldObject();
+	chronology_ok = chronology_ok && restored.nonNull() && VoxelEditorData::fromObject(*restored).layers[0].name != "Renamed";
+	restored = chronological.getUndoWorldObject();
+	if(restored.nonNull()) restored->decompressVoxels();
+	chronology_ok = chronology_ok && restored.nonNull() && restored->getDecompressedVoxels().size() == 1;
+	chronological.getRedoWorldObject();
+	chronological.getRedoWorldObject();
+	restored = chronological.getRedoWorldObject();
+	chronology_ok = chronology_ok && restored.nonNull() && restored->pos == Vec3d(1,2,3);
+
+	panel.setSelectionStatus(false, 0, Vec3<int>(0,0,0), false);
+	bool tab_controls_ok = panel.tabs->count() == 7 && !panel.selection_copy_button->isEnabled() && !panel.selection_paste_button->isEnabled();
+	panel.setSelectionStatus(true, 2, Vec3<int>(2,1,1), true);
+	tab_controls_ok = tab_controls_ok && panel.selection_copy_button->isEnabled() && panel.selection_paste_button->isEnabled();
+
+	// Delete without a cell region must reach ordinary whole-object deletion.
+	panel.setAttribute(Qt::WA_DontShowOnScreen);
+	panel.show();
+	panel.setSceneToolsEnabled(true);
+	panel.setSelectionStatus(false, 0, Vec3<int>(0,0,0), false);
+	QKeyEvent delete_event(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+	int region_delete_requests = 0;
+	const QMetaObject::Connection delete_connection = QObject::connect(&panel, &VoxelEditorPanel::selectionDeleteRequested, [&]() { ++region_delete_requests; });
+	bool delete_routing_ok = !panel.deleteTargetsVoxelSelection() && !panel.handleShortcut(&delete_event) && region_delete_requests == 0;
+	panel.setSelectionStatus(true, 2, Vec3<int>(2,1,1), true);
+	delete_routing_ok = delete_routing_ok && panel.deleteTargetsVoxelSelection() && panel.handleShortcut(&delete_event) && region_delete_requests == 1;
+	panel.layer_locked_checkbox->setChecked(true);
+	delete_routing_ok = delete_routing_ok && panel.deleteTargetsVoxelSelection() && panel.handleShortcut(&delete_event) && region_delete_requests == 1;
+	panel.layer_locked_checkbox->setChecked(false);
+	panel.setSceneToolsEnabled(false);
+	delete_routing_ok = delete_routing_ok && !panel.deleteTargetsVoxelSelection() && !panel.handleShortcut(&delete_event);
+	panel.setSceneToolsEnabled(true);
+	panel.hide();
+	delete_routing_ok = delete_routing_ok && !panel.deleteTargetsVoxelSelection() && !panel.handleShortcut(&delete_event);
+	QObject::disconnect(delete_connection);
+
+	// Escape must reach GUIClient's scene handler in every voxel selection state.
+	panel.show();
+	QKeyEvent escape_event(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+	panel.setSceneToolsEnabled(true);
+	panel.setSelectionStatus(false, 0, Vec3<int>(0,0,0), false);
+	bool escape_routing_ok = !panel.handleShortcut(&escape_event);
+	panel.setSelectionStatus(true, 2, Vec3<int>(2,1,1), true);
+	escape_routing_ok = escape_routing_ok && !panel.handleShortcut(&escape_event);
+	panel.layer_locked_checkbox->setChecked(true);
+	escape_routing_ok = escape_routing_ok && !panel.handleShortcut(&escape_event);
+	panel.layer_locked_checkbox->setChecked(false);
+	panel.setSceneToolsEnabled(false);
+	escape_routing_ok = escape_routing_ok && !panel.handleShortcut(&escape_event);
+	panel.setSceneToolsEnabled(true);
+	panel.hide();
+
+	// Removing all cells via layer deletion follows the same rule as the eraser.
+	WorldObject last_cell;
+	last_cell.uid = UID(42);
+	last_cell.object_type = WorldObject::ObjectType_VoxelGroup;
+	last_cell.materials.push_back(new WorldMaterial());
+	last_cell.getDecompressedVoxels().push_back(Voxel(Vec3<int>(0,0,0),0));
+	last_cell.compressVoxels();
+	VoxelEditorPanel last_panel;
+	last_panel.setFromObject(last_cell);
+	last_panel.setEditable(true);
+	last_panel.addLayer();
+	std::string last_error;
+	const bool added_empty_layer = last_panel.applyToObject(last_cell, last_error);
+	last_panel.setFromObject(last_cell);
+	last_panel.layerSelectionChanged(0);
+	last_panel.deleteLayer();
+	const std::string before_content = last_cell.content;
+	const size_t before_material_count = last_cell.materials.size();
+	const bool last_cell_guard_ok = added_empty_layer && !last_panel.applyToObject(last_cell, last_error) &&
+		last_cell.getDecompressedVoxels().size() == 1 && last_cell.content == before_content && last_cell.materials.size() == before_material_count;
+
+	// Borrowed generic widgets must return to their original layout intact.
+	QWidget editor_host;
+	QVBoxLayout host_layout(&editor_host);
+	QWidget* generic = new QWidget(&editor_host);
+	QVBoxLayout* generic_layout = new QVBoxLayout(generic);
+	QWidget* materials_widget = new QWidget(generic);
+	generic_layout->addWidget(materials_widget);
+	host_layout.addWidget(generic);
+	panel.embedObjectWidgets(generic, materials_widget);
+	const bool embedded = panel.object_tab_layout->indexOf(generic) >= 0 && panel.colour_tab_layout->indexOf(materials_widget) >= 0;
+	generic_layout->addWidget(materials_widget);
+	host_layout.addWidget(generic);
+	const bool embedding_ok = embedded && generic->parentWidget() == &editor_host && materials_widget->parentWidget() == generic;
+
+	bool captures_ok = true;
+	if(!capture_prefix.isEmpty())
+	{
+		panel.setAttribute(Qt::WA_DontShowOnScreen);
+		panel.resize(540, 850);
+		panel.show();
+		for(int tab=0; tab<6; ++tab)
+		{
+			panel.tabs->setCurrentIndex(tab);
+			QApplication::processEvents();
+			captures_ok = panel.grab().save(capture_prefix + QStringLiteral(".tab%1.png").arg(tab)) && captures_ok;
+		}
+		panel.hide();
+	}
+
+	const bool ok = escape_routing_ok && delete_routing_ok && last_cell_guard_ok && embedding_ok && captures_ok && material_copy_ok && chronology_ok && tab_controls_ok && data_ok && tools_ok && undo_ok && procedural_ok && panel_roundtrip_ok && layer_delete_persisted && legacy_content_preserved &&
 		base_opacity_preserved && shortcuts_ok && procedural_controls_ok && lucide_icons_ok && mesher_ok;
 	std::ostringstream report;
 	report << "{\n";
+	report << "  \"escape_routing\": " << (escape_routing_ok ? "true" : "false") << ",\n";
+	report << "  \"delete_routing\": " << (delete_routing_ok ? "true" : "false") << ",\n";
+	report << "  \"last_cell_guard\": " << (last_cell_guard_ok ? "true" : "false") << ",\n";
+	report << "  \"editor_embedding\": " << (embedding_ok ? "true" : "false") << ",\n";
+	report << "  \"material_copy\": " << (material_copy_ok ? "true" : "false") << ",\n";
+	report << "  \"chronology\": " << (chronology_ok ? "true" : "false") << ",\n";
+	report << "  \"tabs_and_selection\": " << (tab_controls_ok ? "true" : "false") << ",\n";
 	report << "  \"ok\": " << (ok ? "true" : "false") << ",\n";
 	report << "  \"data\": \"" << data_details << "\",\n";
 	report << "  \"tools\": \"" << tool_details << "\",\n";
@@ -1393,16 +1659,17 @@ void VoxelEditorPanel::refreshToolControls()
 	if(QAbstractButton* button = tool_button_group->button(static_cast<int>(selected_tool)))
 		button->setChecked(true);
 	const bool can_edit_layer = activeLayerEditable();
+	generate_button->setEnabled(editable && can_edit_layer);
 	const bool uses_brush_settings = selected_tool != VoxelToolType::Picker && selected_tool != VoxelToolType::Select && selected_tool != VoxelToolType::Fill;
 	tool_settings_widget->setEnabled(editable && can_edit_layer && uses_brush_settings);
 	scene_tools_checkbox->setEnabled(editable && (selected_tool == VoxelToolType::Picker || selected_tool == VoxelToolType::Select || can_edit_layer));
 	current_colour_button->setEnabled(editable && can_edit_layer);
-	selection_copy_button->setEnabled(editable);
-	selection_clear_button->setEnabled(editable);
-	selection_paste_button->setEnabled(editable && can_edit_layer);
-	selection_delete_button->setEnabled(editable && can_edit_layer);
-	selection_duplicate_button->setEnabled(editable && can_edit_layer);
-	selection_move_button->setEnabled(editable && can_edit_layer);
+	selection_copy_button->setEnabled(editable && have_selection && selected_cell_count > 0);
+	selection_clear_button->setEnabled(have_selection);
+	selection_paste_button->setEnabled(editable && can_edit_layer && have_clipboard);
+	selection_delete_button->setEnabled(editable && can_edit_layer && have_selection && selected_cell_count > 0);
+	selection_duplicate_button->setEnabled(editable && can_edit_layer && have_selection && selected_cell_count > 0);
+	selection_move_button->setEnabled(editable && can_edit_layer && have_selection && selected_cell_count > 0);
 	for(QPushButton* button : { generate_box_button, generate_ellipsoid_button, generate_rock_button,
 		generate_terrain_button, generate_noise_button, generate_crystal_button, generate_wall_button })
 		button->setEnabled(editable && can_edit_layer);
@@ -1412,6 +1679,7 @@ void VoxelEditorPanel::refreshToolControls()
 
 void VoxelEditorPanel::refreshColourControls()
 {
+	updateVoxelCount(voxel_count);
 	const QColor colour = toQColor(editor_state.palette.current_colour);
 	current_colour_button->setText(colour.name(QColor::HexRgb).toUpper());
 	current_colour_button->setStyleSheet(QStringLiteral("QPushButton { background-color: %1; color: %2; font-weight: bold; }")
@@ -1571,7 +1839,9 @@ void VoxelEditorPanel::applyIcons()
 
 void VoxelEditorPanel::updateVoxelCount(const size_t count)
 {
-	voxel_count_label->setText(tr("Voxels: %1").arg(static_cast<qulonglong>(count)));
+	voxel_count = count;
+	const VoxelLayer* layer = VoxelEditorData::activeLayer(editor_state);
+	voxel_count_label->setText(tr("Object %1 · %2 voxels · %3 · %4").arg(selected_uid).arg(qulonglong(count)).arg(layer ? QString::fromStdString(layer->name) : QString()).arg(toQColor(editor_state.palette.current_colour).name()));
 }
 
 
@@ -1621,4 +1891,31 @@ void VoxelEditorPanel::emitMeshChange()
 		editor_metadata_dirty = true;
 		emit meshRebuildRequested();
 	}
+}
+
+void VoxelEditorPanel::embedObjectWidgets(QWidget* object_editor, QWidget* materials)
+{
+	object_tab_layout->insertWidget(0, object_editor);
+	colour_tab_layout->insertWidget(1, materials);
+	materials->show();
+}
+
+void VoxelEditorPanel::setSelectionStatus(bool selected, size_t count, const Vec3<int>& extent, bool clipboard_available)
+{
+	have_selection = selected;
+	have_clipboard = clipboard_available;
+	selected_cell_count = count;
+	selection_status_label->setText(selected ? tr("Selected: %1 cells; region %2 × %3 × %4").arg(qulonglong(count)).arg(extent.x).arg(extent.y).arg(extent.z) : tr("No voxel selection"));
+	refreshToolControls();
+}
+
+VoxelEditorViewSettings VoxelEditorPanel::viewSettings() const
+{
+	VoxelEditorViewSettings result;
+	result.preview = show_preview_checkbox->isChecked();
+	result.grid = show_grid_checkbox->isChecked();
+	result.axes = show_axes_checkbox->isChecked();
+	result.paste_preview = tabs->currentIndex() == 1 && paste_preview_checkbox->isChecked() && have_clipboard;
+	result.paste_offset = selectionOffset();
+	return result;
 }

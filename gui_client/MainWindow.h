@@ -476,8 +476,10 @@ public:
 	virtual void setUIForSelectedObject() override; // Enable/disable delete object action etc..
 	virtual void startObEditorTimerIfNotActive() override;
 	virtual void startLightmapFlagTimer() override;
+	bool getVoxelEditorViewSettings(VoxelEditorViewSettings& settings) const override;
 	virtual bool getVoxelEditorToolState(VoxelToolType& tool_out, VoxelToolSettings& settings_out) const override;
 	virtual void voxelEditorMaterialPicked(int material_index) override;
+	virtual void voxelEditorSelectionChanged(bool selected, size_t count, const Vec3<int>& extent, bool clipboard) override;
 	virtual void voxelEditorObjectDataChanged(const WorldObject& ob) override;
 	virtual void gearInventoryUpdated() override;
 

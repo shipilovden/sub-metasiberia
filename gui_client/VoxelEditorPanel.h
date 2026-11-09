@@ -27,6 +27,8 @@ class QListWidget;
 class QPushButton;
 class QSpinBox;
 class QWidget;
+class QTabWidget;
+class QVBoxLayout;
 class WorldObject;
 
 
@@ -48,11 +50,15 @@ public:
 
 	int currentMaterialIndex() const;
 	VoxelToolSettings toolSettings() const;
+	VoxelEditorViewSettings viewSettings() const;
 	VoxelProceduralParams proceduralParams(VoxelProceduralType type) const;
 	Vec3<int> selectionOffset() const;
 	VoxelToolType currentTool() const;
 	bool sceneToolsEnabled() const;
+	bool deleteTargetsVoxelSelection() const;
 	void setSceneToolsEnabled(bool enabled);
+	void embedObjectWidgets(QWidget* object_editor, QWidget* materials);
+	void setSelectionStatus(bool selected, size_t count, const Vec3<int>& extent, bool clipboard_available);
 
 	// Called after a scene edit or undo/redo.  It deliberately does not reload
 	// controls, so an in-progress tool configuration is not discarded.
@@ -62,9 +68,11 @@ public:
 
 	// Runs deterministic data/tool/undo and widget round-trip checks.  A short
 	// JSON-like report is returned in report_out; no files or world state change.
-	static bool runSmokeCheck(std::string& report_out);
+	static bool runSmokeCheck(std::string& report_out, const QString& capture_prefix = QString());
 
 signals:
+	void undoRequested();
+	void redoRequested();
 	void objectMetadataChanged();
 	void meshRebuildRequested();
 	void toolStateChanged();
@@ -126,6 +134,13 @@ private:
 	bool pending_colour_material;
 	bool layer_render_dirty;
 	QString icon_directory;
+	QTabWidget* tabs;
+	QVBoxLayout* object_tab_layout;
+	QVBoxLayout* colour_tab_layout;
+	QLabel* selection_status_label;
+	bool have_selection = false;
+	bool have_clipboard = false;
+	size_t selected_cell_count = 0;
 
 	QLabel* info_label;
 	QLabel* voxel_count_label;
@@ -156,6 +171,10 @@ private:
 	QCheckBox* layer_locked_checkbox;
 	QDoubleSpinBox* layer_opacity_spin;
 
+	QCheckBox* show_preview_checkbox;
+	QCheckBox* show_grid_checkbox;
+	QCheckBox* show_axes_checkbox;
+	QCheckBox* paste_preview_checkbox;
 	QComboBox* render_mode_combo;
 	QCheckBox* smooth_normals_checkbox;
 	QDoubleSpinBox* surface_threshold_spin;
@@ -171,6 +190,10 @@ private:
 	QSpinBox* selection_offset_y_spin;
 	QSpinBox* selection_offset_z_spin;
 
+	QComboBox* generator_combo;
+	QPushButton* generate_button;
+	QString selected_uid;
+	size_t voxel_count = 0;
 	QSpinBox* procedural_seed_spin;
 	QPushButton* procedural_random_seed_button;
 	QSpinBox* procedural_origin_x_spin;

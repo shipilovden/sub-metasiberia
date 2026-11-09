@@ -420,6 +420,7 @@ void VoxelClipboard::clear()
 	extent = Vec3<int>(0, 0, 0);
 	source_layer_index = -1;
 	voxels.clear();
+	materials.clear();
 }
 
 
@@ -533,6 +534,15 @@ void VoxelEditCommand::undo(WorldObject& object) const { undo(object.getDecompre
 
 namespace VoxelTools
 {
+VoxelToolSettings singleCellSettings(const VoxelToolSettings& current)
+{
+	VoxelToolSettings result;
+	result.material_index = current.material_index;
+	result.layer_index = current.layer_index;
+	result.max_voxels = current.max_voxels;
+	return result;
+}
+
 
 int pickMaterial(const glare::AllocatorVector<Voxel, 16>& voxels, const Vec3<int>& coord,
 	const VoxelEditorState& state, const bool active_layer_only)
@@ -1127,7 +1137,32 @@ bool runSelfTest(std::string* details_out)
 	if(deduplicated.changedCount() != 1 || deduplicated.changes[0].before_material != VoxelChange::NO_MATERIAL || deduplicated.changes[0].after_material != 1)
 		return fail("Command delta deduplication failed.");
 
+	VoxelToolSettings large_brush;
+	large_brush.brush_size = 8;
+	large_brush.brush_mode = VoxelBrushMode::Paint;
+	large_brush.brush_shape = VoxelBrushShape::Sphere;
+	large_brush.hollow = true;
+	large_brush.mirror_x = large_brush.mirror_y = large_brush.mirror_z = true;
+	large_brush.material_index = 1;
+	large_brush.layer_index = 0;
+	const VoxelToolSettings single = singleCellSettings(large_brush);
+	glare::AllocatorVector<Voxel, 16> quick_voxels;
+	quick_voxels.push_back(Voxel(Vec3<int>(0,0,0), 0));
+	VoxelToolResult quick_add = execute(VoxelToolType::Brush, VoxelToolInput(Vec3<int>(1,0,0)), single, state, quick_voxels);
+	if(quick_add.command.changedCount() != 1 || quick_voxels.size() != 2 || pickMaterial(quick_voxels, Vec3<int>(1,0,0), state) != 1)
+		return fail("Modifier click did not add exactly one cell with the active material.");
+	VoxelToolResult quick_remove = execute(VoxelToolType::Eraser, VoxelToolInput(Vec3<int>(1,0,0)), single, state, quick_voxels);
+	if(quick_remove.command.changedCount() != 1 || quick_voxels.size() != 1)
+		return fail("Modifier click did not erase exactly one cell.");
+	quick_remove.command.undo(quick_voxels);
+	quick_add.command.undo(quick_voxels);
+	if(quick_voxels.size() != 1 || pickMaterial(quick_voxels, Vec3<int>(0,0,0), state) != 0)
+		return fail("Modifier click undo damaged the original cell.");
+
 	state.layers[0].locked = true;
+	VoxelToolResult quick_locked = execute(VoxelToolType::Brush, VoxelToolInput(Vec3<int>(1,0,0)), single, state, quick_voxels);
+	if(quick_locked.error.empty() || quick_locked.changed() || quick_voxels.size() != 1)
+		return fail("Modifier click bypassed the layer lock.");
 	VoxelToolResult locked = buildCommand(VoxelToolType::Eraser, VoxelToolInput(Vec3<int>(0, 0, 0)), settings, state, voxels);
 	if(locked.error.empty() || locked.changed())
 		return fail("Locked layer accepted an edit.");
@@ -1138,3 +1173,58 @@ bool runSelfTest(std::string* details_out)
 }
 
 } // namespace VoxelTools
+
+bool VoxelTools::prepareClipboardMaterials(const VoxelClipboard& source, WorldObject& candidate, int layer, VoxelClipboard& mapped, std::string& error)
+{
+	VoxelEditorState state = VoxelEditorData::fromObject(candidate);
+	if(layer < 0) layer = state.active_layer;
+	if(layer < 0 || layer >= (int)state.layers.size() || state.layers[layer].locked || !state.layers[layer].visible)
+	{
+		error = "Choose a visible, unlocked destination layer.";
+		return false;
+	}
+	mapped = source;
+	std::map<int, int> mapping;
+	for(VoxelClipboardVoxel& voxel : mapped.voxels)
+	{
+		const int original = voxel.material_index;
+		auto known = mapping.find(original);
+		if(known != mapping.end()) { voxel.material_index = known->second; continue; }
+		auto src = source.materials.find(original);
+		if(src == source.materials.end() || src->second.isNull())
+		{
+			error = "Clipboard materials are missing. Copy the voxel selection again.";
+			return false;
+		}
+		int destination = -1;
+		for(int index : state.layers[layer].material_indices)
+			if(index >= 0 && index < (int)candidate.materials.size() && candidate.materials[index].nonNull())
+			{
+				WorldMaterialRef comparable = candidate.materials[index]->clone();
+				comparable->opacity.val = VoxelEditorData::materialBaseOpacity(state, layer, index);
+				if(*comparable == *src->second) { destination = index; break; }
+			}
+		if(destination < 0)
+		{
+			if(candidate.materials.size() > (size_t)VoxelEditorData::MAX_MATERIAL_INDEX)
+			{
+				error = "Pasting would exceed the 255-material limit. No cells were pasted.";
+				return false;
+			}
+			destination = (int)candidate.materials.size();
+			WorldMaterialRef material = src->second->clone();
+			material->opacity.val *= state.layers[layer].opacity;
+			candidate.materials.push_back(material);
+			VoxelEditorData::ensureMaterialInLayer(state, layer, destination);
+			VoxelEditorData::setMaterialBaseOpacity(state, layer, destination, src->second->opacity.val);
+		}
+		mapping[original] = destination;
+		voxel.material_index = destination;
+	}
+	if(!VoxelEditorData::storeOnObject(candidate, state))
+	{
+		error = "Pasting would exceed the editor metadata limit. No cells were pasted.";
+		return false;
+	}
+	return true;
+}

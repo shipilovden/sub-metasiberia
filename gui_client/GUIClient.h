@@ -272,6 +272,7 @@ public:
 	
 	std::string getDiagnosticsString(bool do_graphics_diagnostics, bool do_physics_diagnostics, bool do_terrain_diagnostics, double last_timerEvent_CPU_work_elapsed, double last_updateGL_time);
 	void diagnosticsSettingsChanged();
+	void updateVoxelEditorOverlays(const MouseCursorState& cursor);
 	void updateVoxelEditMarkers(const MouseCursorState& mouse_cursor_state);
 
 	struct EdgeMarker
@@ -299,6 +300,8 @@ public:
 #if !defined(USE_SDL)
 	bool cacheCulturalPublicImage(const QString& source_url, URLString& resource_url_out, QString& error_out);
 #endif
+	void applyVoxelBrushAtCursor(const Vec2i& pixel);
+	void finishVoxelStroke();
 	bool applyVoxelEditorTool(VoxelToolType tool, const VoxelToolInput& input, const VoxelToolSettings* settings_override = NULL);
 	bool applyVoxelProceduralGenerator(VoxelProceduralType type, const VoxelProceduralParams& params);
 	bool copyVoxelSelection();
@@ -307,7 +310,9 @@ public:
 	bool duplicateVoxelSelection(const Vec3<int>& offset);
 	bool moveVoxelSelection(const Vec3<int>& offset);
 	void clearVoxelSelection();
-	bool finaliseAppliedVoxelEdit(VoxelEditCommand command, bool may_expand_bounds, bool truncated);
+	void notifyVoxelSelectionChanged();
+	bool finaliseAppliedVoxelEdit(VoxelEditCommand command, bool may_expand_bounds, bool truncated, const WorldObjectRef& history_before = WorldObjectRef());
+	bool undoOrRedoEditorEdit(bool redo);
 	bool canUndoVoxelEdit() const;
 	bool canRedoVoxelEdit() const;
 	bool validateSelectedVoxelEditHistoryRevision();
@@ -318,6 +323,7 @@ public:
 	void cancelVoxelShapeTool();
 	void rebuildSelectedVoxelObject();
 	void posAndRot3DControlsToggled(bool enabled);
+	bool handleVoxelModifierClick(MouseEvent& e);
 	void mousePressed(MouseEvent& e);
 	void mouseReleased(MouseEvent& e);
 	void mouseDoubleClicked(MouseEvent& e);
@@ -850,6 +856,13 @@ public:
 	Vec3f selected_ob_transform_rollback_axis;
 	float selected_ob_transform_rollback_angle;
 	Vec3f selected_ob_transform_rollback_scale;
+	bool voxel_stroke_active = false;
+	bool voxel_stroke_has_edit = false;
+	UID voxel_stroke_uid = UID::invalidUID();
+	VoxelToolType voxel_stroke_tool = VoxelToolType::Brush;
+	VoxelToolSettings voxel_stroke_settings;
+	Vec3<int> voxel_stroke_last_coord = Vec3<int>(0,0,0);
+	bool voxel_stroke_has_coord = false;
 	bool voxel_shape_start_valid = false;
 	UID voxel_shape_object_uid = UID::invalidUID();
 	VoxelToolType voxel_shape_tool = VoxelToolType::Box;
@@ -1511,6 +1524,7 @@ public:
 	Vec4f xr_teleport_target_pos;
 	Vec4f xr_teleport_target_normal;
 
+	std::vector<Reference<GLObject>> voxel_editor_overlays;
 	Reference<GLObject> voxel_edit_marker;
 	bool voxel_edit_marker_in_engine;
 	Reference<GLObject> voxel_edit_face_marker;

@@ -72,7 +72,7 @@ void UndoBuffer::replaceFinishWorldObjectEdit(const WorldObject& ob)
 }
 
 
-WorldObjectRef UndoBuffer::getUndoWorldObject()
+WorldObjectRef UndoBuffer::getUndoWorldObject(WorldObjectRef* expected)
 {
 	//conPrint("UndoBuffer::getUndoWorldObject()");
 
@@ -92,6 +92,14 @@ WorldObjectRef UndoBuffer::getUndoWorldObject()
 
 	//conPrint("Undoing edit " + toString(chunk_to_pop));
 
+	if(expected)
+	{
+		BufferInStream expected_stream;
+		expected_stream.buf.resize(chunks[chunk_to_pop].end.size());
+		for(size_t i=0; i<expected_stream.buf.size(); ++i) expected_stream.buf[i] = chunks[chunk_to_pop].end[i];
+		*expected = new WorldObject();
+		readWorldObjectFromStream(expected_stream, **expected);
+	}
 	index--;
 
 	WorldObjectRef ob = new WorldObject();
@@ -100,7 +108,7 @@ WorldObjectRef UndoBuffer::getUndoWorldObject()
 }
 
 
-WorldObjectRef UndoBuffer::getRedoWorldObject()
+WorldObjectRef UndoBuffer::getRedoWorldObject(WorldObjectRef* expected)
 {
 	if(index >= (int)chunks.size())
 		return NULL;
@@ -113,6 +121,14 @@ WorldObjectRef UndoBuffer::getRedoWorldObject()
 	for(size_t z=0; z<chunk_size; ++z)
 		stream.buf[z] = chunks[chunk_to_pop].end[z];
 
+	if(expected)
+	{
+		BufferInStream expected_stream;
+		expected_stream.buf.resize(chunks[chunk_to_pop].start.size());
+		for(size_t i=0; i<expected_stream.buf.size(); ++i) expected_stream.buf[i] = chunks[chunk_to_pop].start[i];
+		*expected = new WorldObject();
+		readWorldObjectFromStream(expected_stream, **expected);
+	}
 	index++;
 
 	WorldObjectRef ob = new WorldObject();

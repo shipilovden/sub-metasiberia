@@ -43,6 +43,15 @@ enum class VoxelBrushMode
 };
 
 
+struct VoxelEditorViewSettings
+{
+	bool preview = true;
+	bool grid = false;
+	bool axes = false;
+	bool paste_preview = false;
+	Vec3<int> paste_offset = Vec3<int>(0,0,0);
+};
+
 struct VoxelToolSettings
 {
 	int brush_size = 1;                 // Clamped to [1, 16].
@@ -156,6 +165,7 @@ struct VoxelClipboard
 	Vec3<int> extent = Vec3<int>(0, 0, 0);
 	int source_layer_index = -1;
 	std::vector<VoxelClipboardVoxel> voxels;
+	std::map<int, WorldMaterialRef> materials; // Detached source materials, with base opacity.
 };
 
 
@@ -171,6 +181,10 @@ struct VoxelClipboardResult
 
 namespace VoxelTools
 {
+	// One Ctrl/Alt click edits one cell, retaining the active material/layer and limits.
+	VoxelToolSettings singleCellSettings(const VoxelToolSettings& current);
+	// Remap full materials on a detached candidate before changing the scene.
+	bool prepareClipboardMaterials(const VoxelClipboard& source, WorldObject& candidate, int layer, VoxelClipboard& mapped, std::string& error);
 	// Builds but does not apply a command.  Picker returns no command and places
 	// the selected material in picked_material_index.
 	VoxelToolResult buildCommand(VoxelToolType tool, const VoxelToolInput& input,

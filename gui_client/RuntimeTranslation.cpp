@@ -1079,8 +1079,33 @@ RuntimeTranslator::RuntimeTranslator(QObject* parent)
 	add("ObjectEditor", "Lightmap baked.", "Лайтмапа запечена.");
 
 	// Voxel editor
+	add("MainWindow", "Duplicate voxel selection", "Дублировать выделенные воксели");
+	add("MainWindow", "Delete voxel selection", "Удалить выделенные воксели");
+	add("MainWindow", "Copy voxel selection", "Копировать выделенные воксели");
+	add("MainWindow", "Paste voxel selection", "Вставить воксели");
+	add("VoxelEditorPanel", "Brushes", "Кисти");
+	add("VoxelEditorPanel", "Selection", "Выделение");
+	add("VoxelEditorPanel", "Colour", "Цвет");
+	add("VoxelEditorPanel", "Generator", "Генератор");
+	add("VoxelEditorPanel", "View", "Вид");
+	add("VoxelEditorPanel", "Object", "Объект");
+	add("VoxelEditorPanel", "Generate", "Создать");
+	add("VoxelEditorPanel", "Undo (Ctrl+Z)", "Отменить (Ctrl+Z)");
+	add("VoxelEditorPanel", "Redo (Ctrl+Y)", "Повторить (Ctrl+Y)");
+	add("VoxelEditorPanel", "Voxel editing (off: move the object)", "Редактировать воксели (выключено — перемещение объекта)");
+	add("VoxelEditorPanel", "No voxel selection", "Область не выделена");
+	add("VoxelEditorPanel", "Selected: %1 cells; region %2 × %3 × %4", "Выбрано клеток: %1; область %2 × %3 × %4");
+	add("VoxelEditorPanel", "Layers group cells in one grid. Moving a layer changes the list order only. Hide changes material visibility.", "Слои группируют клетки общей сетки. Перестановка меняет только порядок списка. Скрытие меняет видимость материалов.");
+	add("VoxelEditorPanel", "Each cell belongs to one layer. Layer order does not change geometry.", "Каждая клетка принадлежит одному слою. Порядок слоёв не меняет геометрию.");
+	add("VoxelEditorPanel", "Preview paste bounds", "Показывать границы вставки");
+	add("VoxelEditorPanel", "Tool bounds preview", "Показывать границы инструмента");
+	add("VoxelEditorPanel", "Region grid (up to 32 cells per axis)", "Сетка выделения (до 32 клеток на ось)");
+	add("VoxelEditorPanel", "Local axes: X red, Y green, Z blue", "Локальные оси: X — красная, Y — зелёная, Z — синяя");
+	add("VoxelEditorPanel", "Paste mode", "Режим вставки");
+	add("VoxelEditorPanel", "Write mode", "Режим применения");
+	add("VoxelEditorPanel", "Object %1 · %2 voxels · %3 · %4", "Объект %1 · Вокселей: %2 · %3 · %4");
 	add("VoxelEditorPanel", "Voxel Editor", "Редактор вокселей");
-	add("VoxelEditorPanel", "Choose a tool, then click a face of the selected voxel object. Changes are committed as one undo command per operation.", "Выберите инструмент и нажмите на грань выбранного воксельного объекта. Каждая операция сохраняется одной командой отмены.");
+	add("VoxelEditorPanel", "Click a face to use the active tool. Ctrl+click adds one voxel; Alt+click removes one voxel. Each operation can be undone.", "Щелчок по грани применяет инструмент. Ctrl+ЛКМ добавляет один воксель, Alt+ЛКМ удаляет один. Каждую операцию можно отменить.");
 	add("VoxelEditorPanel", "Tools", "Инструменты");
 	add("VoxelEditorPanel", "Edit voxels in the world", "Редактировать воксели в мире");
 	add("VoxelEditorPanel", "When enabled, clicks on the selected voxel object use the active voxel tool.", "Когда включено, щелчки по выбранному воксельному объекту применяют активный инструмент.");

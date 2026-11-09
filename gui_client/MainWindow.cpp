@@ -3045,7 +3045,9 @@ void MainWindow::initialiseUI()
 		objectEditedSlot();
 		gui_client.rebuildSelectedVoxelObject();
 	});
-	connect(voxel_editor_panel, &VoxelEditorPanel::toolStateChanged, this, [this]() { gui_client.cancelVoxelShapeTool(); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::toolStateChanged, this, [this]() { gui_client.cancelVoxelShapeTool(); gui_client.notifyVoxelSelectionChanged(); });
+	connect(voxel_editor_panel, &VoxelEditorPanel::undoRequested, this, &MainWindow::on_actionUndo_triggered);
+	connect(voxel_editor_panel, &VoxelEditorPanel::redoRequested, this, &MainWindow::on_actionRedo_triggered);
 	connect(voxel_editor_panel, &VoxelEditorPanel::proceduralGenerationRequested, this, [this](const int type_value)
 	{
 		const VoxelProceduralType type = static_cast<VoxelProceduralType>(type_value);
@@ -5122,6 +5124,14 @@ bool MainWindow::posAndRot3DControlsEnabled()
 
 void MainWindow::showObjectEditor()
 {
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel)
+		voxel_editor_panel->embedObjectWidgets(ui->objectEditor, ui->objectEditor->materialsGroupBox);
+	else if(ui->objectEditor->parentWidget() != ui->scrollAreaWidgetContents)
+	{
+		ui->objectEditor->verticalLayout->insertWidget(2, ui->objectEditor->materialsGroupBox);
+		ui->verticalLayout_4->addWidget(ui->objectEditor);
+	}
+
 	ui->parcelEditor->hide();
 	ui->botEditorWidget->hide();
 	if(gear_inventory_panel)
@@ -5190,6 +5200,7 @@ void MainWindow::showObjectEditor()
 			tree_editor_panel->hide();
 		ui->objectEditor->show();
 		voxel_editor_panel->show();
+		gui_client.notifyVoxelSelectionChanged();
 	}
 	else
 	{
@@ -10825,6 +10836,12 @@ static void requestServerObjectCopy(GUIClient& client, const std::string& source
 
 void MainWindow::on_actionCopy_Object_triggered()
 {
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->isVisible() && voxel_editor_panel->sceneToolsEnabled())
+	{
+		gui_client.copyVoxelSelection();
+		return;
+	}
+
 	if(gui_client.world_state.isNull()) return;
 	if(gui_client.selected_ob.nonNull())
 	{
@@ -11100,6 +11117,12 @@ void MainWindow::handlePasteOrDropMimeData(const QMimeData* mime_data)
 
 void MainWindow::on_actionPaste_Object_triggered()
 {
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->isVisible() && voxel_editor_panel->sceneToolsEnabled())
+	{
+		gui_client.pasteVoxelSelection(voxel_editor_panel->selectionOffset());
+		return;
+	}
+
 	QClipboard* clipboard = QGuiApplication::clipboard();
 	const QMimeData* mime_data = clipboard->mimeData();
 
@@ -11109,6 +11132,12 @@ void MainWindow::on_actionPaste_Object_triggered()
 
 void MainWindow::glWidgetCutShortcutTriggered()
 {
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->isVisible() && voxel_editor_panel->sceneToolsEnabled() && gui_client.gl_ui->getKeyboardFocusWidget().isNull())
+	{
+		if(gui_client.copyVoxelSelection()) gui_client.deleteVoxelSelection();
+		return;
+	}
+
 	if(gui_client.gl_ui->getKeyboardFocusWidget().nonNull())
 	{
 		std::string new_clipboard_content;
@@ -11124,6 +11153,12 @@ void MainWindow::glWidgetCutShortcutTriggered()
 
 void MainWindow::glWidgetCopyShortcutTriggered()
 {
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->isVisible() && voxel_editor_panel->sceneToolsEnabled() && gui_client.gl_ui->getKeyboardFocusWidget().isNull())
+	{
+		gui_client.copyVoxelSelection();
+		return;
+	}
+
 	if(gui_client.gl_ui->getKeyboardFocusWidget().nonNull())
 	{
 		std::string new_clipboard_content;
@@ -11143,6 +11178,12 @@ void MainWindow::glWidgetCopyShortcutTriggered()
 
 void MainWindow::glWidgetPasteShortcutTriggered()
 {
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->isVisible() && voxel_editor_panel->sceneToolsEnabled() && gui_client.gl_ui->getKeyboardFocusWidget().isNull())
+	{
+		gui_client.pasteVoxelSelection(voxel_editor_panel->selectionOffset());
+		return;
+	}
+
 	if(gui_client.gl_ui->getKeyboardFocusWidget().nonNull())
 	{
 		QClipboard* clipboard = QGuiApplication::clipboard();
@@ -11163,6 +11204,12 @@ void MainWindow::glWidgetPasteShortcutTriggered()
 
 void MainWindow::on_actionCloneObject_triggered()
 {
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->isVisible() && voxel_editor_panel->sceneToolsEnabled())
+	{
+		gui_client.duplicateVoxelSelection(voxel_editor_panel->selectionOffset());
+		return;
+	}
+
 	try
 	{
 		WorldObjectRef source = gui_client.selected_ob;
@@ -11470,6 +11517,12 @@ void MainWindow::on_actionMergeSelectedObjects_triggered()
 
 void MainWindow::on_actionDeleteObject_triggered()
 {
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->deleteTargetsVoxelSelection())
+	{
+		gui_client.deleteVoxelSelection();
+		return;
+	}
+
 	if(gui_client.selected_ob.nonNull())
 	{
 		gui_client.deleteSelectedObject();
@@ -13892,19 +13945,7 @@ void MainWindow::on_actionUndo_triggered()
 {
 	try
 	{
-		if(active_editor_kind == ActiveEditor_Voxel)
-		{
-			if(gui_client.canUndoVoxelEdit())
-			{
-				gui_client.undoVoxelEdit(); // A permission failure is terminal; never fall through to unrelated global history.
-				return;
-			}
-			if(!gui_client.selectedVoxelModificationAllowed("undo voxel edit"))
-				return;
-			gui_client.clearSelectedVoxelEditHistory(); // Drop any delta redo branch before crossing into global history.
-		}
-		WorldObjectRef ob = gui_client.undo_buffer.getUndoWorldObject();
-		gui_client.applyUndoOrRedoObject(ob);
+		gui_client.undoOrRedoEditorEdit(false);
 	}
 	catch(glare::Exception& e)
 	{
@@ -13917,19 +13958,7 @@ void MainWindow::on_actionRedo_triggered()
 {
 	try
 	{
-		if(active_editor_kind == ActiveEditor_Voxel)
-		{
-			if(gui_client.canRedoVoxelEdit())
-			{
-				gui_client.redoVoxelEdit();
-				return;
-			}
-			if(!gui_client.selectedVoxelModificationAllowed("redo voxel edit"))
-				return;
-			gui_client.clearSelectedVoxelEditHistory();
-		}
-		WorldObjectRef ob = gui_client.undo_buffer.getRedoWorldObject();
-		gui_client.applyUndoOrRedoObject(ob);
+		gui_client.undoOrRedoEditorEdit(true);
 	}
 	catch(glare::Exception& e)
 	{
@@ -15048,6 +15077,12 @@ void MainWindow::glWidgetMouseReleased(QMouseEvent* e)
 
 void MainWindow::setUIForSelectedObject() // Enable/disable delete object action etc..
 {
+	if(!ui || running_destructor) return; // World cleanup can precede UI creation or follow teardown.
+	const bool voxel_mode = active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->isVisible() && voxel_editor_panel->sceneToolsEnabled();
+	ui->actionCloneObject->setText(voxel_mode ? tr("Duplicate voxel selection") : tr("Clone Object"));
+	ui->actionDeleteObject->setText(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->deleteTargetsVoxelSelection() ? tr("Delete voxel selection") : tr("Delete Object"));
+	ui->actionCopy_Object->setText(voxel_mode ? tr("Copy voxel selection") : tr("Copy Object"));
+	ui->actionPaste_Object->setText(voxel_mode ? tr("Paste voxel selection") : tr("Paste Object"));
 	const bool have_selected_ob = gui_client.selected_ob.nonNull();
 	const bool can_copy = have_selected_ob && canCopyObjectInClient(gui_client, *gui_client.selected_ob);
 	this->ui->actionCloneObject->setEnabled(can_copy);
@@ -15074,7 +15109,7 @@ void MainWindow::startLightmapFlagTimer()
 
 bool MainWindow::getVoxelEditorToolState(VoxelToolType& tool_out, VoxelToolSettings& settings_out) const
 {
-	if(active_editor_kind != ActiveEditor_Voxel || !voxel_editor_panel || !voxel_editor_panel->sceneToolsEnabled())
+	if(active_editor_kind != ActiveEditor_Voxel || !voxel_editor_panel || !voxel_editor_panel->isVisible() || !voxel_editor_panel->sceneToolsEnabled())
 		return false;
 	tool_out = voxel_editor_panel->currentTool();
 	settings_out = voxel_editor_panel->toolSettings();
@@ -15501,7 +15536,7 @@ void MainWindow::glWidgetKeyPressed(QKeyEvent* e)
 		return;
 	}
 
-	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->handleShortcut(e))
+	if(active_editor_kind == ActiveEditor_Voxel && voxel_editor_panel && voxel_editor_panel->isVisible() && voxel_editor_panel->handleShortcut(e))
 	{
 		e->accept();
 		return;
@@ -16090,6 +16125,19 @@ int main(int argc, char *argv[])
 		GUIClient::staticInit();
 		logLifecycleTiming("static client initialization", startup_stage_timer);
 
+		// Isolated in-memory checks must not open or truncate the user's log.
+		if(app.arguments().size() == 3 && app.arguments().at(1) == QStringLiteral("--voxel_editor_smoke"))
+		{
+			const QString path = app.arguments().at(2);
+			RuntimeTranslation::RuntimeTranslator smoke_translator;
+			app.installTranslator(&smoke_translator);
+			std::string report;
+			const bool smoke_ok = VoxelEditorPanel::runSmokeCheck(report, path);
+			QFile report_file(path);
+			if(!report_file.open(QIODevice::WriteOnly | QIODevice::Truncate) || report_file.write(QByteArray(report.data(), (int)report.size())) != (qint64)report.size()) return 2;
+			return smoke_ok ? 0 : 1;
+		}
+
 
 		const std::string cyberspace_base_dir_path = PlatformUtils::getResourceDirectoryPath();
 		const std::string appdata_path = MetasiberiaPaths::getClientAppDataDirectory();
@@ -16160,15 +16208,7 @@ int main(int argc, char *argv[])
 			return TreeGenerator::runSmokeCheck(parsed_args.getArgStringValue("--tree_generator_smoke"));
 		if(parsed_args.isArgPresent("--tree_editor_smoke"))
 			return TreeEditorPanel::runSmokeCheck(parsed_args.getArgStringValue("--tree_editor_smoke"));
-		if(parsed_args.isArgPresent("--voxel_editor_smoke"))
-		{
-			std::string report;
-			const bool smoke_ok = VoxelEditorPanel::runSmokeCheck(report);
-			QFile report_file(QtUtils::toQString(parsed_args.getArgStringValue("--voxel_editor_smoke")));
-			if(!report_file.open(QIODevice::WriteOnly | QIODevice::Truncate) || report_file.write(QByteArray(report.data(), (int)report.size())) != (qint64)report.size())
-				return 2;
-			return smoke_ok ? 0 : 1;
-		}
+
 
 		if(parsed_args.isArgPresent("--test"))
 		{
@@ -16424,3 +16464,17 @@ int main(int argc, char *argv[])
 
 
 #endif // End #ifndef FUZZING
+
+void MainWindow::voxelEditorSelectionChanged(bool selected, size_t count, const Vec3<int>& extent, bool clipboard)
+{
+	if(!ui || running_destructor) return;
+	if(voxel_editor_panel) voxel_editor_panel->setSelectionStatus(selected, count, extent, clipboard);
+	setUIForSelectedObject();
+}
+
+bool MainWindow::getVoxelEditorViewSettings(VoxelEditorViewSettings& settings) const
+{
+	if(active_editor_kind != ActiveEditor_Voxel || !voxel_editor_panel || !voxel_editor_panel->isVisible()) return false;
+	settings = voxel_editor_panel->viewSettings();
+	return true;
+}
